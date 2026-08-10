@@ -52,7 +52,8 @@ export namespace Sandbox {
      * they stay reachable regardless of where they happen to live on the
      * host — including under `/tmp`, which `--tmpfs /tmp` otherwise masks
      * unconditionally, `--ro-bind / /` notwithstanding. Used for the egress
-     * shim's launcher executable and (in dev) its one source dependency.
+     * shim's executable — in dev, the generated launcher and the bundle it
+     * runs — and the interpreter that launcher execs.
      */
     readBind?: string[]
   }
@@ -350,10 +351,10 @@ export namespace Sandbox {
     }
     // Explicit, not a location choice: --tmpfs /tmp (above) masks the whole
     // host /tmp subtree unconditionally, so anything under it — a generated
-    // launcher, or the checkout itself when it's a worktree or CI clone
-    // under /tmp — would otherwise silently not exist in here. Binding each
-    // path back in by its own name, after the tmpfs, is what makes it
-    // reachable regardless of where it actually lives on the host.
+    // launcher or bundle, the interpreter of a portable install — would
+    // otherwise silently not exist in here. Binding each path back in by its
+    // own name, after the tmpfs, is what makes it reachable regardless of
+    // where it actually lives on the host.
     //
     // Skip anything already inside a writable root — boundWritable specifically
     // (not the raw policy.writable list), since that's what's actually mounted
@@ -365,19 +366,29 @@ export namespace Sandbox {
     // an earlier one put there — so a read-only bind here, coming after the
     // --bind-try loop above, would silently turn part of an already-writable
     // workspace read-only again wherever the two overlap.
-    // That's not hypothetical: it's exactly what happens when the workspace
-    // is (or contains) this package's own checkout, e.g. self-hosting
-    // OpenScience on its own repo — precisely the dev + "allowlist" case
-    // this mechanism exists for. Only that one containment direction is
-    // guarded (a readBind path inside a writable root, not the reverse — a
-    // writable root nested inside a readBind path): every current readBind
-    // candidate (the launcher under Global.Path.bin, the interpreter, the
-    // package root) is a narrow, structurally-fixed location no real project
-    // workspace would ever sensibly be a subdirectory of, so the reverse
-    // case has no realistic trigger today. Handling it too would mean
-    // reordering these mounts relative to the writable ones, which risks
-    // quietly reintroducing this same shadowing bug in the other direction
-    // for a scenario that has never actually occurred.
+    //
+    // Only that one containment direction is guarded (a readBind path inside
+    // a writable root, not the reverse — a writable root nested inside a
+    // readBind path). The reason is narrow and specific to today's bind set,
+    // not a claim about what workspaces look like: writable roots are *not*
+    // only project roots (SessionFilesystem.processWriteRoots returns
+    // arbitrary user-granted paths, and options.allowWrite / extraWritable
+    // are arbitrary too), but every readBind path shimPlan() produces is a
+    // regular file — two generated artifacts under Global.Path.bin and the
+    // interpreter — and nothing can be nested inside a file, so the reverse
+    // direction has no trigger at all rather than an unlikely one. By the
+    // same token the exclusion changes nothing observable for today's set —
+    // re-binding a file the sandbox never writes read-only is a no-op — and
+    // is kept because the moment a directory joins that set, the shadowing
+    // above becomes reachable again.
+    //
+    // Order shadows the unreadable masks above too, which is the other reason
+    // to keep this set to individual files: a readBind *directory* containing
+    // an `unreadable` path re-exposes that path's real contents (measured:
+    // when this list still held the package root, a /dev/null mask on a file
+    // inside it was silently undone). Every entry here is a generated
+    // artifact or the interpreter, none of which is ever an unreadable
+    // candidate, so no mask can be defeated by name.
     for (const p of dedupe(policy.readBind ?? [])) {
       if (boundWritable.some((root) => isWithin(p, root))) continue
       args.push("--ro-bind-try", p, p)
@@ -447,26 +458,66 @@ export namespace Sandbox {
   const SHIM_PORT = 3128
 
   /**
+   * Write one of the dev shim's generated artifacts, idempotently. Callers
+   * pass a content-addressed name, so a file already at that name already has
+   * this content and there is nothing to do; comparing anyway costs a few KB
+   * and repairs a truncated leftover. The write goes to a per-process
+   * temporary name and is renamed into place, which is atomic within a
+   * directory — two processes generating the same artifact concurrently write
+   * byte-identical content, and no third process can observe a half-written
+   * file at the real name.
+   *
+   * A missing file (first run, a fresh worktree, a test tmpdir) is the
+   * expected case, not a failure, so read errors of any kind just mean "write
+   * it" and are swallowed separately from the write's own errors. Those fail
+   * loud with an actionable message rather than a raw EACCES/EROFS out of
+   * `wrapArgv`: network "allowlist" without a working shim is a security-
+   * relevant misconfiguration (the caller explicitly asked for bounded
+   * egress), not something to silently downgrade.
+   */
+  function place(file: string, content: Buffer, mode: number) {
+    const current = (() => {
+      try {
+        return fs.readFileSync(file)
+      } catch {
+        return undefined
+      }
+    })()
+    if (current?.equals(content)) return
+    const temp = `${file}.${process.pid}`
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(temp, content, { mode })
+      fs.chmodSync(temp, mode)
+      fs.renameSync(temp, file)
+    } catch (e) {
+      fs.rmSync(temp, { force: true })
+      throw new Error(`Could not write the dev egress shim to ${file}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  /**
    * The single executable `shimScript` execs as the loopback bridge, plus
    * every read-only path that must be explicitly bound into the namespace
-   * (`Policy.readBind`, consumed by `bubblewrapArgs`) for that executable —
-   * and, in dev, the interpreter and package it needs — to actually be
-   * reachable from inside, regardless of where any of them live on the host.
+   * (`Policy.readBind`, consumed by `bubblewrapArgs`) for that executable to
+   * actually be reachable from inside, regardless of where it lives on the
+   * host.
    *
    * In a compiled release `process.execPath` IS the openscience binary, so
-   * `openscience __egress-shim ...` runs directly — no extra artifact ships.
+   * `openscience __egress-shim ...` runs directly — one self-contained file,
+   * no extra artifact ships.
    *
-   * Under `bun run src/index.ts` in development, `process.execPath` is the
-   * `bun` binary itself, and `bun __egress-shim ...` is not a valid bun
-   * invocation (it needs an entry script too). `shimScript`'s `binary` is a
-   * single shell word once quoted, so a two-word "bun <entry>" invocation
-   * cannot be smuggled through it — instead a tiny on-disk launcher plays the
-   * role of a single executable, the same trick `ensureAtlasBinDir` in
+   * Under `bun run src/index.ts` in development no such file exists:
+   * `process.execPath` is `bun`, and `bun __egress-shim ...` is not a valid
+   * bun invocation (it needs an entry script too), while `shimScript`'s
+   * `binary` is a single shell word once quoted, so a two-word "bun <entry>"
+   * invocation cannot be smuggled through it. So dev *builds* the missing
+   * file: `bun build` bundles `egress-shim-entry.ts` (a sibling of this file)
+   * into one self-contained module, and a tiny `sh` launcher execs `bun`
+   * against it — the same trick `ensureAtlasBinDir` in
    * `src/openscience/index.ts` uses to expose a package's JS entry as one
-   * executable path. It execs `bun` against `egress-shim-entry.ts` (a
-   * sibling of this file), not `src/index.ts` — that file imports nothing
-   * but `./egress`, so evaluating it does no I/O; `src/index.ts`'s full graph
-   * pulls in `Global` (an unguarded top-level file write) and a live
+   * executable path. The entry is that file and never `src/index.ts`, whose
+   * graph pulls in `Global` (an unguarded top-level file write) and a live
    * models.dev fetch, both of which run before any argv check could skip
    * them. A compiled binary has no separate entry to redirect to, so it
    * still goes through `index.ts`'s `__egress-shim` check and still
@@ -474,80 +525,73 @@ export namespace Sandbox {
    * reachable there; restructuring `index.ts` so nothing runs before the
    * check, for both modes, is a materially bigger change than this fix.
    *
-   * *Where the launcher and entry files live does not need to be "safe."*
-   * Earlier revisions tried to pick a location `--tmpfs /tmp` couldn't mask —
-   * `Global.Path.state`, then this file's own directory — and both were
-   * live-verified broken: `Global.Path.*` resolves under `os.tmpdir()`
-   * during `bun test` (`test/preload.ts` redirects every XDG dir there for
-   * isolation) and possibly for a real user with `$HOME` under `/tmp`; the
-   * repo checkout resolves under `/tmp` for a `git worktree add /tmp/...`
-   * (this repo's own workflow), a CI `mktemp -d` clone, or a container
-   * build. There is no location immune to both. The actual fix is the one
-   * `bubblewrapArgs` already uses for the egress socket: bind the exact path
-   * back in, explicitly, after `--tmpfs /tmp` — `--ro-bind-try`, not
-   * `--bind`, since this is executed, never written to, from inside. That
-   * works regardless of where the path resolves, so the launcher now lives
-   * in `Global.Path.bin` (matching `ensureAtlasBinDir`'s convention) purely
-   * for tidiness, not because that location is trusted to be visible.
+   * *Why bundle instead of running the source.* `--tmpfs /tmp` masks the
+   * whole host `/tmp` subtree, `--ro-bind / /` notwithstanding, so every path
+   * the shim touches has to be bound back by name — and the set of paths
+   * *running a source file* touches is open-ended: the entry, its imports,
+   * their imports, and for an npm import both the `node_modules` symlink and
+   * its target, which in this bun workspace is the monorepo-root store, one
+   * level *above* the package root. Successive revisions of this function
+   * bound the paths their author thought of (the launcher, then this file's
+   * directory, then the interpreter and the whole package root) and each
+   * time missed one — the last of them that npm target, latent only because
+   * nothing in the graph resolves a package today. A
+   * bundle ends that class rather than extending the list: at run time bun
+   * opens the bundle and nothing else, so the bound set is closed by
+   * construction — launcher, bundle, interpreter — instead of having to keep
+   * pace with an import graph.
    *
-   * *The bound set is not a list of individual files, and `process.execPath`
-   * is in it too.* An earlier version bound exactly `[launcher,
-   * import.meta.dir]` — this file's own directory, reasoning that it covers
-   * `egress-shim-entry.ts` and its one import, `./egress`. Two things about
-   * that were wrong, both live-verified: (1) it never bound the interpreter
-   * the launcher's `exec` line names — `process.execPath` can itself live
-   * under `/tmp` (a portable bun install, `$HOME` under `/tmp`), and that's
-   * a structurally separate input from the source graph, not implied by
-   * binding a directory of source files; (2) a list keyed to "the entry's
-   * current imports" silently breaks the moment that graph grows — adding
-   * one more sibling import to `egress-shim-entry.ts` reproduced the exact
-   * same failure the list was supposed to prevent. Binding the whole package
-   * root (`backend/cli`, two levels up from this file) instead of enumerating
-   * files fixes both: it's one path that structurally contains anything the
-   * entry could ever import from this package, so no future import can
-   * outgrow it, and it's listed explicitly alongside the interpreter rather
-   * than assumed to cover it.
+   * *What that does not cover*, stated precisely because "no future edit can
+   * break this" is the claim that was false the last four times: `bun build`
+   * inlines statically resolvable imports only, so a runtime
+   * `import(expression)` reaching outside the bundle would still resolve
+   * against an unbound path (a literal `import("./x")` is inlined and fine);
+   * the bundle executes from `Global.Path.bin`, so anything resolving off its
+   * own `import.meta.dir`/`url` no longer lands in the source tree; and an
+   * import the bundler cannot inline fails the build here, loudly, at
+   * `wrapArgv` time instead of silently inside the sandbox. Import-time side
+   * effects stay forbidden for the separate reason in
+   * `egress-shim-entry.ts`'s own comment — bundling relocates that code, it
+   * does not stop it running.
+   *
+   * *Where the artifacts live does not need to be "safe."* Earlier revisions
+   * tried to pick a location `--tmpfs /tmp` couldn't mask — `Global.Path.state`,
+   * then this file's own directory — and both were live-verified broken:
+   * `Global.Path.*` resolves under `os.tmpdir()` during `bun test`
+   * (`test/preload.ts` redirects every XDG dir there for isolation) and
+   * possibly for a real user with `$HOME` under `/tmp`; the repo checkout
+   * resolves under `/tmp` for a `git worktree add /tmp/...` (this repo's own
+   * workflow), a CI `mktemp -d` clone, or a container build. There is no
+   * location immune to both. The fix is the one `bubblewrapArgs` already uses
+   * for the egress socket: bind the exact path back in, explicitly, after
+   * `--tmpfs /tmp` — `--ro-bind-try`, not `--bind`, since these are executed
+   * and read, never written to, from inside. `process.execPath` is bound for
+   * the same reason and is a structurally separate input, not implied by
+   * binding the artifacts: a portable bun install, or `$HOME` under `/tmp`,
+   * puts the interpreter the launcher execs under the tmpfs too.
    */
   const shimPlan = lazy((): { binary: string; bind: string[] } => {
     if (!Installation.isLocal()) return { binary: process.execPath, bind: [process.execPath] }
     const entry = path.resolve(import.meta.dir, "egress-shim-entry.ts")
-    const script = `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(entry)} "$@"\n`
-    // Content-addressed, not a single fixed name: two worktrees resolve
-    // different entry paths, so they get different files instead of
-    // overwriting each other's, and any process that finds a file already at
-    // this name knows its content without reading it first (same content ⇒
-    // same name, by construction) — no read-modify-write race to get wrong.
-    const digest = createHash("sha256").update(script).digest("hex").slice(0, 16)
-    const launcher = path.join(Global.Path.bin, `egress-shim-dev-${digest}.sh`)
-    // A missing file (first run, or a fresh worktree/test tmpdir) is the
-    // expected case, not a failure — only errors from actually writing it
-    // below are real. Read failures of any kind (ENOENT included) just mean
-    // "write it", so they're swallowed here rather than sharing a catch with
-    // the write.
-    const upToDate = (() => {
-      try {
-        return fs.readFileSync(launcher, "utf8") === script
-      } catch {
-        return false
-      }
-    })()
-    if (!upToDate) {
-      try {
-        fs.mkdirSync(Global.Path.bin, { recursive: true })
-        fs.writeFileSync(launcher, script, { mode: 0o755 })
-        fs.chmodSync(launcher, 0o755)
-      } catch (e) {
-        // Fail loud with an actionable message, not a raw EACCES/EROFS out of
-        // wrapArgv: network "allowlist" without a working shim is a security-
-        // relevant misconfiguration (the caller explicitly asked for bounded
-        // egress), not something to silently downgrade.
-        throw new Error(
-          `Could not write the dev egress-shim launcher to ${launcher}: ${e instanceof Error ? e.message : String(e)}`,
-        )
-      }
+    const built = Bun.spawnSync([process.execPath, "build", "--target=bun", entry])
+    if (!built.success) {
+      throw new Error(`Could not bundle the dev egress shim from ${entry}: ${built.stderr.toString().trim()}`)
     }
-    const packageRoot = path.resolve(import.meta.dir, "..", "..")
-    return { binary: launcher, bind: [launcher, process.execPath, packageRoot] }
+    // Content-addressed, not fixed names: a rebuilt bundle (edited source, a
+    // different worktree, a different bun) is a different file rather than an
+    // overwrite of the one another process may be executing, and a name that
+    // already exists already holds this exact content, by construction. The
+    // launcher's own digest covers the bundle's path, so a new bundle always
+    // produces a new launcher pointing at it — a stale pair cannot form.
+    const stamp = (value: Buffer) => createHash("sha256").update(value).digest("hex").slice(0, 16)
+    // .mjs, not .js: nothing should make bun's module-type detection for this
+    // file depend on a package.json above Global.Path.bin.
+    const bundle = path.join(Global.Path.bin, `egress-shim-dev-${stamp(built.stdout)}.mjs`)
+    const script = Buffer.from(`#!/bin/sh\nexec ${quote(process.execPath)} ${quote(bundle)} "$@"\n`)
+    const launcher = path.join(Global.Path.bin, `egress-shim-dev-${stamp(script)}.sh`)
+    place(bundle, built.stdout, 0o644)
+    place(launcher, script, 0o755)
+    return { binary: launcher, bind: [launcher, bundle, process.execPath] }
   })
 
   // ── planning (consumed by the bash tool and the kernels) ────────────────────

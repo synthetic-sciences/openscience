@@ -480,13 +480,88 @@ describe("Sandbox.wrapArgv egress shim", () => {
     20000,
   )
 
-  // Regression guard for Important B: --ro-bind-try for the package root
-  // (shimPlan's readBind) is emitted after the writable --bind-try loop, so
-  // without bubblewrapArgs's writable-overlap exclusion it would shadow
-  // write access anywhere the workspace overlaps the package root — exactly
-  // the self-hosting scenario (opening OpenScience on its own checkout)
-  // Task 5 will dogfood. Probes the same path the original finding did:
-  // backend/cli/src/sandbox itself.
+  // Regression guard for the fifth variant of "a path the shim needs is
+  // masked by --tmpfs /tmp": an npm import in the shim's graph resolves
+  // through a node_modules symlink whose target is the monorepo-root store,
+  // above the package root, so binding the package root left the target
+  // unbound. Reproducing that directly needs a /tmp-relocated checkout with a
+  // real hoisted store — a fixture too elaborate to keep honest here. These
+  // two tests assert the property that makes the whole class impossible
+  // instead: the shim resolves nothing from disk at run time.
+  //
+  // First, statically, on the artifact `shimPlan()` actually generated: a
+  // bundle with no import specifiers left in it cannot resolve anything,
+  // whether the import was a sibling file or a package. Builtins are allowed
+  // through — they come from inside bun, not the filesystem — so this keeps
+  // passing if the shim ever imports node:net, and fails if a future import
+  // is left external or the plan goes back to executing source.
+  test.skipIf(Sandbox.backend() !== "bubblewrap")("the generated dev shim bundle resolves nothing from disk", () => {
+    const wrapped = Sandbox.wrapArgv({
+      file: "python3",
+      args: ["-u", "/tmp/k.py"],
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "allowlist", egress: "/run/os/e.sock" },
+    })
+    const bundle = wrapped.args.find((value) => value.endsWith(".mjs"))
+    expect(bundle, `argv=${wrapped.args.join(" ")}`).toBeDefined()
+    const source = fs.readFileSync(bundle!, "utf8")
+    const found = [...source.matchAll(/\bfrom\s*"([^"]+)"|\b(?:require|import)\(\s*"([^"]+)"\s*\)/g)]
+    const external = found.map((match) => match[1] ?? match[2]!).filter((spec) => !/^(bun|bun:|node:)/.test(spec))
+    expect(external).toEqual([])
+  })
+
+  // Second, live: mask the shim's own source entry with /dev/null (the
+  // sandbox's existing `unreadable` mechanism) and run the real composed
+  // script anyway. If the shim still bridges, nothing it ran came from the
+  // source tree — which is what makes where that tree lives, and what it
+  // imports, irrelevant. Executing the source instead reads an empty file,
+  // starts no listener, and the connection is refused (verified: pointing the
+  // launcher back at the entry fails this test in 3s, the readiness cap).
+  // The mask only holds because readBind is files: a readBind *directory*
+  // over the entry would re-expose it and this test would pass regardless,
+  // which is why the static check above is the one that pins the bundle.
+  test.skipIf(Sandbox.backend() !== "bubblewrap" || !bash || !Bun.which("timeout") || !Bun.which("head"))(
+    "the composed script still starts the shim when its own source entry is masked",
+    async () => {
+      await using tmp = await tmpdir()
+      const socket = path.join(tmp.path, "e.sock")
+      const server = Bun.listen<undefined>({
+        unix: socket,
+        socket: {
+          data(sock, chunk) {
+            sock.write(`ACK:${chunk.toString()}`)
+          },
+        },
+      })
+      try {
+        const wrapped = Sandbox.wrapArgv({
+          file: bash!,
+          args: ["-c", "exec 3<>/dev/tcp/127.0.0.1/3128; printf hello >&3; timeout 3 head -c 9 <&3"],
+          workspace: [tmp.path],
+          unreadable: [path.resolve(import.meta.dir, "..", "..", "src", "sandbox", "egress-shim-entry.ts")],
+          options: { enabled: true, network: "allowlist", egress: socket },
+        })
+        const proc = Bun.spawn([wrapped.file, ...wrapped.args], { stdout: "pipe", stderr: "pipe" })
+        const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+        await proc.exited
+        expect(out, `stdout=${out} stderr=${err}`).toContain("ACK:hello")
+      } finally {
+        server.stop(true)
+      }
+    },
+    15000,
+  )
+
+  // End-to-end guard on the property Important B was about: self-hosting —
+  // opening OpenScience on its own checkout, the case Task 5 will dogfood —
+  // must not lose write access to part of the workspace just because the
+  // sandbox also needs some path bound read-only. It caught a real bug when
+  // shimPlan's readBind held the package root and bubblewrapArgs emitted it
+  // after the writable --bind-try loop. That trigger is gone (readBind is now
+  // two generated files plus the interpreter, none inside a checkout), so the
+  // test no longer has a failing negative control — it passes by the bind set
+  // being small rather than by the overlap exclusion doing anything. Kept as
+  // the assertion that the property still holds however the set changes.
   test.skipIf(Sandbox.backend() !== "bubblewrap" || !bash)(
     "a workspace path under the package root stays writable under allowlist",
     async () => {

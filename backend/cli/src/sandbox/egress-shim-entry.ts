@@ -1,7 +1,7 @@
 /**
  * Minimal, dependency-light entry point for the sandboxed loopback shim. In
- * development `Sandbox.shimPlan()` execs `bun` against this file directly
- * — never against `src/index.ts` — because `src/index.ts`'s import graph
+ * development `Sandbox.shimPlan()` bundles this file and execs `bun` against
+ * the bundle — never against `src/index.ts` — because `src/index.ts`'s graph
  * pulls in `Global` (an unguarded top-level `await Bun.file(...).write(...)`
  * at `src/global/index.ts` — `EROFS` under a read-only source tree) and
  * `ModelsDev` (a live fetch at module-eval time). Both run before any argv
@@ -11,12 +11,25 @@
  * constant below (a single string, no other exports), so evaluating it does
  * no I/O beyond the two lines that matter.
  *
- * `shimPlan()` binds this package's whole root into the sandbox, not a list
- * of this file's individual imports — so it stays safe to add another
- * lightweight, I/O-free import here later. It is *not* safe to import
- * anything with import-time side effects (a top-level fetch, a top-level
- * write) — that would reintroduce exactly the failure mode this file exists
- * to avoid, regardless of what's bound.
+ * `shimPlan()` does not exec this file: it runs `bun build` over it and execs
+ * the resulting self-contained bundle, because only the bundle's own path has
+ * to be visible inside the sandbox, where `--tmpfs /tmp` masks whatever it
+ * covers. So an added import does not have to live anywhere in particular —
+ * a sibling module and an npm package are equally fine, and the npm case is
+ * specifically what a package-root bind got wrong before (in this bun
+ * workspace `node_modules/<pkg>` is a symlink into the monorepo-root store,
+ * above the package root: the link was bound, its target was not).
+ *
+ * Three things are still not safe to add here, and none of them are about
+ * where files live. Import-time side effects (a top-level fetch, a top-level
+ * write) run in the bundle exactly as they would in the source, and would
+ * reintroduce the failure this file exists to avoid — the shim dies under the
+ * read-only, no-network conditions it is supposed to survive, with its output
+ * on /dev/null. Resolving anything from `import.meta.dir`/`url` points at
+ * `Global.Path.bin`, where the bundle runs, not at this directory. And a
+ * runtime `import(expression)` cannot be inlined by the bundler, so it would
+ * resolve against a path nothing bound (a literal `import("./x")` is inlined
+ * and fine).
  *
  * A compiled release has no separate entry to redirect to — `bun --compile`
  * embeds a single one — so it still goes through `index.ts`'s
