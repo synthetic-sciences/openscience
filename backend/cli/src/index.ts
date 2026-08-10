@@ -110,6 +110,16 @@ const cli = yargs(hideBin(process.argv))
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")
+  .command(
+    "__egress-shim <port> <socket>",
+    false,
+    (y) => y.positional("port", { type: "number" }).positional("socket", { type: "string" }),
+    async (args) => {
+      const { Egress } = await import("./sandbox/egress")
+      Egress.serveShim({ port: args.port as number, socket: args.socket as string })
+      await new Promise(() => {})
+    },
+  )
   .command(AcpCommand)
   .command(McpCommand)
   .command(RunCommand)

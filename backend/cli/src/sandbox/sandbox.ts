@@ -5,6 +5,8 @@ import { spawn, spawnSync } from "child_process"
 import { lazy } from "@/util/lazy"
 import { Log } from "@/util/log"
 import { Shell } from "@/shell/shell"
+import { Global } from "@/global"
+import { Installation } from "@/installation"
 
 const log = Log.create({ service: "sandbox" })
 
@@ -83,6 +85,12 @@ export namespace Sandbox {
     sandboxed: boolean
     backend: Backend
     warning?: string
+    /**
+     * Proxy variables the caller must set on the child's env for the loopback
+     * shim to be used. Present only when the argv was actually wrapped through
+     * the shim (bubblewrap, network "allowlist", a usable egress socket).
+     */
+    env?: Record<string, string>
   }
 
   export class UnavailableError extends Error {
@@ -334,6 +342,57 @@ export namespace Sandbox {
     }
   }
 
+  // ── egress shim composition ─────────────────────────────────────────────────
+
+  /** POSIX single-quote escaping: close, insert an escaped quote, reopen. */
+  const quote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`
+
+  /**
+   * The sandboxed process needs a proxy at a host:port, but the only route out
+   * is a unix socket. This backgrounds a loopback bridge inside the namespace
+   * and then execs the real command, so the sandbox still holds exactly one
+   * long-lived process.
+   */
+  export function shimScript(input: { binary: string; port: number; socket: string; file: string; args: string[] }) {
+    const shim = [quote(input.binary), "__egress-shim", String(input.port), quote(input.socket)].join(" ")
+    const real = [quote(input.file), ...input.args.map(quote)].join(" ")
+    return `${shim} >/dev/null 2>&1 & exec ${real}`
+  }
+
+  /**
+   * Loopback port the shim binds inside the sandboxed network namespace.
+   * Fixed rather than negotiated: `--unshare-net` gives every sandboxed
+   * process its own private namespace, so this port can never collide across
+   * sandboxed processes or with anything on the host. The egress proxy side
+   * agrees on the same value independently — this module does not import
+   * `egress.ts` (the sandbox layer knows a socket path, not a proxy).
+   */
+  const SHIM_PORT = 3128
+
+  /**
+   * The single executable `shimScript` execs as the loopback bridge.
+   *
+   * In a compiled release `process.execPath` IS the openscience binary, so
+   * `openscience __egress-shim ...` runs directly — no extra artifact ships.
+   *
+   * Under `bun run src/index.ts` in development, `process.execPath` is the
+   * `bun` binary itself, and `bun __egress-shim ...` is not a valid bun
+   * invocation (it needs the entry script too). `shimScript`'s `binary` is a
+   * single shell word once quoted, so a two-word "bun <entry>" invocation
+   * cannot be smuggled through it — instead a tiny on-disk launcher plays the
+   * role of a single executable, the same trick `ensureAtlasBinDir` in
+   * `src/openscience/index.ts` uses to expose a package's JS entry as one
+   * executable path.
+   */
+  const shimBinary = lazy((): string => {
+    if (!Installation.isLocal()) return process.execPath
+    const launcher = path.join(Global.Path.bin, "egress-shim-dev")
+    const script = `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(Bun.main)} "$@"\n`
+    fs.writeFileSync(launcher, script, { mode: 0o755 })
+    fs.chmodSync(launcher, 0o755)
+    return launcher
+  })
+
   // ── planning (consumed by the bash tool and the kernels) ────────────────────
 
   // Warn only once per process so every command doesn't repeat the same notice.
@@ -417,9 +476,20 @@ export namespace Sandbox {
       unreadable: input.unreadable,
       options: input.options!,
     })
-    const s = specForArgv([input.file, ...input.args], policy)!
+    // Only bubblewrap's --unshare-net + --bind gives the shim anything to
+    // bridge: seatbelt has no namespace, so "allowlist" already reads as a
+    // plain network deny there (see seatbeltProfile) and composing a shim
+    // that dials a socket seatbelt never mounted would just fail or hang.
+    const shim =
+      b === "bubblewrap" && policy.network === "allowlist" && policy.egress
+        ? shimScript({ binary: shimBinary(), port: SHIM_PORT, socket: policy.egress, file: input.file, args: input.args })
+        : undefined
+    const argv = shim ? ["/bin/sh", "-c", shim] : [input.file, ...input.args]
+    const s = specForArgv(argv, policy)!
     log.info("sandboxing process", { backend: b, network: policy.network, writable: policy.writable.length })
-    return { file: s.file, args: s.args, sandboxed: true, backend: b, warning }
+    const proxy = `http://127.0.0.1:${SHIM_PORT}`
+    const env = shim ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : undefined
+    return { file: s.file, args: s.args, sandboxed: true, backend: b, warning, ...(env ? { env } : {}) }
   }
 
   // ── self-test (proves the boundary actually holds on this machine) ──────────

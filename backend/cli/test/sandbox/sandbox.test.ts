@@ -298,3 +298,80 @@ describe("Sandbox network policy", () => {
     expect(profile).toContain("(deny network*)")
   })
 })
+
+describe("Sandbox.shimScript", () => {
+  test("backgrounds the shim and execs the real command", () => {
+    const script = Sandbox.shimScript({
+      binary: "/usr/bin/openscience",
+      port: 3128,
+      socket: "/run/os/e.sock",
+      file: "python3",
+      args: ["-u", "/tmp/k.py"],
+    })
+    expect(script).toContain("__egress-shim")
+    expect(script).toContain("&")
+    expect(script).toContain("exec ")
+  })
+
+  test("quotes every interpolated value so a path with a space cannot split", () => {
+    const script = Sandbox.shimScript({
+      binary: "/opt/my apps/openscience",
+      port: 3128,
+      socket: "/run/my dir/e.sock",
+      file: "python3",
+      args: ["-c", "print('hi there')"],
+    })
+    expect(script).toContain("'/opt/my apps/openscience'")
+    expect(script).toContain("'/run/my dir/e.sock'")
+    expect(script).not.toMatch(/[^']\/opt\/my apps/)
+  })
+
+  test("a single quote in an argument cannot break out of the quoting", () => {
+    const script = Sandbox.shimScript({
+      binary: "/usr/bin/openscience",
+      port: 3128,
+      socket: "/run/os/e.sock",
+      file: "python3",
+      args: ["-c", "x = 'a'; print(x)"],
+    })
+    expect(script).toContain(`'"'"'`)
+  })
+})
+
+describe("Sandbox.wrapArgv egress shim", () => {
+  test.skipIf(Sandbox.backend() !== "bubblewrap")("allowlist composes the shim into the argv and returns proxy env", () => {
+    const wrapped = Sandbox.wrapArgv({
+      file: "python3",
+      args: ["-u", "/tmp/k.py"],
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "allowlist", egress: "/run/os/e.sock" },
+    })
+    expect(wrapped.sandboxed).toBe(true)
+    const argv = wrapped.args.join(" ")
+    expect(argv).toContain("__egress-shim")
+    expect(argv).toContain("/run/os/e.sock")
+    expect(argv).toContain("exec 'python3'")
+    expect(wrapped.env?.HTTP_PROXY).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
+    expect(wrapped.env?.http_proxy).toBe(wrapped.env?.HTTP_PROXY)
+  })
+
+  test.skipIf(Sandbox.backend() !== "bubblewrap")("deny and allow never compose the shim", () => {
+    const deny = Sandbox.wrapArgv({
+      file: "python3",
+      args: ["-u", "/tmp/k.py"],
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "deny" },
+    })
+    expect(deny.args.join(" ")).not.toContain("__egress-shim")
+    expect(deny.env).toBeUndefined()
+
+    const allow = Sandbox.wrapArgv({
+      file: "python3",
+      args: ["-u", "/tmp/k.py"],
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "allow" },
+    })
+    expect(allow.args.join(" ")).not.toContain("__egress-shim")
+    expect(allow.env).toBeUndefined()
+  })
+})
