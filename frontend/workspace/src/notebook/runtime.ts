@@ -11,7 +11,7 @@ export type KernelEnvironment = {
     requested: boolean
     enforced: boolean
     backend: "seatbelt" | "bubblewrap" | "none"
-    network: "allow" | "deny"
+    network: "deny" | "allowlist" | "allow"
     platform: string
     available: boolean
     tool?: string
@@ -241,7 +241,10 @@ export function kernelEnvironmentLabel(kernel?: KernelStatus) {
 export function kernelNetworkLabel(kernel?: KernelStatus) {
   const sandbox = kernel?.environment?.sandbox
   if (!sandbox) return null
-  return sandbox.enforced && sandbox.network === "deny" ? "Network disabled" : "Network allowed"
+  if (!sandbox.enforced) return "Network allowed"
+  if (sandbox.network === "deny") return "Network disabled"
+  if (sandbox.network === "allowlist") return "Network bounded"
+  return "Network allowed"
 }
 
 /**
@@ -250,10 +253,20 @@ export function kernelNetworkLabel(kernel?: KernelStatus) {
  * kernelEnvironmentTone, which reads an enforced sandbox as the good outcome:
  * there the question is whether the sandbox holds, here it is what the run can
  * still touch through it.
+ *
+ * "allowlist" gets its own middle tone rather than folding into either
+ * neighbor: it is not inert like "deny" (the kernel does reach the network),
+ * and collapsing it into "allow" would hide the one fact — a fixed host set
+ * vs. no boundary at all — this label exists to surface. "allow" escalates to
+ * "danger": it is the explicit widening away from the bounded default, not
+ * the default itself.
  */
 export function kernelNetworkTone(kernel?: KernelStatus): KernelTone {
   const sandbox = kernel?.environment?.sandbox
-  return sandbox?.enforced && sandbox.network === "deny" ? "muted" : "pending"
+  if (!sandbox?.enforced) return "pending"
+  if (sandbox.network === "deny") return "muted"
+  if (sandbox.network === "allowlist") return "pending"
+  return "danger"
 }
 
 export function kernelEnvironmentTone(kernel?: KernelStatus): KernelTone {

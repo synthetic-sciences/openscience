@@ -50,8 +50,15 @@ The boundary is host-level, not content-level. The proxy pipes bytes after check
 authority; it cannot see inside TLS, so an allowlisted host can still be sent anything a client
 sends it. Allowlisting bounds where a kernel can talk, not what it says once it is talking.
 
-Unresolved: macOS has no namespace equivalent, so this enforcement argument does not transfer.
-This ADR's fallback decision is that seatbelt treats `"allowlist"` as `"deny"` until macOS gets
-its own design; whether that fallback also surfaces a warning is not settled by anything measured
-here — unverified, left to that design. Windows has no sandbox backend at all, so the question
-does not apply there.
+Unresolved: seatbelt has no namespace, so the _mechanism_ above — sever the network device, cross
+back in only through a bind-mounted socket — does not transfer as written. That is not the same as
+saying macOS cannot reach the same bounded-egress outcome: seatbelt can restrict
+`network-outbound` to a specific local port via `(allow network-outbound (remote tcp
+"localhost:PORT"))`, which is exactly the shape `anthropic-experimental/sandbox-runtime` ships (a
+default network deny, then a selective allow for `network-bind`/`network-inbound`/
+`network-outbound` on the proxy's loopback port). Neither OS can filter by hostname at the
+sandbox-profile level — that is what the proxy is for on Linux too — so this is achievable via a
+different mechanism, not impossible; it is simply unimplemented here. This ADR's fallback decision
+is that seatbelt treats `"allowlist"` as `"deny"` until that mechanism is built; whether that
+fallback also surfaces a warning is not settled by anything measured here — unverified, left to
+that design. Windows has no sandbox backend at all, so the question does not apply there.

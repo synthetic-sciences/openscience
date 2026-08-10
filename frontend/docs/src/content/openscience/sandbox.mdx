@@ -22,7 +22,7 @@ openscience sandbox                 # show status: backend + current policy
 
 - **Writes** are denied everywhere except the workspace (your working directory and its worktree), the system temp dirs, and any extra paths you allow. Everything else on disk is read-only to the agent.
 - **Reads** stay open. The threat model is *tampering and exfiltration*, not hiding your files from a tool that needs to read them.
-- **Network** is allowed by default; set it to deny to stop sandboxed commands from reaching the network at all.
+- **Network** is bounded by default (`allowlist`): sandboxed commands can reach a fixed set of research hosts (PyPI, NCBI, UniProt, PDB, EBI, and any hosts you add) through a host-side proxy, and nothing else. Set it to `deny` to block network egress entirely, or `allow` to remove the boundary and permit unrestricted egress.
 
 ## Backends
 
@@ -39,7 +39,9 @@ Check what's available on your machine with `openscience sandbox` or `openscienc
 ```bash
 openscience sandbox                 # status (backend + config)
 openscience sandbox enable          # turn on
-openscience sandbox enable --network deny          # also block network egress
+openscience sandbox enable --network deny          # block network egress entirely
+openscience sandbox enable --network allow         # remove the network boundary (unrestricted egress)
+openscience sandbox enable --allow-host pypi.example.com  # extra host reachable under allowlist (repeatable)
 openscience sandbox enable --allow /data/shared    # extra writable path (repeatable)
 openscience sandbox enable --on-unavailable error  # refuse to run where no backend exists
 openscience sandbox disable         # turn off
@@ -50,7 +52,8 @@ The sandbox is a machine-wide safety setting, so it is always written to your **
 
 | Flag | Meaning |
 | --- | --- |
-| `--network` | `allow` (default) or `deny` network egress from sandboxed commands. |
+| `--network` | `deny`, `allowlist` (default), or `allow` network egress from sandboxed commands. `allowlist` bounds egress to a fixed set of research hosts plus anything you add with `--allow-host`; `allow` removes that boundary entirely. |
+| `--allow-host` | An extra host the sandbox may reach when `--network` is `allowlist`. Repeatable. |
 | `--allow` | An absolute path, beyond the workspace and temp dirs, the sandbox may write to. Repeatable. |
 | `--on-unavailable` | Behaviour where no backend exists: `warn` (default, runs unsandboxed with a notice), `error` (refuses to run), `allow` (runs unsandboxed silently). |
 
@@ -66,7 +69,8 @@ The sandbox is a `sandbox` block in your **global** `openscience.json` (or an en
 {
   "sandbox": {
     "enabled": true,
-    "network": "deny",
+    "network": "allowlist",
+    "allowHosts": ["internal.example.com"],
     "allowWrite": ["/data/shared"],
     "onUnavailable": "error"
   }
@@ -74,7 +78,8 @@ The sandbox is a `sandbox` block in your **global** `openscience.json` (or an en
 ```
 
 - `enabled` — master switch. Off by default.
-- `network` — `allow` (default) or `deny`.
+- `network` — `deny`, `allowlist` (default), or `allow`.
+- `allowHosts` — extra hosts sandboxed processes may reach when `network` is `allowlist`. A leading dot matches subdomains, e.g. `.internal.example.com`.
 - `allowWrite` — extra absolute paths the sandbox may write to.
 - `onUnavailable` — `warn` (default) · `error` · `allow`, for machines with no backend.
 

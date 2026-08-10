@@ -27,7 +27,7 @@ export interface ExecutionDecision {
   writable: string[]
   sandbox: {
     enabled: boolean
-    network: "allow" | "deny"
+    network: "deny" | "allowlist" | "allow"
     allowWrite: string[]
     onUnavailable: "warn" | "error" | "allow"
     backend: "seatbelt" | "bubblewrap" | "none"
