@@ -7,8 +7,16 @@
  * `ModelsDev` (a live fetch at module-eval time). Both run before any argv
  * check could skip them and would kill the shim under exactly the
  * read-only/no-network conditions this mechanism exists to survive. This
- * file imports only `./egress`, which itself imports nothing but a Bun type,
- * so evaluating it does no I/O beyond the two lines below.
+ * file imports only `./egress` (nothing but a Bun type) and the marker
+ * constant below (a single string, no other exports), so evaluating it does
+ * no I/O beyond the two lines that matter.
+ *
+ * `shimPlan()` binds this package's whole root into the sandbox, not a list
+ * of this file's individual imports — so it stays safe to add another
+ * lightweight, I/O-free import here later. It is *not* safe to import
+ * anything with import-time side effects (a top-level fetch, a top-level
+ * write) — that would reintroduce exactly the failure mode this file exists
+ * to avoid, regardless of what's bound.
  *
  * A compiled release has no separate entry to redirect to — `bun --compile`
  * embeds a single one — so it still goes through `index.ts`'s
@@ -25,10 +33,9 @@
  * it without the token.
  */
 import { Egress } from "./egress"
+import { SHIM_READY_MARKER } from "./egress-shim-marker"
 
 const [port, socket] = process.argv.slice(-2)
 Egress.serveShim({ port: Number(port), socket: socket! })
-// Signals Sandbox.shimScript's readiness wait — keep this literal in sync
-// with sandbox.ts's SHIM_READY_MARKER.
-await Bun.write("/tmp/.openscience-egress-shim.ready", "").catch(() => {})
+await Bun.write(SHIM_READY_MARKER, "").catch(() => {})
 await new Promise(() => {})

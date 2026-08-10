@@ -8,6 +8,7 @@ import { Log } from "@/util/log"
 import { Shell } from "@/shell/shell"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
+import { SHIM_READY_MARKER } from "./egress-shim-marker"
 
 const log = Log.create({ service: "sandbox" })
 
@@ -195,6 +196,16 @@ export namespace Sandbox {
   }
 
   /**
+   * True when `p` is exactly `root` or lies inside it. Both arguments must
+   * already be `dedupe()`-normalized (`path.resolve()`d) — this does exact
+   * string comparison, the same convention `tooBroadToConfine` uses for the
+   * same reason.
+   */
+  function isWithin(p: string, root: string): boolean {
+    return p === root || p.startsWith(root + path.sep)
+  }
+
+  /**
    * A path too broad to ever be a sandbox writable root: granting write here
    * would hand back most of the filesystem and defeat containment. Guards
    * against a project/worktree opened at "/" and against `TMPDIR`/`allowWrite`
@@ -307,11 +318,15 @@ export namespace Sandbox {
     // Whole fs read-only, a fresh /dev and /proc, and a throwaway writable /tmp;
     // then re-mount the bits that must be writable on top.
     const args = ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp"]
-    for (const p of dedupe(policy.writable)) {
-      // Skip only the /tmp mount root itself — it is provided as a fresh tmpfs and
-      // re-binding host /tmp would defeat it. A workspace that lives *under* /tmp
-      // still needs binding on top of the tmpfs, or its writes vanish.
-      if (p === "/tmp") continue
+    // "/tmp" itself is always in policy.writable (tempDirs() adds it unconditionally)
+    // but is deliberately never actually bound here — the fresh tmpfs above already
+    // provides it, and re-binding host /tmp would defeat that. So it's excluded from
+    // this set up front and shared with the readBind exclusion below: a path under
+    // "/tmp" is writable only where something *else* in policy.writable specifically
+    // covers it (e.g. a workspace that lives under /tmp), never merely because "/tmp"
+    // is nominally a writable root.
+    const boundWritable = dedupe(policy.writable).filter((p) => p !== "/tmp")
+    for (const p of boundWritable) {
       // --bind-try: don't abort if the source path doesn't exist.
       args.push("--bind-try", p, p)
     }
@@ -339,7 +354,32 @@ export namespace Sandbox {
     // under /tmp — would otherwise silently not exist in here. Binding each
     // path back in by its own name, after the tmpfs, is what makes it
     // reachable regardless of where it actually lives on the host.
+    //
+    // Skip anything already inside a writable root — boundWritable specifically
+    // (not the raw policy.writable list), since that's what's actually mounted
+    // above; "/tmp" itself is nominally writable but was never bound, so it
+    // must not short-circuit this check (a launcher living under /tmp — e.g.
+    // Global.Path.bin redirected there by bun test's isolation — needs its
+    // own explicit bind same as anywhere else). bwrap mounts are applied in
+    // argument order and a later mount at (or inside) a path shadows whatever
+    // an earlier one put there — so a read-only bind here, coming after the
+    // --bind-try loop above, would silently turn part of an already-writable
+    // workspace read-only again wherever the two overlap.
+    // That's not hypothetical: it's exactly what happens when the workspace
+    // is (or contains) this package's own checkout, e.g. self-hosting
+    // OpenScience on its own repo — precisely the dev + "allowlist" case
+    // this mechanism exists for. Only that one containment direction is
+    // guarded (a readBind path inside a writable root, not the reverse — a
+    // writable root nested inside a readBind path): every current readBind
+    // candidate (the launcher under Global.Path.bin, the interpreter, the
+    // package root) is a narrow, structurally-fixed location no real project
+    // workspace would ever sensibly be a subdirectory of, so the reverse
+    // case has no realistic trigger today. Handling it too would mean
+    // reordering these mounts relative to the writable ones, which risks
+    // quietly reintroducing this same shadowing bug in the other direction
+    // for a scenario that has never actually occurred.
     for (const p of dedupe(policy.readBind ?? [])) {
+      if (boundWritable.some((root) => isWithin(p, root))) continue
       args.push("--ro-bind-try", p, p)
     }
     // --unshare-pid: don't share the host PID namespace, so /proc/<pid>/root of a
@@ -364,16 +404,6 @@ export namespace Sandbox {
 
   /** POSIX single-quote escaping: close, insert an escaped quote, reopen. */
   const quote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`
-
-  /**
-   * Marker the `__egress-shim` handler touches once its listener is bound
-   * (see `index.ts`, which must use this exact literal). Lives under `/tmp`,
-   * which `bubblewrapArgs` always mounts as a fresh, process-private tmpfs —
-   * so a fixed name here cannot collide across sandboxed processes or with a
-   * previous run, and — unlike the socket's own directory — is guaranteed
-   * writable regardless of the write policy.
-   */
-  const SHIM_READY_MARKER = "/tmp/.openscience-egress-shim.ready"
 
   /**
    * The sandboxed process needs a proxy at a host:port, but the only route out
@@ -420,8 +450,8 @@ export namespace Sandbox {
    * The single executable `shimScript` execs as the loopback bridge, plus
    * every read-only path that must be explicitly bound into the namespace
    * (`Policy.readBind`, consumed by `bubblewrapArgs`) for that executable —
-   * and, in dev, its one source dependency — to actually be reachable from
-   * inside, regardless of where either lives on the host.
+   * and, in dev, the interpreter and package it needs — to actually be
+   * reachable from inside, regardless of where any of them live on the host.
    *
    * In a compiled release `process.execPath` IS the openscience binary, so
    * `openscience __egress-shim ...` runs directly — no extra artifact ships.
@@ -459,6 +489,24 @@ export namespace Sandbox {
    * works regardless of where the path resolves, so the launcher now lives
    * in `Global.Path.bin` (matching `ensureAtlasBinDir`'s convention) purely
    * for tidiness, not because that location is trusted to be visible.
+   *
+   * *The bound set is not a list of individual files, and `process.execPath`
+   * is in it too.* An earlier version bound exactly `[launcher,
+   * import.meta.dir]` — this file's own directory, reasoning that it covers
+   * `egress-shim-entry.ts` and its one import, `./egress`. Two things about
+   * that were wrong, both live-verified: (1) it never bound the interpreter
+   * the launcher's `exec` line names — `process.execPath` can itself live
+   * under `/tmp` (a portable bun install, `$HOME` under `/tmp`), and that's
+   * a structurally separate input from the source graph, not implied by
+   * binding a directory of source files; (2) a list keyed to "the entry's
+   * current imports" silently breaks the moment that graph grows — adding
+   * one more sibling import to `egress-shim-entry.ts` reproduced the exact
+   * same failure the list was supposed to prevent. Binding the whole package
+   * root (`backend/cli`, two levels up from this file) instead of enumerating
+   * files fixes both: it's one path that structurally contains anything the
+   * entry could ever import from this package, so no future import can
+   * outgrow it, and it's listed explicitly alongside the interpreter rather
+   * than assumed to cover it.
    */
   const shimPlan = lazy((): { binary: string; bind: string[] } => {
     if (!Installation.isLocal()) return { binary: process.execPath, bind: [process.execPath] }
@@ -498,9 +546,8 @@ export namespace Sandbox {
         )
       }
     }
-    // import.meta.dir (this file's directory) covers both egress-shim-entry.ts
-    // and its one dependency, egress.ts — both siblings of sandbox.ts.
-    return { binary: launcher, bind: [launcher, import.meta.dir] }
+    const packageRoot = path.resolve(import.meta.dir, "..", "..")
+    return { binary: launcher, bind: [launcher, process.execPath, packageRoot] }
   })
 
   // ── planning (consumed by the bash tool and the kernels) ────────────────────

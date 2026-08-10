@@ -53,10 +53,9 @@ import { OpenScience } from "./openscience"
 // middleware grows later — there is no yargs command path to keep in sync.
 if (process.argv[2] === "__egress-shim") {
   const { Egress } = await import("./sandbox/egress")
+  const { SHIM_READY_MARKER } = await import("./sandbox/egress-shim-marker")
   Egress.serveShim({ port: Number(process.argv[3]), socket: process.argv[4] as string })
-  // Signals Sandbox.shimScript's readiness wait (backend/cli/src/sandbox/sandbox.ts) —
-  // keep this literal in sync with that file's SHIM_READY_MARKER.
-  await Bun.write("/tmp/.openscience-egress-shim.ready", "").catch(() => {})
+  await Bun.write(SHIM_READY_MARKER, "").catch(() => {})
   await new Promise(() => {})
 }
 

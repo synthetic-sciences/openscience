@@ -422,4 +422,95 @@ describe("Sandbox.wrapArgv egress shim", () => {
     },
     15000,
   )
+
+  // Regression guard for the bug that survived two consecutive rounds: the
+  // interpreter the launcher execs (`process.execPath`) can itself live
+  // under /tmp — a portable bun install, `$HOME` under /tmp — independent of
+  // where the checkout or Global.Path.bin happen to be. `shimPlan()` reads
+  // `process.execPath` from the *current* process, so the only way to
+  // actually exercise this is to run under a /tmp-staged bun. Stages a real
+  // copy (a symlink wouldn't reproduce — Bun resolves it) and drives a small
+  // standalone script through it, since `bun:test` itself isn't the thing
+  // under test here.
+  test.skipIf(Sandbox.backend() !== "bubblewrap" || !bash || !Bun.which("timeout") || !Bun.which("head"))(
+    "the composed script still starts the shim when the interpreter itself is staged under /tmp",
+    async () => {
+      const stage = fs.mkdtempSync(path.join(os.tmpdir(), "staged-bun-"))
+      const stagedBun = path.join(stage, "bun")
+      const driver = path.join(stage, "driver.ts")
+      try {
+        fs.copyFileSync(process.execPath, stagedBun)
+        fs.chmodSync(stagedBun, 0o755)
+        const sandboxPath = path.resolve(import.meta.dir, "..", "..", "src", "sandbox", "sandbox.ts")
+        fs.writeFileSync(
+          driver,
+          [
+            `import path from "path"`,
+            `import fs from "fs"`,
+            `import os from "os"`,
+            `import { Sandbox } from ${JSON.stringify(sandboxPath)}`,
+            `const work = fs.mkdtempSync(path.join(os.tmpdir(), "staged-bun-driver-"))`,
+            `const socket = path.join(work, "e.sock")`,
+            `const server = Bun.listen({ unix: socket, socket: { data(sock, chunk) { sock.write("ACK:" + chunk) } } })`,
+            `try {`,
+            `  const wrapped = Sandbox.wrapArgv({`,
+            `    file: ${JSON.stringify(bash)},`,
+            `    args: ["-c", "exec 3<>/dev/tcp/127.0.0.1/3128; printf hello >&3; timeout 3 head -c 9 <&3"],`,
+            `    workspace: [work],`,
+            `    options: { enabled: true, network: "allowlist", egress: socket },`,
+            `  })`,
+            `  const proc = Bun.spawn([wrapped.file, ...wrapped.args], { stdout: "pipe", stderr: "pipe" })`,
+            `  const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])`,
+            `  await proc.exited`,
+            `  console.log(out.includes("ACK:hello") ? "STAGED_BUN_PASS" : "STAGED_BUN_FAIL " + JSON.stringify({ out, err }))`,
+            `} finally {`,
+            `  server.stop(true)`,
+            `  fs.rmSync(work, { recursive: true, force: true })`,
+            `}`,
+          ].join("\n"),
+        )
+        const proc = Bun.spawn([stagedBun, "run", driver], { stdout: "pipe", stderr: "pipe" })
+        const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+        await proc.exited
+        expect(out, `stdout=${out} stderr=${err}`).toContain("STAGED_BUN_PASS")
+      } finally {
+        fs.rmSync(stage, { recursive: true, force: true })
+      }
+    },
+    20000,
+  )
+
+  // Regression guard for Important B: --ro-bind-try for the package root
+  // (shimPlan's readBind) is emitted after the writable --bind-try loop, so
+  // without bubblewrapArgs's writable-overlap exclusion it would shadow
+  // write access anywhere the workspace overlaps the package root — exactly
+  // the self-hosting scenario (opening OpenScience on its own checkout)
+  // Task 5 will dogfood. Probes the same path the original finding did:
+  // backend/cli/src/sandbox itself.
+  test.skipIf(Sandbox.backend() !== "bubblewrap" || !bash)(
+    "a workspace path under the package root stays writable under allowlist",
+    async () => {
+      await using tmp = await tmpdir()
+      const socket = path.join(tmp.path, "e.sock")
+      const server = Bun.listen<undefined>({ unix: socket, socket: { data() {} } })
+      const packageRoot = path.resolve(import.meta.dir, "..", "..")
+      const probe = path.join(packageRoot, "src", "sandbox", `.regression-write-probe-${process.pid}`)
+      try {
+        const wrapped = Sandbox.wrapArgv({
+          file: bash!,
+          args: ["-c", `echo probe > '${probe}' && cat '${probe}' && rm '${probe}' && echo WRITE_OK`],
+          workspace: [packageRoot],
+          options: { enabled: true, network: "allowlist", egress: socket },
+        })
+        const proc = Bun.spawn([wrapped.file, ...wrapped.args], { stdout: "pipe", stderr: "pipe" })
+        const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+        await proc.exited
+        expect(out, `stdout=${out} stderr=${err}`).toContain("WRITE_OK")
+      } finally {
+        server.stop(true)
+        fs.rmSync(probe, { force: true })
+      }
+    },
+    15000,
+  )
 })
