@@ -121,6 +121,12 @@ const KERNEL_RUNTIME_KEYS = new Set([
   "WINDIR",
   "PATHEXT",
   "COMSPEC",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
 ])
 const SAFE_SYNCED_KEYS = new Set([
   ...BYOK_LLM_ENV_KEYS,

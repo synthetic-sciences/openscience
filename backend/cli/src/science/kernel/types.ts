@@ -32,7 +32,7 @@ export const KernelEnvironment = z.object({
     requested: z.boolean(),
     enforced: z.boolean(),
     backend: z.enum(["seatbelt", "bubblewrap", "none"]),
-    network: z.enum(["allow", "deny"]),
+    network: z.enum(["deny", "allowlist", "allow"]),
     platform: z.string(),
     available: z.boolean(),
     tool: z.string().optional(),

@@ -10,7 +10,7 @@ const log = Log.create({ service: "settings-sandbox" })
 
 const PatchSchema = z.object({
   enabled: z.boolean().optional(),
-  network: z.enum(["allow", "deny"]).optional(),
+  network: z.enum(["deny", "allowlist", "allow"]).optional(),
   allowWrite: z.array(z.string()).optional(),
   onUnavailable: z.enum(["warn", "error", "allow"]).optional(),
 })

@@ -451,11 +451,12 @@ export namespace Sandbox {
    * Loopback port the shim binds inside the sandboxed network namespace.
    * Fixed rather than negotiated: `--unshare-net` gives every sandboxed
    * process its own private namespace, so this port can never collide across
-   * sandboxed processes or with anything on the host. The egress proxy side
-   * agrees on the same value independently — this module does not import
-   * `egress.ts` (the sandbox layer knows a socket path, not a proxy).
+   * sandboxed processes or with anything on the host. Exported so
+   * `egress-runtime.ts` can hand it back to callers alongside the proxy's
+   * socket — one source of truth, rather than a second module-private 3128
+   * that could drift from this one.
    */
-  const SHIM_PORT = 3128
+  export const SHIM_PORT = 3128
 
   /**
    * Write one of the dev shim's generated artifacts, idempotently. Callers

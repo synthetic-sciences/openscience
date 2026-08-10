@@ -46,7 +46,7 @@ export namespace ExecutionAuthority {
     writable: z.array(z.string()),
     sandbox: z.object({
       enabled: z.boolean(),
-      network: z.enum(["allow", "deny"]),
+      network: z.enum(["deny", "allowlist", "allow"]),
       allowWrite: z.array(z.string()),
       onUnavailable: z.enum(["warn", "error", "allow"]),
       backend: z.enum(["seatbelt", "bubblewrap", "none"]),

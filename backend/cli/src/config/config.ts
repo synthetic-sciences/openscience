@@ -757,9 +757,15 @@ export namespace Config {
           "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Enabled by default.",
         ),
       network: z
-        .enum(["allow", "deny"])
+        .enum(["deny", "allowlist", "allow"])
         .optional()
-        .describe("Whether sandboxed commands may reach the network. Default: deny."),
+        .describe("Whether sandboxed commands may reach the network. Default: allowlist."),
+      allowHosts: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Extra hosts sandboxed processes may reach when network is 'allowlist'. A leading dot matches subdomains, e.g. '.internal.example.com'.",
+        ),
       allowWrite: z
         .array(z.string())
         .optional()
@@ -1718,7 +1724,8 @@ export namespace Config {
     const policy = { ...(base ?? {}), ...(managed ?? {}) }
     return {
       enabled: policy.enabled ?? true,
-      network: policy.network ?? "deny",
+      network: policy.network ?? "allowlist",
+      allowHosts: policy.allowHosts ?? [],
       allowWrite: policy.allowWrite ?? [],
       onUnavailable: policy.onUnavailable ?? "error",
     }
