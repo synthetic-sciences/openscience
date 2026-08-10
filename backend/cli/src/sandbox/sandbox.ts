@@ -39,8 +39,10 @@ export namespace Sandbox {
     writable: string[]
     /** Exact host files the sandboxed process must not be able to read. */
     unreadable?: string[]
-    /** Whether the sandboxed process may reach the network. */
-    network: boolean
+    /** How the sandboxed process may reach the network. */
+    network: "deny" | "allowlist" | "allow"
+    /** Unix socket that is the only egress route. Required when network is "allowlist". */
+    egress?: string
   }
 
   /** A ready-to-spawn argv: `spawn(file, args)` with no shell wrapping. */
@@ -52,7 +54,8 @@ export namespace Sandbox {
   /** User-facing config knobs (mirrors Config.Sandbox, kept dependency-free). */
   export interface Options {
     enabled?: boolean
-    network?: "allow" | "deny"
+    network?: "deny" | "allowlist" | "allow"
+    egress?: string
     allowWrite?: string[]
     onUnavailable?: "warn" | "error" | "allow"
   }
@@ -228,7 +231,8 @@ export namespace Sandbox {
     return {
       writable,
       unreadable: dedupe(input.unreadable ?? []).filter((value) => !tooBroadToConfine(value)),
-      network: (input.options.network ?? "allow") !== "deny",
+      network: input.options.network ?? "allowlist",
+      ...(input.options.egress ? { egress: input.options.egress } : {}),
     }
   }
 
@@ -252,7 +256,9 @@ export namespace Sandbox {
 
   export function seatbeltProfile(policy: Policy): string {
     const lines = ["(version 1)", "(allow default)"]
-    if (!policy.network) lines.push("(deny network*)")
+    // No namespace equivalent on macOS, so "allowlist" cannot be enforced here.
+    // Deny is the safe reading of a request for bounded egress.
+    if (policy.network !== "allow") lines.push("(deny network*)")
     const unreadable = withPrivateAliases(dedupe(policy.unreadable ?? []))
     if (unreadable.length) {
       lines.push(`(deny file-read* ${unreadable.map((value) => `(literal "${sbpl(value)}")`).join(" ")})`)
@@ -291,7 +297,12 @@ export namespace Sandbox {
       if (!fs.existsSync(value)) continue
       args.push("--ro-bind-try", "/dev/null", value)
     }
-    if (!policy.network) args.push("--unshare-net")
+    if (policy.network !== "allow") args.push("--unshare-net")
+    if (policy.network === "allowlist") {
+      if (!policy.egress) throw new Error("sandbox network 'allowlist' requires an egress socket path")
+      // The namespace stays severed; this socket is the only route out.
+      args.push("--bind", policy.egress, policy.egress)
+    }
     // --unshare-pid: don't share the host PID namespace, so /proc/<pid>/root of a
     // same-uid host process can't be used to write through the read-only bind.
     args.push("--unshare-pid", "--die-with-parent")
