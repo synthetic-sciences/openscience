@@ -6,6 +6,7 @@ import { spawn, spawnSync } from "child_process"
 import { lazy } from "@/util/lazy"
 import { Log } from "@/util/log"
 import { Shell } from "@/shell/shell"
+import { Global } from "@/global"
 import { Installation } from "@/installation"
 
 const log = Log.create({ service: "sandbox" })
@@ -45,6 +46,14 @@ export namespace Sandbox {
     network: "deny" | "allowlist" | "allow"
     /** Unix socket that is the only egress route. Required when network is "allowlist". */
     egress?: string
+    /**
+     * Read-only paths to bind into the namespace after `--tmpfs /tmp`, so
+     * they stay reachable regardless of where they happen to live on the
+     * host — including under `/tmp`, which `--tmpfs /tmp` otherwise masks
+     * unconditionally, `--ro-bind / /` notwithstanding. Used for the egress
+     * shim's launcher executable and (in dev) its one source dependency.
+     */
+    readBind?: string[]
   }
 
   /** A ready-to-spawn argv: `spawn(file, args)` with no shell wrapping. */
@@ -324,6 +333,15 @@ export namespace Sandbox {
       // path the sandbox re-mounts (the /tmp tmpfs, a fresh /dev or /proc).
       args.push("--bind", policy.egress, policy.egress)
     }
+    // Explicit, not a location choice: --tmpfs /tmp (above) masks the whole
+    // host /tmp subtree unconditionally, so anything under it — a generated
+    // launcher, or the checkout itself when it's a worktree or CI clone
+    // under /tmp — would otherwise silently not exist in here. Binding each
+    // path back in by its own name, after the tmpfs, is what makes it
+    // reachable regardless of where it actually lives on the host.
+    for (const p of dedupe(policy.readBind ?? [])) {
+      args.push("--ro-bind-try", p, p)
+    }
     // --unshare-pid: don't share the host PID namespace, so /proc/<pid>/root of a
     // same-uid host process can't be used to write through the read-only bind.
     args.push("--unshare-pid", "--die-with-parent")
@@ -368,17 +386,23 @@ export namespace Sandbox {
    * The wait is a marker-file poll, not a network probe: a POSIX `/bin/sh`
    * (dash/busybox, not bash) has no built-in way to test a TCP connection —
    * bash's `/dev/tcp` isn't portable here and `nc`/`curl` aren't guaranteed
-   * present. Measured shim startup (process fork/exec + module load, before
-   * the listener binds) is ~600ms; 30 * 100ms = 3s gives roughly 5x headroom.
-   * If the shim never signals, the loop still exits at the cap and the real
-   * command runs anyway — against a closed proxy port, which fails fast and
-   * visibly (connection refused) rather than hanging forever.
+   * present. `sleep` takes whole seconds, not `0.1`: fractional intervals are
+   * a GNU/BSD coreutils extension, not POSIX, and some busybox builds reject
+   * them outright (`sleep: invalid interval`) — which would print 30 error
+   * lines to the real command's own stderr (this wait runs in the foreground,
+   * unlike the backgrounded shim) and, worse, skip the wait entirely, since a
+   * failing `sleep` doesn't slow the loop down at all. Measured shim startup
+   * (process fork/exec + module load, before the listener binds) is
+   * 600ms–1.1s; 3 * 1s = 3s gives roughly 3-5x headroom at whole-second
+   * granularity. If the shim never signals, the loop still exits at the cap
+   * and the real command runs anyway — against a closed proxy port, which
+   * fails fast and visibly (connection refused) rather than hanging forever.
    */
   export function shimScript(input: { binary: string; port: number; socket: string; file: string; args: string[] }) {
     const shim = [quote(input.binary), "__egress-shim", String(input.port), quote(input.socket)].join(" ")
     const real = [quote(input.file), ...input.args.map(quote)].join(" ")
     const marker = quote(SHIM_READY_MARKER)
-    const wait = `i=0; while [ ! -f ${marker} ] && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i + 1)); done`
+    const wait = `i=0; while [ ! -f ${marker} ] && [ "$i" -lt 3 ]; do sleep 1; i=$((i + 1)); done`
     return `${shim} >/dev/null 2>&1 & ${wait}; exec ${real}`
   }
 
@@ -393,73 +417,90 @@ export namespace Sandbox {
   const SHIM_PORT = 3128
 
   /**
-   * The single executable `shimScript` execs as the loopback bridge.
+   * The single executable `shimScript` execs as the loopback bridge, plus
+   * every read-only path that must be explicitly bound into the namespace
+   * (`Policy.readBind`, consumed by `bubblewrapArgs`) for that executable —
+   * and, in dev, its one source dependency — to actually be reachable from
+   * inside, regardless of where either lives on the host.
    *
    * In a compiled release `process.execPath` IS the openscience binary, so
    * `openscience __egress-shim ...` runs directly — no extra artifact ships.
    *
    * Under `bun run src/index.ts` in development, `process.execPath` is the
    * `bun` binary itself, and `bun __egress-shim ...` is not a valid bun
-   * invocation (it needs the entry script too). `shimScript`'s `binary` is a
+   * invocation (it needs an entry script too). `shimScript`'s `binary` is a
    * single shell word once quoted, so a two-word "bun <entry>" invocation
    * cannot be smuggled through it — instead a tiny on-disk launcher plays the
    * role of a single executable, the same trick `ensureAtlasBinDir` in
    * `src/openscience/index.ts` uses to expose a package's JS entry as one
-   * executable path.
+   * executable path. It execs `bun` against `egress-shim-entry.ts` (a
+   * sibling of this file), not `src/index.ts` — that file imports nothing
+   * but `./egress`, so evaluating it does no I/O; `src/index.ts`'s full graph
+   * pulls in `Global` (an unguarded top-level file write) and a live
+   * models.dev fetch, both of which run before any argv check could skip
+   * them. A compiled binary has no separate entry to redirect to, so it
+   * still goes through `index.ts`'s `__egress-shim` check and still
+   * evaluates that graph — see the Task 4 report for what that leaves
+   * reachable there; restructuring `index.ts` so nothing runs before the
+   * check, for both modes, is a materially bigger change than this fix.
    *
-   * The entry script is resolved from *this file's own location*
-   * (`import.meta.dir`), not `Bun.main` — `Bun.main` is "whatever launched
-   * the current process", which under `bun test` is the test file, not
-   * `src/index.ts`. `sandbox.ts` and `index.ts` sit at a fixed relative
-   * position within this package regardless of what invoked the process, so
-   * that structural relationship is the reliable signal.
-   *
-   * The launcher's filename is content-addressed (a digest of the exact
-   * script it will contain), not a single fixed name: two worktrees resolve
-   * different entry paths, so they get different files instead of
-   * overwriting each other's, and any process that finds a file already at
-   * that name knows its content without reading it first (same content ⇒
-   * same name, by construction) — so there is no read-modify-write race to
-   * get wrong. Errors writing it are reported clearly rather than
-   * propagating a raw EACCES/EROFS out of `wrapArgv`.
-   *
-   * It is written next to this file (`import.meta.dir`), *not* under
-   * `Global.Path.state`/`.bin`/anything XDG-derived, and not under
-   * `os.tmpdir()`. `bubblewrapArgs` unconditionally mounts a fresh, empty
-   * tmpfs at `/tmp` (`--tmpfs /tmp`, after `--ro-bind / /`), which replaces
-   * the *entire* host `/tmp` subtree inside the sandbox regardless of what's
-   * really there on the host — so a launcher living anywhere under `/tmp`
-   * would silently not exist from inside, and the shim would just never
-   * start. This isn't a test-only edge case: `Global.Path.*` all derive from
-   * the same XDG/home resolution, which `bun test` (`test/preload.ts`)
-   * unconditionally redirects under `os.tmpdir()` for isolation, and a real
-   * user can have `$HOME` under `/tmp` too. The repo checkout itself is
-   * never redirected by either, so anchoring to this file's own location is
-   * the one option that's actually safe here — live-verified: writing under
-   * `Global.Path.state` measured "Connection refused" under `bun test`
-   * (the launcher path resolved under the test's tmpdir and the shim never
-   * started); this location doesn't.
+   * *Where the launcher and entry files live does not need to be "safe."*
+   * Earlier revisions tried to pick a location `--tmpfs /tmp` couldn't mask —
+   * `Global.Path.state`, then this file's own directory — and both were
+   * live-verified broken: `Global.Path.*` resolves under `os.tmpdir()`
+   * during `bun test` (`test/preload.ts` redirects every XDG dir there for
+   * isolation) and possibly for a real user with `$HOME` under `/tmp`; the
+   * repo checkout resolves under `/tmp` for a `git worktree add /tmp/...`
+   * (this repo's own workflow), a CI `mktemp -d` clone, or a container
+   * build. There is no location immune to both. The actual fix is the one
+   * `bubblewrapArgs` already uses for the egress socket: bind the exact path
+   * back in, explicitly, after `--tmpfs /tmp` — `--ro-bind-try`, not
+   * `--bind`, since this is executed, never written to, from inside. That
+   * works regardless of where the path resolves, so the launcher now lives
+   * in `Global.Path.bin` (matching `ensureAtlasBinDir`'s convention) purely
+   * for tidiness, not because that location is trusted to be visible.
    */
-  const shimBinary = lazy((): string => {
-    if (!Installation.isLocal()) return process.execPath
-    const entry = path.resolve(import.meta.dir, "..", "index.ts")
+  const shimPlan = lazy((): { binary: string; bind: string[] } => {
+    if (!Installation.isLocal()) return { binary: process.execPath, bind: [process.execPath] }
+    const entry = path.resolve(import.meta.dir, "egress-shim-entry.ts")
     const script = `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(entry)} "$@"\n`
+    // Content-addressed, not a single fixed name: two worktrees resolve
+    // different entry paths, so they get different files instead of
+    // overwriting each other's, and any process that finds a file already at
+    // this name knows its content without reading it first (same content ⇒
+    // same name, by construction) — no read-modify-write race to get wrong.
     const digest = createHash("sha256").update(script).digest("hex").slice(0, 16)
-    const dir = path.join(import.meta.dir, ".egress-shim-dev")
-    const launcher = path.join(dir, `egress-shim-dev-${digest}.sh`)
-    try {
-      if (fs.readFileSync(launcher, "utf8") === script) return launcher
-    } catch {}
-    try {
-      fs.mkdirSync(dir, { recursive: true })
-      fs.writeFileSync(launcher, script, { mode: 0o755 })
-      fs.chmodSync(launcher, 0o755)
-    } catch (e) {
-      throw new Error(
-        `Could not write the dev egress-shim launcher to ${launcher}: ${e instanceof Error ? e.message : String(e)}`,
-      )
+    const launcher = path.join(Global.Path.bin, `egress-shim-dev-${digest}.sh`)
+    // A missing file (first run, or a fresh worktree/test tmpdir) is the
+    // expected case, not a failure — only errors from actually writing it
+    // below are real. Read failures of any kind (ENOENT included) just mean
+    // "write it", so they're swallowed here rather than sharing a catch with
+    // the write.
+    const upToDate = (() => {
+      try {
+        return fs.readFileSync(launcher, "utf8") === script
+      } catch {
+        return false
+      }
+    })()
+    if (!upToDate) {
+      try {
+        fs.mkdirSync(Global.Path.bin, { recursive: true })
+        fs.writeFileSync(launcher, script, { mode: 0o755 })
+        fs.chmodSync(launcher, 0o755)
+      } catch (e) {
+        // Fail loud with an actionable message, not a raw EACCES/EROFS out of
+        // wrapArgv: network "allowlist" without a working shim is a security-
+        // relevant misconfiguration (the caller explicitly asked for bounded
+        // egress), not something to silently downgrade.
+        throw new Error(
+          `Could not write the dev egress-shim launcher to ${launcher}: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
     }
-    return launcher
+    // import.meta.dir (this file's directory) covers both egress-shim-entry.ts
+    // and its one dependency, egress.ts — both siblings of sandbox.ts.
+    return { binary: launcher, bind: [launcher, import.meta.dir] }
   })
 
   // ── planning (consumed by the bash tool and the kernels) ────────────────────
@@ -549,18 +590,12 @@ export namespace Sandbox {
     // bridge: seatbelt has no namespace, so "allowlist" already reads as a
     // plain network deny there (see seatbeltProfile) and composing a shim
     // that dials a socket seatbelt never mounted would just fail or hang.
-    const shim =
-      b === "bubblewrap" && policy.network === "allowlist" && policy.egress
-        ? shimScript({
-            binary: shimBinary(),
-            port: SHIM_PORT,
-            socket: policy.egress,
-            file: input.file,
-            args: input.args,
-          })
-        : undefined
+    const plan = b === "bubblewrap" && policy.network === "allowlist" && policy.egress ? shimPlan() : undefined
+    const shim = plan
+      ? shimScript({ binary: plan.binary, port: SHIM_PORT, socket: policy.egress!, file: input.file, args: input.args })
+      : undefined
     const argv = shim ? ["/bin/sh", "-c", shim] : [input.file, ...input.args]
-    const s = specForArgv(argv, policy)!
+    const s = specForArgv(argv, plan ? { ...policy, readBind: plan.bind } : policy)!
     log.info("sandboxing process", { backend: b, network: policy.network, writable: policy.writable.length })
     const proxy = `http://127.0.0.1:${SHIM_PORT}`
     const env = shim ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : undefined

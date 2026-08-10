@@ -383,10 +383,13 @@ describe("Sandbox.wrapArgv egress shim", () => {
   // sandbox (EROFS from the CLI's logging middleware) go undetected. This
   // spawns the actual `wrapArgv` output — real bwrap, the real composed
   // `sh -c` script, and (in dev, which this test runs as) the real on-disk
-  // launcher `shimBinary()` writes — and proves a TCP client inside the
-  // namespace gets a connection accepted and bridged to the unix socket,
-  // not a refused one.
-  test.skipIf(Sandbox.backend() !== "bubblewrap" || !Bun.which("bash"))(
+  // launcher `shimPlan()` writes — and proves a TCP client inside the
+  // namespace gets a connection accepted and bridged to the unix socket, not
+  // a refused one. Resolved once, from the same gate the skip condition uses
+  // — bash lives at /bin/bash on Alpine and non-usrmerge Debian, not
+  // /usr/bin/bash, and a hardcoded path there would fail instead of skip.
+  const bash = Bun.which("bash")
+  test.skipIf(Sandbox.backend() !== "bubblewrap" || !bash || !Bun.which("timeout") || !Bun.which("head"))(
     "the composed script actually starts the shim inside a real sandbox and bridges a connection",
     async () => {
       await using tmp = await tmpdir()
@@ -403,7 +406,7 @@ describe("Sandbox.wrapArgv egress shim", () => {
       })
       try {
         const wrapped = Sandbox.wrapArgv({
-          file: "/usr/bin/bash",
+          file: bash!,
           args: ["-c", "exec 3<>/dev/tcp/127.0.0.1/3128; printf hello >&3; timeout 3 head -c 9 <&3"],
           workspace: [tmp.path],
           options: { enabled: true, network: "allowlist", egress: socket },
