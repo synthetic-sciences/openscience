@@ -228,7 +228,12 @@ export namespace Sandbox {
       }
       return true
     })
-    const egress = input.options.egress
+    // dedupe() applies the same path.resolve() normalization used for
+    // writable/unreadable above, so a trailing slash, a double slash, or an
+    // unresolved ".." can't slip an over-broad path past tooBroadToConfine's
+    // string checks — the two normalization paths cannot drift apart because
+    // this is the exact same helper, not a parallel implementation of it.
+    const [egress] = dedupe(input.options.egress ? [input.options.egress] : [])
     const egressOk = egress !== undefined && !tooBroadToConfine(egress)
     if (egress !== undefined && !egressOk) {
       log.warn("refusing to grant sandbox egress access to an over-broad path", { path: egress })

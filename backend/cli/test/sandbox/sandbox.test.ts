@@ -242,15 +242,28 @@ describe("Sandbox network policy", () => {
   })
 
   // buildPolicy filters `egress` through the same tooBroadToConfine gate as
-  // `writable`/`unreadable`. An over-broad egress (e.g. $HOME, or "/") must never
-  // reach argv as a read-write --bind: that would defeat write containment
-  // entirely, not just widen network access. Proven previously by calling
-  // bubblewrapArgs directly with an unfiltered `egress: $HOME`, which emitted
-  // "--bind $HOME $HOME" and let a sandboxed write escape to the real $HOME.
-  // Going through the public plan() (which runs buildPolicy) instead: the
-  // over-broad path is dropped, so "allowlist" is left without an egress socket
-  // and refuses to run — it fails closed rather than silently binding it.
-  test("an over-broad egress path ($HOME) is dropped, not bound as a read-write escape hatch", () => {
+  // `writable`/`unreadable`, normalized the same way (dedupe()'s path.resolve())
+  // before the gate sees it — so a lexical variant of an over-broad path (a
+  // trailing slash, a double slash, an unresolved "..") can't slip past the
+  // gate's string checks the way the raw string comparison once did. An
+  // over-broad egress must never reach argv as a read-write --bind: that would
+  // defeat write containment entirely, not just widen network access. Proven
+  // previously by calling bubblewrapArgs directly with an unfiltered
+  // `egress: $HOME`, which emitted "--bind $HOME $HOME" and let a sandboxed
+  // write escape to the real $HOME — and, before normalization was added, the
+  // exact same escape via `egress: $HOME + "/"` (a trailing slash was enough
+  // to dodge the raw string check). Going through the public plan() (which
+  // runs buildPolicy) instead: the over-broad path is dropped, so "allowlist"
+  // is left without an egress socket and refuses to run — it fails closed
+  // rather than silently binding it, for the whole class of lexical variants,
+  // not just the one literal string.
+  test.each([
+    ["exact", os.homedir()],
+    ["trailing slash", os.homedir() + "/"],
+    ["double slash", os.homedir() + "//"],
+    ["unresolved ..", os.homedir() + "/foo/.."],
+    ["root", "/"],
+  ])("an over-broad egress path (%s) is dropped, not bound as a read-write escape hatch", (_label, egress) => {
     if (!Sandbox.available()) return
     expect(() =>
       Sandbox.plan({
@@ -258,9 +271,23 @@ describe("Sandbox network policy", () => {
         shell,
         cwd: "/work/project",
         workspace: ["/work/project"],
-        options: { enabled: true, network: "allowlist", egress: os.homedir() },
+        options: { enabled: true, network: "allowlist", egress },
       }),
     ).toThrow()
+  })
+
+  test("a legitimate, non-broad egress socket is still bound", () => {
+    if (!Sandbox.available()) return
+    const p = Sandbox.plan({
+      command: "true",
+      shell,
+      cwd: "/work/project",
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "allowlist", egress: "/run/os/e.sock" },
+    })
+    expect(p.args).toContain("/run/os/e.sock")
+    const at = (p.args ?? []).indexOf("/run/os/e.sock")
+    expect((p.args ?? [])[at - 1]).toBe("--bind")
   })
 
   // Seatbelt has no namespace, so the enforcement argument does not transfer.
