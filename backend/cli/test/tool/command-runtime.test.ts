@@ -29,7 +29,10 @@ test("bash registers only its live process in the project compute ledger", async
       const find = async (attempt = 0): Promise<ReturnType<typeof CommandRuntime.list>[number]> => {
         const command = CommandRuntime.list(Instance.project.id, session.id)[0]
         if (command) return command
-        if (attempt >= 100) throw new Error("Live command did not enter the compute ledger")
+        // 500 * 10ms = 5s: the real command doesn't start until the loopback
+        // shim signals ready (up to ~3s under sandbox network "allowlist",
+        // the default) or its wait caps out. See sandbox.ts's shimScript.
+        if (attempt >= 500) throw new Error("Live command did not enter the compute ledger")
         await Bun.sleep(10)
         return find(attempt + 1)
       }

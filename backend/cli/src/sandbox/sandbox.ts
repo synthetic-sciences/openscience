@@ -85,6 +85,13 @@ export namespace Sandbox {
     backend: Backend
     /** One-time human-readable note (e.g. sandbox requested but unavailable). */
     warning?: string
+    /**
+     * Proxy variables the caller must set on the child's env for the loopback
+     * shim to be used. Present only when the command was actually wrapped
+     * through the shim (bubblewrap, network "allowlist", a usable egress
+     * socket) — same condition as `Wrapped.env`.
+     */
+    env?: Record<string, string>
   }
 
   /** Result of wrapping a raw argv (used by the notebook/R kernels). */
@@ -647,6 +654,15 @@ export namespace Sandbox {
    * `cwd` is *not* granted write access unless it lies within the workspace —
    * an approved external working directory is a permission decision, not a
    * reason to widen the write boundary to the escape target.
+   *
+   * Composes the same loopback shim `wrapArgv` does, under the same
+   * condition (bubblewrap, network "allowlist", a usable egress socket) —
+   * `pip`/`curl`/`uv` run through here, not `wrapArgv`, so this is the path
+   * the feature's motivating case actually needs. `shimScript` already
+   * treats its `file`/`args` as an arbitrary argv to `exec`, so a shell
+   * invocation composes by feeding it `input.shell`/`["-c", input.command]`
+   * exactly as the no-shim branch below already passes to `specForArgv` —
+   * one shape, not a second implementation of "wrap a shell command".
    */
   export function plan(input: {
     command: string
@@ -661,9 +677,34 @@ export namespace Sandbox {
       return { file: input.command, useShell: input.shell, sandboxed: false, backend: "none", warning }
     }
     const policy = buildPolicy({ workspace: input.workspace, options: input.options! })
-    const s = specForArgv([input.shell, "-c", input.command], policy)!
+    // See wrapArgv's identical guard: seatbelt has no namespace, so
+    // "allowlist" already reads as a plain network deny there, and composing
+    // a shim that dials a socket seatbelt never mounted would just fail or
+    // hang.
+    const shimmed = b === "bubblewrap" && policy.network === "allowlist" && policy.egress ? shimPlan() : undefined
+    const shim = shimmed
+      ? shimScript({
+          binary: shimmed.binary,
+          port: SHIM_PORT,
+          socket: policy.egress!,
+          file: input.shell,
+          args: ["-c", input.command],
+        })
+      : undefined
+    const argv = shim ? ["/bin/sh", "-c", shim] : [input.shell, "-c", input.command]
+    const s = specForArgv(argv, shimmed ? { ...policy, readBind: shimmed.bind } : policy)!
     log.info("sandboxing command", { backend: b, network: policy.network, writable: policy.writable.length })
-    return { file: s.file, args: s.args, useShell: false, sandboxed: true, backend: b, warning }
+    const proxy = `http://127.0.0.1:${SHIM_PORT}`
+    const env = shim ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : undefined
+    return {
+      file: s.file,
+      args: s.args,
+      useShell: false,
+      sandboxed: true,
+      backend: b,
+      warning,
+      ...(env ? { env } : {}),
+    }
   }
 
   /**

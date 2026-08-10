@@ -119,4 +119,25 @@ export namespace EgressRuntime {
     running.server.stop(true)
     await fs.rm(running.socket, { force: true })
   }
+
+  /** The socket to pass as `Sandbox.Options.egress`, or `undefined` when the
+   *  proxy would not actually be used: the sandbox is off, network isn't
+   *  "allowlist", or the active backend isn't bubblewrap. Seatbelt already
+   *  reads "allowlist" as a plain deny (no namespace to bridge a shim across
+   *  — see `sandbox.ts`'s `seatbeltProfile`), so starting the proxy for it,
+   *  or for a disabled/deny/allow policy, would be pure waste: a process
+   *  that never gets a shim would never connect to it. Every `wrapArgv` /
+   *  `plan()` caller should route through this rather than calling `ensure()`
+   *  directly, so a terminal or kernel on macOS — or with network "deny" —
+   *  never pays for a proxy it has no way to reach. */
+  export async function egressFor(policy: {
+    enabled?: boolean
+    network?: "deny" | "allowlist" | "allow"
+  }): Promise<string | undefined> {
+    if (policy.enabled === false) return undefined
+    if (policy.network !== "allowlist") return undefined
+    if (Sandbox.backend() !== "bubblewrap") return undefined
+    const { socket } = await ensure()
+    return socket
+  }
 }

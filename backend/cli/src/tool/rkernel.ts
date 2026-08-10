@@ -10,6 +10,7 @@ import { OpenScience } from "@/openscience"
 import { Config } from "@/config/config"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { KernelQueue } from "@/science/kernel/queue"
 import { KernelProcessIdentity } from "@/science/kernel/process"
 import { KernelRuntime } from "@/science/kernel/registry"
@@ -258,13 +259,14 @@ class RKernel implements Kernel {
     // kernel runs arbitrary agent-authored code — the same threat model as the
     // bash tool — so it must respect the same boundary.
     const policy = await Config.trustedSandbox()
+    const egress = await EgressRuntime.egressFor(policy)
     const sandboxed = Sandbox.wrapArgv({
       file: bin,
       args: ["--vanilla", scriptPath],
       workspace,
       extraWritable: [scriptPath, configPath],
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: policy,
+      options: { ...policy, egress },
     })
     const cwd = opts?.cwd ?? (opts?.sessionID ? await SessionFilesystem.workspace(opts.sessionID) : Instance.directory)
     this.environment = {
@@ -283,6 +285,7 @@ class RKernel implements Kernel {
       cwd,
       env: {
         ...OpenScience.kernelEnv(process.env),
+        ...(sandboxed.env ?? {}),
         ...(opts?.env ?? {}),
         ATLAS_CLI_CONFIG_PATH: configPath,
       },

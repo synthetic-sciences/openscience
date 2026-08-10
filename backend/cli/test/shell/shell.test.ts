@@ -88,8 +88,17 @@ test("killTree SIGKILLs a detached group even after its leader exits", async () 
         exited: () => true,
       }),
     )
-    expect(groupKill).toHaveBeenNthCalledWith(1, -4321, "SIGTERM")
-    expect(groupKill).toHaveBeenNthCalledWith(2, -4321, "SIGKILL")
+    // Filter to this test's own pid rather than asserting on the mock's
+    // absolute call order: process.kill is one process-wide global, and under
+    // a full suite run a real sandboxed spawn elsewhere can land its own
+    // (real, unrelated) killTree cleanup on this same mock while it's active,
+    // interleaving with these two calls by index without changing what this
+    // test is actually verifying — that ITS SIGTERM precedes ITS SIGKILL.
+    const own = groupKill.mock.calls.filter(([pid]) => pid === -4321)
+    expect(own).toEqual([
+      [-4321, "SIGTERM"],
+      [-4321, "SIGKILL"],
+    ])
     expect(proc.kill).not.toHaveBeenCalled()
   } finally {
     groupKill.mockRestore()

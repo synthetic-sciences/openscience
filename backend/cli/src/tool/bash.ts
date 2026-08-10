@@ -17,6 +17,7 @@ import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 import { OpenScience } from "@/openscience"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Filesystem } from "@/util/filesystem"
 import { Provenance } from "@/science/provenance/store"
@@ -277,18 +278,19 @@ export const BashTool = Tool.define("bash", async () => {
       // provider keys (auth.json + shell env), not just synced managed ones.
       await OpenScience.refreshByokSecrets(process.env).catch(() => {})
 
-      const env = await OpenScience.subprocessEnv(process.env)
       // Wrap the command in the authority's effective OS-sandbox policy. The
       // permission checks above decide *whether* to run; this decides *with what
       // authority*. An explicit trusted machine-level opt-out returns the raw
       // command unchanged.
+      const egress = await EgressRuntime.egressFor(authority.sandbox)
       const sandbox = Sandbox.plan({
         command: params.command,
         shell,
         cwd,
         workspace: writable,
-        options: authority.sandbox,
+        options: { ...authority.sandbox, egress },
       })
+      const env = { ...(await OpenScience.subprocessEnv(process.env)), ...(sandbox.env ?? {}) }
 
       const started = Date.now()
       const proc = sandbox.sandboxed

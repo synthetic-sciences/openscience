@@ -10,6 +10,7 @@ import { lazy } from "@synsci/util/lazy"
 import { Shell } from "@/shell/shell"
 import { ExecutionAuthority } from "@/project/execution"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { OpenScience } from "@/openscience"
 import { terminalArgs, terminalEnv } from "./environment"
 
@@ -108,14 +109,15 @@ export namespace Pty {
     const args = terminalArgs(command)
     const cwd = authority.workspace
     const source = await OpenScience.subprocessEnv(process.env)
-    const env = terminalEnv(source, Instance.project.id, input.sessionID)
+    const egress = await EgressRuntime.egressFor(authority.sandbox)
     const sandbox = Sandbox.wrapArgv({
       file: command,
       args,
       workspace: authority.writable,
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: authority.sandbox,
+      options: { ...authority.sandbox, egress },
     })
+    const env = { ...terminalEnv(source, Instance.project.id, input.sessionID), ...(sandbox.env ?? {}) }
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()

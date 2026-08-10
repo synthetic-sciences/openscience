@@ -10,6 +10,7 @@ import { OpenScience } from "@/openscience"
 import { Config } from "@/config/config"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { KernelQueue } from "@/science/kernel/queue"
 import { KernelProcessIdentity } from "@/science/kernel/process"
 import { KernelRuntime } from "@/science/kernel/registry"
@@ -291,13 +292,14 @@ class PythonKernel implements Kernel {
     // notebook runs arbitrary agent-authored code — the same threat model as the
     // bash tool — so it must not be able to escape the boundary bash respects.
     const policy = await Config.trustedSandbox()
+    const egress = await EgressRuntime.egressFor(policy)
     const sandboxed = Sandbox.wrapArgv({
       file: bin,
       args: ["-u", scriptPath],
       workspace,
       extraWritable: [scriptPath, configPath, cachePath],
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: policy,
+      options: { ...policy, egress },
     })
     const cwd = opts?.cwd ?? (opts?.sessionID ? await SessionFilesystem.workspace(opts.sessionID) : Instance.directory)
     this.environment = {
@@ -317,6 +319,7 @@ class PythonKernel implements Kernel {
       env: {
         ...OpenScience.kernelEnv(process.env),
         ...OpenScience.pythonThreadCapEnv(process.env),
+        ...(sandboxed.env ?? {}),
         ...(opts?.env ?? {}),
         ATLAS_CLI_CONFIG_PATH: configPath,
         MPLCONFIGDIR: path.join(cachePath, "matplotlib"),

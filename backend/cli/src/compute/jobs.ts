@@ -9,6 +9,7 @@ import { OpenScience } from "../openscience"
 import { Shell } from "../shell/shell"
 import { Instance } from "../project/instance"
 import { Sandbox } from "../sandbox/sandbox"
+import { EgressRuntime } from "../sandbox/egress-runtime"
 import { Filesystem } from "../util/filesystem"
 import { ProvenanceEnvelope } from "../science/provenance/envelope"
 import { ExecutionAuthority } from "../project/execution"
@@ -246,6 +247,9 @@ export namespace ComputeJobs {
   type Launch = {
     argv: string[]
     sandbox?: Job["sandbox"]
+    /** Proxy variables `execute` must merge into the spawned process's env
+     *  for the loopback shim to be reachable — see `Sandbox.Wrapped.env`. */
+    env?: Record<string, string>
   }
 
   const active = new Map<string, Runtime>()
@@ -683,12 +687,13 @@ export namespace ComputeJobs {
   ): Promise<Launch> {
     const spec = command(job, host)
     if (host) {
+      const egress = await EgressRuntime.egressFor(authority.sandbox)
       const planned = Sandbox.wrapArgv({
         file: spec.argv[0]!,
         args: spec.argv.slice(1),
         workspace: authority.writable,
         unreadable: OpenScience.kernelSensitivePaths(),
-        options: authority.sandbox,
+        options: { ...authority.sandbox, egress },
       })
       return {
         argv: [planned.file, ...planned.args],
@@ -699,19 +704,21 @@ export namespace ComputeJobs {
           network: authority.sandbox.network,
           warning: planned.warning,
         },
+        env: planned.env,
       }
     }
 
     await fs.mkdir(logsOf(scope.root), { recursive: true })
     await fs.writeFile(exitOf(scope.root, job.id), "", { mode: 0o600 })
     const wrapped = `(${job.command}\n); code=$?; printf %s "$code" > ${quote(exitOf(scope.root, job.id))}; exit "$code"`
+    const egress = await EgressRuntime.egressFor(authority.sandbox)
     const planned = Sandbox.wrapArgv({
       file: Shell.acceptable(),
       args: ["-lc", wrapped],
       workspace: authority.writable,
       extraWritable: [exitOf(scope.root, job.id)],
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: authority.sandbox,
+      options: { ...authority.sandbox, egress },
     })
     return {
       argv: [planned.file, ...planned.args],
@@ -722,6 +729,7 @@ export namespace ComputeJobs {
         network: authority.sandbox.network,
         warning: planned.warning,
       },
+      env: planned.env,
     }
   }
 
@@ -730,16 +738,17 @@ export namespace ComputeJobs {
     cwd: string,
     authority: ExecutionAuthority.Decision,
   ): Promise<string | undefined> {
+    const egress = await EgressRuntime.egressFor(authority.sandbox)
     const planned = Sandbox.wrapArgv({
       file: argv[0]!,
       args: argv.slice(1),
       workspace: authority.writable,
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: authority.sandbox,
+      options: { ...authority.sandbox, egress },
     })
     const proc = Bun.spawn([planned.file, ...planned.args], {
       cwd,
-      env: await OpenScience.subprocessEnv(process.env),
+      env: { ...(await OpenScience.subprocessEnv(process.env)), ...(planned.env ?? {}) },
       stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",
@@ -1103,7 +1112,7 @@ export namespace ComputeJobs {
     await fs.mkdir(logsOf(scope.root), { recursive: true })
     const log = path.join(logsOf(scope.root), `${job.id}.log`)
     const output = await fs.open(log, "a", 0o600)
-    const env = await OpenScience.subprocessEnv(process.env)
+    const env = { ...(await OpenScience.subprocessEnv(process.env)), ...(launch.env ?? {}) }
     const queued = (await read(scope.root)).find((item) => item.id === job.id)
     if (queued?.status === "cancelled") {
       await output.close()
@@ -1828,12 +1837,12 @@ export namespace ComputeJobs {
             args: spec.argv.slice(1),
             workspace: job.authority.writable,
             unreadable: OpenScience.kernelSensitivePaths(),
-            options: job.authority.sandbox,
+            options: { ...job.authority.sandbox, egress: await EgressRuntime.egressFor(job.authority.sandbox) },
           })
-        : { file: spec.argv[0]!, args: spec.argv.slice(1) }
+        : { file: spec.argv[0]!, args: spec.argv.slice(1), env: undefined }
       const proc = spawn(planned.file, planned.args, {
         cwd: job.authority?.workspace,
-        env: await OpenScience.subprocessEnv(process.env),
+        env: { ...(await OpenScience.subprocessEnv(process.env)), ...(planned.env ?? {}) },
         windowsHide: true,
         stdio: "ignore",
       })

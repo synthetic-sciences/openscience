@@ -8,6 +8,7 @@ import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { ExecutionAuthority } from "@/project/execution"
 
 const KERNEL_SCRIPT = `
@@ -186,19 +187,21 @@ async function getKernel(sessionID: string): Promise<Kernel> {
   const pythonBin = await findPython()
   // Confine the kernel to the workspace when the execution sandbox is on: it runs
   // arbitrary agent-authored code — the same threat model as the bash tool.
+  const egress = await EgressRuntime.egressFor(authority.sandbox)
   const sandboxed = Sandbox.wrapArgv({
     file: pythonBin,
     args: ["-u", scriptPath],
     workspace: authority.writable,
     extraWritable: [scriptPath, configPath, cachePath],
     unreadable: OpenScience.kernelSensitivePaths(),
-    options: authority.sandbox,
+    options: { ...authority.sandbox, egress },
   })
   const proc = spawn(sandboxed.file, sandboxed.args, {
     cwd: authority.workspace,
     env: {
       ...OpenScience.kernelEnv(process.env),
       ...OpenScience.pythonThreadCapEnv(process.env),
+      ...(sandboxed.env ?? {}),
       ATLAS_CLI_CONFIG_PATH: configPath,
       MPLCONFIGDIR: path.join(cachePath, "matplotlib"),
       XDG_CACHE_HOME: path.join(cachePath, "xdg"),

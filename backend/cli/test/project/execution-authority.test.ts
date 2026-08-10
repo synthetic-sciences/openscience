@@ -79,7 +79,7 @@ test("read-only project authority rejects terminal, shell, and kernel before pro
         trustRevision: 2,
         sandbox: {
           enabled: true,
-          network: "deny",
+          network: "allowlist",
           onUnavailable: "error",
         },
       })
@@ -190,7 +190,7 @@ test("trusted terminal derives its process contract from the owning session", as
             sandbox: {
               enabled: true,
               enforced: true,
-              network: "deny",
+              network: "allowlist",
             },
           },
           status: "running",
