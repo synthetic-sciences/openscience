@@ -30,9 +30,10 @@ function printStatus(config?: Config.Sandbox) {
     }`,
   )
   if (enabled) {
-    UI.println(`  network   ${config?.network ?? "deny"}`)
+    UI.println(`  network   ${config?.network ?? "allowlist"}`)
     UI.println(`  on missing backend   ${config?.onUnavailable ?? "error"}`)
     if (config?.allowWrite?.length) UI.println(`  extra writable   ${config.allowWrite.join(", ")}`)
+    if (config?.allowHosts?.length) UI.println(`  extra hosts   ${config.allowHosts.join(", ")}`)
   }
   if (enabled && !d.available) {
     UI.println("")
@@ -67,13 +68,18 @@ const EnableCommand = cmd({
   builder: (yargs: Argv) =>
     yargs
       .option("network", {
-        choices: ["allow", "deny"] as const,
-        describe: "allow or deny network egress from sandboxed commands (default: deny)",
+        choices: ["deny", "allowlist", "allow"] as const,
+        describe: "network egress from sandboxed commands: deny, allowlist (default), or allow",
       })
       .option("allow", {
         type: "string",
         array: true,
         describe: "extra absolute path the sandbox may write to (repeatable)",
+      })
+      .option("allow-host", {
+        type: "string",
+        array: true,
+        describe: "extra host the sandbox may reach when network is 'allowlist' (repeatable)",
       })
       .option("on-unavailable", {
         choices: ["warn", "error", "allow"] as const,
@@ -84,10 +90,12 @@ const EnableCommand = cmd({
       directory: process.cwd(),
       async fn() {
         const patch: Partial<Config.Sandbox> = { enabled: true }
-        if (args.network) patch.network = args.network as "allow" | "deny"
+        if (args.network) patch.network = args.network
         if (args["on-unavailable"]) patch.onUnavailable = args["on-unavailable"] as "warn" | "error" | "allow"
         const allow = args.allow as string[] | undefined
         if (allow?.length) patch.allowWrite = allow
+        const allowHosts = args["allow-host"] as string[] | undefined
+        if (allowHosts?.length) patch.allowHosts = allowHosts
         await Config.setSandbox(patch)
         UI.empty()
         UI.println(`${S.TEXT_SUCCESS_BOLD}Sandbox enabled${S.TEXT_NORMAL} ${S.TEXT_DIM}(global config)${S.TEXT_NORMAL}`)

@@ -4,6 +4,7 @@ import path from "path"
 import { Config } from "../../src/config/config"
 import { Global } from "../../src/global"
 import { EgressRuntime } from "../../src/sandbox/egress-runtime"
+import { Sandbox } from "../../src/sandbox/sandbox"
 
 // A global config write is process-wide and outlives any one test, so every
 // test that touches sandbox config must undo it — otherwise it leaks into
@@ -151,3 +152,45 @@ test("an allowlist edit reaches a running proxy without restarting it", async ()
   const second = await EgressRuntime.ensure()
   expect(second.socket).toBe(first.socket) // same proxy the whole time, not a restart
 })
+
+/**
+ * `egressFor` has to answer, ahead of time, the same "would this actually be
+ * sandboxed with an allowlist" question that `Sandbox.plan()`/`wrapArgv()`
+ * answer for real via `decide()` + `buildPolicy()` — its socket becomes their
+ * `options.egress`. The two used to default the unset cases in opposite
+ * directions from each other on both fields, invisibly, because production's
+ * five callers always pass an already-fully-resolved policy. These pin the
+ * shared default (`Sandbox.resolved`) so a future edit that reintroduces a
+ * hand-rolled check in just one of the two places fails here instead of
+ * shipping.
+ */
+test("egressFor treats a missing enabled the same way decide() does: off", async () => {
+  // Old behaviour: only an explicit `enabled: false` opted out, so this
+  // started a real proxy nothing could ever reach — decide() never wraps a
+  // command whose `options.enabled` isn't literally `true`.
+  const egress = await EgressRuntime.egressFor({ network: "allowlist" })
+  expect(egress).toBeUndefined()
+})
+
+test.skipIf(Sandbox.backend() !== "bubblewrap")(
+  "egressFor treats a missing network the same way buildPolicy() does: allowlist",
+  async () => {
+    // Old behaviour: a missing `network` read as "not allowlist" here, so
+    // this returned undefined while buildPolicy() (used by the same
+    // options a moment later, in Sandbox.plan/wrapArgv) still defaulted
+    // network to "allowlist" and demanded an egress socket — the exact
+    // "requires an egress socket path" crash, reproduced below without the
+    // fix.
+    const egress = await EgressRuntime.egressFor({ enabled: true })
+    expect(egress).toBeDefined()
+    expect(() =>
+      Sandbox.plan({
+        command: "true",
+        shell: "/bin/sh",
+        cwd: "/tmp",
+        workspace: ["/tmp"],
+        options: { enabled: true, egress },
+      }),
+    ).not.toThrow()
+  },
+)

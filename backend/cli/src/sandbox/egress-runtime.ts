@@ -158,12 +158,10 @@ export namespace EgressRuntime {
    *  `plan()` caller should route through this rather than calling `ensure()`
    *  directly, so a terminal or kernel on macOS — or with network "deny" —
    *  never pays for a proxy it has no way to reach. */
-  export async function egressFor(policy: {
-    enabled?: boolean
-    network?: "deny" | "allowlist" | "allow"
-  }): Promise<string | undefined> {
-    if (policy.enabled === false) return undefined
-    if (policy.network !== "allowlist") return undefined
+  export async function egressFor(policy: Sandbox.Options): Promise<string | undefined> {
+    const { enabled, network } = Sandbox.resolved(policy)
+    if (!enabled) return undefined
+    if (network !== "allowlist") return undefined
     if (Sandbox.backend() !== "bubblewrap") return undefined
     const { socket } = await ensure()
     return socket

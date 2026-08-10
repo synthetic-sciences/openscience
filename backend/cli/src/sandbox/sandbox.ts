@@ -73,6 +73,32 @@ export namespace Sandbox {
     onUnavailable?: "warn" | "error" | "allow"
   }
 
+  /**
+   * The `enabled`/`network` an `Options` resolves to — the one place that
+   * answers both questions, so `decide()` and `buildPolicy()` below and
+   * `EgressRuntime.egressFor()` (which has to precompute the socket that will
+   * become `options.egress` *before* either of them runs) can't quietly
+   * disagree on what "unset" means. They did: a missing `enabled` used to
+   * read as off in `decide()` and on in `egressFor()`, and a missing
+   * `network` used to read as `"allowlist"` in `buildPolicy()` and not in
+   * `egressFor()` — each divergence invisible from the five production
+   * callers, all of which pass an already-fully-resolved policy, but real for
+   * any caller that doesn't.
+   *
+   * A wholly missing `Options` stays off: `enabled` requires an explicit
+   * `true`, matching `decide()`'s existing contract (see the "no options →
+   * runs the raw command unchanged" test in sandbox.test.ts) — this module is
+   * dependency-free and does not itself default a caller into being
+   * sandboxed. `network` unset defaults to `"allowlist"`, matching
+   * `buildPolicy()` and `Config.trustedSandbox()`.
+   */
+  export function resolved(options?: Options): { enabled: boolean; network: "deny" | "allowlist" | "allow" } {
+    return {
+      enabled: options?.enabled === true,
+      network: options?.network ?? "allowlist",
+    }
+  }
+
   export interface Plan {
     /** Program to spawn. */
     file: string
@@ -277,7 +303,7 @@ export namespace Sandbox {
     return {
       writable,
       unreadable: dedupe(input.unreadable ?? []).filter((value) => !tooBroadToConfine(value)),
-      network: input.options.network ?? "allowlist",
+      network: resolved(input.options).network,
       ...(egressOk ? { egress } : {}),
     }
   }
@@ -657,10 +683,10 @@ export namespace Sandbox {
    * and no backend exists.
    */
   function decide(options?: Options): { backend: Backend; warning?: string } {
-    if (options?.enabled !== true) return { backend: "none" }
+    if (!resolved(options).enabled) return { backend: "none" }
     const b = backend()
     if (b !== "none") return { backend: b }
-    const mode = options.onUnavailable ?? "warn"
+    const mode = options?.onUnavailable ?? "warn"
     if (mode === "error") throw new UnavailableError(unavailableMessage())
     const warning = mode === "warn" && !warned.unavailable ? unavailableMessage() : undefined
     if (warning) {

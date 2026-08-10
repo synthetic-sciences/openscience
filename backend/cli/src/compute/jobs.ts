@@ -170,6 +170,10 @@ export namespace ComputeJobs {
     recovery_attempts: z.number().int().nonnegative().optional(),
     recovery_retry_at: z.string().optional(),
     session_id: z.string().startsWith("ses_").optional(),
+    // Persists the whole Decision, including its own sandbox.network — a
+    // second copy of the persisted enum below `sandbox.network` carries; see
+    // the comment on ExecutionAuthority.Decision for the downgrade cost of
+    // widening either one.
     authority: ExecutionAuthority.Decision.optional(),
     scope: z
       .object({
@@ -182,6 +186,9 @@ export namespace ComputeJobs {
         requested: z.boolean(),
         enforced: z.boolean(),
         backend: z.enum(["seatbelt", "bubblewrap", "none"]),
+        // Persisted — widening this costs an older binary its ability to
+        // read a newer record. `authority.sandbox.network` above is the same
+        // enum persisted a second time; see ExecutionAuthority.Decision.
         network: z.enum(["deny", "allowlist", "allow"]),
         warning: z.string().optional(),
       })
