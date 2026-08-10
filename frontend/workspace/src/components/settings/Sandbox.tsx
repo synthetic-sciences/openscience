@@ -17,7 +17,8 @@ import { settingsApi } from "./api"
 
 interface SandboxConfig {
   enabled?: boolean
-  network?: "allow" | "deny"
+  network?: "deny" | "allowlist" | "allow"
+  allowHosts?: string[]
   allowWrite?: string[]
   onUnavailable?: "warn" | "error" | "allow"
 }
@@ -46,8 +47,9 @@ interface SelfTest {
 }
 
 const NETWORK_OPTS = [
-  { value: "allow" as const, label: "Allow" },
-  { value: "deny" as const, label: "Deny" },
+  { value: "deny" as const, label: "Deny — block all network access" },
+  { value: "allowlist" as const, label: "Allowlist — bounded egress (default)" },
+  { value: "allow" as const, label: "Allow — unrestricted egress" },
 ]
 const UNAVAILABLE_OPTS = [
   { value: "warn" as const, label: "Warn & run" },
@@ -67,9 +69,10 @@ const Sandbox: Component = () => {
   const [test, setTest] = createSignal<SelfTest>()
   const [testing, setTesting] = createSignal(false)
   const [newPath, setNewPath] = createSignal("")
+  const [newHost, setNewHost] = createSignal("")
 
   const config = (): SandboxConfig =>
-    data()?.config ?? { enabled: true, network: "deny", allowWrite: [], onUnavailable: "error" }
+    data()?.config ?? { enabled: true, network: "allowlist", allowHosts: [], allowWrite: [], onUnavailable: "error" }
   const status = () => data()?.status
 
   const patch = async (body: SandboxConfig, failure: string) => {
@@ -108,6 +111,17 @@ const Sandbox: Component = () => {
   const removePath = (p: string) =>
     patch({ allowWrite: (config().allowWrite ?? []).filter((x) => x !== p) }, "Couldn't remove the path")
 
+  const addHost = () => {
+    const h = newHost().trim()
+    if (!h) return
+    const next = [...(config().allowHosts ?? [])]
+    if (!next.includes(h)) next.push(h)
+    setNewHost("")
+    patch({ allowHosts: next }, "Couldn't add the host")
+  }
+  const removeHost = (h: string) =>
+    patch({ allowHosts: (config().allowHosts ?? []).filter((x) => x !== h) }, "Couldn't remove the host")
+
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="settings-page-header">
@@ -116,7 +130,8 @@ const Sandbox: Component = () => {
           <p class="text-13-regular text-text-weak">
             Permissions decide <em>whether</em> the agent runs a shell command — not what it can reach once it does.
             OpenScience confines local terminals, kernels, and shell commands by default: writes are limited to
-            authorized project roots and network egress is denied unless you explicitly relax the machine-wide policy.
+            authorized project roots and network egress is bounded to an allowlist of approved hosts unless you
+            explicitly widen or restrict the machine-wide policy.
           </p>
         </div>
       </div>
@@ -178,12 +193,13 @@ const Sandbox: Component = () => {
                 <div class="flex flex-col gap-0.5 min-w-0">
                   <span class="text-14-medium text-text-strong">Network egress</span>
                   <span class="text-12-regular text-text-weak">
-                    Deny to stop sandboxed commands reaching the network.
+                    Allowlist bounds sandboxed commands to approved hosts (default). Allow removes that boundary —
+                    unrestricted egress. Deny blocks the network entirely.
                   </span>
                 </div>
                 <Select
                   options={NETWORK_OPTS}
-                  current={NETWORK_OPTS.find((o) => o.value === (config().network ?? "deny"))}
+                  current={NETWORK_OPTS.find((o) => o.value === (config().network ?? "allowlist"))}
                   value={(o) => o.value}
                   label={(o) => o.label}
                   onSelect={(o) => o && patch({ network: o.value }, "Couldn't update network policy")}
@@ -212,6 +228,39 @@ const Sandbox: Component = () => {
                 />
               </div>
             </div>
+
+            {/* extra allowed hosts — only meaningful under allowlist */}
+            <Show when={(config().network ?? "allowlist") === "allowlist"}>
+              <div class="flex flex-col gap-2">
+                <span class="text-13-medium text-text-strong">Extra allowed hosts</span>
+                <span class="text-12-regular text-text-weak/70">
+                  Hosts sandboxed commands may reach beyond the built-in research allowlist. A leading dot matches
+                  subdomains, e.g. <code>.internal.example.com</code>.
+                </span>
+                <For each={config().allowHosts ?? []}>
+                  {(h) => (
+                    <div class="flex items-center justify-between border border-border-weak-base rounded-[4px] px-3 py-2 bg-surface-base/40">
+                      <code class="text-12-regular text-text-strong truncate">{h}</code>
+                      <Button size="small" variant="secondary" disabled={busy()} onClick={() => removeHost(h)}>
+                        <Icon name="trash" />
+                      </Button>
+                    </div>
+                  )}
+                </For>
+                <div class="flex items-center gap-2">
+                  <input
+                    class="flex-1 bg-surface-base/40 border border-border-weak-base rounded-[4px] px-3 py-2 text-12-regular text-text-strong outline-none focus:border-border-strong"
+                    placeholder="pypi.example.com"
+                    value={newHost()}
+                    onInput={(e) => setNewHost(e.currentTarget.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addHost()}
+                  />
+                  <Button size="small" variant="secondary" disabled={busy() || !newHost().trim()} onClick={addHost}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </Show>
 
             {/* extra writable paths */}
             <div class="flex flex-col gap-2">
