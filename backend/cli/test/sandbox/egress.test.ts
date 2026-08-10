@@ -223,3 +223,184 @@ test("megabytes survive the shim and the proxy together, in both directions", as
   expect(body.length).toBe(VOLUME)
   expect(body.equals(sample)).toBe(true)
 }, 120_000)
+
+// ── one client, one upstream ────────────────────────────────────────────────
+//
+// Both bridges dial their upstream from inside an `async` handler, and Bun does
+// not serialize those handlers — a second chunk, or a client's FIN, re-enters
+// while the first call is parked on `await Bun.connect`. Two distinct defects
+// live in that window, and neither is visible to a test that moves bytes
+// through a connection that behaves politely from start to finish.
+
+/** Handlers for an upstream that counts connections and, crucially, whether
+ *  each one was ever closed. Counting sockets rather than file descriptors
+ *  keeps this honest on platforms without /proc, and measures the actual
+ *  invariant: nothing a bridge dials may be left with no owner. Each
+ *  connection's bytes accumulate in their own entry, so a concurrent second
+ *  connection cannot have its bytes attributed to the first. */
+function counter() {
+  const seen: { text: string }[] = []
+  const counts = { opened: 0, closed: 0 }
+  const entries = new WeakMap<Socket<undefined>, { text: string }>()
+  const socket = {
+    open(sock: Socket<undefined>) {
+      counts.opened++
+      const entry = { text: "" }
+      seen.push(entry)
+      entries.set(sock, entry)
+    },
+    data(sock: Socket<undefined>, chunk: Buffer) {
+      const entry = entries.get(sock)
+      if (entry) entry.text += chunk.toString()
+    },
+    close() {
+      counts.closed++
+    },
+    error() {},
+  }
+  return { counts, seen, socket }
+}
+
+function unixCounter(at: string) {
+  const held = counter()
+  const server = Bun.listen<undefined>({ unix: at, socket: held.socket })
+  opened.push({ stop: () => server.stop(true) })
+  return held
+}
+
+function tcpCounter() {
+  const held = counter()
+  const server = Bun.listen<undefined>({ hostname: "127.0.0.1", port: 0, socket: held.socket })
+  opened.push({ stop: () => server.stop(true) })
+  return { ...held, port: server.port }
+}
+
+function scratch(name: string) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "egress-abort-"))
+  opened.push({ stop: () => fs.rmSync(dir, { recursive: true, force: true }) })
+  return path.join(dir, name)
+}
+
+/** Wait for the counts to stop moving rather than guessing at the race. */
+async function settle(counts: { opened: number; closed: number }) {
+  for (let i = 0; i < 40 && counts.closed < counts.opened; i++) await Bun.sleep(50)
+}
+
+/** connect(), then FIN in the same turn, with nothing sent. */
+function abort(port: number) {
+  return Bun.connect<undefined>({
+    hostname: "127.0.0.1",
+    port,
+    socket: {
+      open(sock) {
+        sock.end()
+      },
+      data() {},
+      close() {},
+      error() {},
+    },
+  })
+}
+
+test("a client that aborts mid-dial does not strand the shim's upstream", async () => {
+  const socket = scratch("u.sock")
+  const upstream = unixCounter(socket)
+  const port = shim(socket)
+
+  const N = 60
+  for (let i = 0; i < N; i++) await abort(port)
+  await settle(upstream.counts)
+
+  // The dial really happened — otherwise this would pass trivially.
+  expect(upstream.counts.opened).toBeGreaterThan(0)
+  // And every one of them was closed. Before the shim tracked the client's
+  // departure, `close` ran while `toUpstream` was still undefined, so it had
+  // nothing to tear down: measured at 300 aborts across separate processes,
+  // 0.897 fd/conn stranded in the shim and the same in the host proxy, held
+  // for as long as the sandbox lives — hours, for a kernel or a terminal.
+  expect(upstream.counts.closed).toBe(upstream.counts.opened)
+}, 60_000)
+
+test("a client that aborts mid-dial does not strand the proxy's upstream", async () => {
+  const socket = scratch("p.sock")
+  // "localhost" rather than 127.0.0.1: the dial then includes a name lookup,
+  // which is what holds the window open long enough to observe any of this.
+  // Resolved from /etc/hosts, so no network is involved.
+  const upstream = tcpCounter()
+  const server = Egress.serveProxy({ socket, rules: ["localhost"] })
+  opened.push({ stop: () => server.stop(true) })
+
+  const N = 40
+  for (let i = 0; i < N; i++) {
+    const client = await Bun.connect<undefined>({
+      unix: socket,
+      socket: {
+        open(sock) {
+          // A complete head, so the proxy commits to dialling, then leave.
+          sock.write(`CONNECT localhost:${upstream.port} HTTP/1.1\r\nHost: localhost\r\n\r\n`)
+          sock.end()
+        },
+        data() {},
+        close() {},
+        error() {},
+      },
+    })
+    client.end()
+  }
+  await settle(upstream.counts)
+
+  expect(upstream.counts.opened).toBeGreaterThan(0)
+  expect(upstream.counts.closed).toBe(upstream.counts.opened)
+}, 60_000)
+
+test("a body that arrives after its head still produces exactly one upstream", async () => {
+  const pieces = ["id=1", "&id=2", "&x"]
+  const body = pieces.join("")
+  const socket = scratch("d.sock")
+  const upstream = tcpCounter()
+  const server = Egress.serveProxy({ socket, rules: ["localhost"] })
+  opened.push({ stop: () => server.stop(true) })
+
+  // The shape NCBI E-utilities recommends for a large id list, and the shape
+  // `HTTP_PROXY` routes through this branch: a plain-http POST whose body
+  // follows the head across separate segments. Each of those segments used to
+  // re-enter `data`, find no link yet, re-parse the same buffered head and
+  // dial again — 2 upstream connections against a local origin, 4 against a
+  // real remote one, every one of them carrying a duplicate of a
+  // non-idempotent request.
+  // Run in parallel, and not as a nod to realism: the dial has to still be in
+  // flight when the next segment lands, and on loopback with a warm resolver a
+  // single dial finishes inside the 1ms gap. Concurrency is what holds the
+  // window open — enough simultaneous name lookups to queue behind the
+  // resolver — and it is the only trigger measured here that survives a warm
+  // cache. Against the unfixed proxy this produced 200 upstream connections
+  // for these 100 clients, three runs out of three; at 25 clients it was one
+  // run in three, and sequentially it needed a cold cache to reproduce at all.
+  const target = `localhost:${upstream.port}`
+  const clients = 100
+  const socks = await Promise.all(
+    Array.from({ length: clients }, async () => {
+      const client = await Bun.connect<undefined>({
+        unix: socket,
+        socket: { data() {}, close() {}, error() {} },
+      })
+      client.write(`POST http://${target}/eutils HTTP/1.1\r\nHost: ${target}\r\nContent-Length: ${body.length}\r\n\r\n`)
+      for (const [i, gap] of [1, 5, 10].entries()) {
+        await Bun.sleep(gap)
+        client.write(pieces[i]!)
+      }
+      return client
+    }),
+  )
+  await Bun.sleep(1_000)
+
+  expect(upstream.counts.opened).toBe(clients)
+  // And each one carries a whole request, rather than the head being
+  // duplicated onto a second connection with the body split between them.
+  expect(upstream.seen.length).toBe(clients)
+  for (const entry of upstream.seen) {
+    expect(entry.text).toContain("POST /eutils")
+    expect(entry.text).toContain(body)
+  }
+  for (const s of socks) s.end()
+}, 60_000)

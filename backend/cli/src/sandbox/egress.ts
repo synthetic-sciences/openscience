@@ -114,12 +114,51 @@ export namespace Egress {
 
   type Pump = ReturnType<typeof pump>
 
-  /** `toUpstream` doubles as the "the link exists" flag — it is created at the
-   *  same moment the upstream socket is, and only after the request head has
-   *  been parsed and allowed. */
-  type Pending = { buffer: string; toClient: Pump; toUpstream?: Pump }
+  /**
+   * A client connection's progress through the proxy, tracked explicitly
+   * because `data` is async and Bun does not serialize its handlers: a second
+   * chunk re-enters `data` while the first is parked on `await Bun.connect`.
+   * Without a state set *before* that await, the re-entrant call finds no
+   * link yet, re-parses the same still-buffered head, and dials the origin a
+   * second time — measured: one client POST whose body followed the head by
+   * 1/5/10ms produced 2 upstream connections to a local origin and 4 to a
+   * real remote one, each carrying a duplicate of a non-idempotent request,
+   * with `toUpstream` left pointing at whichever dial resolved last.
+   *
+   *   head    — still reading the request head
+   *   dialing — head parsed and allowed, upstream connect in flight
+   *   linked  — bytes flow both ways
+   *   closed  — denied, unreachable, or the client went away
+   *
+   * `closed` is what a dial in flight checks when it resolves, so a client
+   * that aborts mid-dial cannot strand an upstream socket nobody will ever
+   * close.
+   */
+  type Phase = "head" | "dialing" | "linked" | "closed"
+
+  /** What both bridges track per client connection. The shim has no head to
+   *  read, so it simply starts at `dialing`. */
+  type Link = { phase: Phase; toClient: Pump; toUpstream?: Pump }
+
+  type Pending = Link & { buffer: string }
 
   const state = new WeakMap<Socket<unknown>, Pending>()
+
+  /** Mark a client gone and release whatever it owns. Setting the phase is
+   *  what a dial still in flight sees when it resolves; without it, the
+   *  socket that dial produces is owned by nobody — `close` has already run
+   *  and found no link to tear down. */
+  function shut(held?: Link) {
+    if (!held) return
+    held.phase = "closed"
+    held.toUpstream?.end()
+  }
+
+  /** Read the phase through a call, not a comparison in place: assigning
+   *  `dialing` earlier in the same scope narrows the property to that literal,
+   *  and the compiler has no way to know `shut` can change it while an
+   *  `await` is parked — which is the entire point of asking. */
+  const gone = (held: Link) => held.phase === "closed"
 
   const deny = (reason: string) =>
     `HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n${reason}\n`
@@ -134,22 +173,26 @@ export namespace Egress {
       unix: input.socket,
       socket: {
         open(client) {
-          state.set(client, { buffer: "", toClient: pump(client) })
+          state.set(client, { buffer: "", phase: "head", toClient: pump(client) })
         },
         async data(client, chunk) {
           const held = state.get(client)
           if (!held) return
-          if (held.toUpstream) {
-            held.toUpstream.send(chunk)
+          if (held.phase === "linked") {
+            held.toUpstream?.send(chunk)
             return
           }
+          if (held.phase === "closed") return
 
+          // Everything before the link is one buffer, so body bytes that land
+          // while the dial is in flight are simply still here when it
+          // resolves — `rest` is sliced after the await, not before it.
           held.buffer += chunk.toString("latin1")
+          if (held.phase === "dialing") return
           const end = held.buffer.indexOf("\r\n\r\n")
           if (end === -1) return
 
           const head = held.buffer.slice(0, end)
-          const rest = held.buffer.slice(end + 4)
           const lines = head.split("\r\n")
           const request = lines[0] ?? ""
           const [method, target, version = "HTTP/1.1"] = request.split(" ")
@@ -169,6 +212,7 @@ export namespace Egress {
 
           if (!authority) {
             log(`malformed ${request.slice(0, 60)}`)
+            held.phase = "closed"
             held.toClient.send(latin1(deny("Malformed proxy request")))
             held.toClient.end()
             return
@@ -176,12 +220,17 @@ export namespace Egress {
 
           if (!allowed(authority, input.rules)) {
             log(`DENY  ${authority}`)
+            held.phase = "closed"
             held.toClient.send(latin1(deny(`Host not on the sandbox allowlist: ${authority.split(":")[0]}`)))
             held.toClient.end()
             return
           }
 
           const [hostname, port] = authority.split(":")
+          // Claim the dial before yielding. Everything above this line is
+          // synchronous, so no second chunk can be part-way through the same
+          // parse when it runs.
+          held.phase = "dialing"
           const upstream = await Bun.connect<undefined>({
             hostname,
             port: Number(port ?? (method === "CONNECT" ? 443 : 80)),
@@ -201,8 +250,17 @@ export namespace Egress {
             },
           }).catch(() => undefined)
 
+          // The client can have gone away while the dial was in flight, in
+          // which case this is the only place that can release the socket it
+          // just produced.
+          if (gone(held)) {
+            upstream?.end()
+            return
+          }
+
           if (!upstream) {
             log(`FAIL  ${authority}`)
+            held.phase = "closed"
             held.toClient.send(latin1(deny(`Cannot reach ${authority}`)))
             held.toClient.end()
             return
@@ -213,6 +271,11 @@ export namespace Egress {
           toUpstream.source = client
           held.toClient.source = upstream
           held.toUpstream = toUpstream
+          held.phase = "linked"
+          // Sliced now rather than before the dial, so anything the client
+          // sent while it was in flight goes upstream in arrival order.
+          const rest = held.buffer.slice(end + 4)
+          held.buffer = ""
           // CONNECT: acknowledge, then the client starts its TLS handshake.
           // Plain HTTP: replay the request head we already consumed.
           if (method === "CONNECT") {
@@ -239,11 +302,11 @@ export namespace Egress {
           state.get(client)?.toClient.flush()
         },
         close(client) {
-          state.get(client)?.toUpstream?.end()
+          shut(state.get(client))
           state.delete(client)
         },
         error(client) {
-          state.get(client)?.toUpstream?.end()
+          shut(state.get(client))
           state.delete(client)
         },
       },
@@ -264,15 +327,23 @@ export namespace Egress {
     // exists. Without this buffer those bytes are dropped and the connection
     // hangs: the listener accepts, nothing is ever forwarded, and the client
     // times out with the socket showing LISTEN the whole time.
-    type Link = { pending: Buffer[]; toClient: Pump; toUpstream?: Pump }
-    const links = new WeakMap<Socket<unknown>, Link>()
+    //
+    // The `closed` phase covers the mirror image: a client that goes away
+    // *during* that same window. Its `close` runs while `toUpstream` is still
+    // undefined, so it has nothing to tear down, and the socket the dial then
+    // produces is owned by nobody. Measured on 300 connect-then-immediately-
+    // close connections, that stranded one fd per connection in this process
+    // and one in the host proxy on the other end of it — and a kernel or a
+    // terminal is a sandbox that lives for hours.
+    type Bridge = Link & { pending: Buffer[] }
+    const links = new WeakMap<Socket<unknown>, Bridge>()
 
     return Bun.listen<undefined>({
       hostname: "127.0.0.1",
       port: input.port,
       socket: {
         async open(client) {
-          const held: Link = { pending: [], toClient: pump(client) }
+          const held: Bridge = { pending: [], phase: "dialing", toClient: pump(client) }
           links.set(client, held)
           const upstream = await Bun.connect<undefined>({
             unix: input.socket,
@@ -291,6 +362,11 @@ export namespace Egress {
               },
             },
           }).catch(() => undefined)
+          if (gone(held)) {
+            upstream?.end()
+            held.pending.length = 0
+            return
+          }
           if (!upstream) {
             held.toClient.end()
             return
@@ -299,12 +375,13 @@ export namespace Egress {
           toUpstream.source = client
           held.toClient.source = upstream
           held.toUpstream = toUpstream
+          held.phase = "linked"
           for (const chunk of held.pending) toUpstream.send(chunk)
           held.pending.length = 0
         },
         data(client, chunk) {
           const held = links.get(client)
-          if (!held) return
+          if (!held || gone(held)) return
           if (held.toUpstream) return void held.toUpstream.send(chunk)
           held.pending.push(Buffer.from(chunk))
         },
@@ -312,10 +389,10 @@ export namespace Egress {
           links.get(client)?.toClient.flush()
         },
         close(client) {
-          links.get(client)?.toUpstream?.end()
+          shut(links.get(client))
         },
         error(client) {
-          links.get(client)?.toUpstream?.end()
+          shut(links.get(client))
         },
       },
     })
