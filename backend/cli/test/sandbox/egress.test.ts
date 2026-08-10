@@ -404,3 +404,157 @@ test("a body that arrives after its head still produces exactly one upstream", a
   }
   for (const s of socks) s.end()
 }, 60_000)
+
+// ── what one client can make the host allocate ──────────────────────────────
+//
+// serveProxy runs on the HOST, outside the sandbox, and holds memory on behalf
+// of a process the sandbox exists to contain — in the CLI's own process, so an
+// OOM there is the supervisor dying, not a worker. Two sub-phases buffer
+// without a link to push into, and neither was bounded:
+//
+//   head     never terminated by CRLFCRLF, so no dial is ever attempted and
+//            nothing downstream limits it. Measured: 93 MiB of head took the
+//            host process from 36.0 MB to 1344.9 MB of RSS in 8 s, climbing.
+//   dialing  a complete head for an allowlisted host that black-holes SYNs.
+//            Measured: 2048.6 MiB blasted in 8 s took it from 36.0 MB to
+//            2120.2 MB and then killed it with `RangeError: Out of memory`,
+//            with the dial still in flight and ~2 minutes of SYN retries left.
+//
+// Both assertions below are on bytes the proxy was willing to *accept*, which
+// is what the growth was made of, and both are orders of magnitude clear of
+// the fixed bounds so neither is timing-sensitive in the passing direction.
+
+/** Blast at a target until it stops accepting or `ms` elapses, and report how
+ *  much it took. `stalled` distinguishes "the proxy stopped reading" — the
+ *  backpressure this is looking for — from "we ran out of time". */
+function flood(to: { unix: string }, head: string, ms: number) {
+  return new Promise<{ sent: number; response: string; stalled: boolean }>((resolve, reject) => {
+    const CHUNK = Buffer.alloc(1 << 20, 0x41) // 'A' — cannot contain CRLFCRLF
+    const state = { sent: 0, response: "", done: false, stalled: false }
+    const finish = () => {
+      if (state.done) return
+      state.done = true
+      clearTimeout(timer)
+      resolve({ sent: state.sent, response: state.response, stalled: state.stalled })
+    }
+    const timer = setTimeout(finish, ms)
+    const push = (sock: Socket<undefined>) => {
+      state.stalled = false
+      while (!state.done) {
+        const wrote = sock.write(CHUNK)
+        if (wrote <= 0) return void (state.stalled = true)
+        state.sent += wrote
+      }
+    }
+    Bun.connect<undefined>({
+      unix: to.unix,
+      socket: {
+        open(sock) {
+          if (head) sock.write(head)
+          push(sock)
+        },
+        drain: push,
+        data(_sock, chunk) {
+          state.response += chunk.toString("latin1")
+        },
+        close: finish,
+        error: finish,
+      },
+    }).catch(reject)
+  })
+}
+
+test("a head that never ends is refused rather than buffered", async () => {
+  const socket = proxy(["127.0.0.1"])
+
+  // No CRLFCRLF anywhere in the payload, so the parse never completes and the
+  // proxy never dials — this phase is not bounded by a connect() at all.
+  const flooded = await flood({ unix: socket }, "", 4_000)
+
+  // Fail closed, and say why: 431 is the status RFC 6585 defines for exactly
+  // this. Against the unbounded version the client got no response whatsoever,
+  // because there is nothing in that code path that ever answers.
+  expect(flooded.response).toContain("431 Request Header Fields Too Large")
+  expect(flooded.response).toContain("Proxy request head exceeded")
+
+  // And it was cut off early. The cap is 64 KiB; the client stops at whatever
+  // was already in flight when the proxy closed, which is a socket buffer or
+  // two. 16 MiB is a bound no correct implementation approaches and the
+  // unbounded one blows through in well under a second — it took 93 MiB in 8 s
+  // while growing the host by 1.3 GB.
+  expect(flooded.sent).toBeLessThan(16 * 1024 * 1024)
+}, 60_000)
+
+test("a client cannot flood the host while its dial is in flight", async () => {
+  // 192.0.2.1 is TEST-NET-1 (RFC 5737): reserved for documentation, routed
+  // nowhere, so a SYN to it is dropped rather than refused and the dial stays
+  // in flight for the kernel's whole retry budget — ~130 s on Linux. That is
+  // the window under test, and allowlisting it is what gets the proxy to
+  // commit to dialling. Confirmed black-holed here by a bare connect that hung
+  // past 20 s with no RST and no ICMP.
+  const socket = proxy(["192.0.2.1"])
+  const head = "CONNECT 192.0.2.1:443 HTTP/1.1\r\nHost: 192.0.2.1:443\r\n\r\n"
+
+  const flooded = await flood({ unix: socket }, head, 4_000)
+
+  // Precondition, asserted rather than assumed: the dial has to still be
+  // outstanding for this to be measuring anything. Any response at all — a 403
+  // "Cannot reach", a 504 — means the environment answered TEST-NET-1 quickly
+  // and the window never opened, so the test would otherwise pass vacuously.
+  expect(flooded.response).toBe("")
+
+  // The invariant: the proxy stopped reading, so the client cannot even
+  // generate the bytes — they stay in its socket buffer and then in it. This
+  // is backpressure rather than a cap, so there is no limit to tune; the bound
+  // asserted here is just the socket buffers on either side of the pause.
+  // Against the unbounded version this reached ~1 GiB inside 4 s.
+  expect(flooded.sent).toBeLessThan(16 * 1024 * 1024)
+  expect(flooded.stalled).toBe(true)
+}, 60_000)
+
+test("a dial that never completes gives up and says so", async () => {
+  // Same black hole, but now waiting for the timeout rather than racing it.
+  // 150 ms stands in for the shipped 30 s so this costs the suite no real
+  // time; what it exercises is that the timer fires, answers, and closes,
+  // instead of the connection hanging for the kernel's ~130 s SYN budget.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "egress-timeout-"))
+  const socket = path.join(dir, "e.sock")
+  const server = Egress.serveProxy({ socket, rules: ["192.0.2.1"], dialTimeout: 150 })
+  opened.push({
+    stop: () => {
+      server.stop(true)
+      fs.rmSync(dir, { recursive: true, force: true })
+    },
+  })
+
+  const started = Date.now()
+  const answer = await new Promise<string>((resolve, reject) => {
+    const fail = setTimeout(() => reject(new Error("the proxy never gave up on the dial")), 20_000)
+    const body = { text: "" }
+    Bun.connect<undefined>({
+      unix: socket,
+      socket: {
+        open(sock) {
+          sock.write("CONNECT 192.0.2.1:443 HTTP/1.1\r\nHost: 192.0.2.1:443\r\n\r\n")
+        },
+        data(_sock, chunk) {
+          body.text += chunk.toString("latin1")
+        },
+        close() {
+          clearTimeout(fail)
+          resolve(body.text)
+        },
+        error() {
+          clearTimeout(fail)
+          resolve(body.text)
+        },
+      },
+    }).catch(reject)
+  })
+
+  expect(answer).toContain("504 Gateway Timeout")
+  expect(answer).toContain("192.0.2.1:443")
+  // Bounded by the budget, not by the kernel. Generous upper bound so a loaded
+  // machine cannot flake it, but far below the ~130 s this used to take.
+  expect(Date.now() - started).toBeLessThan(10_000)
+}, 60_000)

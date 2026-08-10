@@ -160,14 +160,55 @@ export namespace Egress {
    *  `await` is parked — which is the entire point of asking. */
   const gone = (held: Link) => held.phase === "closed"
 
-  const deny = (reason: string) =>
-    `HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n${reason}\n`
+  const refuse = (status: string, reason: string) =>
+    `HTTP/1.1 ${status}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n${reason}\n`
+
+  const deny = (reason: string) => refuse("403 Forbidden", reason)
 
   const latin1 = (text: string) => Buffer.from(text, "latin1")
 
-  /** Host side. Listens on a unix socket, proxies only allowlisted hosts. */
-  export function serveProxy(input: { socket: string; rules: Rule[]; onEvent?: (line: string) => void }) {
+  /**
+   * How much of a request head to accept before refusing the connection.
+   *
+   * The head phase has no natural end other than `\r\n\r\n`, so a client that
+   * never sends one is buffered without limit — and because no dial is
+   * attempted on that path, nothing downstream bounds it either. Measured
+   * against this proxy before this cap existed: 93 MiB of never-terminated
+   * head took the *host* process from 36 MB to 1.34 GB of RSS in 8 seconds,
+   * and it was still climbing when the client stopped.
+   *
+   * 64 KiB is Squid's `request_header_max_size` default — the most generous of
+   * the conventional caps (nginx `large_client_header_buffers` 8k, Apache
+   * `LimitRequestFieldSize` 8190, Node `--max-http-header-size` 16 KiB) and the
+   * closest analogue, Squid being a forward proxy that speaks CONNECT. The
+   * clients here are pip, curl and requests, whose heads run 200-600 bytes, so
+   * this cannot plausibly refuse a real one.
+   */
+  const HEAD_LIMIT = 64 * 1024
+
+  /**
+   * How long to wait for an upstream TCP connect before giving up.
+   *
+   * Linux retries a SYN for ~130 s by default, so an allowlisted host that
+   * black-holes packets — a firewall that drops rather than rejects — pins the
+   * client connection and its fd for over two minutes and then fails with no
+   * explanation. 30 s is far above any real handshake, which costs one RTT
+   * plus name resolution, and turns that wait into a legible 504.
+   */
+  const DIAL_TIMEOUT = 30_000
+
+  /** Host side. Listens on a unix socket, proxies only allowlisted hosts.
+   *  `dialTimeout` overrides `DIAL_TIMEOUT`; it exists so the timeout can be
+   *  exercised in milliseconds rather than by making a test wait half a
+   *  minute for the real one. */
+  export function serveProxy(input: {
+    socket: string
+    rules: Rule[]
+    onEvent?: (line: string) => void
+    dialTimeout?: number
+  }) {
     const log = input.onEvent ?? (() => {})
+    const budget = input.dialTimeout ?? DIAL_TIMEOUT
 
     return Bun.listen<undefined>({
       unix: input.socket,
@@ -190,7 +231,21 @@ export namespace Egress {
           held.buffer += chunk.toString("latin1")
           if (held.phase === "dialing") return
           const end = held.buffer.indexOf("\r\n\r\n")
-          if (end === -1) return
+          if (end === -1) {
+            if (held.buffer.length <= HEAD_LIMIT) return
+            // Fail closed. Unlike the dial window below there is no
+            // backpressure to apply here: the terminator is what the parse is
+            // waiting for, so refusing to read simply deadlocks the connection
+            // instead of ending it. A head this long is a protocol error.
+            log(`OVERSIZE ${held.buffer.length} bytes of head with no terminator`)
+            held.phase = "closed"
+            held.buffer = ""
+            held.toClient.send(
+              latin1(refuse("431 Request Header Fields Too Large", `Proxy request head exceeded ${HEAD_LIMIT} bytes`)),
+            )
+            held.toClient.end()
+            return
+          }
 
           const head = held.buffer.slice(0, end)
           const lines = head.split("\r\n")
@@ -231,6 +286,40 @@ export namespace Egress {
           // synchronous, so no second chunk can be part-way through the same
           // parse when it runs.
           held.phase = "dialing"
+          // Backpressure, not a buffer limit. Everything the client sends
+          // while the dial is in flight would otherwise be held here, and a
+          // dial can be slow for as long as the OS retries a SYN: measured
+          // against a black-holed allowlisted origin, 8 seconds of blasting
+          // took the host process from 36 MB to 2.12 GB and then killed it
+          // outright with `RangeError: Out of memory` — and this proxy runs in
+          // the CLI's own process, so that is the supervisor dying at the hands
+          // of the thing the sandbox exists to contain.
+          //
+          // Pausing costs nothing and has no arbitrary limit: the bytes wait in
+          // the client's own socket buffer, and then in the client. Round 3
+          // declined to do this on the grounds that "pausing the client is what
+          // would stop the FIN that tells us it left" — that is not so, and was
+          // never measured. A paused socket still reports its peer's departure:
+          // with delivery demonstrably stopped (0.21 MiB through a paused
+          // socket against 256 MiB through an unpaused one), the peer's `end()`
+          // still produced `close` while the pause was in force, for both FIN
+          // and RST.
+          client.pause()
+          // An allowlisted host that black-holes packets otherwise holds this
+          // connection for the kernel's whole SYN-retry budget. The phase is
+          // what makes this safe to fire late: `closed` is exactly what the
+          // dial below checks when it finally resolves, so the socket it
+          // produces is still ended by nobody-owns-it handling rather than
+          // stranded.
+          const timer = setTimeout(() => {
+            if (held.phase !== "dialing") return
+            log(`TIMEOUT ${authority}`)
+            held.phase = "closed"
+            held.buffer = ""
+            client.resume()
+            held.toClient.send(latin1(refuse("504 Gateway Timeout", `Timed out connecting to ${authority}`)))
+            held.toClient.end()
+          }, budget)
           const upstream = await Bun.connect<undefined>({
             hostname,
             port: Number(port ?? (method === "CONNECT" ? 443 : 80)),
@@ -249,10 +338,11 @@ export namespace Egress {
               },
             },
           }).catch(() => undefined)
+          clearTimeout(timer)
 
-          // The client can have gone away while the dial was in flight, in
-          // which case this is the only place that can release the socket it
-          // just produced.
+          // The client can have gone away while the dial was in flight — or the
+          // dial can have timed out above — in which case this is the only
+          // place that can release the socket it just produced.
           if (gone(held)) {
             upstream?.end()
             return
@@ -261,6 +351,8 @@ export namespace Egress {
           if (!upstream) {
             log(`FAIL  ${authority}`)
             held.phase = "closed"
+            held.buffer = ""
+            client.resume()
             held.toClient.send(latin1(deny(`Cannot reach ${authority}`)))
             held.toClient.end()
             return
@@ -276,6 +368,10 @@ export namespace Egress {
           // sent while it was in flight goes upstream in arrival order.
           const rest = held.buffer.slice(end + 4)
           held.buffer = ""
+          // Resumed before anything is forwarded, not after: `toUpstream` owns
+          // the client as its source from here, so a forward that has to queue
+          // re-pauses it through the pump. Resuming afterwards would undo that.
+          client.resume()
           // CONNECT: acknowledge, then the client starts its TLS handshake.
           // Plain HTTP: replay the request head we already consumed.
           if (method === "CONNECT") {
@@ -328,6 +424,12 @@ export namespace Egress {
     // hangs: the listener accepts, nothing is ever forwarded, and the client
     // times out with the socket showing LISTEN the whole time.
     //
+    // It is now a safety net rather than the main path: `open` pauses the
+    // client before it yields, so in practice nothing is delivered into
+    // `pending` at all. Keeping it costs nothing and is what stops a byte from
+    // being dropped should anything ever slip through ahead of the pause —
+    // dropping one here does not fail loudly, it hangs the connection.
+    //
     // The `closed` phase covers the mirror image: a client that goes away
     // *during* that same window. Its `close` runs while `toUpstream` is still
     // undefined, so it has nothing to tear down, and the socket the dial then
@@ -345,6 +447,14 @@ export namespace Egress {
         async open(client) {
           const held: Bridge = { pending: [], phase: "dialing", toClient: pump(client) }
           links.set(client, held)
+          // The same backpressure the host proxy applies around its own dial,
+          // and for the same reason: without it a client that starts blasting
+          // before the link exists is buffered in `pending` without limit. The
+          // blast radius is smaller here — the shim lives inside the sandbox,
+          // so it is the sandbox's own memory — but it is the same defect, and
+          // an unbounded shim would in any case hand the whole blast to the
+          // host proxy the moment the link came up.
+          client.pause()
           const upstream = await Bun.connect<undefined>({
             unix: input.socket,
             socket: {
@@ -368,6 +478,7 @@ export namespace Egress {
             return
           }
           if (!upstream) {
+            client.resume()
             held.toClient.end()
             return
           }
@@ -376,6 +487,10 @@ export namespace Egress {
           held.toClient.source = upstream
           held.toUpstream = toUpstream
           held.phase = "linked"
+          // Before the replay, for the reason given in `serveProxy`: a queueing
+          // send re-pauses the client through the pump, and resuming after
+          // would undo it.
+          client.resume()
           for (const chunk of held.pending) toUpstream.send(chunk)
           held.pending.length = 0
         },
