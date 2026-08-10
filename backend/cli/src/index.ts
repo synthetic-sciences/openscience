@@ -41,6 +41,25 @@ import { SandboxCommand } from "./cli/cmd/sandbox"
 import { InitCommand, DoctorCommand } from "./cli/onboard"
 import { OpenScience } from "./openscience"
 
+// Handle the hidden egress shim before any other CLI machinery — yargs
+// construction and its global `.middleware` below — is reached. This runs
+// inside the sandboxed namespace `bubblewrapArgs` builds, where `/` is
+// read-only (the middleware's `Log.init` opens a log file — EROFS) and the
+// network is unshared except for the one bind-mounted socket (the
+// middleware's `OpenScience.refreshIfStale` is an HTTP fetch — hangs against
+// a severed network). The shim only opens a listener and forwards bytes; it
+// must never reach either. This is a plain check against argv, before yargs
+// (or anything yargs triggers) parses anything, so it cannot regress if the
+// middleware grows later — there is no yargs command path to keep in sync.
+if (process.argv[2] === "__egress-shim") {
+  const { Egress } = await import("./sandbox/egress")
+  Egress.serveShim({ port: Number(process.argv[3]), socket: process.argv[4] as string })
+  // Signals Sandbox.shimScript's readiness wait (backend/cli/src/sandbox/sandbox.ts) —
+  // keep this literal in sync with that file's SHIM_READY_MARKER.
+  await Bun.write("/tmp/.openscience-egress-shim.ready", "").catch(() => {})
+  await new Promise(() => {})
+}
+
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
     e: e instanceof Error ? e.message : e,
@@ -110,16 +129,6 @@ const cli = yargs(hideBin(process.argv))
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")
-  .command(
-    "__egress-shim <port> <socket>",
-    false,
-    (y) => y.positional("port", { type: "number" }).positional("socket", { type: "string" }),
-    async (args) => {
-      const { Egress } = await import("./sandbox/egress")
-      Egress.serveShim({ port: args.port as number, socket: args.socket as string })
-      await new Promise(() => {})
-    },
-  )
   .command(AcpCommand)
   .command(McpCommand)
   .command(RunCommand)

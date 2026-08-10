@@ -1,11 +1,11 @@
 import path from "path"
 import os from "os"
 import fs from "fs"
+import { createHash } from "crypto"
 import { spawn, spawnSync } from "child_process"
 import { lazy } from "@/util/lazy"
 import { Log } from "@/util/log"
 import { Shell } from "@/shell/shell"
-import { Global } from "@/global"
 import { Installation } from "@/installation"
 
 const log = Log.create({ service: "sandbox" })
@@ -348,15 +348,38 @@ export namespace Sandbox {
   const quote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`
 
   /**
+   * Marker the `__egress-shim` handler touches once its listener is bound
+   * (see `index.ts`, which must use this exact literal). Lives under `/tmp`,
+   * which `bubblewrapArgs` always mounts as a fresh, process-private tmpfs —
+   * so a fixed name here cannot collide across sandboxed processes or with a
+   * previous run, and — unlike the socket's own directory — is guaranteed
+   * writable regardless of the write policy.
+   */
+  const SHIM_READY_MARKER = "/tmp/.openscience-egress-shim.ready"
+
+  /**
    * The sandboxed process needs a proxy at a host:port, but the only route out
-   * is a unix socket. This backgrounds a loopback bridge inside the namespace
-   * and then execs the real command, so the sandbox still holds exactly one
-   * long-lived process.
+   * is a unix socket. This backgrounds a loopback bridge inside the namespace,
+   * waits (bounded) for it to signal readiness, and then execs the real
+   * command — so the sandbox still holds exactly one long-lived process, and
+   * the real command doesn't get a proxy env pointing at a port nothing is
+   * listening on yet.
+   *
+   * The wait is a marker-file poll, not a network probe: a POSIX `/bin/sh`
+   * (dash/busybox, not bash) has no built-in way to test a TCP connection —
+   * bash's `/dev/tcp` isn't portable here and `nc`/`curl` aren't guaranteed
+   * present. Measured shim startup (process fork/exec + module load, before
+   * the listener binds) is ~600ms; 30 * 100ms = 3s gives roughly 5x headroom.
+   * If the shim never signals, the loop still exits at the cap and the real
+   * command runs anyway — against a closed proxy port, which fails fast and
+   * visibly (connection refused) rather than hanging forever.
    */
   export function shimScript(input: { binary: string; port: number; socket: string; file: string; args: string[] }) {
     const shim = [quote(input.binary), "__egress-shim", String(input.port), quote(input.socket)].join(" ")
     const real = [quote(input.file), ...input.args.map(quote)].join(" ")
-    return `${shim} >/dev/null 2>&1 & exec ${real}`
+    const marker = quote(SHIM_READY_MARKER)
+    const wait = `i=0; while [ ! -f ${marker} ] && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i + 1)); done`
+    return `${shim} >/dev/null 2>&1 & ${wait}; exec ${real}`
   }
 
   /**
@@ -383,13 +406,59 @@ export namespace Sandbox {
    * role of a single executable, the same trick `ensureAtlasBinDir` in
    * `src/openscience/index.ts` uses to expose a package's JS entry as one
    * executable path.
+   *
+   * The entry script is resolved from *this file's own location*
+   * (`import.meta.dir`), not `Bun.main` — `Bun.main` is "whatever launched
+   * the current process", which under `bun test` is the test file, not
+   * `src/index.ts`. `sandbox.ts` and `index.ts` sit at a fixed relative
+   * position within this package regardless of what invoked the process, so
+   * that structural relationship is the reliable signal.
+   *
+   * The launcher's filename is content-addressed (a digest of the exact
+   * script it will contain), not a single fixed name: two worktrees resolve
+   * different entry paths, so they get different files instead of
+   * overwriting each other's, and any process that finds a file already at
+   * that name knows its content without reading it first (same content ⇒
+   * same name, by construction) — so there is no read-modify-write race to
+   * get wrong. Errors writing it are reported clearly rather than
+   * propagating a raw EACCES/EROFS out of `wrapArgv`.
+   *
+   * It is written next to this file (`import.meta.dir`), *not* under
+   * `Global.Path.state`/`.bin`/anything XDG-derived, and not under
+   * `os.tmpdir()`. `bubblewrapArgs` unconditionally mounts a fresh, empty
+   * tmpfs at `/tmp` (`--tmpfs /tmp`, after `--ro-bind / /`), which replaces
+   * the *entire* host `/tmp` subtree inside the sandbox regardless of what's
+   * really there on the host — so a launcher living anywhere under `/tmp`
+   * would silently not exist from inside, and the shim would just never
+   * start. This isn't a test-only edge case: `Global.Path.*` all derive from
+   * the same XDG/home resolution, which `bun test` (`test/preload.ts`)
+   * unconditionally redirects under `os.tmpdir()` for isolation, and a real
+   * user can have `$HOME` under `/tmp` too. The repo checkout itself is
+   * never redirected by either, so anchoring to this file's own location is
+   * the one option that's actually safe here — live-verified: writing under
+   * `Global.Path.state` measured "Connection refused" under `bun test`
+   * (the launcher path resolved under the test's tmpdir and the shim never
+   * started); this location doesn't.
    */
   const shimBinary = lazy((): string => {
     if (!Installation.isLocal()) return process.execPath
-    const launcher = path.join(Global.Path.bin, "egress-shim-dev")
-    const script = `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(Bun.main)} "$@"\n`
-    fs.writeFileSync(launcher, script, { mode: 0o755 })
-    fs.chmodSync(launcher, 0o755)
+    const entry = path.resolve(import.meta.dir, "..", "index.ts")
+    const script = `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(entry)} "$@"\n`
+    const digest = createHash("sha256").update(script).digest("hex").slice(0, 16)
+    const dir = path.join(import.meta.dir, ".egress-shim-dev")
+    const launcher = path.join(dir, `egress-shim-dev-${digest}.sh`)
+    try {
+      if (fs.readFileSync(launcher, "utf8") === script) return launcher
+    } catch {}
+    try {
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(launcher, script, { mode: 0o755 })
+      fs.chmodSync(launcher, 0o755)
+    } catch (e) {
+      throw new Error(
+        `Could not write the dev egress-shim launcher to ${launcher}: ${e instanceof Error ? e.message : String(e)}`,
+      )
+    }
     return launcher
   })
 
@@ -482,7 +551,13 @@ export namespace Sandbox {
     // that dials a socket seatbelt never mounted would just fail or hang.
     const shim =
       b === "bubblewrap" && policy.network === "allowlist" && policy.egress
-        ? shimScript({ binary: shimBinary(), port: SHIM_PORT, socket: policy.egress, file: input.file, args: input.args })
+        ? shimScript({
+            binary: shimBinary(),
+            port: SHIM_PORT,
+            socket: policy.egress,
+            file: input.file,
+            args: input.args,
+          })
         : undefined
     const argv = shim ? ["/bin/sh", "-c", shim] : [input.file, ...input.args]
     const s = specForArgv(argv, policy)!

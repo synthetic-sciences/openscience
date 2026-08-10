@@ -339,21 +339,24 @@ describe("Sandbox.shimScript", () => {
 })
 
 describe("Sandbox.wrapArgv egress shim", () => {
-  test.skipIf(Sandbox.backend() !== "bubblewrap")("allowlist composes the shim into the argv and returns proxy env", () => {
-    const wrapped = Sandbox.wrapArgv({
-      file: "python3",
-      args: ["-u", "/tmp/k.py"],
-      workspace: ["/work/project"],
-      options: { enabled: true, network: "allowlist", egress: "/run/os/e.sock" },
-    })
-    expect(wrapped.sandboxed).toBe(true)
-    const argv = wrapped.args.join(" ")
-    expect(argv).toContain("__egress-shim")
-    expect(argv).toContain("/run/os/e.sock")
-    expect(argv).toContain("exec 'python3'")
-    expect(wrapped.env?.HTTP_PROXY).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
-    expect(wrapped.env?.http_proxy).toBe(wrapped.env?.HTTP_PROXY)
-  })
+  test.skipIf(Sandbox.backend() !== "bubblewrap")(
+    "allowlist composes the shim into the argv and returns proxy env",
+    () => {
+      const wrapped = Sandbox.wrapArgv({
+        file: "python3",
+        args: ["-u", "/tmp/k.py"],
+        workspace: ["/work/project"],
+        options: { enabled: true, network: "allowlist", egress: "/run/os/e.sock" },
+      })
+      expect(wrapped.sandboxed).toBe(true)
+      const argv = wrapped.args.join(" ")
+      expect(argv).toContain("__egress-shim")
+      expect(argv).toContain("/run/os/e.sock")
+      expect(argv).toContain("exec 'python3'")
+      expect(wrapped.env?.HTTP_PROXY).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
+      expect(wrapped.env?.http_proxy).toBe(wrapped.env?.HTTP_PROXY)
+    },
+  )
 
   test.skipIf(Sandbox.backend() !== "bubblewrap")("deny and allow never compose the shim", () => {
     const deny = Sandbox.wrapArgv({
@@ -374,4 +377,46 @@ describe("Sandbox.wrapArgv egress shim", () => {
     expect(allow.args.join(" ")).not.toContain("__egress-shim")
     expect(allow.env).toBeUndefined()
   })
+
+  // Everything above asserts on the composed argv string without ever running
+  // it — which is exactly what let the shim silently die inside the real
+  // sandbox (EROFS from the CLI's logging middleware) go undetected. This
+  // spawns the actual `wrapArgv` output — real bwrap, the real composed
+  // `sh -c` script, and (in dev, which this test runs as) the real on-disk
+  // launcher `shimBinary()` writes — and proves a TCP client inside the
+  // namespace gets a connection accepted and bridged to the unix socket,
+  // not a refused one.
+  test.skipIf(Sandbox.backend() !== "bubblewrap" || !Bun.which("bash"))(
+    "the composed script actually starts the shim inside a real sandbox and bridges a connection",
+    async () => {
+      await using tmp = await tmpdir()
+      const socket = path.join(tmp.path, "e.sock")
+      const received: string[] = []
+      const server = Bun.listen<undefined>({
+        unix: socket,
+        socket: {
+          data(sock, chunk) {
+            received.push(chunk.toString())
+            sock.write(`ACK:${chunk.toString()}`)
+          },
+        },
+      })
+      try {
+        const wrapped = Sandbox.wrapArgv({
+          file: "/usr/bin/bash",
+          args: ["-c", "exec 3<>/dev/tcp/127.0.0.1/3128; printf hello >&3; timeout 3 head -c 9 <&3"],
+          workspace: [tmp.path],
+          options: { enabled: true, network: "allowlist", egress: socket },
+        })
+        const proc = Bun.spawn([wrapped.file, ...wrapped.args], { stdout: "pipe", stderr: "pipe" })
+        const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+        await proc.exited
+        expect(out, `stdout=${out} stderr=${err}`).toContain("ACK:hello")
+        expect(received).toContain("hello")
+      } finally {
+        server.stop(true)
+      }
+    },
+    15000,
+  )
 })
