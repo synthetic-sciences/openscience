@@ -434,23 +434,47 @@ export namespace Sandbox {
    * The wait is a marker-file poll, not a network probe: a POSIX `/bin/sh`
    * (dash/busybox, not bash) has no built-in way to test a TCP connection —
    * bash's `/dev/tcp` isn't portable here and `nc`/`curl` aren't guaranteed
-   * present. `sleep` takes whole seconds, not `0.1`: fractional intervals are
-   * a GNU/BSD coreutils extension, not POSIX, and some busybox builds reject
-   * them outright (`sleep: invalid interval`) — which would print 30 error
-   * lines to the real command's own stderr (this wait runs in the foreground,
-   * unlike the backgrounded shim) and, worse, skip the wait entirely, since a
-   * failing `sleep` doesn't slow the loop down at all. Measured shim startup
-   * (process fork/exec + module load, before the listener binds) is
-   * 600ms–1.1s; 3 * 1s = 3s gives roughly 3-5x headroom at whole-second
-   * granularity. If the shim never signals, the loop still exits at the cap
-   * and the real command runs anyway — against a closed proxy port, which
-   * fails fast and visibly (connection refused) rather than hanging forever.
+   * present.
+   *
+   * *Why the granularity is chosen at run time.* Fractional `sleep` is a
+   * GNU/BSD coreutils extension, not POSIX, and some busybox builds reject it
+   * outright (`sleep: invalid interval`) — which, in a loop, would print an
+   * error line per iteration to the real command's own stderr (this wait runs
+   * in the foreground, unlike the backgrounded shim) and, worse, skip the
+   * wait entirely, since a failing `sleep` doesn't slow a loop down at all.
+   * So the interval is settled once, before the loop, by attempting a single
+   * fractional `sleep` with its stderr discarded: it either works, and the
+   * loop polls at 0.02s, or it fails instantly and everything falls back to
+   * the whole seconds POSIX guarantees. That probe is the only place a
+   * fractional interval is ever attempted, its diagnostic can't reach the
+   * command's stderr, and its cost isn't waste — it is time the shim needs
+   * anyway.
+   *
+   * *Why not whole seconds throughout, as this did before.* Measured shim
+   * readiness (fork/exec, bundle load, listener bound) is ~12ms — the
+   * 600ms–1.1s in Task 4's report predates bundling the shim entry. At
+   * whole-second granularity the first check therefore always lost and every
+   * spawn paid a flat second: n=8, `network: "allowlist"` 1006-1007ms against
+   * `deny` 3-4ms, on `sh -c true`, i.e. 335x for a command that never touches
+   * the network. Every `ls` and every `git status` the agent ran paid it. At
+   * 0.02s the same measurement is 24-25ms.
+   *
+   * The 3s cap is unchanged in both modes (150 * 0.02, 3 * 1). If the shim
+   * never signals, the loop still exits at the cap and the real command runs
+   * anyway — against a closed proxy port, which fails fast and visibly
+   * (connection refused) rather than hanging forever.
    */
   export function shimScript(input: { binary: string; port: number; socket: string; file: string; args: string[] }) {
     const shim = [quote(input.binary), "__egress-shim", String(input.port), quote(input.socket)].join(" ")
     const real = [quote(input.file), ...input.args.map(quote)].join(" ")
     const marker = quote(SHIM_READY_MARKER)
-    const wait = `i=0; while [ ! -f ${marker} ] && [ "$i" -lt 3 ]; do sleep 1; i=$((i + 1)); done`
+    // `s`/`n`/`i` are plain shell variables, never exported, and `exec`
+    // replaces this shell — so none of them reach the real command.
+    const wait = [
+      `s=0.02; n=150`,
+      `sleep "$s" 2>/dev/null || { s=1; n=3; }`,
+      `i=0; while [ ! -f ${marker} ] && [ "$i" -lt "$n" ]; do sleep "$s"; i=$((i + 1)); done`,
+    ].join("; ")
     return `${shim} >/dev/null 2>&1 & ${wait}; exec ${real}`
   }
 

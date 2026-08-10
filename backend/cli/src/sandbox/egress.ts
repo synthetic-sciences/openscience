@@ -53,12 +53,78 @@ export namespace Egress {
     ".arxiv.org",
   ]
 
-  type Pending = { buffer: string; upstream?: Socket<undefined>; connected: boolean }
+  /**
+   * One direction of a bridged pair, with backpressure.
+   *
+   * `Socket.write` returns how many bytes the socket actually accepted, and
+   * that is fewer than the whole chunk the moment the kernel send buffer
+   * fills. Writing and discarding the count silently drops the remainder:
+   * measured on this proxy before this existed, a 40 MB transfer arrived as
+   * 2.6 MB through the proxy alone and 11.9 MB through shim + proxy, while
+   * the same origin read directly delivered all 40 MB. Small responses fit in
+   * one buffer and never show it, which is why every test that pushed
+   * `hello` through passed.
+   *
+   * So: queue whatever the destination refused, flush it from the
+   * destination's own `drain`, and pause the *source* while a backlog exists
+   * so the queue tracks the slower end's pace instead of growing to the size
+   * of the transfer. `end()` is deferred until the queue has actually gone
+   * out — an upstream that closes right after a large body must not truncate
+   * what is still in flight to the client.
+   */
+  function pump(target: Socket<unknown>) {
+    const queue: Buffer[] = []
+    const hold = (chunk: Buffer) => {
+      // Copied, not retained: the buffer handed to a `data` callback belongs
+      // to the caller for the duration of that call, and this outlives it.
+      queue.push(Buffer.from(chunk))
+      held.source?.pause()
+    }
+    const held = {
+      /** The socket feeding this direction; paused while a backlog exists. */
+      source: undefined as Socket<unknown> | undefined,
+      ending: false,
+      send(chunk: Buffer) {
+        if (queue.length > 0) return hold(chunk)
+        const wrote = target.write(chunk)
+        if (wrote >= chunk.length) return
+        hold(chunk.subarray(Math.max(wrote, 0)))
+      },
+      /** Drive from the target socket's `drain` handler, nowhere else. */
+      flush() {
+        while (queue.length > 0) {
+          const head = queue[0]!
+          const wrote = target.write(head)
+          if (wrote < head.length) {
+            if (wrote > 0) queue[0] = head.subarray(wrote)
+            return
+          }
+          queue.shift()
+        }
+        held.source?.resume()
+        if (held.ending) target.end()
+      },
+      end() {
+        held.ending = true
+        if (queue.length === 0) target.end()
+      },
+    }
+    return held
+  }
+
+  type Pump = ReturnType<typeof pump>
+
+  /** `toUpstream` doubles as the "the link exists" flag — it is created at the
+   *  same moment the upstream socket is, and only after the request head has
+   *  been parsed and allowed. */
+  type Pending = { buffer: string; toClient: Pump; toUpstream?: Pump }
 
   const state = new WeakMap<Socket<unknown>, Pending>()
 
   const deny = (reason: string) =>
     `HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n${reason}\n`
+
+  const latin1 = (text: string) => Buffer.from(text, "latin1")
 
   /** Host side. Listens on a unix socket, proxies only allowlisted hosts. */
   export function serveProxy(input: { socket: string; rules: Rule[]; onEvent?: (line: string) => void }) {
@@ -68,13 +134,13 @@ export namespace Egress {
       unix: input.socket,
       socket: {
         open(client) {
-          state.set(client, { buffer: "", connected: false })
+          state.set(client, { buffer: "", toClient: pump(client) })
         },
         async data(client, chunk) {
           const held = state.get(client)
           if (!held) return
-          if (held.connected) {
-            held.upstream?.write(chunk)
+          if (held.toUpstream) {
+            held.toUpstream.send(chunk)
             return
           }
 
@@ -103,15 +169,15 @@ export namespace Egress {
 
           if (!authority) {
             log(`malformed ${request.slice(0, 60)}`)
-            client.write(deny("Malformed proxy request"))
-            client.end()
+            held.toClient.send(latin1(deny("Malformed proxy request")))
+            held.toClient.end()
             return
           }
 
           if (!allowed(authority, input.rules)) {
             log(`DENY  ${authority}`)
-            client.write(deny(`Host not on the sandbox allowlist: ${authority.split(":")[0]}`))
-            client.end()
+            held.toClient.send(latin1(deny(`Host not on the sandbox allowlist: ${authority.split(":")[0]}`)))
+            held.toClient.end()
             return
           }
 
@@ -121,32 +187,37 @@ export namespace Egress {
             port: Number(port ?? (method === "CONNECT" ? 443 : 80)),
             socket: {
               data(_sock, payload) {
-                client.write(payload)
+                held.toClient.send(payload)
+              },
+              drain() {
+                held.toUpstream?.flush()
               },
               close() {
-                client.end()
+                held.toClient.end()
               },
               error() {
-                client.end()
+                held.toClient.end()
               },
             },
           }).catch(() => undefined)
 
           if (!upstream) {
             log(`FAIL  ${authority}`)
-            client.write(deny(`Cannot reach ${authority}`))
-            client.end()
+            held.toClient.send(latin1(deny(`Cannot reach ${authority}`)))
+            held.toClient.end()
             return
           }
 
           log(`ALLOW ${authority}`)
-          held.upstream = upstream
-          held.connected = true
+          const toUpstream = pump(upstream)
+          toUpstream.source = client
+          held.toClient.source = upstream
+          held.toUpstream = toUpstream
           // CONNECT: acknowledge, then the client starts its TLS handshake.
           // Plain HTTP: replay the request head we already consumed.
           if (method === "CONNECT") {
-            client.write("HTTP/1.1 200 Connection Established\r\n\r\n")
-            if (rest) upstream.write(Buffer.from(rest, "latin1"))
+            held.toClient.send(latin1("HTTP/1.1 200 Connection Established\r\n\r\n"))
+            if (rest) toUpstream.send(latin1(rest))
             return
           }
 
@@ -162,14 +233,17 @@ export namespace Egress {
             .filter((line) => !/^proxy-/i.test(line))
             .filter((line) => !/^host:/i.test(line))
           const rewritten = [`${method} ${origin} ${version}`, `Host: ${url!.host}`, ...headers].join("\r\n")
-          upstream.write(Buffer.from(`${rewritten}\r\n\r\n${rest}`, "latin1"))
+          toUpstream.send(latin1(`${rewritten}\r\n\r\n${rest}`))
+        },
+        drain(client) {
+          state.get(client)?.toClient.flush()
         },
         close(client) {
-          state.get(client)?.upstream?.end()
+          state.get(client)?.toUpstream?.end()
           state.delete(client)
         },
         error(client) {
-          state.get(client)?.upstream?.end()
+          state.get(client)?.toUpstream?.end()
           state.delete(client)
         },
       },
@@ -183,53 +257,65 @@ export namespace Egress {
    * socket.
    */
   export function serveShim(input: { port: number; socket: string }) {
-    // `open` is async, so a client that writes immediately — curl sends CONNECT
-    // the moment the TCP handshake completes — arrives before the upstream link
+    // `pending` is for the window *before* the link exists — distinct from the
+    // backpressure queue inside `pump`, which is for after it does. `open` is
+    // async, so a client that writes immediately — curl sends CONNECT the
+    // moment the TCP handshake completes — arrives before the upstream link
     // exists. Without this buffer those bytes are dropped and the connection
     // hangs: the listener accepts, nothing is ever forwarded, and the client
     // times out with the socket showing LISTEN the whole time.
-    const links = new WeakMap<Socket<unknown>, { upstream?: Socket<undefined>; pending: Buffer[] }>()
+    type Link = { pending: Buffer[]; toClient: Pump; toUpstream?: Pump }
+    const links = new WeakMap<Socket<unknown>, Link>()
 
     return Bun.listen<undefined>({
       hostname: "127.0.0.1",
       port: input.port,
       socket: {
         async open(client) {
-          const held: { upstream?: Socket<undefined>; pending: Buffer[] } = { pending: [] }
+          const held: Link = { pending: [], toClient: pump(client) }
           links.set(client, held)
           const upstream = await Bun.connect<undefined>({
             unix: input.socket,
             socket: {
               data(_sock, payload) {
-                client.write(payload)
+                held.toClient.send(payload)
+              },
+              drain() {
+                held.toUpstream?.flush()
               },
               close() {
-                client.end()
+                held.toClient.end()
               },
               error() {
-                client.end()
+                held.toClient.end()
               },
             },
           }).catch(() => undefined)
           if (!upstream) {
-            client.end()
+            held.toClient.end()
             return
           }
-          for (const chunk of held.pending) upstream.write(chunk)
+          const toUpstream = pump(upstream)
+          toUpstream.source = client
+          held.toClient.source = upstream
+          held.toUpstream = toUpstream
+          for (const chunk of held.pending) toUpstream.send(chunk)
           held.pending.length = 0
-          held.upstream = upstream
         },
         data(client, chunk) {
           const held = links.get(client)
           if (!held) return
-          if (held.upstream) return void held.upstream.write(chunk)
+          if (held.toUpstream) return void held.toUpstream.send(chunk)
           held.pending.push(Buffer.from(chunk))
         },
+        drain(client) {
+          links.get(client)?.toClient.flush()
+        },
         close(client) {
-          links.get(client)?.upstream?.end()
+          links.get(client)?.toUpstream?.end()
         },
         error(client) {
-          links.get(client)?.upstream?.end()
+          links.get(client)?.toUpstream?.end()
         },
       },
     })

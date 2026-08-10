@@ -4,6 +4,7 @@ import { builtinModules } from "module"
 import os from "os"
 import path from "path"
 import { Sandbox } from "../../src/sandbox/sandbox"
+import { SHIM_READY_MARKER } from "../../src/sandbox/egress-shim-marker"
 import { tmpdir } from "../fixture/fixture"
 
 const shell = "/bin/sh"
@@ -337,6 +338,117 @@ describe("Sandbox.shimScript", () => {
     })
     expect(script).toContain(`'"'"'`)
   })
+})
+
+// The readiness wait is the whole per-spawn cost of network "allowlist", and
+// it is paid by every sandboxed command whether or not it touches the network.
+// These run the composed script through a real /bin/sh — the only place its
+// behaviour actually lives — with a stand-in for the shim binary, so they need
+// no bubblewrap and no proxy.
+describe("Sandbox.shimScript readiness wait", () => {
+  const posix = process.platform !== "win32"
+
+  /** Runs the composed script and reports how long it took, plus whatever the
+   *  wait leaked to the real command's stderr (it runs in the foreground, so
+   *  anything it prints lands in the command's own output). */
+  async function run(script: string, prefixPath?: string) {
+    const started = Date.now()
+    const proc = Bun.spawn(["/bin/sh", "-c", script], {
+      stdout: "pipe",
+      stderr: "pipe",
+      env: prefixPath ? { ...process.env, PATH: `${prefixPath}:${process.env["PATH"]}` } : process.env,
+    })
+    const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+    await proc.exited
+    return { ms: Date.now() - started, stdout, stderr }
+  }
+
+  /** A `sleep` that rejects fractional intervals the way some busybox builds
+   *  do, so the fallback branch is exercised on a host whose real coreutils
+   *  accepts them. */
+  function busyboxishSleep(dir: string) {
+    const real = Bun.which("sleep") ?? "/bin/sleep"
+    const file = path.join(dir, "sleep")
+    fs.writeFileSync(
+      file,
+      `#!/bin/sh\ncase "$1" in\n  *.*) echo "sleep: invalid number '$1'" >&2; exit 1 ;;\nesac\nexec ${real} "$@"\n`,
+      { mode: 0o755 },
+    )
+    return dir
+  }
+
+  test.skipIf(!posix)(
+    "waits for the shim, and only for as long as the shim takes",
+    async () => {
+      await using dir = await tmpdir()
+      // Stands in for the shim: ignores its arguments, becomes ready quickly.
+      const fake = path.join(dir.path, "shim")
+      fs.writeFileSync(fake, `#!/bin/sh\nsleep 0.15\n: > ${JSON.stringify(SHIM_READY_MARKER)}\n`, { mode: 0o755 })
+      fs.rmSync(SHIM_READY_MARKER, { force: true })
+
+      try {
+        const { ms, stdout } = await run(
+          Sandbox.shimScript({ binary: fake, port: 3128, socket: "/run/os/e.sock", file: "/bin/echo", args: ["ran"] }),
+        )
+        expect(stdout.trim()).toBe("ran")
+        // It really waited: the marker only lands at ~150ms.
+        expect(ms).toBeGreaterThanOrEqual(140)
+        // And it did not round that up to a whole second. Before the poll
+        // interval was chosen at run time this was a flat ~1.0s for a shim that
+        // is ready in ~12ms — measured 1006ms against 3ms for network "deny".
+        expect(ms).toBeLessThan(600)
+      } finally {
+        fs.rmSync(SHIM_READY_MARKER, { force: true })
+      }
+    },
+    30_000,
+  )
+
+  test.skipIf(!posix)(
+    "a sleep that rejects fractions still waits, and says nothing about it",
+    async () => {
+      await using dir = await tmpdir()
+      fs.rmSync(SHIM_READY_MARKER, { force: true })
+      // /bin/true ignores the shim arguments and never signals readiness, so the
+      // wait runs to its cap — which is the point: a fractional `sleep` that
+      // errors out returns instantly, so a loop that ignored the failure would
+      // spin through all its iterations in microseconds and skip the wait
+      // entirely, silently, while printing one error line per iteration.
+      const { ms, stderr } = await run(
+        Sandbox.shimScript({
+          binary: "/bin/true",
+          port: 3128,
+          socket: "/run/os/e.sock",
+          file: "/bin/echo",
+          args: ["ran"],
+        }),
+        busyboxishSleep(dir.path),
+      )
+      expect(stderr).toBe("")
+      expect(ms).toBeGreaterThanOrEqual(2_500)
+      expect(ms).toBeLessThan(6_000)
+    },
+    30_000,
+  )
+
+  test.skipIf(!posix)(
+    "the cap is the same 3s whichever granularity the shell supports",
+    async () => {
+      fs.rmSync(SHIM_READY_MARKER, { force: true })
+      const { ms } = await run(
+        Sandbox.shimScript({
+          binary: "/bin/true",
+          port: 3128,
+          socket: "/run/os/e.sock",
+          file: "/bin/echo",
+          args: ["ran"],
+        }),
+      )
+      expect(ms).toBeGreaterThanOrEqual(2_500)
+      expect(ms).toBeLessThan(6_000)
+    },
+    30_000,
+  )
 })
 
 describe("Sandbox.wrapArgv egress shim", () => {

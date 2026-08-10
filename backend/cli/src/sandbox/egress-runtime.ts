@@ -81,11 +81,20 @@ export namespace EgressRuntime {
     // bind with EADDRINUSE.
     await fs.rm(socket, { force: true })
     const rules = await currentRules()
-    const server = Egress.serveProxy({
-      socket,
-      rules,
-      onEvent: (line) => log.info(line),
-    })
+    // Bun.listen throws synchronously, with a message ("Failed to listen at
+    // <path>") that says nothing about what depends on it. Every sandboxed
+    // spawn does, so name that here rather than letting a bare bind error
+    // surface out of an unrelated-looking `bash`/kernel/job call.
+    const server = (() => {
+      try {
+        return Egress.serveProxy({ socket, rules, onEvent: (line) => log.info(line) })
+      } catch (e) {
+        throw new Error(
+          `Could not start the sandbox allowlist proxy on ${socket}: ${e instanceof Error ? e.message : String(e)}. ` +
+            `Sandboxed commands need it to reach the network — retry once the path is writable, or set sandbox.network to "deny" or "allow".`,
+        )
+      }
+    })()
     const onGlobalChange = (event: { directory?: string; payload: unknown }) => {
       if (!isGlobalConfigChange(event)) return
       refresh(rules).catch(() => {})
@@ -99,22 +108,41 @@ export namespace EgressRuntime {
    *  reach it. Idempotent — a second call returns the same address without
    *  restarting anything. Also refreshes the live rules from the current
    *  config, so a caller composing a new sandboxed argv always gets the
-   *  latest allowlist even between reactive updates. */
+   *  latest allowlist even between reactive updates.
+   *
+   *  A failure is loud but never permanent. Caching the promise is what makes
+   *  the success path idempotent, and it would just as happily cache a
+   *  rejection: one transient failure — a state directory briefly unwritable,
+   *  a socket path momentarily taken — would then be replayed to every later
+   *  caller for the life of the process, and since every bash command,
+   *  terminal, kernel and compute job routes through here under the
+   *  "allowlist" default, that is the whole product failing until restart.
+   *  So a rejected start un-caches itself and the next call genuinely
+   *  retries. It still throws rather than degrading to no-proxy: `wrapArgv`
+   *  would reject an "allowlist" policy with no egress socket anyway, and a
+   *  silent downgrade is exactly the failure this feature keeps producing —
+   *  a sandbox that looks like it has bounded egress and in fact has none. */
   export async function ensure(): Promise<{ socket: string; port: number }> {
-    state.running ??= start()
-    const running = await state.running
+    const pending = (state.running ??= start())
+    const running = await pending.catch((error) => {
+      if (state.running === pending) state.running = undefined
+      throw error
+    })
     await refresh(running.rules)
     return { socket: running.socket, port: running.port }
   }
 
   /** Stop the proxy and unlink its socket. The CLI process otherwise leaves
    *  this running for its own lifetime; tests use this to reset between
-   *  cases. */
+   *  cases. A no-op when nothing is running, and — because a caller reaching
+   *  for the escape hatch after a failed start must not be handed that same
+   *  failure again — when the last start rejected. */
   export async function stop() {
     const pending = state.running
     state.running = undefined
     if (!pending) return
-    const running = await pending
+    const running = await pending.catch(() => undefined)
+    if (!running) return
     GlobalBus.off("event", running.onGlobalChange)
     running.server.stop(true)
     await fs.rm(running.socket, { force: true })

@@ -28,6 +28,56 @@ test("ensure is idempotent and returns a stable address", async () => {
   await EgressRuntime.stop()
 })
 
+test("a failed start does not latch — the next call really retries", async () => {
+  // Making the state directory unwritable is the cheapest real way to make
+  // the bind fail; every other route (a port already taken, a path too long)
+  // is either not applicable to a unix socket or harder to arrange
+  // deterministically. Global.Path.state is a per-test-process tmpdir (see
+  // test/preload.ts), so this cannot touch a developer's real state dir —
+  // but it is still restored in `finally`, because leaving it read-only
+  // would break every later test in this process rather than just this one.
+  const dir = Global.Path.state
+  await fs.mkdir(dir, { recursive: true })
+  const mode = (await fs.stat(dir)).mode & 0o7777
+
+  const failure = await (async () => {
+    try {
+      await fs.chmod(dir, 0o500)
+      return await EgressRuntime.ensure().then(
+        () => undefined,
+        (error) => error as Error,
+      )
+    } finally {
+      await fs.chmod(dir, mode)
+    }
+  })()
+
+  // Loud: the message has to name the thing that broke and what depends on
+  // it, since the caller is an unrelated-looking bash/kernel/job spawn.
+  expect(failure?.message).toContain("sandbox allowlist proxy")
+
+  // Recoverable: the rejected promise must not have been cached. Caching it
+  // would make one transient failure permanent for the process — and under
+  // the "allowlist" default that is every bash command, terminal, kernel and
+  // compute job failing until restart.
+  const recovered = await EgressRuntime.ensure()
+  await expect(fs.stat(recovered.socket)).resolves.toBeDefined()
+})
+
+test("stop is safe after a start that failed", async () => {
+  const dir = Global.Path.state
+  await fs.mkdir(dir, { recursive: true })
+  const mode = (await fs.stat(dir)).mode & 0o7777
+  try {
+    await fs.chmod(dir, 0o500)
+    await EgressRuntime.ensure().catch(() => {})
+  } finally {
+    await fs.chmod(dir, mode)
+  }
+  // The escape hatch must not hand back the same failure it exists to clear.
+  await expect(EgressRuntime.stop()).resolves.toBeUndefined()
+})
+
 test("the socket is created under the state directory, not the workspace", async () => {
   const { socket } = await EgressRuntime.ensure()
   // Not Bun.file(socket).exists(): Bun.file() only recognizes regular files,
