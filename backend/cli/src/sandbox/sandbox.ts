@@ -228,11 +228,16 @@ export namespace Sandbox {
       }
       return true
     })
+    const egress = input.options.egress
+    const egressOk = egress !== undefined && !tooBroadToConfine(egress)
+    if (egress !== undefined && !egressOk) {
+      log.warn("refusing to grant sandbox egress access to an over-broad path", { path: egress })
+    }
     return {
       writable,
       unreadable: dedupe(input.unreadable ?? []).filter((value) => !tooBroadToConfine(value)),
       network: input.options.network ?? "allowlist",
-      ...(input.options.egress ? { egress: input.options.egress } : {}),
+      ...(egressOk ? { egress } : {}),
     }
   }
 
@@ -300,7 +305,10 @@ export namespace Sandbox {
     if (policy.network !== "allow") args.push("--unshare-net")
     if (policy.network === "allowlist") {
       if (!policy.egress) throw new Error("sandbox network 'allowlist' requires an egress socket path")
-      // The namespace stays severed; this socket is the only route out.
+      // --unshare-net (above) is what makes this the only route to the network —
+      // there is no other network device inside the namespace. The --bind here
+      // only makes the socket path reachable at all, for when it lives under a
+      // path the sandbox re-mounts (the /tmp tmpfs, a fresh /dev or /proc).
       args.push("--bind", policy.egress, policy.egress)
     }
     // --unshare-pid: don't share the host PID namespace, so /proc/<pid>/root of a
@@ -352,10 +360,12 @@ export namespace Sandbox {
 
   /**
    * Decide how to run a shell command given the sandbox config and the
-   * workspace. Never throws unless `onUnavailable: "error"` and no backend
-   * exists. The `cwd` is *not* granted write access unless it lies within the
-   * workspace — an approved external working directory is a permission decision,
-   * not a reason to widen the write boundary to the escape target.
+   * workspace. Throws only in two cases: `onUnavailable: "error"` with no
+   * backend available, or `network: "allowlist"` with no `egress` socket path
+   * (directly, or because the supplied path was rejected as over-broad). The
+   * `cwd` is *not* granted write access unless it lies within the workspace —
+   * an approved external working directory is a permission decision, not a
+   * reason to widen the write boundary to the escape target.
    */
   export function plan(input: {
     command: string

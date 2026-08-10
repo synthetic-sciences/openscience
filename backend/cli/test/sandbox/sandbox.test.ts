@@ -241,6 +241,28 @@ describe("Sandbox network policy", () => {
     expect(() => Sandbox.bubblewrapArgs({ writable: ["/w"], network: "allowlist" })).toThrow()
   })
 
+  // buildPolicy filters `egress` through the same tooBroadToConfine gate as
+  // `writable`/`unreadable`. An over-broad egress (e.g. $HOME, or "/") must never
+  // reach argv as a read-write --bind: that would defeat write containment
+  // entirely, not just widen network access. Proven previously by calling
+  // bubblewrapArgs directly with an unfiltered `egress: $HOME`, which emitted
+  // "--bind $HOME $HOME" and let a sandboxed write escape to the real $HOME.
+  // Going through the public plan() (which runs buildPolicy) instead: the
+  // over-broad path is dropped, so "allowlist" is left without an egress socket
+  // and refuses to run — it fails closed rather than silently binding it.
+  test("an over-broad egress path ($HOME) is dropped, not bound as a read-write escape hatch", () => {
+    if (!Sandbox.available()) return
+    expect(() =>
+      Sandbox.plan({
+        command: "true",
+        shell,
+        cwd: "/work/project",
+        workspace: ["/work/project"],
+        options: { enabled: true, network: "allowlist", egress: os.homedir() },
+      }),
+    ).toThrow()
+  })
+
   // Seatbelt has no namespace, so the enforcement argument does not transfer.
   // Falling back to deny is safe; falling back to allow would silently grant
   // unrestricted egress to a user who asked for a bounded one.
