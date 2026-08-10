@@ -31,9 +31,9 @@ kernel uses, so the asymmetry that motivated a second sandbox no longer exists.
 Proxy policy is not part of the `ExecutionAuthority.generation` hash. `generation` hashes trust,
 filesystem grants, and sandbox policy, and changing it tears down and reboots every live kernel
 bound to it. Editing the allowlist is not that kind of change: it takes effect on the next
-connection through the running proxy, without tearing down kernels that are mid-session.
+connection through the running proxy, without tearing down live kernels.
 
-The default allowlist ships in code. Per-project additions live in config.
+This ADR decides the default allowlist ships in code; per-project additions live in config.
 
 ## Consequences
 
@@ -41,14 +41,17 @@ This is a breaking change to a documented config key. Existing `"deny"` and `"al
 working unchanged; only the default moves, from `"deny"` to `"allowlist"`.
 
 `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` join `SAFE_ENV_PREFIXES` so they reach a kernel
-process. A proxy process gains a lifecycle tied to the CLI. `Sandbox.wrapArgv` must compose a
-shim into the sandboxed argv, because pip, requests and curl take an `http://host:port` proxy
-from those variables and none of them speak unix sockets directly.
+process, and `Sandbox.wrapArgv` must compose a shim into the sandboxed argv, because pip,
+requests and curl take an `http://host:port` proxy from those variables and none of them speak
+unix sockets directly. Some process also has to start and stop the proxy across the CLI's own
+lifecycle; this ADR does not fix that shape here, only that it is needed.
 
 The boundary is host-level, not content-level. The proxy pipes bytes after checking the
 authority; it cannot see inside TLS, so an allowlisted host can still be sent anything a client
 sends it. Allowlisting bounds where a kernel can talk, not what it says once it is talking.
 
 Unresolved: macOS has no namespace equivalent, so this enforcement argument does not transfer.
-Seatbelt gets `"allowlist"` treated as `"deny"` with a warning until this is designed. Windows
-has no sandbox backend at all, so the question does not apply there.
+This ADR's fallback decision is that seatbelt treats `"allowlist"` as `"deny"` until macOS gets
+its own design; whether that fallback also surfaces a warning is not settled by anything measured
+here — unverified, left to that design. Windows has no sandbox backend at all, so the question
+does not apply there.
