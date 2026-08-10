@@ -1,0 +1,54 @@
+# ADR 0002: Sandbox network policy becomes three-state, allowlist by default
+
+Status: accepted
+
+## Context
+
+`sandbox.network` is `"allow" | "deny"`. Deny locks kernels out of PyPI, NCBI, UniProt, PDB and
+EBI, which is most of what a research tool is for. Allow is unrestricted egress. Neither state is
+what the product needs: a kernel that cannot reach a package index or a sequence database cannot
+do the work it exists to do, and a kernel with unrestricted egress can send agent-controlled data
+anywhere on the internet. Because the installer needed the egress the kernel was denied, earlier
+design work gave it a second, network-enabled sandbox purely so it could have that egress the
+kernel could not.
+
+## Decision
+
+`sandbox.network` becomes three-state: `"deny" | "allowlist" | "allow"`, defaulting to
+`"allowlist"`.
+
+Enforcement is `--unshare-net` plus a bind-mounted unix socket, established by two measurements
+taken on the spike branch `proto/sandbox-allowlist-proxy` before the proxy itself was written:
+inside `bwrap --unshare-net`, TCP to any host — including the host's own loopback — returns `000`,
+and a unix socket bind-mounted into that same network namespace still crosses it. The socket is
+therefore the only route out of the namespace. The proxy on the host end of that socket resolves
+names itself, which is why the sandboxed process has no DNS of its own.
+
+One policy covers kernel and installer. There is no separate network-enabled install sandbox:
+under `"allowlist"` the installer reaches the same allowlisted hosts through the same proxy the
+kernel uses, so the asymmetry that motivated a second sandbox no longer exists.
+
+Proxy policy is not part of the `ExecutionAuthority.generation` hash. `generation` hashes trust,
+filesystem grants, and sandbox policy, and changing it tears down and reboots every live kernel
+bound to it. Editing the allowlist is not that kind of change: it takes effect on the next
+connection through the running proxy, without tearing down kernels that are mid-session.
+
+The default allowlist ships in code. Per-project additions live in config.
+
+## Consequences
+
+This is a breaking change to a documented config key. Existing `"deny"` and `"allow"` values keep
+working unchanged; only the default moves, from `"deny"` to `"allowlist"`.
+
+`HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` join `SAFE_ENV_PREFIXES` so they reach a kernel
+process. A proxy process gains a lifecycle tied to the CLI. `Sandbox.wrapArgv` must compose a
+shim into the sandboxed argv, because pip, requests and curl take an `http://host:port` proxy
+from those variables and none of them speak unix sockets directly.
+
+The boundary is host-level, not content-level. The proxy pipes bytes after checking the
+authority; it cannot see inside TLS, so an allowlisted host can still be sent anything a client
+sends it. Allowlisting bounds where a kernel can talk, not what it says once it is talking.
+
+Unresolved: macOS has no namespace equivalent, so this enforcement argument does not transfer.
+Seatbelt gets `"allowlist"` treated as `"deny"` with a warning until this is designed. Windows
+has no sandbox backend at all, so the question does not apply there.
