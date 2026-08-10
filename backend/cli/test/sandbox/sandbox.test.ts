@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs"
+import { builtinModules } from "module"
 import os from "os"
 import path from "path"
 import { Sandbox } from "../../src/sandbox/sandbox"
@@ -494,7 +495,19 @@ describe("Sandbox.wrapArgv egress shim", () => {
   // whether the import was a sibling file or a package. Builtins are allowed
   // through — they come from inside bun, not the filesystem — so this keeps
   // passing if the shim ever imports node:net, and fails if a future import
-  // is left external or the plan goes back to executing source.
+  // is left external or the plan goes back to executing source. It does not
+  // see a native binding: `dlopen("…so")` in a bundled dependency is not an
+  // import specifier (see shimPlan's residual list).
+  //
+  // Classifying a specifier is the whole guard, so it is done against the
+  // real builtin list rather than by prefix. `bun build` *strips* the node:
+  // prefix — a bundled `import "node:net"` comes out as `from "net"` — so a
+  // prefix test flags a legitimate builtin, and the natural reaction to that
+  // false alarm is to loosen the one check standing between here and variant
+  // six. In the other direction a bare /^bun/ would quietly excuse any
+  // package named bun-something. builtinModules already carries bun's own
+  // entries (bun, bun:ffi, …), so stripping node: and asking it is both
+  // directions at once.
   test.skipIf(Sandbox.backend() !== "bubblewrap")("the generated dev shim bundle resolves nothing from disk", () => {
     const wrapped = Sandbox.wrapArgv({
       file: "python3",
@@ -505,8 +518,16 @@ describe("Sandbox.wrapArgv egress shim", () => {
     const bundle = wrapped.args.find((value) => value.endsWith(".mjs"))
     expect(bundle, `argv=${wrapped.args.join(" ")}`).toBeDefined()
     const source = fs.readFileSync(bundle!, "utf8")
-    const found = [...source.matchAll(/\bfrom\s*"([^"]+)"|\b(?:require|import)\(\s*"([^"]+)"\s*\)/g)]
-    const external = found.map((match) => match[1] ?? match[2]!).filter((spec) => !/^(bun|bun:|node:)/.test(spec))
+    // The three shapes an unbundled dependency can survive as: `from "x"`
+    // (covers `import x from` and `export … from`), a call — `require("x")`,
+    // `import("x")` — and a bare side-effect `import "x"`.
+    const found = [
+      ...source.matchAll(/\bfrom\s*"([^"]+)"|\b(?:require|import)\(\s*"([^"]+)"\s*\)|\bimport\s*"([^"]+)"/g),
+    ]
+    const builtin = new Set(builtinModules)
+    const external = found
+      .map((match) => match[1] ?? match[2] ?? match[3]!)
+      .filter((spec) => !builtin.has(spec.replace(/^node:/, "")))
     expect(external).toEqual([])
   })
 

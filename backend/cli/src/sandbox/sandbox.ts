@@ -554,6 +554,16 @@ export namespace Sandbox {
    * `egress-shim-entry.ts`'s own comment — bundling relocates that code, it
    * does not stop it running.
    *
+   * The fourth one escapes the framing rather than sitting inside it: a
+   * dependency that loads a *native binding* bundles cleanly and still
+   * resolves a path at run time. Measured with `bun-pty` as a probe — the
+   * build succeeds, the JS is inlined, and the output then carries
+   * `dlopen("….so")`, `import.meta.require` and `process.cwd`, with only
+   * `bun:ffi` left external. A `dlopen` argument is not an import specifier,
+   * so neither "bun opens the bundle and nothing else" nor the static test
+   * that enforces it covers this; such a dependency would need its shared
+   * library bound by name the way the artifacts are.
+   *
    * *Where the artifacts live does not need to be "safe."* Earlier revisions
    * tried to pick a location `--tmpfs /tmp` couldn't mask — `Global.Path.state`,
    * then this file's own directory — and both were live-verified broken:
@@ -577,12 +587,17 @@ export namespace Sandbox {
     if (!built.success) {
       throw new Error(`Could not bundle the dev egress shim from ${entry}: ${built.stderr.toString().trim()}`)
     }
-    // Content-addressed, not fixed names: a rebuilt bundle (edited source, a
-    // different worktree, a different bun) is a different file rather than an
-    // overwrite of the one another process may be executing, and a name that
-    // already exists already holds this exact content, by construction. The
-    // launcher's own digest covers the bundle's path, so a new bundle always
-    // produces a new launcher pointing at it — a stale pair cannot form.
+    // Content-addressed, not fixed names: a rebuilt bundle is a different
+    // file rather than an overwrite of the one another process may be
+    // executing, and a name that already exists already holds this exact
+    // content, by construction. The launcher's own digest covers the bundle's
+    // path, so a new bundle always produces a new launcher pointing at it —
+    // a stale pair cannot form. What makes the bytes differ is (source, bun,
+    // cwd): bun build writes cwd-relative module banners into the output, so
+    // the same source built from `backend/cli` and from anywhere else are
+    // different files. Only correctness is claimed here, not thrift — cwd is
+    // the dimension that varies per invocation, so it is also the one that
+    // drives how many of these accumulate.
     const stamp = (value: Buffer) => createHash("sha256").update(value).digest("hex").slice(0, 16)
     // .mjs, not .js: nothing should make bun's module-type detection for this
     // file depend on a package.json above Global.Path.bin.

@@ -20,16 +20,18 @@
  * workspace `node_modules/<pkg>` is a symlink into the monorepo-root store,
  * above the package root: the link was bound, its target was not).
  *
- * Three things are still not safe to add here, and none of them are about
+ * Four things are still not safe to add here, and none of them are about
  * where files live. Import-time side effects (a top-level fetch, a top-level
  * write) run in the bundle exactly as they would in the source, and would
  * reintroduce the failure this file exists to avoid — the shim dies under the
  * read-only, no-network conditions it is supposed to survive, with its output
  * on /dev/null. Resolving anything from `import.meta.dir`/`url` points at
- * `Global.Path.bin`, where the bundle runs, not at this directory. And a
- * runtime `import(expression)` cannot be inlined by the bundler, so it would
- * resolve against a path nothing bound (a literal `import("./x")` is inlined
- * and fine).
+ * `Global.Path.bin`, where the bundle runs, not at this directory. A runtime
+ * `import(expression)` cannot be inlined by the bundler, so it would resolve
+ * against a path nothing bound (a literal `import("./x")` is inlined and
+ * fine). And a dependency that loads a native binding bundles cleanly but
+ * still `dlopen`s a `.so` at run time, from a path nothing bound and nothing
+ * checks — see `shimPlan`'s residual list for the measurement.
  *
  * A compiled release has no separate entry to redirect to — `bun --compile`
  * embeds a single one — so it still goes through `index.ts`'s
