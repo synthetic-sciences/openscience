@@ -208,4 +208,39 @@ describe.skipIf(skip)("egress: a real seatbelt sandbox, a real proxy, a real rem
       host.stop()
     }
   }, 120_000)
+
+  // The seatbelt counterpart to egress-live.test.ts's pip test, and the
+  // macOS half of the merge gate: `pip install` under `network: "allowlist"`
+  // must work on every platform we ship, not just the one it was developed
+  // on. Deliberately the same package and the same flags as the Linux file,
+  // for the same reason the wheel test shares its URL and hash — a
+  // divergence between the two backends should surface as one green and one
+  // red, not as two different scenarios that happen to both pass.
+  //
+  // One thing this covers that the Linux file cannot: pip authenticating to
+  // the proxy. Seatbelt's loopback port is reachable by every process on the
+  // machine, so `Sandbox.plan` puts a per-start secret in the proxy URL
+  // (`http://os:<secret>@127.0.0.1:<port>`) and the proxy 407s anything
+  // without it. curl and urllib are already covered; pip reaches the proxy
+  // through urllib3, whose own `Proxy-Authorization` handling on CONNECT is
+  // exercised here for the first time.
+  test("pip install reaches pypi through the authenticated proxy and the installed package imports", async () => {
+    await using work = await tmpdir()
+    const host = proxy(Egress.DEFAULT_RULES)
+    try {
+      const egress = `${host.port}:${host.secret}`
+      const venv = `${work.path}/venv`
+      const script = [
+        `set -e`,
+        `python3 -m venv ${JSON.stringify(venv)}`,
+        `${JSON.stringify(`${venv}/bin/pip`)} install --only-binary :all: --disable-pip-version-check -q tqdm`,
+        `printf 'TQDM=%s\\n' "$(${JSON.stringify(`${venv}/bin/python`)} -c 'import tqdm; print(tqdm.__version__)')"`,
+      ].join("\n")
+
+      const { stdout, stderr } = await run(script, work.path, egress)
+      expect(stdout.match(/^TQDM=(.+)$/m)?.[1], `stdout=${stdout} stderr=${stderr}`).toMatch(/^\d+\.\d+/)
+    } finally {
+      host.stop()
+    }
+  }, 240_000)
 })

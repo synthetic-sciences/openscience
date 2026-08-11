@@ -29,6 +29,7 @@ import { tmpdir } from "../fixture/fixture"
  */
 
 const curl = Bun.which("curl")
+const python = Bun.which("python3")
 
 /**
  * A direct, un-sandboxed HEAD against a host the shipped default allowlist
@@ -183,4 +184,45 @@ describe.skipIf(skip)("egress: a real sandbox, a real proxy, a real remote host"
       host.stop()
     }
   }, 120_000)
+
+  // The case this whole branch exists to enable: a real `pip install` from
+  // pypi, inside the sandbox, with `network: "allowlist"` as the only route
+  // out. The tests above prove the boundary holds; this proves the boundary
+  // is *usable*, which is a different claim. pip does more than one curl
+  // does — it issues its own index request, follows a redirect from pypi.org
+  // to files.pythonhosted.org (a second allowlist entry, so this also covers
+  // a cross-host hop through the proxy), streams a wheel, and unpacks it.
+  //
+  // `--only-binary :all:` keeps this a network test rather than a toolchain
+  // test: a source build failing for want of a compiler would be a red run
+  // that says nothing about egress. tqdm is pure Python, small, and pulls no
+  // dependencies, so a version printed back means the index request, the
+  // download and the install all crossed the proxy.
+  //
+  // The venv itself needs no network — `python3 -m venv` bootstraps pip from
+  // the wheel bundled in the interpreter's own `ensurepip`. That is why this
+  // works on a machine with no pip on PATH at all, which was one of the
+  // three blockers that started this work.
+  test.skipIf(!python)(
+    "pip install reaches pypi through the proxy and the installed package imports",
+    async () => {
+      await using work = await tmpdir()
+      const host = proxy(Egress.DEFAULT_RULES)
+      try {
+        const venv = path.join(work.path, "venv")
+        const script = [
+          `set -e`,
+          `python3 -m venv ${JSON.stringify(venv)}`,
+          `${JSON.stringify(path.join(venv, "bin/pip"))} install --only-binary :all: --disable-pip-version-check -q tqdm`,
+          `printf 'TQDM=%s\\n' "$(${JSON.stringify(path.join(venv, "bin/python"))} -c 'import tqdm; print(tqdm.__version__)')"`,
+        ].join("\n")
+
+        const { stdout, stderr } = await run(script, work.path, host.socket)
+        expect(stdout.match(/^TQDM=(.+)$/m)?.[1], `stdout=${stdout} stderr=${stderr}`).toMatch(/^\d+\.\d+/)
+      } finally {
+        host.stop()
+      }
+    },
+    240_000,
+  )
 })
