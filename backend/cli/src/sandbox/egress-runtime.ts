@@ -41,6 +41,14 @@ export namespace EgressRuntime {
     socket: string
     port: number
     server: ReturnType<typeof Egress.serveProxy>
+    /**
+     * Seatbelt-only: the host-side TCP-loopback→unix-socket bridge that
+     * gives a seatbelt-sandboxed process (no network namespace, so nothing
+     * severs it from an ordinary loopback connect) a port to dial directly.
+     * `undefined` on bubblewrap, where the bind-mounted socket itself is
+     * already the sandboxed process's only route in.
+     */
+    bridge?: ReturnType<typeof Egress.serveShim>
     rules: Egress.Rule[]
     onGlobalChange: (event: { directory?: string; payload: unknown }) => void
   }
@@ -74,7 +82,14 @@ export namespace EgressRuntime {
     return payload.type === Event.Disposed.type
   }
 
-  async function start(): Promise<Running> {
+  /**
+   * `platform` decides only whether a seatbelt bridge joins the unix-socket
+   * proxy below — defaulting to the real platform, like every other
+   * platform-injectable seam this branch added (`Sandbox.backend`,
+   * `plan`/`wrapArgv`), so this is exercisable, deterministically, from a
+   * machine that has no seatbelt at all.
+   */
+  async function start(platform: NodeJS.Platform = process.platform): Promise<Running> {
     const socket = path.join(Global.Path.state, `egress-${process.pid}.sock`)
     // A stale socket file from a killed previous process (same pid, unlikely
     // but possible after a pid wraparound) would make Bun.listen refuse to
@@ -95,13 +110,31 @@ export namespace EgressRuntime {
         )
       }
     })()
+    // Seatbelt has no network namespace to bind-mount the socket into, so a
+    // seatbelt-sandboxed process cannot reach it the way bubblewrap's
+    // in-namespace shim does. What it CAN reach — seatbelt's own profile is
+    // what narrows this down to exactly one port, see sandbox.ts's
+    // seatbeltProfile — is an ordinary host loopback TCP port. That bridge,
+    // TCP loopback → this same unix socket, is exactly what `Egress.serveShim`
+    // already implements for bubblewrap's in-namespace shim; nothing about it
+    // is namespace-specific, so running it here, in the CLI's own process
+    // instead of inside a sandbox, gives seatbelt the same host-side proxy
+    // Linux has, reached one hop further in. `port: 0` asks the OS for an
+    // ephemeral port — unlike SHIM_PORT, nothing needs this value known in
+    // advance: no shim script embeds it as a literal (seatbelt's profile is
+    // built from `policy.port` at wrap time, not composed into a string that
+    // has to agree with a value chosen earlier), and a fixed port here, with
+    // no namespace to keep it private, would collide across every
+    // concurrently sandboxed process on the machine.
+    const bridge = Sandbox.backend(platform) === "seatbelt" ? Egress.serveShim({ port: 0, socket }) : undefined
+    const port = bridge ? bridge.port : Sandbox.SHIM_PORT
     const onGlobalChange = (event: { directory?: string; payload: unknown }) => {
       if (!isGlobalConfigChange(event)) return
       refresh(rules).catch(() => {})
     }
     GlobalBus.on("event", onGlobalChange)
-    log.info("egress proxy listening", { socket })
-    return { socket, port: Sandbox.SHIM_PORT, server, rules, onGlobalChange }
+    log.info("egress proxy listening", { socket, port, bridged: bridge !== undefined })
+    return { socket, port, server, bridge, rules, onGlobalChange }
   }
 
   /** Start the proxy if it is not already running, and return where to
@@ -121,9 +154,19 @@ export namespace EgressRuntime {
    *  retries. It still throws rather than degrading to no-proxy: `wrapArgv`
    *  would reject an "allowlist" policy with no egress socket anyway, and a
    *  silent downgrade is exactly the failure this feature keeps producing —
-   *  a sandbox that looks like it has bounded egress and in fact has none. */
-  export async function ensure(): Promise<{ socket: string; port: number }> {
-    const pending = (state.running ??= start())
+   *  a sandbox that looks like it has bounded egress and in fact has none.
+   *
+   *  `platform` decides only whether `start()` joins a seatbelt bridge — see
+   *  its doc comment — and is only ever non-default from a test; every real
+   *  caller (`egressFor` below) leaves it at the real one. The proxy itself
+   *  is not re-created per platform: `state.running` is one proxy for the
+   *  process lifetime, same as before this parameter existed, so a caller
+   *  that wants the seatbelt branch exercised must `stop()` first if a
+   *  differently-platformed proxy is already cached. */
+  export async function ensure(
+    platform: NodeJS.Platform = process.platform,
+  ): Promise<{ socket: string; port: number }> {
+    const pending = (state.running ??= start(platform))
     const running = await pending.catch((error) => {
       if (state.running === pending) state.running = undefined
       throw error
@@ -148,22 +191,34 @@ export namespace EgressRuntime {
     await fs.rm(running.socket, { force: true })
   }
 
-  /** The socket to pass as `Sandbox.Options.egress`, or `undefined` when the
+  /** The value to pass as `Sandbox.Options.egress`, or `undefined` when the
    *  proxy would not actually be used: the sandbox is off, network isn't
-   *  "allowlist", or the active backend isn't bubblewrap. Seatbelt already
-   *  reads "allowlist" as a plain deny (no namespace to bridge a shim across
-   *  — see `sandbox.ts`'s `seatbeltProfile`), so starting the proxy for it,
-   *  or for a disabled/deny/allow policy, would be pure waste: a process
-   *  that never gets a shim would never connect to it. Every `wrapArgv` /
+   *  "allowlist", or the platform's backend is neither bubblewrap nor
+   *  seatbelt. The shape differs by backend, matching `Options.egress`'s own
+   *  doc comment: bubblewrap gets the bind-mountable unix socket path, since
+   *  the bind-mounted socket itself is the sandboxed process's only route in;
+   *  seatbelt gets `ensure()`'s bridged loopback port, stringified, since a
+   *  seatbelt-sandboxed process dials that port directly (see
+   *  `sandbox.ts`'s `seatbeltProfile`) and never touches the socket at all.
+   *  A disabled/deny/allow policy skips starting the proxy entirely — pure
+   *  waste when nothing would ever connect to it. Every `wrapArgv` /
    *  `plan()` caller should route through this rather than calling `ensure()`
-   *  directly, so a terminal or kernel on macOS — or with network "deny" —
-   *  never pays for a proxy it has no way to reach. */
-  export async function egressFor(policy: Sandbox.Options): Promise<string | undefined> {
+   *  directly, so a terminal or kernel with network "deny" never pays for a
+   *  proxy it has no way to reach.
+   *
+   *  `platform` defaults to the real one — the same injectable seam
+   *  `Sandbox.backend`/`plan`/`wrapArgv` use — so the seatbelt branch is
+   *  exercisable, deterministically, from a machine that has none. */
+  export async function egressFor(
+    policy: Sandbox.Options,
+    platform: NodeJS.Platform = process.platform,
+  ): Promise<string | undefined> {
     const { enabled, network } = Sandbox.resolved(policy)
     if (!enabled) return undefined
     if (network !== "allowlist") return undefined
-    if (Sandbox.backend() !== "bubblewrap") return undefined
-    const { socket } = await ensure()
-    return socket
+    const b = Sandbox.backend(platform)
+    if (b === "bubblewrap") return (await ensure(platform)).socket
+    if (b === "seatbelt") return String((await ensure(platform)).port)
+    return undefined
   }
 }

@@ -368,12 +368,189 @@ describe("Sandbox network policy", () => {
     },
   )
 
-  // Seatbelt has no namespace, so the enforcement argument does not transfer.
-  // Falling back to deny is safe; falling back to allow would silently grant
-  // unrestricted egress to a user who asked for a bounded one.
-  test("seatbelt treats allowlist as deny, never as allow", () => {
-    const profile = Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist", egress: "/run/os/e.sock" })
-    expect(profile).toContain("(deny network*)")
+  // Seatbelt has no namespace, so bwrap's --unshare-net has no equivalent
+  // here: the profile text itself is the only boundary. "allowlist" is
+  // therefore carried by Policy.port, not Policy.egress (that field stays
+  // bubblewrap's unix socket path — see Policy's doc comment).
+  test("allowlist with a port emits deny before the narrow allow", () => {
+    const profile = Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist", port: 54321 })
+    const deny = profile.indexOf("(deny network*)")
+    const allow = profile.indexOf('(allow network-outbound (remote ip "localhost:54321"))')
+    expect(deny).toBeGreaterThan(-1)
+    expect(allow).toBeGreaterThan(deny)
+  })
+
+  // The safety rule from the task brief: a missing/invalid port must never
+  // silently downgrade to a plain deny (which would look identical to a user
+  // asking for network:"deny", not what "allowlist" means) or, worse, to an
+  // unfiltered allow. Same fail-closed contract bubblewrapArgs already
+  // applies to a missing egress socket.
+  test("allowlist with no port throws rather than silently degrading to deny", () => {
+    expect(() => Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist" })).toThrow(
+      "sandbox network 'allowlist' requires an egress port",
+    )
+  })
+
+  test.each([
+    ["zero", 0],
+    ["negative", -1],
+    ["fractional", 3.5],
+  ])("allowlist with an invalid port (%s) throws", (_label, port) => {
+    expect(() => Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist", port })).toThrow(
+      "sandbox network 'allowlist' requires an egress port",
+    )
+  })
+
+  // The dangerous direction named in the brief: a malformed or over-broad
+  // allow is the only failure mode that makes a macOS user worse off than
+  // today's plain deny. Pin the exact three shapes seatbeltProfile can
+  // produce — never a bare, unfiltered network-outbound allow.
+  test("never emits an unfiltered (allow network-outbound) in any mode", () => {
+    for (const network of ["deny", "allow"] as const) {
+      const profile = Sandbox.seatbeltProfile({ writable: ["/w"], network })
+      expect(profile).not.toContain("(allow network-outbound")
+    }
+    const profile = Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist", port: 4000 })
+    const lines = profile.split("\n").filter((line) => line.includes("network-outbound"))
+    expect(lines).toEqual(['(allow network-outbound (remote ip "localhost:4000"))'])
+  })
+
+  // Pins the deny/allow branches byte-for-byte: Policy.port only ever
+  // affects the "allowlist" branch, so these two must come out exactly as
+  // they did before this field existed.
+  test("deny and allow profiles are unaffected by the allowlist port machinery", () => {
+    const deny = Sandbox.seatbeltProfile({ writable: ["/w"], network: "deny" })
+    expect(deny.split("\n")).toEqual([
+      "(version 1)",
+      "(allow default)",
+      "(deny network*)",
+      "(deny file-write*)",
+      '(allow file-write* (subpath "/w"))',
+      '(allow file-write* (subpath "/dev"))',
+    ])
+    const allow = Sandbox.seatbeltProfile({ writable: ["/w"], network: "allow" })
+    expect(allow.split("\n")).toEqual([
+      "(version 1)",
+      "(allow default)",
+      "(deny file-write*)",
+      '(allow file-write* (subpath "/w"))',
+      '(allow file-write* (subpath "/dev"))',
+    ])
+  })
+})
+
+describe("Sandbox.backend(platform)", () => {
+  // The injectable seam every darwin-only assertion in this branch depends
+  // on: nobody on this project can install sandbox-exec, so exercising the
+  // seatbelt code paths in plan()/wrapArgv()/EgressRuntime from Linux is
+  // only possible if `platform` overrides the real, probed detection below.
+  test("darwin resolves to seatbelt regardless of the machine actually running the test", () => {
+    expect(Sandbox.backend("darwin")).toBe("seatbelt")
+  })
+
+  test("linux resolves to bubblewrap regardless of the machine actually running the test", () => {
+    expect(Sandbox.backend("linux")).toBe("bubblewrap")
+  })
+
+  test("an unsupported platform resolves to none", () => {
+    expect(Sandbox.backend("win32")).toBe("none")
+  })
+
+  // The doc comment's exact claim: an explicit platform that matches the
+  // real one is the same code path as the zero-arg call, not a parallel
+  // implementation that could drift from the probed one.
+  test("an explicitly-matching platform is identical to the zero-arg call", () => {
+    expect(Sandbox.backend(process.platform)).toBe(Sandbox.backend())
+  })
+})
+
+describe("Sandbox.plan/wrapArgv on darwin (seatbelt)", () => {
+  const port = "54321"
+
+  test("plan composes no shim and dials the proxy port directly", () => {
+    const p = Sandbox.plan({
+      command: "echo hi",
+      shell,
+      cwd: "/work/project",
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "allowlist", egress: port },
+      platform: "darwin",
+    })
+    expect(p.sandboxed).toBe(true)
+    expect(p.backend).toBe("seatbelt")
+    expect(p.file).toBe("sandbox-exec")
+    const argv = (p.args ?? []).join(" ")
+    // No unix-socket shim exists on darwin: no launcher, no bundle, no
+    // __egress-shim marker — the real command runs directly under sandbox-exec.
+    expect(argv).not.toContain("__egress-shim")
+    expect(argv).toContain("echo hi")
+    expect(p.env?.HTTP_PROXY).toBe(`http://127.0.0.1:${port}`)
+    expect(p.env?.http_proxy).toBe(p.env?.HTTP_PROXY)
+  })
+
+  test("wrapArgv composes no shim and dials the proxy port directly", () => {
+    const w = Sandbox.wrapArgv({
+      file: "python3",
+      args: ["-u", "/tmp/k.py"],
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "allowlist", egress: port },
+      platform: "darwin",
+    })
+    expect(w.sandboxed).toBe(true)
+    expect(w.backend).toBe("seatbelt")
+    const argv = w.args.join(" ")
+    expect(argv).not.toContain("__egress-shim")
+    expect(argv).toContain("python3")
+    expect(w.env?.HTTP_PROXY).toBe(`http://127.0.0.1:${port}`)
+  })
+
+  test("allowlist with no egress port throws rather than silently degrading to deny", () => {
+    expect(() =>
+      Sandbox.wrapArgv({
+        file: "python3",
+        args: ["-u", "/tmp/k.py"],
+        workspace: ["/work/project"],
+        options: { enabled: true, network: "allowlist" },
+        platform: "darwin",
+      }),
+    ).toThrow()
+  })
+
+  test("deny and allow never compose a shim or set a proxy env on darwin", () => {
+    const deny = Sandbox.wrapArgv({
+      file: "python3",
+      args: ["-u", "/tmp/k.py"],
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "deny" },
+      platform: "darwin",
+    })
+    expect(deny.args.join(" ")).not.toContain("__egress-shim")
+    expect(deny.env).toBeUndefined()
+
+    const allow = Sandbox.wrapArgv({
+      file: "python3",
+      args: ["-u", "/tmp/k.py"],
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "allow" },
+      platform: "darwin",
+    })
+    expect(allow.args.join(" ")).not.toContain("__egress-shim")
+    expect(allow.env).toBeUndefined()
+  })
+
+  // Regression guard for the real-platform paths: an explicit platform that
+  // matches this machine's own must not diverge from the zero-arg call —
+  // "allow" keeps this cheap (no shim/proxy machinery) while still routing
+  // through decide()/buildPolicy() with a platform argument threaded in.
+  test("an explicitly-matching platform reproduces the zero-arg plan on this machine", () => {
+    const base = {
+      command: "echo hi",
+      shell,
+      cwd: "/work/project",
+      workspace: ["/work/project"],
+      options: { enabled: true, network: "allow" as const },
+    }
+    expect(Sandbox.plan({ ...base, platform: process.platform })).toEqual(Sandbox.plan(base))
   })
 })
 

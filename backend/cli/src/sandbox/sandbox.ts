@@ -45,8 +45,21 @@ export namespace Sandbox {
     unreadable?: string[]
     /** How the sandboxed process may reach the network. */
     network: "deny" | "allowlist" | "allow"
-    /** Unix socket that is the only egress route. Required when network is "allowlist". */
+    /**
+     * Unix socket that is the only egress route on Linux — bubblewrap's
+     * `--unshare-net` severs everything else. Required when network is
+     * "allowlist" and the backend is bubblewrap.
+     */
     egress?: string
+    /**
+     * TCP loopback port that is the only egress route on macOS. Seatbelt has
+     * no network namespace to sever, so there is no socket to bind-mount —
+     * `seatbeltProfile` instead narrows `network-outbound` to this one port
+     * (see its doc comment). Required when network is "allowlist" and the
+     * backend is seatbelt; carried on `Policy` rather than read from ambient
+     * state so profile generation stays a pure function of its input.
+     */
+    port?: number
     /**
      * Read-only paths to bind into the namespace after `--tmpfs /tmp`, so
      * they stay reachable regardless of where they happen to live on the
@@ -68,6 +81,14 @@ export namespace Sandbox {
   export interface Options {
     enabled?: boolean
     network?: "deny" | "allowlist" | "allow"
+    /**
+     * Address of the only egress route, in whatever shape the resolved
+     * backend needs: a bind-mountable unix socket path for bubblewrap, or a
+     * loopback TCP port (stringified — `EgressRuntime.egressFor` is the one
+     * producer, and it returns one string either way) for seatbelt.
+     * `buildPolicy` is what interprets this per backend, into `Policy.egress`
+     * or `Policy.port` respectively.
+     */
     egress?: string
     allowWrite?: string[]
     onUnavailable?: "warn" | "error" | "allow"
@@ -175,9 +196,30 @@ export namespace Sandbox {
     return "none"
   })
 
-  /** The sandbox backend usable on this machine right now, or "none". */
-  export function backend(): Backend {
-    return detected()
+  /**
+   * The sandbox backend for `platform`, defaulting to this machine's real
+   * one right now.
+   *
+   * For the default (or an explicitly-matching) `platform` this is exactly
+   * `detected()` — cached, and probed for real (`Bun.which`,
+   * `probeBubblewrap`) — so every existing zero-arg caller is unaffected.
+   *
+   * An explicitly *different* platform is the seam that lets the seatbelt
+   * code paths in `plan`/`wrapArgv`/`EgressRuntime` be exercised from Linux,
+   * where no Mac exists to install `sandbox-exec` on or probe for: probing a
+   * binary that cannot be present on the machine actually running the test
+   * would just report "none" and defeat the whole point. So a mismatched
+   * platform skips probing and assumes the backend that platform normally
+   * has — `sandbox-exec` ships with every macOS install, `bwrap` is what the
+   * real Linux branch above already probes for — trading "verified installed
+   * here" for "what plan()/wrapArgv() would compose for that platform",
+   * which is the property these tests actually need.
+   */
+  export function backend(platform: NodeJS.Platform = process.platform): Backend {
+    if (platform === process.platform) return detected()
+    if (platform === "darwin") return "seatbelt"
+    if (platform === "linux") return "bubblewrap"
+    return "none"
   }
 
   export function available(): boolean {
@@ -270,12 +312,24 @@ export namespace Sandbox {
     return roots.includes(p)
   }
 
-  /** Assemble the writable allowlist for a policy, dropping over-broad roots. */
+  /**
+   * Assemble the writable allowlist for a policy, dropping over-broad roots,
+   * and route `options.egress` to whichever of `Policy.egress`/`Policy.port`
+   * the resolved `backend` actually consumes.
+   *
+   * `backend` is required (not read from ambient state) for the same reason
+   * `plan`/`wrapArgv` take a `platform` parameter: it is what makes the
+   * seatbelt branch here exercisable from Linux, and it is also simply
+   * correct — the caller already resolved it before deciding whether to
+   * sandbox at all, and re-deriving it here from `process.platform` would
+   * silently disagree with that decision on an injected platform.
+   */
   function buildPolicy(input: {
     workspace: string[]
     extraWritable?: string[]
     unreadable?: string[]
     options: Options
+    backend: Backend
   }): Policy {
     const candidates = dedupe([
       ...input.workspace,
@@ -290,6 +344,28 @@ export namespace Sandbox {
       }
       return true
     })
+    const unreadable = dedupe(input.unreadable ?? []).filter((value) => !tooBroadToConfine(value))
+    const network = resolved(input.options).network
+
+    // Seatbelt's egress route is a bare TCP loopback port (see
+    // seatbeltProfile), not a filesystem path — options.egress here is a
+    // stringified port number, and none of the path machinery below
+    // (dedupe's path.resolve, tooBroadToConfine) applies to it: resolving
+    // "52341" against cwd would silently turn it into an absolute path and
+    // corrupt it. An invalid value (missing, non-numeric, non-positive,
+    // non-integer) is dropped here exactly like an over-broad path is
+    // dropped below — seatbeltProfile is the fail-closed enforcement point,
+    // the same division of labour bubblewrapArgs already has with the path
+    // branch immediately below.
+    if (input.backend === "seatbelt") {
+      const port = input.options.egress !== undefined ? Number(input.options.egress) : undefined
+      const portOk = port !== undefined && Number.isInteger(port) && port > 0
+      if (input.options.egress !== undefined && !portOk) {
+        log.warn("refusing to grant sandbox egress access to an invalid port", { egress: input.options.egress })
+      }
+      return { writable, unreadable, network, ...(portOk ? { port } : {}) }
+    }
+
     // dedupe() applies the same path.resolve() normalization used for
     // writable/unreadable above, so a trailing slash, a double slash, or an
     // unresolved ".." can't slip an over-broad path past tooBroadToConfine's
@@ -300,12 +376,7 @@ export namespace Sandbox {
     if (egress !== undefined && !egressOk) {
       log.warn("refusing to grant sandbox egress access to an over-broad path", { path: egress })
     }
-    return {
-      writable,
-      unreadable: dedupe(input.unreadable ?? []).filter((value) => !tooBroadToConfine(value)),
-      network: resolved(input.options).network,
-      ...(egressOk ? { egress } : {}),
-    }
+    return { writable, unreadable, network, ...(egressOk ? { egress } : {}) }
   }
 
   // ── macOS: Seatbelt (sandbox-exec) ──────────────────────────────────────────
@@ -326,11 +397,43 @@ export namespace Sandbox {
     return [...out]
   }
 
+  /**
+   * `(deny network*)` then, for "allowlist" only, a narrow re-allow of
+   * exactly one loopback port — the host-side proxy `EgressRuntime` starts
+   * for seatbelt (see egress-runtime.ts). Seatbelt has no network namespace
+   * to sever the way bubblewrap's `--unshare-net` does, so there is no
+   * unix socket to bind-mount either: the profile itself is the only
+   * boundary, which is why the deny must always precede the allow (an
+   * allow with no prior deny is the unfiltered, unrestricted-egress shape
+   * this function must never produce) and why a missing or invalid port
+   * throws rather than silently falling back to a bare deny — the same
+   * fail-closed rule `bubblewrapArgs` applies to a missing egress socket.
+   * Falling back to a plain deny instead of throwing would look identical
+   * to a user asking for `network: "deny"`, which is not what "allowlist"
+   * means and is exactly the kind of silent downgrade this branch exists to
+   * avoid.
+   *
+   * Never asserts enforcement — that a real `sandbox-exec` actually honours
+   * this text — only the text itself, its ordering, and this function's own
+   * refusal to emit an unfiltered allow. No Mac exists on this project to
+   * verify the former; see the Task 7 report for exactly what a Mac owner
+   * still needs to run.
+   */
   export function seatbeltProfile(policy: Policy): string {
     const lines = ["(version 1)", "(allow default)"]
-    // No namespace equivalent on macOS, so "allowlist" cannot be enforced here.
-    // Deny is the safe reading of a request for bounded egress.
+    // No namespace equivalent on macOS, so "allowlist" cannot be enforced by
+    // severing the network device the way bubblewrapArgs does. Deny is the
+    // safe reading of a request for bounded egress; the allow line below
+    // narrows that back to exactly the loopback proxy port when one reached
+    // the policy.
     if (policy.network !== "allow") lines.push("(deny network*)")
+    if (policy.network === "allowlist") {
+      const port = policy.port
+      if (typeof port !== "number" || !Number.isInteger(port) || port <= 0) {
+        throw new Error("sandbox network 'allowlist' requires an egress port")
+      }
+      lines.push(`(allow network-outbound (remote ip "localhost:${port}"))`)
+    }
     const unreadable = withPrivateAliases(dedupe(policy.unreadable ?? []))
     if (unreadable.length) {
       lines.push(`(deny file-read* ${unreadable.map((value) => `(literal "${sbpl(value)}")`).join(" ")})`)
@@ -440,9 +543,14 @@ export namespace Sandbox {
     return args
   }
 
-  /** Wrap an arbitrary argv under the active backend, or null when unavailable. */
-  function specForArgv(argv: string[], policy: Policy): Spec | null {
-    switch (backend()) {
+  /**
+   * Wrap an arbitrary argv under `b`, or null when unavailable. `b` is
+   * passed in rather than read from `backend()` here — the caller already
+   * resolved it (via a possibly-injected `platform`), and re-deriving it
+   * from ambient state would silently disagree with that resolution.
+   */
+  function specForArgv(argv: string[], policy: Policy, b: Backend): Spec | null {
+    switch (b) {
       case "seatbelt":
         return { file: "sandbox-exec", args: ["-p", seatbeltProfile(policy), ...argv] }
       case "bubblewrap":
@@ -513,13 +621,19 @@ export namespace Sandbox {
   }
 
   /**
-   * Loopback port the shim binds inside the sandboxed network namespace.
-   * Fixed rather than negotiated: `--unshare-net` gives every sandboxed
-   * process its own private namespace, so this port can never collide across
-   * sandboxed processes or with anything on the host. Exported so
-   * `egress-runtime.ts` can hand it back to callers alongside the proxy's
-   * socket — one source of truth, rather than a second module-private 3128
-   * that could drift from this one.
+   * Bubblewrap-only. Loopback port the shim binds inside the sandboxed
+   * network namespace. Fixed rather than negotiated: `--unshare-net` gives
+   * every sandboxed process its own private namespace, so this port can
+   * never collide across sandboxed processes or with anything on the host.
+   * Exported so `egress-runtime.ts` can hand it back to callers alongside
+   * the proxy's socket — one source of truth, rather than a second
+   * module-private 3128 that could drift from this one.
+   *
+   * Seatbelt has no such namespace — every process on the machine shares one
+   * loopback, so a fixed well-known port would collide across concurrent
+   * sandboxed processes the way it structurally cannot here. Its egress port
+   * (`Policy.port`) is instead assigned by the OS per proxy instance; see
+   * `egress-runtime.ts`.
    */
   export const SHIM_PORT = 3128
 
@@ -645,6 +759,15 @@ export namespace Sandbox {
    * the same reason and is a structurally separate input, not implied by
    * binding the artifacts: a portable bun install, or `$HOME` under `/tmp`,
    * puts the interpreter the launcher execs under the tmpfs too.
+   *
+   * Bubblewrap-only. Every one of the artifacts this produces exists to get
+   * a launcher into a severed network namespace and bind it back in by name
+   * — problems seatbelt does not have, since it has no namespace and the
+   * sandboxed process dials the loopback proxy directly (see
+   * `seatbeltProfile`). `plan()`/`wrapArgv()` only ever call this behind a
+   * `backend === "bubblewrap"` guard, so on darwin — real or
+   * platform-injected — this function, and everything it writes to
+   * `Global.Path.bin`, is never reached at all.
    */
   const shimPlan = lazy((): { binary: string; bind: string[] } => {
     if (!Installation.isLocal()) return { binary: process.execPath, bind: [process.execPath] }
@@ -685,21 +808,25 @@ export namespace Sandbox {
   }
 
   /**
-   * Resolve which backend a command should use given the config. Returns
-   * backend "none" (run unsandboxed) with an optional one-time warning, or the
+   * Resolve which backend a command should use given the config and
+   * `platform` (default the real one — see `backend()`). Returns backend
+   * "none" (run unsandboxed) with an optional one-time warning, or the
    * active backend. Throws UnavailableError only when `onUnavailable: "error"`
    * and no backend exists.
    */
-  function decide(options?: Options): { backend: Backend; warning?: string } {
+  function decide(
+    options: Options | undefined,
+    platform: NodeJS.Platform = process.platform,
+  ): { backend: Backend; warning?: string } {
     if (!resolved(options).enabled) return { backend: "none" }
-    const b = backend()
+    const b = backend(platform)
     if (b !== "none") return { backend: b }
     const mode = options?.onUnavailable ?? "warn"
     if (mode === "error") throw new UnavailableError(unavailableMessage())
     const warning = mode === "warn" && !warned.unavailable ? unavailableMessage() : undefined
     if (warning) {
       warned.unavailable = true
-      log.warn("sandbox enabled but unavailable", { platform: process.platform })
+      log.warn("sandbox enabled but unavailable", { platform })
     }
     return { backend: "none", warning }
   }
@@ -721,6 +848,10 @@ export namespace Sandbox {
    * invocation composes by feeding it `input.shell`/`["-c", input.command]`
    * exactly as the no-shim branch below already passes to `specForArgv` —
    * one shape, not a second implementation of "wrap a shell command".
+   *
+   * `platform` defaults to the real one — the only reason to pass a
+   * different value is to exercise the seatbelt/darwin branch from a
+   * machine that isn't one; see `backend()`.
    */
   export function plan(input: {
     command: string
@@ -729,16 +860,20 @@ export namespace Sandbox {
     /** Workspace roots (Instance.directory + worktree) that stay writable. */
     workspace: string[]
     options?: Options
+    platform?: NodeJS.Platform
   }): Plan {
-    const { backend: b, warning } = decide(input.options)
+    const platform = input.platform ?? process.platform
+    const { backend: b, warning } = decide(input.options, platform)
     if (b === "none") {
       return { file: input.command, useShell: input.shell, sandboxed: false, backend: "none", warning }
     }
-    const policy = buildPolicy({ workspace: input.workspace, options: input.options! })
-    // See wrapArgv's identical guard: seatbelt has no namespace, so
-    // "allowlist" already reads as a plain network deny there, and composing
-    // a shim that dials a socket seatbelt never mounted would just fail or
-    // hang.
+    const policy = buildPolicy({ workspace: input.workspace, options: input.options!, backend: b })
+    // Bubblewrap's loopback shim bridges a bind-mounted unix socket that only
+    // exists inside its own network namespace. Seatbelt has no namespace, so
+    // there is nothing to bridge and no shim to compose — the sandboxed
+    // process instead dials the loopback proxy port seatbeltProfile allowed
+    // directly, which is why this guard stays bubblewrap-only rather than
+    // "any backend with allowlist + an egress value".
     const shimmed = b === "bubblewrap" && policy.network === "allowlist" && policy.egress ? shimPlan() : undefined
     const shim = shimmed
       ? shimScript({
@@ -750,10 +885,16 @@ export namespace Sandbox {
         })
       : undefined
     const argv = shim ? ["/bin/sh", "-c", shim] : [input.shell, "-c", input.command]
-    const s = specForArgv(argv, shimmed ? { ...policy, readBind: shimmed.bind } : policy)!
+    const s = specForArgv(argv, shimmed ? { ...policy, readBind: shimmed.bind } : policy, b)!
     log.info("sandboxing command", { backend: b, network: policy.network, writable: policy.writable.length })
-    const proxy = `http://127.0.0.1:${SHIM_PORT}`
-    const env = shim ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : undefined
+    // The env points at whichever loopback port actually reaches the proxy:
+    // the bwrap shim's fixed SHIM_PORT when a shim was composed, or
+    // seatbelt's own policy.port (no shim, dialed directly) when the backend
+    // is seatbelt and network is "allowlist" — specForArgv above already
+    // threw if that port were missing or invalid, so reading it here is safe.
+    const port = shim ? SHIM_PORT : b === "seatbelt" && policy.network === "allowlist" ? policy.port : undefined
+    const proxy = port ? `http://127.0.0.1:${port}` : undefined
+    const env = proxy ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : undefined
     return {
       file: s.file,
       args: s.args,
@@ -770,6 +911,10 @@ export namespace Sandbox {
    * which spawn an interpreter directly. When the sandbox is off or unavailable
    * the original `file`/`args` are returned unchanged, so callers can spawn the
    * result verbatim.
+   *
+   * `platform` defaults to the real one — the only reason to pass a
+   * different value is to exercise the seatbelt/darwin branch from a
+   * machine that isn't one; see `backend()`.
    */
   export function wrapArgv(input: {
     file: string
@@ -781,8 +926,10 @@ export namespace Sandbox {
     /** Exact host credential files to mask from the process. */
     unreadable?: string[]
     options?: Options
+    platform?: NodeJS.Platform
   }): Wrapped {
-    const { backend: b, warning } = decide(input.options)
+    const platform = input.platform ?? process.platform
+    const { backend: b, warning } = decide(input.options, platform)
     if (b === "none") {
       return { file: input.file, args: input.args, sandboxed: false, backend: "none", warning }
     }
@@ -791,20 +938,27 @@ export namespace Sandbox {
       extraWritable: input.extraWritable,
       unreadable: input.unreadable,
       options: input.options!,
+      backend: b,
     })
     // Only bubblewrap's --unshare-net + --bind gives the shim anything to
-    // bridge: seatbelt has no namespace, so "allowlist" already reads as a
-    // plain network deny there (see seatbeltProfile) and composing a shim
-    // that dials a socket seatbelt never mounted would just fail or hang.
+    // bridge: seatbelt has no namespace, so there is nothing to bridge and no
+    // shim to compose — the sandboxed process instead dials the loopback
+    // proxy port seatbeltProfile allowed directly (see plan()'s identical
+    // guard for the shell-command path).
     const plan = b === "bubblewrap" && policy.network === "allowlist" && policy.egress ? shimPlan() : undefined
     const shim = plan
       ? shimScript({ binary: plan.binary, port: SHIM_PORT, socket: policy.egress!, file: input.file, args: input.args })
       : undefined
     const argv = shim ? ["/bin/sh", "-c", shim] : [input.file, ...input.args]
-    const s = specForArgv(argv, plan ? { ...policy, readBind: plan.bind } : policy)!
+    const s = specForArgv(argv, plan ? { ...policy, readBind: plan.bind } : policy, b)!
     log.info("sandboxing process", { backend: b, network: policy.network, writable: policy.writable.length })
-    const proxy = `http://127.0.0.1:${SHIM_PORT}`
-    const env = shim ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : undefined
+    // See plan()'s identical computation: SHIM_PORT for a composed bwrap
+    // shim, or seatbelt's own dynamically-assigned policy.port when the
+    // backend is seatbelt and network is "allowlist" (specForArgv above
+    // already threw if that port were missing or invalid).
+    const port = shim ? SHIM_PORT : b === "seatbelt" && policy.network === "allowlist" ? policy.port : undefined
+    const proxy = port ? `http://127.0.0.1:${port}` : undefined
+    const env = proxy ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : undefined
     return { file: s.file, args: s.args, sandboxed: true, backend: b, warning, ...(env ? { env } : {}) }
   }
 

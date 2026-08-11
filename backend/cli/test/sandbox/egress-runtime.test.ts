@@ -194,3 +194,88 @@ test.skipIf(Sandbox.backend() !== "bubblewrap")(
     ).not.toThrow()
   },
 )
+
+/**
+ * Same wire technique as `proxyRequest` above, but dialed over TCP loopback
+ * rather than the unix socket — what a seatbelt-sandboxed process reaches
+ * directly (no namespace to bridge across; see `sandbox.ts`'s
+ * `seatbeltProfile`). This is the one seatbelt-specific piece of Task 7 that
+ * genuinely runs, without a Mac: `EgressRuntime`'s bridge is `Egress.serveShim`
+ * (already covered on its own in `egress.test.ts`), a plain `Bun.listen` with
+ * nothing namespace- or platform-specific about it, so starting it with
+ * `platform: "darwin"` injected and then dialing it for real proves the
+ * bridge → proxy → allowlist path actually runs. What it cannot prove is
+ * whether a real `sandbox-exec` restricts a sandboxed process to dialing only
+ * this one port in the first place — see the Task 7 report for exactly what
+ * a Mac owner still needs to run.
+ */
+function tcpProxyRequest(port: number, authority: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`no response from the bridge for ${authority}`)), 2_000)
+    let body = ""
+    Bun.connect({
+      hostname: "127.0.0.1",
+      port,
+      socket: {
+        open(client) {
+          client.write(`CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n\r\n`)
+        },
+        data(_client, chunk) {
+          body += chunk.toString()
+        },
+        close() {
+          clearTimeout(timeout)
+          resolve(body)
+        },
+        error(_client, error) {
+          clearTimeout(timeout)
+          reject(error)
+        },
+      },
+    }).catch(reject)
+  })
+}
+
+test("ensure with platform darwin bridges a TCP loopback port distinct from the bwrap SHIM_PORT", async () => {
+  const running = await EgressRuntime.ensure("darwin")
+  // Seatbelt has no namespace to keep a fixed port private across
+  // concurrently sandboxed processes the way --unshare-net does for
+  // bubblewrap, so the bridge asks the OS for an ephemeral one (port: 0 in
+  // egress-runtime.ts's start()) rather than reusing the fixed SHIM_PORT.
+  expect(running.port).not.toBe(Sandbox.SHIM_PORT)
+  expect(running.port).toBeGreaterThan(0)
+  // The unix-socket proxy underneath is unaffected — a bubblewrap process
+  // reaching the very same running proxy would still find it there.
+  await expect(fs.stat(running.socket)).resolves.toBeDefined()
+})
+
+test("the seatbelt bridge really forwards to the proxy, live", async () => {
+  const running = await EgressRuntime.ensure("darwin")
+  // Nothing listens on loopback:1 (a privileged, essentially never-bound
+  // port), so a request that clears the allowlist check still gets a 403 —
+  // "cannot reach", not "not on the allowlist" — which is what proves the
+  // bridge → proxy → allowlist check chain actually ran end to end.
+  const body = await tcpProxyRequest(running.port, "127.0.0.1:1")
+  expect(body).toContain("not on the sandbox allowlist")
+})
+
+test("egressFor on darwin returns the bridged port, stringified — not a socket path", async () => {
+  const egress = await EgressRuntime.egressFor({ enabled: true, network: "allowlist" }, "darwin")
+  expect(egress).toBeDefined()
+  expect(Number.isInteger(Number(egress))).toBe(true)
+  expect(egress).not.toContain("/")
+  expect(egress).not.toContain(".sock")
+})
+
+test("egressFor with network deny or allow never starts a proxy on darwin", async () => {
+  const deny = await EgressRuntime.egressFor({ enabled: true, network: "deny" }, "darwin")
+  expect(deny).toBeUndefined()
+  const allow = await EgressRuntime.egressFor({ enabled: true, network: "allow" }, "darwin")
+  expect(allow).toBeUndefined()
+})
+
+test("egressFor on linux/bubblewrap keeps returning the unix socket path, unaffected by the darwin branch", async () => {
+  if (Sandbox.backend() !== "bubblewrap") return
+  const egress = await EgressRuntime.egressFor({ enabled: true, network: "allowlist" })
+  expect(egress).toContain(".sock")
+})
