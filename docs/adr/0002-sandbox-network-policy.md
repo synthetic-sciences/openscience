@@ -58,7 +58,16 @@ saying macOS cannot reach the same bounded-egress outcome: seatbelt can restrict
 default network deny, then a selective allow for `network-bind`/`network-inbound`/
 `network-outbound` on the proxy's loopback port). Neither OS can filter by hostname at the
 sandbox-profile level — that is what the proxy is for on Linux too — so this is achievable via a
-different mechanism, not impossible; it is simply unimplemented here. This ADR's fallback decision
-is that seatbelt treats `"allowlist"` as `"deny"` until that mechanism is built; whether that
-fallback also surfaces a warning is not settled by anything measured here — unverified, left to
-that design. Windows has no sandbox backend at all, so the question does not apply there.
+different mechanism, not impossible. Task 7 built it: the host-side proxy listens on a loopback
+TCP port directly on macOS (no bind-mounted socket, no bridge — seatbelt has no namespace to put
+either behind), the profile permits `network-bind`/`network-inbound`/`network-outbound` on
+exactly that port as described above, and — because a loopback port, unlike a unix socket, carries
+no filesystem permissions of its own — every request to it must additionally carry a
+`Proxy-Authorization` secret generated fresh per proxy start. This is unverified in the same sense
+the rest of this ADR's Linux side was before it was measured: nobody on this project has run
+`sandbox-exec`, so whether the profile text above is actually _accepted and enforced_ as written —
+including whether `network-bind`/`network-inbound` are the right operations to permit at all, and
+whether `(local ...)` is the right filter for them — is a real, open question, not merely
+theoretical caution. See `.superpowers/sdd/2026-08-09-sandbox-network-policy/task-7-report.md` for
+exactly what a Mac owner still needs to run to close it. Windows has no sandbox backend at all, so
+the question does not apply there.

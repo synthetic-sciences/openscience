@@ -378,7 +378,13 @@ export namespace Sandbox {
       const secret = at > 0 ? raw!.slice(at + 1) : undefined
       const valid = port !== undefined && Number.isInteger(port) && port > 0 && !!secret
       if (raw !== undefined && !valid) {
-        log.warn("refusing to grant sandbox egress access to an invalid port/secret pair", { egress: raw })
+        // Only the port half, never the secret: this is a warning, not an
+        // error path guarded by anything that stops it reaching a log
+        // sink — logging the credential half here would defeat the whole
+        // point of requiring one.
+        log.warn("refusing to grant sandbox egress access to an invalid port/secret pair", {
+          port: at > 0 ? raw!.slice(0, at) : raw,
+        })
       }
       return { writable, unreadable, network, ...(valid ? { port, secret } : {}) }
     }
@@ -415,20 +421,48 @@ export namespace Sandbox {
   }
 
   /**
-   * `(deny network*)` then, for "allowlist" only, a narrow re-allow of
-   * exactly one loopback port — the host-side proxy `EgressRuntime` starts
-   * for seatbelt (see egress-runtime.ts). Seatbelt has no network namespace
-   * to sever the way bubblewrap's `--unshare-net` does, so there is no
-   * unix socket to bind-mount either: the profile itself is the only
+   * `(deny network*)` then, for "allowlist" only, a narrow re-allow scoped
+   * to exactly one loopback port — the host-side proxy `EgressRuntime`
+   * starts for seatbelt (see egress-runtime.ts). Seatbelt has no network
+   * namespace to sever the way bubblewrap's `--unshare-net` does, so there
+   * is no unix socket to bind-mount either: the profile itself is the only
    * boundary, which is why the deny must always precede the allow (an
    * allow with no prior deny is the unfiltered, unrestricted-egress shape
-   * this function must never produce) and why a missing or invalid port
-   * throws rather than silently falling back to a bare deny — the same
-   * fail-closed rule `bubblewrapArgs` applies to a missing egress socket.
-   * Falling back to a plain deny instead of throwing would look identical
-   * to a user asking for `network: "deny"`, which is not what "allowlist"
-   * means and is exactly the kind of silent downgrade this branch exists to
-   * avoid.
+   * this function must never produce) and why a missing, non-positive, or
+   * out-of-range port throws rather than silently falling back to a bare
+   * deny — the same fail-closed rule `bubblewrapArgs` applies to a missing
+   * egress socket. Falling back to a plain deny instead of throwing would
+   * look identical to a user asking for `network: "deny"`, which is not
+   * what "allowlist" means and is exactly the kind of silent downgrade this
+   * branch exists to avoid.
+   *
+   * Three allow lines, not one: `docs/adr/0002-sandbox-network-policy.md`
+   * records the reference implementation
+   * (`anthropic-experimental/sandbox-runtime`) as permitting
+   * `network-bind`/`network-inbound`/`network-outbound`, all narrowed to the
+   * proxy's loopback port, filter spelled `tcp` — not the single
+   * `network-outbound` with `(remote ip ...)` this function emitted before
+   * Task 7's fix round 1. That original, narrower shape was never measured;
+   * it was this function's author's own guess at what a TCP `connect()`
+   * needs, and a Task 7 review flagged the failure mode a wrong guess
+   * produces here: if seatbelt classifies the implicit local port a
+   * `connect()` allocates under `network-bind` (this sandboxed process is
+   * never a listener, so `network-inbound` is included for the same
+   * uncertainty, not because a genuine inbound connection is expected), a
+   * profile missing that allow would make "allowlist" unreachable on every
+   * real Mac — silently, indistinguishable from the network simply being
+   * down, which is the one direction this task must not ship in. Matching a
+   * documented, cited-as-working reference is the safer default than an
+   * independently-derived narrower profile that has never been measured
+   * against a real `sandbox-exec`. `local`/`remote` for `network-bind`+
+   * `network-inbound` vs `network-outbound` follows ordinary SBPL
+   * convention (bind/inbound describe the local endpoint, outbound the
+   * remote one) — the ADR does not itself quote a filter spelling for the
+   * first two, only for `network-outbound`, so that pairing is this
+   * function's own inference, not a documented fact. See the Task 7
+   * report's unverified section: whether seatbelt needs `network-bind`/
+   * `network-inbound` at all, and whether `local`/`remote` is the right
+   * pairing for them, are both open questions only a Mac can answer.
    *
    * Never asserts enforcement — that a real `sandbox-exec` actually honours
    * this text — only the text itself, its ordering, and this function's own
@@ -440,16 +474,18 @@ export namespace Sandbox {
     const lines = ["(version 1)", "(allow default)"]
     // No namespace equivalent on macOS, so "allowlist" cannot be enforced by
     // severing the network device the way bubblewrapArgs does. Deny is the
-    // safe reading of a request for bounded egress; the allow line below
-    // narrows that back to exactly the loopback proxy port when one reached
+    // safe reading of a request for bounded egress; the allow lines below
+    // narrow that back to exactly the loopback proxy port when one reached
     // the policy.
     if (policy.network !== "allow") lines.push("(deny network*)")
     if (policy.network === "allowlist") {
       const port = policy.port
-      if (typeof port !== "number" || !Number.isInteger(port) || port <= 0) {
+      if (typeof port !== "number" || !Number.isInteger(port) || port <= 0 || port > 65535) {
         throw new Error("sandbox network 'allowlist' requires an egress port")
       }
-      lines.push(`(allow network-outbound (remote ip "localhost:${port}"))`)
+      lines.push(`(allow network-bind (local tcp "localhost:${port}"))`)
+      lines.push(`(allow network-inbound (local tcp "localhost:${port}"))`)
+      lines.push(`(allow network-outbound (remote tcp "localhost:${port}"))`)
     }
     const unreadable = withPrivateAliases(dedupe(policy.unreadable ?? []))
     if (unreadable.length) {

@@ -264,15 +264,27 @@ test("ensure with platform darwin listens on a loopback TCP port, not a unix soc
   expect(running.socket).toBeUndefined()
 })
 
-test("the darwin proxy forwards a correctly-authenticated request, live", async () => {
+test("the darwin proxy forwards a correctly-authenticated request past both auth and the allowlist check, live", async () => {
+  // 127.0.0.1 is not in Egress.DEFAULT_RULES, so it has to be added
+  // explicitly here — otherwise a request to 127.0.0.1:1 is denied at the
+  // allowlist check before the auth → dial chain this test exists to prove
+  // is ever reached at all. (Task 7 fix round 1, I2: the unfixed version of
+  // this test asserted "not on the sandbox allowlist" — the denial text —
+  // while its own comment claimed the opposite outcome. Both the comment
+  // and the assertion described a dial that never actually happened;
+  // measured by the reviewer, confirmed here by fixing it forward instead
+  // of just correcting the prose.)
+  await Config.setSandbox({ allowHosts: ["127.0.0.1"] })
   const running = await EgressRuntime.ensure("darwin")
   // Nothing listens on loopback:1 (a privileged, essentially never-bound
   // port), so a request that clears BOTH the auth check and the allowlist
-  // check still gets a 403 "cannot reach" — not "not on the sandbox
+  // check still gets a 403 "Cannot reach" — not "not on the sandbox
   // allowlist" and not 407 — which is what proves the whole
   // auth → allowlist → dial chain actually ran end to end.
   const body = await tcpProxyRequest(running.port, "127.0.0.1:1", running.secret)
-  expect(body).toContain("not on the sandbox allowlist")
+  expect(body).toContain("Cannot reach")
+  expect(body).not.toContain("not on the sandbox allowlist")
+  expect(body).not.toContain("407")
 })
 
 test("the darwin proxy refuses a request with no Proxy-Authorization, and never forwards it", async () => {
@@ -296,9 +308,36 @@ test('egressFor on darwin returns "port:secret", not a socket path', async () =>
   expect(egress).toBeDefined()
   const [portPart, secretPart] = egress!.split(":")
   expect(Number.isInteger(Number(portPart))).toBe(true)
-  expect(secretPart).toBeTruthy()
+  // Shape-checked against crypto.randomUUID()'s actual format, not just
+  // toBeTruthy(): the string "undefined" — what a missing `secret` coerces
+  // to inside a template literal — is itself truthy, so a bare truthiness
+  // check structurally cannot catch the I1 defect the next test reproduces.
+  expect(secretPart).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
   expect(egress).not.toContain("/")
   expect(egress).not.toContain(".sock")
+})
+
+// Task 7 fix round 1, I1: egressFor's seatbelt branch used to interpolate
+// `running.secret` with no guard. ensure()/start() cache ONE proxy for the
+// process lifetime (see ensure()'s doc comment); `platform` only decides
+// what starts when nothing is running yet. Asking for "darwin" after a
+// bubblewrap proxy is already cached — impossible for a real caller, since
+// process.platform never changes mid-process, but reachable here because
+// platform is deliberately injectable for testing — used to silently reuse
+// that cached listener and return the literal string "3128:undefined"
+// (Buffer-safe, syntactically valid, and — per the test above — exactly
+// what a bare `toBeTruthy()` on the secret half cannot distinguish from a
+// real one). Confirmed by execution before the fix; asserts the fail-closed
+// replacement here.
+test("egressFor on darwin fails closed rather than composing an undefined secret when a differently-platformed proxy is already cached", async () => {
+  // Force the FIRST proxy to be the bubblewrap (unix-socket) shape,
+  // deterministically regardless of what machine actually runs this test —
+  // the same platform-injection seam every darwin test in this file uses,
+  // just pointed at the other platform.
+  await EgressRuntime.ensure("linux")
+  await expect(EgressRuntime.egressFor({ enabled: true, network: "allowlist" }, "darwin")).rejects.toThrow(
+    /already running as the bubblewrap/,
+  )
 })
 
 test("egressFor with network deny or allow never starts a proxy on darwin", async () => {
@@ -313,3 +352,119 @@ test("egressFor on linux/bubblewrap keeps returning the unix socket path, unaffe
   const egress = await EgressRuntime.egressFor({ enabled: true, network: "allowlist" })
   expect(egress).toContain(".sock")
 })
+
+/**
+ * Task 7 fix round 1, I4: every auth test above hand-builds the
+ * `Proxy-Authorization` header itself, which leaves the seam joining
+ * `sandbox.ts`'s `proxyUrl()` (`http://os:<secret>@host:port`) to
+ * `egress.ts`'s own parser of that header unpinned in-suite — a rename of
+ * the userinfo user ("os") in one place only would still pass every other
+ * test here. These drive a real `curl`, an independent HTTP client
+ * implementation, at the *exact* URL `Sandbox.plan()` composes, covering
+ * both wire forms curl uses to talk to a proxy: an absolute-form GET (its
+ * default for a plain `http://` target) and a CONNECT tunnel (forced with
+ * `--proxytunnel`, and also what curl uses unprompted for an `https://`
+ * target — see `egress-live.test.ts` for that shape against a real host).
+ * A third, with Python's `urllib`, covers a second independent client
+ * library — the same proxy-auth mechanism pip itself relies on.
+ */
+function planProxyUrl(egress: string): string {
+  const plan = Sandbox.plan({
+    command: "true",
+    shell: "/bin/sh",
+    cwd: "/tmp",
+    workspace: ["/tmp"],
+    options: { enabled: true, network: "allowlist", egress },
+    platform: "darwin",
+  })
+  const proxy = plan.env?.HTTP_PROXY
+  expect(proxy).toMatch(/^http:\/\/os:.+@127\.0\.0\.1:\d+$/)
+  return proxy!
+}
+
+/** `Bun.spawn`, never `Bun.spawnSync`: the origin and the proxy both reply
+ *  from `Bun.listen`/`Bun.serve` callbacks on this same event loop, so a
+ *  *synchronous* spawn would block that loop for as long as the child runs
+ *  — the child blocks on recv() waiting for a reply the loop can't yet
+ *  deliver, deadlocking both sides until the test times out. Reproduced
+ *  while writing these three tests (all three hung at 5s with empty stdout)
+ *  — the same defect class `sandbox.test.ts`'s own "Bun.spawn, not
+ *  spawnSync" comment documents for an identical reason. */
+async function runCapture(cmd: string[]) {
+  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" })
+  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+  await proc.exited
+  return { stdout, stderr }
+}
+
+test.skipIf(!Bun.which("curl"))(
+  "a real curl (absolute-form GET) using the exact URL Sandbox.plan() emits authenticates and is forwarded",
+  async () => {
+    const origin = Bun.serve({ port: 0, fetch: () => new Response("ok") })
+    try {
+      await Config.setSandbox({ allowHosts: ["127.0.0.1"] })
+      const running = await EgressRuntime.ensure("darwin")
+      const proxy = planProxyUrl(`${running.port}:${running.secret}`)
+      const { stdout, stderr } = await runCapture([
+        "curl",
+        "-sS",
+        "-m",
+        "5",
+        "-x",
+        proxy,
+        `http://127.0.0.1:${origin.port}/`,
+      ])
+      expect(stdout, stderr).toBe("ok")
+    } finally {
+      origin.stop(true)
+    }
+  },
+)
+
+test.skipIf(!Bun.which("curl"))(
+  "a real curl --proxytunnel (forced CONNECT) using the exact URL Sandbox.plan() emits authenticates and is forwarded",
+  async () => {
+    const origin = Bun.serve({ port: 0, fetch: () => new Response("ok") })
+    try {
+      await Config.setSandbox({ allowHosts: ["127.0.0.1"] })
+      const running = await EgressRuntime.ensure("darwin")
+      const proxy = planProxyUrl(`${running.port}:${running.secret}`)
+      const { stdout, stderr } = await runCapture([
+        "curl",
+        "-sS",
+        "-m",
+        "5",
+        "--proxytunnel",
+        "-x",
+        proxy,
+        `http://127.0.0.1:${origin.port}/`,
+      ])
+      expect(stdout, stderr).toBe("ok")
+    } finally {
+      origin.stop(true)
+    }
+  },
+)
+
+test.skipIf(!Bun.which("python3"))(
+  "a real Python urllib request using the exact URL Sandbox.plan() emits authenticates and is forwarded",
+  async () => {
+    const origin = Bun.serve({ port: 0, fetch: () => new Response("ok") })
+    try {
+      await Config.setSandbox({ allowHosts: ["127.0.0.1"] })
+      const running = await EgressRuntime.ensure("darwin")
+      const proxy = planProxyUrl(`${running.port}:${running.secret}`)
+      const target = `http://127.0.0.1:${origin.port}/`
+      const script = [
+        "import urllib.request",
+        `handler = urllib.request.ProxyHandler({"http": ${JSON.stringify(proxy)}})`,
+        "opener = urllib.request.build_opener(handler)",
+        `print(opener.open(${JSON.stringify(target)}, timeout=5).read().decode(), end="")`,
+      ].join("\n")
+      const { stdout, stderr } = await runCapture(["python3", "-c", script])
+      expect(stdout, stderr).toBe("ok")
+    } finally {
+      origin.stop(true)
+    }
+  },
+)

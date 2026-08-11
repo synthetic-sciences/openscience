@@ -372,12 +372,28 @@ describe("Sandbox network policy", () => {
   // here: the profile text itself is the only boundary. "allowlist" is
   // therefore carried by Policy.port, not Policy.egress (that field stays
   // bubblewrap's unix socket path — see Policy's doc comment).
-  test("allowlist with a port emits deny before the narrow allow", () => {
+  //
+  // Task 7 fix round 1, I3: this used to emit only network-outbound, spelled
+  // (remote ip ...). docs/adr/0002-sandbox-network-policy.md:56-59 records
+  // the reference implementation as permitting network-bind/network-inbound/
+  // network-outbound, all narrowed to the proxy's loopback port, spelled tcp
+  // — a narrower, unmeasured guess on the one platform this project cannot
+  // execute against is exactly the failure mode that makes "allowlist"
+  // silently unreachable on every real Mac. See seatbeltProfile's own doc
+  // comment for why network-bind/network-inbound are included even though
+  // this sandboxed process is only ever a TCP client, never a listener.
+  test("allowlist with a port emits deny before all three narrow allows, spelled tcp", () => {
     const profile = Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist", port: 54321 })
     const deny = profile.indexOf("(deny network*)")
-    const allow = profile.indexOf('(allow network-outbound (remote ip "localhost:54321"))')
     expect(deny).toBeGreaterThan(-1)
-    expect(allow).toBeGreaterThan(deny)
+    for (const line of [
+      '(allow network-bind (local tcp "localhost:54321"))',
+      '(allow network-inbound (local tcp "localhost:54321"))',
+      '(allow network-outbound (remote tcp "localhost:54321"))',
+    ]) {
+      const at = profile.indexOf(line)
+      expect(at).toBeGreaterThan(deny)
+    }
   })
 
   // The safety rule from the task brief: a missing/invalid port must never
@@ -391,28 +407,43 @@ describe("Sandbox network policy", () => {
     )
   })
 
+  // Task 7 fix round 1, M5: 65536 and above are not valid TCP ports at all;
+  // an unbounded check let them through and would have composed a profile
+  // narrowing egress to a port number that can never exist.
   test.each([
     ["zero", 0],
     ["negative", -1],
     ["fractional", 3.5],
+    ["one past the max valid port", 65536],
+    ["absurdly large", 1e21],
   ])("allowlist with an invalid port (%s) throws", (_label, port) => {
     expect(() => Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist", port })).toThrow(
       "sandbox network 'allowlist' requires an egress port",
     )
   })
 
+  test("allowlist accepts the maximum valid port, 65535", () => {
+    expect(() => Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist", port: 65535 })).not.toThrow()
+  })
+
   // The dangerous direction named in the brief: a malformed or over-broad
   // allow is the only failure mode that makes a macOS user worse off than
-  // today's plain deny. Pin the exact three shapes seatbeltProfile can
-  // produce — never a bare, unfiltered network-outbound allow.
-  test("never emits an unfiltered (allow network-outbound) in any mode", () => {
+  // today's plain deny. Pin the exact shapes seatbeltProfile can produce —
+  // never a bare, unfiltered allow of any of the three network operations.
+  test("never emits an unfiltered network-bind/network-inbound/network-outbound allow in any mode", () => {
     for (const network of ["deny", "allow"] as const) {
       const profile = Sandbox.seatbeltProfile({ writable: ["/w"], network })
+      expect(profile).not.toContain("(allow network-bind")
+      expect(profile).not.toContain("(allow network-inbound")
       expect(profile).not.toContain("(allow network-outbound")
     }
     const profile = Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist", port: 4000 })
-    const lines = profile.split("\n").filter((line) => line.includes("network-outbound"))
-    expect(lines).toEqual(['(allow network-outbound (remote ip "localhost:4000"))'])
+    const lines = profile.split("\n").filter((line) => /network-(bind|inbound|outbound)/.test(line))
+    expect(lines).toEqual([
+      '(allow network-bind (local tcp "localhost:4000"))',
+      '(allow network-inbound (local tcp "localhost:4000"))',
+      '(allow network-outbound (remote tcp "localhost:4000"))',
+    ])
   })
 
   // Pins the deny/allow branches byte-for-byte: Policy.port only ever

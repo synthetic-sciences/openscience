@@ -249,7 +249,22 @@ export namespace EgressRuntime {
    *
    *  `platform` defaults to the real one — the same injectable seam
    *  `Sandbox.backend`/`plan`/`wrapArgv` use — so the seatbelt branch is
-   *  exercisable, deterministically, from a machine that has none. */
+   *  exercisable, deterministically, from a machine that has none.
+   *
+   *  `ensure()` caches ONE proxy for the process lifetime (see its doc
+   *  comment); `platform` only decides which listener `start()` picks when
+   *  nothing is running yet. Asking for `"darwin"` after a differently-
+   *  platformed proxy is already cached (a real caller never does this —
+   *  `process.platform` is constant for the life of a process — but a test
+   *  injecting platform explicitly can) silently reuses that cached
+   *  listener instead of starting a seatbelt one. Interpolating a
+   *  bubblewrap `Running`'s missing `secret` into the template literal
+   *  below would then produce the *string* `"undefined"` — truthy, and
+   *  therefore indistinguishable from a real secret to any check that only
+   *  asks whether the value is present. Guarded explicitly rather than
+   *  trusting the interpolation to fail loudly on its own, because it
+   *  doesn't: confirmed by execution (Task 7 fix round 1 review) that it
+   *  silently composes `"<port>:undefined"` instead. */
   export async function egressFor(
     policy: Sandbox.Options,
     platform: NodeJS.Platform = process.platform,
@@ -261,6 +276,12 @@ export namespace EgressRuntime {
     if (b === "bubblewrap") return (await ensure(platform)).socket
     if (b === "seatbelt") {
       const running = await ensure(platform)
+      if (!running.secret) {
+        throw new Error(
+          "sandbox egress proxy is already running as the bubblewrap (unix-socket) listener, not seatbelt's — " +
+            "call EgressRuntime.stop() first if a seatbelt proxy is genuinely needed here",
+        )
+      }
       return `${running.port}:${running.secret}`
     }
     return undefined
