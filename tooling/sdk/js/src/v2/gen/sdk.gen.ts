@@ -114,10 +114,12 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  NotebookCommandsResponses,
+  NotebookCommandStopErrors,
+  NotebookCommandStopResponses,
   NotebookComputeResponses,
   NotebookExecuteResponses,
   NotebookInterruptResponses,
-  NotebookKernelCreateResponses,
   NotebookKernelDeleteResponses,
   NotebookKernelInterruptResponses,
   NotebookKernelRestartResponses,
@@ -1915,7 +1917,7 @@ export class Trust extends HeyApiClient {
   /**
    * Inspect project trust
    *
-   * Inspect whether project-local code may execute. Projects are untrusted by default; read-only project opening remains available.
+   * Inspect whether project-local code may execute. Project code is enabled by default and remains disabled only after an explicit revocation.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
@@ -5239,16 +5241,15 @@ export class File extends HeyApiClient {
   }
 }
 
-export class Kernel extends HeyApiClient {
+export class Command extends HeyApiClient {
   /**
-   * Create a named session kernel record
+   * Stop a live shell command
    */
-  public create<ThrowOnError extends boolean = false>(
-    parameters?: {
+  public stop<ThrowOnError extends boolean = false>(
+    parameters: {
+      commandID: string
       directory?: string
       sessionID?: string
-      name?: string
-      language?: "python" | "r"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5257,26 +5258,29 @@ export class Kernel extends HeyApiClient {
       [
         {
           args: [
+            { in: "path", key: "commandID" },
             { in: "query", key: "directory" },
             { in: "body", key: "sessionID" },
-            { in: "body", key: "name" },
-            { in: "body", key: "language" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).post<NotebookKernelCreateResponses, unknown, ThrowOnError>({
-      url: "/notebook/kernels",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
+    return (options?.client ?? this.client).post<NotebookCommandStopResponses, NotebookCommandStopErrors, ThrowOnError>(
+      {
+        url: "/notebook/commands/{commandID}/stop",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
       },
-    })
+    )
   }
+}
 
+export class Kernel extends HeyApiClient {
   /**
    * Restart a kernel in a fresh runtime
    */
@@ -5415,7 +5419,7 @@ export class Kernel extends HeyApiClient {
 
 export class Notebook extends HeyApiClient {
   /**
-   * Report host compute capacity
+   * Report live local compute capacity
    */
   public compute<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -5426,6 +5430,34 @@ export class Notebook extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
     return (options?.client ?? this.client).get<NotebookComputeResponses, unknown, ThrowOnError>({
       url: "/notebook/compute",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List live project shell commands
+   */
+  public commands<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<NotebookCommandsResponses, unknown, ThrowOnError>({
+      url: "/notebook/commands",
       ...options,
       ...params,
     })
@@ -5645,6 +5677,11 @@ export class Notebook extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _command?: Command
+  get command(): Command {
+    return (this._command ??= new Command({ client: this.client }))
   }
 
   private _kernel?: Kernel
@@ -6307,7 +6344,7 @@ export class Vcs extends HeyApiClient {
   }
 }
 
-export class Command extends HeyApiClient {
+export class Command2 extends HeyApiClient {
   /**
    * List commands
    *
@@ -6797,9 +6834,9 @@ export class OpenScienceClient extends HeyApiClient {
     return (this._vcs ??= new Vcs({ client: this.client }))
   }
 
-  private _command?: Command
-  get command(): Command {
-    return (this._command ??= new Command({ client: this.client }))
+  private _command?: Command2
+  get command(): Command2 {
+    return (this._command ??= new Command2({ client: this.client }))
   }
 
   private _app?: App

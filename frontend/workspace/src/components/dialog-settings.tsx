@@ -15,7 +15,10 @@ const SETTINGS_STYLES = `
 .settings-dialog {
   font-family: var(--font-family-sans);
   font-feature-settings: var(--font-family-sans--font-feature-settings, normal);
-  background: var(--background-base);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  background: color-mix(in srgb, var(--background-base) 88%, transparent);
   color: var(--text-base);
 }
 .settings-dialog h2,
@@ -84,10 +87,14 @@ const SETTINGS_STYLES = `
   width: min(calc(100vw - 32px), 960px);
   height: min(calc(100vh - 40px), 720px);
   overflow: hidden;
-  border: 1px solid var(--border-base);
-  border-radius: 16px;
-  background: var(--background-base);
-  box-shadow: 0 24px 80px color-mix(in srgb, #000 36%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-base) 82%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--background-base) 90%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset,
+    0 22px 70px color-mix(in srgb, #000 30%, transparent);
+  backdrop-filter: saturate(1.16) blur(28px);
+  -webkit-backdrop-filter: saturate(1.16) blur(28px);
 }
 [data-component="dialog"]:has([data-slot="dialog-content"].settings-expanded) [data-slot="dialog-container"] {
   width: min(calc(100vw - 32px), 1200px);
@@ -111,8 +118,8 @@ const SETTINGS_STYLES = `
   flex-direction: column;
   justify-content: space-between;
   padding: 14px 10px;
-  border-right: 1px solid var(--border-weak-base);
-  background: var(--background-strong);
+  border-right: 1px solid color-mix(in srgb, var(--border-weak-base) 82%, transparent);
+  background: color-mix(in srgb, var(--background-strong) 76%, transparent);
 }
 .settings-nav__sections {
   display: flex;
@@ -147,21 +154,28 @@ const SETTINGS_STYLES = `
   gap: 6px;
   padding: 4px 7px;
   border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.25;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
   color: var(--text-weak);
   text-align: left;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 120ms ease;
 }
 .settings-nav__item:hover {
   background: var(--surface-raised-strong);
   color: var(--text-strong);
 }
 .settings-nav__item[data-active="true"] {
-  background: var(--surface-raised-strong);
+  background: color-mix(in srgb, var(--surface-raised-strong) 88%, transparent);
   color: var(--text-strong);
-  box-shadow: none;
+  font-weight: 500;
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 5%, transparent) inset;
+}
+.settings-nav__item:active {
+  transform: scale(0.98);
 }
 .settings-nav__item:focus-visible {
   outline: 1px solid var(--text-strong);
@@ -174,12 +188,17 @@ const SETTINGS_STYLES = `
   padding: 8px 9px 0;
   color: var(--text-weak);
 }
+.settings-nav__footer > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .settings-main {
   min-width: 0;
   display: flex;
   flex: 1;
   flex-direction: column;
-  background: var(--background-base);
+  background: color-mix(in srgb, var(--background-base) 86%, transparent);
 }
 .settings-main__header {
   min-height: 54px;
@@ -188,7 +207,10 @@ const SETTINGS_STYLES = `
   justify-content: space-between;
   gap: 8px;
   padding: 0 14px;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-weak-base) 82%, transparent);
+  background: color-mix(in srgb, var(--background-base) 72%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   flex-shrink: 0;
 }
 .settings-main__title {
@@ -196,7 +218,7 @@ const SETTINGS_STYLES = `
   overflow: hidden;
   padding-left: 4px;
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -210,9 +232,9 @@ const SETTINGS_STYLES = `
   display: flex;
   width: min(100%, 800px);
   flex-direction: column;
-  gap: 12px;
-  padding: 24px 32px 18px;
-  background: linear-gradient(to bottom, var(--background-base) 84%, transparent);
+  gap: 10px;
+  padding: 22px 30px 15px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--background-base) 93%, transparent) 80%, transparent);
 }
 .settings-page-header__inner {
   display: flex;
@@ -225,15 +247,16 @@ const SETTINGS_STYLES = `
 .settings-page-header p {
   max-width: 660px;
   color: var(--text-weak);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
 }
 .settings-page-body {
   display: flex;
   width: min(100%, 800px);
   flex-direction: column;
-  gap: 26px;
-  padding: 2px 32px 48px;
+  gap: 22px;
+  padding: 2px 30px 44px;
 }
 .settings-section-heading {
   display: flex;
@@ -278,18 +301,18 @@ const SETTINGS_STYLES = `
 .settings-list {
   overflow: hidden;
   border: 1px solid var(--border-weak-base);
-  border-radius: 12px;
-  background: var(--surface-raised-base);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-raised-base) 70%, transparent);
 }
 .settings-list-item + .settings-list-item {
   border-top: 1px solid var(--border-weak-base);
 }
 .settings-list-row {
-  min-height: 62px;
+  min-height: 54px;
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 10px 12px 10px 14px;
+  padding: 8px 11px 8px 13px;
 }
 .settings-list-copy {
   min-width: 0;
@@ -300,14 +323,15 @@ const SETTINGS_STYLES = `
 }
 .settings-list-copy strong {
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
+  line-height: 18px;
 }
 .settings-list-copy span {
   overflow: hidden;
   color: var(--text-weak);
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -381,9 +405,106 @@ const SETTINGS_STYLES = `
   background: var(--surface-raised-base);
   color: var(--text-strong);
 }
+
+/* The panel implementations predate this shell and use several nominal type
+   utilities. Normalize them here so every tab carries the same compact rhythm
+   as the navigation rail, including panels that are lazy-loaded later. */
+.settings-dialog :where(.text-16-medium, .text-14-medium, .text-13-medium, .text-12-medium) {
+  font-family: inherit !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 18px !important;
+  letter-spacing: 0 !important;
+}
+.settings-dialog :where(.text-14-regular, .text-13-regular, .text-12-regular) {
+  font-family: inherit !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  line-height: 18px !important;
+  letter-spacing: 0 !important;
+}
+.settings-dialog :where(.text-11-medium, .text-11-regular) {
+  font-family: inherit !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  line-height: 16px !important;
+  letter-spacing: 0 !important;
+}
+.settings-dialog .text-11-medium {
+  font-weight: 500 !important;
+}
+.settings-dialog :where(.text-10-medium, .text-10-regular) {
+  font-family: inherit !important;
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  line-height: 14px !important;
+  letter-spacing: 0 !important;
+}
+.settings-dialog .text-10-medium {
+  font-weight: 500 !important;
+}
+.settings-dialog [style*="font-size"] {
+  font-size: 12px !important;
+  line-height: 18px !important;
+}
+.settings-dialog :where(h2, h3, h4) {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 18px !important;
+}
+.settings-dialog :where(button, input, select, textarea) {
+  font-size: 12px;
+  line-height: 18px;
+}
+.settings-dialog [data-slot="select-select-trigger"] span {
+  font-size: 12px !important;
+  line-height: 18px !important;
+}
+.settings-dialog :where(button, [role="button"]):not(:disabled) {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 120ms ease;
+}
+.settings-dialog :where(button, [role="button"]):not(:disabled):active {
+  transform: scale(0.98);
+}
+.settings-dialog :where(button, input, select, textarea):focus-visible {
+  outline: 1px solid var(--border-strong-base);
+  outline-offset: 2px;
+}
+.settings-dialog :where([class*="bg-surface-base"], [class*="bg-surface-raised-base"]) {
+  background-color: color-mix(in srgb, var(--surface-raised-base) 66%, transparent) !important;
+}
+.settings-dialog :where([class*="border-border-weak-base"]) {
+  border-color: color-mix(in srgb, var(--border-weak-base) 82%, transparent) !important;
+}
 .settings-dialog [class*="rounded-[4px]"],
 .settings-dialog [class*="rounded-[6px]"] {
   border-radius: 10px !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-component="dialog"]:has([data-slot="dialog-content"].settings-dialog) [data-slot="dialog-container"],
+  .settings-dialog,
+  .settings-nav,
+  .settings-main,
+  .settings-main__header {
+    background: var(--background-base);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  [data-component="dialog"]:has([data-slot="dialog-content"].settings-dialog) [data-slot="dialog-container"],
+  .settings-nav,
+  .settings-main__header,
+  .settings-list {
+    border-color: var(--border-strong-base);
+  }
 }
 
 @media (max-width: 720px) {
@@ -446,6 +567,17 @@ const SETTINGS_STYLES = `
   }
   .credential-form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-dialog *,
+  .settings-dialog *::before,
+  .settings-dialog *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 `

@@ -606,6 +606,107 @@
     gap: 12px;
   }
 
+  [data-slot="session-turn-generated"] {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    gap: 7px;
+    padding-top: 2px;
+
+    > header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text-weak);
+      font-size: 11px;
+      line-height: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.035em;
+
+      strong {
+        color: var(--text-base);
+        font-weight: 500;
+      }
+    }
+  }
+
+  [data-slot="session-turn-generated-list"] {
+    display: flex;
+    min-width: 0;
+    gap: 7px;
+    padding-bottom: 3px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scroll-snap-type: x proximity;
+  }
+
+  [data-slot="session-turn-generated-artifact"] {
+    width: 154px;
+    min-width: 154px;
+    display: grid;
+    grid-template-rows: 86px auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-weak-base);
+    border-radius: 8px;
+    background: var(--background-base);
+    color: var(--text-base);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    scroll-snap-align: start;
+
+    &:hover {
+      border-color: var(--border-base);
+      background: var(--surface-raised-base, var(--background-strong));
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--border-focus-base, var(--text-interactive-base));
+      outline-offset: 2px;
+    }
+  }
+
+  [data-slot="session-turn-generated-preview"] {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border-weak-base);
+    background: var(--background-strong);
+    color: var(--icon-weak-base);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  [data-slot="session-turn-generated-copy"] {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+    padding: 7px 8px 8px;
+
+    strong,
+    small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    strong {
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    small {
+      color: var(--text-weak);
+      font-size: 10px;
+      text-transform: capitalize;
+    }
+  }
+
   [data-slot="session-turn-artifact-save"] {
     width: 100%;
     min-width: 0;

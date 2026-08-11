@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, type JSX } from "solid-js"
+import { Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
 import {
   kernelCanStop,
   kernelLabel,
@@ -49,7 +49,11 @@ export function KernelCard(props: {
           <strong title={kernelLabel(props.kernel)}>{kernelLabel(props.kernel)}</strong>
           <span>
             <i data-tone={kernelTone(props.kernel.state)} aria-hidden="true" />
-            {kernelStateLabel(props.kernel.state)} · {kernelRecoveryLabel(props.kernel)}
+            {kernelStateLabel(props.kernel.state)} ·
+            <span data-slot="kernel-card-executions">
+              {props.kernel.execution_count} {props.kernel.execution_count === 1 ? "cell" : "cells"}
+            </span>
+            · {kernelRecoveryLabel(props.kernel)}
           </span>
         </div>
       </div>
@@ -69,6 +73,22 @@ export function KernelCard(props: {
       >
         {busy() ? "Stopping…" : "Stop"}
       </button>
+      <Show when={props.kernel.last_cell}>
+        {(cell) => (
+          <details class="kernel-card__cell">
+            <summary>
+              <span>
+                {cell().execution_count ? `Cell ${cell().execution_count}` : "Current cell"} · {cell().status}
+              </span>
+              <strong>{cell().title || `${kernelLanguageLabel(props.kernel)} cell`}</strong>
+              <Show when={cell().source}>{(source) => <small>{source()}</small>}</Show>
+            </summary>
+            <pre>
+              <code>{cell().code}</code>
+            </pre>
+          </details>
+        )}
+      </Show>
     </article>
   )
 }

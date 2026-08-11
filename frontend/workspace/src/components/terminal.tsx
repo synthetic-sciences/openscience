@@ -8,6 +8,7 @@ import { connectionError } from "./terminal-error"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@synsci/ui/theme"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@synsci/ui/toast"
+import { terminalMatches, type TerminalMatch } from "./terminal-search"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -16,6 +17,19 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onCleanup?: (pty: LocalPTY) => void
   onConnect?: () => void
   onConnectError?: (error: Error) => void
+  onReady?: (controller?: TerminalController) => void
+  onOpenSearch?: () => void
+}
+
+export type TerminalSearchResult = {
+  current: number
+  total: number
+}
+
+export type TerminalController = {
+  focus: () => void
+  clearSelection: () => void
+  search: (query: string, direction?: "next" | "previous") => TerminalSearchResult
 }
 
 let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty }> | undefined
@@ -29,6 +43,10 @@ const loadGhostty = () => {
       throw err
     })
   return shared
+}
+
+export const preloadTerminal = () => {
+  void loadGhostty().catch(() => {})
 }
 
 type TerminalColors = {
@@ -59,7 +77,18 @@ export const Terminal = (props: TerminalProps) => {
   const theme = useTheme()
   const language = useLanguage()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "active", "class", "classList", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, [
+    "pty",
+    "active",
+    "class",
+    "classList",
+    "onConnect",
+    "onConnectError",
+    "onSubmit",
+    "onCleanup",
+    "onReady",
+    "onOpenSearch",
+  ])
   let term: Term | undefined
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
@@ -176,44 +205,109 @@ export const Terminal = (props: TerminalProps) => {
       }
       term = t
 
-      const copy = () => {
-        const selection = t.getSelection()
-        if (!selection) return false
-
+      const fallback = (value: string) => {
         const body = document.body
-        if (body) {
-          const textarea = document.createElement("textarea")
-          textarea.value = selection
-          textarea.setAttribute("readonly", "")
-          textarea.style.position = "fixed"
-          textarea.style.opacity = "0"
-          body.appendChild(textarea)
-          textarea.select()
-          const copied = document.execCommand("copy")
-          body.removeChild(textarea)
-          if (copied) return true
-        }
+        if (!body) return false
+        const textarea = document.createElement("textarea")
+        textarea.value = value
+        textarea.setAttribute("readonly", "")
+        textarea.style.position = "fixed"
+        textarea.style.opacity = "0"
+        body.appendChild(textarea)
+        textarea.select()
+        const copied = document.execCommand("copy")
+        body.removeChild(textarea)
+        return copied
+      }
 
+      const write = (value: string) => {
+        if (!value) return Promise.resolve(false)
+        if (fallback(value)) return Promise.resolve(true)
         const clipboard = navigator.clipboard
         if (clipboard?.writeText) {
-          clipboard.writeText(selection).catch(() => {})
-          return true
+          return clipboard.writeText(value).then(
+            () => true,
+            () => false,
+          )
         }
-
-        return false
+        return Promise.resolve(false)
       }
+
+      const state = {
+        query: "",
+        index: -1,
+        matches: [] as TerminalMatch[],
+      }
+
+      const controller: TerminalController = {
+        focus: focusTerminal,
+        clearSelection: () => t.clearSelection(),
+        search: (query, direction = "next") => {
+          const needle = query.toLocaleLowerCase()
+          if (!needle) {
+            state.query = ""
+            state.index = -1
+            state.matches = []
+            t.clearSelection()
+            return { current: 0, total: 0 }
+          }
+
+          if (state.query !== needle) {
+            state.query = needle
+            state.index = -1
+            const lines = Array.from(
+              { length: t.buffer.active.length },
+              (_, row) => t.buffer.active.getLine(row)?.translateToString(true) ?? "",
+            )
+            state.matches = terminalMatches(lines, query)
+          }
+
+          if (!state.matches.length) {
+            t.clearSelection()
+            return { current: 0, total: 0 }
+          }
+
+          const offset = direction === "previous" ? -1 : 1
+          state.index = (state.index + offset + state.matches.length) % state.matches.length
+          const match = state.matches[state.index]
+          t.select(match.column, match.row, match.length)
+          t.scrollToLine(match.row)
+          return { current: state.index + 1, total: state.matches.length }
+        },
+      }
+
+      local.onReady?.(controller)
+      cleanups.push(() => local.onReady?.())
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
 
         if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
-          copy()
+          void write(t.getSelection())
           return true
         }
 
         if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
           if (!t.hasSelection()) return true
-          copy()
+          void write(t.getSelection())
+          return true
+        }
+
+        if (event.ctrlKey && !event.shiftKey && !event.metaKey && key === "insert") {
+          void write(t.getSelection())
+          return true
+        }
+
+        if (
+          (event.metaKey && !event.ctrlKey && !event.altKey && key === "f") ||
+          (event.ctrlKey && event.shiftKey && !event.metaKey && key === "f")
+        ) {
+          local.onOpenSearch?.()
+          return true
+        }
+
+        if (event.metaKey && !event.ctrlKey && !event.altKey && key === "a") {
+          t.selectAll()
           return true
         }
 
@@ -236,6 +330,14 @@ export const Terminal = (props: TerminalProps) => {
       t.open(container)
       container.addEventListener("pointerdown", handlePointerDown)
       cleanups.push(() => container.removeEventListener("pointerdown", handlePointerDown))
+      const handlePointerUp = () => {
+        queueMicrotask(() => {
+          if (!t.hasSelection()) return
+          void write(t.getSelection())
+        })
+      }
+      container.addEventListener("pointerup", handlePointerUp, true)
+      cleanups.push(() => container.removeEventListener("pointerup", handlePointerUp, true))
 
       handleTextareaFocus = () => {
         t.options.cursorBlink = true

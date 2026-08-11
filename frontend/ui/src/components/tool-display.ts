@@ -20,6 +20,114 @@ export function stripRedactedReasoning(text: string): string {
   return (text ?? "").replaceAll("[REDACTED]", "").trim()
 }
 
+export type SavedArtifact = {
+  title: string
+  kind: string
+  path: string
+  id: string
+  versionID: string
+  mimeType?: string
+  version: number
+  size: number
+  sha256: string
+  preview?: { kind: "image" | "text"; data: string }
+}
+
+const record = (value: unknown): Record<string, unknown> | undefined => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return
+  return value as Record<string, unknown>
+}
+
+export function savedArtifact(value: unknown): SavedArtifact | undefined {
+  const item = record(value)
+  if (
+    !item ||
+    typeof item.title !== "string" ||
+    typeof item.kind !== "string" ||
+    typeof item.path !== "string" ||
+    typeof item.id !== "string" ||
+    typeof item.versionID !== "string" ||
+    typeof item.version !== "number" ||
+    typeof item.size !== "number" ||
+    typeof item.sha256 !== "string"
+  )
+    return
+  const raw = record(item.preview)
+  const kind = raw?.kind
+  const preview: SavedArtifact["preview"] =
+    raw && (kind === "image" || kind === "text") && typeof raw.data === "string" ? { kind, data: raw.data } : undefined
+  return {
+    title: item.title,
+    kind: item.kind,
+    path: item.path,
+    id: item.id,
+    versionID: item.versionID,
+    ...(typeof item.mimeType === "string" ? { mimeType: item.mimeType } : {}),
+    version: item.version,
+    size: item.size,
+    sha256: item.sha256,
+    ...(preview ? { preview } : {}),
+  }
+}
+
+export function generatedArtifacts(
+  parts: ReadonlyArray<{
+    type: string
+    tool?: string
+    state?: { status?: string; metadata?: unknown }
+  }>,
+): SavedArtifact[] {
+  const seen = new Set<string>()
+  return parts.flatMap((part) => {
+    if (part.type !== "tool" || part.tool !== "artifact" || part.state?.status !== "completed") return []
+    const metadata = record(part.state.metadata)
+    const artifact = savedArtifact(metadata?.savedArtifact)
+    if (!artifact || seen.has(artifact.versionID)) return []
+    seen.add(artifact.versionID)
+    return [artifact]
+  })
+}
+
+const filename = (value: string) => value.replaceAll("\\", "/").split("/").pop() || value
+
+/**
+ * A stable receipt label for an executed scientific cell. Models can provide a
+ * concrete action title; older calls fall back to conservative code-shape
+ * labels instead of leaking an arbitrary first line such as an import.
+ */
+export function scienceTaskLabel(input: { title?: unknown; code?: unknown; language?: unknown }): string {
+  if (typeof input.title === "string" && input.title.trim())
+    return input.title
+      .trim()
+      .replace(/[.\s]+$/, "")
+      .slice(0, 100)
+  const code = typeof input.code === "string" ? input.code : ""
+  const comment = code
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => /^#\s+\S/.test(line) && !/^#\s*(?:coding|type:|noqa|r)/i.test(line))
+  if (comment)
+    return comment
+      .replace(/^#\s*/, "")
+      .replace(/[.\s]+$/, "")
+      .slice(0, 100)
+
+  const read = code.match(/\b(?:read_csv|read_table|read_parquet|read_excel|readRDS|fread)\s*\(\s*[rubf]*["']([^"']+)/i)
+  const write = code.match(
+    /\b(?:to_csv|to_parquet|to_excel|savefig|ggsave|write_csv|write\.csv|saveRDS)\s*\(\s*[rubf]*["']([^"']+)/i,
+  )
+  if (/\b(?:savefig|ggsave)\s*\(/i.test(code))
+    return write ? `Rendering ${filename(write[1])}` : "Rendering analysis figure"
+  if (/\b(?:plt\.|sns\.|ggplot\s*\(|plot\s*\()/i.test(code)) return "Rendering analysis figure"
+  if (/\b(?:cross_val|GridSearch|RandomForest|LogisticRegression|\.fit\s*\(|model\.train\s*\()/i.test(code)) {
+    return "Fitting statistical models"
+  }
+  if (/\b(?:groupby|describe\s*\(|crosstab|summary\s*\(|aggregate\s*\()/i.test(code)) return "Summarizing dataset"
+  if (read) return `Loading ${filename(read[1])}`
+  if (write) return `Saving ${filename(write[1])}`
+  return `${input.language === "r" ? "R" : "Python"} cell`
+}
+
 /**
  * Files a turn actually wrote, from its completed tool parts. write/edit/
  * multiedit carry the target in input.filePath; apply_patch lists every

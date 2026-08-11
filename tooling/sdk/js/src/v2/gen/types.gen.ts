@@ -10735,7 +10735,70 @@ export type NotebookComputeData = {
 
 export type NotebookComputeResponses = {
   /**
-   * Machine capacity and the share kernels hold
+   * Machine capacity and the share live kernels and commands hold
+   */
+  200: unknown
+}
+
+export type NotebookCommandsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    sessionID?: string
+  }
+  url: "/notebook/commands"
+}
+
+export type NotebookCommandsResponses = {
+  /**
+   * Live shell commands and process resource usage
+   */
+  200: {
+    commands: Array<{
+      id: string
+      projectID: string
+      sessionID: string
+      messageID: string
+      callID?: string
+      description: string
+      command: string
+      state: "running"
+      process_id: number
+      started_at: number
+      resources?: {
+        cpu_percent?: number
+        memory_bytes?: number
+      }
+    }>
+  }
+}
+
+export type NotebookCommandsResponse = NotebookCommandsResponses[keyof NotebookCommandsResponses]
+
+export type NotebookCommandStopData = {
+  body?: {
+    sessionID: string
+  }
+  path: {
+    commandID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/notebook/commands/{commandID}/stop"
+}
+
+export type NotebookCommandStopErrors = {
+  /**
+   * Command not found
+   */
+  404: unknown
+}
+
+export type NotebookCommandStopResponses = {
+  /**
+   * Command stopped
    */
   200: unknown
 }
@@ -10836,6 +10899,15 @@ export type NotebookKernelsResponses = {
           }
         }
       } | null
+      last_cell: {
+        title: string | null
+        source: string | null
+        code: string
+        status: "running" | "succeeded" | "failed"
+        execution_count: number | null
+        message_id: string | null
+        call_id: string | null
+      } | null
       resources?: {
         cpu_percent?: number
         memory_bytes?: number
@@ -10847,115 +10919,6 @@ export type NotebookKernelsResponses = {
 }
 
 export type NotebookKernelsResponse = NotebookKernelsResponses[keyof NotebookKernelsResponses]
-
-export type NotebookKernelCreateData = {
-  body?: {
-    sessionID: string
-    name: string
-    language: "python" | "r"
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/notebook/kernels"
-}
-
-export type NotebookKernelCreateResponses = {
-  /**
-   * Lazy named kernel record
-   */
-  200: {
-    id: string
-    active: boolean
-    state: "lazy" | "starting" | "idle" | "running" | "stopped" | "crashed"
-    projectID: string
-    sessionID: string
-    name: string
-    language: string
-    target: {
-      kind: "local"
-    }
-    incarnation: number | null
-    execution_count: number
-    queue_depth: number
-    environment: {
-      cwd: string
-      atlas: {
-        access: "host_broker"
-        credentials: "withheld"
-        sources: "source_ids_only"
-      }
-      sandbox: {
-        requested: boolean
-        enforced: boolean
-        backend: "seatbelt" | "bubblewrap" | "none"
-        network: "allow" | "deny"
-        platform: string
-        available: boolean
-        tool?: string
-        reason?: string
-        warning?: string
-      }
-    } | null
-    process_id: number | null
-    process_started_at: number | null
-    process_identity_verified: boolean | null
-    started_at: number | null
-    last_activity_at: number | null
-    authority: {
-      allowed: boolean
-      reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
-      capability:
-        | "terminal"
-        | "kernel"
-        | "shell"
-        | "local_job"
-        | "remote_job"
-        | "package_install"
-        | "project_plugin"
-        | "project_mcp"
-        | "project_formatter"
-        | "project_lsp"
-        | "provider_token_command"
-      mode: "read_only" | "sandboxed" | "host"
-      projectID: string
-      sessionID: string
-      trustRevision: number
-      grantRevision: number
-      generation: string
-      workspace: string
-      writable: Array<string>
-      sandbox: {
-        enabled: boolean
-        network: "allow" | "deny"
-        allowWrite: Array<string>
-        onUnavailable: "warn" | "error" | "allow"
-        backend: "seatbelt" | "bubblewrap" | "none"
-        available: boolean
-        enforced: boolean
-      }
-      remediation?: {
-        code: "trust_project_required"
-        message: string
-        method: "PUT"
-        path: string
-        body: {
-          trusted: true
-          root: string
-        }
-      }
-    } | null
-    resources?: {
-      cpu_percent?: number
-      memory_bytes?: number
-      gpu_percent?: number
-      vram_bytes?: number
-    }
-  }
-}
-
-export type NotebookKernelCreateResponse = NotebookKernelCreateResponses[keyof NotebookKernelCreateResponses]
 
 export type NotebookKernelRestartData = {
   body?: {
@@ -11054,6 +11017,15 @@ export type NotebookKernelRestartResponses = {
           root: string
         }
       }
+    } | null
+    last_cell: {
+      title: string | null
+      source: string | null
+      code: string
+      status: "running" | "succeeded" | "failed"
+      execution_count: number | null
+      message_id: string | null
+      call_id: string | null
     } | null
     resources?: {
       cpu_percent?: number
@@ -11164,6 +11136,15 @@ export type NotebookKernelStopResponses = {
         }
       }
     } | null
+    last_cell: {
+      title: string | null
+      source: string | null
+      code: string
+      status: "running" | "succeeded" | "failed"
+      execution_count: number | null
+      message_id: string | null
+      call_id: string | null
+    } | null
     resources?: {
       cpu_percent?: number
       memory_bytes?: number
@@ -11272,6 +11253,15 @@ export type NotebookKernelInterruptResponses = {
           root: string
         }
       }
+    } | null
+    last_cell: {
+      title: string | null
+      source: string | null
+      code: string
+      status: "running" | "succeeded" | "failed"
+      execution_count: number | null
+      message_id: string | null
+      call_id: string | null
     } | null
     resources?: {
       cpu_percent?: number
@@ -11425,6 +11415,15 @@ export type NotebookStatusResponses = {
         }
       }
     } | null
+    last_cell: {
+      title: string | null
+      source: string | null
+      code: string
+      status: "running" | "succeeded" | "failed"
+      execution_count: number | null
+      message_id: string | null
+      call_id: string | null
+    } | null
     resources?: {
       cpu_percent?: number
       memory_bytes?: number
@@ -11533,6 +11532,15 @@ export type NotebookRestartResponses = {
           root: string
         }
       }
+    } | null
+    last_cell: {
+      title: string | null
+      source: string | null
+      code: string
+      status: "running" | "succeeded" | "failed"
+      execution_count: number | null
+      message_id: string | null
+      call_id: string | null
     } | null
     resources?: {
       cpu_percent?: number
@@ -11643,6 +11651,15 @@ export type NotebookStopResponses = {
         }
       }
     } | null
+    last_cell: {
+      title: string | null
+      source: string | null
+      code: string
+      status: "running" | "succeeded" | "failed"
+      execution_count: number | null
+      message_id: string | null
+      call_id: string | null
+    } | null
     resources?: {
       cpu_percent?: number
       memory_bytes?: number
@@ -11751,6 +11768,15 @@ export type NotebookInterruptResponses = {
           root: string
         }
       }
+    } | null
+    last_cell: {
+      title: string | null
+      source: string | null
+      code: string
+      status: "running" | "succeeded" | "failed"
+      execution_count: number | null
+      message_id: string | null
+      call_id: string | null
     } | null
     resources?: {
       cpu_percent?: number

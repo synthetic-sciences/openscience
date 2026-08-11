@@ -16,7 +16,7 @@ import {
   IconX,
 } from "@/atlas/shared/Icon"
 import { Wordmark } from "@/atlas/Wordmark"
-import { projectName, type LauncherState, type PreparedProject } from "./home-projects"
+import { projectHint, projectName, type LauncherState, type PreparedProject } from "./home-projects"
 import "./home-workbench.css"
 
 export type HomeProject = PreparedProject & {
@@ -160,14 +160,17 @@ export function ProjectsWorkbench(props: {
       <main class="atlas-scroll science-home__main">
         <div class="science-home__content">
           <header class="science-home__heading">
-            <div class="science-home__title">
-              <IconArchive size={15} strokeWidth={1.45} />
-              <h1 id="science-home-projects-title">Projects</h1>
-              <Show when={recent()}>
-                <span class="science-home__count" aria-label={`${props.projects.length} projects`}>
-                  {props.projects.length}
-                </span>
-              </Show>
+            <div class="science-home__heading-copy">
+              <div class="science-home__title">
+                <IconArchive size={15} strokeWidth={1.45} />
+                <h1 id="science-home-projects-title">Projects</h1>
+                <Show when={recent()}>
+                  <span class="science-home__count" aria-label={`${props.projects.length} projects`}>
+                    {props.projects.length}
+                  </span>
+                </Show>
+              </div>
+              <p>Recent research, files, and sessions.</p>
             </div>
             <Show when={recent() && props.refreshing}>
               <span class="science-home__refreshing" role="status">
@@ -259,6 +262,7 @@ export function ProjectsWorkbench(props: {
                         >
                           <span class="science-home__project-copy">
                             <strong>{projectName(project)}</strong>
+                            <span>{project.pinned ? "Pinned" : projectHint(project)}</span>
                           </span>
                           <Show when={project.sessions !== undefined}>
                             <span class="science-home__sessions">

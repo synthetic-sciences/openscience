@@ -24,7 +24,8 @@ describe("live compute inventory", () => {
     expect(panel).not.toContain("KernelResultCard")
     expect(panel).not.toContain("recentLocal")
     expect(panel).not.toContain('aria-label="Recent local results"')
-    expect(panel).toContain('aria-label="Recent remote results"')
+    expect(panel).not.toContain('aria-label="Recent remote results"')
+    expect(panel).not.toContain("recentRemote")
     expect(panel).toContain('kernels.filter((kernel) => kernel.active || kernel.state === "starting")')
   })
 

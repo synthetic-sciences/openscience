@@ -14,6 +14,16 @@ export type KernelIdentity = {
   language: KernelLanguage
 }
 
+type KernelCell = {
+  title: string | null
+  source: string | null
+  code: string
+  status: "running" | "succeeded" | "failed"
+  executionCount: number | null
+  messageID: string | null
+  callID: string | null
+}
+
 export class KernelStartupCancelled extends Error {
   constructor() {
     super("Kernel startup was cancelled before execution.")
@@ -44,6 +54,7 @@ type Entry = {
   startedAt: number | null
   lastActivityAt: number | null
   authority: ExecutionAuthority.Decision | null
+  lastCell: KernelCell | null
 }
 
 type Pending = {
@@ -90,6 +101,17 @@ export const KernelStatus = z.object({
   started_at: z.number().nullable(),
   last_activity_at: z.number().nullable(),
   authority: ExecutionAuthority.Decision.nullable(),
+  last_cell: z
+    .object({
+      title: z.string().nullable(),
+      source: z.string().nullable(),
+      code: z.string(),
+      status: z.enum(["running", "succeeded", "failed"]),
+      execution_count: z.number().int().positive().nullable(),
+      message_id: z.string().nullable(),
+      call_id: z.string().nullable(),
+    })
+    .nullable(),
   // Live usage sampled at request time for running processes. Absent fields
   // mean the platform could not report them — render as unavailable, not 0.
   resources: z
@@ -124,6 +146,7 @@ const records = Instance.state(
         entry.startedAt = null
         entry.lastActivityAt = Date.now()
         entry.authority = null
+        entry.lastCell = null
         await persist(entry)
       }),
     )
@@ -177,6 +200,7 @@ function restore(value: z.infer<typeof Persisted>) {
     startedAt: null,
     lastActivityAt: value.last_activity_at,
     authority: null,
+    lastCell: null,
   }
   records().entries.set(id, entry)
   return entry
@@ -219,6 +243,7 @@ const record = (identity: KernelIdentity) => {
     startedAt: null,
     lastActivityAt: null,
     authority: null,
+    lastCell: null,
   }
   records().entries.set(id, value)
   return value
@@ -362,6 +387,7 @@ const entry = async (identity: KernelIdentity, _options?: KernelStartOptions) =>
   value.startedAt = null
   value.lastActivityAt = Date.now()
   value.authority = authority
+  value.lastCell = null
   const drop = () => {
     if (records().starts.get(value.key)?.ticket === ticket) records().starts.delete(value.key)
   }
@@ -468,49 +494,78 @@ export namespace KernelRuntime {
     const codeState = ProvenanceEnvelope.code(value.environment?.cwd ?? Instance.directory)
     const startedAt = Date.now()
     value.lastActivityAt = startedAt
-    return kernel.execute(code, options).then(
-      async (result) => {
-        // The count belongs to this cell, so capture it before the awaits below.
-        // `value.executionCount` is the kernel's running total and every cell
-        // queued behind this one advances it — reading it back after the persist
-        // reported the count of whichever cell had most recently finished.
-        const count = result.executionCount ?? value.executionCount + 1
-        value.executionCount = count
-        const completedAt = Date.now()
-        value.lastActivityAt = completedAt
-        await persist(value)
-        const complete = { ...result, executionCount: count }
-        const node = await provenance(
-          identity,
-          value,
-          code,
-          startedAt,
-          completedAt,
-          codeState,
-          options?.origin,
-          complete,
-        )
-        return { ...complete, provenanceID: node.id }
-      },
-      async (error) => {
-        const completedAt = Date.now()
-        value.lastActivityAt = completedAt
-        if (kernel.crashed) value.state = "crashed"
-        await persist(value)
-        const node = await provenance(
-          identity,
-          value,
-          code,
-          startedAt,
-          completedAt,
-          codeState,
-          options?.origin,
-          undefined,
-          error,
-        )
-        throw new KernelExecutionError(error, node.id)
-      },
-    )
+    const source = options?.origin?.source ?? (identity.name.startsWith("notebook:") ? identity.name.slice(9) : null)
+    const cell = (): KernelCell => ({
+      title: options?.origin?.title?.trim().slice(0, 100) || null,
+      source,
+      code: code.length > 12_000 ? `${code.slice(0, 12_000)}\n\n... (truncated)` : code,
+      status: "running",
+      executionCount: Math.max(value.executionCount, value.lastCell?.executionCount ?? 0) + 1,
+      messageID: options?.origin?.messageID ?? null,
+      callID: options?.origin?.callID ?? null,
+    })
+    const running: { cell?: KernelCell } = {}
+    return kernel
+      .execute(code, {
+        ...options,
+        onStart: () => {
+          running.cell = cell()
+          value.lastCell = running.cell
+          value.lastActivityAt = Date.now()
+          options?.onStart?.()
+        },
+      })
+      .then(
+        async (result) => {
+          // The count belongs to this cell, so capture it before the awaits below.
+          // `value.executionCount` is the kernel's running total and every cell
+          // queued behind this one advances it — reading it back after the persist
+          // reported the count of whichever cell had most recently finished.
+          const count = result.executionCount ?? value.executionCount + 1
+          value.executionCount = count
+          const completedAt = Date.now()
+          value.lastActivityAt = completedAt
+          const completeCell: KernelCell = {
+            ...(running.cell ?? cell()),
+            status: result.ok ? "succeeded" : "failed",
+            executionCount: count,
+          }
+          if (!value.lastCell || value.lastCell === running.cell) value.lastCell = completeCell
+          await persist(value)
+          const complete = { ...result, executionCount: count }
+          const node = await provenance(
+            identity,
+            value,
+            code,
+            startedAt,
+            completedAt,
+            codeState,
+            options?.origin,
+            complete,
+          )
+          return { ...complete, provenanceID: node.id }
+        },
+        async (error) => {
+          const completedAt = Date.now()
+          value.lastActivityAt = completedAt
+          const failedCell: KernelCell = { ...(running.cell ?? cell()), status: "failed" }
+          if (!value.lastCell || value.lastCell === running.cell) value.lastCell = failedCell
+          if (kernel.crashed) value.state = "crashed"
+          await persist(value)
+          const node = await provenance(
+            identity,
+            value,
+            code,
+            startedAt,
+            completedAt,
+            codeState,
+            options?.origin,
+            undefined,
+            error,
+          )
+          throw new KernelExecutionError(error, node.id)
+        },
+      )
   }
 
   export function active(identity: KernelIdentity) {
@@ -544,6 +599,18 @@ export namespace KernelRuntime {
       started_at: active ? value.startedAt : null,
       last_activity_at: value.lastActivityAt,
       authority: value.authority,
+      last_cell:
+        active && value.lastCell
+          ? {
+              title: value.lastCell.title,
+              source: value.lastCell.source,
+              code: value.lastCell.code,
+              status: value.lastCell.status,
+              execution_count: value.lastCell.executionCount,
+              message_id: value.lastCell.messageID,
+              call_id: value.lastCell.callID,
+            }
+          : null,
     }
   }
 
@@ -575,6 +642,7 @@ export namespace KernelRuntime {
     value.startedAt = null
     value.lastActivityAt = Date.now()
     value.authority = null
+    value.lastCell = null
     await persist(value)
   }
 

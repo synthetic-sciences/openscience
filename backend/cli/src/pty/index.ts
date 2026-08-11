@@ -117,7 +117,13 @@ export namespace Pty {
       unreadable: OpenScience.kernelSensitivePaths(),
       options: { ...authority.sandbox, egress },
     })
-    const env = { ...terminalEnv(source, Instance.project.id, input.sessionID), ...(sandbox.env ?? {}) }
+    // terminalEnv gained a `command` argument on main (it picks the PS1/PROMPT
+    // shape from the shell); the env still has to be built *after* wrapArgv,
+    // because sandbox.env carries the proxy variables the shim needs.
+    const env = {
+      ...terminalEnv(source, Instance.project.id, input.sessionID, command),
+      ...(sandbox.env ?? {}),
+    }
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()

@@ -45,6 +45,7 @@ const kernel = (value: Partial<KernelStatus> = {}): KernelStatus => ({
   process_identity_verified: true,
   started_at: Date.now() - 4_000,
   last_activity_at: Date.now() - 1_000,
+  last_cell: null,
   resources: { cpu_percent: 180, memory_bytes: 412_000_000 },
   ...value,
 })
@@ -105,5 +106,32 @@ describe("kernel status row", () => {
     const first = host.querySelector(".kernel-card__uptime")?.textContent
     await Bun.sleep(1_200)
     expect(host.querySelector(".kernel-card__uptime")?.textContent).not.toBe(first)
+  })
+
+  test("keeps the latest executed cell compact and inspectable", () => {
+    const host = mount(() =>
+      subject.KernelCard({
+        kernel: kernel({
+          last_cell: {
+            title: "Benchmarking survival classifiers",
+            source: "analysis/titanic.ipynb",
+            code: "model.fit(X, y)",
+            status: "running",
+            execution_count: 7,
+            message_id: "msg_1",
+            call_id: "call_1",
+          },
+        }),
+        action: "",
+        onControl: () => {},
+      }),
+    )
+    const cell = host.querySelector<HTMLDetailsElement>(".kernel-card__cell")
+
+    expect(cell?.open).toBe(false)
+    expect(cell?.querySelector("summary")?.textContent).toContain("Cell 7 · running")
+    expect(cell?.querySelector("summary")?.textContent).toContain("Benchmarking survival classifiers")
+    expect(cell?.querySelector("summary")?.textContent).toContain("analysis/titanic.ipynb")
+    expect(cell?.querySelector("code")?.textContent).toBe("model.fit(X, y)")
   })
 })

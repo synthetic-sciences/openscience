@@ -7,6 +7,8 @@ import {
   isChatModel,
   isFrontier,
   isUserProviderConnection,
+  modelContext,
+  modelSummary,
   preferredModel,
   preferredModels,
   routableModelKey,
@@ -55,6 +57,20 @@ describe("frontier model canonicalization", () => {
     expect(displayProviderForModel(openrouter, "google/gemini-3.6-flash")).toEqual({ id: "google", name: "Google" })
     expect(displayProviderForModel(openrouter, "x-ai/grok-4.5")).toEqual({ id: "xai", name: "xAI" })
     expect(displayProviderForModel(openrouter, "z-ai/glm-5.2")).toEqual({ id: "zai", name: "Z.AI" })
+    expect(displayProviderForModel({ id: "openai-codex", name: "OpenAI (Codex subscription)" }, "gpt-5.6-sol")).toEqual(
+      {
+        id: "openai",
+        name: "OpenAI",
+      },
+    )
+  })
+
+  test("model metadata stays factual and formats advertised windows calmly", () => {
+    expect(modelContext(1_050_000)).toBe("1m")
+    expect(modelContext(400_000)).toBe("400k")
+    expect(modelSummary({ reasoning: true, context: 1_050_000, provider: "OpenAI" })).toBe(
+      "Reasoning · 1m context · OpenAI",
+    )
   })
 
   test("logical models appear once while subscription routes remain separate", () => {

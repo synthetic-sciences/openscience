@@ -6,7 +6,7 @@ import { IconButton } from "@synsci/ui/icon-button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type Component } from "solid-js"
 import { useLocal } from "@/context/local"
-import { canonicalKey, displayProviderForModel } from "@/context/model-catalog"
+import { canonicalKey, displayProviderForModel, modelSummary } from "@/context/model-catalog"
 import { RECOMMENDED_MODELS } from "@/context/models"
 import { DialogSettings } from "./dialog-settings"
 import { modelGroup, modelGroupLabel, modelGroupLabelRank } from "./model-groups"
@@ -17,15 +17,7 @@ const row = "model-settings-row flex w-full min-w-0 items-center justify-between
 
 export type InferenceSource = "managed" | "byok" | "chatgpt"
 
-export function modelSummary(input: { reasoning: boolean; context: number; provider: string }) {
-  const context =
-    input.context >= 1_000_000
-      ? `${(input.context / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}m context`
-      : input.context >= 1_000
-        ? `${Math.round(input.context / 1_000).toLocaleString()}k context`
-        : `${input.context.toLocaleString()} context`
-  return `${input.reasoning ? "Reasoning" : "General"} · ${context} · ${input.provider}`
-}
+export { modelSummary } from "@/context/model-catalog"
 
 /**
  * How the current model is billed and routed: managed inference, the user's
@@ -399,17 +391,11 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                             <span class="model-settings-model">
                               <strong>{model.name}</strong>
                               <small>
-                                {canonicalKey(model.provider.id, model.id) === "openai/gpt-5-6-sol"
-                                  ? "Balanced research, coding, and tool use"
-                                  : canonicalKey(model.provider.id, model.id) === "anthropic/claude-opus-5"
-                                    ? "Deep analysis and scientific review"
-                                    : canonicalKey(model.provider.id, model.id) === "moonshotai/kimi-k3"
-                                      ? "Long-context research and synthesis"
-                                      : modelSummary({
-                                          reasoning: model.capabilities.reasoning,
-                                          context: model.limit.context,
-                                          provider: provider(),
-                                        })}
+                                {modelSummary({
+                                  reasoning: model.capabilities.reasoning,
+                                  context: model.limit.context,
+                                  provider: provider(),
+                                })}
                               </small>
                             </span>
                             <Show when={selected()}>
