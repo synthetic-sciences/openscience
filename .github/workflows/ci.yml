@@ -54,6 +54,43 @@ jobs:
         shell: bash
         working-directory: backend/cli
 
+  # Task 7 gave macOS a seatbelt profile for network:"allowlist" — an SBPL
+  # profile plus an authenticated loopback proxy, built and unit-tested
+  # entirely from Linux with the platform injected, because no Mac exists on
+  # this project. `sandbox-exec` (macOS) and `bwrap --unshare-net` (Linux)
+  # are unrelated OS-level mechanisms underneath the same `Sandbox` API, so a
+  # green Linux run says nothing about whether seatbelt actually confines a
+  # real process the way the profile text claims — only this leg's macOS run
+  # does. See test/sandbox/egress-live-seatbelt.test.ts's doc comment for
+  # exactly what a red run here would mean.
+  sandbox:
+    name: Sandbox (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - name: Install and verify Linux sandbox
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+          # Ubuntu 24.04's host-wide AppArmor policy blocks unprivileged user
+          # namespaces on the hosted runner before bubblewrap can apply our
+          # stricter per-process profile. This runner is disposable; enable
+          # user namespaces for the job, then prove the sandbox can start.
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
+      - run: bun test test/sandbox/
+        shell: bash
+        working-directory: backend/cli
+
   test:
     name: Test
     runs-on: ubuntu-latest
