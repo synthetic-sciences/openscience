@@ -274,7 +274,14 @@ describe("Sandbox settings panel — extra allowed hosts", () => {
     for (let i = 0; i < 50 && api.puts.length === 0; i++) await settle()
     expect(api.puts).toEqual([{ allowHosts: [".internal.example.com"] }])
 
-    for (let i = 0; i < 50 && !host.textContent?.includes(".internal.example.com"); i++) await settle()
-    expect([...host.querySelectorAll("code")].some((el) => el.textContent === ".internal.example.com")).toBe(true)
+    // Poll on exactly the predicate being asserted. Waiting on a looser one
+    // (the whole subtree's textContent containing the host) can go true while
+    // the <code> element this asserts on has not rendered, spending all 50
+    // iterations and then failing anyway — and a substring test against a
+    // rendered hostname is also what CodeQL flags as incomplete URL
+    // sanitization, which it is not, but the strict check is better regardless.
+    const rendered = () => [...host.querySelectorAll("code")].some((el) => el.textContent === ".internal.example.com")
+    for (let i = 0; i < 50 && !rendered(); i++) await settle()
+    expect(rendered()).toBe(true)
   })
 })
