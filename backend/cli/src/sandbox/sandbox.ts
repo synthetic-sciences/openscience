@@ -464,6 +464,16 @@ export namespace Sandbox {
    * `network-inbound` at all, and whether `local`/`remote` is the right
    * pairing for them, are both open questions only a Mac can answer.
    *
+   * A narrow, accepted consequence of matching that reference shape (Task 7
+   * fix round 2): if the host proxy dies while the sandboxed child is still
+   * alive, `network-bind`+`network-inbound` on that same ephemeral port
+   * would let the child itself bind or listen there. That is still confined
+   * to the one port this profile names — not a broader network grant, and
+   * not a route to any host the child couldn't already reach through the
+   * (now-dead) proxy — so it is not treated as a defect. It is a real
+   * property of this design, not a hypothetical one, and belongs next to
+   * the other open questions above rather than being silently true.
+   *
    * Never asserts enforcement — that a real `sandbox-exec` actually honours
    * this text — only the text itself, its ordering, and this function's own
    * refusal to emit an unfiltered allow. No Mac exists on this project to
