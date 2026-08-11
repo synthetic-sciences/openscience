@@ -272,7 +272,11 @@ describe("Sandbox network policy", () => {
     ["unresolved ..", os.homedir() + "/foo/.."],
     ["root", "/"],
   ])("an over-broad egress path (%s) is dropped, not bound as a read-write escape hatch", (_label, egress) => {
-    if (!Sandbox.available()) return
+    // platform "linux", not the ambient one: this asserts bubblewrap argv,
+    // and on a darwin runner the same call reaches `seatbeltProfile` and
+    // throws for an entirely different reason ("requires an egress port"),
+    // which a bare .toThrow() would have accepted as a pass. Asserting the
+    // message closes that hole for good.
     expect(() =>
       Sandbox.plan({
         command: "true",
@@ -280,18 +284,19 @@ describe("Sandbox network policy", () => {
         cwd: "/work/project",
         workspace: ["/work/project"],
         options: { enabled: true, network: "allowlist", egress },
+        platform: "linux",
       }),
-    ).toThrow()
+    ).toThrow("requires an egress socket path")
   })
 
   test("a legitimate, non-broad egress socket is still bound, read-only", () => {
-    if (!Sandbox.available()) return
     const p = Sandbox.plan({
       command: "true",
       shell,
       cwd: "/work/project",
       workspace: ["/work/project"],
       options: { enabled: true, network: "allowlist", egress: "/run/os/e.sock" },
+      platform: "linux",
     })
     expect(p.args).toContain("/run/os/e.sock")
     const at = (p.args ?? []).indexOf("/run/os/e.sock")
@@ -685,6 +690,18 @@ describe("Sandbox.shimScript readiness wait", () => {
     return dir
   }
 
+  /** A `sleep` whose cost is dominated by process creation rather than by the
+   *  interval asked for. A macOS CI runner measured ~114ms per iteration of
+   *  the 0.02s poll — ~94ms of fork/exec — which stretched the nominal 3s cap
+   *  to 17.1s and is what put the wall-clock deadline in `shimScript`. This
+   *  reproduces that condition on any host. */
+  function expensiveSleep(dir: string) {
+    const real = Bun.which("sleep") ?? "/bin/sleep"
+    const file = path.join(dir, "sleep")
+    fs.writeFileSync(file, `#!/bin/sh\nexec ${real} 0.12\n`, { mode: 0o755 })
+    return dir
+  }
+
   test.skipIf(!posix)(
     "waits for the shim, and only for as long as the shim takes",
     async () => {
@@ -752,6 +769,33 @@ describe("Sandbox.shimScript readiness wait", () => {
           args: ["ran"],
         }),
       )
+      expect(ms).toBeGreaterThanOrEqual(2_500)
+      expect(ms).toBeLessThan(6_000)
+    },
+    30_000,
+  )
+
+  // The regression this file's macOS run found: the cap used to be an
+  // iteration count, so it only equalled 3s where forking `sleep` was nearly
+  // free. Without the deadline, 150 iterations at 0.12s each run for 18s.
+  test.skipIf(!posix)(
+    "a `sleep` whose real cost is fork/exec cannot stretch the cap",
+    async () => {
+      await using dir = await tmpdir()
+      fs.rmSync(SHIM_READY_MARKER, { force: true })
+      const { ms, stderr } = await run(
+        Sandbox.shimScript({
+          binary: "/bin/true",
+          port: 3128,
+          socket: "/run/os/e.sock",
+          file: "/bin/echo",
+          args: ["ran"],
+        }),
+        expensiveSleep(dir.path),
+      )
+      // Still silent: the deadline probe's own diagnostics are discarded the
+      // same way the fractional-sleep probe's are.
+      expect(stderr).toBe("")
       expect(ms).toBeGreaterThanOrEqual(2_500)
       expect(ms).toBeLessThan(6_000)
     },

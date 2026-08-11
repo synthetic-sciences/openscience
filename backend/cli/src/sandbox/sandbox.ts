@@ -664,21 +664,38 @@ export namespace Sandbox {
    * the network. Every `ls` and every `git status` the agent ran paid it. At
    * 0.02s the same measurement is 24-25ms.
    *
-   * The 3s cap is unchanged in both modes (150 * 0.02, 3 * 1). If the shim
-   * never signals, the loop still exits at the cap and the real command runs
-   * anyway — against a closed proxy port, which fails fast and visibly
-   * (connection refused) rather than hanging forever.
+   * *Why there is a wall-clock deadline and not just an iteration count.* The
+   * count alone (150 * 0.02, 3 * 1) only equals 3s where forking `sleep` is
+   * nearly free. It isn't everywhere: a macOS CI runner measured 17.1s for
+   * the 150-iteration loop — ~114ms per iteration, of which ~94ms is
+   * fork/exec of `/bin/sleep`, a 5.7x overshoot of the documented cap. Any
+   * machine with expensive process creation (a CPU-throttled container, a
+   * loaded box) drifts the same way, so the loop carries an explicit deadline
+   * as well. `date +%s` is probed exactly like fractional `sleep` — a build
+   * without it leaves the deadline unset and the count is the only cap, which
+   * is the behaviour that shipped before — and `+ 4` rather than `+ 3`
+   * because `%s` truncates to whole seconds, which would otherwise cut a
+   * nominal 3s wait as short as 2.0s.
+   *
+   * The cap is therefore ~3s in both modes, and 3–4s when the deadline is the
+   * one that fires. If the shim never signals, the loop still exits at the cap
+   * and the real command runs anyway — against a closed proxy port, which
+   * fails fast and visibly (connection refused) rather than hanging forever.
    */
   export function shimScript(input: { binary: string; port: number; socket: string; file: string; args: string[] }) {
     const shim = [quote(input.binary), "__egress-shim", String(input.port), quote(input.socket)].join(" ")
     const real = [quote(input.file), ...input.args.map(quote)].join(" ")
     const marker = quote(SHIM_READY_MARKER)
-    // `s`/`n`/`i` are plain shell variables, never exported, and `exec`
-    // replaces this shell — so none of them reach the real command.
+    // `s`/`n`/`i`/`d`/`t` are plain shell variables, never exported, and
+    // `exec` replaces this shell — so none of them reach the real command.
+    // `${t:-0}` keeps a `date` that starts failing mid-loop from breaking out
+    // early or printing to the real command's stderr: it degrades to the
+    // count-only cap, the same direction the probe failing does.
     const wait = [
       `s=0.02; n=150`,
       `sleep "$s" 2>/dev/null || { s=1; n=3; }`,
-      `i=0; while [ ! -f ${marker} ] && [ "$i" -lt "$n" ]; do sleep "$s"; i=$((i + 1)); done`,
+      `d=$(date +%s 2>/dev/null); case "$d" in ''|*[!0-9]*) d= ;; *) d=$((d + 4)) ;; esac`,
+      `i=0; while [ ! -f ${marker} ] && [ "$i" -lt "$n" ] && { [ -z "$d" ] || { t=$(date +%s 2>/dev/null); [ "\${t:-0}" -lt "$d" ]; }; }; do sleep "$s"; i=$((i + 1)); done`,
     ].join("; ")
     return `${shim} >/dev/null 2>&1 & ${wait}; exec ${real}`
   }

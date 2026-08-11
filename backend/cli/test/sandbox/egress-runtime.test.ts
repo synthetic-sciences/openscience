@@ -44,7 +44,11 @@ test("a failed start does not latch — the next call really retries", async () 
   const failure = await (async () => {
     try {
       await fs.chmod(dir, 0o500)
-      return await EgressRuntime.ensure().then(
+      // platform "linux", not the ambient one: an unwritable state directory
+      // only fails the bubblewrap listener, which is the one that binds a
+      // unix socket there. The darwin listener binds a loopback port and
+      // would have started happily, leaving `failure` undefined.
+      return await EgressRuntime.ensure("linux").then(
         () => undefined,
         (error) => error as Error,
       )
@@ -61,11 +65,11 @@ test("a failed start does not latch — the next call really retries", async () 
   // would make one transient failure permanent for the process — and under
   // the "allowlist" default that is every bash command, terminal, kernel and
   // compute job failing until restart.
-  const recovered = await EgressRuntime.ensure()
-  // Non-null: this test always runs on the real (bubblewrap) platform, where
-  // `ensure()` always carries a socket — `egress-runtime.ts`'s `Running`
-  // type makes the field optional only because the darwin branch (added by
-  // Task 7) carries a TCP endpoint instead.
+  const recovered = await EgressRuntime.ensure("linux")
+  // Non-null: the bubblewrap listener always carries a socket —
+  // `egress-runtime.ts`'s `Running` type makes the field optional only
+  // because the darwin branch (added by Task 7) carries a TCP endpoint
+  // instead.
   await expect(fs.stat(recovered.socket!)).resolves.toBeDefined()
 })
 
@@ -75,7 +79,10 @@ test("stop is safe after a start that failed", async () => {
   const mode = (await fs.stat(dir)).mode & 0o7777
   try {
     await fs.chmod(dir, 0o500)
-    await EgressRuntime.ensure().catch(() => {})
+    // platform "linux": same reason as the test above — only the bubblewrap
+    // listener fails on an unwritable state directory, and a start that
+    // succeeded would not exercise the escape hatch this test is about.
+    await EgressRuntime.ensure("linux").catch(() => {})
   } finally {
     await fs.chmod(dir, mode)
   }
@@ -84,8 +91,10 @@ test("stop is safe after a start that failed", async () => {
 })
 
 test("the socket is created under the state directory, not the workspace", async () => {
-  const { socket } = await EgressRuntime.ensure()
-  // Non-null: bubblewrap (the real platform here) always carries a socket.
+  // platform "linux": there is no socket to place at all on darwin, which
+  // listens on a loopback port instead.
+  const { socket } = await EgressRuntime.ensure("linux")
+  // Non-null: the bubblewrap listener always carries a socket.
   // Not Bun.file(socket).exists(): Bun.file() only recognizes regular files,
   // and a unix socket is a distinct inode type (S_IFSOCK) — verified with an
   // isolated Bun.listen({ unix }) that Bun.file(...).exists() reports false
@@ -133,9 +142,13 @@ test("an allowlist edit reaches a running proxy without restarting it", async ()
   // "cannot reach", not "not on the allowlist". That distinction is what
   // proves the check ran, without needing a real upstream.
   const authority = "127.0.0.1:1"
-  const first = await EgressRuntime.ensure()
+  // platform "linux": `proxyRequest` speaks to a unix socket, which only the
+  // bubblewrap listener has. The freshness behaviour under test is the
+  // proxy's, not the listener's, so pinning the transport keeps this one
+  // test meaningful on either kind of machine.
+  const first = await EgressRuntime.ensure("linux")
 
-  // Non-null: this test always runs on the real (bubblewrap) platform.
+  // Non-null: the bubblewrap listener always carries a socket.
   const before = await proxyRequest(first.socket!, authority)
   expect(before).toContain("not on the sandbox allowlist")
 
@@ -155,7 +168,7 @@ test("an allowlist edit reaches a running proxy without restarting it", async ()
   expect(after).not.toContain("not on the sandbox allowlist")
   expect(after).toContain("Cannot reach")
 
-  const second = await EgressRuntime.ensure()
+  const second = await EgressRuntime.ensure("linux")
   expect(second.socket).toBe(first.socket) // same proxy the whole time, not a restart
 })
 

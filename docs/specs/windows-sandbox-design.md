@@ -95,16 +95,16 @@ Linux and macOS are **socket-transparent**: unmodified `pip`, `curl` and `reques
 the sandbox speaks HTTP-proxy protocol and forwards over the socket. That shim needs to listen on loopback.
 
 An AppContainer with no network capability has **no loopback either**, so no shim can exist. Windows is
-therefore **capability-mediated**: code must *ask* the broker, not *connect*.
+therefore **capability-mediated**: code must _ask_ the broker, not _connect_.
 
 Better security, worse compatibility. Concretely:
 
-| | Linux / macOS | Windows |
-|---|---|---|
-| Agent tools (`webfetch`, `compute`) | works | works |
-| `pip install` in a kernel | works via proxy | **needs the installer outside the sandbox** |
-| `requests.get(uniprot)` in a cell | works | **blocked** |
-| A malicious package phoning home | bounded by allowlist | blocked outright |
+|                                     | Linux / macOS        | Windows                                     |
+| ----------------------------------- | -------------------- | ------------------------------------------- |
+| Agent tools (`webfetch`, `compute`) | works                | works                                       |
+| `pip install` in a kernel           | works via proxy      | **needs the installer outside the sandbox** |
+| `requests.get(uniprot)` in a cell   | works                | **blocked**                                 |
+| A malicious package phoning home    | bounded by allowlist | blocked outright                            |
 
 Two consequences worth deciding deliberately rather than discovering:
 
@@ -131,15 +131,15 @@ it when it stabilises — the tier-fallback pattern is the lesson, not just the 
 
 ## Alternatives considered
 
-| Approach | Runtime admin | Network isolation | Per-destination policy | Verdict |
-|---|---|---|---|---|
-| WFP / firewall rules | usually yes | strong | yes | rejected — elevation we cannot justify asking for |
-| AppContainer + `internetClient` | no | strong | **no** | rejected — cannot express an allowlist |
-| **AppContainer + broker** | **no** | **strong** | **strong** | **proposed** |
-| Userspace proxy only, `HTTP_PROXY` | no | **none** | yes | rejected — advisory; a raw socket ignores it |
-| Restricted token / job object | no | **none** | no | rejected — no network isolation at all |
-| Run under WSL2 | no (WSL install is elevated, but it is Microsoft's prompt) | strong | strong | viable fallback; reuses the Linux path unchanged |
-| Hyper-V / Windows Sandbox | setup privileged | strong | yes | rejected — heavyweight, Pro/Enterprise only |
+| Approach                           | Runtime admin                                              | Network isolation | Per-destination policy | Verdict                                           |
+| ---------------------------------- | ---------------------------------------------------------- | ----------------- | ---------------------- | ------------------------------------------------- |
+| WFP / firewall rules               | usually yes                                                | strong            | yes                    | rejected — elevation we cannot justify asking for |
+| AppContainer + `internetClient`    | no                                                         | strong            | **no**                 | rejected — cannot express an allowlist            |
+| **AppContainer + broker**          | **no**                                                     | **strong**        | **strong**             | **proposed**                                      |
+| Userspace proxy only, `HTTP_PROXY` | no                                                         | **none**          | yes                    | rejected — advisory; a raw socket ignores it      |
+| Restricted token / job object      | no                                                         | **none**          | no                     | rejected — no network isolation at all            |
+| Run under WSL2                     | no (WSL install is elevated, but it is Microsoft's prompt) | strong            | strong                 | viable fallback; reuses the Linux path unchanged  |
+| Hyper-V / Windows Sandbox          | setup privileged                                           | strong            | yes                    | rejected — heavyweight, Pro/Enterprise only       |
 
 WSL2 deserves a second look before committing to a third backend: where it is present, everything already built
 for Linux applies unchanged, and the elevated step belongs to Microsoft's installer rather than ours.
@@ -156,7 +156,7 @@ Before any of it is built, a Windows owner should confirm:
 2. A process in an AppContainer with no network capability genuinely cannot open a socket — including to
    loopback.
 3. A named pipe ACL'd to that package SID is reachable from inside, unelevated.
-4. Whether *any* in-container loopback listener is possible, since that single answer decides whether the
+4. Whether _any_ in-container loopback listener is possible, since that single answer decides whether the
    socket-transparent model can be recovered and `pip` can work inside the sandbox after all.
 
 Question 4 is the one that would most change this design.
