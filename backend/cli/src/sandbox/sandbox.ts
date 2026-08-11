@@ -61,6 +61,17 @@ export namespace Sandbox {
      */
     port?: number
     /**
+     * The `Proxy-Authorization` secret the loopback proxy requires on macOS
+     * — a TCP port, unlike `egress`'s unix socket, carries no filesystem
+     * permissions of its own, so `plan`/`wrapArgv` embed this in the proxy
+     * URL (`http://os:<secret>@127.0.0.1:<port>`) rather than pointing the
+     * sandboxed process at an unauthenticated one. Not consumed by
+     * `seatbeltProfile` itself — the profile only narrows the network layer
+     * to `port`; the secret is enforced by `Egress.serveProxy` on the other
+     * end. Set together with `port` or not at all (see `buildPolicy`).
+     */
+    secret?: string
+    /**
      * Read-only paths to bind into the namespace after `--tmpfs /tmp`, so
      * they stay reachable regardless of where they happen to live on the
      * host — including under `/tmp`, which `--tmpfs /tmp` otherwise masks
@@ -83,11 +94,11 @@ export namespace Sandbox {
     network?: "deny" | "allowlist" | "allow"
     /**
      * Address of the only egress route, in whatever shape the resolved
-     * backend needs: a bind-mountable unix socket path for bubblewrap, or a
-     * loopback TCP port (stringified — `EgressRuntime.egressFor` is the one
-     * producer, and it returns one string either way) for seatbelt.
-     * `buildPolicy` is what interprets this per backend, into `Policy.egress`
-     * or `Policy.port` respectively.
+     * backend needs: a bind-mountable unix socket path for bubblewrap, or
+     * `"<port>:<secret>"` for seatbelt (`EgressRuntime.egressFor` is the one
+     * producer, and it returns one string either way). `buildPolicy` is what
+     * interprets this per backend, into `Policy.egress` or
+     * `Policy.port`/`Policy.secret` respectively.
      */
     egress?: string
     allowWrite?: string[]
@@ -347,23 +358,29 @@ export namespace Sandbox {
     const unreadable = dedupe(input.unreadable ?? []).filter((value) => !tooBroadToConfine(value))
     const network = resolved(input.options).network
 
-    // Seatbelt's egress route is a bare TCP loopback port (see
-    // seatbeltProfile), not a filesystem path — options.egress here is a
-    // stringified port number, and none of the path machinery below
-    // (dedupe's path.resolve, tooBroadToConfine) applies to it: resolving
-    // "52341" against cwd would silently turn it into an absolute path and
-    // corrupt it. An invalid value (missing, non-numeric, non-positive,
-    // non-integer) is dropped here exactly like an over-broad path is
-    // dropped below — seatbeltProfile is the fail-closed enforcement point,
-    // the same division of labour bubblewrapArgs already has with the path
-    // branch immediately below.
+    // Seatbelt's egress route is a bare TCP loopback port plus the
+    // `Proxy-Authorization` secret that port requires (see seatbeltProfile
+    // and Options.egress's doc comment), not a filesystem path —
+    // options.egress here is "<port>:<secret>", and none of the path
+    // machinery below (dedupe's path.resolve, tooBroadToConfine) applies to
+    // it: resolving "52341:abc" against cwd would silently turn it into an
+    // absolute path and corrupt it. Port and secret are validated and
+    // dropped together — a port with no secret would compose a proxy URL
+    // seatbelt's own proxy always rejects, which is a confusing way to fail
+    // compared to the same "allowlist requires an egress port" throw a wholly
+    // missing value already produces (seatbeltProfile is the fail-closed
+    // enforcement point, the same division of labour bubblewrapArgs already
+    // has with the path branch immediately below).
     if (input.backend === "seatbelt") {
-      const port = input.options.egress !== undefined ? Number(input.options.egress) : undefined
-      const portOk = port !== undefined && Number.isInteger(port) && port > 0
-      if (input.options.egress !== undefined && !portOk) {
-        log.warn("refusing to grant sandbox egress access to an invalid port", { egress: input.options.egress })
+      const raw = input.options.egress
+      const at = raw?.indexOf(":") ?? -1
+      const port = at > 0 ? Number(raw!.slice(0, at)) : undefined
+      const secret = at > 0 ? raw!.slice(at + 1) : undefined
+      const valid = port !== undefined && Number.isInteger(port) && port > 0 && !!secret
+      if (raw !== undefined && !valid) {
+        log.warn("refusing to grant sandbox egress access to an invalid port/secret pair", { egress: raw })
       }
-      return { writable, unreadable, network, ...(portOk ? { port } : {}) }
+      return { writable, unreadable, network, ...(valid ? { port, secret } : {}) }
     }
 
     // dedupe() applies the same path.resolve() normalization used for
@@ -800,6 +817,29 @@ export namespace Sandbox {
 
   // ── planning (consumed by the bash tool and the kernels) ────────────────────
 
+  /**
+   * The `HTTP_PROXY`-shaped URL the sandboxed process should use, or
+   * `undefined` when nothing composed a route to the proxy at all.
+   * Bubblewrap: the shim's fixed `SHIM_PORT`, unauthenticated — the
+   * bind-mounted unix socket underneath it is already the sandboxed
+   * process's only route out, so the loopback hop inside the namespace
+   * needs no credential of its own. Seatbelt: no shim, so the sandboxed
+   * process dials `policy.port` directly, and — because that loopback port,
+   * unlike a unix socket, carries no filesystem permissions of its own —
+   * the URL embeds `policy.secret` as userinfo
+   * (`http://os:<secret>@127.0.0.1:<port>`), which pip, curl and requests
+   * all parse into a `Proxy-Authorization` header. Both must be present, not
+   * just `port`: `buildPolicy` only ever sets them together, so a `port`
+   * with no `secret` means something upstream broke that invariant, and
+   * this fails closed to "no proxy configured" rather than emitting a URL
+   * seatbelt's own proxy would just reject with 407 anyway.
+   */
+  function proxyUrl(shim: string | undefined, b: Backend, policy: Policy): string | undefined {
+    if (shim) return `http://127.0.0.1:${SHIM_PORT}`
+    if (b !== "seatbelt" || policy.network !== "allowlist" || !policy.port || !policy.secret) return undefined
+    return `http://os:${policy.secret}@127.0.0.1:${policy.port}`
+  }
+
   // Warn only once per process so every command doesn't repeat the same notice.
   const warned = { unavailable: false }
 
@@ -887,13 +927,7 @@ export namespace Sandbox {
     const argv = shim ? ["/bin/sh", "-c", shim] : [input.shell, "-c", input.command]
     const s = specForArgv(argv, shimmed ? { ...policy, readBind: shimmed.bind } : policy, b)!
     log.info("sandboxing command", { backend: b, network: policy.network, writable: policy.writable.length })
-    // The env points at whichever loopback port actually reaches the proxy:
-    // the bwrap shim's fixed SHIM_PORT when a shim was composed, or
-    // seatbelt's own policy.port (no shim, dialed directly) when the backend
-    // is seatbelt and network is "allowlist" — specForArgv above already
-    // threw if that port were missing or invalid, so reading it here is safe.
-    const port = shim ? SHIM_PORT : b === "seatbelt" && policy.network === "allowlist" ? policy.port : undefined
-    const proxy = port ? `http://127.0.0.1:${port}` : undefined
+    const proxy = proxyUrl(shim, b, policy)
     const env = proxy ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : undefined
     return {
       file: s.file,
@@ -952,12 +986,7 @@ export namespace Sandbox {
     const argv = shim ? ["/bin/sh", "-c", shim] : [input.file, ...input.args]
     const s = specForArgv(argv, plan ? { ...policy, readBind: plan.bind } : policy, b)!
     log.info("sandboxing process", { backend: b, network: policy.network, writable: policy.writable.length })
-    // See plan()'s identical computation: SHIM_PORT for a composed bwrap
-    // shim, or seatbelt's own dynamically-assigned policy.port when the
-    // backend is seatbelt and network is "allowlist" (specForArgv above
-    // already threw if that port were missing or invalid).
-    const port = shim ? SHIM_PORT : b === "seatbelt" && policy.network === "allowlist" ? policy.port : undefined
-    const proxy = port ? `http://127.0.0.1:${port}` : undefined
+    const proxy = proxyUrl(shim, b, policy)
     const env = proxy ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : undefined
     return { file: s.file, args: s.args, sandboxed: true, backend: b, warning, ...(env ? { env } : {}) }
   }

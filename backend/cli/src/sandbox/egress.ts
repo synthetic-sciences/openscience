@@ -1,4 +1,4 @@
-import type { Socket } from "bun"
+import type { Socket, SocketHandler } from "bun"
 
 /**
  * Allowlist egress proxy for sandboxed kernels.
@@ -13,10 +13,17 @@ import type { Socket } from "bun"
  * decides what is reachable. No pasta, no nftables, no root.
  *
  * Two roles:
- *   serveProxy — runs on the HOST, listens on a unix socket, speaks HTTP proxy
+ *   serveProxy — runs on the HOST, speaks HTTP proxy. Listens on a unix
+ *                socket for bubblewrap (Linux), or directly on a loopback TCP
+ *                port for seatbelt (macOS), which has no network namespace to
+ *                bind a socket into — see sandbox.ts's seatbeltProfile. The
+ *                TCP form additionally requires a Proxy-Authorization secret,
+ *                since a loopback port (unlike a unix socket) carries no
+ *                filesystem permissions of its own.
  *   serveShim  — runs INSIDE the sandbox, TCP on loopback → the unix socket,
  *                because pip/requests/curl take a host:port proxy, not a
- *                unix path
+ *                unix path. Bubblewrap-only: seatbelt's serveProxy needs no
+ *                bridge, since it already listens on TCP directly.
  *
  * Ported from the feasibility spike on `proto/sandbox-allowlist-proxy`
  * (`src/sandbox/prototype/proxy.ts`); see that branch's README for the
@@ -165,6 +172,19 @@ export namespace Egress {
 
   const deny = (reason: string) => refuse("403 Forbidden", reason)
 
+  /**
+   * Sent only by the TCP/loopback listener (darwin's seatbelt path — see
+   * `egress-runtime.ts`). A unix socket's access control is the filesystem
+   * permissions on the path itself; a loopback TCP port has none — every
+   * process on the machine can dial it — so that listener additionally
+   * requires a `Proxy-Authorization` header carrying a secret generated once
+   * per proxy start, and refuses (without forwarding anything) a request
+   * missing it or carrying the wrong one. `Proxy-Authenticate` names the
+   * scheme per RFC 7235.
+   */
+  const unauthorized = () =>
+    `HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="os"\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nMissing or invalid Proxy-Authorization\n`
+
   const latin1 = (text: string) => Buffer.from(text, "latin1")
 
   /**
@@ -197,214 +217,251 @@ export namespace Egress {
    */
   const DIAL_TIMEOUT = 30_000
 
-  /** Host side. Listens on a unix socket, proxies only allowlisted hosts.
-   *  `dialTimeout` overrides `DIAL_TIMEOUT`; it exists so the timeout can be
-   *  exercised in milliseconds rather than by making a test wait half a
-   *  minute for the real one. */
-  export function serveProxy(input: {
-    socket: string
-    rules: Rule[]
-    onEvent?: (line: string) => void
-    dialTimeout?: number
-  }) {
+  type ServeProxyCommon = { rules: Rule[]; onEvent?: (line: string) => void; dialTimeout?: number }
+
+  /**
+   * Host side. Proxies only allowlisted hosts. Listens on a unix socket
+   * (bubblewrap, Linux) or directly on a loopback TCP port with a required
+   * `secret` (seatbelt, macOS — see the module doc comment and
+   * `egress-runtime.ts`). Overloaded, not one union signature, so each call
+   * site gets back the concrete `UnixSocketListener`/`TCPSocketListener` its
+   * own input shape implies — `egress-runtime.ts`'s seatbelt path reads
+   * `.port` off the result, which only `TCPSocketListener` has.
+   * `dialTimeout` overrides `DIAL_TIMEOUT`; it exists so the timeout can be
+   * exercised in milliseconds rather than by making a test wait half a
+   * minute for the real one.
+   */
+  export function serveProxy(input: ServeProxyCommon & { socket: string }): Bun.UnixSocketListener<undefined>
+  export function serveProxy(
+    input: ServeProxyCommon & { hostname: string; port: number; secret: string },
+  ): Bun.TCPSocketListener<undefined>
+  export function serveProxy(
+    input: ServeProxyCommon & ({ socket: string } | { hostname: string; port: number; secret: string }),
+  ) {
     const log = input.onEvent ?? (() => {})
     const budget = input.dialTimeout ?? DIAL_TIMEOUT
+    // Set only by the TCP/loopback listener — see `unauthorized` above for why.
+    const authorization =
+      "secret" in input ? `Basic ${Buffer.from(`os:${input.secret}`).toString("base64")}` : undefined
 
-    return Bun.listen<undefined>({
-      unix: input.socket,
-      socket: {
-        open(client) {
-          state.set(client, { buffer: "", phase: "head", toClient: pump(client) })
-        },
-        async data(client, chunk) {
-          const held = state.get(client)
-          if (!held) return
-          if (held.phase === "linked") {
-            held.toUpstream?.send(chunk)
-            return
-          }
-          if (held.phase === "closed") return
+    // Branched, and the handlers built once and passed to whichever branch
+    // fires, rather than a spread of the two option shapes into one object:
+    // Bun.listen is overloaded on unix vs hostname/port, and a union spread
+    // matches neither overload (the same reason this file's own tests branch
+    // Bun.connect for the mirror image of this call).
+    const listen = (socket: SocketHandler<undefined>) =>
+      "socket" in input
+        ? Bun.listen<undefined>({ unix: input.socket, socket })
+        : Bun.listen<undefined>({ hostname: input.hostname, port: input.port, socket })
 
-          // Everything before the link is one buffer, so body bytes that land
-          // while the dial is in flight are simply still here when it
-          // resolves — `rest` is sliced after the await, not before it.
-          held.buffer += chunk.toString("latin1")
-          if (held.phase === "dialing") return
-          const end = held.buffer.indexOf("\r\n\r\n")
-          if (end === -1) {
-            if (held.buffer.length <= HEAD_LIMIT) return
-            // Fail closed. Unlike the dial window below there is no
-            // backpressure to apply here: the terminator is what the parse is
-            // waiting for, so refusing to read simply deadlocks the connection
-            // instead of ending it. A head this long is a protocol error.
-            log(`OVERSIZE ${held.buffer.length} bytes of head with no terminator`)
-            held.phase = "closed"
-            held.buffer = ""
-            held.toClient.send(
-              latin1(refuse("431 Request Header Fields Too Large", `Proxy request head exceeded ${HEAD_LIMIT} bytes`)),
-            )
-            held.toClient.end()
-            return
-          }
+    return listen({
+      open(client) {
+        state.set(client, { buffer: "", phase: "head", toClient: pump(client) })
+      },
+      async data(client, chunk) {
+        const held = state.get(client)
+        if (!held) return
+        if (held.phase === "linked") {
+          held.toUpstream?.send(chunk)
+          return
+        }
+        if (held.phase === "closed") return
 
-          const head = held.buffer.slice(0, end)
-          const lines = head.split("\r\n")
-          const request = lines[0] ?? ""
-          const [method, target, version = "HTTP/1.1"] = request.split(" ")
-
-          // CONNECT host:443 for TLS; absolute-form GET http://host/path for plain.
-          const url =
-            method === "CONNECT"
-              ? undefined
-              : (() => {
-                  try {
-                    return new URL(target)
-                  } catch {
-                    return undefined
-                  }
-                })()
-          const authority = method === "CONNECT" ? target : url?.host
-
-          if (!authority) {
-            log(`malformed ${request.slice(0, 60)}`)
-            held.phase = "closed"
-            held.toClient.send(latin1(deny("Malformed proxy request")))
-            held.toClient.end()
-            return
-          }
-
-          if (!allowed(authority, input.rules)) {
-            log(`DENY  ${authority}`)
-            held.phase = "closed"
-            held.toClient.send(latin1(deny(`Host not on the sandbox allowlist: ${authority.split(":")[0]}`)))
-            held.toClient.end()
-            return
-          }
-
-          const [hostname, port] = authority.split(":")
-          // Claim the dial before yielding. Everything above this line is
-          // synchronous, so no second chunk can be part-way through the same
-          // parse when it runs.
-          held.phase = "dialing"
-          // Backpressure, not a buffer limit. Everything the client sends
-          // while the dial is in flight would otherwise be held here, and a
-          // dial can be slow for as long as the OS retries a SYN: measured
-          // against a black-holed allowlisted origin, 8 seconds of blasting
-          // took the host process from 36 MB to 2.12 GB and then killed it
-          // outright with `RangeError: Out of memory` — and this proxy runs in
-          // the CLI's own process, so that is the supervisor dying at the hands
-          // of the thing the sandbox exists to contain.
-          //
-          // Pausing costs nothing and has no arbitrary limit: the bytes wait in
-          // the client's own socket buffer, and then in the client. Round 3
-          // declined to do this on the grounds that "pausing the client is what
-          // would stop the FIN that tells us it left" — that is not so, and was
-          // never measured. A paused socket still reports its peer's departure:
-          // with delivery demonstrably stopped (0.21 MiB through a paused
-          // socket against 256 MiB through an unpaused one), the peer's `end()`
-          // still produced `close` while the pause was in force, for both FIN
-          // and RST.
-          client.pause()
-          // An allowlisted host that black-holes packets otherwise holds this
-          // connection for the kernel's whole SYN-retry budget. The phase is
-          // what makes this safe to fire late: `closed` is exactly what the
-          // dial below checks when it finally resolves, so the socket it
-          // produces is still ended by nobody-owns-it handling rather than
-          // stranded.
-          const timer = setTimeout(() => {
-            if (held.phase !== "dialing") return
-            log(`TIMEOUT ${authority}`)
-            held.phase = "closed"
-            held.buffer = ""
-            client.resume()
-            held.toClient.send(latin1(refuse("504 Gateway Timeout", `Timed out connecting to ${authority}`)))
-            held.toClient.end()
-          }, budget)
-          const upstream = await Bun.connect<undefined>({
-            hostname,
-            port: Number(port ?? (method === "CONNECT" ? 443 : 80)),
-            socket: {
-              data(_sock, payload) {
-                held.toClient.send(payload)
-              },
-              drain() {
-                held.toUpstream?.flush()
-              },
-              close() {
-                held.toClient.end()
-              },
-              error() {
-                held.toClient.end()
-              },
-            },
-          }).catch(() => undefined)
-          clearTimeout(timer)
-
-          // The client can have gone away while the dial was in flight — or the
-          // dial can have timed out above — in which case this is the only
-          // place that can release the socket it just produced.
-          if (gone(held)) {
-            upstream?.end()
-            return
-          }
-
-          if (!upstream) {
-            log(`FAIL  ${authority}`)
-            held.phase = "closed"
-            held.buffer = ""
-            client.resume()
-            held.toClient.send(latin1(deny(`Cannot reach ${authority}`)))
-            held.toClient.end()
-            return
-          }
-
-          log(`ALLOW ${authority}`)
-          const toUpstream = pump(upstream)
-          toUpstream.source = client
-          held.toClient.source = upstream
-          held.toUpstream = toUpstream
-          held.phase = "linked"
-          // Sliced now rather than before the dial, so anything the client
-          // sent while it was in flight goes upstream in arrival order.
-          const rest = held.buffer.slice(end + 4)
+        // Everything before the link is one buffer, so body bytes that land
+        // while the dial is in flight are simply still here when it
+        // resolves — `rest` is sliced after the await, not before it.
+        held.buffer += chunk.toString("latin1")
+        if (held.phase === "dialing") return
+        const end = held.buffer.indexOf("\r\n\r\n")
+        if (end === -1) {
+          if (held.buffer.length <= HEAD_LIMIT) return
+          // Fail closed. Unlike the dial window below there is no
+          // backpressure to apply here: the terminator is what the parse is
+          // waiting for, so refusing to read simply deadlocks the connection
+          // instead of ending it. A head this long is a protocol error.
+          log(`OVERSIZE ${held.buffer.length} bytes of head with no terminator`)
+          held.phase = "closed"
           held.buffer = ""
-          // Resumed before anything is forwarded, not after: `toUpstream` owns
-          // the client as its source from here, so a forward that has to queue
-          // re-pauses it through the pump. Resuming afterwards would undo that.
-          client.resume()
-          // CONNECT: acknowledge, then the client starts its TLS handshake.
-          // Plain HTTP: replay the request head we already consumed.
-          if (method === "CONNECT") {
-            held.toClient.send(latin1("HTTP/1.1 200 Connection Established\r\n\r\n"))
-            if (rest) toUpstream.send(latin1(rest))
+          held.toClient.send(
+            latin1(refuse("431 Request Header Fields Too Large", `Proxy request head exceeded ${HEAD_LIMIT} bytes`)),
+          )
+          held.toClient.end()
+          return
+        }
+
+        const head = held.buffer.slice(0, end)
+        const lines = head.split("\r\n")
+        const request = lines[0] ?? ""
+        const [method, target, version = "HTTP/1.1"] = request.split(" ")
+
+        // Checked before anything about the request is even inspected for
+        // validity — an unauthenticated caller learns nothing about
+        // whether its target was well-formed, let alone allowlisted.
+        if (authorization) {
+          const header = lines.slice(1).find((line) => /^proxy-authorization:/i.test(line))
+          const provided = header?.slice(header.indexOf(":") + 1).trim()
+          if (provided !== authorization) {
+            log(`AUTH  missing or invalid Proxy-Authorization`)
+            held.phase = "closed"
+            held.buffer = ""
+            held.toClient.send(latin1(unauthorized()))
+            held.toClient.end()
             return
           }
+        }
 
-          // A proxy must rewrite absolute-form to origin-form. Forwarding
-          // `GET http://pypi.org/simple/ HTTP/1.1` verbatim is legal per RFC 7230
-          // §5.3.2 but origin servers routinely reject it — measured: 403 from
-          // pypi.org on the plain-HTTP path while CONNECT to the same host
-          // returned 200. Also drop hop-by-hop `Proxy-*` headers, which are for
-          // us and must not travel upstream.
-          const origin = `${url!.pathname}${url!.search}` || "/"
-          const headers = lines
-            .slice(1)
-            .filter((line) => !/^proxy-/i.test(line))
-            .filter((line) => !/^host:/i.test(line))
-          const rewritten = [`${method} ${origin} ${version}`, `Host: ${url!.host}`, ...headers].join("\r\n")
-          toUpstream.send(latin1(`${rewritten}\r\n\r\n${rest}`))
-        },
-        drain(client) {
-          state.get(client)?.toClient.flush()
-        },
-        close(client) {
-          shut(state.get(client))
-          state.delete(client)
-        },
-        error(client) {
-          shut(state.get(client))
-          state.delete(client)
-        },
+        // CONNECT host:443 for TLS; absolute-form GET http://host/path for plain.
+        const url =
+          method === "CONNECT"
+            ? undefined
+            : (() => {
+                try {
+                  return new URL(target)
+                } catch {
+                  return undefined
+                }
+              })()
+        const authority = method === "CONNECT" ? target : url?.host
+
+        if (!authority) {
+          log(`malformed ${request.slice(0, 60)}`)
+          held.phase = "closed"
+          held.toClient.send(latin1(deny("Malformed proxy request")))
+          held.toClient.end()
+          return
+        }
+
+        if (!allowed(authority, input.rules)) {
+          log(`DENY  ${authority}`)
+          held.phase = "closed"
+          held.toClient.send(latin1(deny(`Host not on the sandbox allowlist: ${authority.split(":")[0]}`)))
+          held.toClient.end()
+          return
+        }
+
+        const [hostname, port] = authority.split(":")
+        // Claim the dial before yielding. Everything above this line is
+        // synchronous, so no second chunk can be part-way through the same
+        // parse when it runs.
+        held.phase = "dialing"
+        // Backpressure, not a buffer limit. Everything the client sends
+        // while the dial is in flight would otherwise be held here, and a
+        // dial can be slow for as long as the OS retries a SYN: measured
+        // against a black-holed allowlisted origin, 8 seconds of blasting
+        // took the host process from 36 MB to 2.12 GB and then killed it
+        // outright with `RangeError: Out of memory` — and this proxy runs in
+        // the CLI's own process, so that is the supervisor dying at the hands
+        // of the thing the sandbox exists to contain.
+        //
+        // Pausing costs nothing and has no arbitrary limit: the bytes wait in
+        // the client's own socket buffer, and then in the client. Round 3
+        // declined to do this on the grounds that "pausing the client is what
+        // would stop the FIN that tells us it left" — that is not so, and was
+        // never measured. A paused socket still reports its peer's departure:
+        // with delivery demonstrably stopped (0.21 MiB through a paused
+        // socket against 256 MiB through an unpaused one), the peer's `end()`
+        // still produced `close` while the pause was in force, for both FIN
+        // and RST.
+        client.pause()
+        // An allowlisted host that black-holes packets otherwise holds this
+        // connection for the kernel's whole SYN-retry budget. The phase is
+        // what makes this safe to fire late: `closed` is exactly what the
+        // dial below checks when it finally resolves, so the socket it
+        // produces is still ended by nobody-owns-it handling rather than
+        // stranded.
+        const timer = setTimeout(() => {
+          if (held.phase !== "dialing") return
+          log(`TIMEOUT ${authority}`)
+          held.phase = "closed"
+          held.buffer = ""
+          client.resume()
+          held.toClient.send(latin1(refuse("504 Gateway Timeout", `Timed out connecting to ${authority}`)))
+          held.toClient.end()
+        }, budget)
+        const upstream = await Bun.connect<undefined>({
+          hostname,
+          port: Number(port ?? (method === "CONNECT" ? 443 : 80)),
+          socket: {
+            data(_sock, payload) {
+              held.toClient.send(payload)
+            },
+            drain() {
+              held.toUpstream?.flush()
+            },
+            close() {
+              held.toClient.end()
+            },
+            error() {
+              held.toClient.end()
+            },
+          },
+        }).catch(() => undefined)
+        clearTimeout(timer)
+
+        // The client can have gone away while the dial was in flight — or the
+        // dial can have timed out above — in which case this is the only
+        // place that can release the socket it just produced.
+        if (gone(held)) {
+          upstream?.end()
+          return
+        }
+
+        if (!upstream) {
+          log(`FAIL  ${authority}`)
+          held.phase = "closed"
+          held.buffer = ""
+          client.resume()
+          held.toClient.send(latin1(deny(`Cannot reach ${authority}`)))
+          held.toClient.end()
+          return
+        }
+
+        log(`ALLOW ${authority}`)
+        const toUpstream = pump(upstream)
+        toUpstream.source = client
+        held.toClient.source = upstream
+        held.toUpstream = toUpstream
+        held.phase = "linked"
+        // Sliced now rather than before the dial, so anything the client
+        // sent while it was in flight goes upstream in arrival order.
+        const rest = held.buffer.slice(end + 4)
+        held.buffer = ""
+        // Resumed before anything is forwarded, not after: `toUpstream` owns
+        // the client as its source from here, so a forward that has to queue
+        // re-pauses it through the pump. Resuming afterwards would undo that.
+        client.resume()
+        // CONNECT: acknowledge, then the client starts its TLS handshake.
+        // Plain HTTP: replay the request head we already consumed.
+        if (method === "CONNECT") {
+          held.toClient.send(latin1("HTTP/1.1 200 Connection Established\r\n\r\n"))
+          if (rest) toUpstream.send(latin1(rest))
+          return
+        }
+
+        // A proxy must rewrite absolute-form to origin-form. Forwarding
+        // `GET http://pypi.org/simple/ HTTP/1.1` verbatim is legal per RFC 7230
+        // §5.3.2 but origin servers routinely reject it — measured: 403 from
+        // pypi.org on the plain-HTTP path while CONNECT to the same host
+        // returned 200. Also drop hop-by-hop `Proxy-*` headers, which are for
+        // us and must not travel upstream.
+        const origin = `${url!.pathname}${url!.search}` || "/"
+        const headers = lines
+          .slice(1)
+          .filter((line) => !/^proxy-/i.test(line))
+          .filter((line) => !/^host:/i.test(line))
+        const rewritten = [`${method} ${origin} ${version}`, `Host: ${url!.host}`, ...headers].join("\r\n")
+        toUpstream.send(latin1(`${rewritten}\r\n\r\n${rest}`))
+      },
+      drain(client) {
+        state.get(client)?.toClient.flush()
+      },
+      close(client) {
+        shut(state.get(client))
+        state.delete(client)
+      },
+      error(client) {
+        shut(state.get(client))
+        state.delete(client)
       },
     })
   }

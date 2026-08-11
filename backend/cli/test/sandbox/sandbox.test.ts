@@ -465,15 +465,20 @@ describe("Sandbox.backend(platform)", () => {
 })
 
 describe("Sandbox.plan/wrapArgv on darwin (seatbelt)", () => {
+  // "<port>:<secret>" — the shape EgressRuntime.egressFor() produces for
+  // seatbelt (see egress-runtime.ts); buildPolicy splits it back into
+  // Policy.port/Policy.secret.
   const port = "54321"
+  const secret = "topsecret123"
+  const egress = `${port}:${secret}`
 
-  test("plan composes no shim and dials the proxy port directly", () => {
+  test("plan composes no shim and dials the proxy port directly, with the secret in the proxy URL", () => {
     const p = Sandbox.plan({
       command: "echo hi",
       shell,
       cwd: "/work/project",
       workspace: ["/work/project"],
-      options: { enabled: true, network: "allowlist", egress: port },
+      options: { enabled: true, network: "allowlist", egress },
       platform: "darwin",
     })
     expect(p.sandboxed).toBe(true)
@@ -484,16 +489,19 @@ describe("Sandbox.plan/wrapArgv on darwin (seatbelt)", () => {
     // __egress-shim marker — the real command runs directly under sandbox-exec.
     expect(argv).not.toContain("__egress-shim")
     expect(argv).toContain("echo hi")
-    expect(p.env?.HTTP_PROXY).toBe(`http://127.0.0.1:${port}`)
+    // A loopback TCP port carries no filesystem permissions of its own (a
+    // unix socket does), so the URL embeds the per-start secret as userinfo
+    // — pip/curl/requests all parse this into Proxy-Authorization.
+    expect(p.env?.HTTP_PROXY).toBe(`http://os:${secret}@127.0.0.1:${port}`)
     expect(p.env?.http_proxy).toBe(p.env?.HTTP_PROXY)
   })
 
-  test("wrapArgv composes no shim and dials the proxy port directly", () => {
+  test("wrapArgv composes no shim and dials the proxy port directly, with the secret in the proxy URL", () => {
     const w = Sandbox.wrapArgv({
       file: "python3",
       args: ["-u", "/tmp/k.py"],
       workspace: ["/work/project"],
-      options: { enabled: true, network: "allowlist", egress: port },
+      options: { enabled: true, network: "allowlist", egress },
       platform: "darwin",
     })
     expect(w.sandboxed).toBe(true)
@@ -501,7 +509,7 @@ describe("Sandbox.plan/wrapArgv on darwin (seatbelt)", () => {
     const argv = w.args.join(" ")
     expect(argv).not.toContain("__egress-shim")
     expect(argv).toContain("python3")
-    expect(w.env?.HTTP_PROXY).toBe(`http://127.0.0.1:${port}`)
+    expect(w.env?.HTTP_PROXY).toBe(`http://os:${secret}@127.0.0.1:${port}`)
   })
 
   test("allowlist with no egress port throws rather than silently degrading to deny", () => {
@@ -511,6 +519,22 @@ describe("Sandbox.plan/wrapArgv on darwin (seatbelt)", () => {
         args: ["-u", "/tmp/k.py"],
         workspace: ["/work/project"],
         options: { enabled: true, network: "allowlist" },
+        platform: "darwin",
+      }),
+    ).toThrow()
+  })
+
+  // A port with no secret is exactly as fail-closed as no port at all — see
+  // buildPolicy's doc comment: the two are validated and dropped together,
+  // so a malformed "port with no secret" pairing can never compose a proxy
+  // URL missing the credential the darwin listener requires.
+  test("allowlist with a port but no secret (malformed egress) throws, not an unauthenticated proxy URL", () => {
+    expect(() =>
+      Sandbox.wrapArgv({
+        file: "python3",
+        args: ["-u", "/tmp/k.py"],
+        workspace: ["/work/project"],
+        options: { enabled: true, network: "allowlist", egress: `${port}:` },
         platform: "darwin",
       }),
     ).toThrow()

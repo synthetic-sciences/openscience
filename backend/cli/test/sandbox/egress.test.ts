@@ -558,3 +558,122 @@ test("a dial that never completes gives up and says so", async () => {
   // machine cannot flake it, but far below the ~130 s this used to take.
   expect(Date.now() - started).toBeLessThan(10_000)
 }, 60_000)
+
+// ── seatbelt: TCP loopback + Proxy-Authorization ────────────────────────────
+//
+// Everything above dials a unix socket. macOS has no network namespace to
+// bind one into, so serveProxy listens directly on a loopback TCP port
+// instead (Task 7 brief, decision 1 — no host-side bridge between the two;
+// see the module doc comment and sandbox.ts's seatbeltProfile). A loopback
+// TCP port, unlike a unix socket, carries no filesystem permissions of its
+// own — every process on the machine can dial it — so that listener
+// additionally requires a `Proxy-Authorization` secret (decision 2). These
+// test the listener and that requirement directly, with no EgressRuntime or
+// sandbox in between; `test/sandbox/egress-runtime.test.ts` covers the same
+// property one layer up, through the lifecycle that actually generates and
+// threads the secret in production.
+
+function tcpProxy(rules: string[], secret: string) {
+  const server = Egress.serveProxy({ hostname: "127.0.0.1", port: 0, secret, rules })
+  opened.push({ stop: () => server.stop(true) })
+  return server
+}
+
+/** Speaks CONNECT directly over TCP loopback, optionally with a
+ *  Proxy-Authorization header — the wire shape pip/curl/requests produce
+ *  from a `http://os:<secret>@host:port` proxy URL. */
+function tcpRequest(port: number, authority: string, auth?: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`no response from the proxy for ${authority}`)), 5_000)
+    let body = ""
+    const header =
+      auth !== undefined ? `\r\nProxy-Authorization: Basic ${Buffer.from(`os:${auth}`).toString("base64")}` : ""
+    Bun.connect<undefined>({
+      hostname: "127.0.0.1",
+      port,
+      socket: {
+        open(sock) {
+          sock.write(`CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}${header}\r\n\r\n`)
+        },
+        data(_sock, chunk) {
+          body += chunk.toString()
+        },
+        close() {
+          clearTimeout(timeout)
+          resolve(body)
+        },
+        error(_sock, error) {
+          clearTimeout(timeout)
+          reject(error)
+        },
+      },
+    }).catch(reject)
+  })
+}
+
+test("serveProxy on TCP binds 127.0.0.1, never 0.0.0.0", () => {
+  const server = tcpProxy([], "s")
+  expect(server.hostname).toBe("127.0.0.1")
+})
+
+test("a correctly-authenticated TCP request passes auth and reaches the dial", async () => {
+  const port = tcpProxy(["127.0.0.1"], "right-secret").port
+  // 127.0.0.1:1 is allowlisted but nothing listens there (a privileged,
+  // essentially never-bound port) — "Cannot reach" (not 407, not "not on
+  // the sandbox allowlist") is what proves the secret was accepted and the
+  // request reached the dial, the same distinction `proxyRequest`-based
+  // tests elsewhere in this suite use for the unix-socket listener.
+  const body = await tcpRequest(port, "127.0.0.1:1", "right-secret")
+  expect(body).toContain("Cannot reach")
+})
+
+test("a TCP request with no Proxy-Authorization is refused with 407 and never reaches the dial or the allowlist check", async () => {
+  const port = tcpProxy(["127.0.0.1"], "right-secret").port
+  const body = await tcpRequest(port, "127.0.0.1:1")
+  expect(body).toContain("407 Proxy Authentication Required")
+  expect(body).not.toContain("sandbox allowlist")
+  expect(body).not.toContain("Cannot reach")
+})
+
+test("a TCP request with the wrong secret is refused with 407", async () => {
+  const port = tcpProxy(["127.0.0.1"], "right-secret").port
+  const body = await tcpRequest(port, "127.0.0.1:1", "wrong-secret")
+  expect(body).toContain("407 Proxy Authentication Required")
+})
+
+test("the unix-socket listener requires no Proxy-Authorization — auth is TCP-only", async () => {
+  // Regression guard for the other direction: adding auth to the TCP branch
+  // must not leak onto bubblewrap's unix socket, which has no `secret` to
+  // check in the first place — filesystem permissions on the path are its
+  // access control (unchanged Linux behaviour this task must not regress).
+  const socket = proxy(["127.0.0.1"])
+  const body = await proxyRequestNoAuth(socket, "127.0.0.1:1")
+  expect(body).not.toContain("407")
+  expect(body).toContain("Cannot reach")
+})
+
+function proxyRequestNoAuth(socket: string, authority: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`no response for ${authority}`)), 5_000)
+    let body = ""
+    Bun.connect<undefined>({
+      unix: socket,
+      socket: {
+        open(sock) {
+          sock.write(`CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n\r\n`)
+        },
+        data(_sock, chunk) {
+          body += chunk.toString()
+        },
+        close() {
+          clearTimeout(timeout)
+          resolve(body)
+        },
+        error(_sock, error) {
+          clearTimeout(timeout)
+          reject(error)
+        },
+      },
+    }).catch(reject)
+  })
+}

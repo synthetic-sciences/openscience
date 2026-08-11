@@ -1,3 +1,4 @@
+import crypto from "crypto"
 import fs from "fs/promises"
 import path from "path"
 import { Config } from "@/config/config"
@@ -37,18 +38,30 @@ const log = Log.create({ service: "egress-runtime" })
  * deliberately not that kind of change.
  */
 export namespace EgressRuntime {
+  /**
+   * Bubblewrap (Linux) carries `socket` — the bind-mounted socket itself is
+   * the sandboxed process's only route in. Seatbelt (macOS) has no network
+   * namespace to bind a socket into, so `Egress.serveProxy` listens directly
+   * on a loopback TCP port instead (see its own doc comment and
+   * `sandbox.ts`'s `seatbeltProfile`), carried as `hostname`/`secret` —
+   * `secret` is the per-start `Proxy-Authorization` credential that port
+   * requires, since a loopback TCP port, unlike a unix socket, carries no
+   * filesystem permissions of its own. Optional fields rather than a
+   * discriminated union: every real caller narrows by checking `socket`
+   * (see `stop()`, `ensure()`, `egressFor()` below), and a union would force
+   * that same narrowing onto every *test* that reaches these fields too,
+   * including the bubblewrap-only ones this task must leave unchanged.
+   */
   type Running = {
-    socket: string
+    socket?: string
+    hostname?: string
     port: number
-    server: ReturnType<typeof Egress.serveProxy>
-    /**
-     * Seatbelt-only: the host-side TCP-loopback→unix-socket bridge that
-     * gives a seatbelt-sandboxed process (no network namespace, so nothing
-     * severs it from an ordinary loopback connect) a port to dial directly.
-     * `undefined` on bubblewrap, where the bind-mounted socket itself is
-     * already the sandboxed process's only route in.
-     */
-    bridge?: ReturnType<typeof Egress.serveShim>
+    secret?: string
+    // Not `ReturnType<typeof Egress.serveProxy>`: TS resolves that utility
+    // against an overloaded function's LAST signature only (the TCP one
+    // here), not a union of all of them — this field needs both, since
+    // `startBubblewrap`'s `server` really is a `UnixSocketListener`.
+    server: Bun.UnixSocketListener<undefined> | Bun.TCPSocketListener<undefined>
     rules: Egress.Rule[]
     onGlobalChange: (event: { directory?: string; payload: unknown }) => void
   }
@@ -82,14 +95,19 @@ export namespace EgressRuntime {
     return payload.type === Event.Disposed.type
   }
 
-  /**
-   * `platform` decides only whether a seatbelt bridge joins the unix-socket
-   * proxy below — defaulting to the real platform, like every other
-   * platform-injectable seam this branch added (`Sandbox.backend`,
-   * `plan`/`wrapArgv`), so this is exercisable, deterministically, from a
-   * machine that has no seatbelt at all.
-   */
-  async function start(platform: NodeJS.Platform = process.platform): Promise<Running> {
+  function listener(rules: Egress.Rule[]) {
+    const onGlobalChange = (event: { directory?: string; payload: unknown }) => {
+      if (!isGlobalConfigChange(event)) return
+      refresh(rules).catch(() => {})
+    }
+    GlobalBus.on("event", onGlobalChange)
+    return onGlobalChange
+  }
+
+  /** Bubblewrap (Linux): a bind-mountable unix socket under the state dir —
+   *  unchanged from before Task 7 (macOS seatbelt support) added the
+   *  loopback-TCP branch below. */
+  async function startBubblewrap(): Promise<Running> {
     const socket = path.join(Global.Path.state, `egress-${process.pid}.sock`)
     // A stale socket file from a killed previous process (same pid, unlikely
     // but possible after a pid wraparound) would make Bun.listen refuse to
@@ -110,31 +128,54 @@ export namespace EgressRuntime {
         )
       }
     })()
-    // Seatbelt has no network namespace to bind-mount the socket into, so a
-    // seatbelt-sandboxed process cannot reach it the way bubblewrap's
-    // in-namespace shim does. What it CAN reach — seatbelt's own profile is
-    // what narrows this down to exactly one port, see sandbox.ts's
-    // seatbeltProfile — is an ordinary host loopback TCP port. That bridge,
-    // TCP loopback → this same unix socket, is exactly what `Egress.serveShim`
-    // already implements for bubblewrap's in-namespace shim; nothing about it
-    // is namespace-specific, so running it here, in the CLI's own process
-    // instead of inside a sandbox, gives seatbelt the same host-side proxy
-    // Linux has, reached one hop further in. `port: 0` asks the OS for an
-    // ephemeral port — unlike SHIM_PORT, nothing needs this value known in
-    // advance: no shim script embeds it as a literal (seatbelt's profile is
-    // built from `policy.port` at wrap time, not composed into a string that
-    // has to agree with a value chosen earlier), and a fixed port here, with
-    // no namespace to keep it private, would collide across every
-    // concurrently sandboxed process on the machine.
-    const bridge = Sandbox.backend(platform) === "seatbelt" ? Egress.serveShim({ port: 0, socket }) : undefined
-    const port = bridge ? bridge.port : Sandbox.SHIM_PORT
-    const onGlobalChange = (event: { directory?: string; payload: unknown }) => {
-      if (!isGlobalConfigChange(event)) return
-      refresh(rules).catch(() => {})
-    }
-    GlobalBus.on("event", onGlobalChange)
-    log.info("egress proxy listening", { socket, port, bridged: bridge !== undefined })
-    return { socket, port, server, bridge, rules, onGlobalChange }
+    const onGlobalChange = listener(rules)
+    log.info("egress proxy listening", { socket })
+    return { socket, port: Sandbox.SHIM_PORT, server, rules, onGlobalChange }
+  }
+
+  /**
+   * Seatbelt (macOS): no network namespace to bind a unix socket into, so
+   * `Egress.serveProxy` listens directly on a loopback TCP port instead —
+   * decision 1 of the Task 7 brief, deliberately *not* a host-side bridge
+   * from TCP to a unix socket (that would just be a second component doing
+   * what one listener already can). `port: 0` asks the OS for an ephemeral
+   * port: unlike bubblewrap's `SHIM_PORT`, nothing needs this value fixed in
+   * advance — no shim script embeds it as a literal, since seatbelt has no
+   * shim at all (see `sandbox.ts`'s `shimPlan` doc comment) — and a fixed
+   * port here, with no namespace to keep it private, would collide across
+   * every concurrently sandboxed process on the machine.
+   *
+   * `secret` is generated fresh per proxy start (decision 2): a loopback TCP
+   * port, unlike a unix socket, carries no filesystem permissions of its
+   * own, so every request to it must additionally prove it holds this —
+   * enforced inside `Egress.serveProxy` itself, not here.
+   */
+  async function startSeatbelt(): Promise<Running> {
+    const rules = await currentRules()
+    const secret = crypto.randomUUID()
+    const server = (() => {
+      try {
+        return Egress.serveProxy({ hostname: "127.0.0.1", port: 0, secret, rules, onEvent: (line) => log.info(line) })
+      } catch (e) {
+        throw new Error(
+          `Could not start the sandbox allowlist proxy on 127.0.0.1: ${e instanceof Error ? e.message : String(e)}. ` +
+            `Sandboxed commands need it to reach the network — retry, or set sandbox.network to "deny" or "allow".`,
+        )
+      }
+    })()
+    const onGlobalChange = listener(rules)
+    log.info("egress proxy listening", { hostname: "127.0.0.1", port: server.port })
+    return { hostname: "127.0.0.1", port: server.port, secret, server, rules, onGlobalChange }
+  }
+
+  /**
+   * `platform` decides which of the two listeners above starts — defaulting
+   * to the real platform, like every other platform-injectable seam this
+   * branch added (`Sandbox.backend`, `plan`/`wrapArgv`), so the seatbelt
+   * branch is exercisable, deterministically, from a machine that has none.
+   */
+  function start(platform: NodeJS.Platform = process.platform): Promise<Running> {
+    return platform === "darwin" ? startSeatbelt() : startBubblewrap()
   }
 
   /** Start the proxy if it is not already running, and return where to
@@ -156,30 +197,30 @@ export namespace EgressRuntime {
    *  silent downgrade is exactly the failure this feature keeps producing —
    *  a sandbox that looks like it has bounded egress and in fact has none.
    *
-   *  `platform` decides only whether `start()` joins a seatbelt bridge — see
-   *  its doc comment — and is only ever non-default from a test; every real
-   *  caller (`egressFor` below) leaves it at the real one. The proxy itself
-   *  is not re-created per platform: `state.running` is one proxy for the
-   *  process lifetime, same as before this parameter existed, so a caller
-   *  that wants the seatbelt branch exercised must `stop()` first if a
-   *  differently-platformed proxy is already cached. */
+   *  `platform` decides only which listener `start()` picks — see its doc
+   *  comment — and is only ever non-default from a test; every real caller
+   *  (`egressFor` below) leaves it at the real one. The proxy itself is not
+   *  re-created per platform: `state.running` is one proxy for the process
+   *  lifetime, same as before this parameter existed, so a caller that wants
+   *  a differently-platformed proxy exercised must `stop()` first. */
   export async function ensure(
     platform: NodeJS.Platform = process.platform,
-  ): Promise<{ socket: string; port: number }> {
+  ): Promise<{ socket?: string; hostname?: string; port: number; secret?: string }> {
     const pending = (state.running ??= start(platform))
     const running = await pending.catch((error) => {
       if (state.running === pending) state.running = undefined
       throw error
     })
     await refresh(running.rules)
-    return { socket: running.socket, port: running.port }
+    return { socket: running.socket, hostname: running.hostname, port: running.port, secret: running.secret }
   }
 
-  /** Stop the proxy and unlink its socket. The CLI process otherwise leaves
-   *  this running for its own lifetime; tests use this to reset between
-   *  cases. A no-op when nothing is running, and — because a caller reaching
-   *  for the escape hatch after a failed start must not be handed that same
-   *  failure again — when the last start rejected. */
+  /** Stop the proxy. The CLI process otherwise leaves this running for its
+   *  own lifetime; tests use this to reset between cases. A no-op when
+   *  nothing is running, and — because a caller reaching for the escape
+   *  hatch after a failed start must not be handed that same failure again —
+   *  when the last start rejected. Unlinks the unix socket on bubblewrap;
+   *  seatbelt's loopback listener leaves nothing on disk to clean up. */
   export async function stop() {
     const pending = state.running
     state.running = undefined
@@ -188,7 +229,7 @@ export namespace EgressRuntime {
     if (!running) return
     GlobalBus.off("event", running.onGlobalChange)
     running.server.stop(true)
-    await fs.rm(running.socket, { force: true })
+    if (running.socket) await fs.rm(running.socket, { force: true })
   }
 
   /** The value to pass as `Sandbox.Options.egress`, or `undefined` when the
@@ -197,10 +238,10 @@ export namespace EgressRuntime {
    *  seatbelt. The shape differs by backend, matching `Options.egress`'s own
    *  doc comment: bubblewrap gets the bind-mountable unix socket path, since
    *  the bind-mounted socket itself is the sandboxed process's only route in;
-   *  seatbelt gets `ensure()`'s bridged loopback port, stringified, since a
-   *  seatbelt-sandboxed process dials that port directly (see
-   *  `sandbox.ts`'s `seatbeltProfile`) and never touches the socket at all.
-   *  A disabled/deny/allow policy skips starting the proxy entirely — pure
+   *  seatbelt gets `"<port>:<secret>"` — `buildPolicy` in sandbox.ts is what
+   *  splits that back apart into `Policy.port`/`Policy.secret`, the same
+   *  division of labour it already has for bubblewrap's `Policy.egress`. A
+   *  disabled/deny/allow policy skips starting the proxy entirely — pure
    *  waste when nothing would ever connect to it. Every `wrapArgv` /
    *  `plan()` caller should route through this rather than calling `ensure()`
    *  directly, so a terminal or kernel with network "deny" never pays for a
@@ -218,7 +259,10 @@ export namespace EgressRuntime {
     if (network !== "allowlist") return undefined
     const b = Sandbox.backend(platform)
     if (b === "bubblewrap") return (await ensure(platform)).socket
-    if (b === "seatbelt") return String((await ensure(platform)).port)
+    if (b === "seatbelt") {
+      const running = await ensure(platform)
+      return `${running.port}:${running.secret}`
+    }
     return undefined
   }
 }

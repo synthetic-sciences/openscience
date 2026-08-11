@@ -62,7 +62,11 @@ test("a failed start does not latch — the next call really retries", async () 
   // the "allowlist" default that is every bash command, terminal, kernel and
   // compute job failing until restart.
   const recovered = await EgressRuntime.ensure()
-  await expect(fs.stat(recovered.socket)).resolves.toBeDefined()
+  // Non-null: this test always runs on the real (bubblewrap) platform, where
+  // `ensure()` always carries a socket — `egress-runtime.ts`'s `Running`
+  // type makes the field optional only because the darwin branch (added by
+  // Task 7) carries a TCP endpoint instead.
+  await expect(fs.stat(recovered.socket!)).resolves.toBeDefined()
 })
 
 test("stop is safe after a start that failed", async () => {
@@ -81,11 +85,12 @@ test("stop is safe after a start that failed", async () => {
 
 test("the socket is created under the state directory, not the workspace", async () => {
   const { socket } = await EgressRuntime.ensure()
+  // Non-null: bubblewrap (the real platform here) always carries a socket.
   // Not Bun.file(socket).exists(): Bun.file() only recognizes regular files,
   // and a unix socket is a distinct inode type (S_IFSOCK) — verified with an
   // isolated Bun.listen({ unix }) that Bun.file(...).exists() reports false
   // for it while fs.stat sees it fine. fs.stat is the correct check here.
-  await expect(fs.stat(socket)).resolves.toBeDefined()
+  await expect(fs.stat(socket!)).resolves.toBeDefined()
   expect(socket).not.toContain(process.cwd())
   await EgressRuntime.stop()
 })
@@ -130,7 +135,8 @@ test("an allowlist edit reaches a running proxy without restarting it", async ()
   const authority = "127.0.0.1:1"
   const first = await EgressRuntime.ensure()
 
-  const before = await proxyRequest(first.socket, authority)
+  // Non-null: this test always runs on the real (bubblewrap) platform.
+  const before = await proxyRequest(first.socket!, authority)
   expect(before).toContain("not on the sandbox allowlist")
 
   await Config.setSandbox({ allowHosts: ["127.0.0.1"] })
@@ -144,7 +150,7 @@ test("an allowlist edit reaches a running proxy without restarting it", async ()
   const deadline = Date.now() + 2_000
   let after = before
   while (Date.now() < deadline && after.includes("not on the sandbox allowlist")) {
-    after = await proxyRequest(first.socket, authority)
+    after = await proxyRequest(first.socket!, authority)
   }
   expect(after).not.toContain("not on the sandbox allowlist")
   expect(after).toContain("Cannot reach")
@@ -198,27 +204,32 @@ test.skipIf(Sandbox.backend() !== "bubblewrap")(
 /**
  * Same wire technique as `proxyRequest` above, but dialed over TCP loopback
  * rather than the unix socket — what a seatbelt-sandboxed process reaches
- * directly (no namespace to bridge across; see `sandbox.ts`'s
- * `seatbeltProfile`). This is the one seatbelt-specific piece of Task 7 that
- * genuinely runs, without a Mac: `EgressRuntime`'s bridge is `Egress.serveShim`
- * (already covered on its own in `egress.test.ts`), a plain `Bun.listen` with
- * nothing namespace- or platform-specific about it, so starting it with
- * `platform: "darwin"` injected and then dialing it for real proves the
- * bridge → proxy → allowlist path actually runs. What it cannot prove is
- * whether a real `sandbox-exec` restricts a sandboxed process to dialing only
- * this one port in the first place — see the Task 7 report for exactly what
- * a Mac owner still needs to run.
+ * directly, since seatbelt has no namespace to bind a unix socket into and
+ * `Egress.serveProxy` listens on that loopback port itself (decision 1 of
+ * the Task 7 brief: no host-side bridge). `auth`, when given, is sent as the
+ * `Proxy-Authorization` secret the TCP listener requires (decision 2) —
+ * omitted or wrong, the request must never reach the allowlist check at all.
+ *
+ * This is the one seatbelt-specific piece of Task 7 that genuinely runs,
+ * without a Mac: everything here is a plain `Bun.connect`/`Bun.listen` pair
+ * with nothing namespace- or platform-specific about it, so starting
+ * `EgressRuntime` with `platform: "darwin"` injected and dialing it for real
+ * proves the proxy → auth → allowlist path actually runs. What it cannot
+ * prove is whether a real `sandbox-exec` restricts a sandboxed process to
+ * dialing only this one port in the first place — see the Task 7 report for
+ * exactly what a Mac owner still needs to run.
  */
-function tcpProxyRequest(port: number, authority: string): Promise<string> {
+function tcpProxyRequest(port: number, authority: string, auth?: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`no response from the bridge for ${authority}`)), 2_000)
+    const timeout = setTimeout(() => reject(new Error(`no response from the proxy for ${authority}`)), 2_000)
     let body = ""
+    const header = auth ? `\r\nProxy-Authorization: Basic ${Buffer.from(`os:${auth}`).toString("base64")}` : ""
     Bun.connect({
       hostname: "127.0.0.1",
       port,
       socket: {
         open(client) {
-          client.write(`CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n\r\n`)
+          client.write(`CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}${header}\r\n\r\n`)
         },
         data(_client, chunk) {
           body += chunk.toString()
@@ -236,33 +247,56 @@ function tcpProxyRequest(port: number, authority: string): Promise<string> {
   })
 }
 
-test("ensure with platform darwin bridges a TCP loopback port distinct from the bwrap SHIM_PORT", async () => {
+test("ensure with platform darwin listens on a loopback TCP port, not a unix socket", async () => {
   const running = await EgressRuntime.ensure("darwin")
-  // Seatbelt has no namespace to keep a fixed port private across
-  // concurrently sandboxed processes the way --unshare-net does for
-  // bubblewrap, so the bridge asks the OS for an ephemeral one (port: 0 in
-  // egress-runtime.ts's start()) rather than reusing the fixed SHIM_PORT.
+  expect(running.hostname).toBe("127.0.0.1")
+  // Ephemeral, not the bwrap shim's fixed SHIM_PORT: seatbelt has no
+  // namespace to keep a fixed port private across concurrently sandboxed
+  // processes the way --unshare-net does for bubblewrap.
   expect(running.port).not.toBe(Sandbox.SHIM_PORT)
   expect(running.port).toBeGreaterThan(0)
-  // The unix-socket proxy underneath is unaffected — a bubblewrap process
-  // reaching the very same running proxy would still find it there.
-  await expect(fs.stat(running.socket)).resolves.toBeDefined()
+  // A secret was generated for this start — required to reach the proxy at
+  // all, since a loopback port (unlike a unix socket) carries no filesystem
+  // permissions of its own.
+  expect(running.secret).toBeTruthy()
+  // And no unix socket on this path at all — decision 1 of the Task 7
+  // brief: serveProxy listens on TCP directly, no host-side bridge to one.
+  expect(running.socket).toBeUndefined()
 })
 
-test("the seatbelt bridge really forwards to the proxy, live", async () => {
+test("the darwin proxy forwards a correctly-authenticated request, live", async () => {
   const running = await EgressRuntime.ensure("darwin")
   // Nothing listens on loopback:1 (a privileged, essentially never-bound
-  // port), so a request that clears the allowlist check still gets a 403 —
-  // "cannot reach", not "not on the allowlist" — which is what proves the
-  // bridge → proxy → allowlist check chain actually ran end to end.
-  const body = await tcpProxyRequest(running.port, "127.0.0.1:1")
+  // port), so a request that clears BOTH the auth check and the allowlist
+  // check still gets a 403 "cannot reach" — not "not on the sandbox
+  // allowlist" and not 407 — which is what proves the whole
+  // auth → allowlist → dial chain actually ran end to end.
+  const body = await tcpProxyRequest(running.port, "127.0.0.1:1", running.secret)
   expect(body).toContain("not on the sandbox allowlist")
 })
 
-test("egressFor on darwin returns the bridged port, stringified — not a socket path", async () => {
+test("the darwin proxy refuses a request with no Proxy-Authorization, and never forwards it", async () => {
+  const running = await EgressRuntime.ensure("darwin")
+  const body = await tcpProxyRequest(running.port, "127.0.0.1:1")
+  expect(body).toContain("407 Proxy Authentication Required")
+  // Neither downstream outcome appears — the request was refused before the
+  // allowlist check or the dial ever ran.
+  expect(body).not.toContain("not on the sandbox allowlist")
+  expect(body).not.toContain("Cannot reach")
+})
+
+test("the darwin proxy refuses a request with the wrong secret", async () => {
+  const running = await EgressRuntime.ensure("darwin")
+  const body = await tcpProxyRequest(running.port, "127.0.0.1:1", `${running.secret}-wrong`)
+  expect(body).toContain("407 Proxy Authentication Required")
+})
+
+test('egressFor on darwin returns "port:secret", not a socket path', async () => {
   const egress = await EgressRuntime.egressFor({ enabled: true, network: "allowlist" }, "darwin")
   expect(egress).toBeDefined()
-  expect(Number.isInteger(Number(egress))).toBe(true)
+  const [portPart, secretPart] = egress!.split(":")
+  expect(Number.isInteger(Number(portPart))).toBe(true)
+  expect(secretPart).toBeTruthy()
   expect(egress).not.toContain("/")
   expect(egress).not.toContain(".sock")
 })
