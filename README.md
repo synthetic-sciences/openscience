@@ -53,12 +53,14 @@ Linux installs require kernel 5.1 or newer. Glibc builds require glibc 2.17 or n
 
 ## Quickstart
 
-Set an API key from any provider (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, and so on) and start the workspace:
+Set an API key from any provider (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, and so on) and start the workspace:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 openscience
 ```
+
+DeepSeek's official API (`https://api.deepseek.com`) is supported natively — set `DEEPSEEK_API_KEY` (or `openscience keys add deepseek`) and pick a `deepseek/*` model. To point at a custom endpoint, set `DEEPSEEK_BASE_URL`.
 
 `openscience` opens the workspace in your browser. Your keys stay on your machine and requests go straight to the provider. You can also run `openscience keys add` to store a key from the terminal, add keys from the Credentials panel, and pick a model from the model selector. To open the workspace in a specific project:
 
