@@ -3,6 +3,7 @@ import { mergeDeep, unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
+import { normalizeToolSchema } from "./tool-schema"
 import { iife } from "@/util/iife"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
@@ -611,6 +612,20 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/xai
       case "@ai-sdk/deepinfra":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
+      case "@ai-sdk/deepseek":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepseek
+        // The native adapter maps `reasoningEffort` -> body `reasoning_effort`
+        // and accepts a `max` tier above high (matches the OpenRouter branch).
+        if (exact) {
+          return Object.fromEntries(exact.map((effort) => [effort, { reasoningEffort: effort }]))
+        }
+        if (/deepseek-v[4-9]/.test(id)) {
+          return Object.fromEntries(
+            [...WIDELY_SUPPORTED_EFFORTS, "max"].map((effort) => [effort, { reasoningEffort: effort }]),
+          )
+        }
+        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+
       case "@ai-sdk/openai-compatible":
         if (exact) {
           return Object.fromEntries(exact.map((effort) => [effort, { reasoningEffort: effort }]))
@@ -910,6 +925,19 @@ export namespace ProviderTransform {
       }
     }
 
+    // DeepSeek V4 ships with thinking ON by default. The native adapter replays
+    // reasoning_content across tool-call turns, so reasoning stays usable — but
+    // a model configured as non-reasoning (`reasoning: false`) must have
+    // thinking explicitly disabled, otherwise every agent call silently reasons
+    // (extra latency/cost) even though no effort variant is offered.
+    if (
+      input.model.api.npm === "@ai-sdk/deepseek" &&
+      /deepseek-v[4-9]/.test(input.model.api.id.toLowerCase()) &&
+      !input.model.capabilities.reasoning
+    ) {
+      result["thinking"] = { type: "disabled" }
+    }
+
     if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
       result["promptCacheKey"] = input.sessionID
     }
@@ -1041,6 +1069,11 @@ export namespace ProviderTransform {
       }
       return { thinkingConfig: { thinkingBudget: 0 } }
     }
+    // DeepSeek-v4's default is thinking-on; small calls (titles, summaries,
+    // compaction) don't need it and the flash model should stay fast.
+    if (model.api.npm === "@ai-sdk/deepseek" && /deepseek-v[4-9]/.test(apiID)) {
+      return { thinking: { type: "disabled" } }
+    }
     return {}
   }
 
@@ -1140,6 +1173,14 @@ export namespace ProviderTransform {
       }
 
       schema = sanitizeGemini(schema)
+    }
+
+    // DeepSeek and generic OpenAI-compatible gateways run strict tool-schema
+    // validation and reject zod discriminated-union shapes (`type: null`) plus
+    // several constraint keywords. Normalize the schema at the provider
+    // boundary so tool definitions always carry a plain `type: "object"`.
+    if (model.api.npm?.includes("@ai-sdk/deepseek") || model.api.npm?.includes("@ai-sdk/openai-compatible")) {
+      schema = normalizeToolSchema(schema)
     }
 
     return schema

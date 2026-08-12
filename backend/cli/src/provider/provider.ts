@@ -26,6 +26,7 @@ import { createVertex } from "@ai-sdk/google-vertex"
 import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { createDeepSeek } from "@ai-sdk/deepseek"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
 import { createXai } from "@ai-sdk/xai"
@@ -101,6 +102,7 @@ export namespace Provider {
     "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
+    "@ai-sdk/deepseek": createDeepSeek,
     "@openrouter/ai-sdk-provider": createOpenRouter,
     "@ai-sdk/xai": createXai,
     "@ai-sdk/mistral": createMistral,
@@ -653,6 +655,24 @@ export namespace Provider {
       // Neither an own key nor a managed route — nothing to route with.
       return { autoload: false, options: { headers } }
     },
+    deepseek: async () => {
+      // DeepSeek is BYOK-only through the official API — there is no Atlas
+      // managed route. Resolve the user's own key (auth.json first, then
+      // DEEPSEEK_API_KEY) and pin to the public endpoint unless an explicit
+      // DEEPSEEK_BASE_URL points somewhere else. The native @ai-sdk/deepseek
+      // adapter is selected in the npm-resolution chains below, so the loader
+      // only supplies the credential + base URL.
+      const auth = await Auth.get("deepseek").catch(() => undefined)
+      const authKey = auth?.type === "api" ? auth.key : undefined
+      const envKey = Env.get("DEEPSEEK_API_KEY")
+      const apiKey = isByokKey(authKey) ? authKey : isByokKey(envKey) ? envKey : undefined
+      if (apiKey) {
+        const envBase = Env.get("DEEPSEEK_BASE_URL")
+        const baseURL = envBase && !hasManagedProxyPath(envBase) ? envBase : "https://api.deepseek.com"
+        return { autoload: false, options: { apiKey, baseURL } }
+      }
+      return { autoload: false }
+    },
     meta: async () => {
       // Meta is BYOK-only in the client. Managed Muse Spark now routes through
       // OpenRouter's `meta/muse-spark-1.1` slug, so stale Atlas Meta proxy env
@@ -1155,7 +1175,13 @@ export namespace Provider {
       api: {
         id: model.id,
         url: provider.api!,
-        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
+        // DeepSeek's official API is OpenAI-compatible, but the catalog still
+        // lists it under the generic openai-compatible adapter. Resolve the
+        // native @ai-sdk/deepseek adapter instead so V4's thinking/tool modes
+        // and strict-schema validation behave correctly.
+        npm:
+          model.provider?.npm ??
+          (provider.id === "deepseek" ? "@ai-sdk/deepseek" : (provider.npm ?? "@ai-sdk/openai-compatible")),
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -1351,10 +1377,15 @@ export namespace Provider {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
               model.provider?.npm ??
-              provider.npm ??
-              existingModel?.api.npm ??
-              modelsDev[providerID]?.npm ??
-              "@ai-sdk/openai-compatible",
+              // A config-registered `deepseek` provider (e.g. from `openscience
+              // local add`) may carry `npm: "@ai-sdk/openai-compatible"`. Prefer
+              // the native adapter for the deepseek provider ID regardless.
+              (providerID === "deepseek"
+                ? "@ai-sdk/deepseek"
+                : (provider.npm ??
+                  existingModel?.api.npm ??
+                  modelsDev[providerID]?.npm ??
+                  "@ai-sdk/openai-compatible")),
             url: baseURL ?? provider.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
@@ -1717,6 +1748,26 @@ export namespace Provider {
     }
   }
 
+  /** Direct-provider-beats-OpenRouter: given an OpenRouter slug like
+   *  `deepseek/deepseek-v4-flash-0731`, find the same vendor's direct BYOK
+   *  provider (official API, no relay). Only returns a route when the direct
+   *  provider actually has a user-owned key — an unauthenticated catalog entry
+   *  must not shadow a working OpenRouter route. Tolerates vendor date suffixes
+   *  (-0731) so it works without knowing the catalog's current snapshot. */
+  function resolveDirectVendor(s: Awaited<ReturnType<typeof state>>, openrouterModelID: string) {
+    const [vendor, ...rest] = openrouterModelID.split("/")
+    if (!vendor || rest.length === 0) return undefined
+    const directProviderID = OPENROUTER_VENDOR_PREFIX[vendor] ?? vendor
+    const provider = s.providers[directProviderID]
+    if (!provider || !isByokKey(effectiveKey(provider))) return undefined
+    const directModelID = rest.join("/")
+    const candidates = [directModelID, directModelID.replace(/-\d{4,}$/, "")]
+    for (const candidate of candidates) {
+      if (provider.models[candidate]) return { providerID: directProviderID, modelID: candidate }
+    }
+    return undefined
+  }
+
   function resolveAvailableModel(s: Awaited<ReturnType<typeof state>>, providerID: string, modelID: string) {
     const exact = s.providers[providerID]?.models[modelID]
     return exact ?? resolveOpenRouterAlias(s, providerID, modelID)
@@ -1995,6 +2046,11 @@ export namespace Provider {
 
     if (cfg.small_model) {
       const parsed = parseModel(cfg.small_model)
+      const s = await state()
+      if (parsed.providerID === "openrouter") {
+        const direct = resolveDirectVendor(s, parsed.modelID)
+        if (direct) return getModel(direct.providerID, direct.modelID)
+      }
       return getModel(parsed.providerID, parsed.modelID)
     }
 
@@ -2064,8 +2120,18 @@ export namespace Provider {
       // (e.g. a saved `anthropic/...` model with no API key must not be returned)
       // — otherwise fall through to the priority-based selection below.
       const parsed = parseModel(cfg.model)
-      const resolved = resolveAvailableModel(await state(), parsed.providerID, parsed.modelID)
-      if (resolved) return { providerID: resolved.providerID, modelID: resolved.id }
+      const s = await state()
+      const resolved = resolveAvailableModel(s, parsed.providerID, parsed.modelID)
+      if (resolved) {
+        // Direct-provider-beats-OpenRouter: when the configured model is an
+        // OpenRouter slug for a vendor that also has a direct BYOK provider
+        // with the same model, prefer the direct route (official API, no relay).
+        if (parsed.providerID === "openrouter") {
+          const direct = resolveDirectVendor(s, parsed.modelID)
+          if (direct) return direct
+        }
+        return { providerID: resolved.providerID, modelID: resolved.id }
+      }
       log.warn("configured model is not available, falling back to default selection", parsed)
     }
 

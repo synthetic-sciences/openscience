@@ -2,23 +2,19 @@ import z from "zod"
 import { ComputeJobs } from "@/compute/jobs"
 import { Tool } from "./tool"
 
-export const ComputeJobParameters = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("list"),
-    status: ComputeJobs.Status.optional(),
-    limit: z.number().int().min(1).max(100).default(20),
-  }),
-  z.object({ action: z.literal("status"), job_id: z.string().trim().min(1) }),
-  z.object({
-    action: z.literal("logs"),
-    job_id: z.string().trim().min(1),
-    bytes: z.number().int().min(1).max(256_000).default(64_000),
-  }),
-  z.object({ action: z.literal("artifacts"), job_id: z.string().trim().min(1) }),
-  z.object({ action: z.literal("cancel"), job_id: z.string().trim().min(1) }),
-  z.object({ action: z.literal("retry_delivery"), job_id: z.string().trim().min(1) }),
-  z.object({ action: z.literal("release"), job_id: z.string().trim().min(1) }),
-])
+// Flat object schema instead of a discriminated union. DeepSeek's strict
+// tool-schema validation rejects discriminated-union shapes (JSON Schema
+// `oneOf` with no top-level `type: "object"` → HTTP 400 `type: null`), so keep
+// the tool's contract as a plain `type: "object"`. `job_id` is optional at the
+// schema level and required at runtime for every non-list action (see
+// execute) — the model only needs to produce one valid object.
+export const ComputeJobParameters = z.object({
+  action: z.enum(["list", "status", "logs", "artifacts", "cancel", "retry_delivery", "release"]),
+  status: ComputeJobs.Status.optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  job_id: z.string().trim().min(1).optional(),
+  bytes: z.number().int().min(1).max(256_000).optional(),
+})
 
 type Input = z.infer<typeof ComputeJobParameters>
 type Metadata = {
@@ -97,7 +93,7 @@ export function createComputeJobTool(base?: ComputeJobs.Options) {
       if (input.action === "list") {
         const state = await jobs(base)
         const filtered = input.status ? state.jobs.filter((job) => job.status === input.status) : state.jobs
-        const output = filtered.slice(0, input.limit).map(summary)
+        const output = filtered.slice(0, input.limit ?? 20).map(summary)
         return {
           title: "Compute jobs",
           metadata: { compute_job: { action: input.action, count: output.length } },
@@ -105,6 +101,9 @@ export function createComputeJobTool(base?: ComputeJobs.Options) {
         }
       }
 
+      if (!input.job_id) {
+        throw new Error(`The compute_job "${input.action}" action requires a job_id argument.`)
+      }
       const state = await selected(input.job_id, base)
       if (input.action === "status") {
         return {
@@ -114,9 +113,10 @@ export function createComputeJobTool(base?: ComputeJobs.Options) {
         }
       }
       if (input.action === "logs") {
+        const bytes = input.bytes ?? 64_000
         const [events, output] = await Promise.all([
-          ComputeJobs.events(state.job.id, { ...state.resolved, bytes: input.bytes }),
-          ComputeJobs.log(state.job.id, { ...state.resolved, bytes: input.bytes }),
+          ComputeJobs.events(state.job.id, { ...state.resolved, bytes }),
+          ComputeJobs.log(state.job.id, { ...state.resolved, bytes }),
         ])
         return {
           title: `Compute logs: ${state.job.name}`,
