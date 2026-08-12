@@ -59,9 +59,13 @@ describe("context pane state", () => {
     first.activateScope("project-a", "session-a")
     first.openFile("/work/a", "results/a.csv")
     first.setArtifactPaneTab("history")
+    const workTabs = first.workTabs()
+    const openFile = first.file()
 
     first.activateScope("project-a", "session-b")
     expect(first.open()).toBe(true)
+    expect(first.workTabs()).toBe(workTabs)
+    expect(first.file()).toBe(openFile)
     expect(first.file()?.path).toBe("results/a.csv")
     expect(first.artifactPaneTab()).toBe("history")
     first.openContext("kernels")
@@ -133,7 +137,7 @@ describe("context pane state", () => {
     expect(state.prefill()).toBe("alpha")
   })
 
-  test("active context toggles closed and a different context switches directly", () => {
+  test("active context remains selected and a different context switches directly", () => {
     const state = createContextState()
 
     state.openContext("files")
@@ -141,14 +145,15 @@ describe("context pane state", () => {
     expect(state.open()).toBe(true)
 
     state.openContext("files")
-    expect(state.open()).toBe(false)
+    expect(state.open()).toBe(true)
+    expect(state.activeWorkTab()).toBe("view:files")
 
     state.openContext("kernels")
     expect(state.context()).toBe("kernels")
     expect(state.open()).toBe(true)
   })
 
-  test("Files returns from a selected preview to the project source browser before toggling", () => {
+  test("Files returns from a selected preview to the project source browser without implicitly closing", () => {
     const state = createContextState()
 
     state.openFile("/work/alpha", "results/curve.csv")
@@ -160,7 +165,8 @@ describe("context pane state", () => {
     expect(state.file()).toBeUndefined()
 
     state.openContext("files")
-    expect(state.open()).toBe(false)
+    expect(state.open()).toBe(true)
+    expect(state.activeWorkTab()).toBe("view:files")
   })
 
   test("persists the terminal as a project context", () => {
@@ -411,14 +417,15 @@ describe("open-file tabs", () => {
     expect(state.files().map((file) => file.path)).toEqual(["c.txt", "a.md", "b.csv"])
   })
 
-  test("a full strip evicts the oldest inactive tab", () => {
+  test("opening a ninth file never silently evicts an existing editor", () => {
     const state = createContextState({ storage: memoryStorage() })
     state.activateScope("project-a", "session-a")
     for (let index = 0; index < 9; index++) state.openFile("/root", `file-${index}.md`)
 
-    expect(state.files()).toHaveLength(8)
+    expect(state.files()).toHaveLength(9)
     expect(state.file()?.path).toBe("file-8.md")
-    expect(state.files().some((file) => file.path === "file-0.md")).toBe(false)
+    expect(state.files().some((file) => file.path === "file-0.md")).toBe(true)
+    expect(state.workTabs().filter((tab) => tab.kind === "file")).toHaveLength(9)
   })
 
   test("tabs persist per scope and returning to Files keeps them with no active file", () => {

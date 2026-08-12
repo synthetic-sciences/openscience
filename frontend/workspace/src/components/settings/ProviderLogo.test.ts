@@ -23,6 +23,12 @@ describe("provider logos", () => {
     for (const provider of MODEL_PROVIDERS) expect(providerLogoSource(provider.id).kind).not.toBe("fallback")
   })
 
+  test("normalizes catalog aliases to real provider marks", () => {
+    expect(providerLogoSource("DeepSeek")).toEqual({ kind: "provider", id: "deepseek" })
+    for (const id of ["DeepSeek", "deep-seek", "deepseek-ai", "moonshot", "kimi", "z-ai", "zhipuai"])
+      expect(providerLogoSource(id).kind).not.toBe("fallback")
+  })
+
   test("covers every built-in compute and integration credential", () => {
     for (const id of CREDENTIALS) expect(providerLogoSource(id).kind).not.toBe("fallback")
   })

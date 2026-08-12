@@ -257,7 +257,7 @@ export function ManuscriptWorkbench(props: {
           "flex-shrink": 0,
         }}
       >
-        <span style={eyebrow()}>MANUSCRIPT</span>
+        <span style={eyebrow()}>Manuscript</span>
         <span style={{ flex: 1, "font-family": FONT_MONO, "font-size": "9px", color: "var(--color-text-faint)" }}>
           live source + preview
         </span>
@@ -449,7 +449,7 @@ export function ManuscriptWorkbench(props: {
             background: "var(--color-bg)",
           }}
         >
-          <PaneLabel label="SOURCE" detail={props.dirty ? "unsaved changes" : "saved"} active={props.dirty} />
+          <PaneLabel label="Source" detail={props.dirty ? "Unsaved changes" : "Saved"} active={props.dirty} />
           <textarea
             ref={setEditor}
             aria-label="Manuscript source"
@@ -484,7 +484,7 @@ export function ManuscriptWorkbench(props: {
             background: "var(--color-bg-subtle)",
           }}
         >
-          <PaneLabel label="LIVE PREVIEW" detail={`${wordCount(manuscript().body)} words`} />
+          <PaneLabel label="Live preview" detail={`${wordCount(manuscript().body)} words`} />
           <div
             data-slot="manuscript-preview"
             class="atlas-scroll"
@@ -658,7 +658,7 @@ function eyebrow(): JSX.CSSProperties {
   return {
     "font-family": FONT_MONO,
     "font-size": "9px",
-    "font-weight": 650,
+    "font-weight": "var(--font-weight-emphasis)",
     "letter-spacing": "0.08em",
     color: "var(--color-text-faint)",
   }
@@ -679,7 +679,7 @@ function toolButton(active = false): JSX.CSSProperties {
     color: active ? "var(--color-text)" : "var(--color-text-muted)",
     "font-family": FONT_SANS,
     "font-size": "10px",
-    "font-weight": 550,
+    "font-weight": "var(--font-weight-emphasis)",
   }
 }
 

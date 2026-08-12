@@ -19,10 +19,10 @@ test("keeps the explorer and selected file preview inside the contextual pane", 
   expect(pane).toContain('display: browser() ? "flex" : "none"')
   expect(pane).toContain('if (context() === "files") setSeen(true)')
   expect(pane).toContain("<FileView")
-  expect(pane).toContain("directory={file.directory}")
-  expect(pane).toContain("path={file.path}")
-  expect(pane).toContain("onClose={() => uiStore.closeFile()}")
-  expect(pane).toContain("when={!file.external}")
+  expect(pane).toContain("directory={tab.file.directory}")
+  expect(pane).toContain("path={tab.file.path}")
+  expect(pane).toContain("onClose={() => void closeWorkTab(tab.id)}")
+  expect(pane).toContain("when={!tab.file.external}")
   expect(pane).toContain("<ExternalFileAccess")
   // Collection surfaces and individual files share one reorderable,
   // closable, project-scoped work strip that survives chat changes.
@@ -31,7 +31,10 @@ test("keeps the explorer and selected file preview inside the contextual pane", 
   expect(pane.indexOf("<WorkTabStrip")).toBeLessThan(pane.indexOf('class="research-inspector__controls"'))
   expect(pane).toContain("onSelect={uiStore.activateWorkTab}")
   expect(pane).toContain("onReorder={uiStore.moveWorkTab}")
-  expect(pane).toContain("<Show when={uiStore.file()} keyed>")
+  expect(pane).toContain("<For each={fileTabs()}>")
+  expect(pane).toContain("hidden={!visibleFile(tab)}")
+  expect(pane).toContain("onDirtyChange={(dirty) => markDirty(tab.id, dirty)}")
+  expect(pane).toContain('title: "Discard unsaved changes?"')
   expect(pane).toContain('subtitle="Session files"')
   expect(pane).toContain("<RightPaneGate>")
   expect(directory).toContain("uiStore.openFile(dir, path)")
@@ -42,16 +45,19 @@ test("keeps the explorer and selected file preview inside the contextual pane", 
 
 test("preserves the center conversation for markdown links while opening Files on the right", () => {
   const session = read("../pages/session.tsx")
+  const directory = read("../pages/directory-layout.tsx")
+  const projectPane = read("./ProjectRightPane.tsx")
 
   expect(session).toContain('data-component="conversation-center"')
   expect(session).toContain('aria-label="Conversation"')
   expect(session).toContain("uiStore.openFile(projectPath(), path)")
   expect(session).not.toContain("uiStore.closeFile()")
-  expect(session).toContain(
-    '<RightPane project={sdk.scope} session={params.id ?? "new"} onEnsureSession={ensureSession} />',
-  )
+  expect(session).not.toContain("<RightPane")
+  expect(directory).toContain('<ProjectRightPane project={sdk.scope} session={params.id ?? "new"} />')
+  expect(projectPane).toContain("<RightPane project={props.project} session={props.session} />")
   expect(session).toContain('document.addEventListener("openscience:open-file", onOpenFile)')
-  expect(session).not.toContain('role="tabpanel"')
+  expect(session).toContain('id="session-conversation-panel"')
+  expect(session.match(/role="tabpanel"/g)).toHaveLength(1)
   expect(session).not.toContain("<CenterTabStrip")
   expect(session).not.toContain("centerTabs.docs()")
 })

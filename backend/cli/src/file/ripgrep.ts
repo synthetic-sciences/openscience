@@ -5,7 +5,6 @@ import fs from "fs/promises"
 import z from "zod"
 import { NamedError } from "@synsci/util/error"
 import { lazy } from "../util/lazy"
-import { $ } from "bun"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
@@ -380,7 +379,8 @@ export namespace Ripgrep {
     limit?: number
     follow?: boolean
   }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    const executable = await filepath()
+    const args = ["--json", "--hidden", "--glob=!.git/*"]
     if (input.follow !== false) args.push("--follow")
 
     if (input.glob) {
@@ -396,14 +396,28 @@ export namespace Ripgrep {
     args.push("--")
     args.push(input.pattern)
 
-    const command = args.join(" ")
-    const result = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
-    if (result.exitCode !== 0) {
+    // The pattern is untrusted HTTP input. Keep it as one argv element after
+    // `--`; constructing a shell command here turns newlines, substitutions,
+    // and metacharacters into host command execution before project trust.
+    const proc = Bun.spawn([executable, ...args], {
+      cwd: input.cwd,
+      env: Object.fromEntries(
+        ["PATH", "LANG", "LC_ALL", "LC_CTYPE", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"].flatMap((key) =>
+          process.env[key] === undefined ? [] : [[key, process.env[key]!]],
+        ),
+      ),
+      stdout: "pipe",
+      stderr: "ignore",
+      maxBuffer: 1024 * 1024 * 20,
+    })
+    const [exitCode, output] = await Promise.all([proc.exited, Bun.readableStreamToText(proc.stdout)])
+    // ripgrep uses 1 for a valid search with no matches.
+    if (exitCode !== 0 && exitCode !== 1) {
       return []
     }
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = result.text().trim().split(/\r?\n/).filter(Boolean)
+    const lines = output.trim().split(/\r?\n/).filter(Boolean)
     // Parse JSON lines from ripgrep output
 
     return lines

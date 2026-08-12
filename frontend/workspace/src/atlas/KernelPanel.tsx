@@ -1,12 +1,11 @@
 import { For, Show, createMemo, createResource, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
-import { IconCpu } from "@/atlas/shared/Icon"
 import { identify } from "@/atlas/poll-identity"
 import { KernelCard, type KernelAction } from "@/atlas/KernelCard"
 import { CommandCard } from "@/atlas/CommandCard"
 import type { Job } from "@/atlas/ComputeJobsAPI"
-import { RemoteJobCard, jobLive } from "@/atlas/RemoteJobCard"
+import { RemoteJobCard, visibleJobs } from "@/atlas/RemoteJobCard"
 import { useKernelList } from "@/atlas/use-kernel-list"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -34,18 +33,26 @@ export function inventory<T>(request: Promise<T>, settled: (error: string) => vo
   )
 }
 
-const usage = (group: Group) => {
+export const usage = (group: Group) => {
   const entries = [...group.kernels, ...group.commands]
   const memory = entries.reduce((total, entry) => total + (entry.resources?.memory_bytes ?? 0), 0)
   const cpu = entries.reduce((total, entry) => total + (entry.resources?.cpu_percent ?? 0), 0) / 100
-  const kernels = `${group.kernels.length} ${group.kernels.length === 1 ? "kernel" : "kernels"}`
-  const commands = `${group.commands.length} ${group.commands.length === 1 ? "command" : "commands"}`
-  const jobs = `${group.jobs.length} ${group.jobs.length === 1 ? "job" : "jobs"}`
-  const ram = entries.some((entry) => entry.resources?.memory_bytes !== undefined) ? kernelMemoryLabel(memory) : "— rss"
+  const kinds = [
+    group.kernels.length ? `${group.kernels.length} ${group.kernels.length === 1 ? "kernel" : "kernels"}` : undefined,
+    group.commands.length
+      ? `${group.commands.length} ${group.commands.length === 1 ? "command" : "commands"}`
+      : undefined,
+    group.jobs.length ? `${group.jobs.length} ${group.jobs.length === 1 ? "job" : "jobs"}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+  const ram = entries.some((entry) => entry.resources?.memory_bytes !== undefined)
+    ? kernelMemoryLabel(memory)
+    : "Memory —"
   const cores = entries.some((entry) => entry.resources?.cpu_percent !== undefined)
     ? `${cpu.toFixed(1)} cores`
-    : "— cpu"
-  return `${kernels} · ${commands} · ${jobs} · ${ram} · ${cores}`
+    : "CPU —"
+  return { kinds, memory: ram, cpu: cores }
 }
 
 export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
@@ -107,7 +114,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
       const value = group(command.sessionID)
       groups.set(command.sessionID, { ...value, commands: [...value.commands, command] })
     }
-    for (const job of jobs().filter(jobLive)) {
+    for (const job of visibleJobs(jobs())) {
       const sessionID = job.session_id ?? projectJobs
       const value = group(sessionID)
       groups.set(sessionID, { ...value, jobs: [...value.jobs, job] })
@@ -191,7 +198,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   })
 
   return (
-    <section aria-label="Live project compute" data-testid="kernel-panel" class="kernel-panel">
+    <section aria-label="Project compute" data-testid="kernel-panel" class="kernel-panel">
       <div class="atlas-scroll kernel-panel__body">
         <Show when={view.error || view.remote || view.problem}>
           <div role="alert" class="kernel-panel__message kernel-panel__message--error">
@@ -212,64 +219,74 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
           when={groups().length > 0}
           fallback={
             <div class="kernel-panel__empty">
-              <span aria-hidden="true">
-                <IconCpu size={15} strokeWidth={1.4} />
-              </span>
-              <strong>{view.error ? "Compute inventory unavailable" : "No live compute"}</strong>
+              <strong>{view.error ? "Compute inventory unavailable" : "Runtimes start with your work"}</strong>
               <p>
                 {view.error
                   ? "The last poll could not read this project's kernels, commands, and remote jobs, so this is not a count of what is running."
-                  : "Kernels, commands, and remote jobs appear here the moment any session starts computing in this project."}
+                  : "Python and R kernels preserve session state automatically. Live commands and remote jobs appear here too."}
               </p>
             </div>
           }
         >
           <div class="kernel-panel__sessions">
             <For each={groups()}>
-              {(sessionID) => (
-                <section class="kernel-session" data-current={route() === sessionID ? "true" : undefined}>
-                  <header class="kernel-session__header">
-                    <div class="kernel-session__identity">
-                      <span aria-hidden="true">›_</span>
-                      <strong>{title(sessionID)}</strong>
-                      <Show when={route() === sessionID}>
-                        <em>current</em>
-                      </Show>
+              {(sessionID) => {
+                const summary = () => usage(grouped().get(sessionID) ?? { kernels: [], commands: [], jobs: [] })
+                return (
+                  <section
+                    class="kernel-session"
+                    aria-label={`${title(sessionID)} compute`}
+                    data-current={route() === sessionID ? "true" : undefined}
+                  >
+                    <header class="kernel-session__header">
+                      <div class="kernel-session__identity">
+                        <strong>{title(sessionID)}</strong>
+                        <Show when={route() === sessionID}>
+                          <em>Current</em>
+                        </Show>
+                      </div>
+                      <div
+                        class="kernel-session__summary"
+                        aria-label={`${summary().kinds}, ${summary().memory}, ${summary().cpu}`}
+                      >
+                        <span>{summary().kinds}</span>
+                        <span>{summary().memory}</span>
+                        <span>{summary().cpu}</span>
+                      </div>
+                    </header>
+                    <div class="kernel-panel__list">
+                      <For each={grouped().get(sessionID)?.kernels ?? []}>
+                        {(kernel) => (
+                          <KernelCard
+                            kernel={kernel}
+                            action={view.action}
+                            onControl={(action) => void control(kernel, action)}
+                          />
+                        )}
+                      </For>
+                      <For each={grouped().get(sessionID)?.commands ?? []}>
+                        {(command) => (
+                          <CommandCard
+                            command={command}
+                            stopping={view.action === `${command.id}:stop`}
+                            onStop={() => void stop(command)}
+                          />
+                        )}
+                      </For>
+                      <For each={grouped().get(sessionID)?.jobs ?? []}>
+                        {(job) => (
+                          <RemoteJobCard
+                            job={job}
+                            cancelling={view.action === `${job.id}:cancel`}
+                            onCancel={() => cancel(job).then(() => undefined)}
+                            onOutput={() => jobApi.log(job.id).then((value) => value.log)}
+                          />
+                        )}
+                      </For>
                     </div>
-                    <span>{usage(grouped().get(sessionID) ?? { kernels: [], commands: [], jobs: [] })}</span>
-                  </header>
-                  <div class="kernel-panel__list">
-                    <For each={grouped().get(sessionID)?.kernels ?? []}>
-                      {(kernel) => (
-                        <KernelCard
-                          kernel={kernel}
-                          action={view.action}
-                          onControl={(action) => void control(kernel, action)}
-                        />
-                      )}
-                    </For>
-                    <For each={grouped().get(sessionID)?.commands ?? []}>
-                      {(command) => (
-                        <CommandCard
-                          command={command}
-                          stopping={view.action === `${command.id}:stop`}
-                          onStop={() => void stop(command)}
-                        />
-                      )}
-                    </For>
-                    <For each={grouped().get(sessionID)?.jobs ?? []}>
-                      {(job) => (
-                        <RemoteJobCard
-                          job={job}
-                          cancelling={view.action === `${job.id}:cancel`}
-                          onCancel={() => cancel(job).then(() => undefined)}
-                          onOutput={() => jobApi.log(job.id).then((value) => value.log)}
-                        />
-                      )}
-                    </For>
-                  </div>
-                </section>
-              )}
+                  </section>
+                )
+              }}
             </For>
           </div>
         </Show>

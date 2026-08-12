@@ -87,7 +87,13 @@ const EnableCommand = cmd({
         if (args.network) patch.network = args.network as "allow" | "deny"
         if (args["on-unavailable"]) patch.onUnavailable = args["on-unavailable"] as "warn" | "error" | "allow"
         const allow = args.allow as string[] | undefined
-        if (allow?.length) patch.allowWrite = allow
+        if (allow?.length) {
+          patch.allowWrite = allow.map((value) => {
+            const canonical = Sandbox.writableGrant(value)
+            if (!canonical) throw new Error(`Writable sandbox path is invalid or over-broad: ${value}`)
+            return canonical
+          })
+        }
         await Config.setSandbox(patch)
         UI.empty()
         UI.println(`${S.TEXT_SUCCESS_BOLD}Sandbox enabled${S.TEXT_NORMAL} ${S.TEXT_DIM}(global config)${S.TEXT_NORMAL}`)

@@ -119,7 +119,9 @@ export function DispatchPreview(props: { staged: Staged }): JSX.Element {
           {(row) => (
             <>
               <span>{row.label}</span>
-              <strong style={{ "font-weight": 500, color: "var(--color-text)" }}>{row.value}</strong>
+              <strong style={{ "font-weight": "var(--font-weight-medium)", color: "var(--color-text)" }}>
+                {row.value}
+              </strong>
             </>
           )}
         </For>
@@ -143,7 +145,7 @@ const heading: JSX.CSSProperties = {
   color: "var(--color-text)",
   "font-family": FONT_SANS,
   "font-size": "12px",
-  "font-weight": 600,
+  "font-weight": "var(--font-weight-emphasis)",
 }
 
 const box: JSX.CSSProperties = {

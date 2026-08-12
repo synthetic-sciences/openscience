@@ -10,3 +10,11 @@ test("Cmd-K opens project search even while the composer is focused", () => {
   expect(typing).toBeGreaterThan(shortcut)
   expect(source.slice(shortcut, typing)).toContain("uiStore.setPaletteOpen(true)")
 })
+
+test("global launch shortcuts stay inert behind an open palette or help modal", () => {
+  const modalGuard = source.indexOf("uiStore.paletteOpen() || uiStore.helpOpen()")
+  const shortcut = source.indexOf('if (mod && key === "k")')
+
+  expect(modalGuard).toBeGreaterThan(0)
+  expect(shortcut).toBeGreaterThan(modalGuard)
+})

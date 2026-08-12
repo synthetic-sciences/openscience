@@ -1,11 +1,22 @@
 import fs from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
+import { spawn, type ChildProcess } from "node:child_process"
 import { marked, Renderer } from "marked"
 import z from "zod"
+import { Config } from "../config/config"
 import { OpenScience } from "../openscience"
+import { AuthoritySignal } from "../project/authority-signal"
+import { Instance } from "../project/instance"
+import { ProjectTrust } from "../project/trust"
+import { Sandbox } from "../sandbox/sandbox"
+import { CommandRuntime } from "../science/command/registry"
+import { Shell } from "../shell/shell"
 import { Filesystem } from "../util/filesystem"
 import { escapeHtml } from "../util/html"
 import { PublicationReview } from "./review"
+import { SafeFileIO } from "./safe-io"
+import { WindowsJobLauncher } from "../process/windows-job-launcher"
 
 export namespace PublicationFile {
   export const Format = z.enum(["html", "pdf", "docx", "latex", "pptx"])
@@ -54,6 +65,9 @@ export namespace PublicationFile {
     pptx: "pptx",
   }
 
+  const exportTimeoutMs = 120_000
+  const diagnosticLimit = 64 * 1024
+
   export async function capabilities(): Promise<Capabilities> {
     const options = { PATH: process.env.PATH }
     const pandoc = Boolean(Bun.which("pandoc", options))
@@ -97,8 +111,18 @@ export namespace PublicationFile {
           : `${parsed.format.toUpperCase()} export requires Pandoc`,
       )
     }
+    // Tool-backed publication runs project-controlled Markdown, TeX and local
+    // resource bytes through host executables. Do not create even the export
+    // directory until the user has explicitly trusted that project.
+    if (parsed.format !== "html") {
+      const canonicalRoot = await Filesystem.canonical(root)
+      if (canonicalRoot !== Instance.directory) {
+        throw new Error("Publication export project does not match the active project")
+      }
+      await ProjectTrust.require(Instance.project, "publication_export")
+    }
+
     const folder = path.join(root, "exports")
-    await fs.mkdir(folder, { recursive: true })
     const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 17)
     const nonce = crypto.randomUUID().slice(0, 8)
     const stem =
@@ -166,56 +190,244 @@ export namespace PublicationFile {
 <body>
 ${body}
 </body>
-</html>
+      </html>
 `
-      await Bun.write(target, document)
-      const stat = await fs.stat(target)
+      await SafeFileIO.write(target, document)
       return Result.parse({
         path: relative.split(path.sep).join("/"),
         format: parsed.format,
-        size: stat.size,
+        size: Buffer.byteLength(document),
         created_at: new Date().toISOString(),
         engine: "OpenScience Markdown",
         readiness: parsed.readiness,
         ...(review ? { review_id: review.id } : {}),
       })
     }
-    const snapshotFile = path.join(folder, `.openscience-publication-${nonce}.md`)
-    await Bun.write(snapshotFile, snapshot)
-    const args = [
-      "pandoc",
-      snapshotFile,
-      "--standalone",
-      `--resource-path=${path.dirname(source)}${path.delimiter}${root}`,
-      "--output",
-      target,
-      ...(parsed.format === "pdf" && support.pdf_engine ? [`--pdf-engine=${support.pdf_engine}`] : []),
-    ]
-    const proc = Bun.spawn(args, {
-      cwd: root,
-      env: await OpenScience.subprocessEnv(process.env),
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const [code, stdout, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]).finally(() => fs.rm(snapshotFile, { force: true }))
-    if (code !== 0) {
-      await fs.rm(target, { force: true })
-      throw new Error(stderr.trim() || stdout.trim() || `Pandoc exited with code ${code}`)
+    // Keep both the immutable input snapshot and untrusted converter output in
+    // a private, one-run directory. The sandbox sees the project read-only and
+    // can write only here; host-side SafeFileIO performs the final no-follow,
+    // no-overwrite install into exports after the child exits successfully.
+    const job = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-publication-"))
+    const snapshotFile = path.join(job, "source.md")
+    const generatedFile = path.join(job, `result.${extensions[parsed.format]}`)
+    let lifecycle:
+      | {
+          child: ChildProcess
+          sandbox: ReturnType<typeof Sandbox.wrapArgv>
+          closed: boolean
+        }
+      | undefined
+    let releaseRequested = false
+    let releasePromise: Promise<void> | undefined
+    const release = () =>
+      (releasePromise ??= Promise.resolve().then(async () => {
+        if (lifecycle) Sandbox.cleanup(lifecycle.sandbox)
+        await fs.rm(job, { recursive: true, force: true })
+      }))
+    const requestRelease = async () => {
+      releaseRequested = true
+      if (!lifecycle || lifecycle.closed || stopped(lifecycle.child)) await release()
     }
-    const stat = await fs.stat(target)
-    return Result.parse({
-      path: relative.split(path.sep).join("/"),
-      format: parsed.format,
-      size: stat.size,
-      created_at: new Date().toISOString(),
-      engine: parsed.format === "pdf" ? `pandoc + ${support.pdf_engine}` : "pandoc",
-      readiness: parsed.readiness,
-      ...(review ? { review_id: review.id } : {}),
+
+    try {
+      await fs.chmod(job, 0o700)
+      await fs.writeFile(snapshotFile, Buffer.from(snapshot), { flag: "wx", mode: 0o600 })
+      const launched = await AuthoritySignal.exclusive(async () => {
+        // This final check shares the same interprocess lease as trust
+        // revocation. Once spawn wins, the child is durably registered before
+        // revocation can be acknowledged; if revocation wins, no child starts.
+        await ProjectTrust.require(Instance.project, "publication_export")
+        const toolPath = process.env.PATH
+        const pandoc = Bun.which("pandoc", { PATH: toolPath })
+        const pdfEngine =
+          parsed.format === "pdf"
+            ? (Bun.which("xelatex", { PATH: toolPath }) ??
+              Bun.which("pdflatex", { PATH: toolPath }) ??
+              Bun.which("typst", { PATH: toolPath }))
+            : undefined
+        if (!pandoc) throw new Error(`${parsed.format.toUpperCase()} export requires Pandoc`)
+        if (parsed.format === "pdf" && !pdfEngine) {
+          throw new Error("PDF export requires Pandoc and a local TeX or Typst engine")
+        }
+
+        const args = [
+          snapshotFile,
+          "--standalone",
+          `--resource-path=${path.dirname(source)}${path.delimiter}${root}`,
+          "--output",
+          generatedFile,
+          ...(pdfEngine ? [`--pdf-engine=${pdfEngine}`] : []),
+        ]
+        const options = await Config.trustedSandbox()
+        const sandbox = Sandbox.wrapArgv({
+          file: pandoc,
+          args,
+          // Publication converters only need to read the manuscript and its
+          // resources. They never receive write authority to the project.
+          workspace: [],
+          readable: [root],
+          extraWritable: [job],
+          unreadable: OpenScience.kernelSensitivePaths(),
+          options,
+        })
+        const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
+        const detached = process.platform !== "win32"
+        let child: ChildProcess
+        try {
+          child = spawn(wrapped.file, wrapped.args, {
+            cwd: root,
+            env: {
+              ...OpenScience.kernelEnv(process.env),
+              HOME: job,
+              XDG_CACHE_HOME: path.join(job, "cache"),
+              XDG_CONFIG_HOME: path.join(job, "config"),
+              XDG_DATA_HOME: path.join(job, "data"),
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+            detached,
+          })
+        } catch (error) {
+          Sandbox.cleanup(sandbox)
+          throw error
+        }
+
+        const output = completion(child)
+        const stop = () => Shell.killTree(child, { exited: () => stopped(child), detached })
+        const registered = await CommandRuntime.start(
+          {
+            projectID: Instance.project.id,
+            sessionID: "publication",
+            messageID: "publication",
+            description: `Export ${path.basename(source)} as ${parsed.format.toUpperCase()}`,
+            command: `pandoc ${parsed.format} export`,
+          },
+          child,
+          stop,
+          { windowsRelease: wrapped.release },
+        ).catch(async (error) => {
+          void output.catch(() => undefined)
+          if (!stopped(child)) await stop()
+          Sandbox.cleanup(sandbox)
+          throw error
+        })
+        return { child, output, registered, sandbox, stop, pdfEngine }
+      })
+      lifecycle = {
+        child: launched.child,
+        sandbox: launched.sandbox,
+        closed: stopped(launched.child),
+      }
+      const closed = () => {
+        if (!lifecycle) return
+        lifecycle.closed = true
+        if (releaseRequested) void release()
+      }
+      launched.child.once("close", closed)
+      launched.child.once("error", closed)
+      if (stopped(launched.child)) lifecycle.closed = true
+
+      const timeout = timeoutAfter(launched.child, launched.stop)
+      let result: Awaited<ReturnType<typeof completion>>
+      try {
+        result = await Promise.race([launched.output, timeout.promise])
+      } finally {
+        timeout.cancel()
+      }
+      if (result.code !== 0) {
+        throw new Error(result.stderr.trim() || result.stdout.trim() || `Pandoc exited with code ${result.code}`)
+      }
+
+      // Serialize the final artifact acceptance with trust mutation as well.
+      // A converter result cannot be acknowledged after the project has been
+      // revoked while it was running.
+      const size = await AuthoritySignal.exclusive(async () => {
+        await ProjectTrust.require(Instance.project, "publication_export")
+        const generated = await SafeFileIO.read(generatedFile)
+        await SafeFileIO.write(target, generated.bytes)
+        return generated.bytes.length
+      })
+      return Result.parse({
+        path: relative.split(path.sep).join("/"),
+        format: parsed.format,
+        size,
+        created_at: new Date().toISOString(),
+        engine: parsed.format === "pdf" ? `pandoc + ${path.basename(launched.pdfEngine!)}` : "pandoc",
+        readiness: parsed.readiness,
+        ...(review ? { review_id: review.id } : {}),
+      })
+    } finally {
+      // A child that somehow survives forced termination stays registered and
+      // retains its sandbox/job directory for later durable reaping. Releasing
+      // those paths while it is still alive would turn a timeout into an
+      // authority escape. Normal exits clean synchronously here.
+      await requestRelease()
+    }
+  }
+
+  function stopped(child: ChildProcess) {
+    return child.exitCode !== null || child.signalCode !== null
+  }
+
+  function completion(child: ChildProcess) {
+    let stdout = ""
+    let stderr = ""
+    child.stdout?.on("data", (chunk) => {
+      if (stdout.length < diagnosticLimit) stdout += String(chunk).slice(0, diagnosticLimit - stdout.length)
+    })
+    child.stderr?.on("data", (chunk) => {
+      if (stderr.length < diagnosticLimit) stderr += String(chunk).slice(0, diagnosticLimit - stderr.length)
+    })
+    return new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
+      child.once("error", reject)
+      child.once("close", (code) => resolve({ code: code ?? 1, stdout, stderr }))
+    })
+  }
+
+  function timeoutAfter(child: ChildProcess, stop: () => Promise<void>) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const promise = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        void stop()
+          .then(() => waitForStop(child))
+          .then(
+            () => reject(new Error(`Pandoc timed out after ${Math.round(exportTimeoutMs / 1_000)} seconds`)),
+            (error) => reject(new AggregateError([error], "Pandoc timed out and could not be stopped")),
+          )
+      }, exportTimeoutMs)
+      timer.unref()
+    })
+    return {
+      promise,
+      cancel() {
+        if (timer) clearTimeout(timer)
+      },
+    }
+  }
+
+  async function waitForStop(child: ChildProcess) {
+    if (stopped(child)) return
+    await new Promise<void>((resolve, reject) => {
+      const finish = () => {
+        clearTimeout(timer)
+        child.off("close", finish)
+        child.off("error", fail)
+        resolve()
+      }
+      const fail = (error: Error) => {
+        clearTimeout(timer)
+        child.off("close", finish)
+        child.off("error", fail)
+        reject(error)
+      }
+      const timer = setTimeout(() => {
+        child.off("close", finish)
+        child.off("error", fail)
+        reject(new Error("Pandoc remained alive after forced termination"))
+      }, 2_000)
+      timer.unref()
+      child.once("close", finish)
+      child.once("error", fail)
+      if (stopped(child)) finish()
     })
   }
 

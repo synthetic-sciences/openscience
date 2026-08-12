@@ -36,6 +36,10 @@ describe("contextual project terminal", () => {
     expect(surface).toContain('role="tabpanel"')
     expect(surface).toContain("active={active()?.id === pty.id}")
     expect(surface).toContain("terminal.close(pty.id)")
+    expect(surface).toContain(".clone(id)")
+    expect(surface).toContain('class="terminal-surface__error"')
+    expect(surface).toContain("Try again")
+    expect(surface).toContain('import "@/atlas/TerminalSurface.css"')
     expect(surface).not.toContain('aria-label="Copy terminal selection"')
     expect(surface).not.toContain('aria-label="Copy all output"')
     expect(surface).not.toContain('aria-label="Find in terminal"')
@@ -57,13 +61,33 @@ describe("contextual project terminal", () => {
     expect(session).toContain('keybind: "ctrl+`"')
     expect(session).toContain('id: "terminal.new"')
     expect(session).toContain('keybind: "ctrl+shift+`"')
-    expect(context).toContain("load(sdk.scope, params.id)")
-    expect(context).toContain("sdk.client.pty")
+    expect(context).toContain("createMemo(() => load(sdk.scope))")
+    expect(context).not.toContain("load(sdk.scope, params.id)")
+    expect(context).toContain("const session = currentSession()")
+    expect(context).toContain("const client = sdk.client")
+    expect(context).toContain("client.pty.remove({ ptyID: pty.id })")
+    expect(context).not.toContain("sdk.client.pty")
+    expect(context).toContain("const owner = (id: string)")
+    expect(session).toContain('if (context !== "terminal") return')
+    expect(session).toContain("void ensureSession()")
     expect(terminal).toContain("sdk.request.url(`/pty/${local.pty.id}/connect`)")
     expect(terminal).toContain("onOpenSearch")
     expect(terminal).toContain("export const preloadTerminal")
     expect(terminal).toContain("void write(t.getSelection())")
     expect(terminal).toContain("t.selectAll()")
+  })
+
+  test("keeps terminal styling local, semantic, and deliberately light", async () => {
+    const [css, globalCss] = await Promise.all([read("../atlas/TerminalSurface.css"), read("../styles/atlas.css")])
+
+    expect(css).toContain(".terminal-surface__error button")
+    expect(css).toContain("font-weight: var(--font-weight-medium)")
+    expect(css).toContain("background: var(--color-bg)")
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/)
+    expect(globalCss).not.toContain(".terminal-surface")
+    for (const selector of ["terminal-surface", "terminal-surface__search", "terminal-surface__tabs-row"]) {
+      expect(css.match(new RegExp(`^\\.${selector} \\{`, "gm"))).toHaveLength(1)
+    }
   })
 
   test("keeps existing terminals closable while authority only gates new process creation", async () => {

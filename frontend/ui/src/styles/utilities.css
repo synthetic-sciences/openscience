@@ -5,11 +5,10 @@
     pointer-events: none;
   }
 
-  /* ::selection { */
-  /*   background-color: color-mix(in srgb, var(--color-primary) 33%, transparent); */
-  /*   background-color: var(--color-primary); */
-  /*   color: var(--color-background); */
-  /* } */
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-primary) 24%, transparent);
+    color: inherit;
+  }
 
   ::-webkit-scrollbar {
     width: 8px;

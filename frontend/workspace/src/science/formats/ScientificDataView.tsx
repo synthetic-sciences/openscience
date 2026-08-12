@@ -1,5 +1,5 @@
 import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js"
-import { FONT_CODE, FONT_MONO, FONT_SANS } from "@/styles/tokens"
+import { FONT_CODE, FONT_SANS } from "@/styles/tokens"
 import {
   parseBiologicalFile,
   type BiologicalFile,
@@ -11,6 +11,17 @@ import {
   type SamFile,
   type VcfFile,
 } from "./biological"
+
+const CONTROL_FONT_SIZE = "12px"
+const HELPER_FONT_SIZE = "11.5px"
+const TABLE_FONT_SIZE = "12px"
+const SECTION_FONT_SIZE = "13px"
+
+function sentence(value: string) {
+  const text = value.trim()
+  if (!text) return text
+  return `${text.charAt(0).toLocaleUpperCase()}${text.slice(1)}`
+}
 
 export function ScientificDataView(props: { text: string; format: BiologicalFormat; name: string }): JSX.Element {
   const [query, setQuery] = createSignal("")
@@ -57,8 +68,18 @@ export function ScientificDataView(props: { text: string; format: BiologicalForm
         when={data()}
         fallback={
           <div style={empty()}>
-            <strong style={{ "font-family": FONT_SANS, "font-size": "14px" }}>Could not inspect this file</strong>
-            <span style={{ "font-family": FONT_MONO, "font-size": "11px", color: "var(--color-text-faint)" }}>
+            <strong
+              style={{
+                "font-family": FONT_SANS,
+                "font-size": "14px",
+                "font-weight": "var(--font-weight-medium)",
+              }}
+            >
+              Could not inspect this file
+            </strong>
+            <span
+              style={{ "font-family": FONT_SANS, "font-size": CONTROL_FONT_SIZE, color: "var(--color-text-faint)" }}
+            >
               {parsed().error}
             </span>
           </div>
@@ -79,19 +100,26 @@ export function ScientificDataView(props: { text: string; format: BiologicalForm
               }}
             >
               <span style={formatBadge()}>{props.format.toUpperCase()}</span>
-              <strong style={{ "font-family": FONT_SANS, "font-size": "12px", color: "var(--color-text)" }}>
+              <strong
+                style={{
+                  "font-family": FONT_SANS,
+                  "font-size": SECTION_FONT_SIZE,
+                  "font-weight": "var(--font-weight-medium)",
+                  color: "var(--color-text)",
+                }}
+              >
                 {recordCount().toLocaleString()} {noun(value())}
               </strong>
               <Show when={value().truncated}>
-                <span style={warning()}>first 10,000 records inspected</span>
+                <span style={warning()}>First 10,000 records inspected</span>
               </Show>
               <div style={{ flex: 1 }} />
               <button type="button" style={button(view() === "overview")} onClick={() => setView("overview")}>
-                overview
+                Overview
               </button>
               <Show when={value().format !== "mzml"}>
                 <button type="button" style={button(view() === "records")} onClick={() => setView("records")}>
-                  records
+                  Records
                 </button>
               </Show>
             </div>
@@ -122,7 +150,7 @@ export function ScientificDataView(props: { text: string; format: BiologicalForm
                     aria-label="Filter scientific records"
                     value={query()}
                     onInput={(event) => setQuery(event.currentTarget.value)}
-                    placeholder="filter records…"
+                    placeholder="Filter records…"
                     style={input()}
                   />
                 </div>
@@ -164,7 +192,7 @@ function FastqOverview(props: { file: FastqFile }): JSX.Element {
         <Panel title="Parser health" note="FASTQ structural validation">
           <div style={{ display: "flex", "align-items": "baseline", gap: "8px", padding: "12px 2px" }}>
             <strong style={large()}>{props.file.invalid}</strong>
-            <span style={muted()}>malformed records</span>
+            <span style={muted()}>Malformed records</span>
           </div>
         </Panel>
       </div>
@@ -432,7 +460,7 @@ function Metrics(props: { children: JSX.Element }): JSX.Element {
 function Metric(props: { label: string; value: string; detail: string }): JSX.Element {
   return (
     <div style={card()}>
-      <span style={{ ...muted(), "text-transform": "uppercase", "letter-spacing": "0.06em" }}>{props.label}</span>
+      <span style={muted()}>{sentence(props.label)}</span>
       <strong style={{ ...large(), "margin-top": "8px" }}>{props.value}</strong>
       <span
         title={props.detail}
@@ -454,7 +482,14 @@ function Panel(props: { title: string; note: string; children: JSX.Element }): J
   return (
     <section style={{ ...card(), padding: "12px 14px" }}>
       <div style={{ display: "flex", "align-items": "baseline", gap: "8px", "margin-bottom": "12px" }}>
-        <strong style={{ "font-family": FONT_SANS, "font-size": "12px", color: "var(--color-text)" }}>
+        <strong
+          style={{
+            "font-family": FONT_SANS,
+            "font-size": SECTION_FONT_SIZE,
+            "font-weight": "var(--font-weight-medium)",
+            color: "var(--color-text)",
+          }}
+        >
           {props.title}
         </strong>
         <span style={muted()}>{props.note}</span>
@@ -538,8 +573,8 @@ function Line(props: { values: number[]; floor: number; ceiling: number }): JSX.
         />
       </svg>
       <div style={{ display: "flex", "justify-content": "space-between", ...muted() }}>
-        <span>cycle 1</span>
-        <span>cycle {props.values.length}</span>
+        <span>Cycle 1</span>
+        <span>Cycle {props.values.length}</span>
       </div>
     </div>
   )
@@ -549,9 +584,9 @@ function QualityGauge(props: { value: number }): JSX.Element {
   return (
     <div style={{ padding: "10px 0" }}>
       <div style={{ display: "flex", "justify-content": "space-between", "margin-bottom": "8px" }}>
-        <span style={muted()}>low</span>
+        <span style={muted()}>Low</span>
         <strong style={{ ...large(), "font-size": "18px" }}>Q{props.value}</strong>
-        <span style={muted()}>excellent</span>
+        <span style={muted()}>Excellent</span>
       </div>
       <div
         style={{
@@ -613,7 +648,8 @@ function Check(props: { ok: boolean; text: string }): JSX.Element {
         gap: "8px",
         "align-items": "center",
         "font-family": FONT_SANS,
-        "font-size": "11px",
+        "font-size": CONTROL_FONT_SIZE,
+        "font-weight": "var(--font-weight-regular)",
         color: "var(--color-text-muted)",
       }}
     >
@@ -630,17 +666,19 @@ function Check(props: { ok: boolean; text: string }): JSX.Element {
       >
         {props.ok ? "✓" : "·"}
       </span>
-      {props.text}
+      {sentence(props.text)}
     </div>
   )
 }
 
 function Table(props: { columns: string[]; children: JSX.Element }): JSX.Element {
   return (
-    <table style={{ width: "100%", "border-collapse": "collapse", "font-family": FONT_SANS, "font-size": "11px" }}>
+    <table
+      style={{ width: "100%", "border-collapse": "collapse", "font-family": FONT_SANS, "font-size": TABLE_FONT_SIZE }}
+    >
       <thead style={{ position: "sticky", top: "51px", "z-index": 3, background: "var(--color-bg)" }}>
         <tr>
-          <For each={props.columns}>{(column) => <th style={head()}>{column}</th>}</For>
+          <For each={props.columns}>{(column) => <th style={head()}>{sentence(column)}</th>}</For>
         </tr>
       </thead>
       <tbody>{props.children}</tbody>
@@ -713,7 +751,12 @@ function card(): JSX.CSSProperties {
 }
 
 function muted(): JSX.CSSProperties {
-  return { "font-family": FONT_MONO, "font-size": "9px", color: "var(--color-text-faint)" }
+  return {
+    "font-family": FONT_SANS,
+    "font-size": HELPER_FONT_SIZE,
+    "font-weight": "var(--font-weight-regular)",
+    color: "var(--color-text-faint)",
+  }
 }
 
 function large(): JSX.CSSProperties {
@@ -721,7 +764,7 @@ function large(): JSX.CSSProperties {
     display: "block",
     "font-family": FONT_SANS,
     "font-size": "20px",
-    "font-weight": 600,
+    "font-weight": "var(--font-weight-emphasis)",
     color: "var(--color-text)",
     "letter-spacing": "-0.02em",
   }
@@ -733,9 +776,9 @@ function formatBadge(): JSX.CSSProperties {
     "border-radius": "4px",
     background: "color-mix(in srgb, var(--color-accent) 12%, transparent)",
     color: "var(--color-accent)",
-    "font-family": FONT_MONO,
-    "font-size": "9px",
-    "font-weight": 600,
+    "font-family": FONT_CODE,
+    "font-size": HELPER_FONT_SIZE,
+    "font-weight": "var(--font-weight-medium)",
     "letter-spacing": "0.05em",
   }
 }
@@ -746,8 +789,9 @@ function warning(): JSX.CSSProperties {
     "border-radius": "4px",
     background: "color-mix(in srgb, #d4a72c 13%, transparent)",
     color: "#a57500",
-    "font-family": FONT_MONO,
-    "font-size": "9px",
+    "font-family": FONT_SANS,
+    "font-size": HELPER_FONT_SIZE,
+    "font-weight": "var(--font-weight-regular)",
   }
 }
 
@@ -759,7 +803,8 @@ function button(active = false): JSX.CSSProperties {
     background: active ? "var(--color-bg-subtle)" : "transparent",
     color: active ? "var(--color-text)" : "var(--color-text-muted)",
     "font-family": FONT_SANS,
-    "font-size": "10px",
+    "font-size": CONTROL_FONT_SIZE,
+    "font-weight": active ? "var(--font-weight-medium)" : "var(--font-weight-regular)",
     cursor: "pointer",
   }
 }
@@ -774,7 +819,8 @@ function input(): JSX.CSSProperties {
     background: "var(--color-bg-subtle)",
     color: "var(--color-text)",
     "font-family": FONT_SANS,
-    "font-size": "11px",
+    "font-size": CONTROL_FONT_SIZE,
+    "font-weight": "var(--font-weight-regular)",
   }
 }
 
@@ -784,12 +830,11 @@ function head(): JSX.CSSProperties {
     border: "0",
     "border-bottom": "1px solid var(--color-border)",
     color: "var(--color-text-faint)",
-    "font-family": FONT_MONO,
-    "font-size": "9px",
-    "font-weight": 500,
+    "font-family": FONT_SANS,
+    "font-size": HELPER_FONT_SIZE,
+    "font-weight": "var(--font-weight-medium)",
     "text-align": "left",
-    "text-transform": "uppercase",
-    "letter-spacing": "0.05em",
+    "letter-spacing": "normal",
     "white-space": "nowrap",
   }
 }

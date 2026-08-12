@@ -2,7 +2,6 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { $ } from "bun"
-import type { BunFile } from "bun"
 import { formatPatch, structuredPatch } from "diff"
 import { HTTPException } from "hono/http-exception"
 import path from "path"
@@ -21,6 +20,7 @@ import { PublicationFile } from "./publication"
 import { PublicationReview } from "./review"
 import { SessionFilesystem } from "../session/filesystem"
 import { Filesystem } from "../util/filesystem"
+import { SafeFileIO } from "./safe-io"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -88,7 +88,7 @@ export namespace File {
     })
   export type Content = z.infer<typeof Content>
 
-  async function shouldEncode(file: BunFile): Promise<boolean> {
+  async function shouldEncode(file: { type?: string }): Promise<boolean> {
     const type = file.type?.toLowerCase()
     log.info("shouldEncode", { type })
     if (!type) return false
@@ -317,11 +317,11 @@ export namespace File {
     using _ = log.time("read", { file })
     const project = Instance.project
 
-    const bunFile = Bun.file(full)
-
-    if (!(await bunFile.exists())) {
+    const snapshot = await SafeFileIO.optional(full)
+    if (!snapshot) {
       return { type: "text", content: "" }
     }
+    const bunFile = new Blob([new Uint8Array(snapshot.bytes)], { type: Bun.file(full).type })
 
     const encode = ScienceFile.binary(file) || (await shouldEncode(bunFile))
 
@@ -379,14 +379,14 @@ export namespace File {
 
   export async function inspect(file: string, options?: AccessOptions): Promise<ScienceFile.Inspection> {
     const full = await contained(file, "read", options)
-    return ScienceFile.inspect(full, file)
+    return ScienceFile.inspect(full, file, options)
   }
 
-  export async function raw(file: string, options?: AccessOptions): Promise<BunFile> {
+  export async function raw(file: string, options?: AccessOptions): Promise<Blob> {
     const full = await contained(file, "read", options)
-    const content = Bun.file(full)
-    if (!(await content.exists())) throw new HTTPException(404, { message: `File not found: ${file}` })
-    return content
+    const snapshot = await SafeFileIO.optional(full)
+    if (!snapshot) throw new HTTPException(404, { message: `File not found: ${file}` })
+    return new Blob([new Uint8Array(snapshot.bytes)], { type: Bun.file(full).type })
   }
 
   export async function artifacts(options?: AccessOptions): Promise<ArtifactFile.Info[]> {
@@ -446,8 +446,9 @@ export namespace File {
     using _ = log.time("write", { file })
     const full = await contained(file, "write", options)
 
-    const exists = await Bun.file(full).exists()
-    await Bun.write(full, content)
+    const approved = await SafeFileIO.optional(full)
+    const exists = !!approved
+    await SafeFileIO.write(full, content, approved)
     await Bus.publish(File.Event.Edited, {
       file: full,
     })

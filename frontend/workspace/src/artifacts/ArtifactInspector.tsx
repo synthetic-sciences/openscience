@@ -53,6 +53,13 @@ const CONTROL_HEIGHT = "44px"
 const CONTROL_RADIUS = "14px"
 const GROUP_RADIUS = "18px"
 
+function sentence(value: string) {
+  const text = value.replace(/[-_]+/g, " ").trim()
+  if (!text) return text
+  if (text.toLocaleLowerCase() === "ok") return "OK"
+  return `${text.charAt(0).toLocaleUpperCase()}${text.slice(1)}`
+}
+
 interface AnnotationMessage {
   id: string
   body: string
@@ -165,16 +172,16 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
 
   const copy = async () => {
     await navigator.clipboard?.writeText(props.context.path)
-    toast.success("copied", props.context.path)
+    toast.success("Copied", props.context.path)
   }
   const attach = () => {
     prompt.context.add({ type: "file", path: props.context.path })
-    toast.success("added to context", props.context.name)
+    toast.success("Added to context", props.context.name)
   }
   const download = async () => {
     const response = await sdk.request("/file/raw", undefined, query(props.context.path)).catch(() => undefined)
     if (!response?.ok) {
-      toast.error("download failed", response ? `${response.status}` : "request failed")
+      toast.error("Download failed", response ? `${response.status}` : "Request failed")
       return
     }
     const object = URL.createObjectURL(await response.blob())
@@ -197,7 +204,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
       )
       .catch(() => undefined)
     if (!response?.ok) {
-      toast.error("annotation failed", response ? `${response.status}` : "request failed")
+      toast.error("Annotation failed", response ? `${response.status}` : "Request failed")
       return false
     }
     await api.refetch()
@@ -233,8 +240,8 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
     if (!response?.ok) {
       const payload = (await response?.json().catch(() => undefined)) as { error?: unknown } | undefined
       const detail =
-        typeof payload?.error === "string" ? payload.error : response ? `${response.status}` : "request failed"
-      toast.error("publication preflight failed", detail)
+        typeof payload?.error === "string" ? payload.error : response ? `${response.status}` : "Request failed"
+      toast.error("Publication preflight failed", detail)
       return false
     }
     await api.refetch()
@@ -268,11 +275,11 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
     if (!response?.ok) {
       const payload = (await response?.json().catch(() => undefined)) as { error?: unknown } | undefined
       const detail =
-        typeof payload?.error === "string" ? payload.error : response ? `${response.status}` : "request failed"
-      toast.error("could not record the fix", detail)
+        typeof payload?.error === "string" ? payload.error : response ? `${response.status}` : "Request failed"
+      toast.error("Could not record the fix", detail)
       return
     }
-    toast.success("finding marked addressed", note)
+    toast.success("Finding marked addressed", note)
     await api.refetch()
   }
   const runReview = () =>
@@ -342,6 +349,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
             style={{
               "font-family": FONT_SANS,
               "font-size": "18px",
+              "font-weight": "var(--font-weight-medium)",
               "line-height": 1.3,
               color: "var(--color-text)",
               overflow: "hidden",
@@ -351,16 +359,16 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
           >
             {props.context.name}
           </strong>
-          <span style={{ "font-family": FONT_MONO, "font-size": META_FONT_SIZE, color: "var(--color-text-faint)" }}>
+          <span style={{ "font-family": FONT_SANS, "font-size": META_FONT_SIZE, color: "var(--color-text-faint)" }}>
             {props.context.kind} · {props.context.format.toUpperCase()}
           </span>
         </div>
-        <button type="button" title="refresh file details" style={iconButton()} onClick={() => void api.refetch()}>
+        <button type="button" title="Refresh file details" style={iconButton()} onClick={() => void api.refetch()}>
           <IconRefresh size={13} />
         </button>
         <Show when={props.onClose}>
           <button type="button" style={quietButton()} onClick={() => props.onClose?.()}>
-            close
+            Close
           </button>
         </Show>
       </header>
@@ -374,13 +382,13 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
         }}
       >
         <button type="button" style={actionButton(true)} onClick={attach}>
-          <IconFlask size={16} /> ask
+          <IconFlask size={16} /> Ask
         </button>
         <button type="button" style={actionButton()} onClick={() => void copy()}>
-          <IconCopy size={16} /> path
+          <IconCopy size={16} /> Path
         </button>
         <button type="button" style={actionButton()} onClick={() => void download()}>
-          <IconDownload size={16} /> download
+          <IconDownload size={16} /> Download
         </button>
       </div>
 
@@ -556,14 +564,20 @@ function Review(props: {
               style={{
                 "font-family": FONT_MONO,
                 "font-size": META_FONT_SIZE,
-                "text-transform": "uppercase",
-                "letter-spacing": "0.08em",
+                "letter-spacing": "normal",
                 color: reviewColor(props.state.kind),
               }}
             >
-              {props.state.kind.replace("-", " ")}
+              {sentence(props.state.kind)}
             </span>
-            <strong style={{ "font-family": FONT_SANS, "font-size": SECTION_TITLE_SIZE, color: "var(--color-text)" }}>
+            <strong
+              style={{
+                "font-family": FONT_SANS,
+                "font-size": SECTION_TITLE_SIZE,
+                "font-weight": "var(--font-weight-medium)",
+                color: "var(--color-text)",
+              }}
+            >
               {props.state.title}
             </strong>
             <p style={copyStyle()}>{props.state.detail}</p>
@@ -732,7 +746,14 @@ function Review(props: {
         when={props.annotations.length}
         fallback={
           <div style={{ ...card(), "justify-items": "start" }}>
-            <strong style={{ "font-family": FONT_SANS, "font-size": "18px", color: "var(--color-text)" }}>
+            <strong
+              style={{
+                "font-family": FONT_SANS,
+                "font-size": "18px",
+                "font-weight": "var(--font-weight-medium)",
+                color: "var(--color-text)",
+              }}
+            >
               No annotations yet
             </strong>
             <p style={copyStyle()}>Add the first review note. Threads persist with this project and file.</p>
@@ -762,8 +783,9 @@ function ReviewMetric(props: {
     >
       <strong
         style={{
-          "font-family": FONT_MONO,
+          "font-family": FONT_SANS,
           "font-size": SECTION_TITLE_SIZE,
+          "font-weight": "var(--font-weight-emphasis)",
           color: props.tone ? findingColor(props.tone) : "var(--color-text)",
         }}
       >
@@ -771,13 +793,12 @@ function ReviewMetric(props: {
       </strong>
       <span
         style={{
-          "font-family": FONT_MONO,
+          "font-family": FONT_SANS,
           "font-size": "13px",
-          "text-transform": "uppercase",
           color: "var(--color-text-faint)",
         }}
       >
-        {props.label}
+        {sentence(props.label)}
       </span>
     </div>
   )
@@ -816,12 +837,18 @@ function ReviewFindingCard(props: {
       }}
     >
       <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
-        <span style={findingBadge(props.finding.severity)}>{props.finding.severity}</span>
-        <span style={findingBadge()}>{props.finding.check}</span>
-        <span style={{ ...findingBadge(), "margin-left": "auto" }}>{props.finding.status}</span>
+        <span style={findingBadge(props.finding.severity)}>{sentence(props.finding.severity)}</span>
+        <span style={findingBadge()}>{sentence(props.finding.check)}</span>
+        <span style={{ ...findingBadge(), "margin-left": "auto" }}>{sentence(props.finding.status)}</span>
       </div>
       <strong
-        style={{ "font-family": FONT_SANS, "font-size": "18px", "line-height": 1.35, color: "var(--color-text)" }}
+        style={{
+          "font-family": FONT_SANS,
+          "font-size": "18px",
+          "font-weight": "var(--font-weight-medium)",
+          "line-height": 1.35,
+          color: "var(--color-text)",
+        }}
       >
         {props.finding.title}
       </strong>
@@ -836,7 +863,7 @@ function ReviewFindingCard(props: {
             style={{
               "font-family": FONT_SANS,
               "font-size": META_FONT_SIZE,
-              "font-weight": 650,
+              "font-weight": "var(--font-weight-emphasis)",
               color: "var(--color-text)",
             }}
           >
@@ -951,12 +978,12 @@ function ReviewerFindingCard(props: {
       }}
     >
       <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
-        <span style={findingBadge(props.finding.severity)}>{props.finding.severity}</span>
-        <span style={findingBadge()}>{props.finding.verdict}</span>
+        <span style={findingBadge(props.finding.severity)}>{sentence(props.finding.severity)}</span>
+        <span style={findingBadge()}>{sentence(props.finding.verdict)}</span>
         <Show when={props.finding.status}>
           {(status) => (
             <span data-chip="finding-status" style={{ ...reviewerStatusBadge(status()), "margin-left": "auto" }}>
-              {status()}
+              {sentence(status())}
             </span>
           )}
         </Show>
@@ -1055,8 +1082,7 @@ function AnnotationThread(props: {
             color: props.annotation.status === "open" ? "var(--color-warning)" : "var(--color-success)",
             "font-family": FONT_SANS,
             "font-size": "13px",
-            "font-weight": 650,
-            "text-transform": "capitalize",
+            "font-weight": "var(--font-weight-emphasis)",
           }}
         >
           {props.annotation.status === "open" ? "Open" : "Resolved"}
@@ -1322,7 +1348,7 @@ function RunCard(props: { run: LineageRun }): JSX.Element {
         <Show when={props.run.status}>
           {(status) => (
             <span data-run-status={status()} style={{ ...runBadge(status()), "margin-left": "auto" }}>
-              {status()}
+              {sentence(status())}
             </span>
           )}
         </Show>
@@ -1512,7 +1538,7 @@ function Heading(props: {
         "font-family": FONT_SANS,
         "font-size": SECTION_TITLE_SIZE,
         "line-height": 1.3,
-        "font-weight": 650,
+        "font-weight": "var(--font-weight-emphasis)",
         color: "var(--color-text)",
       }}
     >
@@ -1526,7 +1552,7 @@ function Fact(props: { label: string; value: string; mono?: boolean }): JSX.Elem
   return (
     <div style={{ display: "grid", gap: "4px", "align-items": "start", padding: "2px 0 8px" }}>
       <span style={{ "font-family": FONT_SANS, "font-size": META_FONT_SIZE, color: "var(--color-text-faint)" }}>
-        {props.label}
+        {sentence(props.label)}
       </span>
       <span
         title={props.value}
@@ -1581,7 +1607,7 @@ function actionButton(primary = false): JSX.CSSProperties {
     color: primary ? "var(--color-bg)" : "var(--color-text-muted)",
     "font-family": FONT_SANS,
     "font-size": "15px",
-    "font-weight": primary ? 650 : 500,
+    "font-weight": primary ? "var(--font-weight-medium)" : "var(--font-weight-regular)",
   }
 }
 
@@ -1600,7 +1626,7 @@ function tabButton(active: boolean): JSX.CSSProperties {
     color: active ? "var(--color-text)" : "var(--color-text-muted)",
     "font-family": FONT_SANS,
     "font-size": "15px",
-    "font-weight": active ? 650 : 500,
+    "font-weight": active ? "var(--font-weight-medium)" : "var(--font-weight-regular)",
     "white-space": "nowrap",
   }
 }
@@ -1633,6 +1659,7 @@ function quietButton(): JSX.CSSProperties {
     "border-radius": CONTROL_RADIUS,
     "font-family": FONT_SANS,
     "font-size": "15px",
+    "font-weight": "var(--font-weight-regular)",
     color: "var(--color-text-muted)",
   }
 }
@@ -1660,11 +1687,10 @@ function runBadge(status: "ok" | "error"): JSX.CSSProperties {
         ? "var(--color-error-subtle, var(--color-bg))"
         : "var(--color-success-subtle, var(--color-bg))",
     color: status === "error" ? "var(--color-danger, var(--color-error))" : "var(--color-success)",
-    "font-family": FONT_MONO,
+    "font-family": FONT_SANS,
     "font-size": "13px",
-    "font-weight": 650,
-    "text-transform": "uppercase",
-    "letter-spacing": "0.04em",
+    "font-weight": "var(--font-weight-emphasis)",
+    "letter-spacing": "normal",
   }
 }
 
@@ -1680,11 +1706,10 @@ function reviewerStatusBadge(status: NonNullable<ReviewerFinding["status"]>): JS
     "border-radius": "999px",
     background: "var(--color-bg)",
     color,
-    "font-family": FONT_MONO,
+    "font-family": FONT_SANS,
     "font-size": "13px",
-    "font-weight": 650,
-    "text-transform": "uppercase",
-    "letter-spacing": "0.04em",
+    "font-weight": "var(--font-weight-emphasis)",
+    "letter-spacing": "normal",
   }
 }
 
@@ -1694,11 +1719,10 @@ function findingBadge(severity?: PublicationReviewFinding["severity"]): JSX.CSSP
     "border-radius": "999px",
     background: "var(--color-bg)",
     color: severity ? findingColor(severity) : "var(--color-text-muted)",
-    "font-family": FONT_MONO,
+    "font-family": FONT_SANS,
     "font-size": "13px",
-    "font-weight": severity ? 650 : 500,
-    "text-transform": "uppercase",
-    "letter-spacing": "0.04em",
+    "font-weight": severity ? "var(--font-weight-emphasis)" : "var(--font-weight-medium)",
+    "letter-spacing": "normal",
   }
 }
 

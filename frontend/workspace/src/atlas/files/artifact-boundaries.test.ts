@@ -162,15 +162,15 @@ describe("artifact grid inside the app's boundaries", () => {
     await settle(120)
     const afterMount = reads
 
+    host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
     host.querySelector<HTMLButtonElement>("[data-artifact-layout='list']")!.click()
     await settle(120)
-    host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
     host.querySelector<HTMLButtonElement>("[data-pref='sizes']")!.click()
     await settle(120)
 
     // Sorting regroups, which makes <For> recreate every card -- the previews
     // are cached by version id so that costs no reads either.
-    host.querySelector<HTMLButtonElement>("[data-artifact-sort]")!.click()
+    host.querySelector<HTMLButtonElement>("[data-artifact-sort='name']")!.click()
     await settle(120)
 
     expect(afterMount).toBe(2)
@@ -203,9 +203,9 @@ describe("artifact grid inside the app's boundaries", () => {
     const before = [...host.querySelectorAll("[data-card-open]")]
     expect(before).toHaveLength(2)
 
+    host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
     host.querySelector<HTMLButtonElement>("[data-artifact-layout='list']")!.click()
     await settle(80)
-    host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
     host.querySelector<HTMLButtonElement>("[data-pref='sizes']")!.click()
     await settle(80)
 
@@ -242,7 +242,7 @@ describe("artifact grid inside the app's boundaries", () => {
       await settle()
 
       expect(host.textContent).not.toContain("BOUNDARY-CAUGHT")
-      expect(host.textContent).toContain("No artifacts saved yet.")
+      expect(host.textContent).toContain("No saved artifacts yet")
     } finally {
       if (original) Object.defineProperty(globalThis, "localStorage", original)
     }

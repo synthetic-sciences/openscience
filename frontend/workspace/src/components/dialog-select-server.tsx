@@ -14,29 +14,43 @@ import { useLanguage } from "@/context/language"
 import { DropdownMenu } from "@synsci/ui/dropdown-menu"
 import { Tooltip } from "@synsci/ui/tooltip"
 import { showToast } from "@synsci/ui/toast"
+import "./dialog-select-server.css"
 
 type ServerStatus = { healthy: boolean; version?: string }
 
+function serverVersionLabel(value: string) {
+  return value.trim().toLocaleLowerCase() === "local" ? "Local" : value
+}
+
 interface AddRowProps {
   value: string
+  label: string
   placeholder: string
   adding: boolean
   error: string
   status: boolean | undefined
+  saveLabel: string
+  cancelLabel: string
   onChange: (value: string) => void
   onKeyDown: (event: KeyboardEvent) => void
-  onBlur: () => void
+  onSave: () => void
+  onCancel: () => void
 }
 
 interface EditRowProps {
   value: string
+  label: string
   placeholder: string
   busy: boolean
   error: string
   status: boolean | undefined
+  saveLabel: string
+  cancelLabel: string
+  canSave: boolean
   onChange: (value: string) => void
   onKeyDown: (event: KeyboardEvent) => void
-  onBlur: () => void
+  onSave: () => void
+  onCancel: () => void
 }
 
 async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>): Promise<ServerStatus> {
@@ -54,8 +68,15 @@ async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>
 
 function AddRow(props: AddRowProps) {
   return (
-    <div class="flex items-center px-4 min-h-14 py-3 min-w-0 flex-1">
-      <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
+    <form
+      class="server-dialog__form"
+      aria-label={props.label}
+      onSubmit={(event) => {
+        event.preventDefault()
+        props.onSave()
+      }}
+    >
+      <div class="server-dialog__form-field [&_[data-slot=input-wrapper]]:relative">
         <div
           classList={{
             "size-1.5 rounded-full absolute left-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none": true,
@@ -75,6 +96,7 @@ function AddRow(props: AddRowProps) {
         />
         <TextField
           type="text"
+          label={props.label}
           hideLabel
           placeholder={props.placeholder}
           value={props.value}
@@ -84,28 +106,44 @@ function AddRow(props: AddRowProps) {
           disabled={props.adding}
           onChange={props.onChange}
           onKeyDown={props.onKeyDown}
-          onBlur={props.onBlur}
           class="pl-7"
         />
       </div>
-    </div>
+      <div class="server-dialog__form-actions">
+        <Button type="button" size="normal" variant="ghost" disabled={props.adding} onClick={props.onCancel}>
+          {props.cancelLabel}
+        </Button>
+        <Button type="submit" size="normal" variant="primary" disabled={props.adding || !props.value.trim()}>
+          {props.saveLabel}
+        </Button>
+      </div>
+    </form>
   )
 }
 
 function EditRow(props: EditRowProps) {
   return (
-    <div class="flex items-center gap-3 px-4 min-w-0 flex-1" onClick={(event) => event.stopPropagation()}>
+    <form
+      class="server-dialog__form"
+      aria-label={props.label}
+      onClick={(event) => event.stopPropagation()}
+      onSubmit={(event) => {
+        event.preventDefault()
+        props.onSave()
+      }}
+    >
       <div
         classList={{
-          "size-1.5 rounded-full shrink-0": true,
+          "server-dialog__status mt-[13px]": true,
           "bg-icon-success-base": props.status === true,
           "bg-icon-critical-base": props.status === false,
           "bg-border-weak-base": props.status === undefined,
         }}
       />
-      <div class="flex-1 min-w-0">
+      <div class="server-dialog__form-field">
         <TextField
           type="text"
+          label={props.label}
           hideLabel
           placeholder={props.placeholder}
           value={props.value}
@@ -115,10 +153,17 @@ function EditRow(props: EditRowProps) {
           disabled={props.busy}
           onChange={props.onChange}
           onKeyDown={props.onKeyDown}
-          onBlur={props.onBlur}
         />
       </div>
-    </div>
+      <div class="server-dialog__form-actions">
+        <Button type="button" size="normal" variant="ghost" disabled={props.busy} onClick={props.onCancel}>
+          {props.cancelLabel}
+        </Button>
+        <Button type="submit" size="normal" variant="primary" disabled={props.busy || !props.canSave}>
+          {props.saveLabel}
+        </Button>
+      </div>
+    </form>
   )
 }
 
@@ -340,16 +385,13 @@ export function DialogSelectServer() {
 
   const handleAddKey = (event: KeyboardEvent) => {
     event.stopPropagation()
-    if (event.key !== "Enter" || event.isComposing) return
-    event.preventDefault()
-    handleAdd(store.addServer.url)
-  }
-
-  const blurAdd = () => {
-    if (!store.addServer.url.trim()) {
+    if (event.key === "Escape") {
+      event.preventDefault()
       resetAdd()
       return
     }
+    if (event.key !== "Enter" || event.isComposing) return
+    event.preventDefault()
     handleAdd(store.addServer.url)
   }
 
@@ -370,8 +412,14 @@ export function DialogSelectServer() {
   }
 
   return (
-    <Dialog title={language.t("dialog.server.title")}>
-      <div class="flex flex-col gap-2">
+    <Dialog
+      title={language.t("dialog.server.title")}
+      description={language.t("dialog.server.description")}
+      class="server-dialog"
+      fit
+      transition
+    >
+      <div class="server-dialog__content">
         <List
           search={{ placeholder: language.t("dialog.server.search.placeholder"), autofocus: false }}
           noInitialSelection
@@ -386,21 +434,50 @@ export function DialogSelectServer() {
               resetAdd()
             }
           }}
+          itemWrapper={(item, node) => (
+            <Show when={store.editServer.id === item} fallback={node}>
+              <div data-slot="list-item-editor" data-key={item} class="server-dialog__editor">
+                <EditRow
+                  value={store.editServer.value}
+                  label={language.t("dialog.server.add.url")}
+                  placeholder={language.t("dialog.server.add.placeholder")}
+                  busy={store.editServer.busy}
+                  error={store.editServer.error}
+                  status={store.editServer.status}
+                  saveLabel={language.t("dialog.server.action.save")}
+                  cancelLabel={language.t("dialog.server.action.cancel")}
+                  canSave={Boolean(store.editServer.value.trim()) && store.editServer.value !== item}
+                  onChange={handleEditChange}
+                  onKeyDown={(event) => handleEditKey(event, item)}
+                  onSave={() => void handleEdit(item, store.editServer.value)}
+                  onCancel={resetEdit}
+                />
+              </div>
+            </Show>
+          )}
           divider={true}
-          class="px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:max-h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-raised-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent [&_[data-slot=list-item-add]]:px-0"
+          class="server-dialog__list"
           add={
             store.addServer.showForm
               ? {
                   render: () => (
                     <AddRow
                       value={store.addServer.url}
+                      label={language.t("dialog.server.add.url")}
                       placeholder={language.t("dialog.server.add.placeholder")}
                       adding={store.addServer.adding}
                       error={store.addServer.error}
                       status={store.addServer.status}
+                      saveLabel={
+                        store.addServer.adding
+                          ? language.t("dialog.server.add.checking")
+                          : language.t("dialog.server.add.button")
+                      }
+                      cancelLabel={language.t("dialog.server.action.cancel")}
                       onChange={handleAddChange}
                       onKeyDown={handleAddKey}
-                      onBlur={blurAdd}
+                      onSave={() => void handleAdd(store.addServer.url)}
+                      onCancel={resetAdd}
                     />
                   ),
                 }
@@ -438,151 +515,134 @@ export function DialogSelectServer() {
             }
 
             return (
-              <div class="flex items-center gap-3 min-w-0 flex-1 group/item">
-                <Show
-                  when={store.editServer.id !== i}
-                  fallback={
-                    <EditRow
-                      value={store.editServer.value}
-                      placeholder={language.t("dialog.server.add.placeholder")}
-                      busy={store.editServer.busy}
-                      error={store.editServer.error}
-                      status={store.editServer.status}
-                      onChange={handleEditChange}
-                      onKeyDown={(event) => handleEditKey(event, i)}
-                      onBlur={() => handleEdit(i, store.editServer.value)}
-                    />
-                  }
-                >
-                  <Tooltip value={tooltipValue()} placement="top" inactive={!truncated()}>
+              <div class="server-dialog__row group/item">
+                <Tooltip value={tooltipValue()} placement="top" inactive={!truncated()}>
+                  <div class="server-dialog__identity" classList={{ "opacity-50": store.status[i]?.healthy === false }}>
                     <div
-                      class="flex items-center gap-3 px-4 min-w-0 flex-1"
-                      classList={{ "opacity-50": store.status[i]?.healthy === false }}
-                    >
-                      <div
-                        classList={{
-                          "size-1.5 rounded-full shrink-0": true,
-                          "bg-icon-success-base": store.status[i]?.healthy === true,
-                          "bg-icon-critical-base": store.status[i]?.healthy === false,
-                          "bg-border-weak-base": store.status[i] === undefined,
-                        }}
-                      />
-                      <span ref={nameRef} class="truncate">
-                        {serverDisplayName(i)}
-                      </span>
-                      <Show when={store.status[i]?.version}>
-                        <span ref={versionRef} class="text-text-weak text-14-regular truncate">
-                          {store.status[i]?.version}
+                      classList={{
+                        "server-dialog__status": true,
+                        "bg-icon-success-base": store.status[i]?.healthy === true,
+                        "bg-icon-critical-base": store.status[i]?.healthy === false,
+                        "bg-border-weak-base": store.status[i] === undefined,
+                      }}
+                    />
+                    <span ref={nameRef} class="server-dialog__name">
+                      {serverDisplayName(i)}
+                    </span>
+                    <Show when={store.status[i]?.version}>
+                      {(version) => (
+                        <span ref={versionRef} class="server-dialog__badge">
+                          {serverVersionLabel(version())}
                         </span>
-                      </Show>
-                      <Show when={defaultUrl() === i}>
-                        <span class="text-12-regular text-text-weak bg-surface-base px-1.5 rounded-xs">
-                          {language.t("dialog.server.status.default")}
-                        </span>
-                      </Show>
-                    </div>
-                  </Tooltip>
-                </Show>
-                <Show when={store.editServer.id !== i}>
-                  <div class="flex items-center justify-center gap-5 pl-4">
-                    <Show when={current() === i}>
-                      <p class="text-text-weak text-12-regular">{language.t("dialog.server.current")}</p>
+                      )}
                     </Show>
-
-                    <DropdownMenu>
-                      <DropdownMenu.Trigger
-                        as={IconButton}
-                        icon="dot-grid"
-                        variant="ghost"
-                        class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
-                        onClick={(e: MouseEvent) => e.stopPropagation()}
-                        onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                      />
-                      <DropdownMenu.Portal>
-                        <DropdownMenu.Content class="mt-1">
+                    <Show when={defaultUrl() === i}>
+                      <span class="server-dialog__badge">{language.t("dialog.server.status.default")}</span>
+                    </Show>
+                    <Show when={current() === i}>
+                      <span class="server-dialog__badge server-dialog__badge--current">
+                        {language.t("dialog.server.current")}
+                      </span>
+                    </Show>
+                  </div>
+                </Tooltip>
+                <div class="server-dialog__actions">
+                  <DropdownMenu>
+                    <DropdownMenu.Trigger
+                      as={IconButton}
+                      icon="more-horizontal"
+                      variant="ghost"
+                      class="server-dialog__menu-button"
+                      aria-label={language.t("common.moreOptions")}
+                      onClick={(e: MouseEvent) => e.stopPropagation()}
+                      onPointerDown={(e: PointerEvent) => e.stopPropagation()}
+                    />
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content class="mt-1">
+                        <DropdownMenu.Item
+                          onSelect={() => {
+                            resetAdd()
+                            setStore("editServer", {
+                              id: i,
+                              value: i,
+                              error: "",
+                              status: store.status[i]?.healthy,
+                            })
+                          }}
+                        >
+                          <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <Show when={canDefault() && defaultUrl() !== i}>
                           <DropdownMenu.Item
-                            onSelect={() => {
-                              setStore("editServer", {
-                                id: i,
-                                value: i,
-                                error: "",
-                                status: store.status[i]?.healthy,
-                              })
+                            onSelect={async () => {
+                              try {
+                                await platform.setDefaultServerUrl?.(i)
+                                defaultUrlActions.mutate(i)
+                              } catch (err) {
+                                showToast({
+                                  variant: "error",
+                                  title: language.t("common.requestFailed"),
+                                  description: err instanceof Error ? err.message : String(err),
+                                })
+                              }
                             }}
                           >
-                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.default")}</DropdownMenu.ItemLabel>
                           </DropdownMenu.Item>
-                          <Show when={canDefault() && defaultUrl() !== i}>
-                            <DropdownMenu.Item
-                              onSelect={async () => {
-                                try {
-                                  await platform.setDefaultServerUrl?.(i)
-                                  defaultUrlActions.mutate(i)
-                                } catch (err) {
-                                  showToast({
-                                    variant: "error",
-                                    title: language.t("common.requestFailed"),
-                                    description: err instanceof Error ? err.message : String(err),
-                                  })
-                                }
-                              }}
-                            >
-                              <DropdownMenu.ItemLabel>
-                                {language.t("dialog.server.menu.default")}
-                              </DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                          </Show>
-                          <Show when={canDefault() && defaultUrl() === i}>
-                            <DropdownMenu.Item
-                              onSelect={async () => {
-                                try {
-                                  await platform.setDefaultServerUrl?.(null)
-                                  defaultUrlActions.mutate(null)
-                                } catch (err) {
-                                  showToast({
-                                    variant: "error",
-                                    title: language.t("common.requestFailed"),
-                                    description: err instanceof Error ? err.message : String(err),
-                                  })
-                                }
-                              }}
-                            >
-                              <DropdownMenu.ItemLabel>
-                                {language.t("dialog.server.menu.defaultRemove")}
-                              </DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                          </Show>
-                          <DropdownMenu.Separator />
+                        </Show>
+                        <Show when={canDefault() && defaultUrl() === i}>
                           <DropdownMenu.Item
-                            onSelect={() => handleRemove(i)}
-                            class="text-text-on-critical-base hover:bg-surface-critical-weak"
+                            onSelect={async () => {
+                              try {
+                                await platform.setDefaultServerUrl?.(null)
+                                defaultUrlActions.mutate(null)
+                              } catch (err) {
+                                showToast({
+                                  variant: "error",
+                                  title: language.t("common.requestFailed"),
+                                  description: err instanceof Error ? err.message : String(err),
+                                })
+                              }
+                            }}
                           >
-                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
+                            <DropdownMenu.ItemLabel>
+                              {language.t("dialog.server.menu.defaultRemove")}
+                            </DropdownMenu.ItemLabel>
                           </DropdownMenu.Item>
-                        </DropdownMenu.Content>
-                      </DropdownMenu.Portal>
-                    </DropdownMenu>
-                  </div>
-                </Show>
+                        </Show>
+                        <DropdownMenu.Separator />
+                        <DropdownMenu.Item
+                          onSelect={() => handleRemove(i)}
+                          class="text-text-on-critical-base hover:bg-surface-critical-weak"
+                        >
+                          <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu>
+                </div>
               </div>
             )
           }}
         </List>
 
-        <div class="px-5 pb-5">
-          <Button
-            variant="secondary"
-            icon="plus-small"
-            size="large"
-            onClick={() => {
-              setStore("addServer", { showForm: true, url: "", error: "" })
-              scrollListToBottom()
-            }}
-            class="py-1.5 pl-1.5 pr-3 flex items-center gap-1.5"
-          >
-            {store.addServer.adding ? language.t("dialog.server.add.checking") : language.t("dialog.server.add.button")}
-          </Button>
-        </div>
+        <Show when={!store.addServer.showForm}>
+          <div class="server-dialog__footer">
+            <Button
+              variant="ghost"
+              icon="plus-small"
+              size="normal"
+              onClick={() => {
+                resetEdit()
+                setStore("addServer", { showForm: true, url: "", error: "", status: undefined })
+                scrollListToBottom()
+              }}
+              class="server-dialog__add-button"
+            >
+              {language.t("dialog.server.add.button")}
+            </Button>
+          </div>
+        </Show>
       </div>
     </Dialog>
   )

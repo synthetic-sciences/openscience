@@ -69,6 +69,14 @@ export namespace ProvenanceEnvelope {
         z.object({
           id: z.string(),
           language: z.string(),
+          environment_name: field(z.string()),
+          interpreter: field(
+            z.object({
+              name: z.string(),
+              binary: z.string(),
+              version: field(z.string()),
+            }),
+          ),
           incarnation: field(z.number().int().positive()),
           process_id: field(z.number().int().positive()),
           process_started_at: field(z.string()),
@@ -109,14 +117,21 @@ export namespace ProvenanceEnvelope {
     const binary = Bun.which("git")
     if (!binary) return
     const run = (args: string[]) => {
-      const proc = Bun.spawnSync([binary, ...args], {
-        cwd,
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "ignore",
-      })
-      if (!proc.success) return
-      return proc.stdout.toString().trim()
+      try {
+        const proc = Bun.spawnSync([binary, ...args], {
+          cwd,
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "ignore",
+        })
+        if (!proc.success) return
+        return proc.stdout.toString().trim()
+      } catch {
+        // Code-state capture is best effort. The repository/cwd may disappear,
+        // or PATH may rotate between discovery and spawn, while the owning
+        // execution remains valid and must not be aborted by provenance.
+        return
+      }
     }
     const repository = run(["remote", "get-url", "origin"])
     const branch = run(["branch", "--show-current"])
@@ -182,6 +197,12 @@ export namespace ProvenanceEnvelope {
     kernel?: {
       id: string
       language: string
+      environmentName?: string
+      interpreter?: {
+        name: string
+        binary: string
+        version?: string
+      }
       incarnation?: number
       processID?: number
       processStartedAt?: string | number
@@ -227,6 +248,18 @@ export namespace ProvenanceEnvelope {
           ? available({
               id: input.kernel.id,
               language: input.kernel.language,
+              environment_name: input.kernel.environmentName
+                ? available(input.kernel.environmentName)
+                : unavailable("not_captured"),
+              interpreter: input.kernel.interpreter
+                ? available({
+                    name: input.kernel.interpreter.name,
+                    binary: input.kernel.interpreter.binary,
+                    version: input.kernel.interpreter.version
+                      ? available(input.kernel.interpreter.version)
+                      : unavailable("not_captured"),
+                  })
+                : unavailable("not_captured"),
               incarnation:
                 input.kernel.incarnation === undefined
                   ? unavailable("not_captured")

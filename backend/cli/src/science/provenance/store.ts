@@ -14,6 +14,7 @@ import fs from "node:fs/promises"
 import { realpathSync } from "node:fs"
 import { randomUUID } from "node:crypto"
 import { Global } from "@/global"
+import { FileLease } from "@/util/file-lease"
 import { OpenScience } from "@/openscience"
 import { ProjectLegacy } from "@/project/legacy"
 import type { ProvenanceEnvelope } from "./envelope"
@@ -214,6 +215,7 @@ async function mutate<T>(fn: (graph: Graph) => Promise<T> | T): Promise<T> {
   const task = lock.current
     .catch(() => undefined)
     .then(async () => {
+      await using lease = await FileLease.acquire(`${STORE_PATH}.lock`, 120_000)
       const graph = await load().catch(preserve)
       const result = await fn(graph)
       await save(graph)

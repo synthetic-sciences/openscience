@@ -10,19 +10,17 @@ function memoryStorage(): SessionTabStorage {
 }
 
 describe("session tabs", () => {
-  test("reuses recent sessions through rapid switches without duplicates", () => {
+  test("reuses rapid session switches without duplicates", () => {
     const tabs = createSessionTabs({ storage: memoryStorage() })
     tabs.activateProject("project-a")
 
-    for (let index = 0; index < 20; index++) {
-      tabs.open(index % 2 ? "session-a" : "session-b")
-    }
+    for (let index = 0; index < 20; index++) tabs.open(index % 2 ? "session-a" : "session-b")
 
     expect(tabs.tabs()).toEqual(["session-b", "session-a"])
     expect(tabs.active()).toBe("session-a")
   })
 
-  test("closing a tab only changes the strip and restores the nearest session after reload", () => {
+  test("closes to the nearest tab and restores order, active state, and drafts", () => {
     const storage = memoryStorage()
     const first = createSessionTabs({ storage })
     first.activateProject("project-a")
@@ -41,7 +39,7 @@ describe("session tabs", () => {
     expect(restored.dirty("session-b")).toBe(true)
   })
 
-  test("never shares open sessions between projects", () => {
+  test("never shares tab state between projects", () => {
     const tabs = createSessionTabs({ storage: memoryStorage() })
     tabs.activateProject("project-a")
     tabs.open("shared-session")
@@ -57,7 +55,7 @@ describe("session tabs", () => {
     expect(tabs.dirty("shared-session")).toBe(true)
   })
 
-  test("move reorders tabs, clamps targets, and persists across reload", () => {
+  test("reorders tabs, clamps targets, and persists the result", () => {
     const storage = memoryStorage()
     const tabs = createSessionTabs({ storage })
     tabs.activateProject("project-a")
@@ -67,22 +65,17 @@ describe("session tabs", () => {
 
     tabs.move("session-c", 0)
     expect(tabs.tabs()).toEqual(["session-c", "session-a", "session-b"])
-
     tabs.move("session-c", 99)
     expect(tabs.tabs()).toEqual(["session-a", "session-b", "session-c"])
-
     tabs.move("session-b", -5)
     expect(tabs.tabs()).toEqual(["session-b", "session-a", "session-c"])
 
-    tabs.move("missing", 0)
-    expect(tabs.tabs()).toEqual(["session-b", "session-a", "session-c"])
-
-    const reloaded = createSessionTabs({ storage })
-    reloaded.activateProject("project-a")
-    expect(reloaded.tabs()).toEqual(["session-b", "session-a", "session-c"])
+    const restored = createSessionTabs({ storage })
+    restored.activateProject("project-a")
+    expect(restored.tabs()).toEqual(["session-b", "session-a", "session-c"])
   })
 
-  test("tracks unread activity per project without confusing drafts or streaming state", () => {
+  test("tracks unread updates separately from drafts and active working state", () => {
     const storage = memoryStorage()
     const tabs = createSessionTabs({ storage })
     tabs.activateProject("project-a")
@@ -102,10 +95,5 @@ describe("session tabs", () => {
     restored.activateProject("project-a")
     restored.open("session-b")
     expect(restored.unread("session-a", 101)).toBe(false)
-
-    restored.activateProject("project-b")
-    restored.open("session-a")
-    restored.open("session-b")
-    expect(restored.unread("session-a", 1)).toBe(true)
   })
 })

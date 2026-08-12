@@ -1,0 +1,302 @@
+/* The server picker is intentionally scoped. It is a compact connection
+   utility, not a second settings screen, and must not reshape shared List,
+   Dialog, or Button primitives elsewhere in the app. */
+[data-component="dialog"]:has([data-slot="dialog-content"].server-dialog) [data-slot="dialog-container"] {
+  width: min(calc(100vw - 24px), 560px);
+  height: auto;
+  max-height: min(calc(100vh - 24px), 560px);
+}
+
+[data-component="dialog"]:has([data-slot="dialog-content"].server-dialog) [data-slot="dialog-content"] {
+  min-height: 0;
+  max-height: min(calc(100vh - 24px), 560px);
+  overflow: hidden;
+}
+
+.server-dialog {
+  --server-radius-pill: 999px;
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised-stronger-non-alpha);
+  box-shadow: var(--atlas-shadow-float);
+  color: var(--text-base);
+}
+
+.server-dialog [data-slot="dialog-header"] {
+  min-height: 52px;
+  padding: 14px 16px 6px 18px;
+}
+
+.server-dialog [data-slot="dialog-title"] {
+  font-size: 17px;
+  font-weight: var(--font-weight-emphasis);
+  line-height: 24px;
+  letter-spacing: -0.015em;
+}
+
+.server-dialog [data-slot="dialog-description"] {
+  margin: 0;
+  padding: 0 18px 14px;
+  color: var(--text-weak);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.server-dialog__content {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.server-dialog__list {
+  min-height: 0;
+  gap: 10px;
+  padding: 0 18px;
+}
+
+.server-dialog__list [data-slot="list-search-wrapper"] {
+  width: 100%;
+  margin: 0;
+}
+
+.server-dialog__list [data-slot="list-search"] {
+  min-height: 38px;
+  padding: 7px 10px;
+  gap: 8px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--radius-sm);
+  background: var(--input-base);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.server-dialog__list [data-slot="list-search"]:focus-within {
+  border-color: var(--focus-lit-ring);
+  box-shadow: var(--focus-lit);
+}
+
+.server-dialog__list [data-slot="list-search-container"] {
+  max-height: none;
+}
+
+.server-dialog__list [data-slot="list-search-input"] {
+  min-height: 22px;
+}
+
+.server-dialog__list [data-slot="list-scroll"] {
+  max-height: 288px;
+  overflow-y: auto;
+}
+
+.server-dialog__list [data-slot="list-group"]:last-child {
+  padding-bottom: 0;
+}
+
+.server-dialog__list [data-slot="list-items"] {
+  overflow: hidden;
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised-base);
+}
+
+.server-dialog__list [data-slot="list-item"] {
+  min-height: 50px;
+  height: auto;
+  padding: 0 6px;
+  background: transparent;
+}
+
+.server-dialog__list [data-slot="list-item"][data-active="true"] {
+  border-radius: 0;
+  background: var(--surface-raised-base-hover);
+}
+
+.server-dialog__list [data-slot="list-item"]:focus-visible {
+  z-index: 1;
+  outline: 1px solid var(--border-strong-base);
+  outline-offset: -2px;
+}
+
+.server-dialog__list [data-slot="list-item-divider"] {
+  left: 12px;
+  right: 12px;
+}
+
+.server-dialog__list [data-slot="list-empty-state"] {
+  min-height: 76px;
+  padding: 18px;
+}
+
+.server-dialog__row {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+}
+
+.server-dialog__row > [data-component="tooltip-trigger"] {
+  min-width: 0;
+  flex: 1;
+}
+
+.server-dialog__identity {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 6px;
+}
+
+.server-dialog__status {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: var(--server-radius-pill);
+}
+
+.server-dialog__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-dialog__badge {
+  min-height: 22px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--server-radius-pill);
+  background: var(--surface-raised-base);
+  color: var(--text-weak);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.server-dialog__badge--current {
+  border-color: color-mix(in srgb, var(--icon-success-base) 22%, var(--border-weak-base));
+  background: color-mix(in srgb, var(--icon-success-base) 8%, transparent);
+  color: var(--text-base);
+}
+
+.server-dialog__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.server-dialog__menu-button {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-xs);
+}
+
+.server-dialog__editor {
+  min-width: 0;
+  width: 100%;
+}
+
+.server-dialog__editor:not(:last-child) {
+  border-bottom: 1px solid var(--border-weak-base);
+}
+
+.server-dialog__form {
+  min-width: 0;
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+}
+
+.server-dialog__form-field {
+  min-width: 0;
+  flex: 1;
+}
+
+.server-dialog__form-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.server-dialog__footer {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--border-weak-base);
+}
+
+.server-dialog__add-button {
+  padding-inline: 10px;
+  border-radius: var(--radius-xs);
+}
+
+@media (pointer: coarse) {
+  .server-dialog__list [data-slot="list-search"],
+  .server-dialog__list [data-slot="list-search-input"] {
+    min-height: 44px;
+  }
+
+  .server-dialog__list [data-slot="list-item"] {
+    min-height: 52px;
+  }
+
+  .server-dialog__menu-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 560px) {
+  [data-component="dialog"]:has([data-slot="dialog-content"].server-dialog) [data-slot="dialog-container"],
+  [data-component="dialog"]:has([data-slot="dialog-content"].server-dialog) [data-slot="dialog-content"] {
+    max-height: calc(100vh - 16px);
+  }
+
+  .server-dialog__identity {
+    flex-wrap: wrap;
+    row-gap: 3px;
+    padding-block: 8px;
+  }
+
+  .server-dialog__name {
+    flex-basis: calc(100% - 22px);
+  }
+
+  .server-dialog__form {
+    flex-wrap: wrap;
+  }
+
+  .server-dialog__form-field {
+    flex-basis: 100%;
+  }
+
+  .server-dialog__form-actions {
+    margin-left: auto;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .server-dialog,
+  .server-dialog__list [data-slot="list-search"],
+  .server-dialog__list [data-slot="list-items"] {
+    background: var(--surface-raised-stronger-non-alpha);
+  }
+}

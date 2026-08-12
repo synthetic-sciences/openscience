@@ -7,6 +7,7 @@ export interface FileToolbarProps {
   location?: string
   description: FileDescription
   source: boolean
+  sourceLabel?: string
   dirty: boolean
   saving: boolean
   writable?: boolean
@@ -34,7 +35,7 @@ export function FileToolbar(props: FileToolbarProps): JSX.Element {
   )
   const views = createMemo(() => controls().filter((control) => control.id === "preview" || control.id === "source"))
   const artifact = createMemo(() =>
-    artifactControl({ session: props.artifact === true, busy: props.archiving === true }),
+    artifactControl({ session: props.artifact === true, busy: props.archiving === true, dirty: props.dirty }),
   )
   const changes = createMemo(() =>
     props.writable === false ? [] : controls().filter((control) => control.id === "discard" || control.id === "save"),
@@ -74,20 +75,23 @@ export function FileToolbar(props: FileToolbarProps): JSX.Element {
         <Show when={views().length > 0}>
           <div class="atlas-file-modes" role="tablist" aria-label="File view">
             <For each={views()}>
-              {(control) => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-label={control.label}
-                  aria-selected={control.active === true}
-                  class="atlas-file-mode"
-                  classList={{ "is-active": control.active === true }}
-                  disabled={props.disabled}
-                  onClick={() => action(control.id)}
-                >
-                  {control.label}
-                </button>
-              )}
+              {(control) => {
+                const label = () => (control.id === "source" ? (props.sourceLabel ?? control.label) : control.label)
+                return (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-label={label()}
+                    aria-selected={control.active === true}
+                    class="atlas-file-mode"
+                    classList={{ "is-active": control.active === true }}
+                    disabled={props.disabled}
+                    onClick={() => action(control.id)}
+                  >
+                    {label()}
+                  </button>
+                )
+              }}
             </For>
           </div>
         </Show>
@@ -116,7 +120,8 @@ export function FileToolbar(props: FileToolbarProps): JSX.Element {
             <button
               type="button"
               class="atlas-file-action"
-              aria-label="Save as artifact"
+              aria-label={control().label}
+              title={control().label}
               disabled={props.disabled || control().disabled}
               onClick={() => props.onArtifact?.()}
             >

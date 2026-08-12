@@ -308,13 +308,23 @@ export namespace Patch {
     content: string
   }
 
-  export function deriveNewContentsFromChunks(filePath: string, chunks: UpdateFileChunk[]): ApplyPatchFileUpdate {
-    // Read original file content
+  export function deriveNewContentsFromChunks(
+    filePath: string,
+    chunks: UpdateFileChunk[],
+    approvedContent?: string,
+  ): ApplyPatchFileUpdate {
+    // Callers that gate an edit on user approval pass the exact snapshotted
+    // bytes here. This prevents a second pathname read from silently deriving
+    // a patch from a different inode during the approval window.
     let originalContent: string
-    try {
-      originalContent = readFileSync(filePath, "utf-8")
-    } catch (error) {
-      throw new Error(`Failed to read file ${filePath}: ${error}`)
+    if (approvedContent !== undefined) {
+      originalContent = approvedContent
+    } else {
+      try {
+        originalContent = readFileSync(filePath, "utf-8")
+      } catch (error) {
+        throw new Error(`Failed to read file ${filePath}: ${error}`)
+      }
     }
 
     let originalLines = originalContent.split("\n")

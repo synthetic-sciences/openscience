@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test"
 import path from "path"
-import { tmpdir } from "../fixture/fixture"
+import { tmpdir, trustProject } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Config } from "../../src/config/config"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -46,6 +46,7 @@ test("Agent.get includes color from config", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      await trustProject()
       const plan = await AgentSvc.get("plan")
       expect(plan?.color).toBe("#A855F7")
     },

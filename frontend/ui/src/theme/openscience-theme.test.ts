@@ -22,26 +22,33 @@ const fallback = {
 }
 
 const darkPalette = {
-  "background-base": "#1c1d1c",
-  "background-weak": "#202120",
-  "background-strong": "#181918",
-  "background-stronger": "#141514",
-  "surface-raised-strong": "#252625",
-  "surface-raised-strong-hover": "#2a2b2a",
-  "surface-raised-stronger": "#2a2b2a",
-  "surface-raised-stronger-hover": "#30312f",
-  "surface-strong": "#2d2e2c",
-  "surface-raised-stronger-non-alpha": "#252625",
-  "border-weaker-base": "#f0efeb08",
-  "border-weak-base": "#f0efeb12",
-  "border-weak-hover": "#f0efeb1d",
-  "border-base": "#f0efeb27",
-  "border-hover": "#f0efeb34",
-  "border-strong-base": "#f0efeb43",
-  "text-base": "#deddd8",
-  "text-weak": "#b0afa9",
-  "text-weaker": "#85847f",
-  "text-strong": "#f0efeb",
+  "background-base": "#26241f",
+  "background-weak": "#2d2a24",
+  "background-strong": "#2a2822",
+  "background-stronger": "#302d27",
+  "surface-inset-base": "#23211d",
+  "surface-inset-strong": "#201e1a",
+  "surface-float-base": "#34312b",
+  "surface-raised-strong": "#34312b",
+  "surface-raised-strong-hover": "#3a362f",
+  "surface-raised-stronger": "#38342d",
+  "surface-raised-stronger-hover": "#423d35",
+  "surface-strong": "#3e3931",
+  "surface-raised-stronger-non-alpha": "#34312b",
+  "input-base": "#302d27",
+  "input-hover": "#37332c",
+  "button-secondary-base": "#34312b",
+  "button-secondary-hover": "#3e3931",
+  "border-weaker-base": "#f4eee50a",
+  "border-weak-base": "#f4eee514",
+  "border-weak-hover": "#f4eee522",
+  "border-base": "#f4eee52e",
+  "border-hover": "#f4eee53d",
+  "border-strong-base": "#f4eee54d",
+  "text-base": "#e3ded5",
+  "text-weak": "#c0b8ad",
+  "text-weaker": "#b0a79c",
+  "text-strong": "#faf6ef",
 } as const
 
 const luminance = (color: string) => {
@@ -120,12 +127,39 @@ const darkSemantics = [
   "syntax-info",
 ] as const
 
+const darkStructuralTokens = [
+  "background-base",
+  "background-weak",
+  "background-strong",
+  "background-stronger",
+  "surface-inset-base",
+  "surface-inset-base-hover",
+  "surface-inset-strong",
+  "surface-inset-strong-hover",
+  "surface-float-base",
+  "surface-float-base-hover",
+  "surface-raised-strong",
+  "surface-raised-strong-hover",
+  "surface-raised-stronger",
+  "surface-raised-stronger-hover",
+  "surface-strong",
+  "surface-raised-stronger-non-alpha",
+  "input-base",
+  "input-hover",
+  "input-active",
+  "input-selected",
+  "input-focus",
+  "input-disabled",
+  "button-secondary-base",
+  "button-secondary-hover",
+] as const
+
 describe("OpenScience default theme", () => {
-  test("uses canonical warm paper, cool-neutral dark, and rust anchors", () => {
+  test("uses canonical warm paper, warm-charcoal dark, and rust anchors", () => {
     expect(openscience.light.overrides["background-base"]).toBe("#f7f4ed")
     expect(openscience.light.overrides["text-strong"]).toBe("#241f1a")
     expect(openscience.light.overrides["surface-brand-base"]).toBe("#b85c3b")
-    expect(openscience.dark.seeds.neutral).toBe("#292a28")
+    expect(openscience.dark.seeds.neutral).toBe("#5f574d")
     expect(openscience.dark.overrides["surface-brand-base"]).toBe("#d48765")
 
     for (const entry of Object.entries(darkPalette)) {
@@ -133,6 +167,25 @@ describe("OpenScience default theme", () => {
       expect(resolved.dark[entry[0]]).toBe(entry[1])
       expect(fallback.dark[entry[0]]).toBe(entry[1])
     }
+  })
+
+  test("keeps every dark structural surface out of the near-black range", () => {
+    for (const token of darkStructuralTokens) {
+      const color = resolved.dark[token]
+      expect(color).toMatch(/^#[0-9a-f]{6}$/i)
+      expect(color.toLowerCase()).not.toBe("#000000")
+      expect(luminance(color)).toBeGreaterThanOrEqual(0.013)
+      expect(fallback.dark[token]).toBe(color)
+    }
+  })
+
+  test("keeps dark body, supporting text, and brand labels readable", () => {
+    expect(contrast(resolved.dark["text-base"], resolved.dark["background-base"])).toBeGreaterThanOrEqual(7)
+    expect(contrast(resolved.dark["text-weak"], resolved.dark["background-base"])).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(resolved.dark["text-weaker"], resolved.dark["background-base"])).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(resolved.dark["text-on-brand-base"], resolved.dark["surface-brand-base"])).toBeGreaterThanOrEqual(
+      4.5,
+    )
   })
 
   test("does not change alternate themes", () => {
@@ -152,6 +205,12 @@ describe("OpenScience default theme", () => {
 
   test("keeps the pre-JavaScript dark semantic scales identical to the resolved theme", () => {
     for (const token of darkSemantics) {
+      expect(fallback.dark[token]).toBe(resolved.dark[token])
+    }
+  })
+
+  test("keeps every explicit dark override identical before and after JavaScript loads", () => {
+    for (const token of Object.keys(darkOverrides)) {
       expect(fallback.dark[token]).toBe(resolved.dark[token])
     }
   })

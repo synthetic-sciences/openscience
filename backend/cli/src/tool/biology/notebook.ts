@@ -9,6 +9,9 @@ import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
 import { Sandbox } from "@/sandbox/sandbox"
 import { ExecutionAuthority } from "@/project/execution"
+import { AuthoritySignal } from "@/project/authority-signal"
+import { AuthorityProcessLedger } from "@/project/authority-process"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 const KERNEL_SCRIPT = `
 import sys, json, io, traceback, os, re
@@ -86,27 +89,52 @@ while True:
 
 interface Kernel {
   process: ChildProcess
+  projectID: string
   scriptPath: string
   configPath: string
   cachePath: string
   lastUsed: number
   generation: string
+  authorityID: string
 }
 
 const kernels = new Map<string, Kernel>()
+const executionQueues = new Map<string, Promise<void>>()
+
+async function serialize<T>(sessionID: string, action: () => Promise<T>): Promise<T> {
+  const previous = executionQueues.get(sessionID) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const tail = previous.catch(() => undefined).then(() => current)
+  executionQueues.set(sessionID, tail)
+  await previous.catch(() => undefined)
+  try {
+    return await action()
+  } finally {
+    release()
+    if (executionQueues.get(sessionID) === tail) executionQueues.delete(sessionID)
+  }
+}
+
+function removeKernel(id: string, kernel: Kernel) {
+  try {
+    require("fs").unlinkSync(kernel.scriptPath)
+  } catch {}
+  try {
+    require("fs").unlinkSync(kernel.configPath)
+  } catch {}
+  rmSync(kernel.cachePath, { recursive: true, force: true })
+  if (kernels.get(id) === kernel) kernels.delete(id)
+  void AuthorityProcessLedger.complete(kernel.authorityID).catch(() => undefined)
+}
 
 // Clean up all kernels on process exit
 function cleanupAll() {
   for (const [id, kernel] of kernels) {
     Shell.killTreeSync(kernel.process, { detached: process.platform !== "win32" })
-    try {
-      require("fs").unlinkSync(kernel.scriptPath)
-    } catch {}
-    try {
-      require("fs").unlinkSync(kernel.configPath)
-    } catch {}
-    rmSync(kernel.cachePath, { recursive: true, force: true })
-    kernels.delete(id)
+    removeKernel(id, kernel)
   }
 }
 
@@ -114,27 +142,32 @@ export function shutdownBiologyKernels() {
   cleanupAll()
 }
 
+export async function releaseBiologySession(projectID: string, sessionID: string) {
+  const kernel = kernels.get(sessionID)
+  if (kernel && kernel.projectID === projectID) {
+    await AuthorityProcessLedger.revoke({ id: kernel.authorityID, kind: "biology" })
+    removeKernel(sessionID, kernel)
+  }
+  await AuthorityProcessLedger.revoke({ kind: "biology", projectID, sessionID })
+}
+
+export async function releaseBiologyProject(projectID: string) {
+  const sessions = [...kernels].filter(([, kernel]) => kernel.projectID === projectID).map(([sessionID]) => sessionID)
+  await Promise.all(sessions.map((sessionID) => releaseBiologySession(projectID, sessionID)))
+  await AuthorityProcessLedger.revoke({ kind: "biology", projectID })
+}
+
 process.on("exit", cleanupAll)
 process.on("SIGTERM", cleanupAll)
 process.on("SIGINT", cleanupAll)
 
-function cleanupIdle() {
+async function cleanupIdle() {
   const now = Date.now()
   const idle = 30 * 60 * 1000 // 30 min
   for (const [id, kernel] of kernels) {
     if (now - kernel.lastUsed > idle) {
-      void Shell.killTree(kernel.process, {
-        exited: () => kernel.process.exitCode !== null,
-        detached: process.platform !== "win32",
-      })
-      try {
-        require("fs").unlinkSync(kernel.scriptPath)
-      } catch {}
-      try {
-        require("fs").unlinkSync(kernel.configPath)
-      } catch {}
-      rmSync(kernel.cachePath, { recursive: true, force: true })
-      kernels.delete(id)
+      await AuthorityProcessLedger.revoke({ id: kernel.authorityID, kind: "biology" })
+      removeKernel(id, kernel)
     }
   }
 }
@@ -146,7 +179,7 @@ async function getKernel(sessionID: string): Promise<Kernel> {
     capability: "kernel",
   })
   // Clean up idle kernels while we're here
-  cleanupIdle()
+  await cleanupIdle()
 
   const existing = kernels.get(sessionID)
   if (
@@ -161,18 +194,8 @@ async function getKernel(sessionID: string): Promise<Kernel> {
 
   // Dead kernel — clean up
   if (existing) {
-    await Shell.killTree(existing.process, {
-      exited: () => existing.process.exitCode !== null,
-      detached: process.platform !== "win32",
-    })
-    try {
-      require("fs").unlinkSync(existing.scriptPath)
-    } catch {}
-    try {
-      require("fs").unlinkSync(existing.configPath)
-    } catch {}
-    rmSync(existing.cachePath, { recursive: true, force: true })
-    kernels.delete(sessionID)
+    await AuthorityProcessLedger.revoke({ id: existing.authorityID, kind: "biology" })
+    removeKernel(sessionID, existing)
   }
 
   // Start new kernel
@@ -184,31 +207,101 @@ async function getKernel(sessionID: string): Promise<Kernel> {
   await Bun.write(configPath, "{}\n")
 
   const pythonBin = await findPython()
-  // Confine the kernel to the workspace when the execution sandbox is on: it runs
-  // arbitrary agent-authored code — the same threat model as the bash tool.
-  const sandboxed = Sandbox.wrapArgv({
-    file: pythonBin,
-    args: ["-u", scriptPath],
-    workspace: authority.writable,
-    extraWritable: [scriptPath, configPath, cachePath],
-    unreadable: OpenScience.kernelSensitivePaths(),
-    options: authority.sandbox,
+  const launched = await AuthoritySignal.exclusive(async () => {
+    const current = await ExecutionAuthority.require({
+      projectID: Instance.project.id,
+      sessionID,
+      capability: "kernel",
+    })
+    // Confine the kernel to the workspace when execution sandboxing is on: it
+    // runs arbitrary agent-authored code and shares Bash's threat model.
+    const sandboxed = Sandbox.wrapArgv({
+      file: pythonBin,
+      args: ["-u", scriptPath],
+      workspace: current.writable,
+      readable: current.readable,
+      extraWritable: [scriptPath, configPath, cachePath],
+      unreadable: OpenScience.kernelSensitivePaths(),
+      options: current.sandbox,
+    })
+    const launch = WindowsJobLauncher.wrap({ file: sandboxed.file, args: sandboxed.args })
+    const proc = (() => {
+      try {
+        return spawn(launch.file, launch.args, {
+          cwd: current.workspace,
+          env: {
+            ...OpenScience.kernelEnv(process.env),
+            ...OpenScience.pythonThreadCapEnv(process.env),
+            ATLAS_CLI_CONFIG_PATH: configPath,
+            MPLCONFIGDIR: path.join(cachePath, "matplotlib"),
+            XDG_CACHE_HOME: path.join(cachePath, "xdg"),
+            PYTHONPYCACHEPREFIX: path.join(cachePath, "pycache"),
+            PYTHONUNBUFFERED: "1",
+          },
+          stdio: ["pipe", "pipe", "pipe"],
+          // Own process group so killing the kernel reaps its joblib/BLAS children (#102).
+          detached: process.platform !== "win32",
+        })
+      } catch (error) {
+        Sandbox.cleanup(sandboxed)
+        throw error
+      }
+    })()
+    const authorityID = `biology-${crypto.randomUUID()}`
+    let exited = false
+    const complete = () => {
+      exited = true
+      Sandbox.cleanup(sandboxed)
+      void AuthorityProcessLedger.complete(authorityID).catch(() => undefined)
+    }
+    proc.once("exit", complete)
+    proc.once("error", complete)
+    if (!proc.pid) {
+      await Shell.killTree(proc, { detached: process.platform !== "win32" })
+      Sandbox.cleanup(sandboxed)
+      throw new Error("Biology kernel started without a process id")
+    }
+    const registered = await AuthorityProcessLedger.register({
+      id: authorityID,
+      kind: "biology",
+      pid: proc.pid,
+      projectID: Instance.project.id,
+      sessionID,
+      authorityGeneration: current.generation,
+      windowsRelease: launch.release,
+    }).catch(async (error) => {
+      await AuthorityProcessLedger.revoke({ id: authorityID, kind: "biology" }).catch(() => undefined)
+      await Shell.killTree(proc, {
+        exited: () => proc.exitCode !== null,
+        detached: process.platform !== "win32",
+      })
+      Sandbox.cleanup(sandboxed)
+      throw error
+    })
+    if (!registered || exited) {
+      await AuthorityProcessLedger.revoke({ id: authorityID, kind: "biology" })
+      Sandbox.cleanup(sandboxed)
+      throw new Error("Biology kernel exited before durable authority registration")
+    }
+    const kernel: Kernel = {
+      process: proc,
+      projectID: Instance.project.id,
+      scriptPath,
+      configPath,
+      cachePath,
+      lastUsed: Date.now(),
+      generation: current.generation,
+      authorityID,
+    }
+    kernels.set(sessionID, kernel)
+    return kernel
+  }).catch((error) => {
+    rmSync(scriptPath, { force: true })
+    rmSync(configPath, { force: true })
+    rmSync(cachePath, { recursive: true, force: true })
+    throw error
   })
-  const proc = spawn(sandboxed.file, sandboxed.args, {
-    cwd: authority.workspace,
-    env: {
-      ...OpenScience.kernelEnv(process.env),
-      ...OpenScience.pythonThreadCapEnv(process.env),
-      ATLAS_CLI_CONFIG_PATH: configPath,
-      MPLCONFIGDIR: path.join(cachePath, "matplotlib"),
-      XDG_CACHE_HOME: path.join(cachePath, "xdg"),
-      PYTHONPYCACHEPREFIX: path.join(cachePath, "pycache"),
-      PYTHONUNBUFFERED: "1",
-    },
-    stdio: ["pipe", "pipe", "pipe"],
-    // Own process group so killing the kernel reaps its joblib/BLAS children (#102).
-    detached: process.platform !== "win32",
-  })
+  const proc = launched.process
 
   // Collect kernel stderr (startup warnings, etc.)
   let kernelStderr = ""
@@ -221,8 +314,10 @@ async function getKernel(sessionID: string): Promise<Kernel> {
   // Wait for ready signal
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      void Shell.killTree(proc, { exited: () => proc.exitCode !== null, detached: process.platform !== "win32" })
-      reject(new Error(`Kernel startup timed out. stderr: ${kernelStderr}`))
+      void AuthorityProcessLedger.revoke({ id: launched.authorityID, kind: "biology" }).then(
+        () => reject(new Error(`Kernel startup timed out. stderr: ${kernelStderr}`)),
+        reject,
+      )
     }, 15_000)
 
     let buf = ""
@@ -245,16 +340,7 @@ async function getKernel(sessionID: string): Promise<Kernel> {
     })
   })
 
-  const kernel: Kernel = {
-    process: proc,
-    scriptPath,
-    configPath,
-    cachePath,
-    lastUsed: Date.now(),
-    generation: authority.generation,
-  }
-  kernels.set(sessionID, kernel)
-  return kernel
+  return launched
 }
 
 function executeInKernel(
@@ -264,12 +350,14 @@ function executeInKernel(
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      // Kill the timed-out kernel and any joblib/BLAS workers it started.
-      void Shell.killTree(kernel.process, {
-        exited: () => kernel.process.exitCode !== null,
-        detached: process.platform !== "win32",
-      })
-      reject(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`))
+      kernel.process.stdout?.off("data", handler)
+      kernel.process.off("exit", exitHandler)
+      // Durable group revocation is identity-checked and includes joblib/BLAS
+      // workers; reject only after teardown is acknowledged.
+      void AuthorityProcessLedger.revoke({ id: kernel.authorityID, kind: "biology" }).then(
+        () => reject(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`)),
+        reject,
+      )
     }, timeout)
 
     let buffer = ""
@@ -283,6 +371,7 @@ function executeInKernel(
       if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
         clearTimeout(timer)
         kernel.process.stdout?.off("data", handler)
+        kernel.process.off("exit", exitHandler)
         const json = buffer.slice(startIdx + startMarker.length, endIdx)
         try {
           resolve(JSON.parse(json))
@@ -336,33 +425,35 @@ export const NotebookTool = Tool.define("notebook", {
       metadata: {},
     })
 
-    const kernel = await getKernel(ctx.sessionID)
-    const result = await executeInKernel(kernel, params.code, timeout)
+    return serialize(ctx.sessionID, async () => {
+      const kernel = await getKernel(ctx.sessionID)
+      const result = await executeInKernel(kernel, params.code, timeout)
 
-    // Stream metadata updates for the UI
-    ctx.metadata({
-      metadata: {
-        output: result.stdout || result.stderr || "(no output)",
-        ok: result.ok,
-      },
+      // Stream metadata updates for the UI
+      ctx.metadata({
+        metadata: {
+          output: result.stdout || result.stderr || "(no output)",
+          ok: result.ok,
+        },
+      })
+
+      const parts: string[] = []
+      if (result.stdout) parts.push(result.stdout)
+      if (result.stderr) {
+        parts.push(result.ok ? `[stderr]\n${result.stderr}` : `[ERROR]\n${result.stderr}`)
+      }
+      if (!parts.length) parts.push("(no output)")
+
+      const output = parts.join("\n")
+
+      return {
+        title: result.ok ? "Python cell" : "Python cell (error)",
+        output,
+        metadata: {
+          ok: result.ok,
+          output: output.length > 30_000 ? output.slice(0, 30_000) + "\n\n..." : output,
+        },
+      }
     })
-
-    const parts: string[] = []
-    if (result.stdout) parts.push(result.stdout)
-    if (result.stderr) {
-      parts.push(result.ok ? `[stderr]\n${result.stderr}` : `[ERROR]\n${result.stderr}`)
-    }
-    if (!parts.length) parts.push("(no output)")
-
-    const output = parts.join("\n")
-
-    return {
-      title: result.ok ? "Python cell" : "Python cell (error)",
-      output,
-      metadata: {
-        ok: result.ok,
-        output: output.length > 30_000 ? output.slice(0, 30_000) + "\n\n..." : output,
-      },
-    }
   },
 })

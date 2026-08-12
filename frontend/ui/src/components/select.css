@@ -16,7 +16,7 @@
       justify-content: center;
       flex-shrink: 0;
       color: var(--text-weak);
-      transition: transform 0.1s ease-in-out;
+      transition: transform var(--duration-fast) var(--ease-standard);
     }
 
     &[data-expanded] {
@@ -48,7 +48,7 @@
     [data-slot="select-select-trigger"] {
       padding: 6px 6px 6px 12px;
       box-shadow: none;
-      border-radius: 6px;
+      border-radius: var(--radius-xs);
       min-width: 160px;
       height: 32px;
       justify-content: flex-end;
@@ -71,8 +71,8 @@
         flex-shrink: 0;
         color: var(--text-weak);
         background-color: var(--surface-raised-base);
-        border-radius: 4px;
-        transition: transform 0.1s ease-in-out;
+        border-radius: var(--radius-xs);
+        transition: transform var(--duration-fast) var(--ease-standard);
       }
 
       &[data-slot="select-select-trigger"]:hover:not(:disabled),
@@ -100,8 +100,9 @@
   box-shadow: var(--shadow-xs-border);
   z-index: 60;
 
-  &[data-expanded] {
-    animation: select-open 0.15s ease-out;
+  &[data-closed] {
+    pointer-events: none;
+    animation: select-close var(--duration-fast) ease-in forwards;
   }
 
   [data-slot="select-select-content-list"] {
@@ -124,10 +125,11 @@
   [data-slot="select-select-item"] {
     position: relative;
     display: flex;
+    min-height: 32px;
     align-items: center;
     padding: 2px 8px;
     gap: 12px;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     cursor: default;
 
     /* text-12-medium */
@@ -140,9 +142,6 @@
 
     color: var(--text-strong);
 
-    transition:
-      background-color 0.2s ease-in-out,
-      color 0.2s ease-in-out;
     outline: none;
     user-select: none;
 
@@ -172,7 +171,7 @@
 
 [data-component="select-content"][data-trigger-style="settings"] {
   min-width: 160px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0;
 
   [data-slot="select-select-content-list"] {
@@ -190,13 +189,19 @@
   }
 }
 
-@keyframes select-open {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
+@media (pointer: coarse) {
+  [data-component="select-content"] [data-slot="select-select-item"] {
+    min-height: 44px;
   }
-  to {
+}
+
+@keyframes select-close {
+  from {
     opacity: 1;
     transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
   }
 }

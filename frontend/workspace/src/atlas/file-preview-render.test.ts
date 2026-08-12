@@ -13,6 +13,30 @@ describe("file preview markdown images", () => {
     expect(preview).toContain('<Markdown class="atlas-md" text={view.draft} resolveImage={image} />')
   })
 
+  test("ordinary Markdown remains readable and editable through the existing save path", async () => {
+    const preview = await read("./FilePreview.tsx")
+    const css = await read("./FilePreview.css")
+
+    expect(preview).toContain('sourceLabel={description().source && props.writable !== false ? "Edit" : undefined}')
+    expect(preview).toContain('classList={{ "is-prose-editor": kind() === "markdown" }}')
+    expect(preview).toContain("void save()")
+    expect(css).toContain(".atlas-file-source-editor.is-prose-editor")
+    expect(css).toContain("text-wrap: pretty")
+    expect(css).toContain("text-wrap: balance")
+  })
+
+  test("README alignment wrappers keep their inner Markdown parsed and sanitized", async () => {
+    const preview = await read("./FilePreview.tsx")
+    const css = await read("./FilePreview.css")
+
+    expect(preview).toContain('import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"')
+    expect(preview).toContain("data-align={lead().alignment}")
+    expect(preview).toContain("text={lead().text} resolveImage={image}")
+    expect(preview).toContain("text={rest()} resolveImage={image}")
+    expect(css).toContain('.atlas-file-document-lead[data-align="center"]')
+    expect(css).toContain("p:has(a > img)")
+  })
+
   test("chat markdown resolves images against the project root via the shared context", async () => {
     const layout = await read("../pages/directory-layout.tsx")
 
@@ -24,7 +48,7 @@ describe("file preview markdown images", () => {
   test("the shared renderer rewrites image sources only after DOMPurify sanitization", async () => {
     const markdown = await read("../../../ui/src/components/markdown.tsx")
 
-    const sanitized = markdown.indexOf("const safe = sanitize(next)")
+    const sanitized = markdown.indexOf("(next) => sanitize(next)")
     const resolved = markdown.indexOf("if (resolve) resolveImages(temp, resolve)")
     expect(sanitized).toBeGreaterThan(-1)
     expect(resolved).toBeGreaterThan(sanitized)

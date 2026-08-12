@@ -1,22 +1,41 @@
 import { $ } from "bun"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { Project } from "../../src/project/project"
+import { Instance } from "../../src/project/instance"
+import { ProjectTrust } from "../../src/project/trust"
+import { Sandbox } from "../../src/sandbox/sandbox"
 import { Server } from "../../src/server/server"
 import { Storage } from "../../src/storage/storage"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
+// These integration cases cross the durable authority/trust boundary and run
+// real repository probes. They complete in roughly 10–12 seconds in
+// isolation, but can legitimately queue behind other native lifecycle tests
+// when Bun executes the full backend suite concurrently.
+setDefaultTimeout(30_000)
 
 const fetch = Server.internalFetch()
+
+async function trust(directory: string) {
+  return Instance.provide({
+    directory,
+    fn: async () => {
+      const status = await ProjectTrust.status(Instance.project)
+      return ProjectTrust.update(Instance.project, { trusted: true, root: status.root })
+    },
+  })
+}
 
 describe("pre-instance project selection routes", () => {
   test("uses an opaque selector without a caller-owned directory", async () => {
     await using tmp = await tmpdir({ git: true })
     const created = await Project.fromDirectory(tmp.path)
+    await trust(tmp.path)
     await fs.mkdir(path.join(tmp.path, ".openscience"), { recursive: true })
     await Bun.write(path.join(tmp.path, ".openscience", "project.json"), JSON.stringify({ project_id: "atlas-root" }))
 
@@ -148,6 +167,7 @@ describe("pre-instance project selection routes", () => {
   test("canonicalizes a symlink override before repository execution", async () => {
     await using tmp = await tmpdir({ git: true })
     const created = await Project.fromDirectory(tmp.path)
+    await trust(tmp.path)
     const link = path.join(path.dirname(tmp.path), `${path.basename(tmp.path)}-route-alias`)
     await fs.symlink(tmp.path, link)
 
@@ -166,7 +186,7 @@ describe("pre-instance project selection routes", () => {
     await fs.rm(link, { force: true })
   })
 
-  test("preserves raw-directory clients and encoded deep links without a selector", async () => {
+  test("keeps folder discovery compatible but requires a project capability for repository execution", async () => {
     await using tmp = await tmpdir({ git: true })
     const link = path.join(path.dirname(tmp.path), `${path.basename(tmp.path)}-legacy-alias`)
     await fs.symlink(tmp.path, link)
@@ -180,11 +200,8 @@ describe("pre-instance project selection routes", () => {
       body: JSON.stringify({ path: link }),
     })
 
-    expect(repo.status).toBe(200)
-    expect(await repo.json()).toMatchObject({
-      directory: tmp.path,
-      isGit: true,
-    })
+    expect(repo.status).toBe(400)
+    expect(await repo.json()).toEqual({ error: "Repository operations require an opaque project selector" })
     expect(folder.status).toBe(200)
     expect(await folder.json()).toMatchObject({
       ok: true,
@@ -207,6 +224,7 @@ describe("pre-instance project selection routes", () => {
       },
     })
     const created = await Project.fromDirectory(tmp.path)
+    await trust(tmp.path)
 
     const response = await fetch("http://openscience.internal/api/repo/status", {
       headers: {
@@ -265,6 +283,7 @@ describe("pre-instance project selection routes", () => {
   test("accepts body project selection for repository mutations", async () => {
     await using tmp = await tmpdir({ git: true })
     const created = await Project.fromDirectory(tmp.path)
+    await trust(tmp.path)
     await Bun.write(path.join(tmp.path, "result.txt"), "done\n")
 
     const response = await fetch("http://openscience.internal/api/repo/commit", {
@@ -281,5 +300,41 @@ describe("pre-instance project selection routes", () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ committed: true })
     expect((await $`git log -1 --format=%s`.cwd(tmp.path).quiet().text()).trim()).toBe("record result")
+  })
+
+  test("denies repository hooks before trust and confines them after trust", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const created = await Project.fromDirectory(tmp.path)
+    const inside = path.join(tmp.path, "hook-ran")
+    const outside = path.join(path.dirname(tmp.path), `openscience-repo-hook-${crypto.randomUUID()}`)
+    const hook = path.join(tmp.path, ".git", "hooks", "pre-commit")
+    await Bun.write(
+      hook,
+      `#!/bin/sh
+printf ran > ${JSON.stringify(inside)}
+printf escaped > ${JSON.stringify(outside)} 2>/dev/null || true
+`,
+    )
+    await fs.chmod(hook, 0o700)
+    await Bun.write(path.join(tmp.path, "result.txt"), "done\n")
+
+    const request = () =>
+      fetch("http://openscience.internal/api/repo/commit", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-openscience-project": created.project.id },
+        body: JSON.stringify({ message: "record result" }),
+      })
+
+    const denied = await request()
+    expect(denied.status).toBe(400)
+    expect(await Bun.file(inside).exists()).toBe(false)
+    expect(await Bun.file(outside).exists()).toBe(false)
+
+    await trust(tmp.path)
+    const committed = await request()
+    expect(committed.status).toBe(200)
+    expect(await Bun.file(inside).text()).toBe("ran")
+    if (Sandbox.describe().available) expect(await Bun.file(outside).exists()).toBe(false)
+    await fs.rm(outside, { force: true })
   })
 })

@@ -3,16 +3,14 @@
  *
  * The shipped binary builds with `autoloadDotenv: false` (script/build.ts) so it
  * never silently ingests an ambient `.env` from whatever directory it is run in.
- * But a user's own project `.env` is a first-class BYOK source — the same as a
- * shell export or `keys add`. So we load it ourselves, explicitly and
- * predictably, from the launch directory.
+ * Repository `.env` files are never loaded during OpenScience boot: canonical
+ * project trust does not exist at that import boundary. This parser/loader is
+ * retained for explicit post-trust workload use and tests; callers must not use
+ * it as a host credential/control-plane source.
  *
- * Precedence: a real shell export always wins (we only apply vars that are not
- * already set), and because preload-env.ts calls this BEFORE replaying the
- * synced-env snapshot, a `.env` key also wins over a managed synced value —
- * matching the "the user's own key beats the managed wallet" rule everywhere
- * else. A `.env` is the user's own credential, so it is NOT subject to the sync
- * blocklist (synced-env-policy.ts) — that only filters Atlas-provided values.
+ * Precedence for an explicit caller: a real shell export always wins. Even
+ * after trust, OpenScience control-plane, loader, proxy, and provider-routing
+ * variables remain explicit shell/global settings.
  *
  * Kept dependency-free (only node fs/path) so preload-env.ts can call it at
  * module init before the rest of the app loads.
@@ -56,14 +54,108 @@ export function parseDotenv(raw: string): Array<[string, string]> {
  *  code into the tool subprocesses openscience spawns. A shell export of these
  *  still works; only the `.env` path is refused. */
 const DANGEROUS_ENV = new Set([
+  // OpenScience/host process discovery and import behavior.
+  "PATH",
+  "HOME",
+  "SHELL",
+  "ENV",
+  "BASH_ENV",
+  "ZDOTDIR",
+  "CDPATH",
+  "IFS",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
   "NODE_OPTIONS",
   "BUN_OPTIONS",
   "NODE_REPL_EXTERNAL_MODULE",
+  "PYTHONPATH",
+  "PYTHONHOME",
+  "RUBYOPT",
+  "RUBYLIB",
+  "PERL5OPT",
+  "PERL5LIB",
+  "JAVA_TOOL_OPTIONS",
+  "_JAVA_OPTIONS",
+  "CLASSPATH",
+  "BUNDLE_GEMFILE",
+  "GIT_ASKPASS",
+  "GIT_SSH_COMMAND",
+  "SSH_ASKPASS",
   "LD_PRELOAD",
   "LD_LIBRARY_PATH",
   "DYLD_INSERT_LIBRARIES",
   "DYLD_LIBRARY_PATH",
+  // Transport indirection can redirect a shell-exported credential to an
+  // attacker-controlled proxy/CA even when the credential itself is not in
+  // the repository.
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+  "no_proxy",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "NODE_EXTRA_CA_CERTS",
+  "ATLAS_BASE_URL",
+  "ANTHROPIC_BASE_URL",
+  "OPENAI_BASE_URL",
+  "GOOGLE_GENERATIVE_AI_BASE_URL",
+  "GOOGLE_BASE_URL",
+  "GEMINI_BASE_URL",
+  "OPENROUTER_BASE_URL",
+  "META_MODEL_BASE_URL",
+  "TOGETHER_BASE_URL",
+  "GROQ_BASE_URL",
+  "FIREWORKS_BASE_URL",
+  "XAI_BASE_URL",
+  "MISTRAL_BASE_URL",
+  "DEEPSEEK_BASE_URL",
+  "CEREBRAS_BASE_URL",
+  "PERPLEXITY_BASE_URL",
+  "AZURE_OPENAI_ENDPOINT",
+  "TINKER_BASE_URL",
 ])
+
+/** Repository dotenv is data/workload configuration, never an authority to
+ * reconfigure the OpenScience host. This predicate runs before Flag, Config,
+ * Global, provider SDK, and plugin modules are imported. */
+export function isProjectDotenvAllowed(key: string): boolean {
+  if (DANGEROUS_ENV.has(key)) return false
+  if (key.startsWith("OPENSCIENCE_") || key.startsWith("SYNSC_")) return false
+  if (key.startsWith("GIT_CONFIG_") || key.startsWith("NPM_CONFIG_")) return false
+  return true
+}
+
+/** Remove variables Bun may have auto-loaded from the launch directory before
+ * JavaScript got control. The standalone binary disables autoload at build
+ * time, and dev scripts pass --no-env-file, but this closes direct
+ * `bun src/index.ts` launches too. A parent-shell value that differs from the
+ * repository value is preserved; an indistinguishable equal value is dropped
+ * fail-closed and can be supplied through global Keys settings instead. */
+export function scrubAmbientProjectDotenv(cwd: string, env: NodeJS.ProcessEnv): string[] {
+  const removed: string[] = []
+  for (const name of [".env.local", ".env"]) {
+    let raw: string
+    try {
+      raw = fs.readFileSync(path.join(cwd, name), "utf-8")
+    } catch {
+      continue
+    }
+    for (const [key, value] of parseDotenv(raw)) {
+      if (value === "" || env[key] !== value) continue
+      delete env[key]
+      removed.push(key)
+    }
+  }
+  return [...new Set(removed)]
+}
 
 /** Load `.env.local` then `.env` from `cwd`, applying a var only when it is not
  *  already set in `env` (so a shell export wins). `.env.local` is read first so
@@ -80,7 +172,7 @@ export function loadProjectDotenv(cwd: string, env: NodeJS.ProcessEnv): string[]
       continue
     }
     for (const [key, value] of parseDotenv(raw)) {
-      if (DANGEROUS_ENV.has(key)) continue
+      if (!isProjectDotenvAllowed(key)) continue
       // Skip empty values: they aren't a real credential, and applying "" here
       // only to have the synced replay (which treats "" as unset) overwrite it
       // would violate the shell > .env > synced precedence.

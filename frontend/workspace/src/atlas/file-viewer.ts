@@ -111,13 +111,18 @@ export function toolbarControls(input: {
 export function artifactControl(input: {
   session: boolean
   busy: boolean
+  dirty: boolean
 }): { id: "artifact"; label: string; disabled: boolean } | undefined {
   if (!input.session) return
   return {
     id: "artifact",
-    label: input.busy ? "Saving artifact…" : "Save as artifact",
-    disabled: input.busy,
+    label: input.busy ? "Saving artifact…" : input.dirty ? "Save file first" : "Save as artifact",
+    disabled: input.busy || input.dirty,
   }
+}
+
+export function reconcileSavedDraft(current: string, submitted: string, saved: string) {
+  return { draft: current === submitted ? saved : current, saved }
 }
 
 export async function readFile(reader: () => Promise<FileData>): Promise<{ data?: FileData; error?: Error }> {

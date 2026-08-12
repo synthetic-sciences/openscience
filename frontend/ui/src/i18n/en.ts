@@ -101,7 +101,7 @@ export const dict = {
   "ui.message.copy": "Copy",
   "ui.message.copied": "Copied!",
   "ui.message.revert": "Undo from here",
-  "ui.message.attachment.alt": "attachment",
+  "ui.message.attachment.alt": "Attachment",
 
   "ui.patch.action.deleted": "Deleted",
   "ui.patch.action.created": "Created",

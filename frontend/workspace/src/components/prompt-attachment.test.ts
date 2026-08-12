@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_BYTES, attachmentMime, attachmentSize } from "./prompt-attachment"
+import {
+  ATTACHMENT_ACCEPT,
+  MAX_ATTACHMENT_BYTES,
+  attachmentFormat,
+  attachmentMime,
+  attachmentSize,
+} from "./prompt-attachment"
 
 describe("prompt attachments", () => {
   test("accepts scientific text and data files even when the browser omits MIME", () => {
@@ -17,5 +23,11 @@ describe("prompt attachments", () => {
     expect(attachmentSize(812)).toBe("812 B")
     expect(attachmentSize(12_288)).toBe("12 KB")
     expect(attachmentSize(2_621_440)).toBe("2.5 MB")
+  })
+
+  test("keeps the real file extension visible", () => {
+    expect(attachmentFormat({ name: "methods.pdf", type: "application/pdf" })).toBe("PDF")
+    expect(attachmentFormat({ name: "counts.tsv", type: "text/tab-separated-values" })).toBe("TSV")
+    expect(attachmentFormat({ name: "clipboard", type: "image/png" })).toBe("PNG")
   })
 })

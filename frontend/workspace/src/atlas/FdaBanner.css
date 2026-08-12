@@ -91,7 +91,7 @@
   align-items: start;
   gap: 0.7rem;
   border: 1px solid color-mix(in srgb, var(--color-warning) 22%, var(--border-weak-base));
-  border-radius: var(--radius-lg);
+  border-radius: var(--atlas-radius-lg);
   padding: 0.8rem 0.9rem;
   background: color-mix(in srgb, var(--color-warning) 6%, var(--surface-base));
 }

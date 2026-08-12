@@ -67,8 +67,9 @@ const platform: Platform = {
       })
       .catch(() => undefined)
   },
-  checkUpdate: async () => {
-    const response = await openscienceFetch("/settings/updates", { headers: { Accept: "application/json" } })
+  checkUpdate: async (options) => {
+    const query = options?.refresh ? "?refresh=1" : ""
+    const response = await openscienceFetch(`/settings/updates${query}`, { headers: { Accept: "application/json" } })
     if (!response.ok) throw new Error(`Update check failed (${response.status})`)
     const result = (await response.json()) as { updateAvailable: boolean; latest?: string }
     return { updateAvailable: result.updateAvailable, version: result.latest }

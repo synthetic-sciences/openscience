@@ -61,12 +61,19 @@ describe("kernel status row", () => {
   test("shows the live runtime in one compact row", () => {
     const host = mount(() => subject.KernelCard({ kernel: kernel(), action: "", onControl: () => {} }))
 
-    expect(host.querySelector(".kernel-card__language")?.textContent).toBe("Py")
+    expect(host.querySelector(".kernel-card__language [data-component=icon]")).not.toBeNull()
     expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("analysis.ipynb")
-    expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Executing now")
-    expect(host.querySelectorAll(".kernel-card__metric")[0]?.textContent).toBe("412 MBrss")
-    expect(host.querySelectorAll(".kernel-card__metric")[1]?.textContent).toBe("1.8cores")
-    expect(host.querySelector(".kernel-card__uptime")?.textContent).toMatch(/^\d+s$/)
+    expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Running · 7 cells")
+    expect(host.querySelector(".kernel-card__copy > span")?.getAttribute("title")).toBe("Executing now.")
+    expect(host.querySelector(".kernel-card__uptime strong")?.textContent).toMatch(/^\d+s$/)
+    expect(host.querySelector(".kernel-card__uptime small")?.textContent).toBe("Runtime")
+    expect(host.querySelectorAll(".kernel-card__metric")[1]?.textContent).toBe("412 MBMemory")
+    expect(host.querySelectorAll(".kernel-card__metric")[2]?.textContent).toBe("1.8CPU cores")
+  })
+
+  test("keeps queued work visible without filling the row with recovery prose", () => {
+    expect(subject.kernelActivity(kernel({ queue_depth: 2 }))).toBe("Running · 7 cells · 2 queued")
+    expect(subject.kernelActivity(kernel({ state: "idle", execution_count: 1 }))).toBe("Ready · 1 cell")
   })
 
   test("only exposes stop, never manual start, restart, interrupt, or forget", () => {
@@ -94,7 +101,7 @@ describe("kernel status row", () => {
 
     expect(host.querySelectorAll("button").length).toBe(1)
     expect(host.querySelector<HTMLButtonElement>("button")?.disabled).toBe(true)
-    expect(host.querySelector(".kernel-card__uptime")?.textContent).toBe("—")
+    expect(host.querySelector(".kernel-card__uptime strong")?.textContent).toBe("—")
     expect(host.textContent).not.toContain("Start")
     expect(host.textContent).not.toContain("Restart")
   })
@@ -129,7 +136,7 @@ describe("kernel status row", () => {
     const cell = host.querySelector<HTMLDetailsElement>(".kernel-card__cell")
 
     expect(cell?.open).toBe(false)
-    expect(cell?.querySelector("summary")?.textContent).toContain("Cell 7 · running")
+    expect(cell?.querySelector("summary")?.textContent).toContain("Cell 7 · Running")
     expect(cell?.querySelector("summary")?.textContent).toContain("Benchmarking survival classifiers")
     expect(cell?.querySelector("summary")?.textContent).toContain("analysis/titanic.ipynb")
     expect(cell?.querySelector("code")?.textContent).toBe("model.fit(X, y)")

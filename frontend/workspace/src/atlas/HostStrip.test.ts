@@ -35,17 +35,16 @@ const capacity = {
   kernels: { live: 2, running: 1 },
 }
 
-// A live Bun.serve endpoint cannot stand in for the product server under this
+// A live test endpoint cannot stand in for the product server under this
 // suite: happydom.ts replaces globalThis.Response, so Bun.serve does not
 // recognise what a handler returns and answers with its own placeholder body
 // carrying a doubled content-length. Every request would then fail for a reason
 // that has nothing to do with the subject, and the degraded-state tests would
 // pass without the error status ever reaching the component. So the connection
-// failure uses a genuinely closed port over Bun's own fetch, and the statuses a
-// running server returns are real Response objects over fixture bodies.
-const closed = Bun.serve({ port: 0, fetch: () => new Response("") })
-const unreachable = `http://127.0.0.1:${closed.port}`
-await closed.stop(true)
+// failure uses an unbound high loopback port over Bun's own fetch, and the
+// statuses a running server returns are real Response objects over fixtures.
+// Avoid opening a listener here: restricted test runners may forbid all binds.
+const unreachable = "http://127.0.0.1:65535"
 
 const offline = (path: string) => Bun.fetch(`${unreachable}${path}`)
 const erroring = async () => new Response("kernel registry unavailable", { status: 503 })
@@ -131,7 +130,8 @@ describe("host strip", () => {
   test("names the block as machine resources", () => {
     const source = readFileSync(fileURLToPath(new URL("./HostStrip.tsx", import.meta.url)), "utf8")
 
-    expect(source).toContain('<span class="host-strip__label">Machine</span>')
+    expect(source).toContain('<span class="host-strip__label">Memory</span>')
+    expect(source).toContain('<span class="host-strip__label">Active</span>')
     expect(source).toContain('aria-label="Machine resources"')
   })
 
@@ -142,8 +142,9 @@ describe("host strip", () => {
 
     expect(host.querySelector("[data-boundary]")).toBeNull()
     expect(values(host)).toEqual(["412.0 MB", "~0.4 of 8"])
-    expect(host.textContent).toContain("of 16.0 GB memory")
-    expect(host.textContent).toContain("2kernels · 1 running")
+    expect(host.textContent).toContain("of 16.0 GB")
+    expect(host.textContent).toContain("2processes")
+    expect(host.querySelector('[data-host-tile="kernels"] p')?.getAttribute("title")).toContain("2 kernels · 1 running")
   })
 
   test("asks the route the compute strip is served from, naming itself to the server", async () => {

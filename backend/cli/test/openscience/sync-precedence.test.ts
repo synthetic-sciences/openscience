@@ -29,7 +29,9 @@ afterEach(async () => {
   delete process.env["GITHUB_TOKEN"]
   delete process.env["GH_TOKEN"]
   delete process.env["GOOGLE_APPLICATION_CREDENTIALS"]
+  delete process.env["GOOGLE_CLOUD_PROJECT"]
   if (gcp) await fs.rm(gcp, { force: true })
+  await fs.rm(path.join(Global.Path.data, "openscience-session.json"), { force: true })
 })
 
 async function seedSession() {

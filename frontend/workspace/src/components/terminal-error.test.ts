@@ -10,11 +10,11 @@ describe("connectionError", () => {
   test("wraps the bare error Event WebKit fires when a socket drops", () => {
     const wrapped = connectionError(new Event("error"))
     expect(wrapped).toBeInstanceOf(Error)
-    expect(wrapped.message).toBe("connection to the server was lost")
+    expect(wrapped.message).toBe("Connection to the server was lost.")
   })
 
   test("wraps any other non-Error rejection", () => {
-    expect(connectionError(undefined).message).toBe("connection to the server was lost")
-    expect(connectionError("boom").message).toBe("connection to the server was lost")
+    expect(connectionError(undefined).message).toBe("Connection to the server was lost.")
+    expect(connectionError("boom").message).toBe("Connection to the server was lost.")
   })
 })

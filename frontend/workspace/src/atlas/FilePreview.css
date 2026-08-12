@@ -22,13 +22,13 @@
   z-index: 2;
   display: flex;
   min-width: 0;
-  min-height: 48px;
+  min-height: 50px;
   flex: none;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--color-border);
+  padding: 8px 12px;
+  border: 0;
   background: var(--color-surface-solid);
 }
 
@@ -53,7 +53,7 @@
   overflow: hidden;
   color: var(--color-text);
   font-size: 14px;
-  font-weight: 550;
+  font-weight: var(--font-weight-emphasis);
   letter-spacing: -0.006em;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -99,9 +99,9 @@
   flex: none;
   align-items: center;
   padding: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--color-bg-subtle) 78%, transparent);
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
+  background: var(--color-bg-subtle);
 }
 
 .atlas-file-mode,
@@ -110,14 +110,15 @@
 .atlas-file-close {
   appearance: none;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--atlas-radius-xs);
   font: inherit;
   line-height: 1;
   cursor: pointer;
   transition:
-    border-color 120ms ease,
-    background-color 120ms ease,
-    color 120ms ease;
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
 }
 
 .atlas-file-mode {
@@ -126,7 +127,7 @@
   background: transparent;
   color: var(--color-text-faint);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .atlas-file-mode:hover:not(:disabled) {
@@ -135,18 +136,18 @@
 
 .atlas-file-mode.is-active {
   background: var(--color-surface-solid);
-  box-shadow: 0 0 0 1px var(--color-border);
+  box-shadow: var(--atlas-shadow-xs);
   color: var(--color-text);
 }
 
 .atlas-file-button,
 .atlas-file-action {
   min-height: 32px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-solid);
+  border: 0;
+  background: var(--color-bg-subtle);
   color: var(--color-text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .atlas-file-button {
@@ -154,7 +155,6 @@
 }
 
 .atlas-file-button.is-primary {
-  border-color: var(--color-accent);
   background: var(--color-accent);
   color: var(--color-on-accent);
 }
@@ -169,13 +169,11 @@
 .atlas-file-button:hover:not(:disabled),
 .atlas-file-action:hover:not(:disabled),
 .atlas-file-close:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
   background: var(--color-bg-elevated);
   color: var(--color-text);
 }
 
 .atlas-file-button.is-primary:hover:not(:disabled) {
-  border-color: var(--color-accent-hover);
   background: var(--color-accent-hover);
   color: var(--color-on-accent);
 }
@@ -224,6 +222,14 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.atlas-file-scroll.is-managed-scroll,
+.atlas-file-scroll.is-editor-scroll {
+  display: flex;
+  overflow: hidden;
 }
 
 .atlas-file-loading {
@@ -239,8 +245,9 @@
   overflow: hidden;
   height: 12px;
   margin-bottom: 13px;
-  border-radius: var(--radius);
+  border-radius: var(--atlas-radius-md);
   background: var(--color-bg-elevated);
+  animation: atlas-file-loading 1.1s ease-in-out infinite alternate;
 }
 
 .atlas-file-loading-heading {
@@ -258,28 +265,13 @@
   margin-bottom: 20px;
 }
 
-.atlas-file-loading-heading::after,
-.atlas-file-loading-line::after {
-  display: block;
-  width: 45%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--color-text-faint) 10%, transparent),
-    transparent
-  );
-  content: "";
-  animation: atlas-file-loading 1.25s ease-in-out infinite;
-}
-
 @keyframes atlas-file-loading {
   from {
-    transform: translateX(-120%);
+    opacity: 0.45;
   }
 
   to {
-    transform: translateX(320%);
+    opacity: 0.82;
   }
 }
 
@@ -302,7 +294,7 @@
   margin: 9px 0 4px;
   color: var(--color-text);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: var(--font-weight-emphasis);
 }
 
 .atlas-file-error p {
@@ -324,7 +316,7 @@
   box-sizing: border-box;
   width: min(100%, 820px);
   min-height: 100%;
-  padding: clamp(30px, 5vw, 52px) clamp(24px, 5vw, 48px) 64px;
+  padding: clamp(30px, 5cqi, 52px) clamp(20px, 5cqi, 48px) 64px;
   margin: 0 auto;
   background: var(--color-surface-solid);
 }
@@ -341,13 +333,14 @@
 .atlas-file-document .atlas-md h4 {
   scroll-margin-top: 24px;
   color: var(--color-text);
-  font-weight: 600;
+  font-weight: var(--font-weight-emphasis);
   letter-spacing: -0.022em;
+  text-wrap: balance;
 }
 
 .atlas-file-document .atlas-md h1 {
   margin: 0 0 22px;
-  font-size: clamp(24px, 3vw, 30px);
+  font-size: clamp(24px, 3cqi, 30px);
   line-height: 1.18;
 }
 
@@ -371,6 +364,7 @@
 
 .atlas-file-document .atlas-md p {
   margin: 0 0 13px;
+  text-wrap: pretty;
 }
 
 .atlas-file-document .atlas-md ul,
@@ -410,9 +404,58 @@
   max-width: 100%;
   height: auto;
   margin: 22px auto;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-bg);
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
+  background: transparent;
+}
+
+.atlas-file-document-lead {
+  margin-bottom: 30px;
+}
+
+.atlas-file-document-lead[data-align="center"] {
+  text-align: center;
+}
+
+.atlas-file-document-lead[data-align="right"] {
+  text-align: right;
+}
+
+.atlas-file-document-lead .atlas-md img {
+  margin-inline: auto;
+}
+
+.atlas-file-document-lead[data-align="right"] .atlas-md img {
+  margin-right: 0;
+}
+
+.atlas-file-document-lead[data-align="left"] .atlas-md img {
+  margin-left: 0;
+}
+
+.atlas-file-document-lead .atlas-md p:has(a > img),
+.atlas-file-document-lead .atlas-md .atlas-file-badges {
+  display: flex;
+  align-items: center;
+  justify-content: inherit;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.atlas-file-document-lead[data-align="center"] .atlas-md p:has(a > img),
+.atlas-file-document-lead[data-align="center"] .atlas-md .atlas-file-badges {
+  justify-content: center;
+}
+
+.atlas-file-document-lead[data-align="right"] .atlas-md p:has(a > img),
+.atlas-file-document-lead[data-align="right"] .atlas-md .atlas-file-badges {
+  justify-content: flex-end;
+}
+
+.atlas-file-document-lead .atlas-md p:has(a > img) img,
+.atlas-file-document-lead .atlas-md .atlas-file-badges img {
+  margin: 0;
+  border-radius: 3px;
 }
 
 .atlas-file-document .atlas-md table {
@@ -441,6 +484,18 @@
   min-height: 420px;
 }
 
+.atlas-file-pdf {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  padding: 0;
+}
+
+.atlas-file-pdf .pdf-viewer {
+  height: 100%;
+}
+
 .atlas-file-image {
   display: grid;
   width: 100%;
@@ -455,9 +510,9 @@
   max-height: 100%;
   object-fit: contain;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--atlas-radius-md);
   background: var(--color-surface-solid);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--atlas-shadow-xs);
 }
 
 .atlas-file-html {
@@ -489,11 +544,24 @@
 
 .atlas-file-source-editor {
   display: block;
+  min-height: 0;
+  flex: 1;
   resize: none;
   border: 0;
   outline-offset: -3px;
   background: var(--color-surface-solid);
   white-space: pre;
+}
+
+.atlas-file-source-editor.is-prose-editor {
+  padding: clamp(24px, 4cqi, 40px) max(20px, calc((100cqi - 820px) / 2)) 64px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.atlas-file-source-editor::selection {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 
 .atlas-file-truncated pre {
@@ -506,7 +574,7 @@
   padding: 9px 11px;
   margin-bottom: 13px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--atlas-radius-xs);
   background: var(--color-surface-solid);
   color: var(--color-text-muted);
   font-family: var(--font-sans);
@@ -657,6 +725,20 @@
   }
 }
 
+@media (pointer: coarse) {
+  .atlas-file-mode,
+  .atlas-file-button,
+  .atlas-file-action,
+  .atlas-file-close {
+    min-height: 44px;
+  }
+
+  .atlas-file-close,
+  .atlas-file-action {
+    min-width: 44px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .atlas-file-mode,
   .atlas-file-button,
@@ -665,8 +747,8 @@
     transition: none;
   }
 
-  .atlas-file-loading-heading::after,
-  .atlas-file-loading-line::after {
+  .atlas-file-loading-heading,
+  .atlas-file-loading-line {
     animation: none;
   }
 }

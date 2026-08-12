@@ -1,7 +1,11 @@
-import { For, Show, createMemo, createResource, createSignal } from "solid-js"
+import { For, Show, createMemo, createResource, createSignal, type Component, type ParentComponent } from "solid-js"
+import { Icon } from "@synsci/ui/icon"
+import type { IconProps } from "@synsci/ui/icon"
 import { IconButton } from "@synsci/ui/icon-button"
 import { Switch } from "@synsci/ui/switch"
 import { showToast } from "@synsci/ui/toast"
+import { useDialog } from "@synsci/ui/context/dialog"
+import { confirmDialog } from "@/atlas/dialogs"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
@@ -11,20 +15,17 @@ import {
   PanelScroll,
   PanelHeader,
   PanelBody,
+  Section,
+  Card,
   Toolbar,
   SearchInput,
   FilterMenu,
-  AddMenu,
-  Card,
-  Row,
-  SectionLabel,
   EmptyState,
   FormField,
   FormButton,
-  Avatar,
-  Chip,
 } from "./_shared"
-import { isVisibleSpecialist } from "./specialist-catalog"
+import { SPECIALIST_GROUPS, isVisibleSpecialist, specialistGroupFor } from "./specialist-catalog"
+import "./specialists.css"
 
 const LABELS: Record<string, string> = {
   research: "Research",
@@ -40,7 +41,22 @@ const LABELS: Record<string, string> = {
   "physics-critique": "Physics critique",
   reviewer: "Research reviewer",
 }
+const ICONS = {
+  research: "models",
+  ml: "cpu",
+  biology: "flask",
+  physics: "atom",
+  write: "pencil-line",
+  docs: "file",
+  task: "task",
+  explore: "magnifying-glass",
+  "literature-review": "book-open",
+  critique: "shield-alert",
+  "physics-critique": "atom",
+  reviewer: "glasses",
+} as const
 type Mode = "primary" | "subagent" | "all"
+type ModeFilter = "all" | "primary" | "subagent"
 type ReviewPreferences = {
   auto: boolean
   model: { providerID: string; modelID: string } | null
@@ -51,6 +67,7 @@ export default function Specialists() {
   const globalSDK = useGlobalSDK()
   const sync = useGlobalSync()
   const platform = usePlatform()
+  const dialog = useDialog()
 
   // Reviewer preference — GET/PUT /settings/review (backend/cli/src/settings/
   // review.ts). Manual review stays always available from the session header;
@@ -59,19 +76,23 @@ export default function Specialists() {
   const reviewApi = (init?: RequestInit) => settingsApi<ReviewPreferences>(sdk.url, fetchFn, "/settings/review", init)
   const [reviewPrefs, reviewCtl] = createResource(() => reviewApi())
   const [reviewSaving, setReviewSaving] = createSignal(false)
+  let reviewVersion = 0
   async function toggleAutoReview(auto: boolean) {
+    const before = reviewPrefs()
+    const version = ++reviewVersion
+    reviewCtl.mutate({ auto, model: before?.model ?? null })
     setReviewSaving(true)
     try {
-      reviewCtl.mutate(
-        await reviewApi({
-          method: "PUT",
-          body: JSON.stringify({ auto, model: reviewPrefs()?.model ?? null }),
-        }),
-      )
+      const saved = await reviewApi({
+        method: "PUT",
+        body: JSON.stringify({ auto, model: before?.model ?? null }),
+      })
+      if (version === reviewVersion) reviewCtl.mutate(saved)
     } catch (err) {
+      if (version === reviewVersion && before) reviewCtl.mutate(before)
       showToast({ variant: "error", title: "Could not update reviewer preference", description: message(err) })
     } finally {
-      setReviewSaving(false)
+      if (version === reviewVersion) setReviewSaving(false)
     }
   }
 
@@ -84,39 +105,61 @@ export default function Specialists() {
   })
 
   const [search, setSearch] = createSignal("")
-  const [modeFilter, setModeFilter] = createSignal("all")
+  const [modeFilter, setModeFilter] = createSignal<ModeFilter>("all")
   const [creating, setCreating] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
+  const [delegationPending, setDelegationPending] = createSignal<Record<string, number>>({})
+  const delegationVersions = new Map<string, number>()
+  let delegationWrites = Promise.resolve()
 
   const visible = createMemo(() => {
     const q = search().trim().toLowerCase()
     const m = modeFilter()
     return (agents() ?? [])
-      .filter((a) => m === "all" || a.mode === m || (m === "primary" && a.mode === "all"))
+      .filter((a) => matchesModeFilter(a.mode as Mode, m))
       .filter((a) => !q || a.name.toLowerCase().includes(q) || (a.description ?? "").toLowerCase().includes(q))
   })
-  const builtIn = createMemo(() =>
-    visible()
-      .filter((a) => a.native)
-      .sort(byName),
+  const builtInGroups = createMemo(() =>
+    SPECIALIST_GROUPS.map((group) => ({
+      ...group,
+      agents: visible()
+        .filter((agent) => agent.native && specialistGroupFor(agent) === group.id)
+        .sort(byName),
+    })).filter((group) => group.agents.length > 0),
   )
   const custom = createMemo(() =>
     visible()
       .filter((a) => !a.native)
       .sort(byName),
   )
+  const delegated = (name: string) => taskAction(sync.data.config.permission, name) !== "deny"
 
-  const modeOptions = createMemo(() => [
-    { id: "all", label: "All", count: (agents() ?? []).length },
-    {
-      id: "primary",
-      label: "Primary",
-      count: (agents() ?? []).filter((a) => a.mode === "primary" || a.mode === "all").length,
-    },
-    { id: "subagent", label: "Subagents", count: (agents() ?? []).filter((a) => a.mode === "subagent").length },
-  ])
+  const modeOptions = createMemo(
+    () =>
+      [
+        { id: "all", label: "All", count: (agents() ?? []).length },
+        {
+          id: "primary",
+          label: "Session",
+          count: (agents() ?? []).filter((a) => a.mode === "primary" || a.mode === "all").length,
+        },
+        {
+          id: "subagent",
+          label: "Delegated",
+          count: (agents() ?? []).filter((a) => a.mode === "subagent" || a.mode === "all").length,
+        },
+      ] satisfies Array<{ id: ModeFilter; label: string; count: number }>,
+  )
 
   async function createAgent(name: string, description: string, prompt: string, mode: Mode) {
+    if ((agents() ?? []).some((agent) => agent.name === name)) {
+      showToast({
+        variant: "error",
+        title: "Specialist already exists",
+        description: `Choose a name other than "${name}".`,
+      })
+      return
+    }
     setBusy(true)
     try {
       const agent: Config["agent"] = { [name]: { description, prompt: prompt || undefined, mode } }
@@ -132,7 +175,13 @@ export default function Specialists() {
   }
 
   async function deleteAgent(name: string) {
-    if (!window.confirm(`Delete custom specialist "${name}"? This removes it from your config.`)) return
+    const confirmed = await confirmDialog(dialog, {
+      title: `Delete "${name}"?`,
+      message: "This removes the custom specialist from your global OpenScience configuration. This cannot be undone.",
+      confirmLabel: "Delete specialist",
+      danger: true,
+    })
+    if (!confirmed) return
     setBusy(true)
     try {
       await globalSDK.client.global.configUnset({ path: ["agent", name] })
@@ -145,123 +194,296 @@ export default function Specialists() {
     }
   }
 
-  return (
-    <PanelScroll>
-      <PanelHeader
-        title="Specialists"
-        description="Primary agents can lead a session. Subagents are delegated focused work by a primary agent. Every non-hidden built-in specialist appears here."
-        toolbar={
-          <Show when={!creating()}>
-            <Toolbar>
-              <FilterMenu options={modeOptions()} value={modeFilter()} onSelect={setModeFilter} />
-              <SearchInput value={search()} onInput={setSearch} placeholder="Search specialists" />
-              <AddMenu
-                label="Add specialist"
-                items={[
-                  {
-                    icon: "pencil-line",
-                    label: "Write from scratch",
-                    description: "Define a custom agent persisted to config",
-                    onSelect: () => setCreating(true),
-                  },
-                ]}
-              />
-            </Toolbar>
-          </Show>
+  function markDelegationPending(name: string, delta: number) {
+    setDelegationPending((current) => {
+      const next = { ...current }
+      const count = (next[name] ?? 0) + delta
+      if (count > 0) next[name] = count
+      else delete next[name]
+      return next
+    })
+  }
+
+  function toggleDelegation(name: string, enabled: boolean) {
+    const before = sync.data.config.permission
+    const change = taskPermissionChange(before, name, enabled)
+    const version = (delegationVersions.get(name) ?? 0) + 1
+    delegationVersions.set(name, version)
+    sync.set("config", "permission", change.optimistic as Config["permission"])
+    markDelegationPending(name, 1)
+
+    const persist = async () => {
+      try {
+        const latest = taskPermissionChange(sync.data.config.permission, name, enabled)
+        await sync.updateConfig({ permission: latest.patch } as Config)
+      } catch (err) {
+        if (delegationVersions.get(name) === version) {
+          sync.set(
+            "config",
+            "permission",
+            restoreExactTaskPermission(sync.data.config.permission, before, name) as Config["permission"],
+          )
         }
-      />
+        showToast({ variant: "error", title: "Could not update specialist", description: message(err) })
+      } finally {
+        markDelegationPending(name, -1)
+      }
+    }
+    delegationWrites = delegationWrites.then(persist, persist)
+  }
 
-      <PanelBody>
-        <Show when={creating()}>
-          <CreateForm busy={busy()} onCancel={() => setCreating(false)} onCreate={createAgent} />
-        </Show>
-
-        <Show when={!creating()}>
-          <div class="flex flex-col gap-2">
-            <SectionLabel label="Reviewer" />
-            <Card>
-              <Row>
-                <div class="min-w-0 flex-1">
-                  <span class="text-14-medium text-text-strong">Automatically review significant results</span>
-                  <p class="text-12-regular text-text-weak mt-0.5">
-                    Runs the reviewer after a result is saved as a durable artifact.
-                  </p>
-                </div>
-                <Switch
-                  hideLabel
-                  checked={reviewPrefs()?.auto ?? false}
-                  disabled={reviewSaving() || reviewPrefs.loading}
-                  onChange={(auto) => void toggleAutoReview(auto)}
-                >
-                  Automatically review significant results
-                </Switch>
-              </Row>
-            </Card>
-          </div>
-
-          <Show
-            when={!agents.loading}
-            fallback={<div class="py-12 text-center text-13-regular text-text-weak">Loading specialists…</div>}
-          >
-            <Show
-              when={visible().length > 0}
-              fallback={
-                <EmptyState
-                  icon="models"
-                  title={search() ? "No matching specialists" : "No specialists"}
-                  hint="Create a custom specialist to tailor an agent to your workflow."
+  return (
+    <div class="specialists-panel">
+      <PanelScroll>
+        <PanelHeader
+          title="Specialists"
+          description="Choose who can join a session or be delegated focused research work."
+          toolbar={
+            <Show when={!creating()}>
+              <Toolbar>
+                <SearchInput
+                  value={search()}
+                  onInput={setSearch}
+                  placeholder="Search specialists"
+                  ariaLabel="Search specialists"
                 />
-              }
-            >
-              <Show when={custom().length > 0}>
-                <div class="flex flex-col gap-2">
-                  <SectionLabel label="Custom" count={custom().length} />
-                  <Card>
-                    <For each={custom()}>
-                      {(agent) => (
-                        <AgentRow agent={agent} onDelete={() => void deleteAgent(agent.name)} busy={busy()} />
-                      )}
-                    </For>
-                  </Card>
-                </div>
-              </Show>
+                <FilterMenu
+                  options={modeOptions()}
+                  value={modeFilter()}
+                  onSelect={(mode) => setModeFilter(mode as ModeFilter)}
+                  ariaLabel="Filter specialists by mode"
+                />
+                <button
+                  type="button"
+                  class="settings-control settings-control--primary specialists-panel__add"
+                  onClick={() => setCreating(true)}
+                >
+                  <Icon name="plus" size="small" aria-hidden="true" />
+                  <span>Add specialist</span>
+                </button>
+              </Toolbar>
+            </Show>
+          }
+        />
 
-              <Show when={builtIn().length > 0}>
-                <div class="flex flex-col gap-2">
-                  <SectionLabel label="Built-in" count={builtIn().length} />
-                  <Card>
-                    <For each={builtIn()}>{(agent) => <AgentRow agent={agent} busy={busy()} />}</For>
-                  </Card>
+        <PanelBody>
+          <Show when={creating()}>
+            <CreateForm busy={busy()} onCancel={() => setCreating(false)} onCreate={createAgent} />
+          </Show>
+
+          <Show when={!creating()}>
+            <Show when={reviewPrefs.error}>
+              <div class="settings-alert" data-tone="critical" role="alert">
+                <span>Reviewer settings could not be loaded. {message(reviewPrefs.error)}</span>
+                <button
+                  type="button"
+                  class="settings-inline-action"
+                  disabled={reviewPrefs.loading || reviewSaving()}
+                  onClick={() => void reviewCtl.refetch()}
+                >
+                  Retry
+                </button>
+              </div>
+            </Show>
+            <Section
+              id="specialists-reviewer-heading"
+              title="Review automation"
+              description="Run an independent review after a significant result is saved."
+            >
+              <Card>
+                <div
+                  class="settings-row specialists-agent specialists-agent--reviewer"
+                  data-loading={reviewPrefs.loading ? "true" : undefined}
+                  aria-busy={reviewPrefs.loading || reviewSaving() ? "true" : undefined}
+                >
+                  <div class="specialists-agent__copy">
+                    <strong>Automatic result review</strong>
+                    <p>Checks durable results without interrupting the active research session.</p>
+                  </div>
+                  <div class="specialists-agent__availability">
+                    <span class="specialists-agent__mode">{reviewPrefs.loading ? "Loading…" : "After save"}</span>
+                    <div class="specialists-agent__control">
+                      <Switch
+                        data-action="specialist-reviewer"
+                        hideLabel
+                        checked={reviewPrefs()?.auto ?? false}
+                        disabled={reviewSaving() || reviewPrefs.loading || !!reviewPrefs.error}
+                        onChange={(auto) => void toggleAutoReview(auto)}
+                      >
+                        Automatically review significant results
+                      </Switch>
+                    </div>
+                  </div>
                 </div>
+              </Card>
+            </Section>
+
+            <Show
+              when={!agents.loading}
+              fallback={<div class="py-12 text-center text-13-regular text-text-weak">Loading specialists…</div>}
+            >
+              <Show
+                when={!agents.error}
+                fallback={
+                  <div class="settings-alert" data-tone="critical" role="alert">
+                    <span>Specialists could not be loaded. {message(agents.error)}</span>
+                    <button type="button" class="settings-inline-action" onClick={() => void agentsCtl.refetch()}>
+                      Retry
+                    </button>
+                  </div>
+                }
+              >
+                <Show
+                  when={visible().length > 0}
+                  fallback={
+                    <EmptyState
+                      icon="task"
+                      title={search() ? "No matching specialists" : "No specialists"}
+                      hint="Create a custom specialist to tailor an agent to your workflow."
+                    />
+                  }
+                >
+                  <Section
+                    id="specialists-catalog-heading"
+                    title="Specialist catalog"
+                    description="Roles are grouped by the work they handle. Delegation switches control automatic use."
+                    count={visible().length}
+                  >
+                    <div class="specialists-catalog">
+                      <Show when={custom().length > 0}>
+                        <SpecialistGroup
+                          title="Custom roles"
+                          description="Roles defined in your OpenScience configuration."
+                          count={custom().length}
+                          id="specialists-custom-heading"
+                        >
+                          <For each={custom()}>
+                            {(agent) => (
+                              <AgentRow
+                                agent={agent}
+                                delegated={delegated(agent.name)}
+                                onDelegation={(enabled) => toggleDelegation(agent.name, enabled)}
+                                onDelete={() => void deleteAgent(agent.name)}
+                                busy={busy()}
+                                saving={Boolean(delegationPending()[agent.name])}
+                              />
+                            )}
+                          </For>
+                        </SpecialistGroup>
+                      </Show>
+
+                      <For each={builtInGroups()}>
+                        {(group) => (
+                          <SpecialistGroup
+                            title={group.title}
+                            description={group.description}
+                            count={group.agents.length}
+                            id={`specialists-${group.id}-heading`}
+                          >
+                            <For each={group.agents}>
+                              {(agent) => (
+                                <AgentRow
+                                  agent={agent}
+                                  delegated={delegated(agent.name)}
+                                  onDelegation={(enabled) => toggleDelegation(agent.name, enabled)}
+                                  busy={busy()}
+                                  saving={Boolean(delegationPending()[agent.name])}
+                                />
+                              )}
+                            </For>
+                          </SpecialistGroup>
+                        )}
+                      </For>
+                    </div>
+                  </Section>
+                </Show>
               </Show>
             </Show>
           </Show>
-        </Show>
-      </PanelBody>
-    </PanelScroll>
+        </PanelBody>
+      </PanelScroll>
+    </div>
   )
 }
 
-function AgentRow(props: { agent: Agent; onDelete?: () => void; busy: boolean }) {
+const SpecialistGroup: ParentComponent<{ title: string; description: string; count: number; id: string }> = (props) => (
+  <section class="specialists-group" aria-labelledby={props.id}>
+    <header class="specialists-group__header">
+      <div>
+        <h4 id={props.id}>{props.title}</h4>
+        <p>{props.description}</p>
+      </div>
+      <span aria-label={`${props.count} specialists`}>{props.count}</span>
+    </header>
+    <div class="settings-card specialists-group__list" role="list">
+      {props.children}
+    </div>
+  </section>
+)
+
+const SpecialistIcon: Component<{ icon: IconProps["name"] }> = (props) => (
+  <div class="specialists-agent__icon" aria-hidden="true">
+    <Icon name={props.icon} size="small" />
+  </div>
+)
+
+function AgentRow(props: {
+  agent: Agent
+  delegated: boolean
+  onDelegation: (enabled: boolean) => void
+  onDelete?: () => void
+  busy: boolean
+  saving: boolean
+}) {
   const label = () => LABELS[props.agent.name] ?? props.agent.name
-  const modeLabel = () =>
-    props.agent.mode === "subagent" ? "subagent" : props.agent.mode === "all" ? "primary · subagent" : "primary"
+  const icon = () => specialistIconFor(props.agent)
+  const mode = () => specialistModeMeta(props.agent.mode as Mode)
   return (
-    <Row>
-      <Avatar monogram={label().slice(0, 1)} tint={props.agent.color ?? undefined} />
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <span class="text-14-medium text-text-strong truncate">{label()}</span>
-          <Chip>{modeLabel()}</Chip>
-        </div>
+    <div
+      class="settings-row specialists-agent"
+      role="listitem"
+      data-delegated={props.delegated ? "true" : "false"}
+      data-saving={props.saving ? "true" : undefined}
+      aria-busy={props.saving ? "true" : undefined}
+    >
+      <SpecialistIcon icon={icon()} />
+      <div class="specialists-agent__copy">
+        <strong>{label()}</strong>
         <Show when={props.agent.description}>
-          <p class="text-12-regular text-text-weak truncate mt-0.5">{props.agent.description}</p>
+          <p>{props.agent.description}</p>
+        </Show>
+      </div>
+      <div class="specialists-agent__availability">
+        <span class="specialists-agent__mode" data-mode={props.agent.mode}>
+          {mode().label}
+        </span>
+        <Show
+          when={mode().canDelegate}
+          fallback={<span class="specialists-agent__session-only">Always available</span>}
+        >
+          <div class="specialists-agent__control">
+            <Switch
+              data-action="specialist-delegation"
+              hideLabel
+              checked={props.delegated}
+              disabled={props.busy}
+              onChange={props.onDelegation}
+            >
+              {props.delegated ? `Stop automatic delegation to ${label()}` : `Allow automatic delegation to ${label()}`}
+            </Switch>
+          </div>
         </Show>
       </div>
       <Show when={props.onDelete}>
-        <IconButton icon="trash" variant="ghost" disabled={props.busy} aria-label="Delete" onClick={props.onDelete} />
+        <IconButton
+          icon="trash"
+          variant="ghost"
+          disabled={props.busy}
+          aria-label={`Delete ${label()}`}
+          onClick={props.onDelete}
+        />
       </Show>
-    </Row>
+    </div>
   )
 }
 
@@ -276,9 +498,12 @@ function CreateForm(props: {
   const [mode, setMode] = createSignal<Mode>("subagent")
   const valid = () => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(name().trim()) && description().trim().length > 0
   return (
-    <div class="flex flex-col gap-4">
-      <SectionLabel label="Create a custom specialist" />
-      <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[4px] bg-surface-base/40">
+    <Section
+      id="specialists-create-heading"
+      title="Create a custom specialist"
+      description="Describe a focused role and where it should be available."
+    >
+      <div class="specialists-panel__form">
         <FormField
           label="Name"
           value={name()}
@@ -291,16 +516,12 @@ function CreateForm(props: {
           onInput={setDescription}
           placeholder="When should this specialist be used?"
         />
-        <label class="flex flex-col gap-1.5">
-          <span class="text-12-medium text-text-strong">Mode</span>
-          <select
-            value={mode()}
-            class="h-9 px-3 rounded-xs border border-border-weak-base bg-surface-base text-13-regular text-text-strong outline-none focus:border-border-strong-base"
-            onInput={(e) => setMode(e.currentTarget.value as Mode)}
-          >
-            <option value="subagent">Subagent (invoked by other agents)</option>
-            <option value="primary">Primary (user-selectable)</option>
-            <option value="all">Both</option>
+        <label class="specialists-panel__field">
+          <span>Availability</span>
+          <select value={mode()} class="settings-field" onInput={(e) => setMode(e.currentTarget.value as Mode)}>
+            <option value="subagent">Delegated by other agents</option>
+            <option value="primary">Session model</option>
+            <option value="all">Session and delegated</option>
           </select>
         </label>
         <FormField
@@ -310,7 +531,7 @@ function CreateForm(props: {
           multiline
           placeholder="Instructions that define this specialist's behavior…"
         />
-        <div class="flex items-center gap-2">
+        <div class="specialists-panel__form-actions">
           <FormButton
             label={props.busy ? "Creating…" : "Create specialist"}
             disabled={props.busy || !valid()}
@@ -319,8 +540,38 @@ function CreateForm(props: {
           <FormButton label="Cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
-    </div>
+    </Section>
   )
+}
+
+export function matchesModeFilter(mode: Mode, filter: ModeFilter) {
+  if (filter === "all") return true
+  if (filter === "primary") return mode === "primary" || mode === "all"
+  return mode === "subagent" || mode === "all"
+}
+
+export function specialistModeMeta(mode: Mode): {
+  label: string
+  canDelegate: boolean
+} {
+  if (mode === "primary") return { label: "Session", canDelegate: false }
+  if (mode === "all") return { label: "Session + delegated", canDelegate: true }
+  return { label: "Delegated", canDelegate: true }
+}
+
+export function specialistIconFor(agent: Pick<Agent, "name" | "description">): IconProps["name"] {
+  const known = ICONS[agent.name as keyof typeof ICONS]
+  if (known) return known
+
+  const signature = `${agent.name} ${agent.description ?? ""}`.toLowerCase()
+  if (/bio|protein|gene|cell|medical/.test(signature)) return "flask"
+  if (/physics|quantum|math/.test(signature)) return "atom"
+  if (/write|document|paper|literature|citation/.test(signature)) return "book-open"
+  if (/code|software|repo|develop|debug/.test(signature)) return "code"
+  if (/review|critique|verify|audit/.test(signature)) return "shield-alert"
+  if (/data|model|machine learning|compute/.test(signature)) return "cpu"
+
+  return "task"
 }
 
 function byName(a: Agent, b: Agent) {
@@ -328,4 +579,83 @@ function byName(a: Agent, b: Agent) {
 }
 function message(err: unknown) {
   return err instanceof Error ? err.message : String(err)
+}
+
+type Action = "allow" | "ask" | "deny"
+
+function isAction(value: unknown): value is Action {
+  return value === "allow" || value === "ask" || value === "deny"
+}
+
+export function taskAction(permission: unknown, name: string): Action {
+  if (isAction(permission)) return permission
+  if (!permission || typeof permission !== "object" || Array.isArray(permission)) return "allow"
+  const task = (permission as Record<string, unknown>).task
+  if (isAction(task)) return task
+  if (!task || typeof task !== "object" || Array.isArray(task)) return "allow"
+  const rules = task as Record<string, unknown>
+  return (
+    Object.entries(rules).reduce<Action | undefined>(
+      (current, [pattern, action]) => (matches(name, pattern) && isAction(action) ? action : current),
+      undefined,
+    ) ?? "allow"
+  )
+}
+
+export function taskPermissionChange(permission: unknown, name: string, enabled: boolean) {
+  const base = isAction(permission)
+    ? { "*": permission }
+    : permission && typeof permission === "object" && !Array.isArray(permission)
+      ? permission
+      : {}
+  const existing = (base as Record<string, unknown>).task
+  const rules =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? (existing as Record<string, Action>)
+      : isAction(existing)
+        ? { "*": existing }
+        : {}
+  const clean = Object.fromEntries(Object.entries(rules).filter(([pattern]) => pattern !== name))
+  const task = { ...clean, [name]: enabled ? ("allow" as const) : ("deny" as const) }
+  return {
+    optimistic: { ...(base as Record<string, unknown>), task },
+    patch: { task },
+  }
+}
+
+export function restoreExactTaskPermission(current: unknown, before: unknown, name: string) {
+  const base = isAction(current)
+    ? { "*": current }
+    : current && typeof current === "object" && !Array.isArray(current)
+      ? current
+      : {}
+  const currentTask = (base as Record<string, unknown>).task
+  const rules: Record<string, Action> =
+    currentTask && typeof currentTask === "object" && !Array.isArray(currentTask)
+      ? { ...(currentTask as Record<string, Action>) }
+      : isAction(currentTask)
+        ? { "*": currentTask }
+        : {}
+
+  const previousTask =
+    before && typeof before === "object" && !Array.isArray(before)
+      ? (before as Record<string, unknown>).task
+      : undefined
+  const previousRules =
+    previousTask && typeof previousTask === "object" && !Array.isArray(previousTask)
+      ? (previousTask as Record<string, unknown>)
+      : undefined
+  const previousExact = previousRules?.[name]
+
+  if (isAction(previousExact)) rules[name] = previousExact
+  else delete rules[name]
+  return { ...(base as Record<string, unknown>), task: rules }
+}
+
+function matches(value: string, pattern: string) {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".")
+  return new RegExp(`^${escaped}$`, "s").test(value)
 }

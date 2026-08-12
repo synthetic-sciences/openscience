@@ -6,7 +6,7 @@
   gap: 12px;
   padding: 6px 8px 6px 12px;
   border: 1px solid var(--border-weak-base);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: var(--surface-raised-stronger-non-alpha);
   color: var(--text-strong);
 }
@@ -20,7 +20,7 @@
 
 .workspace-composer__setup strong {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
   line-height: 17px;
 }
 
@@ -38,17 +38,68 @@
   flex: 0 0 auto;
   padding-inline: 10px;
   border: 1px solid var(--border-weak-base);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--surface-base);
   color: var(--text-strong);
   font: inherit;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--font-weight-regular);
   cursor: pointer;
 }
 
 .workspace-composer__setup button:hover {
   background: var(--surface-raised-base-hover);
+}
+
+.workspace-composer__context {
+  gap: 6px;
+  padding: 8px 8px 0;
+}
+
+.workspace-composer__context-item {
+  height: 46px;
+  gap: 2px;
+  padding: 5px 6px 5px 8px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised-strong);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+
+.workspace-composer__context-item:hover {
+  border-color: var(--border-base);
+}
+
+.workspace-composer__context-heading {
+  min-width: 0;
+  min-height: 20px;
+  color: var(--text-strong);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+}
+
+.workspace-composer__context-remove {
+  width: 24px;
+  height: 24px;
+  margin-right: -2px;
+  opacity: 0.58;
+}
+
+.workspace-composer__context-remove:hover,
+.workspace-composer__context-remove:focus-visible {
+  opacity: 1;
+}
+
+.workspace-composer__context-comment {
+  margin-left: 20px;
+  padding-right: 4px;
+  color: var(--text-weak);
+  font-size: 12px;
+  font-weight: var(--font-weight-regular);
+  line-height: 15px;
 }
 
 .workspace-composer__attachments {
@@ -58,25 +109,78 @@
   padding: 10px 10px 0;
 }
 
+.workspace-composer__dropzone {
+  border-radius: inherit;
+  background: var(--surface-raised-stronger-non-alpha);
+  backdrop-filter: blur(3px);
+}
+
+.workspace-composer__dropzone-copy {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 9px;
+  color: var(--text-weak);
+}
+
+.workspace-composer__dropzone-copy > [data-component="icon"] {
+  grid-row: 1 / span 2;
+}
+
+.workspace-composer__dropzone-copy strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  line-height: 17px;
+}
+
+.workspace-composer__dropzone-copy span {
+  color: var(--text-weak);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-regular);
+  line-height: 15px;
+}
+
 .workspace-composer__attachment {
   min-width: 0;
   max-width: min(260px, 100%);
-  height: 42px;
+  height: 48px;
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) 24px;
+  grid-template-columns: minmax(0, 1fr) 24px;
   align-items: center;
   gap: 7px;
   padding: 5px 5px 5px 6px;
-  border: 1px solid color-mix(in srgb, var(--border-weak-base) 82%, transparent);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 74%, transparent);
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised-strong);
+}
+
+.workspace-composer__attachment-open {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border-radius: var(--radius-xs);
+  color: inherit;
+  text-decoration: none;
+}
+
+.workspace-composer__attachment-open:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.workspace-composer__attachment-open:hover .workspace-composer__attachment-copy strong {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .workspace-composer__attachment-icon,
 .workspace-composer__attachment-preview {
   width: 30px;
   height: 30px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
 }
 
 .workspace-composer__attachment-icon {
@@ -89,7 +193,6 @@
 
 .workspace-composer__attachment-preview {
   object-fit: cover;
-  cursor: zoom-in;
 }
 
 .workspace-composer__attachment-copy {
@@ -108,14 +211,15 @@
 
 .workspace-composer__attachment-copy strong {
   color: var(--text-strong);
-  font-size: 11.5px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
 }
 
 .workspace-composer__attachment-copy span {
   color: var(--text-weak);
-  font-size: 10px;
-  text-transform: lowercase;
+  font-size: 12px;
+  line-height: 15px;
 }
 
 .workspace-composer__attachment-remove {
@@ -125,7 +229,7 @@
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: transparent;
   cursor: pointer;
   opacity: 0.72;
@@ -151,7 +255,7 @@
   justify-content: center;
   padding: 0;
   border: 1px solid var(--border-weak-base);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised-strong);
   color: var(--text-weak);
   cursor: pointer;
@@ -174,9 +278,9 @@
 }
 
 .workspace-composer__overflow > summary:focus-visible {
-  outline: 2px solid #4f8cff !important;
+  outline: 2px solid var(--color-focus);
   outline-offset: 1px;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .workspace-composer__overflow > div {
@@ -189,9 +293,9 @@
   overflow-y: auto;
   padding: 6px;
   border: 1px solid var(--border-base);
-  border-radius: 13px;
+  border-radius: var(--radius-md);
   background: var(--surface-raised-stronger-non-alpha);
-  box-shadow: 0 12px 30px color-mix(in srgb, #000 18%, transparent);
+  box-shadow: var(--atlas-shadow-md);
 }
 
 .workspace-composer__overflow button {
@@ -203,12 +307,12 @@
   gap: 16px;
   padding: 0 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-strong);
   font: inherit;
   font-size: 13.5px;
-  font-weight: 450;
+  font-weight: var(--font-weight-regular);
   line-height: 18px;
   text-align: left;
   white-space: nowrap;
@@ -226,6 +330,36 @@
   white-space: nowrap;
 }
 
+.workspace-composer__capability-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  white-space: normal;
+}
+
+.workspace-composer__capability-copy > span {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: var(--font-weight-regular);
+  line-height: 16px;
+}
+
+.workspace-composer__capability-copy small {
+  overflow: hidden;
+  color: var(--text-weaker);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-composer__capability-list button:has(.workspace-composer__capability-copy) {
+  min-height: 50px;
+}
+
 .workspace-composer__capability-value {
   min-width: 0;
   max-width: 142px;
@@ -235,18 +369,24 @@
   flex: 0 0 auto;
   color: var(--text-weaker);
   font-size: 12.5px;
-  font-weight: 400;
+  font-weight: var(--font-weight-regular);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .workspace-composer__capability-chevron {
-  display: inline-block;
-  margin-left: 5px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
   color: var(--text-weaker);
-  font-size: 17px;
-  line-height: 1;
-  transform: translateY(1px);
+}
+
+.workspace-composer__capability-chevron [data-slot="icon-svg"] {
+  width: 14px;
+  height: 14px;
 }
 
 .workspace-composer__capability-switch {
@@ -254,7 +394,7 @@
   width: 34px;
   height: 20px;
   flex: 0 0 34px;
-  border-radius: 999px;
+  border-radius: var(--composer-radius-pill);
   background: var(--surface-raised-base-active);
   box-shadow: inset 0 0 0 1px var(--border-base);
   transition: background 140ms ease;
@@ -266,14 +406,14 @@
   left: 3px;
   width: 14px;
   height: 14px;
-  border-radius: 999px;
+  border-radius: var(--composer-radius-pill);
   background: var(--text-strong);
-  box-shadow: 0 1px 3px color-mix(in srgb, #000 26%, transparent);
+  box-shadow: var(--atlas-shadow-xs);
   transition: transform 140ms ease;
 }
 
 .workspace-composer__capability-switch[data-checked="true"] {
-  background: #4f8cff;
+  background: var(--surface-brand-base);
   box-shadow: none;
 }
 
@@ -301,12 +441,12 @@
   display: block;
   padding: 5px 10px;
   color: var(--text-weaker);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
 .workspace-composer__compute-label {
-  font-weight: 550;
+  font-weight: var(--font-weight-medium);
 }
 
 .workspace-composer__compute-hint {
@@ -339,7 +479,7 @@
 
 .workspace-composer__specialist-back strong {
   font-size: 13.5px;
-  font-weight: 550;
+  font-weight: var(--font-weight-medium);
 }
 
 .workspace-composer__specialist-list .workspace-composer__specialist-option {
@@ -365,16 +505,16 @@
 .workspace-composer__specialist-option strong {
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 520;
+  font-weight: var(--font-weight-medium);
 }
 
 .workspace-composer__specialist-option small {
   display: -webkit-box;
   overflow: hidden;
   color: var(--text-weaker);
-  font-size: 10.5px;
-  font-weight: 400;
-  line-height: 1.3;
+  font-size: 12px;
+  font-weight: var(--font-weight-regular);
+  line-height: 1.35;
   -webkit-box-orient: vertical;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -383,11 +523,7 @@
 
 .workspace-composer__specialist-option [data-slot="icon-svg"] {
   flex: 0 0 auto;
-  color: #4f8cff;
-}
-
-.workspace-composer__reviewer-more {
-  min-height: 40px !important;
+  color: var(--text-interactive-base);
 }
 
 .workspace-composer__reviewer-more small {
@@ -437,5 +573,335 @@
 
   .workspace-composer__setup small {
     white-space: normal;
+  }
+}
+
+/* Composer surface
+   ----------------
+   This file is the sole owner of the input surface, editor baseline, utility
+   row, and responsive control geometry. */
+
+form.workspace-composer {
+  --composer-radius-pill: 999px;
+  --composer-editor-font-family: var(--font-family-sans);
+  --composer-editor-font-features: var(--font-family-sans--font-feature-settings, normal);
+  --composer-editor-font-variation: var(--font-family-sans--font-variation-settings, normal);
+  /* Keep the editor on the same type rhythm as the surrounding workspace.
+     Mobile still steps up to 16px below to prevent browser zoom. */
+  --composer-editor-font-size: var(--font-size-base);
+  --composer-editor-font-weight: var(--font-weight-regular);
+  --composer-editor-line-height: 20px;
+  --composer-editor-padding-block-start: 13px;
+  --composer-editor-padding-block-end: 8px;
+  --composer-editor-padding-inline: 15px;
+  min-height: 92px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
+  box-shadow: var(--atlas-shadow-xs);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+form.workspace-composer:focus-within {
+  border-color: var(--focus-lit-ring);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--focus-lit-ring) 13%, transparent),
+    var(--atlas-shadow-xs);
+}
+
+.workspace-composer__editor {
+  position: relative;
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-base) transparent;
+}
+
+.workspace-composer__editor[data-composer-mode="shell"] {
+  --composer-editor-font-family: var(--font-family-mono);
+  --composer-editor-font-features: var(--font-family-mono--font-feature-settings, normal);
+  --composer-editor-font-variation: var(--font-family-mono--font-variation-settings, normal);
+}
+
+/* One declaration owns every metric that affects the first glyph's baseline.
+   Keeping the placeholder and contenteditable in the same selector prevents
+   utility classes or future component changes from drifting apart. */
+form.workspace-composer :is([data-component="prompt-input"], .workspace-composer__placeholder) {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 49px;
+  padding: var(--composer-editor-padding-block-start) var(--composer-editor-padding-inline)
+    var(--composer-editor-padding-block-end);
+  font-family: var(--composer-editor-font-family);
+  font-feature-settings: var(--composer-editor-font-features);
+  font-variation-settings: var(--composer-editor-font-variation);
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  font-size: var(--composer-editor-font-size);
+  font-style: normal;
+  font-weight: var(--composer-editor-font-weight);
+  line-height: var(--composer-editor-line-height);
+  letter-spacing: 0;
+  font-synthesis: none;
+}
+
+form.workspace-composer [data-component="prompt-input"] {
+  display: block;
+  color: var(--text-strong);
+  caret-color: var(--text-strong);
+  overflow-wrap: anywhere;
+  text-align: start;
+  white-space: pre-wrap;
+}
+
+form.workspace-composer .workspace-composer__placeholder {
+  position: absolute;
+  inset: 0 0 auto;
+  overflow: hidden;
+  color: var(--text-weak);
+  pointer-events: none;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+form.workspace-composer .workspace-composer__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px 8px;
+}
+
+form.workspace-composer .workspace-composer__controls,
+form.workspace-composer .workspace-composer__actions {
+  min-width: 0;
+  gap: 4px;
+}
+
+form.workspace-composer .workspace-composer__controls {
+  overflow: visible;
+}
+
+form.workspace-composer .workspace-composer__actions {
+  justify-content: flex-end;
+}
+
+form.workspace-composer .workspace-composer__attach {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius-xs);
+  color: var(--text-weak);
+  font-weight: var(--font-weight-regular);
+}
+
+form.workspace-composer .workspace-composer__attach:hover:not(:disabled),
+form.workspace-composer .workspace-composer__attach:focus-visible {
+  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+  color: var(--text-strong);
+}
+
+form.workspace-composer .workspace-composer__overflow > summary {
+  width: auto;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  gap: 6px;
+  padding: 0 8px 0 7px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-weak);
+  font-weight: var(--font-weight-regular);
+}
+
+form.workspace-composer .workspace-composer__overflow > summary:hover,
+form.workspace-composer .workspace-composer__overflow[open] > summary {
+  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+  color: var(--text-strong);
+}
+
+.workspace-composer__overflow-label {
+  color: currentColor;
+  font-family: var(--font-family-sans);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-regular);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+form.workspace-composer .workspace-composer__overflow > div {
+  padding: 5px;
+  border-color: var(--color-border, var(--border-base));
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
+  box-shadow: var(--atlas-shadow-md);
+}
+
+form.workspace-composer .workspace-composer__overflow button {
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+  font-weight: var(--font-weight-regular);
+  line-height: 18px;
+}
+
+form.workspace-composer .workspace-composer__capability-list button:has(.workspace-composer__capability-copy) {
+  min-height: 50px;
+}
+
+form.workspace-composer .workspace-composer__specialist-list .workspace-composer__specialist-option {
+  min-height: 46px;
+}
+
+form.workspace-composer .workspace-composer__specialist-list .workspace-composer__reviewer-more {
+  min-height: 40px;
+}
+
+form.workspace-composer .workspace-composer__specialist-list .workspace-composer__specialist-back {
+  min-height: 36px;
+}
+
+.workspace-composer__specialist-back > [data-component="icon"] {
+  color: var(--text-weaker);
+}
+
+form.workspace-composer [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"] {
+  min-height: 32px;
+  max-width: min(220px, 32vw);
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: var(--font-weight-regular);
+}
+
+form.workspace-composer
+  [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"]:hover,
+form.workspace-composer
+  [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"]:focus-visible,
+form.workspace-composer
+  [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"][data-expanded] {
+  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+}
+
+form.workspace-composer .workspace-composer__send {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: var(--composer-radius-pill);
+  box-shadow: none;
+}
+
+form.workspace-composer .workspace-composer__send[data-composer-action="idle"]:disabled {
+  background-color: var(--color-bg-subtle, var(--surface-raised-base-hover));
+}
+
+form.workspace-composer .workspace-composer__send[data-composer-action="idle"]:disabled [data-slot="icon-svg"] {
+  color: var(--text-weaker);
+}
+
+form.workspace-composer .workspace-composer__send[data-composer-action="stop"] {
+  background-color: var(--surface-critical-strong);
+}
+
+form.workspace-composer .workspace-composer__send[data-composer-action="stop"]:hover:not(:disabled),
+form.workspace-composer .workspace-composer__send[data-composer-action="stop"]:focus-visible {
+  background-color: var(--icon-critical-hover);
+}
+
+form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [data-slot="icon-svg"] {
+  color: var(--icon-invert-base);
+}
+
+/* The conversation column can narrow independently of the viewport when the
+   research pane is resized. Mirror the small-screen control geometry against
+   that actual available width instead of waiting for a window breakpoint. */
+@container conversation (max-width: 540px) {
+  form.workspace-composer {
+    --composer-editor-padding-inline: 12px;
+  }
+
+  form.workspace-composer .workspace-composer__footer {
+    gap: 5px;
+    padding: 5px 6px 6px;
+  }
+
+  form.workspace-composer [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"] {
+    max-width: min(148px, 38cqi);
+  }
+}
+
+@container conversation (max-width: 390px) {
+  form.workspace-composer .workspace-composer__overflow > summary {
+    width: 32px;
+    padding: 0;
+  }
+
+  .workspace-composer__overflow-label {
+    display: none;
+  }
+
+  form.workspace-composer [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"] {
+    max-width: min(124px, 40cqi);
+  }
+}
+
+@media (max-width: 719px) {
+  form.workspace-composer {
+    --composer-editor-font-size: 16px;
+    --composer-editor-line-height: 24px;
+    --composer-editor-padding-inline: 12px;
+    min-height: 96px;
+    border-radius: var(--radius-xl);
+  }
+
+  form.workspace-composer .workspace-composer__footer {
+    gap: 5px;
+    padding: 5px 6px 6px;
+  }
+
+  form.workspace-composer [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"] {
+    max-width: min(148px, 38vw);
+  }
+}
+
+@media (max-width: 390px) {
+  form.workspace-composer .workspace-composer__overflow > summary {
+    width: 32px;
+    padding: 0;
+  }
+
+  .workspace-composer__overflow-label {
+    display: none;
+  }
+
+  form.workspace-composer [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"] {
+    max-width: 124px;
+  }
+}
+
+@media (pointer: coarse) {
+  form.workspace-composer .workspace-composer__attach,
+  form.workspace-composer .workspace-composer__overflow > summary,
+  form.workspace-composer .workspace-composer__send,
+  form.workspace-composer [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  form.workspace-composer {
+    transition: none;
   }
 }

@@ -3,15 +3,29 @@ import { Provenance } from "@/science/provenance/store"
 import { ProvenanceEnvelope } from "@/science/provenance/envelope"
 import { ExecutionAuthority } from "@/project/execution"
 import { Storage } from "@/storage/storage"
+import path from "node:path"
 import z from "zod"
 import { KernelEnvironment } from "./types"
-import type { ExecuteOptions, ExecuteResult, Kernel, KernelLanguage, KernelManager, KernelStartOptions } from "./types"
+import { KernelProcessIdentity } from "./process"
+import { Global } from "@/global"
+import { FileLease } from "@/util/file-lease"
+import { AuthoritySignal } from "@/project/authority-signal"
+import type {
+  ExecuteOptions,
+  ExecuteResult,
+  Kernel,
+  KernelLanguage,
+  KernelManager,
+  KernelProcess,
+  KernelStartOptions,
+} from "./types"
 
 export type KernelIdentity = {
   projectID: string
   sessionID: string
   name: string
   language: KernelLanguage
+  environmentName?: string
 }
 
 type KernelCell = {
@@ -55,15 +69,24 @@ type Entry = {
   lastActivityAt: number | null
   authority: ExecutionAuthority.Decision | null
   lastCell: KernelCell | null
+  process: KernelProcess | null
+  lease?: AsyncDisposable
+  claiming?: Promise<void>
 }
 
 type Pending = {
   identity: KernelIdentity
   key: string
   manager: KernelManager
-  ticket: { cancelled: boolean }
+  ticket: StartTicket
   promise: Promise<Entry>
   generation: string
+}
+
+type StartTicket = {
+  cancelled: boolean
+  minimumIncarnation: number
+  incarnation?: number
 }
 
 const Persisted = z.object({
@@ -73,11 +96,21 @@ const Persisted = z.object({
     sessionID: z.string(),
     name: z.string(),
     language: z.string(),
+    environmentName: z.string().optional(),
   }),
   state: z.enum(["lazy", "stopped", "crashed"]),
   incarnation: z.number().int().nullable(),
   execution_count: z.number().int().nonnegative(),
   last_activity_at: z.number().nullable(),
+  process: z
+    .object({
+      pid: z.number().int().positive(),
+      startedAt: z.number().positive(),
+      token: z.string().optional(),
+      ownershipID: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
 })
 
 export const KernelStatus = z.object({
@@ -88,6 +121,7 @@ export const KernelStatus = z.object({
   sessionID: z.string(),
   name: z.string(),
   language: z.string(),
+  environment_name: z.string(),
   target: z.object({
     kind: z.literal("local"),
   }),
@@ -134,31 +168,25 @@ const records = Instance.state(
   }),
   async (value) => {
     for (const pending of value.starts.values()) pending.ticket.cancelled = true
-    await Promise.allSettled([...value.starts.values()].map((pending) => pending.manager.release(pending.key)))
-    await Promise.allSettled([...value.starts.values()].map((pending) => pending.promise))
-    await Promise.allSettled(
-      [...value.entries.values()].map(async (entry) => {
-        await entry.manager.release(entry.key)
-        entry.kernel = undefined
-        entry.state = entry.state === "crashed" ? "crashed" : "stopped"
-        entry.executionCount = 0
-        entry.environment = null
-        entry.startedAt = null
-        entry.lastActivityAt = Date.now()
-        entry.authority = null
-        entry.lastCell = null
-        await persist(entry)
-      }),
-    )
+    const stopped = await Promise.allSettled([...value.entries.values()].map(releaseEntry))
     value.entries.clear()
     value.starts.clear()
+    const failed = stopped.filter((result): result is PromiseRejectedResult => result.status === "rejected")
+    if (failed.length) {
+      throw new AggregateError(
+        failed.map((result) => result.reason),
+        "One or more kernels could not be safely reclaimed while disposing the project instance.",
+      )
+    }
   },
 )
 
-const key = (identity: KernelIdentity) =>
-  `kernel-${Bun.hash(`${identity.projectID}\0${identity.sessionID}\0${identity.name}\0${identity.language}`).toString(
-    36,
-  )}`
+const key = (identity: KernelIdentity) => {
+  const environment = identity.environmentName ? `\0${identity.environmentName}` : ""
+  return `kernel-${Bun.hash(
+    `${identity.projectID}\0${identity.sessionID}\0${identity.name}\0${identity.language}${environment}`,
+  ).toString(36)}`
+}
 
 const manager = (language: KernelLanguage) => {
   const value = managers.get(language)
@@ -173,6 +201,8 @@ const storageKey = (identity: KernelIdentity) => [
   key(identity),
 ]
 
+const leasePath = (id: string) => path.join(Global.Path.data, "kernel-registry", `${id}.lock`)
+
 async function persist(value: Entry) {
   await Storage.write(storageKey(value.identity), {
     version: 1,
@@ -182,6 +212,7 @@ async function persist(value: Entry) {
     incarnation: value.incarnation,
     execution_count: value.executionCount,
     last_activity_at: value.lastActivityAt,
+    process: value.kernel?.process ?? value.process,
   } satisfies z.infer<typeof Persisted>)
 }
 
@@ -201,6 +232,7 @@ function restore(value: z.infer<typeof Persisted>) {
     lastActivityAt: value.last_activity_at,
     authority: null,
     lastCell: null,
+    process: value.process ?? null,
   }
   records().entries.set(id, entry)
   return entry
@@ -244,9 +276,163 @@ const record = (identity: KernelIdentity) => {
     lastActivityAt: null,
     authority: null,
     lastCell: null,
+    process: null,
   }
   records().entries.set(id, value)
   return value
+}
+
+async function releaseLease(value: Entry) {
+  await value.lease?.[Symbol.asyncDispose]()
+  value.lease = undefined
+}
+
+function running(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM"
+  }
+}
+
+async function reap(value: Entry) {
+  const identity = value.process
+  if (!identity) return
+  if (!identity.token && running(identity.pid)) {
+    throw new Error(`Refusing to terminate unverified persisted kernel process ${identity.pid}.`)
+  }
+  await KernelProcessIdentity.terminate(identity)
+  const stopped = async (attempt = 0): Promise<boolean> => {
+    if (!KernelProcessIdentity.matchesRecorded(identity)) return true
+    if (attempt >= 100) return false
+    await Bun.sleep(10)
+    return stopped(attempt + 1)
+  }
+  if (!(await stopped())) {
+    throw new Error(`Kernel process ${identity.pid} is still running after an identity-verified termination attempt.`)
+  }
+  value.process = null
+}
+
+async function reapCurrent(value: Entry) {
+  const identity = value.kernel?.process ?? value.process
+  if (identity) value.process = identity
+  await reap(value).catch(async (error) => {
+    await persist(value).catch(() => undefined)
+    await releaseLease(value)
+    throw error
+  })
+  return identity
+}
+
+function reserveIncarnation(value: Entry, ticket?: StartTicket) {
+  if (!ticket) return
+  if (ticket.incarnation === undefined) {
+    ticket.incarnation = Math.max(ticket.minimumIncarnation, (value.incarnation ?? 0) + 1)
+  }
+  value.incarnation = Math.max(value.incarnation ?? 0, ticket.incarnation)
+}
+
+async function claim(value: Entry, ticket?: StartTicket) {
+  if (value.lease) {
+    reserveIncarnation(value, ticket)
+    return
+  }
+  if (value.claiming) {
+    await value.claiming
+    reserveIncarnation(value, ticket)
+    return
+  }
+  const pending = (async () => {
+    value.lease = await FileLease.acquire(leasePath(value.key), 1_000).catch(() => {
+      throw new Error("This kernel is active in another OpenScience server. Stop it there before starting it here.")
+    })
+    const stored = await Storage.read<unknown>(storageKey(value.identity)).catch(async (error) => {
+      if (Storage.NotFoundError.isInstance(error)) return
+      await releaseLease(value)
+      throw error
+    })
+    const parsed = Persisted.safeParse(stored)
+    if (parsed.success) {
+      value.incarnation = parsed.data.incarnation
+      value.executionCount = parsed.data.execution_count
+      value.lastActivityAt = parsed.data.last_activity_at
+      value.process = parsed.data.process ?? null
+    }
+    await reap(value).catch(async (error) => {
+      await releaseLease(value)
+      throw error
+    })
+    reserveIncarnation(value, ticket)
+  })()
+  value.claiming = pending
+  await pending.finally(() => {
+    if (value.claiming === pending) value.claiming = undefined
+  })
+}
+
+async function releaseEntry(value: Entry) {
+  const pending = records().starts.get(value.key)
+  if (pending) pending.ticket.cancelled = true
+  // A start with no kernel claim is queued behind the authority mutation that
+  // invoked this revoker. Waiting for that promise while the mutation still
+  // owns AuthoritySignal.exclusive would deadlock. Its cancelled ticket makes
+  // it abort before spawn when it eventually enters the exclusive section.
+  const entered = !!pending && (!!value.lease || !!value.claiming)
+  // Reserve the cancelled boot's generation while holding the kernel lease.
+  // A restart may win the authority lease before this pending start enters its
+  // own spawn section; without this reservation the replacement reused
+  // incarnation 1 and looked indistinguishable from the boot it cancelled.
+  await claim(value, pending?.ticket)
+  // Reap through the durable ledger while the interpreter leader is still
+  // alive. Its live descendant closure includes workers that called setsid()
+  // and left the kernel's process group; killing the manager/leader first
+  // would reparent those workers and erase the only safe ownership proof.
+  await reapCurrent(value)
+  const released = await value.manager.release(value.key).then(
+    () => ({ ok: true as const }),
+    (error) => ({ ok: false as const, error }),
+  )
+  if (entered) await pending?.promise.catch(() => undefined)
+  else void pending?.promise.catch(() => undefined)
+  records().starts.delete(value.key)
+  // A cancelled startup releases its lease in the pending promise. Reclaim it
+  // before touching the durable record so a different server cannot start the
+  // same kernel between cancellation and the final stopped-state write.
+  if (!value.lease) await claim(value)
+  // A cancelled startup may have crossed its spawn boundary after the first
+  // pass. Keep this second pass to reclaim that late durable registration.
+  const identity = await reapCurrent(value)
+  if (!released.ok && !identity) {
+    await releaseLease(value)
+    throw released.error
+  }
+  value.kernel = undefined
+  value.state = "stopped"
+  value.executionCount = 0
+  value.environment = null
+  value.startedAt = null
+  value.lastActivityAt = Date.now()
+  value.authority = null
+  value.lastCell = null
+  value.process = null
+  await persist(value).catch(async (error) => {
+    await releaseLease(value)
+    throw error
+  })
+  await releaseLease(value)
+}
+
+async function releaseEntries(entries: Entry[]) {
+  const results = await Promise.allSettled(entries.map(releaseEntry))
+  const failed = results.filter((result): result is PromiseRejectedResult => result.status === "rejected")
+  if (failed.length) {
+    throw new AggregateError(
+      failed.map((result) => result.reason),
+      "One or more kernels could not be safely reclaimed.",
+    )
+  }
 }
 
 async function provenance(
@@ -306,6 +492,8 @@ async function provenance(
     kernel: {
       id: value.key,
       language: identity.language,
+      environmentName: identity.environmentName ?? value.environment?.interpreter.name ?? identity.language,
+      interpreter: value.environment?.interpreter,
       incarnation: value.incarnation ?? undefined,
       processID: process?.pid,
       processStartedAt: process?.startedAt,
@@ -340,6 +528,8 @@ async function provenance(
         ...(origin?.callID !== undefined ? { callID: origin.callID } : {}),
         kernelID: value.key,
         kernelName: identity.name,
+        kernelEnvironment: identity.environmentName ?? value.environment?.interpreter.name ?? identity.language,
+        interpreter: value.environment?.interpreter,
         kernelIncarnation: value.incarnation,
         executionCount: result?.executionCount ?? value.executionCount,
         outputTypes: result?.outputs.map((item) => item.type) ?? [],
@@ -352,14 +542,19 @@ async function provenance(
   )
 }
 
-const entry = async (identity: KernelIdentity, _options?: KernelStartOptions) => {
+type Handoff = (value: Entry, kernel: Kernel) => void
+
+const entry = async (identity: KernelIdentity, options?: KernelStartOptions, handoff?: Handoff) => {
   const authority = await ExecutionAuthority.require({
     projectID: identity.projectID,
     sessionID: identity.sessionID,
     capability: "kernel",
   })
   const value = await hydrate(identity)
-  if (value.kernel?.ready && value.authority?.generation === authority.generation) return value
+  if (value.kernel?.ready && value.authority?.generation === authority.generation) {
+    handoff?.(value, value.kernel)
+    return value
+  }
   if (value.kernel?.ready) {
     await value.manager.release(value.key)
     value.kernel = undefined
@@ -369,7 +564,12 @@ const entry = async (identity: KernelIdentity, _options?: KernelStartOptions) =>
   }
   if (value.kernel?.crashed) value.state = "crashed"
   const pending = records().starts.get(value.key)
-  if (pending?.generation === authority.generation) return pending.promise
+  if (pending?.generation === authority.generation) {
+    const active = await pending.promise
+    if (!active.kernel) throw new Error("Kernel startup completed without a process")
+    handoff?.(active, active.kernel)
+    return active
+  }
   if (pending) {
     pending.ticket.cancelled = true
     await pending.manager.release(pending.key)
@@ -377,17 +577,10 @@ const entry = async (identity: KernelIdentity, _options?: KernelStartOptions) =>
     records().starts.delete(value.key)
   }
 
-  const incarnation = (value.incarnation ?? 0) + 1
-  const ticket = { cancelled: false }
-  value.state = "stopped"
-  value.kernel = undefined
-  value.environment = null
-  value.incarnation = incarnation
-  value.executionCount = 0
-  value.startedAt = null
-  value.lastActivityAt = Date.now()
-  value.authority = authority
-  value.lastCell = null
+  const ticket: StartTicket = {
+    cancelled: false,
+    minimumIncarnation: (value.incarnation ?? 0) + 1,
+  }
   const drop = () => {
     if (records().starts.get(value.key)?.ticket === ticket) records().starts.delete(value.key)
   }
@@ -395,47 +588,89 @@ const entry = async (identity: KernelIdentity, _options?: KernelStartOptions) =>
   const abort = async () => {
     drop()
     await value.manager.release(value.key)
+    await releaseLease(value)
     throw new KernelStartupCancelled()
   }
-  // Booting runs inside a call so the pending-start record below is claimed in
-  // this same synchronous block. The boot awaits (persist, then the process
-  // spawn), and a cell that arrives during one of them has to find the in-flight
-  // start to queue behind — publishing the record after those awaits let it
-  // instead see an entry with no start and boot a second incarnation of its own.
-  const start = (async () => {
-    await persist(value)
-    return value.manager.get(value.key, {
+  // Publish the pending start before acquiring the cross-process authority
+  // lease. The exclusive section then owns the final authority check, kernel
+  // claim, child creation, durable process identity, and in-memory handoff as
+  // one indivisible spawn boundary with trust/filesystem mutations.
+  const start = AuthoritySignal.exclusive(async () => {
+    await claim(value, ticket)
+    const current = await ExecutionAuthority.require({
+      projectID: identity.projectID,
       sessionID: identity.sessionID,
-      cwd: authority.workspace,
-    })
-  })().then(
-    async (kernel) => {
-      if (stale()) return abort()
-      value.environment = kernel.environment ?? null
-      value.authority = authority
-      value.startedAt = kernel.process?.startedAt ?? Date.now()
-      value.lastActivityAt = value.startedAt
-      await persist(value)
-      if (stale()) return abort()
-      // Handing the kernel over is the last, synchronous step of the boot.
-      // `/status` and the ready fast path above both read `value.kernel`, so
-      // publishing it before the persist above advertised an idle, ready kernel
-      // while the cell whose request booted it had not reached the execution
-      // queue yet — a cell arriving in that window took the free slot first.
-      drop()
-      value.kernel = kernel
-      return value
-    },
-    async (error) => {
-      drop()
-      value.kernel = undefined
-      value.authority = authority
-      value.state = ticket.cancelled ? "stopped" : "crashed"
-      await persist(value)
-      if (ticket.cancelled) throw new KernelStartupCancelled()
+      capability: "kernel",
+    }).catch(async (error) => {
+      await releaseLease(value)
       throw error
-    },
-  )
+    })
+    if (current.generation !== authority.generation || stale()) {
+      await abort()
+    }
+
+    value.state = "stopped"
+    value.kernel = undefined
+    value.environment = null
+    value.executionCount = 0
+    value.startedAt = null
+    value.lastActivityAt = Date.now()
+    value.authority = current
+    value.lastCell = null
+    const processOwnership: KernelProcessIdentity.Ownership = {
+      id: `kernel-${crypto.randomUUID()}`,
+      projectID: identity.projectID,
+      sessionID: identity.sessionID,
+      authorityGeneration: current.generation,
+    }
+    return (async () => {
+      await persist(value)
+      const kernel = await value.manager.get(value.key, {
+        ...options,
+        sessionID: identity.sessionID,
+        cwd: current.workspace,
+        processOwnership,
+      })
+      const registered = await KernelProcessIdentity.ensureRegistered(kernel.process, processOwnership).catch(
+        async (error) => {
+          await value.manager.release(value.key).catch(() => undefined)
+          throw error
+        },
+      )
+      if (!registered) {
+        await value.manager.release(value.key).catch(() => undefined)
+        throw new Error("Kernel manager did not expose a process for durable registration")
+      }
+      return kernel
+    })().then(
+      async (kernel) => {
+        if (stale()) return abort()
+        value.environment = kernel.environment ?? null
+        value.process = kernel.process ?? null
+        value.authority = current
+        value.startedAt = kernel.process?.startedAt ?? Date.now()
+        value.lastActivityAt = value.startedAt
+        await persist(value)
+        if (stale()) return abort()
+        // A booting execute request synchronously reserves its kernel queue slot
+        // before this ready process becomes visible through status. Otherwise a
+        // client that reacts to `active` can overtake the cell that did the boot.
+        handoff?.(value, kernel)
+        drop()
+        value.kernel = kernel
+        return value
+      },
+      async (error) => {
+        value.kernel = undefined
+        value.authority = current
+        value.state = ticket.cancelled ? "stopped" : "crashed"
+        await persist(value)
+        await releaseLease(value)
+        if (ticket.cancelled) throw new KernelStartupCancelled()
+        throw error
+      },
+    )
+  }).finally(drop)
   records().starts.set(value.key, {
     identity,
     key: value.key,
@@ -488,14 +723,8 @@ export namespace KernelRuntime {
     options?: ExecuteOptions,
     start?: KernelStartOptions,
   ): Promise<ExecuteResult> {
-    const value = await entry(identity, start)
-    const kernel = value.kernel
-    if (!kernel) throw new Error("Kernel startup completed without a process")
-    const codeState = ProvenanceEnvelope.code(value.environment?.cwd ?? Instance.directory)
-    const startedAt = Date.now()
-    value.lastActivityAt = startedAt
     const source = options?.origin?.source ?? (identity.name.startsWith("notebook:") ? identity.name.slice(9) : null)
-    const cell = (): KernelCell => ({
+    const cell = (value: Entry): KernelCell => ({
       title: options?.origin?.title?.trim().slice(0, 100) || null,
       source,
       code: code.length > 12_000 ? `${code.slice(0, 12_000)}\n\n... (truncated)` : code,
@@ -504,68 +733,87 @@ export namespace KernelRuntime {
       messageID: options?.origin?.messageID ?? null,
       callID: options?.origin?.callID ?? null,
     })
-    const running: { cell?: KernelCell } = {}
-    return kernel
-      .execute(code, {
+    const running: {
+      cell?: KernelCell
+      promise?: Promise<ExecuteResult>
+      startedAt?: number
+      codeState?: ReturnType<typeof ProvenanceEnvelope.code>
+    } = {}
+    const value = await entry(identity, start, (current, kernel) => {
+      running.startedAt = Date.now()
+      current.lastActivityAt = running.startedAt
+      // KernelQueue increments synchronously, so status cannot expose an idle
+      // process between the startup handoff and this request joining the queue.
+      running.promise = kernel.execute(code, {
         ...options,
         onStart: () => {
-          running.cell = cell()
-          value.lastCell = running.cell
-          value.lastActivityAt = Date.now()
+          running.cell = cell(current)
+          current.lastCell = running.cell
+          current.lastActivityAt = Date.now()
           options?.onStart?.()
         },
       })
-      .then(
-        async (result) => {
-          // The count belongs to this cell, so capture it before the awaits below.
-          // `value.executionCount` is the kernel's running total and every cell
-          // queued behind this one advances it — reading it back after the persist
-          // reported the count of whichever cell had most recently finished.
-          const count = result.executionCount ?? value.executionCount + 1
-          value.executionCount = count
-          const completedAt = Date.now()
-          value.lastActivityAt = completedAt
-          const completeCell: KernelCell = {
-            ...(running.cell ?? cell()),
-            status: result.ok ? "succeeded" : "failed",
-            executionCount: count,
-          }
-          if (!value.lastCell || value.lastCell === running.cell) value.lastCell = completeCell
-          await persist(value)
-          const complete = { ...result, executionCount: count }
-          const node = await provenance(
-            identity,
-            value,
-            code,
-            startedAt,
-            completedAt,
-            codeState,
-            options?.origin,
-            complete,
-          )
-          return { ...complete, provenanceID: node.id }
-        },
-        async (error) => {
-          const completedAt = Date.now()
-          value.lastActivityAt = completedAt
-          const failedCell: KernelCell = { ...(running.cell ?? cell()), status: "failed" }
-          if (!value.lastCell || value.lastCell === running.cell) value.lastCell = failedCell
-          if (kernel.crashed) value.state = "crashed"
-          await persist(value)
-          const node = await provenance(
-            identity,
-            value,
-            code,
-            startedAt,
-            completedAt,
-            codeState,
-            options?.origin,
-            undefined,
-            error,
-          )
-          throw new KernelExecutionError(error, node.id)
-        },
-      )
+      // Capture after reserving the queue but before its promise continuation
+      // can run. Best-effort git inspection therefore remains pre-execution.
+      running.codeState = ProvenanceEnvelope.code(current.environment?.cwd ?? Instance.directory)
+    })
+    const kernel = value.kernel
+    const execution = running.promise
+    const startedAt = running.startedAt
+    if (!kernel || !execution || startedAt === undefined) {
+      throw new Error("Kernel startup completed without a queued execution")
+    }
+    return execution.then(
+      async (result) => {
+        // The count belongs to this cell, so capture it before the awaits below.
+        // `value.executionCount` is the kernel's running total and every cell
+        // queued behind this one advances it — reading it back after the persist
+        // reported the count of whichever cell had most recently finished.
+        const count = result.executionCount ?? value.executionCount + 1
+        value.executionCount = count
+        const completedAt = Date.now()
+        value.lastActivityAt = completedAt
+        const completeCell: KernelCell = {
+          ...(running.cell ?? cell(value)),
+          status: result.ok ? "succeeded" : "failed",
+          executionCount: count,
+        }
+        if (!value.lastCell || value.lastCell === running.cell) value.lastCell = completeCell
+        await persist(value)
+        const complete = { ...result, executionCount: count }
+        const node = await provenance(
+          identity,
+          value,
+          code,
+          startedAt,
+          completedAt,
+          running.codeState,
+          options?.origin,
+          complete,
+        )
+        return { ...complete, provenanceID: node.id }
+      },
+      async (error) => {
+        const completedAt = Date.now()
+        value.lastActivityAt = completedAt
+        const failedCell: KernelCell = { ...(running.cell ?? cell(value)), status: "failed" }
+        if (!value.lastCell || value.lastCell === running.cell) value.lastCell = failedCell
+        if (kernel.crashed) value.state = "crashed"
+        await persist(value)
+        const node = await provenance(
+          identity,
+          value,
+          code,
+          startedAt,
+          completedAt,
+          running.codeState,
+          options?.origin,
+          undefined,
+          error,
+        )
+        throw new KernelExecutionError(error, node.id)
+      },
+    )
   }
 
   export function active(identity: KernelIdentity) {
@@ -588,6 +836,7 @@ export namespace KernelRuntime {
       sessionID: identity.sessionID,
       name: identity.name,
       language: identity.language,
+      environment_name: identity.environmentName ?? identity.language,
       target: { kind: "local" },
       incarnation: value.incarnation,
       execution_count: value.executionCount,
@@ -630,20 +879,7 @@ export namespace KernelRuntime {
   export async function release(identity: KernelIdentity) {
     const value = records().entries.get(key(identity))
     if (!value) return
-    const pending = records().starts.get(value.key)
-    if (pending) pending.ticket.cancelled = true
-    await value.manager.release(value.key)
-    await pending?.promise.catch(() => undefined)
-    records().starts.delete(value.key)
-    value.kernel = undefined
-    value.state = "stopped"
-    value.executionCount = 0
-    value.environment = null
-    value.startedAt = null
-    value.lastActivityAt = Date.now()
-    value.authority = null
-    value.lastCell = null
-    await persist(value)
+    await releaseEntry(value)
   }
 
   export async function restart(identity: KernelIdentity, options?: KernelStartOptions) {
@@ -682,12 +918,25 @@ export namespace KernelRuntime {
   }
 
   export async function releaseSession(sessionID: string) {
+    cancelSession(sessionID)
+    const entries = [...records().entries.values()].filter((value) => value.identity.sessionID === sessionID)
+    await releaseEntries(entries)
+  }
+
+  /** Mark in-flight boots synchronously before a deletion waits on the shared
+   * authority lease. The boot rechecks this ticket after its last awaited
+   * startup step and cannot hand a deleted session a live interpreter. */
+  export function cancelSession(sessionID: string) {
     const pending = [...records().starts.values()].filter((value) => value.identity.sessionID === sessionID)
     for (const value of pending) value.ticket.cancelled = true
-    await Promise.allSettled(pending.map((value) => value.manager.release(value.key)))
-    await Promise.allSettled(pending.map((value) => value.promise))
-    const entries = [...records().entries.values()].filter((value) => value.identity.sessionID === sessionID)
-    await Promise.allSettled(entries.map((value) => release(value.identity)))
+  }
+
+  export async function releaseProject(projectID: string) {
+    await restoreSession(projectID)
+    const pending = [...records().starts.values()].filter((value) => value.identity.projectID === projectID)
+    for (const value of pending) value.ticket.cancelled = true
+    const entries = [...records().entries.values()].filter((value) => value.identity.projectID === projectID)
+    await releaseEntries(entries)
   }
 
   export async function removeSession(projectID: string, sessionID: string) {

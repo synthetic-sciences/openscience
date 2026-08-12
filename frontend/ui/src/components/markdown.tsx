@@ -56,6 +56,17 @@ export function sanitize(html: string) {
   return DOMPurify.sanitize(html, config)
 }
 
+export function markdownFallback(markdown: string) {
+  const escaped = markdown.replace(/[&<>"']/g, (value) => {
+    if (value === "&") return "&amp;"
+    if (value === "<") return "&lt;"
+    if (value === ">") return "&gt;"
+    if (value === '"') return "&quot;"
+    return "&#39;"
+  })
+  return `<p data-markdown-fallback="true">${escaped.replace(/\r?\n/g, "<br>")}</p>`
+}
+
 type Resolve = (src: string) => string
 
 const images = createContext<Resolve>()
@@ -228,8 +239,10 @@ export function Markdown(
         }
       }
 
-      const next = await marked.parse(markdown)
-      const safe = sanitize(next)
+      const safe = await marked.parse(markdown).then(
+        (next) => sanitize(next),
+        () => markdownFallback(markdown),
+      )
       if (key && hash) touch(key, { hash, html: safe })
       return safe
     },

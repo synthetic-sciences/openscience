@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures"
-import { promptSelector, sessionTab } from "./utils"
+import { promptSelector, sessionHeading } from "./utils"
 
 function isSessionResponse(response: import("@playwright/test").Response, method: string, sessionID?: string) {
   const path = new URL(response.url()).pathname.replace(/\/$/, "")
@@ -23,6 +23,34 @@ test("can open an existing session and type into the prompt", async ({ page, sdk
     await expect(prompt).toContainText("hello from e2e")
   } finally {
     await sdk.session.delete({ sessionID }).catch(() => undefined)
+  }
+})
+
+test("session heading rename persists through the real session API", async ({ page, sdk, gotoSession }) => {
+  const title = `e2e heading ${Date.now()}`
+  const renamed = `${title} refined`
+  const created = await sdk.session.create({ title }).then((response) => response.data)
+  if (!created?.id) throw new Error("Session create did not return an id")
+
+  try {
+    await gotoSession(created.id)
+
+    await sessionHeading(page, title).focus()
+    await sessionHeading(page, title).press("F2")
+    const editor = page.getByRole("textbox", { name: "Session name", exact: true })
+    await expect(editor).toBeFocused()
+    await editor.fill(renamed)
+    const responsePromise = page.waitForResponse((response) => isSessionResponse(response, "PATCH", created.id))
+    await editor.press("Enter")
+    expect((await responsePromise).ok()).toBe(true)
+
+    await expect(sessionHeading(page, renamed)).toBeVisible()
+    await expect(page.getByRole("complementary").getByRole("button", { name: renamed, exact: true })).toBeVisible()
+    await expect
+      .poll(async () => (await sdk.session.list()).data?.find((session) => session.id === created.id)?.title)
+      .toBe(renamed)
+  } finally {
+    await sdk.session.delete({ sessionID: created.id }).catch(() => undefined)
   }
 })
 
@@ -76,7 +104,7 @@ test("session lifecycle works through the sidebar UI", async ({ page, slug, sdk,
 
     const newResearch = page.getByRole("button", { name: "New research", exact: true })
     const sidebar = page.getByRole("complementary").filter({ has: newResearch })
-    const rows = sidebar.locator('div[role="button"]')
+    const rows = sidebar.locator(".session-sidebar__session")
     await expect(sidebar).toBeVisible()
     const baselineCount = await rows.count()
 
@@ -106,15 +134,16 @@ test("session lifecycle works through the sidebar UI", async ({ page, slug, sdk,
     const renamedRow = rows.filter({ hasText: renamedTitle })
     await expect(renamedRow).toHaveCount(1)
     await expect(rows.filter({ hasText: created.title })).toHaveCount(0)
-    await expect(sessionTab(page, renamedTitle)).toHaveAttribute("aria-selected", "true")
+    await expect(sessionHeading(page, renamedTitle)).toBeVisible()
+    await expect(renamedRow.getByRole("button", { name: renamedTitle, exact: true })).toBeFocused()
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${sessionID}(?:\\?|#|$)`))
 
     await renamedRow.hover()
-    const actions = renamedRow.getByRole("button", { name: "Session actions", exact: true })
+    const actions = renamedRow.getByRole("button", { name: `Session actions for ${renamedTitle}`, exact: true })
     await expect(actions).toBeVisible()
     await actions.click()
     await renamedRow.getByRole("menuitem", { name: "Delete", exact: true }).click()
-    const deleteButton = page.getByRole("button", { name: "delete session", exact: true })
+    const deleteButton = page.getByRole("button", { name: "Delete session", exact: true })
     await expect(deleteButton).toBeVisible()
     const deleteResponsePromise = page.waitForResponse((response) => isSessionResponse(response, "DELETE", sessionID))
     await deleteButton.click()
@@ -123,7 +152,7 @@ test("session lifecycle works through the sidebar UI", async ({ page, slug, sdk,
 
     await expect(renamedRow).toHaveCount(0)
     await expect(rows).toHaveCount(baselineCount)
-    await expect(sessionTab(page, renamedTitle)).toHaveCount(0)
+    await expect(sessionHeading(page, renamedTitle)).toHaveCount(0)
     if (baselineCount === 0) {
       await expect(page).toHaveURL(new RegExp(`/${slug}/session/new(?:\\?|#|$)`))
     } else {

@@ -2,6 +2,11 @@ export type KernelState = "lazy" | "starting" | "idle" | "running" | "stopped" |
 
 export type KernelEnvironment = {
   cwd: string
+  interpreter?: {
+    name: string
+    binary: string
+    version?: string
+  }
   atlas: {
     access: "host_broker"
     credentials: "withheld"
@@ -58,6 +63,7 @@ export type KernelStatus = {
   sessionID: string
   name: string
   language: string
+  environment_name?: string
   target: {
     kind: "local"
   }
@@ -107,7 +113,12 @@ export async function resolveNotebookSession(routeID: string | undefined, create
 
 export function kernelLabel(kernel: KernelStatus) {
   if (kernel.name.startsWith("notebook:")) return kernel.name.slice("notebook:".length)
-  if (kernel.name === "agent") return `${kernel.language === "r" ? "R" : "Python"} analysis`
+  if (kernel.name.startsWith("environment:")) return `${kernel.name.slice("environment:".length)} environment`
+  if (kernel.name === "agent") {
+    const environment = kernel.environment_name
+    if (environment && environment !== kernel.language) return `${environment} analysis`
+    return `${kernel.language === "r" ? "R" : "Python"} analysis`
+  }
   return kernel.name
 }
 

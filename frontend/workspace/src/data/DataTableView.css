@@ -1,0 +1,523 @@
+.data-table-view {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  container: data-table / inline-size;
+}
+
+.data-table-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  min-width: 0;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-solid);
+}
+
+.data-table-summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--color-text-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.data-table-summary strong {
+  color: var(--color-text);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-medium);
+}
+
+.data-table-search {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.data-table-search input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 90px 0 10px;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  outline: 1px solid transparent;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  transition:
+    background-color 140ms ease,
+    outline-color 140ms ease;
+}
+
+.data-table-search input:hover {
+  background: var(--color-bg-elevated);
+}
+
+.data-table-search input:focus-visible {
+  outline-color: var(--color-border-strong);
+}
+
+.data-table-search input::placeholder {
+  color: var(--color-text-faint);
+}
+
+.data-table-matches {
+  position: absolute;
+  right: 9px;
+  color: var(--color-text-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.data-table-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.data-table-actions button,
+.data-table-actions select,
+.data-table-pagination button,
+.data-table-plot button {
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.data-table-actions button,
+.data-table-pagination button,
+.data-table-plot button {
+  padding: 0 9px;
+}
+
+.data-table-actions select {
+  max-width: 150px;
+  padding: 0 24px 0 8px;
+  background: var(--color-bg-subtle);
+}
+
+.data-table-actions button:hover:not(:disabled),
+.data-table-actions select:hover:not(:disabled),
+.data-table-pagination button:hover:not(:disabled),
+.data-table-plot button:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+}
+
+.data-table-actions button.is-active {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.data-table-actions button:focus-visible,
+.data-table-actions select:focus-visible,
+.data-table-pagination button:focus-visible,
+.data-table-plot button:focus-visible,
+.data-table-scroll:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -2px;
+}
+
+.data-table-actions :disabled,
+.data-table-pagination button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.data-table-schema {
+  display: flex;
+  min-height: 0;
+  flex: none;
+  gap: 8px;
+  padding: 8px 12px;
+  overflow: auto hidden;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+}
+
+.data-table-schema-card {
+  width: 176px;
+  flex: 0 0 176px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  background: var(--color-surface-solid);
+}
+
+.data-table-schema-name {
+  overflow: hidden;
+  color: var(--color-text);
+  font-family: var(--font-code);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-table-schema-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
+  color: var(--color-text-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.data-table-missing-track {
+  height: 3px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.data-table-missing-value {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-warning, #a66d32);
+}
+
+.data-table-scroll {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.data-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-spacing: 0;
+  border-collapse: separate;
+  color: var(--color-text-muted);
+  font-family: var(--font-code);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 42px;
+  min-width: 136px;
+  max-width: 280px;
+  padding: 0;
+  border-bottom: 1px solid var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-surface-solid) 94%, var(--color-bg-subtle));
+  text-align: left;
+}
+
+.data-table-scroll thead th > button {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.data-table-scroll thead th > button:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.data-table-scroll thead th > button:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -2px;
+}
+
+.data-table-column-label {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.data-table-column-name {
+  overflow: hidden;
+  color: inherit;
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-table-column-type {
+  color: var(--color-text-faint);
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: var(--font-weight-regular);
+}
+
+.data-table-sort {
+  flex: none;
+  color: var(--color-text-faint);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+.data-table-scroll tbody td,
+.data-table-scroll tbody th {
+  height: 34px;
+  max-width: 320px;
+  padding: 0 10px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-solid);
+  font-weight: var(--font-weight-regular);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-table-scroll tbody tr:hover > td,
+.data-table-scroll tbody tr:hover > th {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.data-table-index-head,
+.data-table-index {
+  position: sticky !important;
+  left: 0;
+  z-index: 3 !important;
+  width: 52px;
+  min-width: 52px !important;
+  max-width: 52px !important;
+  color: var(--color-text-faint);
+  text-align: right !important;
+  box-shadow: 1px 0 0 var(--color-border);
+}
+
+.data-table-index-head {
+  padding: 0 10px !important;
+}
+
+.data-table-index {
+  z-index: 1 !important;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table-empty-value {
+  color: var(--color-text-faint);
+}
+
+.data-table-pagination {
+  display: flex;
+  min-height: 40px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-solid);
+}
+
+.data-table-pagination span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-table-plot {
+  flex: none;
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-solid);
+}
+
+.data-table-plot header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.data-table-plot strong {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-table-metrics {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+  color: var(--color-text-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.data-table-plot header > button {
+  margin-left: auto;
+}
+
+.data-table-plot svg {
+  display: block;
+  width: 100%;
+  height: 120px;
+}
+
+.data-table-plot line {
+  stroke: var(--color-border-strong);
+}
+
+.data-table-plot rect {
+  fill: var(--color-text-muted);
+  opacity: 0.78;
+}
+
+.data-table-empty {
+  display: grid;
+  min-height: 100%;
+  flex: 1;
+  place-content: center;
+  justify-items: center;
+  gap: 7px;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.data-table-empty strong {
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+}
+
+.data-table-empty span {
+  max-width: 420px;
+  color: var(--color-text-faint);
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+@container data-table (max-width: 720px) {
+  .data-table-toolbar {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .data-table-summary {
+    grid-row: 1;
+  }
+
+  .data-table-search {
+    grid-row: 2;
+  }
+
+  .data-table-actions {
+    grid-row: 3;
+    overflow-x: auto;
+    padding-bottom: 1px;
+    scrollbar-width: none;
+  }
+
+  .data-table-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .data-table-actions select {
+    max-width: 132px;
+  }
+}
+
+@container data-table (max-width: 460px) {
+  .data-table-toolbar {
+    padding-inline: 10px;
+  }
+
+  .data-table-schema {
+    padding-inline: 10px;
+  }
+
+  .data-table-plot header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .data-table-metrics {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .data-table-pagination {
+    justify-content: space-between;
+    padding-inline: 8px;
+  }
+
+  .data-table-pagination button {
+    padding-inline: 7px;
+  }
+}
+
+@media (pointer: coarse) {
+  .data-table-actions button,
+  .data-table-actions select,
+  .data-table-pagination button,
+  .data-table-plot button,
+  .data-table-scroll thead th > button {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-table-search input,
+  .data-table-actions button,
+  .data-table-actions select,
+  .data-table-pagination button,
+  .data-table-plot button,
+  .data-table-scroll thead th > button {
+    transition: none;
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { assetUrl, resolvePath } from "./markdown-assets"
+import { alignLoopbackAssetHost, assetUrl, resolvePath } from "./markdown-assets"
 
 const raw = (path: string) => `http://127.0.0.1:4096/file/raw?path=${encodeURIComponent(path)}&project=prj_1`
 
@@ -41,5 +41,36 @@ describe("markdown asset resolution", () => {
   test("normalizes windows separators and duplicate slashes", () => {
     expect(resolvePath("notes\\paper.md", "figures//plot.png")).toBe("notes/figures/plot.png")
     expect(resolvePath("", "./a/./b.png")).toBe("a/b.png")
+  })
+
+  test("aligns mismatched loopback hostnames without changing the API port or project capability", () => {
+    const url = "http://localhost:4096/file/raw?path=assets%2Fwordmark.svg&project=prj_1&directory=%2Fworkspace"
+
+    expect(alignLoopbackAssetHost(url, "http://127.0.0.1:4444")).toBe(
+      "http://127.0.0.1:4096/file/raw?path=assets%2Fwordmark.svg&project=prj_1&directory=%2Fworkspace",
+    )
+    expect(alignLoopbackAssetHost(url, "http://localhost:4444")).toBe(url)
+    expect(alignLoopbackAssetHost("https://files.example.com/plot.svg", "http://127.0.0.1:4444")).toBe(
+      "https://files.example.com/plot.svg",
+    )
+  })
+
+  test("applies loopback alignment only to generated project-local asset URLs", () => {
+    const localhostRaw = (path: string) =>
+      `http://localhost:4096/file/raw?path=${encodeURIComponent(path)}&project=prj_1`
+
+    expect(
+      assetUrl("assets/wordmark.svg", {
+        base: "README.md",
+        url: localhostRaw,
+        pageOrigin: "http://127.0.0.1:4444",
+      }),
+    ).toBe("http://127.0.0.1:4096/file/raw?path=assets%2Fwordmark.svg&project=prj_1")
+    expect(
+      assetUrl("https://example.com/logo.svg", {
+        url: localhostRaw,
+        pageOrigin: "http://127.0.0.1:4444",
+      }),
+    ).toBe("https://example.com/logo.svg")
   })
 })

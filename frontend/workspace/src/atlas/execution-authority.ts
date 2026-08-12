@@ -85,6 +85,30 @@ export function createExecutionAuthorityAPI(request: ProjectRequest) {
       }
       return response.json() as Promise<ExecutionDecision>
     },
+    async trust(input: ExecutionDecision): Promise<void> {
+      const remediation = input.remediation
+      const target = `/project/${encodeURIComponent(input.projectID)}/trust`
+      if (
+        input.allowed ||
+        input.reason !== "project_untrusted" ||
+        !remediation ||
+        remediation.method !== "PUT" ||
+        remediation.path !== target ||
+        remediation.body.trusted !== true ||
+        !remediation.body.root
+      ) {
+        throw new Error("The server did not provide a valid project-trust action.")
+      }
+      const response = await request(target, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(remediation.body),
+      })
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "")
+        throw new Error(detail || `${response.status} ${response.statusText}`)
+      }
+    },
   }
 }
 

@@ -4,6 +4,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import z from "zod"
 import { Global } from "@/global"
+import { FileLease } from "@/util/file-lease"
 import { Lock } from "@/util/lock"
 
 export namespace ArtifactStore {
@@ -231,9 +232,9 @@ export namespace ArtifactStore {
   async function prepare() {
     await Promise.all([fs.mkdir(blobs, { recursive: true }), fs.mkdir(partials, { recursive: true })])
     const db = new Database(database, { create: true })
+    db.exec("PRAGMA busy_timeout = 5000")
     db.exec("PRAGMA journal_mode = WAL")
     db.exec("PRAGMA synchronous = FULL")
-    db.exec("PRAGMA busy_timeout = 5000")
     db.exec(schema)
     const columns = db.query("PRAGMA table_info(artifacts)").all() as Array<{ name: string }>
     if (!columns.some((column) => column.name === "trashed_at")) {
@@ -357,6 +358,18 @@ export namespace ArtifactStore {
     return path.join(blobs, sha256.slice(0, 2), sha256.slice(2, 4), sha256)
   }
 
+  async function digest(content: BunFile) {
+    const hasher = new Bun.CryptoHasher("sha256")
+    const reader = content.stream().getReader()
+    const read = async (): Promise<string> => {
+      const item = await reader.read()
+      if (item.done) return hasher.digest("hex")
+      hasher.update(item.value)
+      return read()
+    }
+    return read()
+  }
+
   function rows(db: Database, projectID: string, artifactID?: string, state: "active" | "trash" = "active") {
     const suffix = artifactID
       ? " WHERE a.project_id = ?1 AND a.id = ?2"
@@ -369,6 +382,10 @@ export namespace ArtifactStore {
   export async function save(input: SaveInput): Promise<Artifact> {
     const staged = await stage(input.content)
     using _ = await Lock.write(lock)
+    await using lease = await FileLease.acquire(lock).catch(async (error) => {
+      await fs.rm(staged.file, { force: true })
+      throw error
+    })
     const db = await prepare()
     const target = blob(staged.sha256)
     const now = Date.now()
@@ -376,32 +393,64 @@ export namespace ArtifactStore {
     const versionID = `ver_${crypto.randomUUID()}`
     const executionID = input.execution ? `exe_${crypto.randomUUID()}` : undefined
     const source = input.sourcePath.replaceAll("\\", "/")
-    const existing = db
-      .query("SELECT id FROM artifacts WHERE project_id = ?1 AND source_key = ?2")
-      .get(input.projectID, source) as { id: string } | null
-    const id = existing?.id ?? artifactID
-    const count = db
-      .query("SELECT coalesce(max(version), 0) AS value FROM versions WHERE artifact_id = ?1")
-      .get(id) as {
-      value: number
-    }
-    const number = count.value + 1
     const relative = path.relative(root, target)
-    const created = !(await Bun.file(target).exists())
-    if (created) {
-      await fs.mkdir(path.dirname(target), { recursive: true })
-      await fs.rename(staged.file, target)
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    const published = await fs.link(staged.file, target).then(
+      () => true,
+      async (error: NodeJS.ErrnoException) => {
+        if (error.code === "EEXIST") return false
+        await fs.rm(staged.file, { force: true })
+        throw error
+      },
+    )
+    if (!published) {
+      const prior = await fs.lstat(target).catch(() => undefined)
+      const valid =
+        !!prior?.isFile() &&
+        !prior.isSymbolicLink() &&
+        prior.size === staged.size &&
+        (await digest(Bun.file(target))) === staged.sha256
+      if (valid) await fs.rm(staged.file, { force: true })
+      if (!valid) await fs.rename(staged.file, target)
+    } else {
+      await fs.rm(staged.file, { force: true })
     }
-    if (!created) await fs.rm(staged.file, { force: true })
+    const stored = await fs.lstat(target)
+    if (
+      !stored.isFile() ||
+      stored.isSymbolicLink() ||
+      stored.size !== staged.size ||
+      (await digest(Bun.file(target))) !== staged.sha256
+    ) {
+      db.close()
+      throw new Error(`Artifact blob ${staged.sha256} failed its size integrity check`)
+    }
 
     try {
       db.exec("BEGIN IMMEDIATE")
+      const existing = db
+        .query("SELECT id FROM artifacts WHERE project_id = ?1 AND source_key = ?2")
+        .get(input.projectID, source) as { id: string } | null
+      const id = existing?.id ?? artifactID
+      const count = db
+        .query("SELECT coalesce(max(version), 0) AS value FROM versions WHERE artifact_id = ?1")
+        .get(id) as {
+        value: number
+      }
+      const number = count.value + 1
       db.query("INSERT OR IGNORE INTO blobs (sha256, size, path, created_at) VALUES (?1, ?2, ?3, ?4)").run(
         staged.sha256,
         staged.size,
         relative,
         now,
       )
+      const record = db.query("SELECT size, path FROM blobs WHERE sha256 = ?1").get(staged.sha256) as {
+        size: number
+        path: string
+      }
+      if (record.size !== staged.size || record.path !== relative) {
+        throw new Error(`Artifact blob ${staged.sha256} conflicts with the stored integrity record`)
+      }
       if (!existing) {
         db.query(
           `INSERT INTO artifacts
@@ -461,17 +510,16 @@ export namespace ArtifactStore {
          WHERE id = ?5`,
       ).run(input.title ?? input.filename, input.kind, versionID, now, id)
       db.exec("COMMIT")
+
+      const row = rows(db, input.projectID, id)[0]
+      db.close()
+      if (!row) throw new Error(`Artifact ${id} was not saved`)
+      return artifact(row)
     } catch (error) {
       db.exec("ROLLBACK")
       db.close()
-      if (created) await fs.rm(target, { force: true })
       throw error
     }
-
-    const row = rows(db, input.projectID, id)[0]
-    db.close()
-    if (!row) throw new Error(`Artifact ${id} was not saved`)
-    return artifact(row)
   }
 
   export async function list(projectID: string, state: "active" | "trash" = "active"): Promise<Artifact[]> {
@@ -484,6 +532,7 @@ export namespace ArtifactStore {
 
   export async function rename(projectID: string, artifactID: string, title: string): Promise<Artifact | undefined> {
     using _ = await Lock.write(lock)
+    await using lease = await FileLease.acquire(lock)
     const db = await prepare()
     db.query("UPDATE artifacts SET title = ?1, updated_at = ?2 WHERE project_id = ?3 AND id = ?4").run(
       title,
@@ -498,6 +547,7 @@ export namespace ArtifactStore {
 
   export async function trash(projectID: string, artifactID: string, now = Date.now()): Promise<Artifact | undefined> {
     using _ = await Lock.write(lock)
+    await using lease = await FileLease.acquire(lock)
     const db = await prepare()
     db.query(
       "UPDATE artifacts SET state = 'trash', trashed_at = ?1, updated_at = ?1 WHERE project_id = ?2 AND id = ?3",
@@ -509,6 +559,7 @@ export namespace ArtifactStore {
 
   export async function restore(projectID: string, artifactID: string): Promise<Artifact | undefined> {
     using _ = await Lock.write(lock)
+    await using lease = await FileLease.acquire(lock)
     const db = await prepare()
     db.query(
       "UPDATE artifacts SET state = 'active', trashed_at = NULL, updated_at = ?1 WHERE project_id = ?2 AND id = ?3",
@@ -520,18 +571,19 @@ export namespace ArtifactStore {
 
   export async function sweep(now = Date.now()) {
     using _ = await Lock.write(lock)
+    await using lease = await FileLease.acquire(lock)
     const db = await prepare()
     const cutoff = now - TRASH_RETENTION_MS
-    const stale = db.query("SELECT id FROM artifacts WHERE state = 'trash' AND trashed_at <= ?1").all(cutoff) as Array<{
-      id: string
-    }>
-    if (!stale.length) {
-      db.close()
-      return 0
-    }
     const orphaned = (() => {
       try {
         db.exec("BEGIN IMMEDIATE")
+        const stale = db
+          .query("SELECT id FROM artifacts WHERE state = 'trash' AND trashed_at <= ?1")
+          .all(cutoff) as Array<{ id: string }>
+        if (!stale.length) {
+          db.exec("COMMIT")
+          return { stale: 0, unused: [] as Array<{ path: string }> }
+        }
         const remove = db.query("DELETE FROM artifacts WHERE id = ?1")
         stale.forEach((item) => remove.run(item.id))
         const unused = db
@@ -543,7 +595,7 @@ export namespace ArtifactStore {
           "DELETE FROM blobs WHERE NOT EXISTS (SELECT 1 FROM versions WHERE versions.sha256 = blobs.sha256)",
         ).run()
         db.exec("COMMIT")
-        return unused
+        return { stale: stale.length, unused }
       } catch (error) {
         db.exec("ROLLBACK")
         throw error
@@ -551,8 +603,8 @@ export namespace ArtifactStore {
         db.close()
       }
     })()
-    await Promise.all(orphaned.map((item) => fs.rm(path.join(root, item.path), { force: true })))
-    return stale.length
+    await Promise.all(orphaned.unused.map((item) => fs.rm(path.join(root, item.path), { force: true })))
+    return orphaned.stale
   }
 
   export async function get(projectID: string, artifactID: string): Promise<Detail | undefined> {
@@ -598,13 +650,17 @@ export namespace ArtifactStore {
     const stored = db.query("SELECT path FROM blobs WHERE sha256 = ?1").get(row.sha256) as { path: string } | null
     db.close()
     if (!stored) return
-    const content = Bun.file(path.join(root, stored.path))
-    if (!(await content.exists()) || content.size !== row.size) return
+    const filepath = path.join(root, stored.path)
+    const stat = await fs.lstat(filepath).catch(() => undefined)
+    if (!stat?.isFile() || stat.isSymbolicLink() || stat.size !== row.size) return
+    const content = Bun.file(filepath)
+    if ((await digest(content)) !== row.sha256) return
     return { info: version(row), content }
   }
 
   export async function reset() {
     using _ = await Lock.write(lock)
+    await using lease = await FileLease.acquire(lock)
     await fs.rm(root, { recursive: true, force: true })
   }
 }

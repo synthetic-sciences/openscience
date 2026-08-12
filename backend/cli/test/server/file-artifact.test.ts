@@ -6,6 +6,7 @@ import { ArtifactStore } from "../../src/artifact/store"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { FileRoutes } from "../../src/server/routes/file"
+import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
 
 interface Saved {
@@ -233,6 +234,33 @@ describe("/file/artifact", () => {
         expect(detail?.versions.map((version) => version.version)).toEqual([2, 1])
         expect(new Set(detail?.versions.map((version) => version.id)).size).toBe(2)
         expect(new Set(detail?.versions.map((version) => version.sha256)).size).toBe(1)
+      },
+    })
+  })
+
+  test("rejects same-size blob corruption and repairs it from a known-good save", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const info = await Session.create({})
+        sessions.add(info.id)
+        const content = "immutable research bytes"
+        await Bun.write(path.join(tmp.path, "integrity.txt"), content)
+        const saved = (await (await save({ path: "integrity.txt", sessionID: info.id })).json()) as Saved
+        const sha = saved.current.sha256
+        const blob = path.join(Global.Path.data, "artifact-store", "blobs", sha.slice(0, 2), sha.slice(2, 4), sha)
+        await Bun.write(blob, "corrupted research bytes")
+        expect(Buffer.byteLength("corrupted research bytes")).toBe(Buffer.byteLength(content))
+        expect(await ArtifactStore.read(Instance.project.id, saved.id)).toBeUndefined()
+
+        const repaired = (await (await save({ path: "integrity.txt", sessionID: info.id })).json()) as Saved
+        expect(repaired.id).toBe(saved.id)
+        expect(repaired.current.version).toBe(2)
+        expect(await (await ArtifactStore.read(Instance.project.id, repaired.id))?.content.text()).toBe(content)
+        expect(
+          await (await ArtifactStore.read(Instance.project.id, repaired.id, saved.currentVersionID))?.content.text(),
+        ).toBe(content)
       },
     })
   })

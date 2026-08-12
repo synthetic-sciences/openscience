@@ -118,3 +118,73 @@ await Auth.set(process.argv[2], { type: "api", key: process.argv[3] })
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test("provider logout in one server revokes inherited BYOK children in another", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-auth-revision-"))
+  const mutate = path.join(root, "mutate.ts")
+  const worker = path.join(root, "worker.ts")
+  const ready = path.join(root, "ready")
+  const auth = new URL("../../src/auth/index.ts", import.meta.url).href
+  const lifecycle = new URL("../../src/credentials/lifecycle.ts", import.meta.url).href
+  const openscience = new URL("../../src/openscience/index.ts", import.meta.url).href
+  await Bun.write(
+    mutate,
+    [
+      `import { Auth } from ${JSON.stringify(auth)}`,
+      `if (process.argv[2] === "remove") await Auth.remove("openai")`,
+      `else await Auth.set("openai", { type: "api", key: "sk-cross-process-provider" })`,
+    ].join("\n"),
+  )
+  await Bun.write(
+    worker,
+    [
+      `import fs from "node:fs/promises"`,
+      `import { spawn } from "node:child_process"`,
+      `import { CredentialLifecycle } from ${JSON.stringify(lifecycle)}`,
+      `import { OpenScience } from ${JSON.stringify(openscience)}`,
+      `await CredentialLifecycle.ensureFresh()`,
+      `const initial = await OpenScience.subprocessEnv(process.env)`,
+      `if (initial.OPENAI_API_KEY !== "sk-cross-process-provider") throw new Error("worker did not load provider key")`,
+      `const child = spawn(process.execPath, ["-e", "console.log(process.env.OPENAI_API_KEY || 'absent'); setInterval(() => {}, 1000)"], { env: initial, stdio: ["ignore", "pipe", "pipe"] })`,
+      `const inherited = await new Promise((resolve, reject) => { child.stdout.once("data", (data) => resolve(String(data).trim())); child.once("error", reject) })`,
+      `if (inherited !== "sk-cross-process-provider") throw new Error("child did not inherit provider key")`,
+      `let revoked = false`,
+      `CredentialLifecycle.onRevoke(async () => { revoked = true; child.kill("SIGTERM"); await new Promise((resolve) => child.once("exit", resolve)) })`,
+      `CredentialLifecycle.watch(25)`,
+      `await fs.writeFile(${JSON.stringify(ready)}, "ready")`,
+      `for (let i = 0; i < 400 && !revoked; i++) await Bun.sleep(10)`,
+      `await CredentialLifecycle.ensureFresh()`,
+      `if (!revoked || (child.exitCode === null && child.signalCode === null)) throw new Error("provider child was not revoked")`,
+      `const next = await OpenScience.subprocessEnv(process.env)`,
+      `if (next.OPENAI_API_KEY !== undefined) throw new Error("new child env retained removed provider key")`,
+      `CredentialLifecycle.stopWatching()`,
+    ].join("\n"),
+  )
+
+  const env = {
+    ...process.env,
+    OPENSCIENCE_DATA_DIR: root,
+    OPENSCIENCE_CONFIG_DIR: path.join(root, "config"),
+    OPENSCIENCE_TEST_HOME: path.join(root, "home"),
+    XDG_STATE_HOME: path.join(root, "state"),
+    XDG_CACHE_HOME: path.join(root, "cache"),
+  }
+  const run = async (args: string[]) => {
+    const proc = Bun.spawn(args, { env, stdout: "pipe", stderr: "pipe" })
+    const [exit, error] = await Promise.all([proc.exited, new Response(proc.stderr).text()])
+    if (exit !== 0) throw new Error(error)
+  }
+
+  try {
+    await run([process.execPath, mutate, "set"])
+    const live = Bun.spawn([process.execPath, worker], { env, stdout: "pipe", stderr: "pipe" })
+    for (let i = 0; i < 400 && !(await Bun.file(ready).exists()); i++) await Bun.sleep(10)
+    expect(await Bun.file(ready).exists()).toBe(true)
+    await run([process.execPath, mutate, "remove"])
+    const [exit, error] = await Promise.all([live.exited, new Response(live.stderr).text()])
+    if (exit !== 0) throw new Error(error)
+    expect(exit).toBe(0)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})

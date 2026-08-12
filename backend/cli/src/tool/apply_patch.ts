@@ -1,6 +1,8 @@
 import z from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
+import crypto from "node:crypto"
+import { constants as FS } from "node:fs"
 import { Tool } from "./tool"
 import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
@@ -13,10 +15,111 @@ import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
+import { FileTrash } from "../file/trash"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
 })
+
+type ApprovedFile = {
+  bytes: Buffer
+  content: string
+  dev: number
+  ino: number
+  mode: number
+}
+
+async function readApprovedFile(filepath: string): Promise<ApprovedFile> {
+  const requested = await fs.lstat(filepath)
+  if (requested.isSymbolicLink()) throw new Error(`Refusing to edit a symbolic link: ${filepath}`)
+  const handle = await fs.open(filepath, FS.O_RDONLY | FS.O_NOFOLLOW)
+  try {
+    const stat = await handle.stat()
+    if (!stat.isFile()) throw new Error(`Only regular files can be edited: ${filepath}`)
+    const bytes = await handle.readFile()
+    return {
+      bytes,
+      content: bytes.toString("utf8"),
+      dev: stat.dev,
+      ino: stat.ino,
+      mode: stat.mode & 0o777,
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
+async function assertAbsent(filepath: string) {
+  const exists = await fs.lstat(filepath).then(
+    () => true,
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return false
+      throw error
+    },
+  )
+  if (exists) throw new Error(`Refusing to overwrite an existing file: ${filepath}`)
+}
+
+async function assertApprovedFile(filepath: string, approved: ApprovedFile) {
+  const current = await readApprovedFile(filepath).catch((error) => {
+    throw new Error(`Refusing to edit ${filepath}: the file changed after approval: ${error}`)
+  })
+  if (current.dev !== approved.dev || current.ino !== approved.ino) {
+    throw new Error(`Refusing to edit ${filepath}: the file identity changed after approval`)
+  }
+  if (!current.bytes.equals(approved.bytes)) {
+    throw new Error(`Refusing to edit ${filepath}: the file changed after approval`)
+  }
+}
+
+async function stageFile(target: string, content: string, mode: number) {
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  const canonical = await Filesystem.canonical(target)
+  if (!canonical || canonical !== target) throw new Error(`Edit destination became ambiguous: ${target}`)
+  const staged = path.join(path.dirname(target), `.openscience-edit-${crypto.randomUUID()}.tmp`)
+  await fs.writeFile(staged, content, { encoding: "utf8", flag: "wx", mode })
+  return staged
+}
+
+async function installExclusive(staged: string, target: string) {
+  try {
+    // link() is an atomic no-replace install on the target filesystem.
+    await fs.link(staged, target)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error(`Refusing to overwrite an existing file: ${target}`)
+    }
+    throw error
+  }
+}
+
+async function applyUpdate(change: { filePath: string; newContent: string; approved: ApprovedFile }) {
+  const staged = await stageFile(change.filePath, change.newContent, change.approved.mode)
+  const backup = path.join(path.dirname(change.filePath), `.openscience-approved-${crypto.randomUUID()}.bak`)
+  let moved = false
+  let installed = false
+  try {
+    await fs.rename(change.filePath, backup)
+    moved = true
+    await assertApprovedFile(backup, change.approved)
+    await installExclusive(staged, change.filePath)
+    installed = true
+    await fs.unlink(staged)
+    await fs.unlink(backup)
+  } catch (error) {
+    if (moved && !installed) {
+      try {
+        await installExclusive(backup, change.filePath)
+        await fs.unlink(backup)
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], `Edit failed; approved original retained at ${backup}`)
+      }
+    }
+    throw error
+  } finally {
+    await fs.rm(staged, { force: true })
+  }
+}
 
 export const ApplyPatchTool = Tool.define("apply_patch", {
   description: DESCRIPTION,
@@ -43,6 +146,13 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       throw new Error("apply_patch verification failed: no hunks found")
     }
 
+    // There is no cross-file filesystem transaction primitive available to
+    // this broker. Refuse multi-file patches before permission prompts or
+    // writes so a later-file failure can never leave a partial patch.
+    if (hunks.length > 1) {
+      throw new Error("apply_patch verification failed: multi-file patches are not atomic; submit one file per patch")
+    }
+
     // Validate file paths and check permissions
     const fileChanges: Array<{
       filePath: string
@@ -53,6 +163,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       diff: string
       additions: number
       deletions: number
+      approved?: ApprovedFile
     }> = []
 
     let totalDiff = ""
@@ -63,6 +174,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
 
       switch (hunk.type) {
         case "add": {
+          await assertAbsent(filePath)
           const oldContent = ""
           const newContent =
             hunk.contents.length === 0 || hunk.contents.endsWith("\n") ? hunk.contents : `${hunk.contents}\n`
@@ -90,18 +202,15 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         }
 
         case "update": {
-          // Check if file exists for update
-          const stats = await fs.stat(filePath).catch(() => null)
-          if (!stats || stats.isDirectory()) {
-            throw new Error(`apply_patch verification failed: Failed to read file to update: ${filePath}`)
-          }
-
-          const oldContent = await fs.readFile(filePath, "utf-8")
+          const approved = await readApprovedFile(filePath).catch((error) => {
+            throw new Error(`apply_patch verification failed: Failed to read file to update: ${filePath}: ${error}`)
+          })
+          const oldContent = approved.content
           let newContent = oldContent
 
           // Apply the update chunks to get new content
           try {
-            const fileUpdate = Patch.deriveNewContentsFromChunks(filePath, hunk.chunks)
+            const fileUpdate = Patch.deriveNewContentsFromChunks(filePath, hunk.chunks, oldContent)
             newContent = fileUpdate.content
           } catch (error) {
             throw new Error(`apply_patch verification failed: ${error}`)
@@ -120,6 +229,10 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           const movePath = requestedMove
             ? ((await assertExternalDirectory(ctx, requestedMove, { access: "write" }))?.path ?? requestedMove)
             : undefined
+          if (movePath) {
+            if (movePath === filePath) throw new Error(`apply_patch verification failed: move destination is unchanged`)
+            await assertAbsent(movePath)
+          }
 
           fileChanges.push({
             filePath,
@@ -130,6 +243,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             diff,
             additions,
             deletions,
+            approved,
           })
 
           totalDiff += diff + "\n"
@@ -137,9 +251,10 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         }
 
         case "delete": {
-          const contentToDelete = await fs.readFile(filePath, "utf-8").catch((error) => {
+          const approved = await readApprovedFile(filePath).catch((error) => {
             throw new Error(`apply_patch verification failed: ${error}`)
           })
+          const contentToDelete = approved.content
           const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
 
           const deletions = contentToDelete.split("\n").length
@@ -152,6 +267,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             diff: deleteDiff,
             additions: 0,
             deletions,
+            approved,
           })
 
           totalDiff += deleteDiff + "\n"
@@ -186,39 +302,78 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       },
     })
 
+    // Approval is bound to exact source bytes+inode and to an absent add/move
+    // destination. Revalidate after the user answers, before any side effect.
+    for (const change of fileChanges) {
+      if (change.approved) await assertApprovedFile(change.filePath, change.approved)
+      if (change.type === "add") await assertAbsent(change.filePath)
+      if (change.type === "move" && change.movePath) await assertAbsent(change.movePath)
+    }
+
     // Apply the changes
     const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
+    const trash: FileTrash.Record[] = []
 
     for (const change of fileChanges) {
       const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
       switch (change.type) {
         case "add":
-          // Create parent directories (recursive: true is safe on existing/root dirs)
-          await fs.mkdir(path.dirname(change.filePath), { recursive: true })
-          await fs.writeFile(change.filePath, change.newContent, "utf-8")
+          {
+            const staged = await stageFile(change.filePath, change.newContent, 0o644)
+            try {
+              await installExclusive(staged, change.filePath)
+            } finally {
+              await fs.rm(staged, { force: true })
+            }
+          }
           updates.push({ file: change.filePath, event: "add" })
           break
 
         case "update":
-          await fs.writeFile(change.filePath, change.newContent, "utf-8")
+          if (!change.approved) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
+          await applyUpdate({ filePath: change.filePath, newContent: change.newContent, approved: change.approved })
           updates.push({ file: change.filePath, event: "change" })
           break
 
         case "move":
           if (change.movePath) {
-            // Create parent directories (recursive: true is safe on existing/root dirs)
-            await fs.mkdir(path.dirname(change.movePath), { recursive: true })
-            await fs.writeFile(change.movePath, change.newContent, "utf-8")
-            await fs.unlink(change.filePath)
+            if (!change.approved) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
+            const staged = await stageFile(change.movePath, change.newContent, change.approved.mode)
+            let removed: FileTrash.Record | undefined
+            try {
+              removed = await FileTrash.trash({
+                projectID: Instance.project.id,
+                sessionID: ctx.sessionID,
+                path: change.filePath,
+                expectedContent: change.approved.bytes,
+              })
+              try {
+                await installExclusive(staged, change.movePath)
+              } catch (error) {
+                await FileTrash.rollback(removed)
+                throw error
+              }
+            } finally {
+              await fs.rm(staged, { force: true })
+            }
+            trash.push(removed)
             updates.push({ file: change.filePath, event: "unlink" })
             updates.push({ file: change.movePath, event: "add" })
           }
           break
 
-        case "delete":
-          await fs.unlink(change.filePath)
+        case "delete": {
+          if (!change.approved) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
+          const removed = await FileTrash.trash({
+            projectID: Instance.project.id,
+            sessionID: ctx.sessionID,
+            path: change.filePath,
+            expectedContent: change.approved.bytes,
+          })
+          trash.push(removed)
           updates.push({ file: change.filePath, event: "unlink" })
           break
+        }
       }
 
       if (edited) {
@@ -253,6 +408,9 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       return `M ${path.relative(Instance.worktree, target)}`
     })
     let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
+    if (trash.length) {
+      output += `\n\nRecoverable for 30 days: ${trash.map((record) => record.id).join(", ")}`
+    }
 
     // Report LSP errors for changed files
     const MAX_DIAGNOSTICS_PER_FILE = 20
@@ -276,6 +434,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         diff: totalDiff,
         files,
         diagnostics,
+        trash,
       },
       output,
     }

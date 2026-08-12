@@ -16,16 +16,13 @@ function sources(dir: string): string[] {
 }
 
 describe("reviewer workflow truth pass", () => {
-  test("the session header launches the reviewer directly", () => {
+  test("the session header does not expose a manual reviewer control", () => {
     const session = read("pages/session.tsx")
 
-    expect(session).toContain("Run review")
-    expect(session).toContain("`/session/${id}/review`")
-    expect(session).toContain('{ method: "POST" }')
-    expect(session).toContain('toast.success("review started"')
-    // Disabled without an open, idle session.
-    expect(session).toContain("reviewDisabled")
-    expect(session).toContain('!params.id || params.id === "new" || working()')
+    expect(session).not.toContain("Run review")
+    expect(session).not.toContain("openscience:run-review")
+    expect(session).not.toContain("reviewDisabled")
+    expect(session).not.toContain("workspace-header__review")
   })
 
   test("no surface prefills chat to spawn the reviewer", () => {
@@ -57,7 +54,7 @@ describe("reviewer workflow truth pass", () => {
 
     expect(specialists).toContain('"/settings/review"')
     expect(specialists).toContain("Automatically review significant results")
-    expect(specialists).toContain("Runs the reviewer after a result is saved as a durable artifact.")
+    expect(specialists).toContain("Checks durable results without interrupting the active research session.")
     expect(specialists).toContain('method: "PUT"')
   })
 

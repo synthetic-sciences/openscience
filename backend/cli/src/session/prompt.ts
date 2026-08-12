@@ -40,7 +40,7 @@ import { RLMArtifacts } from "./rlm/artifacts"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $, fileURLToPath } from "bun"
+import { fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { Config } from "../config/config"
 import { computeBillingMode } from "./billing-gate"
@@ -62,6 +62,12 @@ import { PlanMode } from "@/tool/plan-mode"
 import { Inference } from "@/provider/inference"
 import { OpenScience } from "@/openscience"
 import { assertExternalDirectory } from "@/tool/external-directory"
+import { CommandRuntime } from "@/science/command/registry"
+import { ExecutionAuthority } from "@/project/execution"
+import { AuthoritySignal } from "@/project/authority-signal"
+import { Sandbox } from "@/sandbox/sandbox"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
+import { BashTool } from "@/tool/bash"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1778,6 +1784,11 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
   export async function shell(input: ShellInput) {
     const session = await Session.get(input.sessionID)
     const cwd = await SessionFilesystem.workspace(input.sessionID)
+    const authority = await ExecutionAuthority.require({
+      projectID: Instance.project.id,
+      sessionID: input.sessionID,
+      capability: "shell",
+    })
     const abort = start(input.sessionID)
     if (!abort) {
       throw new Session.BusyError(input.sessionID)
@@ -1911,18 +1922,70 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     const matchingInvocation = invocations[shellName] ?? invocations[""]
     const args = matchingInvocation?.args
 
-    const proc = spawn(shell, args, {
-      cwd,
-      detached: process.platform !== "win32",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...(await OpenScience.subprocessEnv(process.env)),
-        TERM: "dumb",
-      },
-    })
-
     let output = ""
-
+    let aborted = false
+    let exited = false
+    const { proc, command, kill, sandbox, completion } = await AuthoritySignal.exclusive(async () => {
+      const current = await ExecutionAuthority.require({
+        projectID: Instance.project.id,
+        sessionID: input.sessionID,
+        capability: "shell",
+      })
+      if (current.generation !== authority.generation) {
+        throw new Error("Execution authority changed while the shell command was being prepared; retry it")
+      }
+      const sandbox = Sandbox.wrapArgv({
+        file: shell,
+        args: args ?? [],
+        workspace: current.writable,
+        readable: current.readable,
+        unreadable: OpenScience.kernelSensitivePaths(),
+        options: current.sandbox,
+      })
+      return OpenScience.withSubprocessEnv(process.env, async (env) => {
+        const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
+        const child = spawn(wrapped.file, wrapped.args, {
+          cwd,
+          detached: process.platform !== "win32",
+          stdio: ["ignore", "pipe", "pipe"],
+          env: { ...env, TERM: "dumb" },
+        })
+        const completion = new Promise<void>((resolve, reject) => {
+          child.once("close", () => {
+            exited = true
+            resolve()
+          })
+          child.once("error", (error) => {
+            exited = true
+            reject(error)
+          })
+        })
+        const stop = () => Shell.killTree(child, { exited: () => exited, detached: process.platform !== "win32" })
+        try {
+          const registered = await CommandRuntime.start(
+            {
+              projectID: Instance.project.id,
+              sessionID: input.sessionID,
+              messageID: msg.id,
+              callID: part.callID,
+              description: "User shell command",
+              command: input.command,
+            },
+            child,
+            async () => {
+              aborted = true
+              await stop()
+            },
+            { authorityGeneration: current.generation, windowsRelease: wrapped.release },
+          )
+          return { proc: child, command: registered, kill: stop, sandbox, completion }
+        } catch (error) {
+          await stop()
+          Sandbox.cleanup(sandbox)
+          throw error
+        }
+      })
+    })
     proc.stdout?.on("data", (chunk) => {
       output += chunk.toString()
       if (part.state.status === "running") {
@@ -1945,11 +2008,6 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       }
     })
 
-    let aborted = false
-    let exited = false
-
-    const kill = () => Shell.killTree(proc, { exited: () => exited, detached: process.platform !== "win32" })
-
     if (abort.aborted) {
       aborted = true
       await kill()
@@ -1962,12 +2020,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
 
     abort.addEventListener("abort", abortHandler, { once: true })
 
-    await new Promise<void>((resolve) => {
-      proc.on("close", () => {
-        exited = true
-        abort.removeEventListener("abort", abortHandler)
-        resolve()
-      })
+    await completion.finally(() => {
+      abort.removeEventListener("abort", abortHandler)
+      CommandRuntime.finish(command.id)
+      Sandbox.cleanup(sandbox)
     })
 
     if (aborted) {
@@ -2131,12 +2187,41 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       template = template + "\n\n" + input.arguments
     }
 
+    const commandMessageID = input.messageID ?? Identifier.ascending("message")
     const shell = ConfigMarkdown.shell(template)
     if (shell.length > 0) {
+      const commandAgent = await Agent.get(agentName)
+      if (!commandAgent) throw new Error(`Agent not found: "${agentName}"`)
+      const session = await Session.get(input.sessionID)
+      const messages = await Array.fromAsync(MessageV2.stream(input.sessionID))
+      const bash = await BashTool.init({ agent: commandAgent })
       const results = await Promise.all(
-        shell.map(async ([, cmd]) => {
+        shell.map(async ([, cmd], index) => {
           try {
-            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
+            const result = await bash.execute(
+              {
+                command: cmd,
+                timeout: 30_000,
+                description: `Runs command template interpolation ${index + 1}`,
+              },
+              {
+                sessionID: input.sessionID,
+                messageID: commandMessageID,
+                callID: `command-interpolation-${index + 1}`,
+                agent: commandAgent.name,
+                abort: new AbortController().signal,
+                messages,
+                metadata() {},
+                async ask(req) {
+                  await PermissionNext.ask({
+                    ...req,
+                    sessionID: input.sessionID,
+                    ruleset: PermissionNext.merge(commandAgent.permission, session.permission ?? []),
+                  })
+                },
+              },
+            )
+            return result.output
           } catch (error) {
             return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
           }
@@ -2219,7 +2304,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
 
     const result = (await prompt({
       sessionID: input.sessionID,
-      messageID: input.messageID,
+      messageID: commandMessageID,
       model: userModel,
       agent: userAgent,
       parts,

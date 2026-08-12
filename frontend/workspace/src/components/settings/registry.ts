@@ -4,7 +4,10 @@ import type { IconProps } from "@synsci/ui/icon"
 // ── Panel contract ──────────────────────────────────────────────────────────
 //
 // Every settings panel is a lazily-loaded SolidJS component keyed by a stable
-// `id`. Panel authors own exactly one file — `components/settings/<Panel>.tsx`
+// `id`. The shell preloads the default panel before the dialog opens, warms
+// likely destinations during idle or navigation intent, and retains panels
+// after their first visit. Panel authors own exactly one file —
+// `components/settings/<Panel>.tsx`
 // — and `export default` a `Component`. The shell (dialog-settings.tsx) renders
 // the header (back/forward + title + expand/close) and the left rail from this
 // registry; the panel component only renders its own scrollable body.
@@ -22,18 +25,24 @@ import type { IconProps } from "@synsci/ui/icon"
 
 export type SettingsSection = "inference" | "capabilities" | "runtime" | "app"
 
-export type SettingsPanelId =
-  | "models"
-  | "skills"
-  | "connectors"
-  | "specialists"
-  | "compute"
-  | "network"
-  | "permissions"
-  | "sandbox"
-  | "credentials"
-  | "storage"
-  | "general"
+// Source contract for every reachable Settings destination. Keep this list in
+// rail order; the registry contract test verifies that no panel can be added,
+// removed, or left without the shared layout audit silently.
+export const SETTINGS_PANEL_IDS = [
+  "models",
+  "skills",
+  "connectors",
+  "specialists",
+  "compute",
+  "network",
+  "permissions",
+  "sandbox",
+  "credentials",
+  "storage",
+  "general",
+] as const
+
+export type SettingsPanelId = (typeof SETTINGS_PANEL_IDS)[number]
 
 export interface SettingsPanel {
   /** Stable key used for routing/history. */
@@ -45,7 +54,7 @@ export interface SettingsPanel {
   /** Which rail group the row lives under. */
   section: SettingsSection
   /** Lazily-loaded panel body (default export of the file). */
-  component: Component
+  component: Component & { preload?: () => Promise<unknown> }
 }
 
 // Order here is the render order in the rail (top→bottom within each section).
@@ -62,7 +71,7 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   {
     id: "skills",
     title: "Skills",
-    icon: "brain",
+    icon: "flask",
     section: "capabilities",
     component: lazy(() => import("./Skills")),
   },
@@ -76,7 +85,7 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   {
     id: "specialists",
     title: "Specialists",
-    icon: "models",
+    icon: "brain",
     section: "capabilities",
     component: lazy(() => import("./Specialists")),
   },
@@ -86,28 +95,28 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   {
     id: "compute",
     title: "Compute",
-    icon: "server",
+    icon: "cpu",
     section: "runtime",
     component: lazy(() => import("./Compute")),
   },
   {
     id: "network",
     title: "Network",
-    icon: "share",
+    icon: "server",
     section: "runtime",
     component: lazy(() => import("./Network")),
   },
   {
     id: "permissions",
     title: "Permissions",
-    icon: "check",
+    icon: "shield",
     section: "runtime",
     component: lazy(() => import("./Permissions")),
   },
   {
     id: "sandbox",
     title: "Sandbox",
-    icon: "console",
+    icon: "code",
     section: "runtime",
     component: lazy(() => import("./Sandbox")),
   },
@@ -125,7 +134,7 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   {
     id: "general",
     title: "General",
-    icon: "settings-gear",
+    icon: "sliders",
     section: "app",
     component: lazy(() => import("./General")),
   },
@@ -140,6 +149,10 @@ export const SETTINGS_SECTIONS: { id: SettingsSection; label: string }[] = [
 
 export function findPanel(id: SettingsPanelId): SettingsPanel {
   return SETTINGS_PANELS.find((p) => p.id === id) ?? SETTINGS_PANELS[0]
+}
+
+export async function preloadPanel(id: SettingsPanelId): Promise<void> {
+  await findPanel(id).component.preload?.()
 }
 
 export const DEFAULT_PANEL: SettingsPanelId = "models"

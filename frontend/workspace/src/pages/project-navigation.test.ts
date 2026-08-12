@@ -30,23 +30,45 @@ describe("project-ID navigation wiring", () => {
     expect(directory).toContain("setActive({ directory, projectID })")
   })
 
-  test("uses project scope for session tabs, drafts, context, and file-view caches", async () => {
-    const [session, prompt, comments, file, terminal] = await Promise.all([
+  test("keeps chat drafts session-scoped and the mounted inspector project-scoped", async () => {
+    const [session, tabs, prompt, comments, file, terminal, directory, app] = await Promise.all([
       read("./session.tsx"),
+      read("../atlas/store/sessionTabs.ts"),
       read("../context/prompt.tsx"),
       read("../context/comments.tsx"),
       read("../context/file.tsx"),
       read("../context/terminal.tsx"),
+      read("./directory-layout.tsx"),
+      read("../app.tsx"),
     ])
 
-    expect(session).toContain("sessionTabs.activateProject(project)")
-    expect(session).toContain("() => [sdk.scope, params.id] as const")
+    expect(session).toContain('const sessionKey = createMemo(() => `${sdk.scope}/${params.id ?? "new"}`)')
+    expect(session).toContain("uiStore.activateScope(sdk.scope, id)")
+    expect(session).toContain("const sessionTabs = createSessionTabs()")
+    expect(session).toContain("sessionTabs.activateProject(scope)")
+    expect(tabs).toContain('workspaceScope(project, "sessions")')
+    expect(tabs).toContain('const STORAGE_KEY = "openscience-session-tabs-v1"')
     expect(prompt).toContain("load(sdk.scope, params.id)")
     expect(comments).toContain("load(sdk.scope, params.id)")
-    expect(file).toContain("loadView(storage(), params.id)")
-    expect(terminal).toContain("load(sdk.scope, params.id)")
-    expect(terminal).toContain("sdk.client.pty")
+    expect(file).toContain('Persist.workspace(dir, "file-view"')
+    expect(file).toContain("loadView(storage())")
+    expect(file).not.toContain("loadView(storage(), params.id)")
+    expect(terminal).toContain('Persist.workspace(dir, "terminal"')
+    expect(terminal).toContain("createMemo(() => load(sdk.scope))")
+    expect(terminal).not.toContain("load(sdk.scope, params.id)")
+    expect(terminal).toContain("const session = currentSession()")
+    expect(terminal).toContain("const client = sdk.client")
+    expect(terminal).not.toContain("sdk.client.pty")
+    expect(terminal).toContain("const owner = (id: string)")
     expect(await read("../components/terminal.tsx")).toContain("sdk.request.url(`/pty/${local.pty.id}/connect`)")
+    expect(directory).toContain("<TerminalProvider>")
+    expect(directory).toContain("<FileProvider>")
+    expect(directory).toContain("<ProjectWorkspaceFrame")
+    expect(directory).toContain('lazy(() => import("@/atlas/ProjectRightPane"))')
+    expect(directory).toContain("<ProjectRightPane")
+    expect(session).not.toContain("<RightPane")
+    expect(app).not.toContain("<TerminalProvider>")
+    expect(app).not.toContain("<FileProvider>")
   })
 
   test("does not create new base64-directory navigation links", async () => {

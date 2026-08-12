@@ -11,10 +11,10 @@ describe("live compute inventory", () => {
   test("is project-wide and stays mounted across session changes", () => {
     const panel = source()
 
-    expect(panel).toContain('aria-label="Live project compute"')
+    expect(panel).toContain('aria-label="Project compute"')
     expect(panel).toContain("[...grouped().keys()].sort")
     expect(panel).toContain("<For each={groups()}>")
-    expect(panel).toContain("<em>current</em>")
+    expect(panel).toContain("<em>Current</em>")
     expect(panel).toContain("{ client }")
     expect(panel).not.toContain("{ sessionID: params.id, client }")
     expect(panel).toContain('request<CommandsPayload>("/notebook/commands"')
@@ -53,7 +53,7 @@ describe("live compute inventory", () => {
     expect(panel).toContain("the next agent run will start fresh")
     expect(panel).toContain("Its child processes were terminated")
     expect(panel).toContain("provider cleanup")
-    expect(panel).toContain("jobLive")
+    expect(panel).toContain("visibleJobs")
   })
 
   test("polls unconditionally so an agent-started kernel appears", () => {
@@ -70,11 +70,19 @@ describe("live compute inventory", () => {
   test("explains idle and degraded states without claiming a failed poll is empty", () => {
     const panel = source()
 
-    expect(panel).toContain("No live compute")
-    expect(panel).toContain(
-      "Kernels, commands, and remote jobs appear here the moment any session starts computing in this project.",
-    )
-    expect(panel).toContain('{view.error ? "Compute inventory unavailable" : "No live compute"}')
+    expect(panel).toContain("Runtimes start with your work")
+    expect(panel).toContain("Python and R kernels preserve session state automatically")
+    expect(panel).toContain('{view.error ? "Compute inventory unavailable" : "Runtimes start with your work"}')
     expect(panel).toContain("The last poll could not read this project's kernels, commands, and remote jobs")
+  })
+
+  test("uses compact session summaries instead of a single wrapping status sentence", () => {
+    const panel = source()
+
+    expect(panel).toContain('class="kernel-session__summary"')
+    expect(panel).toContain("summary().kinds")
+    expect(panel).toContain("summary().memory")
+    expect(panel).toContain("summary().cpu")
+    expect(panel).not.toContain("<IconCpu")
   })
 })

@@ -49,10 +49,6 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-base);
-
-    &.capitalize {
-      text-transform: capitalize;
-    }
   }
 
   [data-slot="basic-tool-tool-subtitle"] {

@@ -1,6 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { Lock } from "./lock"
+import { DataRootBarrier } from "@/global/data-root-barrier"
 
 /**
  * Shared persistence for small JSON-object credential stores (auth.json,
@@ -128,6 +129,7 @@ export namespace JsonStore {
     filepath: string,
     fn: (data: Record<string, unknown>) => Record<string, unknown> | void | Promise<Record<string, unknown> | void>,
   ): Promise<void> {
+    await using operation = await DataRootBarrier.enter(filepath)
     using _ = await Lock.write(filepath)
     await using file = await fileLock(filepath)
     const data = await load(filepath)

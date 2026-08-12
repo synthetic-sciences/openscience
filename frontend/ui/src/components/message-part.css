@@ -8,6 +8,8 @@
 }
 
 [data-component="user-message"] {
+  width: 100%;
+  min-width: 0;
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
   font-style: normal;
@@ -17,52 +19,70 @@
   color: var(--text-base);
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
 
   [data-slot="user-message-attachments"] {
     display: flex;
     flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 8px;
   }
 
-  [data-slot="user-message-attachment"] {
+  [data-slot="user-message-row"] {
+    width: 100%;
+    min-width: 0;
     display: flex;
-    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  [data-slot="user-message-attachment"] {
+    width: min(240px, 100%);
+    min-width: 156px;
+    height: 52px;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
     align-items: center;
-    justify-content: center;
-    border-radius: 6px;
+    gap: 8px;
+    padding: 5px 9px 5px 5px;
+    border: 1px solid var(--border-weak-base);
+    border-radius: var(--radius-sm);
     overflow: hidden;
     background: var(--surface-weak);
-    border: 1px solid var(--border-weak-base);
-    transition: border-color 0.15s ease;
+    color: inherit;
+    text-decoration: none;
+    transition:
+      border-color var(--duration-fast) var(--ease-standard),
+      background-color var(--duration-fast) var(--ease-standard);
 
     &:hover {
       border-color: var(--border-strong-base);
+      background: var(--surface-raised-base-hover);
     }
 
-    &[data-type="image"] {
-      width: 48px;
-      height: 48px;
-    }
-
-    &[data-type="file"] {
-      width: 48px;
-      height: 48px;
+    &:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: 2px;
     }
   }
 
   [data-slot="user-message-attachment-image"] {
-    width: 100%;
-    height: 100%;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-xs);
     object-fit: cover;
   }
 
   [data-slot="user-message-attachment-icon"] {
-    width: 100%;
-    height: 100%;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: var(--radius-xs);
+    background: var(--surface-base);
     color: var(--icon-weak);
 
     [data-component="icon"] {
@@ -71,15 +91,44 @@
     }
   }
 
+  [data-slot="user-message-attachment-copy"] {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+
+    strong,
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    strong {
+      color: var(--text-strong);
+      font-size: 12.5px;
+      font-weight: var(--font-weight-medium);
+      line-height: 16px;
+    }
+
+    span {
+      color: var(--text-weak);
+      font-size: 11.5px;
+      font-weight: var(--font-weight-regular);
+      line-height: 15px;
+    }
+  }
+
   [data-slot="user-message-text"] {
     position: relative;
+    min-width: 0;
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
     background: var(--surface-weak);
     border: 1px solid var(--border-weak-base);
     padding: 8px 12px;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
 
     [data-highlight="file"] {
       color: var(--syntax-property);
@@ -88,18 +137,26 @@
     [data-highlight="agent"] {
       color: var(--syntax-type);
     }
+  }
 
-    [data-slot="user-message-copy-wrapper"] {
-      position: absolute;
-      top: 7px;
-      right: 7px;
-      opacity: 0;
-      transition: opacity 0.15s ease;
-    }
+  [data-slot="user-message-copy-wrapper"] {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    opacity: 0;
+    color: var(--text-weak);
+    transition:
+      opacity var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard);
+  }
 
-    &:hover [data-slot="user-message-copy-wrapper"] {
-      opacity: 1;
-    }
+  [data-slot="user-message-row"]:hover [data-slot="user-message-copy-wrapper"],
+  [data-slot="user-message-row"]:focus-within [data-slot="user-message-copy-wrapper"],
+  [data-slot="user-message-copy-wrapper"][data-copied="true"] {
+    opacity: 1;
+  }
+
+  [data-slot="user-message-copy-wrapper"][data-copied="true"] [data-slot="icon-svg"] {
+    color: var(--icon-success-base, var(--text-strong));
   }
 
   .text-text-strong {
@@ -108,6 +165,12 @@
 
   .font-medium {
     font-weight: var(--font-weight-medium);
+  }
+}
+
+@media (pointer: coarse) {
+  [data-component="user-message"] [data-slot="user-message-copy-wrapper"] {
+    opacity: 1;
   }
 }
 
@@ -319,10 +382,6 @@
     color: var(--text-base);
   }
 
-  [data-slot="message-part-title-text"] {
-    text-transform: capitalize;
-  }
-
   [data-slot="message-part-title-filename"] {
     /* No text-transform - preserve original filename casing */
   }
@@ -488,8 +547,7 @@
   [data-slot="diagnostic-label"] {
     color: var(--text-on-critical-base);
     font-weight: var(--font-weight-medium);
-    text-transform: uppercase;
-    letter-spacing: -0.5px;
+    letter-spacing: var(--letter-spacing-normal);
     flex-shrink: 0;
   }
 
@@ -532,7 +590,7 @@
     top: calc(2px + var(--sticky-header-height, 40px));
     bottom: 0px;
     z-index: 20;
-    border-radius: 6px;
+    border-radius: var(--radius-xs);
     border: none;
     box-shadow: var(--shadow-xs-border-base);
     background-color: var(--surface-raised-base);
@@ -540,14 +598,14 @@
     overflow-anchor: none;
 
     & > *:first-child {
-      border-top-left-radius: 6px;
-      border-top-right-radius: 6px;
+      border-top-left-radius: var(--radius-xs);
+      border-top-right-radius: var(--radius-xs);
       overflow: hidden;
     }
 
     & > *:last-child {
-      border-bottom-left-radius: 6px;
-      border-bottom-right-radius: 6px;
+      border-bottom-left-radius: var(--radius-xs);
+      border-bottom-right-radius: var(--radius-xs);
       overflow: hidden;
     }
 
@@ -566,7 +624,7 @@
       position: absolute;
       inset: -1.5px;
       top: -5px;
-      border-radius: 7.5px;
+      border-radius: var(--radius-sm);
       border: 1.5px solid transparent;
       background:
         linear-gradient(var(--background-base) 0 0) padding-box,
@@ -670,7 +728,7 @@
       width: 100%;
       height: auto;
       border: 1px solid var(--border-weak-base);
-      border-radius: 6px;
+      border-radius: var(--radius-xs);
     }
   }
 }
@@ -694,7 +752,7 @@
   overflow: hidden;
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -719,7 +777,7 @@
   max-height: 420px;
   object-fit: contain;
   border: 1px solid var(--border-weak-base);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--background-base);
 }
 
@@ -728,7 +786,7 @@
   overflow: auto;
   padding: 10px 12px;
   border: 1px solid var(--border-weak-base);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--background-base);
 }
 
@@ -790,7 +848,7 @@
   gap: 6px;
   padding: 8px 12px;
   background-color: var(--surface-raised-strong);
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
 
   [data-slot="permission-summary"] {
     font-size: 12px;
@@ -812,7 +870,7 @@
   flex-direction: column;
   padding: 12px;
   background-color: var(--surface-inset-base);
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
   gap: 12px;
 
   [data-slot="question-tabs"] {
@@ -823,7 +881,7 @@
     [data-slot="question-tab"] {
       padding: 4px 12px;
       font-size: 13px;
-      border-radius: 4px;
+      border-radius: var(--radius-xs);
       background-color: var(--surface-base);
       color: var(--text-base);
       border: none;
@@ -871,7 +929,7 @@
       padding: 8px 12px;
       background-color: var(--surface-base);
       border: 1px solid var(--border-weaker-base);
-      border-radius: 6px;
+      border-radius: var(--radius-xs);
       cursor: pointer;
       text-align: left;
       width: 100%;
@@ -898,7 +956,7 @@
       [data-slot="option-label"] {
         font-size: 14px;
         color: var(--text-base);
-        font-weight: 500;
+        font-weight: var(--font-weight-medium);
       }
 
       [data-slot="option-description"] {
@@ -918,7 +976,7 @@
         padding: 8px 12px;
         font-size: 14px;
         border: 1px solid var(--border-default);
-        border-radius: 6px;
+        border-radius: var(--radius-xs);
         background-color: var(--surface-base);
         color: var(--text-base);
         outline: none;

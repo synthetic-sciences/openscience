@@ -103,8 +103,6 @@ export function artifactActions(artifact: ArtifactInfo): ArtifactAction[] {
         description: "Execute cells, preserve outputs, and fix failures.",
         instruction: "Open this notebook, inspect it, and run it cell by cell. Repair failures without losing outputs.",
       },
-      // Reviewing is a direct action (POST /session/:id/review), never a chat
-      // prompt — the session header's "Run review" launches the reviewer.
       {
         id: "export-notebook",
         label: "Prepare report",

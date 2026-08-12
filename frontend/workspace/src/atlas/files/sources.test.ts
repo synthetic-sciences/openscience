@@ -13,17 +13,18 @@ const grant = (id: string, path: string, access: "read" | "write"): FilesystemGr
 })
 
 describe("pane sources", () => {
-  test("puts artifacts first, then the project, then granted folders", () => {
+  test("puts saved artifacts first, working files next, and recovery last", () => {
     const list = buildSources({
       projectRoot: "/home/keertan/codes/openscience-demoo",
       projectName: "openscience-demoo",
       grants: [grant("g1", "/home/keertan/data/pdebench", "read")],
     })
 
-    expect(list.map((s) => s.id)).toEqual(["artifacts", "trash", "project", "g1"])
-    expect(list[0]?.group).toBe("Artifacts")
-    expect(list[2]?.group).toBe("This computer")
-    expect(list[2]?.sub).toBe("/home/keertan/codes/openscience-demoo")
+    expect(list.map((s) => s.id)).toEqual(["artifacts", "project", "g1", "trash"])
+    expect(list[0]).toMatchObject({ group: "Saved", name: "Saved artifacts" })
+    expect(list[1]?.group).toBe("Working files")
+    expect(list[1]?.sub).toBe("/home/keertan/codes/openscience-demoo")
+    expect(list.at(-1)?.group).toBe("Recovery")
   })
 
   test("always offers trash so the delete dialog's 30-day recovery promise has a surface", () => {
@@ -31,7 +32,8 @@ describe("pane sources", () => {
     const entry = list.find((s) => s.kind === "trash")
 
     expect(entry?.id).toBe("trash")
-    expect(entry?.group).toBe("Artifacts")
+    expect(entry?.group).toBe("Recovery")
+    expect(entry?.detail).toContain("30 days")
   })
 
   test("marks a read grant read-only so the badge has something true to show", () => {
@@ -51,12 +53,50 @@ describe("pane sources", () => {
 
     expect(without.some((s) => s.kind === "session")).toBe(false)
     expect(with_.find((s) => s.kind === "session")?.root).toBe("/p/.session")
+    expect(with_.find((s) => s.kind === "session")).toMatchObject({
+      name: "Session workspace",
+      detail: "Scratch files for this session",
+    })
+  })
+
+  test("does not relabel the project directory as session scratch space", () => {
+    const exact = buildSources({
+      projectRoot: "/work/OpenScience",
+      projectName: "OpenScience",
+      grants: [],
+      sessionRoot: "/work/OpenScience",
+    })
+    const normalized = buildSources({
+      projectRoot: "/work/OpenScience/",
+      projectName: "OpenScience",
+      grants: [],
+      sessionRoot: "/work/./OpenScience",
+    })
+
+    expect(exact.filter((source) => source.kind === "session")).toHaveLength(0)
+    expect(normalized.filter((source) => source.kind === "session")).toHaveLength(0)
+    expect(exact.filter((source) => source.root === "/work/OpenScience")).toHaveLength(1)
+  })
+
+  test("keeps a genuinely distinct session workspace visible", () => {
+    const list = buildSources({
+      projectRoot: "/work/OpenScience",
+      projectName: "OpenScience",
+      grants: [],
+      sessionRoot: "/app-data/workspaces/prj_1/ses_1",
+    })
+
+    expect(list.find((source) => source.kind === "session")).toMatchObject({
+      name: "Session workspace",
+      detail: "Scratch files for this session",
+      root: "/app-data/workspaces/prj_1/ses_1",
+    })
   })
 
   test("groups in a fixed order and drops empty groups", () => {
     const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [] }))
 
-    expect(groups.map((g) => g.group)).toEqual(["Artifacts", "This computer"])
+    expect(groups.map((g) => g.group)).toEqual(["Saved", "Working files", "Recovery"])
   })
 
   // One entry per provider. Remote will hold AWS, GCP and the rest, and an
@@ -68,7 +108,7 @@ describe("pane sources", () => {
 
     expect(remote).toHaveLength(1)
     expect(remote[0]!.id).toBe("modal")
-    expect(remote[0]!.name).toBe("Modal")
+    expect(remote[0]!.name).toBe("Modal Volumes")
     expect(remote[0]!.group).toBe("Remote")
     // Browsable and downloadable, never writable: it is an API, not a mount.
     expect(remote[0]!.readonly).toBe(true)
@@ -86,7 +126,7 @@ describe("pane sources", () => {
   test("keeps remote sources after local ones so the picker order is stable", () => {
     const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [], modal: true }))
 
-    expect(groups.map((g) => g.group)).toEqual(["Artifacts", "This computer", "Remote"])
+    expect(groups.map((g) => g.group)).toEqual(["Saved", "Working files", "Remote", "Recovery"])
   })
 })
 

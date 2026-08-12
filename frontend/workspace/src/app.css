@@ -1,0 +1,53 @@
+.app-not-found {
+  width: min(100%, 640px);
+  min-height: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: start;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: clamp(48px, 10vh, 96px) 28px;
+  color: var(--text-strong);
+}
+
+.app-not-found__eyebrow {
+  font-size: 12px;
+  font-weight: var(--font-weight-emphasis);
+  letter-spacing: var(--letter-spacing-normal);
+  color: var(--text-weak);
+}
+
+.app-not-found h1 {
+  margin: 0;
+  font-size: clamp(32px, 6vw, 48px);
+  font-weight: var(--font-weight-emphasis);
+  letter-spacing: -0.04em;
+}
+
+.app-not-found p {
+  max-width: 48ch;
+  margin: 0;
+  color: var(--text-weak);
+  font-size: 15px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.app-not-found__action {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  background: var(--button-primary-base);
+  color: var(--icon-invert-base);
+  font-size: 14px;
+  font-weight: var(--font-weight-emphasis);
+  text-decoration: none;
+}
+
+.app-not-found__action:hover {
+  background: var(--icon-strong-hover);
+}

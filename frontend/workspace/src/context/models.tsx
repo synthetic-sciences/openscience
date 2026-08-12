@@ -145,8 +145,8 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       setStore("recent", uniq)
     }
 
-    // New installations start unpinned. The composer independently presents a
-    // small recommended trio, so pinning is always an explicit user choice.
+    // New installations start unpinned. The composer derives its suggested set
+    // from available models, so pinning is always an explicit user choice.
     const pinned = createMemo(() => (store.pinned ?? []).slice(0, 3))
     const isPinned = (model: ModelKey) => {
       const key = canonicalKey(model.providerID, model.modelID)

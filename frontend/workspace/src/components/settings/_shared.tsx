@@ -1,4 +1,4 @@
-import { For, Show, createSignal, type JSX, type ParentComponent, type Component } from "solid-js"
+import { For, Show, createSignal, createUniqueId, type JSX, type ParentComponent, type Component } from "solid-js"
 import { Icon } from "@synsci/ui/icon"
 import type { IconProps } from "@synsci/ui/icon"
 import { DropdownMenu } from "@synsci/ui/dropdown-menu"
@@ -20,17 +20,17 @@ function useDialogMount() {
 
 // Shared visual language for the OpenScience settings panels. Matches the
 // reference (rounded cards, muted subheaders, filter/search/add toolbar) while
-// inheriting the app's Computer Modern font — no token/font edits. Panels stay
-// one-file-each; this module is pure presentational infra they compose.
+// inheriting the workspace type stack and theme tokens. Panels stay one-file-
+// each; this module is pure presentational infrastructure they compose.
 
 export const PanelScroll: ParentComponent = (props) => (
-  <div class="flex flex-col h-full overflow-y-auto no-scrollbar">{props.children}</div>
+  <div class="flex min-h-0 min-w-0 flex-col h-full overflow-y-auto no-scrollbar">{props.children}</div>
 )
 
 export const PanelHeader: Component<{ title: string; description: string; toolbar?: JSX.Element }> = (props) => (
   <div class="settings-page-header">
-    <div class="settings-page-header__inner">
-      <div class="flex flex-col gap-1">
+    <div class="settings-page-header__inner min-w-0">
+      <div class="flex min-w-0 flex-col gap-1">
         <h2 class="text-16-medium text-text-strong">{props.title}</h2>
         <p class="text-13-regular text-text-weak">{props.description}</p>
       </div>
@@ -39,37 +39,74 @@ export const PanelHeader: Component<{ title: string; description: string; toolba
   </div>
 )
 
-export const PanelBody: ParentComponent = (props) => <div class="settings-page-body">{props.children}</div>
+export const PanelBody: ParentComponent = (props) => <div class="settings-page-body min-w-0">{props.children}</div>
+
+export const Section: ParentComponent<{
+  title: string
+  description?: JSX.Element
+  count?: number
+  action?: JSX.Element
+  id?: string
+}> = (props) => {
+  const generated = `settings-${createUniqueId()}`
+  const id = () => props.id ?? generated
+  return (
+    <section class="settings-section" aria-labelledby={id()}>
+      <div class="settings-section-heading">
+        <div>
+          <h3 id={id()}>{props.title}</h3>
+          <Show when={props.description}>
+            <p>{props.description}</p>
+          </Show>
+        </div>
+        <Show
+          when={props.action}
+          fallback={
+            <Show when={props.count !== undefined}>
+              <span>{props.count}</span>
+            </Show>
+          }
+        >
+          {props.action}
+        </Show>
+      </div>
+      {props.children}
+    </section>
+  )
+}
+
+export const RowCopy: Component<{ title: string; description?: string; mono?: boolean }> = (props) => (
+  <div class="settings-list-copy">
+    <strong classList={{ "font-mono": props.mono }}>{props.title}</strong>
+    <Show when={props.description}>
+      <span class="whitespace-normal text-ellipsis">{props.description}</span>
+    </Show>
+  </div>
+)
 
 // Muted sentence-case subheader with a trailing count.
 export const SectionLabel: Component<{ label: string; count?: number }> = (props) => (
-  <div class="flex items-center gap-2 px-0.5">
-    <span class="settings-section-label">{props.label}</span>
+  <div class="settings-section-heading settings-section-heading--compact">
+    <h3 class="settings-section-label min-w-0 break-words">{props.label}</h3>
     <Show when={props.count !== undefined}>
-      <span class="text-10-regular text-text-weaker">{props.count}</span>
+      <span>{props.count}</span>
     </Show>
   </div>
 )
 
 // Rounded card wrapping a stack of rows (dividers between children handled by
 // Row's border-b). Use for grouped lists.
-export const Card: ParentComponent = (props) => (
-  <div class="border border-border-weak-base rounded-[10px] overflow-hidden bg-surface-base/40">{props.children}</div>
-)
+export const Card: ParentComponent = (props) => <div class="settings-card min-w-0 w-full">{props.children}</div>
 
 export const Row: ParentComponent<{ onClick?: () => void }> = (props) => (
-  <div
-    class="flex flex-wrap items-center gap-3 px-4 py-3.5 border-b border-border-weak-base last:border-none"
-    classList={{ "cursor-pointer hover:bg-surface-raised-base/40": !!props.onClick }}
-    onClick={props.onClick}
-  >
+  <div class="settings-row min-w-0" data-interactive={props.onClick ? "true" : undefined} onClick={props.onClick}>
     {props.children}
   </div>
 )
 
 export const EmptyState: Component<{ icon: IconProps["name"]; title: string; hint?: string }> = (props) => (
-  <div class="flex flex-col items-center gap-3 text-center py-14">
-    <div class="flex items-center justify-center size-11 rounded-[4px] border border-border-weak-base bg-surface-base/40 text-icon-weak-base">
+  <div class="settings-empty-state min-w-0">
+    <div class="settings-empty-state__icon">
       <Icon name={props.icon} size="normal" />
     </div>
     <span class="text-14-medium text-text-strong">{props.title}</span>
@@ -86,11 +123,10 @@ export const EmptyState: Component<{ icon: IconProps["name"]; title: string; hin
 // washes the tile background; omit it for a neutral tile.
 export const Avatar: Component<{ tint?: string; icon?: IconProps["name"]; monogram?: string }> = (props) => (
   <div
-    class="flex items-center justify-center size-8 rounded-[5px] flex-shrink-0 text-13-medium leading-none uppercase"
+    class="settings-avatar"
+    data-tinted={props.tint ? "true" : undefined}
     style={{
-      background: props.tint
-        ? `color-mix(in srgb, ${props.tint} 14%, transparent)`
-        : "var(--color-surface-raised-base)",
+      background: props.tint ? `color-mix(in srgb, ${props.tint} 14%, transparent)` : undefined,
       color: props.monogram && props.tint ? props.tint : "var(--color-icon-strong-base)",
     }}
   >
@@ -101,38 +137,42 @@ export const Avatar: Component<{ tint?: string; icon?: IconProps["name"]; monogr
 )
 
 // Small inline metadata badge (a specialist's mode, a connector's type).
-export const Chip: ParentComponent = (props) => (
-  <span class="text-11-medium text-text-weak/70 px-1.5 py-0.5 rounded-md bg-surface-raised-base/60 flex-shrink-0">
-    {props.children}
-  </span>
-)
+export const Chip: ParentComponent = (props) => <span class="settings-chip">{props.children}</span>
 
 // ── Toolbar pieces ──────────────────────────────────────────────────────────
 
-const controlBase =
-  "flex items-center gap-2 h-9 px-3 rounded-xs border border-border-weak-base bg-surface-base text-13-medium transition-colors"
+const controlBase = "settings-control"
 
-export const SearchInput: Component<{ value: string; onInput: (v: string) => void; placeholder?: string }> = (
-  props,
-) => (
-  <label class={`${controlBase} flex-1 min-w-[140px] focus-within:border-border-strong-base cursor-text`}>
+export const SearchInput: Component<{
+  value: string
+  onInput: (v: string) => void
+  placeholder?: string
+  ariaLabel?: string
+}> = (props) => (
+  <div class={`${controlBase} settings-control--search max-w-full`}>
     <Icon name="magnifying-glass" size="small" class="text-icon-weak-base flex-shrink-0" />
     <input
       type="text"
+      aria-label={props.ariaLabel ?? props.placeholder ?? "Search"}
       value={props.value}
       placeholder={props.placeholder ?? "Search"}
       spellcheck={false}
       autocapitalize="off"
       autocomplete="off"
-      class="flex-1 bg-transparent outline-none text-text-strong placeholder:text-text-weak/60"
+      class="min-w-0 flex-1 bg-transparent outline-none text-text-strong placeholder:text-text-weak/60"
       onInput={(e) => props.onInput(e.currentTarget.value)}
     />
     <Show when={props.value}>
-      <button type="button" class="text-icon-weak-base hover:text-text-strong" onClick={() => props.onInput("")}>
+      <button
+        type="button"
+        class="shrink-0 text-icon-weak-base hover:text-text-strong"
+        aria-label="Clear search"
+        onClick={() => props.onInput("")}
+      >
         <Icon name="circle-x" size="small" />
       </button>
     </Show>
-  </label>
+  </div>
 )
 
 export interface FilterOption {
@@ -141,22 +181,26 @@ export interface FilterOption {
   count?: number
 }
 
-export const FilterMenu: Component<{ options: FilterOption[]; value: string; onSelect: (id: string) => void }> = (
-  props,
-) => {
+export const FilterMenu: Component<{
+  options: FilterOption[]
+  value: string
+  onSelect: (id: string) => void
+  ariaLabel?: string
+}> = (props) => {
   const active = () => props.options.find((o) => o.id === props.value) ?? props.options[0]
   const dialog = useDialogMount()
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
         ref={dialog.anchor}
-        class={`${controlBase} text-text-strong hover:bg-surface-raised-base/60 data-[expanded]:bg-surface-raised-base-active flex-shrink-0`}
+        aria-label={props.ariaLabel}
+        class={`${controlBase} settings-control--menu max-w-full`}
       >
-        <span class="truncate max-w-[160px]">
+        <span class="min-w-0 truncate max-w-[160px]">
           {active()?.label}
           <Show when={active()?.count !== undefined}> ({active()?.count})</Show>
         </span>
-        <Icon name="chevron-down" size="small" class="text-icon-weak-base" />
+        <Icon name="chevron-down" size="small" class="shrink-0 text-icon-weak-base" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal mount={dialog.mount()}>
         <DropdownMenu.Content class="mt-1 min-w-[180px]">
@@ -190,11 +234,11 @@ export const AddMenu: Component<{ label: string; items: AddItem[] }> = (props) =
       <DropdownMenu.Trigger
         ref={dialog.anchor}
         aria-label={props.label}
-        class={`${controlBase} text-text-strong bg-surface-raised-base-active hover:bg-surface-raised-base-active/80 data-[expanded]:bg-surface-raised-base-active flex-shrink-0`}
+        class={`${controlBase} settings-control--primary max-w-full`}
       >
-        <Icon name="plus" size="small" />
-        <span class="truncate">{props.label}</span>
-        <Icon name="chevron-down" size="small" class="text-icon-weak-base" />
+        <Icon name="plus" size="small" class="shrink-0" />
+        <span class="min-w-0 truncate">{props.label}</span>
+        <Icon name="chevron-down" size="small" class="shrink-0 text-icon-weak-base" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal mount={dialog.mount()}>
         <DropdownMenu.Content class="mt-1 min-w-[240px]">
@@ -219,7 +263,7 @@ export const AddMenu: Component<{ label: string; items: AddItem[] }> = (props) =
   )
 }
 
-export const Toolbar: ParentComponent = (props) => <div class="flex items-center gap-2 flex-wrap">{props.children}</div>
+export const Toolbar: ParentComponent = (props) => <div class="settings-toolbar min-w-0">{props.children}</div>
 
 // A small labelled text/textarea field used by the inline creation forms.
 export const FormField: Component<{
@@ -231,7 +275,7 @@ export const FormField: Component<{
   disabled?: boolean
   mono?: boolean
 }> = (props) => (
-  <label class="flex flex-col gap-1.5">
+  <label class="flex min-w-0 flex-col gap-1.5">
     <span class="text-12-medium text-text-strong">{props.label}</span>
     <Show
       when={props.multiline}
@@ -241,7 +285,7 @@ export const FormField: Component<{
           value={props.value}
           disabled={props.disabled}
           placeholder={props.placeholder}
-          class="h-9 px-3 rounded-xs border border-border-weak-base bg-surface-base text-13-regular text-text-strong outline-none focus:border-border-strong-base placeholder:text-text-weak/60"
+          class="settings-field"
           onInput={(e) => props.onInput(e.currentTarget.value)}
         />
       }
@@ -251,7 +295,7 @@ export const FormField: Component<{
         disabled={props.disabled}
         placeholder={props.placeholder}
         rows={5}
-        class="px-3 py-2 rounded-xs border border-border-weak-base bg-surface-base text-13-regular text-text-strong outline-none focus:border-border-strong-base resize-y min-h-[96px] placeholder:text-text-weak/60"
+        class="settings-field settings-field--multiline"
         classList={{ "font-mono": props.mono }}
         onInput={(e) => props.onInput(e.currentTarget.value)}
       />
@@ -269,14 +313,8 @@ export const FormButton: Component<{
     type="button"
     disabled={props.disabled}
     onClick={props.onClick}
-    class="h-9 px-4 rounded-xs text-13-medium transition-colors disabled:opacity-50"
-    classList={{
-      "bg-surface-raised-base-active text-text-strong hover:bg-surface-raised-base-active/80":
-        (props.variant ?? "primary") === "primary",
-      "border border-border-weak-base text-text-weak hover:text-text-strong hover:bg-surface-raised-base/60":
-        props.variant === "ghost",
-      "text-text-on-critical-base hover:bg-surface-critical-weak": props.variant === "danger",
-    }}
+    class="settings-button max-w-full"
+    data-variant={props.variant ?? "primary"}
   >
     {props.label}
   </button>

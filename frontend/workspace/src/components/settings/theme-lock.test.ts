@@ -1,0 +1,41 @@
+import { describe, expect, test } from "bun:test"
+
+const app = await Bun.file(new URL("../../app.tsx", import.meta.url)).text()
+const general = await Bun.file(new URL("../settings-general.tsx", import.meta.url)).text()
+const preload = await Bun.file(new URL("../../../public/openscience-theme-preload.js", import.meta.url)).text()
+const theme = await Bun.file(new URL("../../../../ui/src/theme/context.tsx", import.meta.url)).text()
+const index = await Bun.file(new URL("../../../index.html", import.meta.url)).text()
+
+describe("canonical OpenScience theme", () => {
+  test("pins the product palette while preserving the selected display mode", () => {
+    expect(app).toContain('<ThemeProvider lockedTheme="openscience">')
+    expect(app).not.toContain('lockedScheme="light"')
+    expect(preload).toContain('var themeId = "openscience"')
+    expect(preload).toContain('"openscience-theme-css-" + themeId + "-" + mode')
+    expect(preload).not.toContain('localStorage.getItem("openscience-theme-id")')
+    expect(preload).toContain('localStorage.getItem("openscience-color-scheme") || "dark"')
+    expect(index).toContain('<meta name="theme-color" content="#26241f" />')
+    expect(preload).toContain('scheme === "system" && matchMedia("(prefers-color-scheme: dark)").matches')
+    expect(preload).not.toContain('localStorage.setItem("openscience-color-scheme", mode)')
+    expect(preload).toContain("css.match(/--background-base:")
+    expect(theme).toContain("lockedTheme?: string")
+    expect(theme).toContain('lockedScheme?: Exclude<ColorScheme, "system">')
+    expect(theme).toContain('const initialScheme = lockedScheme ?? getStoredColorScheme() ?? "dark"')
+    expect(theme).toContain('mode: initialScheme === "system" ? getSystemMode() : initialScheme')
+    expect(theme).toContain("querySelector<HTMLMetaElement>('meta[name=\"theme-color\"]')")
+    expect(theme).toContain("localStorage.removeItem(STORAGE_KEYS.LEGACY_THEME_CSS_LIGHT)")
+    expect(theme).toContain("if (lockedTheme && id !== lockedTheme) return")
+    expect(theme).toContain("if (lockedScheme && scheme !== lockedScheme) return")
+  })
+
+  test("offers a compact mode control without restoring theme selection", () => {
+    expect(general).toContain("theme.setColorScheme(option.value)")
+    expect(general).toContain('role="group"')
+    expect(general).toContain("aria-pressed={theme.colorScheme() === option.value}")
+    expect(general).toContain('class="h-8 min-w-[56px]')
+    expect(general).toContain("duration-150")
+    expect(general).not.toContain("themeSwatches")
+    expect(general).not.toContain("theme.setTheme(")
+    expect(general).not.toContain("settings.general.row.theme.title")
+  })
+})

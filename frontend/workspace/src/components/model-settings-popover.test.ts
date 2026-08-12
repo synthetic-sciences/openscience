@@ -83,6 +83,22 @@ describe("compact model descriptions", () => {
   })
 })
 
+describe("progressive model catalog", () => {
+  test("preserves group order while limiting the initial DOM work", () => {
+    const groups: Array<[string, number[]]> = [
+      ["Pinned", [1, 2]],
+      ["Frontier", [3, 4, 5]],
+      ["Other", [6, 7]],
+    ]
+
+    expect(subject.takeCatalogGroups(groups, 4)).toEqual([
+      ["Pinned", [1, 2]],
+      ["Frontier", [3, 4]],
+    ])
+    expect(subject.takeCatalogGroups(groups, 0)).toEqual([])
+  })
+})
+
 describe("model option keyboard navigation", () => {
   test.each([
     ["effort", ["standard", "high", "xhigh"]],

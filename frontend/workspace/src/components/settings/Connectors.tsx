@@ -3,9 +3,12 @@ import { Switch } from "@synsci/ui/switch"
 import { Icon } from "@synsci/ui/icon"
 import { IconButton } from "@synsci/ui/icon-button"
 import { showToast } from "@synsci/ui/toast"
+import { useDialog } from "@synsci/ui/context/dialog"
+import { confirmDialog } from "@/atlas/dialogs"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import type { Config, McpInspection, McpStatus } from "@synsci/sdk/v2/client"
+import "./connectors.css"
 import {
   PanelScroll,
   PanelHeader,
@@ -13,22 +16,24 @@ import {
   Toolbar,
   SearchInput,
   AddMenu,
-  Card,
-  Row,
   SectionLabel,
   EmptyState,
   FormField,
   FormButton,
-  Avatar,
-  Chip,
 } from "./_shared"
-import { formatConnectorCommand, parseConnectorCommand } from "./connector-command"
+import {
+  blankConnectorForm,
+  buildConnectorConfig,
+  connectorFormFromConfig,
+  connectorIdentity,
+  maskConnectorConfig,
+  type ConfiguredMcp,
+  type ConnectorFormState,
+  type McpType,
+  type OAuthMode,
+} from "./connector-form"
 
 type McpConfig = NonNullable<Config["mcp"]>[string]
-type McpType = "local" | "remote"
-type OAuthMode = "off" | "auto" | "client"
-type ConfiguredMcp = Extract<McpConfig, { type: McpType }>
-const MASK = "••••••••"
 
 function isConfigured(value: McpConfig | undefined): value is ConfiguredMcp {
   return !!value && typeof value === "object" && "type" in value
@@ -37,6 +42,7 @@ function isConfigured(value: McpConfig | undefined): value is ConfiguredMcp {
 export default function Connectors() {
   const sync = useGlobalSync()
   const sdk = useGlobalSDK()
+  const dialog = useDialog()
 
   const [status, setStatus] = createSignal<Record<string, McpStatus>>({})
   const [details, setDetails] = createSignal<Record<string, McpInspection>>({})
@@ -45,7 +51,7 @@ export default function Connectors() {
   const [problem, setProblem] = createSignal("")
   const [expanded, setExpanded] = createSignal<string>()
   const [editing, setEditing] = createSignal<string | undefined>()
-  const [form, setForm] = createSignal<FormState | undefined>()
+  const [form, setForm] = createSignal<ConnectorFormState | undefined>()
 
   const entries = createMemo(() =>
     Object.entries(sync.data.config.mcp ?? {})
@@ -88,17 +94,8 @@ export default function Connectors() {
     if (s.status === "needs_auth") return "Needs authentication"
     return "Needs client registration"
   }
-  // Wash the connector's avatar tile by connection state so status reads at a
-  // glance; a muted/off connector stays neutral.
-  function statusTint(s: McpStatus | undefined): string | undefined {
-    const d = dot(s)
-    if (d === "active") return "var(--color-success)"
-    if (d === "error") return "var(--color-error)"
-    if (d === "pending") return "var(--color-warning)"
-    return undefined
-  }
-
   async function toggle(name: string, on: boolean) {
+    if (busy()) return
     const config = entries().find(([key]) => key === name)?.[1]
     if (!config) return
     setBusy(true)
@@ -115,7 +112,14 @@ export default function Connectors() {
   }
 
   async function remove(name: string) {
-    if (!window.confirm(`Remove connector "${name}"? It will be disconnected and deleted from config.`)) return
+    if (busy()) return
+    const confirmed = await confirmDialog(dialog, {
+      title: `Remove "${name}"?`,
+      message: "This disconnects the connector and deletes it from your global OpenScience configuration.",
+      confirmLabel: "Remove connector",
+      danger: true,
+    })
+    if (!confirmed) return
     setBusy(true)
     try {
       await sdk.client.mcp.config.remove({ name, scope: "global" })
@@ -134,6 +138,7 @@ export default function Connectors() {
   }
 
   async function authenticate(name: string) {
+    if (busy()) return
     setBusy(true)
     try {
       const result = await sdk.client.mcp.auth.authenticate({ name })
@@ -155,7 +160,14 @@ export default function Connectors() {
   }
 
   async function disconnectAuth(name: string) {
-    if (!window.confirm(`Disconnect "${name}" and remove its OAuth credentials from this machine?`)) return
+    if (busy()) return
+    const confirmed = await confirmDialog(dialog, {
+      title: `Disconnect "${name}"?`,
+      message: "This removes the connector's OAuth credentials from this machine. Its configuration stays in place.",
+      confirmLabel: "Disconnect",
+      danger: true,
+    })
+    if (!confirmed) return
     setBusy(true)
     try {
       await sdk.client.mcp.auth.remove({ name })
@@ -170,11 +182,11 @@ export default function Connectors() {
 
   function openForm(type: McpType) {
     setEditing(undefined)
-    setForm(blankForm(type))
+    setForm(blankConnectorForm(type))
   }
   function editConnector(name: string, config: ConfiguredMcp) {
     setEditing(name)
-    setForm(formFromConfig(name, config))
+    setForm(connectorFormFromConfig(name, config))
   }
   function closeForm() {
     setForm(undefined)
@@ -182,6 +194,7 @@ export default function Connectors() {
   }
 
   async function save() {
+    if (busy()) return
     const state = form()
     if (!state) return
     const name = state.name.trim()
@@ -191,7 +204,7 @@ export default function Connectors() {
     }
     setBusy(true)
     try {
-      const config = buildConfig(state)
+      const config = buildConnectorConfig(state)
       const previous = editing()
       const result = await sdk.client.mcp.config.set({ name, config, scope: "global" })
       if (previous && previous !== name) {
@@ -202,7 +215,7 @@ export default function Connectors() {
           return next
         })
       }
-      sync.set("config", "mcp", name, maskConfig(config))
+      sync.set("config", "mcp", name, maskConnectorConfig(config))
       const latest = result.data ?? {}
       setStatus(latest)
       closeForm()
@@ -233,445 +246,363 @@ export default function Connectors() {
 
   return (
     <PanelScroll>
-      <PanelHeader
-        title="Connectors"
-        description="Connect real MCP servers to give research agents access to external tools and data."
-        toolbar={
-          <Show when={!form()}>
-            <Toolbar>
-              <SearchInput value={search()} onInput={setSearch} placeholder="Search connectors" />
-              <AddMenu
-                label="Add connector"
-                items={[
-                  {
-                    icon: "link",
-                    label: "Remote URL",
-                    description: "Connect a hosted MCP server over HTTP",
-                    onSelect: () => openForm("remote"),
-                  },
-                  {
-                    icon: "console",
-                    label: "Local command",
-                    description: "Run an MCP server process locally",
-                    onSelect: () => openForm("local"),
-                  },
-                ]}
-              />
-            </Toolbar>
-          </Show>
-        }
-      />
+      <div class="connectors-panel">
+        <PanelHeader
+          title="Connectors"
+          description="Connect MCP servers that provide external research tools and data."
+          toolbar={
+            <Show when={!form()}>
+              <Toolbar>
+                <SearchInput
+                  value={search()}
+                  onInput={setSearch}
+                  placeholder="Search connectors"
+                  ariaLabel="Search connectors"
+                />
+                <AddMenu
+                  label="Add connector"
+                  items={[
+                    {
+                      icon: "cloud",
+                      label: "Hosted server",
+                      description: "Connect an MCP endpoint over HTTPS",
+                      onSelect: () => openForm("remote"),
+                    },
+                    {
+                      icon: "console",
+                      label: "Local process",
+                      description: "Run a trusted MCP command on this machine",
+                      onSelect: () => openForm("local"),
+                    },
+                  ]}
+                />
+              </Toolbar>
+            </Show>
+          }
+        />
 
-      <PanelBody>
-        <Show when={problem()}>
-          <div
-            role="alert"
-            class="mb-4 flex items-center justify-between gap-3 rounded-[4px] border border-border-weak-base px-3 py-2"
-            style={{ color: "var(--color-error)" }}
-          >
-            <span class="text-12-regular">Connector status unavailable. {problem()}</span>
-            <button type="button" class="text-12-medium" disabled={busy()} onClick={() => void refresh()}>
-              Retry
-            </button>
-          </div>
-        </Show>
-        <Show when={form()}>
-          {(state) => (
-            <ConnectorForm
-              state={state()}
-              editing={!!editing()}
-              busy={busy()}
-              onChange={setForm}
-              onSave={save}
-              onCancel={closeForm}
-            />
-          )}
-        </Show>
-
-        <Show when={!form()}>
-          <Show
-            when={entries().length > 0}
-            fallback={
-              <Show
-                when={!search()}
-                fallback={
-                  <EmptyState
-                    icon="mcp"
-                    title="No matching connectors"
-                    hint="Try a different name or clear the search."
-                  />
-                }
-              >
-                <div class="flex flex-col items-center gap-3 py-12 text-center">
-                  <div class="flex size-10 items-center justify-center rounded-[6px] bg-surface-raised-base text-icon-weak-base">
-                    <Icon name="mcp" size="normal" />
-                  </div>
-                  <div class="flex flex-col gap-1">
-                    <span class="text-14-medium text-text-strong">Connect your research tools</span>
-                    <p class="max-w-[380px] text-12-regular leading-relaxed text-text-weak">
-                      Add a hosted MCP server with optional OAuth, or run a trusted MCP command on this machine.
-                    </p>
-                  </div>
-                  <div class="mt-1 flex flex-wrap items-center justify-center gap-2">
-                    <FormButton label="Add remote server" onClick={() => openForm("remote")} />
-                    <FormButton label="Add local command" variant="ghost" onClick={() => openForm("local")} />
-                  </div>
-                </div>
-              </Show>
-            }
-          >
-            <div class="flex flex-col gap-2">
-              <SectionLabel label="Connectors" count={entries().length} />
-              <Card>
-                <For each={entries()}>
-                  {(entry) => {
-                    const name = entry[0]
-                    const config = entry[1]
-                    const s = () => status()[name]
-                    const detail = () => details()[name]
-                    return (
-                      <Row>
-                        <Avatar icon={config.type === "remote" ? "link" : "console"} tint={statusTint(s())} />
-                        <div class="min-w-0 flex-1">
-                          <div class="flex items-center gap-2">
-                            <span class="text-14-medium text-text-strong truncate">{name}</span>
-                            <Chip>{config.type}</Chip>
-                            <span
-                              class="text-11-medium text-text-weak/70 truncate"
-                              style={{ color: s()?.status === "failed" ? "var(--color-error)" : undefined }}
-                            >
-                              {statusText(s())}
-                            </span>
-                          </div>
-                          <p class="text-12-regular text-text-weak truncate mt-0.5">
-                            {config.type === "local" ? config.command.join(" ") : config.url}
-                          </p>
-                          <Show when={detail()}>
-                            {(value) => (
-                              <p class="text-11-regular text-text-weak/70 mt-1">
-                                {value().tools.length} tools · {value().resources.length} resources ·{" "}
-                                {value().prompts.length} prompts
-                                <Show when={value().auth}> · {value().auth?.replaceAll("_", " ")}</Show>
-                              </p>
-                            )}
-                          </Show>
-                        </div>
-                        <div class="flex items-center gap-1">
-                          <Show when={config.type === "remote" && config.oauth !== false}>
-                            <button
-                              type="button"
-                              class="rounded-[4px] border border-border-weak-base px-2 py-1 text-11-medium text-text-weak hover:text-text-strong"
-                              disabled={busy()}
-                              onClick={() => void authenticate(name)}
-                            >
-                              {detail()?.auth === "authenticated" ? "Reconnect" : "Connect"}
-                            </button>
-                            <Show when={detail()?.auth === "authenticated" || detail()?.auth === "expired"}>
-                              <button
-                                type="button"
-                                class="rounded-[4px] px-2 py-1 text-11-medium text-text-weak hover:text-text-strong"
-                                disabled={busy()}
-                                onClick={() => void disconnectAuth(name)}
-                              >
-                                Disconnect
-                              </button>
-                            </Show>
-                          </Show>
-                          <IconButton
-                            icon="chevron-down"
-                            variant="ghost"
-                            aria-label={
-                              expanded() === name ? "Hide discovered capabilities" : "Show discovered capabilities"
-                            }
-                            onClick={() => setExpanded((value) => (value === name ? undefined : name))}
-                          />
-                          <IconButton
-                            icon="edit"
-                            variant="ghost"
-                            disabled={busy()}
-                            aria-label="Edit"
-                            onClick={() => editConnector(name, config)}
-                          />
-                          <IconButton
-                            icon="trash"
-                            variant="ghost"
-                            disabled={busy()}
-                            aria-label="Remove"
-                            onClick={() => void remove(name)}
-                          />
-                          <Switch checked={config.enabled !== false} onChange={(v) => void toggle(name, v)} hideLabel>
-                            {name}
-                          </Switch>
-                        </div>
-                        <Show when={expanded() === name}>
-                          <ConnectorInspection detail={detail()} />
-                        </Show>
-                      </Row>
-                    )
-                  }}
-                </For>
-              </Card>
+        <PanelBody>
+          <Show when={problem()}>
+            <div role="alert" class="settings-alert mb-4" data-tone="critical">
+              <span class="text-12-regular">Connector status unavailable. {problem()}</span>
               <button
                 type="button"
-                class="self-start text-12-medium text-text-weak hover:text-text-strong flex items-center gap-1.5 mt-1"
+                class="text-12-medium"
                 disabled={busy()}
-                onClick={() => void refresh()}
+                onClick={() => void refresh().catch(() => undefined)}
               >
-                <Icon name="enter" size="small" /> Refresh status
+                Retry
               </button>
             </div>
           </Show>
-        </Show>
-      </PanelBody>
+          <Show when={form()}>
+            {(state) => (
+              <ConnectorForm
+                state={state()}
+                editing={!!editing()}
+                busy={busy()}
+                onChange={setForm}
+                onSave={save}
+                onCancel={closeForm}
+              />
+            )}
+          </Show>
+
+          <Show when={!form()}>
+            <Show
+              when={entries().length > 0}
+              fallback={
+                <Show
+                  when={!search()}
+                  fallback={
+                    <EmptyState
+                      icon="mcp"
+                      title="No matching connectors"
+                      hint="Try a different name or clear the search."
+                    />
+                  }
+                >
+                  <div class="connectors-empty">
+                    <div class="connectors-empty__icon">
+                      <Icon name="mcp" size="normal" />
+                    </div>
+                    <div class="connectors-empty__copy">
+                      <strong>Connect your research tools</strong>
+                      <p>Add a hosted MCP server with optional OAuth, or run a trusted MCP command on this machine.</p>
+                    </div>
+                    <div class="connectors-empty__actions">
+                      <FormButton label="Hosted server" onClick={() => openForm("remote")} />
+                      <FormButton label="Local process" variant="ghost" onClick={() => openForm("local")} />
+                    </div>
+                  </div>
+                </Show>
+              }
+            >
+              <section class="settings-section connectors-section" aria-label="Configured connectors">
+                <SectionLabel label="Connectors" count={entries().length} />
+                <div class="connectors-list" role="list">
+                  <For each={entries()}>
+                    {(entry) => {
+                      const name = entry[0]
+                      const config = entry[1]
+                      const s = () => status()[name]
+                      const detail = () => details()[name]
+                      const identity = connectorIdentity(name, config)
+                      return (
+                        <article
+                          class="connectors-item"
+                          data-expanded={expanded() === name ? "true" : undefined}
+                          role="listitem"
+                        >
+                          <div class="connectors-row">
+                            <div class="connectors-identity" data-kind={identity.icon}>
+                              <Icon name={identity.icon} size="small" />
+                            </div>
+                            <div class="connectors-copy">
+                              <div class="connectors-copy__title">
+                                <strong>{name}</strong>
+                                <span>{identity.label}</span>
+                              </div>
+                              <p title={config.type === "local" ? config.command.join(" ") : config.url}>
+                                {config.type === "local" ? config.command.join(" ") : config.url}
+                              </p>
+                              <Show when={detail()}>
+                                {(value) => (
+                                  <div class="connectors-capability-summary">
+                                    <span>{value().tools.length} tools</span>
+                                    <span>{value().resources.length} resources</span>
+                                    <span>{value().prompts.length} prompts</span>
+                                  </div>
+                                )}
+                              </Show>
+                            </div>
+                            <span class="connectors-status" data-tone={dot(s())}>
+                              <span aria-hidden="true" />
+                              {statusText(s())}
+                            </span>
+                            <div class="connectors-row__actions">
+                              <Show when={config.type === "remote" && config.oauth !== false}>
+                                <button
+                                  type="button"
+                                  class="connectors-action"
+                                  disabled={busy()}
+                                  onClick={() => void authenticate(name)}
+                                >
+                                  {detail()?.auth === "authenticated" ? "Reconnect" : "Connect"}
+                                </button>
+                              </Show>
+                              <IconButton
+                                icon="edit"
+                                variant="ghost"
+                                disabled={busy()}
+                                aria-label={`Edit ${name}`}
+                                onClick={() => editConnector(name, config)}
+                              />
+                              <Switch
+                                checked={config.enabled !== false}
+                                disabled={busy()}
+                                onChange={(v) => void toggle(name, v)}
+                                hideLabel
+                              >
+                                {name}
+                              </Switch>
+                              <IconButton
+                                icon={expanded() === name ? "chevron-down" : "chevron-right"}
+                                variant="ghost"
+                                aria-expanded={expanded() === name}
+                                aria-label={expanded() === name ? `Hide ${name} details` : `Show ${name} details`}
+                                onClick={() => setExpanded((value) => (value === name ? undefined : name))}
+                              />
+                            </div>
+                          </div>
+                          <Show when={expanded() === name}>
+                            <div class="connectors-details">
+                              <ConnectorInspection detail={detail()} />
+                              <div class="connectors-details__actions">
+                                <Show when={detail()?.auth === "authenticated" || detail()?.auth === "expired"}>
+                                  <button
+                                    type="button"
+                                    class="connectors-detail-action"
+                                    disabled={busy()}
+                                    onClick={() => void disconnectAuth(name)}
+                                  >
+                                    Disconnect OAuth
+                                  </button>
+                                </Show>
+                                <button
+                                  type="button"
+                                  class="connectors-detail-action"
+                                  disabled={busy()}
+                                  onClick={() => editConnector(name, config)}
+                                >
+                                  Edit configuration
+                                </button>
+                                <button
+                                  type="button"
+                                  class="connectors-detail-action connectors-detail-action--danger"
+                                  disabled={busy()}
+                                  onClick={() => void remove(name)}
+                                >
+                                  Remove connector
+                                </button>
+                              </div>
+                            </div>
+                          </Show>
+                        </article>
+                      )
+                    }}
+                  </For>
+                </div>
+                <button
+                  type="button"
+                  class="connectors-refresh"
+                  disabled={busy()}
+                  onClick={() => void refresh().catch(() => undefined)}
+                >
+                  <Icon name="refresh" size="small" /> Refresh status
+                </button>
+              </section>
+            </Show>
+          </Show>
+        </PanelBody>
+      </div>
     </PanelScroll>
   )
 }
 
-// ── form ──────────────────────────────────────────────────────────────────
-
-interface FormState {
-  name: string
-  type: McpType
-  command: string
-  url: string
-  env: string
-  headers: string
-  oauth: OAuthMode
-  clientId: string
-  clientSecret: string
-  scope: string
-  timeout: string
-  previous?: ConfiguredMcp
-}
-
-function blankForm(type: McpType): FormState {
-  return {
-    name: "",
-    type,
-    command: "",
-    url: "",
-    env: "",
-    headers: "",
-    oauth: "auto",
-    clientId: "",
-    clientSecret: "",
-    scope: "",
-    timeout: "",
-  }
-}
-
-function formFromConfig(name: string, config: ConfiguredMcp): FormState {
-  const base = blankForm(config.type)
-  base.name = name
-  base.previous = config
-  base.timeout = config.timeout ? String(config.timeout) : ""
-  if (config.type === "local") {
-    base.command = formatConnectorCommand(config.command)
-    base.env = config.environment ? JSON.stringify(maskRecord(config.environment), null, 2) : ""
-    return base
-  }
-  base.url = config.url
-  base.headers = config.headers ? JSON.stringify(maskRecord(config.headers), null, 2) : ""
-  if (config.oauth === false) base.oauth = "off"
-  else if (config.oauth && "clientId" in config.oauth && config.oauth.clientId) {
-    base.oauth = "client"
-    base.clientId = config.oauth.clientId
-    base.clientSecret = config.oauth.clientSecret ? MASK : ""
-    base.scope = config.oauth.scope ?? ""
-  } else base.oauth = "auto"
-  return base
-}
-
-function maskRecord(value: Record<string, string>) {
-  return Object.fromEntries(Object.keys(value).map((key) => [key, MASK]))
-}
-
-function maskConfig(value: ConfiguredMcp): ConfiguredMcp {
-  if (value.type === "local") {
-    return {
-      ...value,
-      environment: value.environment ? maskRecord(value.environment) : undefined,
-    }
-  }
-  return {
-    ...value,
-    headers: value.headers ? maskRecord(value.headers) : undefined,
-    oauth:
-      value.oauth && typeof value.oauth === "object"
-        ? {
-            ...value.oauth,
-            clientSecret: value.oauth.clientSecret ? MASK : undefined,
-          }
-        : value.oauth,
-  }
-}
-
-function restoreRecord(value: Record<string, string> | undefined, previous: Record<string, string> | undefined) {
-  if (!value) return undefined
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => {
-      if (entry !== MASK) return [key, entry]
-      const stored = previous?.[key]
-      if (stored === undefined) throw new Error(`Replace the masked value for ${key} before saving`)
-      return [key, stored]
-    }),
-  )
-}
-
-function parseRecord(text: string, label: string) {
-  const trimmed = text.trim()
-  if (!trimmed) return undefined
-  const parsed = JSON.parse(trimmed)
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${label} must be a JSON object`)
-  for (const [k, v] of Object.entries(parsed))
-    if (typeof v !== "string") throw new Error(`${label}.${k} must be a string`)
-  return parsed as Record<string, string>
-}
-
-function buildConfig(state: FormState): ConfiguredMcp {
-  const timeout = state.timeout.trim() ? Number(state.timeout) : undefined
-  if (timeout !== undefined && (!Number.isInteger(timeout) || timeout <= 0)) {
-    throw new Error("Timeout must be a positive whole number of milliseconds")
-  }
-  const enabled = state.previous?.enabled
-  if (state.type === "local") {
-    const command = parseConnectorCommand(state.command)
-    if (command.length === 0) throw new Error("Command is required")
-    const previous = state.previous?.type === "local" ? state.previous : undefined
-    const environment = restoreRecord(parseRecord(state.env, "Environment"), previous?.environment)
-    return {
-      type: "local",
-      command,
-      ...(environment ? { environment } : {}),
-      ...(enabled === false ? { enabled } : {}),
-      ...(timeout ? { timeout } : {}),
-    }
-  }
-  if (!URL.canParse(state.url.trim())) throw new Error("Remote URL is invalid")
-  const previous = state.previous?.type === "remote" ? state.previous : undefined
-  const headers = restoreRecord(parseRecord(state.headers, "Headers"), previous?.headers)
-  const oauth = typeof previous?.oauth === "object" ? previous.oauth : undefined
-  const secret = state.clientSecret.trim() === MASK ? oauth?.clientSecret : state.clientSecret.trim()
-  return {
-    type: "remote",
-    url: state.url.trim(),
-    ...(headers ? { headers } : {}),
-    ...(enabled === false ? { enabled } : {}),
-    ...(timeout ? { timeout } : {}),
-    ...(state.oauth === "off"
-      ? { oauth: false }
-      : state.oauth === "client"
-        ? {
-            oauth: {
-              clientId: state.clientId.trim(),
-              ...(secret ? { clientSecret: secret } : {}),
-              ...(state.scope.trim() ? { scope: state.scope.trim() } : {}),
-            },
-          }
-        : { oauth: {} }),
-  }
-}
-
 function ConnectorForm(props: {
-  state: FormState
+  state: ConnectorFormState
   editing: boolean
   busy: boolean
-  onChange: (s: FormState) => void
+  onChange: (s: ConnectorFormState) => void
   onSave: () => void
   onCancel: () => void
 }) {
-  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+  const set = <K extends keyof ConnectorFormState>(key: K, value: ConnectorFormState[K]) =>
     props.onChange({ ...props.state, [key]: value })
   return (
-    <div class="flex flex-col gap-4">
+    <section class="settings-section connectors-form-section">
       <SectionLabel label={props.editing ? "Edit connector" : `Add ${props.state.type} connector`} />
-      <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[4px] bg-surface-base/40">
-        <FormField
-          label="Name"
-          value={props.state.name}
-          onInput={(v) => set("name", v)}
-          placeholder="linear, filesystem…"
-        />
-        <Show
-          when={props.state.type === "remote"}
-          fallback={
-            <>
+      <div class="connectors-form">
+        <div class="connectors-form__lead">
+          <div class="connectors-identity" data-kind={props.state.type === "remote" ? "cloud" : "console"}>
+            <Icon name={props.state.type === "remote" ? "cloud" : "console"} size="small" />
+          </div>
+          <div>
+            <strong>{props.state.type === "remote" ? "Hosted MCP server" : "Local MCP process"}</strong>
+            <p>
+              {props.state.type === "remote"
+                ? "Connect over HTTPS and authenticate with OAuth or headers."
+                : "Launch a trusted command and pass environment values locally."}
+            </p>
+          </div>
+        </div>
+        <div class="connectors-form__grid">
+          <div class="connectors-form__field">
+            <FormField
+              label="Name"
+              value={props.state.name}
+              onInput={(v) => set("name", v)}
+              placeholder="linear, filesystem…"
+            />
+          </div>
+          <div class="connectors-form__field">
+            <FormField
+              label="Request timeout (ms)"
+              value={props.state.timeout}
+              onInput={(v) => set("timeout", v)}
+              mono
+              placeholder="5000"
+            />
+          </div>
+          <Show
+            when={props.state.type === "remote"}
+            fallback={
+              <>
+                <div class="connectors-form__field" data-span="full">
+                  <FormField
+                    label="Command"
+                    value={props.state.command}
+                    onInput={(v) => set("command", v)}
+                    mono
+                    placeholder="npx -y @modelcontextprotocol/server-filesystem ."
+                  />
+                </div>
+                <div class="connectors-form__field" data-span="full">
+                  <FormField
+                    label="Environment (JSON)"
+                    value={props.state.env}
+                    onInput={(v) => set("env", v)}
+                    multiline
+                    mono
+                    placeholder={'{ "TOKEN": "..." }'}
+                  />
+                </div>
+                <Show when={props.editing && props.state.env}>
+                  <p class="connectors-form__hint">
+                    Stored values are masked. Keep the mask to preserve a value, replace it to update, or remove its key
+                    to delete it.
+                  </p>
+                </Show>
+              </>
+            }
+          >
+            <div class="connectors-form__field" data-span="full">
               <FormField
-                label="Command"
-                value={props.state.command}
-                onInput={(v) => set("command", v)}
+                label="URL"
+                value={props.state.url}
+                onInput={(v) => set("url", v)}
                 mono
-                placeholder="npx -y @modelcontextprotocol/server-filesystem ."
+                placeholder="https://mcp.example.com/mcp"
               />
+            </div>
+            <label class="connectors-form__field connectors-form__select">
+              <span>OAuth</span>
+              <select
+                value={props.state.oauth}
+                class="settings-field"
+                onInput={(e) => set("oauth", e.currentTarget.value as OAuthMode)}
+              >
+                <option value="auto">Automatic registration</option>
+                <option value="client">Pre-registered client</option>
+                <option value="off">No OAuth</option>
+              </select>
+            </label>
+            <div class="connectors-form__field" data-span="full">
               <FormField
-                label="Environment (JSON)"
-                value={props.state.env}
-                onInput={(v) => set("env", v)}
+                label="Headers (JSON)"
+                value={props.state.headers}
+                onInput={(v) => set("headers", v)}
                 multiline
                 mono
-                placeholder={'{ "TOKEN": "..." }'}
+                placeholder={'{ "Authorization": "Bearer ..." }'}
               />
-              <Show when={props.editing && props.state.env}>
-                <p class="text-11-regular text-text-weak">
-                  Stored values are masked. Keep the mask to preserve a value, replace it to update, or remove its key
-                  to delete it.
-                </p>
-              </Show>
-            </>
-          }
-        >
-          <FormField
-            label="URL"
-            value={props.state.url}
-            onInput={(v) => set("url", v)}
-            mono
-            placeholder="https://mcp.example.com/mcp"
-          />
-          <label class="flex flex-col gap-1.5">
-            <span class="text-12-medium text-text-strong">OAuth</span>
-            <select
-              value={props.state.oauth}
-              class="h-9 px-3 rounded-xs border border-border-weak-base bg-surface-base text-13-regular text-text-strong outline-none focus:border-border-strong-base"
-              onInput={(e) => set("oauth", e.currentTarget.value as OAuthMode)}
-            >
-              <option value="auto">Auto (dynamic registration)</option>
-              <option value="client">Pre-registered client</option>
-              <option value="off">Off</option>
-            </select>
-          </label>
-          <FormField
-            label="Headers (JSON)"
-            value={props.state.headers}
-            onInput={(v) => set("headers", v)}
-            multiline
-            mono
-            placeholder={'{ "Authorization": "Bearer ..." }'}
-          />
-          <Show when={props.editing && props.state.headers}>
-            <p class="text-11-regular text-text-weak">
-              Stored header values are masked. Keep the mask to preserve a value, replace it to update, or remove its
-              key to delete it.
-            </p>
+            </div>
+            <Show when={props.editing && props.state.headers}>
+              <p class="connectors-form__hint">
+                Stored header values are masked. Keep the mask to preserve a value, replace it to update, or remove its
+                key to delete it.
+              </p>
+            </Show>
+            <Show when={props.state.oauth === "client"}>
+              <div class="connectors-form__field">
+                <FormField label="Client ID" value={props.state.clientId} onInput={(v) => set("clientId", v)} mono />
+              </div>
+              <div class="connectors-form__field">
+                <FormField
+                  label="Client secret"
+                  value={props.state.clientSecret}
+                  onInput={(v) => set("clientSecret", v)}
+                  mono
+                />
+              </div>
+              <div class="connectors-form__field" data-span="full">
+                <FormField label="Scope" value={props.state.scope} onInput={(v) => set("scope", v)} mono />
+              </div>
+            </Show>
           </Show>
-          <Show when={props.state.oauth === "client"}>
-            <FormField label="Client ID" value={props.state.clientId} onInput={(v) => set("clientId", v)} mono />
-            <FormField
-              label="Client secret"
-              value={props.state.clientSecret}
-              onInput={(v) => set("clientSecret", v)}
-              mono
-            />
-            <FormField label="Scope" value={props.state.scope} onInput={(v) => set("scope", v)} mono />
-          </Show>
-        </Show>
-        <FormField
-          label="Request timeout (ms)"
-          value={props.state.timeout}
-          onInput={(v) => set("timeout", v)}
-          mono
-          placeholder="5000"
-        />
-        <div class="flex items-center gap-2">
+        </div>
+        <div class="connectors-form__actions">
           <FormButton
             label={props.busy ? "Saving…" : props.editing ? "Save connector" : "Add connector"}
             disabled={props.busy}
@@ -680,7 +611,7 @@ function ConnectorForm(props: {
           <FormButton label="Cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -695,24 +626,18 @@ function ConnectorInspection(props: { detail?: McpInspection }) {
     return [...status, ...Object.values(props.detail.errors).filter((error) => error !== undefined)]
   }
   return (
-    <div class="basis-full w-full border-t border-border-weak-base pt-3 mt-1 flex flex-col gap-3">
-      <Show when={props.detail} fallback={<span class="text-12-regular text-text-weak">Inspecting connector…</span>}>
+    <div class="connectors-inspection">
+      <Show when={props.detail} fallback={<span class="connectors-inspection__loading">Inspecting connector…</span>}>
         {(detail) => (
           <>
             <Show when={failures().length > 0}>
-              <div
-                class="rounded-[4px] px-3 py-2"
-                style={{
-                  color: "var(--color-error)",
-                  border: "1px solid var(--color-error-muted)",
-                  background: "color-mix(in srgb, var(--color-error) 8%, transparent)",
-                }}
-              >
+              <div role="alert" class="settings-alert" data-tone="critical" data-stacked="true">
                 <For each={failures()}>{(error) => <p class="text-12-regular break-words">{error}</p>}</For>
               </div>
             </Show>
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div class="connectors-inspection__grid">
               <CapabilityList
+                icon="settings-gear"
                 title="Tools"
                 empty="No tools reported"
                 items={detail().tools.map((tool) => ({
@@ -721,6 +646,7 @@ function ConnectorInspection(props: { detail?: McpInspection }) {
                 }))}
               />
               <CapabilityList
+                icon="folder"
                 title="Resources"
                 empty="No resources reported"
                 items={detail().resources.map((resource) => ({
@@ -729,6 +655,7 @@ function ConnectorInspection(props: { detail?: McpInspection }) {
                 }))}
               />
               <CapabilityList
+                icon="speech-bubble"
                 title="Prompts"
                 empty="No prompts reported"
                 items={detail().prompts.map((prompt) => ({
@@ -744,20 +671,29 @@ function ConnectorInspection(props: { detail?: McpInspection }) {
   )
 }
 
-function CapabilityList(props: { title: string; empty: string; items: Array<{ name: string; description?: string }> }) {
+function CapabilityList(props: {
+  icon: "folder" | "settings-gear" | "speech-bubble"
+  title: string
+  empty: string
+  items: Array<{ name: string; description?: string }>
+}) {
   return (
-    <section class="min-w-0">
-      <h3 class="text-11-medium tracking-[0.01em] text-text-weak mb-1.5">{props.title}</h3>
-      <Show when={props.items.length > 0} fallback={<p class="text-11-regular text-text-weak/70">{props.empty}</p>}>
-        <ul class="flex flex-col gap-1.5">
+    <section class="connectors-capability">
+      <header>
+        <Icon name={props.icon} size="small" />
+        <h3>{props.title}</h3>
+        <span>{props.items.length}</span>
+      </header>
+      <Show when={props.items.length > 0} fallback={<p class="connectors-capability__empty">{props.empty}</p>}>
+        <ul>
           <For each={props.items}>
             {(item) => (
-              <li class="min-w-0">
-                <p class="text-12-medium text-text-strong truncate" title={item.name}>
+              <li>
+                <p class="connectors-capability__name" title={item.name}>
                   {item.name}
                 </p>
                 <Show when={item.description}>
-                  <p class="text-11-regular text-text-weak line-clamp-2">{item.description}</p>
+                  <p class="connectors-capability__description">{item.description}</p>
                 </Show>
               </li>
             )}

@@ -3,7 +3,7 @@ import { Tool } from "./tool"
 import { spawn, type ChildProcess } from "child_process"
 import path from "path"
 import os from "os"
-import { mkdirSync, rmSync, unlinkSync } from "fs"
+import { accessSync, constants, mkdirSync, rmSync, statSync, unlinkSync } from "fs"
 import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
@@ -13,6 +13,7 @@ import { Sandbox } from "@/sandbox/sandbox"
 import { KernelQueue } from "@/science/kernel/queue"
 import { KernelProcessIdentity } from "@/science/kernel/process"
 import { KernelRuntime } from "@/science/kernel/registry"
+import { KernelEnvironmentName, pythonEnvironment } from "@/science/kernel/interpreter"
 import { AtlasEnvironment } from "@/science/kernel/types"
 import type {
   Kernel,
@@ -25,6 +26,7 @@ import type {
   KernelOutput,
   KernelProcess,
 } from "@/science/kernel/types"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 /**
  * General, non-domain-gated persistent Python kernel.
@@ -90,7 +92,7 @@ def _load_science(code):
 
 _exec_count = 0
 
-_real_out.write("__OPENSCIENCE_KERNEL_READY__\\n")
+_real_out.write("__OPENSCIENCE_KERNEL_READY__" + json.dumps({"version": "Python " + sys.version.split()[0]}) + "\\n")
 _real_out.flush()
 
 while True:
@@ -198,13 +200,18 @@ interface RawPayload {
   execution_count: number
 }
 
-async function findPython(override?: string): Promise<string> {
+async function findPython(override?: string): Promise<{ binary: string; version?: string }> {
   const candidates = override ? [override] : ["python3", "python"]
   for (const bin of candidates) {
     try {
-      const proc = Bun.spawn([bin, "--version"], { stdout: "pipe", stderr: "pipe" })
-      await proc.exited
-      if (proc.exitCode === 0) return bin
+      // Resolution is metadata-only. A project `.venv/.../python` must never
+      // receive a preflight `--version` execution before KernelRuntime has
+      // acquired trust, authority, sandbox and durable process ownership. The
+      // governed kernel reports its version in the READY frame instead.
+      const binary = path.isAbsolute(bin) ? bin : Bun.which(bin)
+      if (!binary || !statSync(binary).isFile()) continue
+      accessSync(binary, process.platform === "win32" ? constants.F_OK : constants.X_OK)
+      return { binary }
     } catch {}
   }
   throw new Error("Python not found. Install Python 3.10+ (python3) to use the notebook tool.")
@@ -283,18 +290,22 @@ class PythonKernel implements Kernel {
     this.configPath = configPath
     this.cachePath = cachePath
 
-    const bin = await findPython(opts?.binary)
+    const interpreter = await findPython(opts?.binary)
     const workspace = opts?.sessionID
       ? await SessionFilesystem.processWriteRoots(opts.sessionID)
+      : [Instance.directory, Instance.worktree]
+    const readable = opts?.sessionID
+      ? await SessionFilesystem.processReadRoots(opts.sessionID)
       : [Instance.directory, Instance.worktree]
     // Confine the kernel to the workspace when the execution sandbox is on: the
     // notebook runs arbitrary agent-authored code — the same threat model as the
     // bash tool — so it must not be able to escape the boundary bash respects.
     const policy = await Config.trustedSandbox()
     const sandboxed = Sandbox.wrapArgv({
-      file: bin,
+      file: interpreter.binary,
       args: ["-u", scriptPath],
       workspace,
+      readable,
       extraWritable: [scriptPath, configPath, cachePath],
       unreadable: OpenScience.kernelSensitivePaths(),
       options: policy,
@@ -302,6 +313,11 @@ class PythonKernel implements Kernel {
     const cwd = opts?.cwd ?? (opts?.sessionID ? await SessionFilesystem.workspace(opts.sessionID) : Instance.directory)
     this.environment = {
       cwd,
+      interpreter: {
+        name: opts?.environmentName ?? "python",
+        binary: interpreter.binary,
+        version: interpreter.version,
+      },
       atlas: AtlasEnvironment,
       sandbox: {
         ...Sandbox.describe(),
@@ -312,26 +328,46 @@ class PythonKernel implements Kernel {
         warning: sandboxed.warning,
       },
     }
-    const proc = spawn(sandboxed.file, sandboxed.args, {
-      cwd,
-      env: {
-        ...OpenScience.kernelEnv(process.env),
-        ...OpenScience.pythonThreadCapEnv(process.env),
-        ...(opts?.env ?? {}),
-        ATLAS_CLI_CONFIG_PATH: configPath,
-        MPLCONFIGDIR: path.join(cachePath, "matplotlib"),
-        XDG_CACHE_HOME: path.join(cachePath, "xdg"),
-        PYTHONPYCACHEPREFIX: path.join(cachePath, "pycache"),
-        PYTHONUNBUFFERED: "1",
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-      // Own process group so killing the kernel reaps its children too — a scanpy
-      // run forks joblib/BLAS workers that would otherwise be orphaned and keep
-      // thrashing swap after an abort (#102).
-      detached: process.platform !== "win32",
-    })
+    const wrapped = WindowsJobLauncher.wrap({ file: sandboxed.file, args: sandboxed.args })
+    let proc: ChildProcess
+    try {
+      proc = spawn(wrapped.file, wrapped.args, {
+        cwd,
+        env: {
+          ...OpenScience.kernelEnv(process.env),
+          ...OpenScience.pythonThreadCapEnv(process.env),
+          ...(opts?.env ?? {}),
+          ATLAS_CLI_CONFIG_PATH: configPath,
+          MPLCONFIGDIR: path.join(cachePath, "matplotlib"),
+          XDG_CACHE_HOME: path.join(cachePath, "xdg"),
+          PYTHONPYCACHEPREFIX: path.join(cachePath, "pycache"),
+          PYTHONUNBUFFERED: "1",
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+        // Own process group so killing the kernel reaps its children too — a scanpy
+        // run forks joblib/BLAS workers that would otherwise be orphaned and keep
+        // thrashing swap after an abort (#102).
+        detached: process.platform !== "win32",
+      })
+    } catch (error) {
+      Sandbox.cleanup(sandboxed)
+      throw error
+    }
+    proc.once("exit", () => Sandbox.cleanup(sandboxed))
+    proc.once("error", () => Sandbox.cleanup(sandboxed))
     this.proc = proc
     this.process = KernelProcessIdentity.capture(proc)
+    try {
+      const ownership = opts?.processOwnership
+        ? { ...opts.processOwnership, windowsRelease: wrapped.release }
+        : undefined
+      const registered = await KernelProcessIdentity.register(proc, ownership)
+      if (!registered) throw new Error("Python kernel exited before durable process registration")
+      this.process = registered
+    } catch (error) {
+      await this.terminate(proc)
+      throw error
+    }
     proc.once("exit", () => {
       if (!this.intentional) this.cleanupScript()
     })
@@ -349,7 +385,31 @@ class PythonKernel implements Kernel {
       let buf = ""
       const onData = (d: Buffer) => {
         buf += d.toString()
-        if (buf.includes(READY)) {
+        if (buf.length > 64 * 1024) {
+          clearTimeout(timer)
+          proc.stdout?.off("data", onData)
+          void this.terminate(proc)
+          reject(new Error("Python kernel startup output exceeded 65536 bytes before the ready handshake"))
+          return
+        }
+        const start = buf.indexOf(READY)
+        const end = start === -1 ? -1 : buf.indexOf("\n", start)
+        if (start !== -1 && end !== -1) {
+          const frame = buf.slice(start + READY.length, end)
+          if (frame) {
+            try {
+              const ready = JSON.parse(frame) as { version?: unknown }
+              if (typeof ready.version === "string" && ready.version.length <= 128) {
+                this.environment!.interpreter.version = ready.version
+              }
+            } catch {
+              clearTimeout(timer)
+              proc.stdout?.off("data", onData)
+              void this.terminate(proc)
+              reject(new Error("Python kernel returned an invalid ready handshake"))
+              return
+            }
+          }
           clearTimeout(timer)
           proc.stdout?.off("data", onData)
           resolve()
@@ -577,12 +637,13 @@ function clip(s: string, max = 30_000): string {
 
 export const NotebookTool = Tool.define("notebook", {
   description: [
-    "Execute Python code in a persistent, managed kernel. Variables, imports, and state persist across calls that use the same kernel name.",
+    "Execute Python code in a persistent, managed kernel. Variables, imports, and state persist across calls that use the same kernel name and environment.",
+    "Choose `environment` to address a project interpreter under .venv/<name>; the default python environment also discovers a conventional .venv.",
     "For multiple independent analyses, issue multiple notebook calls in the same response with distinct `kernel` names. Those kernels execute concurrently and appear separately in Compute.",
     "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
     "Set `source` when the cell belongs to a script or .ipynb file so Compute can identify that source.",
     "Never use shell subprocesses to imitate multiple kernels; use this tool's `kernel` parameter instead.",
-    "After a named analysis is fully saved and verified, call this tool with `action: stop` and the same kernel name so completed workers do not idle.",
+    "After a named analysis is fully saved and verified, call this tool with `action: stop` and the same kernel and environment so completed workers do not idle.",
     "Use instead of `bash python` for analysis — no need to re-import or re-load data between cells.",
     "numpy (np), pandas (pd), scipy, and matplotlib (plt) are pre-imported. Expression results auto-display like Jupyter.",
     "matplotlib figures are captured as inline PNG images. Not gated to any agent.",
@@ -613,8 +674,12 @@ export const NotebookTool = Tool.define("notebook", {
         .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
         .optional()
         .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
+      environment: KernelEnvironmentName.optional().describe(
+        "Project Python environment: .venv/<name>, with .venv itself also used for the default python environment.",
+      ),
       timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
     })
+    .strict()
     .superRefine((params, issue) => {
       if (params.action !== "stop" && !params.code) {
         issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })
@@ -622,20 +687,26 @@ export const NotebookTool = Tool.define("notebook", {
     }),
   async execute(params, ctx) {
     const name = params.kernel ?? "agent"
+    const environment = params.environment ?? "python"
     const identity = {
       projectID: Instance.project.id,
       sessionID: ctx.sessionID,
       name,
       language: "python" as const,
+      environmentName: environment === "python" ? undefined : environment,
     }
     if (params.action === "stop") {
-      ctx.metadata({ title: `Stopped Python · ${name}`, metadata: { kernel: name, language: "python", stopped: true } })
+      ctx.metadata({
+        title: `Stopped Python · ${name}`,
+        metadata: { kernel: name, environment, language: "python", stopped: true },
+      })
       await KernelRuntime.release(identity)
       return {
         title: `Stopped Python · ${name}`,
         output: `Managed kernel ${name} stopped. Its in-memory state was cleared.`,
         metadata: {
           kernel: name,
+          environment,
           language: "python",
           stopped: true,
           ok: true,
@@ -646,7 +717,13 @@ export const NotebookTool = Tool.define("notebook", {
     const title = params.title ?? "Python cell"
     ctx.metadata({
       title,
-      metadata: { kernel: name, language: "python", task: title, ...(params.source ? { source: params.source } : {}) },
+      metadata: {
+        kernel: name,
+        environment,
+        language: "python",
+        task: title,
+        ...(params.source ? { source: params.source } : {}),
+      },
     })
 
     // Executes arbitrary code — same permission gate as bash.
@@ -657,11 +734,17 @@ export const NotebookTool = Tool.define("notebook", {
       metadata: {},
     })
 
-    const result = await KernelRuntime.execute(identity, params.code!, {
-      timeout: params.timeout,
-      signal: ctx.abort,
-      origin: { messageID: ctx.messageID, callID: ctx.callID, title, source: params.source },
-    })
+    const runtime = await pythonEnvironment(Instance.directory, environment)
+    const result = await KernelRuntime.execute(
+      identity,
+      params.code!,
+      {
+        timeout: params.timeout,
+        signal: ctx.abort,
+        origin: { messageID: ctx.messageID, callID: ctx.callID, title, source: params.source },
+      },
+      runtime,
+    )
 
     const images = result.outputs.filter((o) => o.type === "display" && o.data?.["image/png"])
     const dataUrls = images.map((o) => `data:image/png;base64,${o.data!["image/png"]}`)
@@ -687,6 +770,7 @@ export const NotebookTool = Tool.define("notebook", {
         ok: result.ok,
         provenanceID: result.provenanceID,
         kernel: name,
+        environment,
         language: "python",
         task: title,
         ...(params.source ? { source: params.source } : {}),
@@ -701,6 +785,7 @@ export const NotebookTool = Tool.define("notebook", {
         ok: result.ok,
         output,
         kernel: name,
+        environment,
         language: "python",
         task: title,
         ...(params.source ? { source: params.source } : {}),

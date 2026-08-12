@@ -1,8 +1,9 @@
 import { Show, type JSX } from "solid-js"
+import { Button } from "@synsci/ui/button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useServer } from "@/context/server"
 import { DialogSelectServer } from "@/components/dialog-select-server"
-import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
+import { FONT_CODE, FONT_SANS } from "@/styles/tokens"
 
 /**
  * Banner shown when the local openscience server is confirmed unreachable
@@ -27,6 +28,7 @@ export function DisconnectedPanel(): JSX.Element {
           background: "var(--color-error-muted, rgba(239,68,68,0.15))",
           "border-bottom": "1px solid var(--color-error, #ef4444)",
           "flex-shrink": 0,
+          "flex-wrap": "wrap",
         }}
       >
         <span
@@ -38,16 +40,21 @@ export function DisconnectedPanel(): JSX.Element {
             "flex-shrink": 0,
           }}
         />
-        <div style={{ flex: 1, "min-width": 0 }}>
+        <div style={{ flex: "1 1 320px", "min-width": 0 }}>
           <div
-            style={{ "font-family": FONT_SANS, "font-size": "12.5px", "font-weight": 500, color: "var(--color-text)" }}
+            style={{
+              "font-family": FONT_SANS,
+              "font-size": "12.5px",
+              "font-weight": "var(--font-weight-medium)",
+              color: "var(--color-text)",
+            }}
           >
             Can't reach your local OpenScience server
           </div>
           <div
             style={{
-              "font-family": FONT_MONO,
-              "font-size": "10.5px",
+              "font-family": FONT_SANS,
+              "font-size": "11.5px",
               color: "var(--color-text-muted)",
               overflow: "hidden",
               "text-overflow": "ellipsis",
@@ -55,50 +62,35 @@ export function DisconnectedPanel(): JSX.Element {
             }}
           >
             {server.name} ·{" "}
-            <Show when={server.isLocal()} fallback="check the server URL or switch servers">
-              start it with <code>openscience serve</code>
+            <Show when={server.isLocal()} fallback="Check the server URL or switch servers">
+              Start it with <code style={{ "font-family": FONT_CODE }}>openscience serve</code>
             </Show>
             <Show when={server.failures() > 1}> · {server.failures()} failed checks</Show>
           </div>
         </div>
-        <button
+        <Button
           type="button"
+          size="large"
+          variant="primary"
           disabled={server.checking()}
           onClick={() => void server.refresh()}
           style={{
-            all: "unset",
-            cursor: server.checking() ? "wait" : "pointer",
-            padding: "6px 12px",
-            "border-radius": "4px",
-            border: "1px solid var(--color-error, #ef4444)",
-            background: "var(--color-error, #ef4444)",
-            "font-family": FONT_MONO,
-            "font-size": "11px",
-            color: "white",
-            opacity: server.checking() ? 0.7 : 1,
             "flex-shrink": 0,
           }}
         >
-          {server.checking() ? "checking…" : "retry now"}
-        </button>
-        <button
+          {server.checking() ? "Checking…" : "Retry Now"}
+        </Button>
+        <Button
           type="button"
+          size="large"
+          variant="secondary"
           onClick={() => dialog.show(() => <DialogSelectServer />)}
           style={{
-            all: "unset",
-            cursor: "pointer",
-            padding: "6px 12px",
-            "border-radius": "4px",
-            border: "1px solid var(--color-border-strong)",
-            background: "var(--color-surface-solid)",
-            "font-family": FONT_MONO,
-            "font-size": "11px",
-            color: "var(--color-text)",
             "flex-shrink": 0,
           }}
         >
-          switch server
-        </button>
+          Switch Server
+        </Button>
       </div>
     </Show>
   )

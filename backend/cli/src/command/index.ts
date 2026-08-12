@@ -7,6 +7,7 @@ import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import PROMPT_LEARN from "./template/learn.txt"
 import { MCP } from "../mcp"
+import { State } from "../project/state"
 
 export namespace Command {
   export const Event = {
@@ -63,8 +64,11 @@ export namespace Command {
     HANDOFF: "handoff",
   } as const
 
-  const state = Instance.state(async () => {
-    const cfg = await Config.get()
+  const compute = async () => {
+    // Command templates may contain executable shell interpolation (`!` +
+    // backticks). Project-owned command definitions therefore belong to the
+    // same trust boundary as every other executable project setting.
+    const cfg = await Config.getExecution()
 
     const result: Record<string, Info> = {
       [Default.INIT]: {
@@ -155,7 +159,15 @@ export namespace Command {
     }
 
     return result
-  })
+  }
+
+  const state = Instance.state(compute)
+
+  /** Drop project-derived command and MCP-prompt definitions after an
+   * authority transition. The next read rebuilds against current trust. */
+  export function invalidate() {
+    State.clear(Instance.directory, compute)
+  }
 
   export async function get(name: string) {
     return state().then((x) => x[name])

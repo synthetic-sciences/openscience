@@ -1,5 +1,4 @@
 import { type JSX } from "solid-js"
-import { FONT_MONO } from "@/styles/tokens"
 
 export type StatusKind = "active" | "pending" | "error" | "done" | "muted"
 
@@ -17,32 +16,26 @@ const COLOR: Record<StatusKind, string> = {
   muted: "var(--color-text-faint)",
 }
 
-const CHAR: Record<StatusKind, string> = {
-  active: "●",
-  pending: "◐",
-  error: "×",
-  done: "○",
-  muted: "·",
-}
-
 export function StatusDot(props: StatusDotProps): JSX.Element {
   const size = () => props.size ?? 11
+  const outlined = () => props.status === "pending" || props.status === "done"
   return (
     <span
       aria-hidden="true"
       class={props.pulse ? "atlas-pulse" : undefined}
+      data-status={props.status}
       style={{
-        "font-family": FONT_MONO,
-        "font-size": `${size()}px`,
         color: COLOR[props.status],
-        width: `${size() - 1}px`,
-        "text-align": "center",
+        width: `${size()}px`,
+        height: `${size()}px`,
+        border: outlined() ? "1.25px solid currentColor" : "1.25px solid transparent",
+        "border-radius": "999px",
+        "background-color": outlined() ? "transparent" : "currentColor",
+        opacity: props.status === "muted" ? 0.6 : 1,
+        "box-sizing": "border-box",
         "flex-shrink": 0,
-        "line-height": 1,
         display: "inline-block",
       }}
-    >
-      {CHAR[props.status]}
-    </span>
+    />
   )
 }

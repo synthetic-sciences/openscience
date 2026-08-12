@@ -212,14 +212,21 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const [store, setStore] = createStore({
     checking: false,
     version: undefined as string | undefined,
+    updateError: undefined as string | undefined,
   })
 
   async function checkForUpdates() {
     if (!platform.checkUpdate) return
     setStore("checking", true)
-    const result = await platform.checkUpdate()
-    setStore("checking", false)
-    if (result.updateAvailable && result.version) setStore("version", result.version)
+    setStore("updateError", undefined)
+    try {
+      const result = await platform.checkUpdate({ refresh: true })
+      if (result.updateAvailable && result.version) setStore("version", result.version)
+    } catch (error) {
+      setStore("updateError", error instanceof Error ? error.message : String(error))
+    } finally {
+      setStore("checking", false)
+    }
   }
 
   async function installUpdate() {
@@ -299,21 +306,20 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           <div style={{ display: "flex", "flex-direction": "column", gap: "8px", "min-width": 0 }}>
             <span
               style={{
-                "font-family": FONT_MONO,
-                "font-size": "10px",
-                color: "var(--color-text-faint)",
-                "letter-spacing": "0.12em",
-                "text-transform": "uppercase",
+                "font-family": FONT_SANS,
+                "font-size": "12px",
+                "font-weight": "var(--font-weight-medium)",
+                color: "var(--color-text-muted)",
               }}
             >
-              workspace recovery
+              Workspace recovery
             </span>
             <h1
               style={{
                 margin: 0,
                 color: "var(--color-text)",
                 "font-size": "24px",
-                "font-weight": 680,
+                "font-weight": "var(--font-weight-emphasis)",
                 "letter-spacing": "-0.025em",
               }}
             >
@@ -329,13 +335,13 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           <Button size="large" onClick={() => void platform.restart()}>
             <span style={{ display: "inline-flex", "align-items": "center", gap: "7px" }}>
               <IconRefresh size={13} />
-              {platform.platform === "desktop" ? "restart app" : "reload app"}
+              {platform.platform === "desktop" ? "Restart App" : "Reload App"}
             </span>
           </Button>
           <Button size="large" variant="secondary" onClick={() => void copy()}>
             <span style={{ display: "inline-flex", "align-items": "center", gap: "7px" }}>
               <IconCopy size={13} />
-              {copied() ? "diagnostic copied" : "copy diagnostic"}
+              {copied() ? "Diagnostic Copied" : "Copy Diagnostic"}
             </span>
           </Button>
           <Show when={platform.checkUpdate}>
@@ -343,16 +349,23 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               when={store.version}
               fallback={
                 <Button size="large" variant="ghost" onClick={checkForUpdates} disabled={store.checking}>
-                  {store.checking ? "checking…" : "check for updates"}
+                  {store.checking ? "Checking…" : "Check for Updates"}
                 </Button>
               }
             >
               <Button size="large" onClick={installUpdate}>
-                update to {store.version}
+                Update to {store.version}
               </Button>
             </Show>
           </Show>
         </div>
+        <Show when={store.updateError}>
+          {(message) => (
+            <p role="alert" style={{ margin: 0, color: "var(--color-error)", "font-size": "12px" }}>
+              Update check failed: {message()}
+            </p>
+          )}
+        </Show>
 
         <details
           style={{
@@ -419,7 +432,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
                 "text-underline-offset": "3px",
               }}
             >
-              report this issue
+              Report This Issue
             </button>
           </span>
         </footer>

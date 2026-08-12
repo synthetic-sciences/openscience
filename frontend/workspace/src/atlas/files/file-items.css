@@ -1,0 +1,236 @@
+/*
+ * Catalog-specific refinements for SourceMenu, ArtifactGrid/Card, FileTable,
+ * and TrashList. The pane shell stays in FilesPane.css; this file keeps the
+ * item hierarchy independently testable and avoids coupling card semantics to
+ * the resizable right-pane layout.
+ */
+
+.files-menu__context {
+  display: block;
+  margin-top: 1px;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-menu__item[data-source-kind="artifacts"] .files-menu__label,
+.files-menu__item[data-source-kind="project"] .files-menu__label {
+  font-weight: var(--font-weight-medium);
+}
+
+.files-menu__item[data-source-kind="trash"] {
+  color: var(--color-text-muted);
+}
+
+.files-menu__item[data-source-kind="trash"] .files-menu__glyph {
+  color: var(--color-text-faint);
+}
+
+.artifact-toolbar__primary {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.artifact-toolbar__primary .artifact-toolbar__count {
+  margin-right: 0;
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.artifact-toolbar__hint {
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-toolbar__controls {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.artifact-toolbar__controls .artifact-toolbar__prefs {
+  width: auto;
+  gap: 5px;
+  padding: 0 8px;
+  color: var(--color-text-muted);
+}
+
+.artifact-toolbar__controls .artifact-menu--prefs {
+  top: 36px;
+  min-width: 180px;
+}
+
+.artifact-menu__section {
+  padding: 7px 9px 3px;
+  color: var(--color-text-faint);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.artifact-menu__separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--color-border-weak-base);
+}
+
+.artifact-card__sub {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.artifact-card__sub > span {
+  flex: none;
+}
+
+.artifact-card__meta-separator {
+  margin: 0 4px;
+  color: var(--color-text-faint);
+}
+
+.artifact-card__version {
+  color: var(--color-text-muted);
+}
+
+.artifact-card[data-layout="list"] .artifact-card__sub {
+  max-width: min(52%, 230px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifact-card[data-layout="list"] .artifact-card__sub > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.files-empty--artifacts,
+.files-empty--folder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 280px;
+  margin: 24px auto 0;
+  padding: 16px;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.files-empty--artifacts strong,
+.files-empty--folder strong {
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-medium);
+}
+
+.files-empty--artifacts span,
+.files-empty--folder span {
+  color: var(--color-text-faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.files-row__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.files-row__identity > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-row__meta {
+  color: var(--color-text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Preserve the selected layout at every width. A compact grid remains a grid;
+ * silently drawing it as a list would make aria-checked and the visible result
+ * disagree. Two equal columns keep the choice useful at the narrowest pane. */
+@container files-pane (max-width: 400px) {
+  .artifact-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .artifact-grid .artifact-card[data-layout="grid"] {
+    min-height: 0;
+  }
+
+  .artifact-grid .artifact-card[data-layout="grid"] .artifact-card__open {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
+  }
+
+  .artifact-grid .artifact-card[data-layout="grid"] .artifact-thumb {
+    width: 100%;
+    height: 68px;
+    border-radius: 0;
+  }
+
+  .artifact-grid .artifact-card[data-layout="grid"] .artifact-thumb--text {
+    padding: 6px;
+    font-size: 6.5px;
+  }
+
+  .artifact-grid .artifact-card[data-layout="grid"] .artifact-thumb--binary span {
+    padding: 3px 7px;
+    font-size: 9px;
+  }
+
+  .artifact-grid .artifact-card[data-layout="grid"] .artifact-card__label {
+    min-width: 0;
+    padding: 7px 8px 8px;
+  }
+
+  .artifact-grid .artifact-card[data-layout="grid"] .artifact-card__name {
+    display: -webkit-box;
+    min-height: 2.7em;
+    overflow: hidden;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .artifact-grid .artifact-card[data-layout="grid"] .artifact-card__actions {
+    top: 6px;
+    right: 2px;
+    opacity: 1;
+    background: var(--color-surface-solid);
+    box-shadow: var(--atlas-shadow-xs);
+  }
+
+  .artifact-card__sub {
+    overflow: hidden;
+  }
+
+  .artifact-card__sub [data-card-saved],
+  .artifact-card__sub [data-card-size] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-toolbar__controls .artifact-toolbar__prefs {
+    transition: none;
+  }
+}

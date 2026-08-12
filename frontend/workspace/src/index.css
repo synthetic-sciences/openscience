@@ -14,7 +14,10 @@
   body {
     font-family: var(--font-family-sans);
     font-feature-settings: var(--font-family-sans--font-feature-settings, normal);
+    font-kerning: normal;
     font-optical-sizing: auto;
+    font-synthesis: none;
+    font-variant-ligatures: common-ligatures contextual;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -23,6 +26,12 @@
   select,
   textarea {
     font: inherit;
+  }
+
+  :where(a, button, [role="link"]) {
+    text-decoration-skip-ink: auto;
+    text-decoration-thickness: from-font;
+    text-underline-offset: 0.18em;
   }
 
   h1,
@@ -34,7 +43,7 @@
     font-family: var(--font-family-sans);
     font-feature-settings: var(--font-family-sans--font-feature-settings, normal);
     font-optical-sizing: auto;
-    font-weight: 550;
+    font-weight: var(--font-weight-emphasis);
     letter-spacing: -0.011em;
     line-height: 1.18;
     color: var(--text-strong, var(--color-text));
@@ -42,7 +51,7 @@
   }
 
   h1 {
-    font-weight: 600;
+    font-weight: var(--font-weight-emphasis);
     letter-spacing: -0.016em;
   }
 }
@@ -53,10 +62,13 @@
 */
 .prose-editorial {
   font-family: var(--font-family-serif);
+  font-feature-settings: var(--font-family-serif--font-feature-settings, normal);
   font-size: var(--font-size-large, 15px);
   line-height: 1.7;
   color: var(--text-base, var(--color-text));
   max-width: 68ch;
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  text-wrap: pretty;
 }
 
 .prose-editorial h1,

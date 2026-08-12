@@ -1,8 +1,9 @@
 export const MIN_PANE_WIDTH = 320
-export const MAX_PANE_WIDTH = 600
+export const MAX_PANE_WIDTH = 960
 export const DEFAULT_PANE_WIDTH = 400
 export const INLINE_PANE_BREAKPOINT = 1100
 export const INLINE_PANE_CHROME = 568
+export const MIN_CONVERSATION_WIDTH = 360
 
 export function paneWidthKey(project: string) {
   return `openscience-context-width-v6:${encodeURIComponent(project)}`
@@ -12,12 +13,25 @@ export function legacyPaneWidthKey(project: string, session = "new") {
   return `openscience-context-width-v5:${encodeURIComponent(project)}:${encodeURIComponent(session)}`
 }
 
-export function clampPaneWidth(width: number) {
-  return Math.max(MIN_PANE_WIDTH, Math.min(MAX_PANE_WIDTH, width))
+export function maxPaneWidthForWorkspace(workspace: number) {
+  if (!Number.isFinite(workspace)) return MAX_PANE_WIDTH
+  return Math.max(MIN_PANE_WIDTH, Math.min(MAX_PANE_WIDTH, workspace - MIN_CONVERSATION_WIDTH))
+}
+
+export function clampPaneWidth(width: number, max = MAX_PANE_WIDTH) {
+  return Math.max(MIN_PANE_WIDTH, Math.min(max, width))
 }
 
 export function paneWidthForViewport(width: number, viewport: number) {
   return clampPaneWidth(Math.min(width, viewport - INLINE_PANE_CHROME))
+}
+
+export function paneWidthForWorkspace(width: number, workspace: number) {
+  return clampPaneWidth(width, maxPaneWidthForWorkspace(workspace))
+}
+
+export function equalPaneWidth(workspace: number) {
+  return paneWidthForWorkspace(workspace / 2, workspace)
 }
 
 export function readPaneWidth(

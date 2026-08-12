@@ -33,10 +33,6 @@ export function projectName(project: ProjectRecord) {
   return readable(project.name) || readable(folderName(project.worktree)) || "Untitled project"
 }
 
-export function projectHint(_project: ProjectRecord) {
-  return "Local project"
-}
-
 export function prepareProjects(
   projects: ProjectRecord[],
   hidden: ReadonlySet<string>,
@@ -65,7 +61,8 @@ export function filterProjects(projects: PreparedProject[], query: string) {
   const term = query.trim().toLocaleLowerCase()
   if (!term) return projects
   return projects.filter((project) => {
-    return project.id.toLocaleLowerCase().includes(term) || projectName(project).toLocaleLowerCase().includes(term)
+    const searchable = [project.id, projectName(project), project.worktree].join("\n").toLocaleLowerCase()
+    return searchable.includes(term)
   })
 }
 

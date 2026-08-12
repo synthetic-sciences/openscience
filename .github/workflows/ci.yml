@@ -54,6 +54,40 @@ jobs:
         shell: bash
         working-directory: backend/cli
 
+  # Windows Job Objects are the runtime ownership boundary for terminals,
+  # commands, compute, kernels, LSPs, and local MCP servers. The source-level
+  # structure contracts run everywhere; this leg exercises the real Kernel32
+  # handles, descendant inheritance, named-job reopen, and verified teardown.
+  windows-runtime:
+    name: Windows runtime ownership
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - run: bun test test/process/windows-job.test.ts test/global/data-root.test.ts
+        shell: bash
+        working-directory: backend/cli
+
+  # macOS responsibility IDs are the kernel-backed ownership boundary for
+  # processes that setsid/double-fork away from their original PID and process
+  # group. Exercise the native private ABI and both durable ledgers on an
+  # actual macOS runner; source-contract tests on Linux cannot prove teardown.
+  macos-runtime:
+    name: macOS runtime ownership
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - run: >-
+          bun test
+          test/process/darwin-responsibility.test.ts
+          test/credentials/process-ledger.test.ts
+          test/project/authority-process-ledger.test.ts
+        shell: bash
+        working-directory: backend/cli
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -66,10 +100,10 @@ jobs:
           git config --global user.email "ci@openscience.dev"
           git config --global user.name "OpenScience CI"
           git config --global init.defaultBranch main
-      - name: Install and verify Linux sandbox
+      - name: Install and verify Linux sandbox and SSH fixture
         run: |
           sudo apt-get update
-          sudo apt-get install --yes bubblewrap
+          sudo apt-get install --yes bubblewrap openssh-server
           # Ubuntu 24.04's host-wide AppArmor policy blocks unprivileged user
           # namespaces on the hosted runner before bubblewrap can apply our
           # stricter per-process profile. This runner is disposable; enable
@@ -78,6 +112,11 @@ jobs:
             echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
           fi
           bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
+          sudo install -d -m 0755 /run/sshd
+          test -x /usr/sbin/sshd
+      - name: Exercise real OpenSSH dispatch and recovery
+        run: bun test test/compute/ssh-integration.test.ts
+        working-directory: backend/cli
       - name: Build embedded web assets for server tests
         run: |
           bun run --cwd frontend/workspace build

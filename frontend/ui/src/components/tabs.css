@@ -278,7 +278,7 @@
 
     [data-slot="tabs-trigger-wrapper"] {
       height: 26px;
-      border-radius: 6px;
+      border-radius: var(--radius-xs);
       color: var(--text-weak);
 
       &:not(:has([data-selected])):hover:not(:disabled) {
@@ -314,7 +314,7 @@
       width: 100%;
       height: 32px;
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-xs);
       background-color: transparent;
 
       [data-slot="tabs-trigger"] {
@@ -353,7 +353,7 @@
       [data-slot="tabs-trigger-wrapper"] {
         height: 32px;
         border: none;
-        border-radius: 8px;
+        border-radius: var(--radius-xs);
 
         [data-slot="tabs-trigger"] {
           border: none;

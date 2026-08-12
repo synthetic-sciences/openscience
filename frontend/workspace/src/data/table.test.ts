@@ -94,4 +94,35 @@ describe("data table integration", () => {
     expect(view).toContain('data-action="table-plot"')
     expect(view).toContain('data-action="table-export"')
   })
+
+  test("keeps table controls and metadata readable and sentence-cased", () => {
+    const view = read("./DataTableView.tsx")
+    const css = read("./DataTableView.css")
+
+    expect(view).toContain('import "./DataTableView.css"')
+    expect(css).toContain("font-size: 12px")
+    expect(css).toContain("font-variant-numeric: tabular-nums")
+    expect(view).toMatch(/>\s*Schema\s*</)
+    expect(view).toMatch(/>\s*Distribution\s*</)
+    expect(view).toMatch(/>\s*Export filtered\s*</)
+    expect(view).toMatch(/>\s*Previous\s*</)
+    expect(view).toMatch(/>\s*Next\s*</)
+    expect(view).toMatch(/>\s*Close\s*</)
+    expect(css).toContain("font-weight: var(--font-weight-medium)")
+  })
+
+  test("adapts to the inspector and keeps row and column context while scrolling", () => {
+    const view = read("./DataTableView.tsx")
+    const css = read("./DataTableView.css")
+
+    expect(css).toContain("container: data-table / inline-size")
+    expect(css).toContain("@container data-table (max-width: 720px)")
+    expect(css).toMatch(/\.data-table-scroll\s*\{[^}]*overflow: auto/s)
+    expect(css).toMatch(/\.data-table-scroll thead th\s*\{[^}]*position: sticky/s)
+    expect(css).toMatch(/\.data-table-index-head,[\s\S]*\.data-table-index\s*\{[^}]*left: 0/s)
+    expect(view).toContain("aria-sort={sortState(index())}")
+    expect(view).toContain("data-table-column-type")
+    expect(css).toContain("min-height: 32px")
+    expect(css).toMatch(/@media \(pointer: coarse\)[\s\S]*min-height: 44px/)
+  })
 })

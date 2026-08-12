@@ -2,6 +2,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "../global"
 import { JsonStore } from "../util/jsonstore"
+import { CredentialLifecycle } from "../credentials/lifecycle"
 
 export namespace McpAuth {
   export const Tokens = z.object({
@@ -72,32 +73,51 @@ export namespace McpAuth {
   export async function set(mcpName: string, entry: Entry, serverUrl?: string): Promise<void> {
     // Always update serverUrl if provided
     if (serverUrl) entry.serverUrl = serverUrl
-    await JsonStore.update(filepath, (data) => ({ ...data, [mcpName]: entry }))
+    await CredentialLifecycle.mutate(
+      `mcp-auth.set:${mcpName}`,
+      () => JsonStore.update(filepath, (data) => ({ ...data, [mcpName]: entry })),
+      { reconcileLocal: false },
+    )
   }
 
   export async function remove(mcpName: string): Promise<void> {
-    await JsonStore.update(filepath, (data) => {
-      delete data[mcpName]
-    })
+    await CredentialLifecycle.mutate(
+      `mcp-auth.remove:${mcpName}`,
+      () =>
+        JsonStore.update(filepath, (data) => {
+          delete data[mcpName]
+        }),
+      { reconcileLocal: false },
+    )
   }
 
   export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {
-    await update(
-      mcpName,
-      (entry) => {
-        entry.tokens = tokens
-      },
-      serverUrl,
+    await CredentialLifecycle.mutate(
+      `mcp-auth.tokens:${mcpName}`,
+      () =>
+        update(
+          mcpName,
+          (entry) => {
+            entry.tokens = tokens
+          },
+          serverUrl,
+        ),
+      { reconcileLocal: false },
     )
   }
 
   export async function updateClientInfo(mcpName: string, clientInfo: ClientInfo, serverUrl?: string): Promise<void> {
-    await update(
-      mcpName,
-      (entry) => {
-        entry.clientInfo = clientInfo
-      },
-      serverUrl,
+    await CredentialLifecycle.mutate(
+      `mcp-auth.client:${mcpName}`,
+      () =>
+        update(
+          mcpName,
+          (entry) => {
+            entry.clientInfo = clientInfo
+          },
+          serverUrl,
+        ),
+      { reconcileLocal: false },
     )
   }
 

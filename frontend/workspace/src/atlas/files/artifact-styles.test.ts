@@ -26,6 +26,14 @@ describe("artifact grid styles", () => {
       "--color-text-weak",
       "--syntax-critical",
       "--font-code",
+      "--font-weight-emphasis",
+      "--font-weight-medium",
+      "--letter-spacing-normal",
+      "--atlas-radius-xs",
+      "--atlas-radius-sm",
+      "--atlas-radius-md",
+      "--atlas-shadow-xs",
+      "--atlas-shadow-float",
     ])
     const unknown = [...new Set(used)].filter((name) => !defined.has(name))
 
@@ -47,13 +55,63 @@ describe("artifact grid styles", () => {
     expect(css()).toContain(".artifact-menu button.artifact-menu__danger")
   })
 
-  test("gives the grid the same gutter as the rest of the pane", () => {
-    const gutter = /\.files-search-row\s*\{[^}]*padding: 0 12px/s.test(css())
-    expect(gutter).toBe(true)
-    expect(css()).toMatch(/\.artifact-surface\s*\{[^}]*padding: 0 12px/s)
+  test("keeps the browser continuous while sharing the content gutter", () => {
+    const styles = css()
+
+    expect(styles).toMatch(/\.files-browser\s*\{[^}]*margin: 0;[^}]*border: 0;[^}]*border-radius: 0/s)
+    expect(styles).toMatch(/\.files-browser__header\s*\{[^}]*padding: 8px 12px 6px;[^}]*border: 0/s)
+    expect(styles).toMatch(/\.artifact-surface\s*\{[^}]*padding: 4px 12px 12px/s)
+    expect(styles).toMatch(/\.remote-view\s*\{[^}]*margin: 0;[^}]*border: 0;[^}]*border-radius: 0/s)
+  })
+
+  test("keeps source and search in one compact resize-safe toolbar", () => {
+    const styles = css()
+
+    expect(styles).toMatch(/\.files-browser__toolbar\s*\{[^}]*display: flex;[^}]*min-width: 0/s)
+    expect(styles).toMatch(/\.files-browser__toolbar \.files-source\s*\{[^}]*max-width: min\(48cqi, 210px\)/s)
+    expect(styles).toMatch(/\.files-search\s*\{[^}]*flex: 1 1 160px;[^}]*min-height: 32px/s)
+    expect(styles).toMatch(
+      /\.artifact-grid\s*\{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(min\(136px, 100%\), 1fr\)\)/s,
+    )
+    expect(styles).toMatch(
+      /\.artifact-card\[data-layout="grid"\] \.artifact-card__name\s*\{[^}]*overflow-wrap: anywhere;[^}]*-webkit-line-clamp: 3/s,
+    )
+  })
+
+  test("uses spacing and hover states instead of nested file borders", () => {
+    const styles = css()
+
+    expect(styles).toMatch(/\.files-source__button\s*\{[^}]*border: 0;/s)
+    expect(styles).toMatch(/\.files-search\s*\{[^}]*border: 0;/s)
+    expect(styles).toMatch(/\.files-row\s*\{[^}]*border: 0;/s)
+    expect(styles).toMatch(/\.artifact-card\[data-layout="grid"\]\s*\{[^}]*border: 0;/s)
+    expect(styles).toMatch(/\.artifact-card\[data-layout="grid"\] \.artifact-thumb\s*\{[^}]*border: 0;/s)
+  })
+
+  test("uses the shared radius ladder and no clipped decorative gradients", () => {
+    const styles = css()
+    const rawPixelRadii = [...styles.matchAll(/border-radius:\s*(\d+(?:\.\d+)?)px/g)].map((match) => match[1]!)
+
+    expect(styles).toContain("border-radius: var(--atlas-radius-md)")
+    expect(styles).toContain("border-radius: var(--atlas-radius-sm)")
+    expect(styles).toContain("border-radius: var(--atlas-radius-xs)")
+    expect(styles).toMatch(/\.files-menu__badge\s*\{[^}]*border-radius: 999px/s)
+    expect(styles).toMatch(/::-webkit-scrollbar-thumb\s*\{[^}]*border-radius: 999px/s)
+    expect(rawPixelRadii).toEqual(["999", "999"])
+    expect(styles).not.toContain("linear-gradient")
+    expect(styles).not.toContain("mask-image")
   })
 
   test("reveals the card's actions on focus, not only on hover", () => {
     expect(css()).toContain(".artifact-card__actions:focus-visible")
+  })
+
+  test("uses calm desktop motion and full coarse-pointer targets", () => {
+    const styles = css()
+
+    expect(styles).toContain("background-color 140ms ease")
+    expect(styles.match(/@media \(pointer: coarse\)/g)).toHaveLength(1)
+    expect(styles).toMatch(/@media \(pointer: coarse\)[\s\S]*min-height: 44px/)
+    expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*transition: none/)
   })
 })

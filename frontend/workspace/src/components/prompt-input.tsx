@@ -51,13 +51,19 @@ import { Binary } from "@synsci/util/binary"
 import { showToast } from "@synsci/ui/toast"
 import { uiStore } from "@/atlas/store/ui"
 import { projectHref, projectPathname } from "@/utils/project-route"
-import { canonicalKey, displayProviderForModel, modelSummary } from "@/context/model-catalog"
-import { RECOMMENDED_MODELS } from "@/context/models"
+import { displayProviderForModel, modelSummary } from "@/context/model-catalog"
 import { DialogSelectModel } from "./dialog-select-model"
 import { ModelSettingsPopover } from "./model-settings-popover"
 import { DialogSettings } from "./dialog-settings"
 import "./prompt-input.css"
-import { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_BYTES, attachmentMime, attachmentSize } from "./prompt-attachment"
+import {
+  ATTACHMENT_ACCEPT,
+  MAX_ATTACHMENT_BYTES,
+  attachmentFormat,
+  attachmentMime,
+  attachmentSize,
+} from "./prompt-attachment"
+import { curateQuickModels } from "./model-quick"
 import { settingsApi } from "./settings/api"
 import {
   delegatedSpecialist,
@@ -86,34 +92,6 @@ interface PromptInputProps {
 type ComputePreference = {
   providers: Array<{ id: string; connected: boolean; enabled: boolean }>
 }
-
-const EXAMPLES = [
-  "prompt.example.1",
-  "prompt.example.2",
-  "prompt.example.3",
-  "prompt.example.4",
-  "prompt.example.5",
-  "prompt.example.6",
-  "prompt.example.7",
-  "prompt.example.8",
-  "prompt.example.9",
-  "prompt.example.10",
-  "prompt.example.11",
-  "prompt.example.12",
-  "prompt.example.13",
-  "prompt.example.14",
-  "prompt.example.15",
-  "prompt.example.16",
-  "prompt.example.17",
-  "prompt.example.18",
-  "prompt.example.19",
-  "prompt.example.20",
-  "prompt.example.21",
-  "prompt.example.22",
-  "prompt.example.23",
-  "prompt.example.24",
-  "prompt.example.25",
-] as const
 
 interface SlashCommand {
   id: string
@@ -179,25 +157,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const setModal = (value: { connected: boolean; enabled: boolean }) => setCap("modal", value)
 
   const reviewModels = createMemo(() => {
-    const recommendations = RECOMMENDED_MODELS.map((item) => {
-      const key = canonicalKey(item.providerID, item.modelID)
-      return local.model.list().find((model) => canonicalKey(model.provider.id, model.id) === key)
-    }).filter((model): model is NonNullable<typeof model> => Boolean(model))
-    const options = [
-      ...local.model.pinned(),
-      ...recommendations,
-      local.model.current(),
-      ...local.model.recent(),
-    ].filter((model): model is NonNullable<typeof model> => Boolean(model))
-    const seen = new Set<string>()
-    return options
-      .filter((model) => {
-        const key = canonicalKey(model.provider.id, model.id)
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-      .slice(0, 3)
+    const pinned = local.model.pinned().filter((model): model is NonNullable<typeof model> => Boolean(model))
+    const recent = local.model.recent().filter((model): model is NonNullable<typeof model> => Boolean(model))
+    const available = local.model
+      .list()
+      .filter(
+        (model) =>
+          local.model.pin.has({ providerID: model.provider.id, modelID: model.id }) ||
+          local.model.visible({ providerID: model.provider.id, modelID: model.id }),
+      )
+    return curateQuickModels({ pinned, current: local.model.current(), recent, available, limit: 3 })
   })
 
   const reviewerLabel = createMemo(() => {
@@ -476,7 +445,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     popover: "at" | "slash" | null
     historyIndex: number
     savedPrompt: Prompt | null
-    placeholder: number
     dragging: boolean
     mode: "normal" | "shell"
     applyingHistory: boolean
@@ -484,10 +452,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     popover: null,
     historyIndex: -1,
     savedPrompt: null,
-    placeholder: Math.floor(Math.random() * EXAMPLES.length),
     dragging: false,
     mode: "normal",
     applyingHistory: false,
+  })
+
+  const placeholder = createMemo(() => {
+    if (store.mode === "shell") return language.t("prompt.placeholder.shell")
+    if (commentCount() > 1) return language.t("prompt.placeholder.summarizeComments")
+    if (commentCount() === 1) return language.t("prompt.placeholder.summarizeComment")
+    return language.t("prompt.placeholder.normal")
   })
 
   const MAX_HISTORY = 100
@@ -553,15 +527,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const isFocused = createFocusSignal(() => editorRef)
 
-  createEffect(() => {
-    params.id
-    if (params.id) return
-    const interval = setInterval(() => {
-      setStore("placeholder", (prev) => (prev + 1) % EXAMPLES.length)
-    }, 6500)
-    onCleanup(() => clearInterval(interval))
-  })
-
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
@@ -570,7 +535,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!mime) {
       showToast({
         variant: "error",
-        title: "file not attached",
+        title: "File not attached",
         description: `${file.name} is not a supported image, PDF, text, code, or scientific data file.`,
       })
       return
@@ -578,7 +543,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (file.size > MAX_ATTACHMENT_BYTES) {
       showToast({
         variant: "error",
-        title: "file not attached",
+        title: "File not attached",
         description: `${file.name} is ${attachmentSize(file.size)}; attachments are limited to ${attachmentSize(MAX_ATTACHMENT_BYTES)}.`,
       })
       return
@@ -594,7 +559,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       (error: unknown) => {
         showToast({
           variant: "error",
-          title: "file not attached",
+          title: "File not attached",
           description: error instanceof Error ? error.message : String(error),
         })
         return undefined
@@ -2079,15 +2044,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }}
       >
         <Show when={store.dragging}>
-          <div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-raised-stronger-non-alpha/90 pointer-events-none">
-            <div class="flex flex-col items-center gap-2 text-text-weak">
-              <Icon name="photo" class="size-8" />
-              <span class="text-14-regular">{language.t("prompt.dropzone.label")}</span>
+          <div class="workspace-composer__dropzone absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+            <div class="workspace-composer__dropzone-copy">
+              <Icon name="paperclip" class="size-6" />
+              <strong>{language.t("prompt.dropzone.label")}</strong>
+              <span>{language.t("prompt.dropzone.hint")}</span>
             </div>
           </div>
         </Show>
         <Show when={prompt.context.items().length > 0}>
-          <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
+          <div class="workspace-composer__context flex flex-nowrap items-start gap-2 overflow-x-auto no-scrollbar">
             <For each={prompt.context.items()}>
               {(item) => {
                 const active = () => {
@@ -2109,19 +2075,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <div
                       classList={{
-                        "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
+                        "workspace-composer__context-item group shrink-0 flex flex-col max-w-[220px]": true,
                         "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID && !active(),
-                        "cursor-pointer bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover":
-                          active(),
-                        "bg-background-stronger": !active(),
+                        "cursor-pointer bg-surface-interactive-hover hover:bg-surface-interactive-hover": active(),
                       }}
                       onClick={() => {
                         openComment(item)
                       }}
                     >
-                      <div class="flex items-center gap-1.5">
+                      <div class="workspace-composer__context-heading flex items-center gap-1.5">
                         <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                        <div class="flex items-center text-11-regular min-w-0">
+                        <div class="flex items-center min-w-0">
                           <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
                           <Show when={item.selection}>
                             {(sel) => (
@@ -2137,7 +2101,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           type="button"
                           icon="close-small"
                           variant="ghost"
-                          class="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-all"
+                          class="workspace-composer__context-remove ml-auto"
                           onClick={(e) => {
                             e.stopPropagation()
                             if (item.commentID) comments.remove(item.path, item.commentID)
@@ -2147,9 +2111,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         />
                       </div>
                       <Show when={item.comment}>
-                        {(comment) => (
-                          <div class="text-12-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>
-                        )}
+                        {(comment) => <div class="workspace-composer__context-comment truncate">{comment()}</div>}
                       </Show>
                     </div>
                   </Tooltip>
@@ -2162,31 +2124,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="workspace-composer__attachments" aria-label="Attached files">
             <For each={imageAttachments()}>
               {(attachment) => (
-                <div class="workspace-composer__attachment" data-image={attachment.mime.startsWith("image/")}>
-                  <Show
-                    when={attachment.mime.startsWith("image/")}
-                    fallback={
-                      <div class="workspace-composer__attachment-icon" aria-hidden="true">
-                        <Icon name="folder" class="size-4" />
-                      </div>
-                    }
+                <div
+                  class="workspace-composer__attachment"
+                  data-image={attachment.mime.startsWith("image/")}
+                  data-attachment-status="attached"
+                >
+                  <a
+                    href={attachment.dataUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    class="workspace-composer__attachment-open"
+                    aria-label={`${attachment.mime.startsWith("image/") ? "Preview" : "Open"} ${attachment.filename}`}
+                    onClick={(event) => {
+                      if (!attachment.mime.startsWith("image/")) return
+                      event.preventDefault()
+                      dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
+                    }}
                   >
-                    <img
-                      src={attachment.dataUrl}
-                      alt={attachment.filename}
-                      class="workspace-composer__attachment-preview"
-                      onClick={() =>
-                        dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
+                    <Show
+                      when={attachment.mime.startsWith("image/")}
+                      fallback={
+                        <div class="workspace-composer__attachment-icon" aria-hidden="true">
+                          <FileIcon node={{ path: attachment.filename, type: "file" }} class="size-4" />
+                        </div>
                       }
-                    />
-                  </Show>
-                  <div class="workspace-composer__attachment-copy">
-                    <strong title={attachment.filename}>{attachment.filename}</strong>
-                    <span>
-                      {attachment.mime.split("/").pop()?.replace("x-", "") ?? "file"}
-                      <Show when={attachment.size !== undefined}> · {attachmentSize(attachment.size!)}</Show>
+                    >
+                      <img src={attachment.dataUrl} alt="" class="workspace-composer__attachment-preview" />
+                    </Show>
+                    <span class="workspace-composer__attachment-copy">
+                      <strong title={attachment.filename}>{attachment.filename}</strong>
+                      <span>
+                        Attached · {attachmentFormat({ name: attachment.filename, type: attachment.mime })}
+                        <Show when={attachment.size !== undefined}> · {attachmentSize(attachment.size!)}</Show>
+                      </span>
                     </span>
-                  </div>
+                  </a>
                   <button
                     type="button"
                     onClick={() => removeImageAttachment(attachment.id)}
@@ -2200,7 +2172,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </For>
           </div>
         </Show>
-        <div class="relative max-h-[240px] overflow-y-auto" ref={(el) => (scrollRef = el)}>
+        <div class="workspace-composer__editor" data-composer-mode={store.mode} ref={(el) => (scrollRef = el)}>
           <div
             data-component="prompt-input"
             ref={(el) => {
@@ -2209,15 +2181,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
             role="textbox"
             aria-multiline="true"
-            aria-label={
-              store.mode === "shell"
-                ? language.t("prompt.placeholder.shell")
-                : commentCount() > 1
-                  ? language.t("prompt.placeholder.summarizeComments")
-                  : commentCount() === 1
-                    ? language.t("prompt.placeholder.summarizeComment")
-                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
-            }
+            aria-label={placeholder()}
+            dir="auto"
             contenteditable="true"
             onInput={handleInput}
             onPaste={handlePaste}
@@ -2226,34 +2191,33 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
-              "w-full p-3 pb-2.5 pr-14 text-[15px] leading-[1.45] text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
-              "font-mono!": store.mode === "shell",
             }}
           />
           <Show when={!prompt.dirty()}>
-            <div class="workspace-composer__placeholder absolute top-0 inset-x-0 text-[15px] leading-[1.45] text-text-weak pointer-events-none whitespace-nowrap truncate">
-              {store.mode === "shell"
-                ? language.t("prompt.placeholder.shell")
-                : commentCount() > 1
-                  ? language.t("prompt.placeholder.summarizeComments")
-                  : commentCount() === 1
-                    ? language.t("prompt.placeholder.summarizeComment")
-                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
+            <div class="workspace-composer__placeholder" aria-hidden="true" dir="auto">
+              {placeholder()}
             </div>
           </Show>
         </div>
         <div class="workspace-composer__footer">
-          <div data-slot="prompt-controls" class="workspace-composer__controls flex items-center justify-start gap-2">
+          <div
+            data-slot="prompt-controls"
+            class="workspace-composer__controls flex items-center justify-start gap-2"
+            role="group"
+            aria-label="Composer tools"
+          >
             <input
               ref={fileInputRef}
               type="file"
               accept={ATTACHMENT_ACCEPT}
+              multiple
               class="hidden"
               onChange={(e) => {
-                const file = e.currentTarget.files?.[0]
-                if (file) void addAttachment(file)
+                const selected = Array.from(e.currentTarget.files ?? [])
+                for (const file of selected) void addAttachment(file)
                 e.currentTarget.value = ""
               }}
             />
@@ -2270,11 +2234,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Button
                     type="button"
                     variant="ghost"
-                    class="workspace-composer__attach size-9 shrink-0"
+                    class="workspace-composer__attach shrink-0"
                     onClick={attach}
                     aria-label={language.t("prompt.action.attachFile")}
                   >
-                    <Icon name="plus" class="size-5" />
+                    <Icon name="paperclip" class="size-4" />
                   </Button>
                 </Tooltip>
                 <details
@@ -2300,7 +2264,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     aria-expanded={modeOpen()}
                     title="Research capabilities"
                   >
-                    <Icon name="sliders" />
+                    <Icon name="flask" class="size-4" />
+                    <span class="workspace-composer__overflow-label">Research tools</span>
                   </summary>
                   <div role="menu" aria-label="Research capabilities">
                     <Switch>
@@ -2313,7 +2278,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             disabled={capabilityBusy()}
                             onClick={toggleDelegation}
                           >
-                            <span>Delegation</span>
+                            <span class="workspace-composer__capability-copy">
+                              <span>Delegation</span>
+                              <small>Assign focused work to a best-fit specialist.</small>
+                            </span>
                             <span
                               aria-hidden="true"
                               class="workspace-composer__capability-switch"
@@ -2329,7 +2297,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             disabled={capabilityBusy()}
                             onClick={toggleReview}
                           >
-                            <span>Auto-review</span>
+                            <span class="workspace-composer__capability-copy">
+                              <span>Auto-review</span>
+                              <small>Check completed work before it is returned.</small>
+                            </span>
                             <span
                               aria-hidden="true"
                               class="workspace-composer__capability-switch"
@@ -2339,17 +2310,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             </span>
                           </button>
                           <button type="button" role="menuitem" onClick={() => setCapabilityView("reviewer")}>
-                            <span>Reviewer model</span>
+                            <span class="workspace-composer__capability-copy">
+                              <span>Reviewer model</span>
+                              <small>Choose which model performs the review pass.</small>
+                            </span>
                             <span class="workspace-composer__capability-value">
-                              {reviewerLabel()} <span class="workspace-composer__capability-chevron">›</span>
+                              {reviewerLabel()}
+                              <span class="workspace-composer__capability-chevron">
+                                <Icon name="chevron-right" size="small" />
+                              </span>
                             </span>
                           </button>
                           <div role="separator" class="workspace-composer__capability-divider" />
                           <button type="button" role="menuitem" onClick={() => setCapabilityView("specialists")}>
-                            <span>Specialist</span>
+                            <span class="workspace-composer__capability-copy">
+                              <span>Specialist</span>
+                              <small>Set the default research domain.</small>
+                            </span>
                             <span class="workspace-composer__capability-value">
                               {specialist() ? specialistLabel(specialist()!) : "Research"}
-                              <span class="workspace-composer__capability-chevron">›</span>
+                              <span class="workspace-composer__capability-chevron">
+                                <Icon name="chevron-right" size="small" />
+                              </span>
                             </span>
                           </button>
                           <button
@@ -2364,7 +2346,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             <span>Compute</span>
                             <span class="workspace-composer__capability-value">
                               {modal().enabled ? "Modal" : "Local"}
-                              <span class="workspace-composer__capability-chevron">›</span>
+                              <span class="workspace-composer__capability-chevron">
+                                <Icon name="chevron-right" size="small" />
+                              </span>
                             </span>
                           </button>
                         </div>
@@ -2377,7 +2361,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             class="workspace-composer__specialist-back"
                             onClick={() => setCapabilityView("main")}
                           >
-                            <span aria-hidden="true">‹</span>
+                            <Icon name="chevron-left" size="small" />
                             <strong>Specialist</strong>
                           </button>
                           <div role="separator" class="workspace-composer__capability-divider" />
@@ -2429,7 +2413,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             class="workspace-composer__specialist-back"
                             onClick={() => setCapabilityView("main")}
                           >
-                            <span aria-hidden="true">‹</span>
+                            <Icon name="chevron-left" size="small" />
                             <strong>Reviewer model</strong>
                           </button>
                           <div role="separator" class="workspace-composer__capability-divider" />
@@ -2492,7 +2476,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               <strong>More models</strong>
                               <small>Browse the full model catalog.</small>
                             </span>
-                            <span class="workspace-composer__capability-chevron">›</span>
+                            <span class="workspace-composer__capability-chevron">
+                              <Icon name="chevron-right" size="small" />
+                            </span>
                           </button>
                         </div>
                       </Match>
@@ -2531,7 +2517,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="workspace-composer__actions flex items-center gap-3">
+          <div class="workspace-composer__actions flex items-center gap-3" role="group" aria-label="Model and send">
             <ModelSettingsPopover />
             <Tooltip
               placement="top"
@@ -2558,7 +2544,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 disabled={!prompt.dirty() && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
-                class="workspace-composer__send size-10 rounded-full"
+                class="workspace-composer__send rounded-full"
+                data-composer-action={working() ? "stop" : prompt.dirty() ? "send" : "idle"}
                 aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
               />
             </Tooltip>

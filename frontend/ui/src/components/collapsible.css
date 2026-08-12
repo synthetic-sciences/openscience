@@ -48,7 +48,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 6px;
+      border-radius: var(--radius-xs);
       color: var(--icon-weak);
     }
   }

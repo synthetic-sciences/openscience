@@ -8,8 +8,6 @@ import { Persist, persisted } from "@/utils/persist"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
-const PALETTE_ID = "command.palette"
-const DEFAULT_PALETTE_KEYBIND = "mod+shift+p"
 const SUGGESTED_PREFIX = "suggested."
 
 function actionId(id: string) {
@@ -234,12 +232,6 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const suspended = () => store.suspendCount > 0
 
-    const palette = createMemo(() => {
-      const config = settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
-      const keybinds = parseKeybind(config)
-      return new Set(keybinds.map((kb) => signature(kb.key, kb.ctrl, kb.meta, kb.shift, kb.alt)))
-    })
-
     const keymap = createMemo(() => {
       const map = new Map<string, CommandOption>()
       for (const option of options()) {
@@ -267,21 +259,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       }
     }
 
-    const showPalette = () => {
-      run("file.open", "palette")
-    }
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended() || dialog.active) return
 
       const sig = signatureFromEvent(event)
-
-      if (palette().has(sig)) {
-        event.preventDefault()
-        showPalette()
-        return
-      }
-
       const option = keymap().get(sig)
       if (!option) return
       event.preventDefault()
@@ -308,10 +289,6 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         run(id, source)
       },
       keybind(id: string) {
-        if (id === PALETTE_ID) {
-          return formatKeybind(settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND)
-        }
-
         const base = actionId(id)
         const option = options().find((x) => actionId(x.id) === base)
         if (option?.keybind) return formatKeybind(option.keybind)
@@ -321,7 +298,6 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         if (!config) return ""
         return formatKeybind(config)
       },
-      show: showPalette,
       keybinds(enabled: boolean) {
         setStore("suspendCount", (count) => count + (enabled ? -1 : 1))
       },

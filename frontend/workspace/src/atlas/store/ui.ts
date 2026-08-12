@@ -148,8 +148,6 @@ function restoreFile(value: unknown) {
   return file
 }
 
-const MAX_FILE_TABS = 8
-
 function fileKey(file: ContextFile) {
   return `${file.directory}\n${file.path}`
 }
@@ -216,7 +214,6 @@ function restoreState(value: unknown): ContextState {
     .map(restoreFile)
     .filter((item): item is ContextFile => item !== undefined)
     .filter((item, index, all) => all.findIndex((other) => fileKey(other) === fileKey(item)) === index)
-    .slice(0, MAX_FILE_TABS)
   // The active file is always one of the tabs — sessions persisted before
   // tabs existed carry only `file`.
   if (file && !files.some((item) => fileKey(item) === fileKey(file))) files.unshift(file)
@@ -403,10 +400,10 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
       update(select(state, tabs, id))
       return
     }
-    if (state.open && state.activeWorkTab === id) {
-      closeContext()
-      return
-    }
+    // Context actions select; they do not also act as an implicit close.
+    // Closing is owned by the inspector header, where dirty file drafts can
+    // be confirmed before the mounted editors are released.
+    if (state.open && state.activeWorkTab === id) return
     update(select(state, tabs, id))
   }
   const openFile = (directory: string, path: string) => {
@@ -414,17 +411,10 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
     const file = resolveContextFile(directory, path)
     const existing = state.files ?? []
     const known = existing.some((item) => fileKey(item) === fileKey(file))
-    const expanded = known ? existing : [...existing, file]
-    // A full strip evicts the oldest tab that is not the active file.
-    const evict =
-      !known && expanded.length > MAX_FILE_TABS
-        ? expanded.find((item) => !(state.file && fileKey(item) === fileKey(state.file)))
-        : undefined
-    const files = evict ? expanded.filter((item) => fileKey(item) !== fileKey(evict)) : expanded
-    const withoutEvicted = evict
-      ? (state.workTabs ?? []).filter((item) => item.kind !== "file" || fileKey(item.file) !== fileKey(evict))
-      : (state.workTabs ?? [])
-    const tabs = ensure(ensure(withoutEvicted, viewTab("files")), fileTab(file))
+    const files = known ? existing : [...existing, file]
+    // Never evict an open editor implicitly. Its draft lives in the mounted
+    // FileView, so the user closes tabs explicitly after saving or confirming.
+    const tabs = ensure(ensure(state.workTabs ?? [], viewTab("files")), fileTab(file))
     update(select(state, tabs, fileTab(file).id, files))
   }
   const closeFile = (path?: string) => {

@@ -224,7 +224,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
                     style={{
                       "font-family": FONT_SANS,
                       "font-size": "13px",
-                      "font-weight": 500,
+                      "font-weight": "var(--font-weight-medium)",
                       color: "var(--color-text)",
                     }}
                   >

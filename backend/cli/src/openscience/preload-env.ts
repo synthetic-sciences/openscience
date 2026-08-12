@@ -18,8 +18,7 @@
 import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
-import { isSyncedEnvAllowed } from "./synced-env-policy"
-import { loadProjectDotenv } from "./dotenv"
+import { scrubAmbientProjectDotenv } from "./dotenv"
 
 function syncedEnvPath(): string {
   const config = process.env.OPENSCIENCE_CONFIG_DIR?.trim()
@@ -28,17 +27,18 @@ function syncedEnvPath(): string {
   return path.join(xdg, "openscience", "synced-env.json")
 }
 
-// The shipped binary disables Bun's ambient .env auto-load (autoloadDotenv:false)
-// so it never ingests a stray .env; load the user's own project .env explicitly
-// instead. FIRST, so a shell export still wins over it AND a .env key wins over
-// the managed synced value replayed below (BYOK beats the managed wallet).
-;(function loadDotenv() {
-  try {
-    loadProjectDotenv(process.cwd(), process.env)
-  } catch {
-    // never let a malformed .env break boot
-  }
-})()
+// The shipped binary disables Bun's ambient .env auto-load
+// (`autoloadDotenv:false`). Do not replay a repository .env here: this module
+// runs before canonical project identity/trust exists, and even an apparently
+// ordinary provider key or GIT_ASKPASS-style variable changes host authority.
+// Trusted workloads may load their own dotenv inside the confined process;
+// OpenScience credentials belong in the shell or the global Keys settings.
+scrubAmbientProjectDotenv(process.cwd(), process.env)
+
+// Dynamic on purpose: endpoints.ts snapshots the managed base URL at module
+// evaluation. It must not evaluate until the ambient repository dotenv has
+// been removed above.
+const { isSyncedEnvAllowed } = await import("./synced-env-policy")
 
 // IIFE so the side effect runs the moment this module is imported.
 ;(function loadSyncedEnv() {

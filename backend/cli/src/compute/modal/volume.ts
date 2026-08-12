@@ -1,7 +1,15 @@
 import fs from "fs/promises"
 import path from "path"
+import { spawn, type ChildProcess } from "node:child_process"
 import driver from "./volume.py" with { type: "file" }
 import { Global } from "../../global"
+import { DataRootBarrier } from "../../global/data-root-barrier"
+import { CredentialLifecycle } from "../../credentials/lifecycle"
+import { CredentialProcessLedger } from "../../credentials/process-ledger"
+import { ProcessIdentity } from "../../process/process-identity"
+import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../../process/darwin-responsibility-launcher"
+import { WindowsJobLauncher } from "../../process/windows-job-launcher"
+import { Shell } from "../../shell/shell"
 
 export namespace ModalVolume {
   export const VERSION = "1.1.4"
@@ -52,7 +60,9 @@ export namespace ModalVolume {
 
   const LIST_TIMEOUT = 60_000
   const DOWNLOAD_TIMEOUT = 10 * 60_000
-  const GRACE = 200
+  const PROBE_TIMEOUT = 15_000
+  const MAX_STDOUT = 8 * 1024 * 1024
+  const MAX_STDERR = 1024 * 1024
   const text = new TextDecoder()
   const clean = (value: string) => value.replaceAll("\\", "/").replace(/^\/+/, "")
   const safe = (value: string) => {
@@ -93,21 +103,18 @@ export namespace ModalVolume {
     const file = await driverPath()
     const python = context.python ?? Bun.which("python3") ?? Bun.which("python")
     if (python) {
-      const probe = Bun.spawn(
+      const probe = await execute(
         [
           python,
           "-I",
           "-c",
           `import modal; assert modal.__version__ == '${VERSION}'; assert hasattr(modal.Volume, 'read_file')`,
         ],
-        {
-          stdin: "ignore",
-          stdout: "ignore",
-          stderr: "ignore",
-          env: environment(context.env ?? process.env),
-        },
+        environment({ ...process.env, ...context.env }),
+        PROBE_TIMEOUT,
+        "SDK probe",
       )
-      if ((await probe.exited) === 0) return [python, "-I", file]
+      if (probe.code === 0) return [python, "-I", file]
     }
     const uv = context.uv ?? Bun.which("uv")
     if (uv) {
@@ -116,64 +123,208 @@ export namespace ModalVolume {
     throw new Error("Modal Volume access requires uv or a Python installation that can import the Modal SDK")
   }
 
-  function environment(source: Record<string, string | undefined>) {
-    const env = { ...source }
-    for (const name of ["PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONINSPECT", "PYTHONUSERBASE"]) {
-      delete env[name]
+  const RUNTIME_ENV = new Set([
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "LANG",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "XDG_CACHE_HOME",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "USERPROFILE",
+  ])
+
+  /** Minimal runtime environment for the trusted bridge. Provider/cloud keys,
+   * OpenScience control-plane state, dynamic-loader injection, and Python
+   * startup injection are deliberately absent. */
+  export function environment(source: Record<string, string | undefined> = process.env): Record<string, string> {
+    const env: Record<string, string> = {}
+    for (const [name, value] of Object.entries(source)) {
+      if (!value) continue
+      const key = process.platform === "win32" ? name.toUpperCase() : name
+      if (RUNTIME_ENV.has(key) || key.startsWith("LC_")) env[name] = value
     }
-    env.PYTHONNOUSERSITE = "1"
-    return env
+    return {
+      ...env,
+      PYTHONNOUSERSITE: "1",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+      GIT_TERMINAL_PROMPT: "0",
+    }
   }
 
-  function kill(pid: number) {
-    if (process.platform === "win32") {
-      Bun.spawn(["taskkill", "/pid", String(pid), "/f", "/t"], {
-        stdin: "ignore",
-        stdout: "ignore",
-        stderr: "ignore",
+  function output(stream: NodeJS.ReadableStream, limit: number, label: string): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = []
+      let size = 0
+      let settled = false
+      const fail = (error: unknown) => {
+        if (settled) return
+        settled = true
+        reject(error)
+      }
+      stream.on("data", (value: Buffer | string) => {
+        if (settled) return
+        const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value)
+        size += chunk.length
+        if (size > limit) {
+          fail(new Error(`Modal Volume ${label} exceeded ${limit} bytes`))
+          return
+        }
+        chunks.push(chunk)
       })
-      return
+      stream.once("error", fail)
+      stream.once("end", () => {
+        if (settled) return
+        settled = true
+        resolve(Buffer.concat(chunks, size))
+      })
+    })
+  }
+
+  async function cleanupGate(release?: string) {
+    if (!release) return
+    await Promise.all([
+      fs.rm(release, { force: true }).catch(() => undefined),
+      fs.rm(`${release}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, { force: true }).catch(() => undefined),
+    ])
+  }
+
+  async function stop(id: string, child: ChildProcess, detached: boolean, identity?: string) {
+    const failures: unknown[] = []
+    await CredentialProcessLedger.revoke({ id, kind: "modal-volume" }).catch((error) => failures.push(error))
+    const stillOwned = child.pid && identity ? await CredentialProcessLedger.owns(child.pid, identity) : true
+    if (stillOwned && child.exitCode === null && child.signalCode === null) {
+      await Shell.killTree(child, {
+        detached,
+        exited: () => child.exitCode !== null || child.signalCode !== null,
+      }).catch((error) => failures.push(error))
     }
-    try {
-      process.kill(-pid, "SIGTERM")
-    } catch {
-      return
+    if (failures.length) throw new AggregateError(failures, "Modal Volume bridge could not be stopped")
+  }
+
+  async function complete(id: string) {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (await CredentialProcessLedger.complete(id)) return
+      await Bun.sleep(20)
     }
-    setTimeout(() => {
+    await CredentialProcessLedger.revoke({ id, kind: "modal-volume" })
+  }
+
+  async function execute(argv: string[], env: Record<string, string>, timeout: number, action: string, stdin?: Buffer) {
+    await using operation = await DataRootBarrier.enter(Global.Path.data)
+    const launched = await CredentialLifecycle.admit(async () => {
+      const linuxOwner =
+        process.platform === "linux"
+          ? await ProcessIdentity.capture(process.pid).then((identity) =>
+              identity ? { pid: process.pid, identity } : undefined,
+            )
+          : undefined
+      if (process.platform === "linux" && !linuxOwner) {
+        throw new Error("Could not capture the Linux server identity for Modal Volume launch")
+      }
+      const wrapped = WindowsJobLauncher.wrap({
+        file: argv[0]!,
+        args: argv.slice(1),
+        linuxOwner,
+      })
+      const detached = process.platform !== "win32"
+      const child = spawn(wrapped.file, wrapped.args, {
+        env,
+        detached,
+        windowsHide: true,
+        stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"],
+      })
+      const completion = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+        child.once("error", reject)
+        child.once("close", (code, signal) => resolve({ code, signal }))
+      })
+      const stdout = output(child.stdout!, MAX_STDOUT, `${action} stdout`)
+      const stderr = output(child.stderr!, MAX_STDERR, `${action} stderr`)
+      // Registration can fail before the main result race is installed. Keep
+      // these promises observed during that window without changing their
+      // eventual rejected state for the caller.
+      void completion.catch(() => undefined)
+      void stdout.catch(() => undefined)
+      void stderr.catch(() => undefined)
+      const id = `modal-volume-${crypto.randomUUID()}`
+      let identity: string | undefined
       try {
-        process.kill(-pid, "SIGKILL")
-      } catch {}
-    }, GRACE)
+        if (!child.pid) throw new Error("Modal Volume bridge started without a process id")
+        identity = await CredentialProcessLedger.identity(child.pid)
+        if (!identity) throw new Error(`Could not establish a safe identity for Modal Volume ${action}`)
+        const registered = await CredentialProcessLedger.register({
+          id,
+          kind: "modal-volume",
+          pid: child.pid,
+          detached,
+          identity,
+          windowsRelease: wrapped.release,
+        })
+        if (!registered) throw new Error(`Modal Volume ${action} exited before durable ownership was established`)
+        if (process.platform === "linux" && wrapped.release) {
+          await WindowsJobLauncher.release(wrapped.release, child.pid)
+        }
+        if (stdin) child.stdin!.end(stdin)
+        return { child, completion, stdout, stderr, id, detached, identity, release: wrapped.release }
+      } catch (error) {
+        await stop(id, child, detached, identity).catch(() => undefined)
+        await cleanupGate(wrapped.release)
+        throw error
+      }
+    })
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const expired = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Modal Volume ${action} timed out after ${timeout}ms`)), timeout)
+    })
+    const result = Promise.all([launched.stdout, launched.stderr, launched.completion] as const)
+    let normal = false
+    try {
+      const [stdout, stderr, status] = await Promise.race([result, expired])
+      normal = true
+      return { stdout, stderr, code: status.code, signal: status.signal }
+    } catch (error) {
+      result.catch(() => undefined)
+      await stop(launched.id, launched.child, launched.detached, launched.identity)
+      throw error
+    } finally {
+      if (timer) clearTimeout(timer)
+      if (normal) await complete(launched.id)
+      await cleanupGate(launched.release)
+    }
   }
 
   async function invoke(request: Request, context: Context, timeout: number) {
-    const env = environment(context.env ?? process.env)
+    const env = environment({ ...process.env, ...context.env })
     env.MODAL_TOKEN_ID = context.tokenId
     env.MODAL_TOKEN_SECRET = context.tokenSecret
-    const proc = Bun.spawn(await command(context), {
-      stdin: Buffer.from(JSON.stringify(request)),
-      stdout: "pipe",
-      stderr: "pipe",
+    const { stdout, stderr, code, signal } = await execute(
+      await command(context),
       env,
-      detached: true,
-    })
-    const drained = Promise.all([
-      new Response(proc.stdout).arrayBuffer(),
-      new Response(proc.stderr).arrayBuffer(),
-      proc.exited,
-    ])
-    const timer = Bun.sleep(timeout).then(() => undefined)
-    const result = await Promise.race([drained, timer])
-    if (!result) {
-      kill(proc.pid)
-      drained.catch(() => undefined)
-      throw new Error(`Modal Volume ${request.action} timed out after ${timeout}ms`)
-    }
-    const [stdout, stderr, code] = result
-    if (proc.signalCode) throw new Error(`Modal Volume ${request.action} was killed by ${proc.signalCode}`)
+      timeout,
+      request.action,
+      Buffer.from(JSON.stringify(request)),
+    )
+    if (signal) throw new Error(`Modal Volume ${request.action} was killed by ${signal}`)
     if (code !== 0) {
       const detail = stderr.byteLength ? stderr : stdout
-      throw new Error(`Modal Volume ${request.action} failed (exit ${code}): ${text.decode(detail).trim()}`)
+      const message = [context.tokenId, context.tokenSecret].reduce(
+        (value, secret) => (secret ? value.replaceAll(secret, "[REDACTED]") : value),
+        text.decode(detail).trim(),
+      )
+      throw new Error(`Modal Volume ${request.action} failed (exit ${code}): ${message}`)
     }
     try {
       return JSON.parse(text.decode(stdout)) as unknown
@@ -305,3 +456,9 @@ export namespace ModalVolume {
     )
   }
 }
+
+// A credential rotation in this or another server must revoke any helper that
+// inherited the prior Modal token pair before the new revision is acknowledged.
+CredentialLifecycle.onRevoke(async () => {
+  await CredentialProcessLedger.revoke("modal-volume")
+})

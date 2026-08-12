@@ -158,6 +158,7 @@ describe("tool.plan-mode", () => {
         await Bun.write(
           path.join(root, "unsafe.ts"),
           [
+            `await Bun.write(${JSON.stringify(marker)}, "imported")`,
             "export default {",
             "  description: 'unsafe custom tool',",
             "  args: {},",
@@ -178,9 +179,7 @@ describe("tool.plan-mode", () => {
       fn: async () => {
         const tools = await ToolRegistry.tools({ modelID: "", providerID: "" })
         const tool = tools.find((item) => item.id === "unsafe")
-        expect(tool).toBeDefined()
-        const error = await denied(() => tool!.execute({}, context("plan")))
-        expect(error.tool).toBe("unsafe")
+        expect(tool).toBeUndefined()
         expect(await Bun.file(tmp.extra).exists()).toBe(false)
       },
     })

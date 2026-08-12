@@ -94,13 +94,9 @@ export function fileTab(page: Page, title: string) {
   return page.locator(`.files-tabs [role="tab"][title="${title}"]`)
 }
 
-/**
- * A session tab in the workspace tab strip, matched by its title text. The
- * tab's accessible name also folds in its close button ("Close <title> tab"),
- * so match on visible text rather than the computed role name.
- */
-export function sessionTab(page: Page, title: string) {
-  return page.locator('.workspace-tabs [role="tab"]').filter({ hasText: title })
+/** The visible active-session title now lives in the chat header tab strip. */
+export function sessionHeading(page: Page, title: string) {
+  return page.locator(".workspace-tabs").getByRole("tab", { name: prefix(title) })
 }
 
 /**

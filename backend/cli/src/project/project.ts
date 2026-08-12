@@ -18,6 +18,8 @@ import { NamedError } from "@synsci/util/error"
 import { Lock } from "@/util/lock"
 import type { SessionFilesystem } from "@/session/filesystem"
 import type { SessionWorkspace } from "@/session/workspace"
+import { FileLease } from "@/util/file-lease"
+import { Global } from "@/global"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -300,56 +302,65 @@ export namespace Project {
       }
     })
 
-    // Identity selection and migration must be serialized for a canonical root.
-    // Otherwise two simultaneous first opens can create competing opaque ids,
-    // or one opener can observe a legacy record while another is removing it.
-    using _ = await Lock.write(`project:${worktree}`)
-
-    const found = await records(worktree)
-    const opaque = found.find((record) => record.id.startsWith("prj_"))
-    const source = opaque ?? found[0]
-    const id = opaque?.id ?? createID()
-    const current = found
-      .filter((record) => record.id !== source?.id)
-      .reduce(
-        (result, record) => merge(result, record.project),
-        source
-          ? {
-              ...source.project,
-              id,
-              sandboxes: [...(source.project.sandboxes ?? [])],
-            }
-          : {
-              id,
-              worktree,
-              vcs: vcs as Info["vcs"],
-              sandboxes: [],
-              time: {
-                created: Date.now(),
-                updated: Date.now(),
-              },
-            },
+    const result = await iife(async () => {
+      // Always take the process-local lock before the durable lease. The pair
+      // covers only identity selection and legacy adoption: two server
+      // processes cannot mint competing ids and then delete each other's live
+      // session records, while unrelated icon discovery runs after release.
+      using local = await Lock.write(`project:${worktree}`)
+      const digest = crypto.createHash("sha256").update(worktree).digest("hex")
+      await using durable = await FileLease.acquire(
+        path.join(Global.Path.data, "project-leases", `${digest}.lock`),
+        120_000,
       )
 
-    if (Flag.OPENSCIENCE_EXPERIMENTAL_ICON_DISCOVERY) discover(current)
+      const found = await records(worktree)
+      const opaque = found.find((record) => record.id.startsWith("prj_"))
+      const source = opaque ?? found[0]
+      const id = opaque?.id ?? createID()
+      const current = found
+        .filter((record) => record.id !== source?.id)
+        .reduce(
+          (result, record) => merge(result, record.project),
+          source
+            ? {
+                ...source.project,
+                id,
+                sandboxes: [...(source.project.sandboxes ?? [])],
+              }
+            : {
+                id,
+                worktree,
+                vcs: vcs as Info["vcs"],
+                sandboxes: [],
+                time: {
+                  created: Date.now(),
+                  updated: Date.now(),
+                },
+              },
+        )
 
-    const result: Info = {
-      ...current,
-      worktree,
-      vcs: vcs as Info["vcs"],
-      time: {
-        ...current.time,
-        updated: Date.now(),
-      },
-    }
-    if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
-    result.sandboxes = [
-      ...new Set(
-        result.sandboxes.filter((directory) => canonicalize(directory) !== result.worktree && existsSync(directory)),
-      ),
-    ]
-    await Storage.write<Info>(["project", id], result)
-    await adoptLegacy(id, worktree, found)
+      const result: Info = {
+        ...current,
+        worktree,
+        vcs: vcs as Info["vcs"],
+        time: {
+          ...current.time,
+          updated: Date.now(),
+        },
+      }
+      if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
+      result.sandboxes = [
+        ...new Set(
+          result.sandboxes.filter((directory) => canonicalize(directory) !== result.worktree && existsSync(directory)),
+        ),
+      ]
+      await Storage.write<Info>(["project", id], result)
+      await adoptLegacy(id, worktree, found)
+      return result
+    })
+
+    if (Flag.OPENSCIENCE_EXPERIMENTAL_ICON_DISCOVERY) discover(result)
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,

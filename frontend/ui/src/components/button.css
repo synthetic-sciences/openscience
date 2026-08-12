@@ -10,6 +10,16 @@
   cursor: default;
   outline: none;
   white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
 
   &[data-variant="primary"] {
     background-color: var(--button-primary-base);
@@ -93,8 +103,6 @@
     }
     &:active:not(:disabled) {
       background-color: var(--button-secondary-base);
-      scale: 0.99;
-      transition: all 150ms ease-out;
     }
     &:disabled {
       border-color: var(--border-disabled);
@@ -109,7 +117,7 @@
   }
 
   &[data-size="small"] {
-    height: 22px;
+    height: 32px;
     padding: 0 8px;
     &[data-icon] {
       padding: 0 12px 0 4px;
@@ -129,8 +137,8 @@
   }
 
   &[data-size="normal"] {
-    height: 24px;
-    line-height: 24px;
+    height: 32px;
+    line-height: 32px;
     padding: 0 6px;
     &[data-icon] {
       padding: 0 12px 0 4px;
@@ -148,7 +156,7 @@
   }
 
   &[data-size="large"] {
-    height: 32px;
+    height: 36px;
     padding: 6px 12px;
 
     &[data-icon] {
@@ -168,5 +176,11 @@
 
   &:focus {
     outline: none;
+  }
+}
+
+@media (pointer: coarse) {
+  [data-component="button"] {
+    min-height: 44px;
   }
 }

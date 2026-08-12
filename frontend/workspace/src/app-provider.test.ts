@@ -8,3 +8,9 @@ test("the launch screen stays in the global sync provider owner tree", () => {
   expect(source.indexOf("<GlobalSyncProvider>")).toBeLessThan(source.indexOf("<Router"))
   expect(source.indexOf("<Router")).toBeLessThan(source.indexOf("<Home />"))
 })
+
+test("unmatched routes resolve to a useful recovery surface", () => {
+  expect(source).toContain('path="*404" component={NotFound}')
+  expect(source).toContain('aria-labelledby="not-found-title"')
+  expect(source).toContain("Back to Projects")
+})

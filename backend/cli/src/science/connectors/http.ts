@@ -14,6 +14,7 @@
 
 import type { RateLimit } from "./types"
 import { Network } from "@/settings/network"
+import { AsyncLocalStorage } from "node:async_hooks"
 
 const USER_AGENT = "openscience-science/1.0 (+https://syntheticsciences.ai)"
 const DEFAULT_TIMEOUT = 30_000
@@ -37,6 +38,9 @@ export interface HttpOptions extends Omit<RequestInit, "signal"> {
    * Empty bodies are never cached regardless.
    */
   looksValid?: (body: string) => boolean
+  /** Deterministic resolver seam for connector unit tests. Production
+   * connectors omit this and use the operating-system DNS resolver. */
+  resolveAddresses?: Network.FetchPolicy["resolveAddresses"]
 }
 
 interface CacheEntry {
@@ -90,9 +94,39 @@ function combineSignals(a: AbortSignal, b?: AbortSignal): AbortSignal {
 // cap bounds in-flight requests to that host. Keyed by host so unrelated
 // sources are never over-serialized.
 
-const hostPace = new Map<string, Promise<void>>()
-const hostActive = new Map<string, number>()
-const hostWaiters = new Map<string, Array<() => void>>()
+interface ThrottleState {
+  pace: Map<string, Promise<void>>
+  active: Map<string, number>
+  waiters: Map<string, Array<() => void>>
+}
+
+function throttleState(): ThrottleState {
+  return testContext.getStore()?.throttle ?? productionThrottle
+}
+
+function newThrottleState(): ThrottleState {
+  return { pace: new Map(), active: new Map(), waiters: new Map() }
+}
+
+const productionThrottle = newThrottleState()
+
+/** Request-local transport seam for deterministic connector integration tests.
+ * AsyncLocalStorage keeps concurrent Bun test files from racing through the
+ * process-global fetch function; production requests never enter this scope. */
+export interface HttpTestPolicy {
+  resolveAddresses: NonNullable<Network.FetchPolicy["resolveAddresses"]>
+  transport: NonNullable<Network.FetchPolicy["transport"]>
+}
+
+interface HttpTestContext extends HttpTestPolicy {
+  throttle: ThrottleState
+}
+
+const testContext = new AsyncLocalStorage<HttpTestContext>()
+
+export function withHttpTestPolicy<T>(policy: HttpTestPolicy, action: () => T): T {
+  return testContext.run({ ...policy, throttle: newThrottleState() }, action)
+}
 
 function hostOf(url: string): string | undefined {
   try {
@@ -108,8 +142,9 @@ function hostOf(url: string): string | undefined {
  * `minIntervalMs` after the previous request began.
  */
 function pace(host: string, minIntervalMs: number): Promise<void> {
-  const ready = hostPace.get(host) ?? Promise.resolve()
-  hostPace.set(
+  const state = throttleState()
+  const ready = state.pace.get(host) ?? Promise.resolve()
+  state.pace.set(
     host,
     ready.then(() => sleep(minIntervalMs)),
   )
@@ -118,24 +153,26 @@ function pace(host: string, minIntervalMs: number): Promise<void> {
 
 /** Take an in-flight slot for this host, waiting if `maxConcurrent` is reached. */
 function acquire(host: string, maxConcurrent: number): Promise<void> {
-  const active = hostActive.get(host) ?? 0
+  const state = throttleState()
+  const active = state.active.get(host) ?? 0
   if (active < maxConcurrent) {
-    hostActive.set(host, active + 1)
+    state.active.set(host, active + 1)
     return Promise.resolve()
   }
   return new Promise<void>((resolve) => {
-    const queue = hostWaiters.get(host) ?? []
+    const queue = state.waiters.get(host) ?? []
     queue.push(resolve)
-    hostWaiters.set(host, queue)
+    state.waiters.set(host, queue)
   })
 }
 
 /** Release an in-flight slot, handing it straight to the next waiter if any. */
 function release(host: string): void {
-  const next = hostWaiters.get(host)?.shift()
+  const state = throttleState()
+  const next = state.waiters.get(host)?.shift()
   if (next) return next()
-  const active = hostActive.get(host) ?? 1
-  hostActive.set(host, Math.max(0, active - 1))
+  const active = state.active.get(host) ?? 1
+  state.active.set(host, Math.max(0, active - 1))
 }
 
 /** Apply the optional per-host throttle; returns a `release` to call when done. */
@@ -176,6 +213,7 @@ export async function request(url: string, opts: HttpOptions = {}) {
     Accept: "*/*",
     ...(opts.headers as Record<string, string> | undefined),
   }
+  const { resolveAddresses, ...fetchOptions } = opts
 
   const done = await throttle(url, opts.rateLimit)
   try {
@@ -185,7 +223,15 @@ export async function request(url: string, opts: HttpOptions = {}) {
       const timer = setTimeout(() => controller.abort(), timeout)
       const signal = combineSignals(controller.signal, opts.signal)
       try {
-        const res = await fetch(url, { ...opts, method, headers, signal })
+        const scopedPolicy = testContext.getStore()
+        const res = await Network.fetch(
+          url,
+          { ...fetchOptions, method, headers, signal },
+          {
+            resolveAddresses: resolveAddresses ?? scopedPolicy?.resolveAddresses,
+            transport: scopedPolicy?.transport,
+          },
+        )
         const body = await res.text()
         if (!res.ok && isRetryable(res.status) && attempt < retries) {
           const backoff = backoffMs(res, attempt)
@@ -290,7 +336,8 @@ export function clearCache(): void {
 
 /** Reset per-host rate-limit pacing + concurrency state (test/debug helper). */
 export function resetRateLimits(): void {
-  hostPace.clear()
-  hostActive.clear()
-  hostWaiters.clear()
+  const state = throttleState()
+  state.pace.clear()
+  state.active.clear()
+  state.waiters.clear()
 }

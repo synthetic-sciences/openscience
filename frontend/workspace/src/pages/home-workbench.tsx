@@ -1,22 +1,19 @@
-import { createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { DateTime } from "luxon"
 import { AppHeader } from "@/atlas/AppHeader"
 import {
-  IconArchive,
-  IconChevronRight,
-  IconFolder,
-  IconMoon,
+  IconFolderAdd,
   IconPin,
   IconPinFilled,
   IconPlus,
   IconSearch,
   IconSettings,
-  IconSun,
   IconTrash,
   IconX,
 } from "@/atlas/shared/Icon"
 import { Wordmark } from "@/atlas/Wordmark"
-import { projectHint, projectName, type LauncherState, type PreparedProject } from "./home-projects"
+import { projectName, type LauncherState, type PreparedProject } from "./home-projects"
+import { preloadSession } from "./session-loader"
 import "./home-workbench.css"
 
 export type HomeProject = PreparedProject & {
@@ -26,12 +23,11 @@ export type HomeProject = PreparedProject & {
 export function ProjectsWorkbench(props: {
   state: LauncherState
   projects: HomeProject[]
+  totalProjects: number
   query: string
-  home?: string
   refreshing?: boolean
   accessory?: JSX.Element
   notice?: JSX.Element
-  dark: boolean
   serverName: string
   serverStatus: "checking" | "healthy" | "error"
   onQuery: (query: string) => void
@@ -41,107 +37,37 @@ export function ProjectsWorkbench(props: {
   onCreate: () => void
   onImport: () => void
   onRetry: () => void
-  onTheme: () => void
   onSettings: () => void
   onServer: () => void
 }): JSX.Element {
-  const [searching, setSearching] = createSignal(false)
-  const searchOpen = () => searching() || props.query.length > 0
   const recent = () => props.state === "recent"
   let input: HTMLInputElement | undefined
-
-  const openSearch = () => {
-    setSearching(true)
-    queueMicrotask(() => input?.focus())
-  }
 
   const clearSearch = () => {
     props.onQuery("")
     input?.focus()
   }
 
-  const actions = () => (
-    <div class="science-home__state-actions">
-      <button class="science-home__button science-home__button--primary" type="button" onClick={props.onCreate}>
-        <IconPlus size={14} strokeWidth={1.5} />
-        Create project
-      </button>
-      <button class="science-home__button" type="button" onClick={props.onImport}>
-        <IconFolder size={14} strokeWidth={1.5} />
-        Import existing folder
-      </button>
-    </div>
-  )
+  const countLabel = () => {
+    const total = props.totalProjects
+    const noun = total === 1 ? "project" : "projects"
+    if (props.query.trim()) return `${props.projects.length} of ${total} ${noun}`
+    return `${total} ${noun}`
+  }
+
+  const editedLabel = (project: HomeProject) => {
+    const relative = DateTime.fromMillis(project.updatedAt).toRelative() ?? "recently"
+    return `Edited ${relative}`
+  }
 
   return (
     <div class="science-home__view">
       <AppHeader class="science-home__bar">
-        <Wordmark size="sm" textOnly />
+        <Wordmark size="sm" />
         <span class="science-home__spacer" />
 
         <div class="science-home__bar-actions">
-          <div class="science-home__search" data-open={searchOpen()}>
-            <IconSearch size={14} strokeWidth={1.5} />
-            <input
-              ref={input}
-              id="science-home-project-search"
-              type="search"
-              aria-label="Search projects"
-              value={props.query}
-              placeholder="Search projects"
-              onInput={(event) => props.onQuery(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape") return
-                props.onQuery("")
-                setSearching(false)
-                event.currentTarget.blur()
-              }}
-            />
-            <Show when={props.query}>
-              <button type="button" aria-label="Clear search" onClick={clearSearch}>
-                <IconX size={12} strokeWidth={1.6} />
-              </button>
-            </Show>
-          </div>
-
-          <button
-            class="science-home__icon science-home__search-toggle"
-            type="button"
-            aria-label="Search projects"
-            aria-controls="science-home-project-search"
-            aria-expanded={searchOpen()}
-            onClick={openSearch}
-          >
-            <IconSearch size={15} strokeWidth={1.5} />
-          </button>
           {props.accessory}
-          <button
-            class="science-home__icon science-home__new"
-            type="button"
-            aria-label="New project"
-            title="Create project"
-            onClick={props.onCreate}
-          >
-            <IconPlus size={16} strokeWidth={1.6} />
-            <span>New project</span>
-          </button>
-          <button
-            class="science-home__icon"
-            type="button"
-            aria-label="Import existing folder"
-            title="Import existing folder"
-            onClick={props.onImport}
-          >
-            <IconFolder size={15} strokeWidth={1.5} />
-          </button>
-          <button class="science-home__icon" type="button" aria-label="Toggle theme" onClick={props.onTheme}>
-            <Show when={props.dark} fallback={<IconMoon size={15} strokeWidth={1.5} />}>
-              <IconSun size={15} strokeWidth={1.5} />
-            </Show>
-          </button>
-          <button class="science-home__icon" type="button" aria-label="Settings" onClick={props.onSettings}>
-            <IconSettings size={15} strokeWidth={1.5} />
-          </button>
           <button
             class="science-home__server"
             type="button"
@@ -151,6 +77,10 @@ export function ProjectsWorkbench(props: {
           >
             <span class="science-home__server-dot" data-status={props.serverStatus} aria-hidden="true" />
             <span>{props.serverName}</span>
+          </button>
+          <span class="science-home__bar-divider" aria-hidden="true" />
+          <button class="science-home__icon" type="button" aria-label="Settings" onClick={props.onSettings}>
+            <IconSettings size={15} strokeWidth={1.5} />
           </button>
         </div>
       </AppHeader>
@@ -162,22 +92,66 @@ export function ProjectsWorkbench(props: {
           <header class="science-home__heading">
             <div class="science-home__heading-copy">
               <div class="science-home__title">
-                <IconArchive size={15} strokeWidth={1.45} />
                 <h1 id="science-home-projects-title">Projects</h1>
-                <Show when={recent()}>
-                  <span class="science-home__count" aria-label={`${props.projects.length} projects`}>
-                    {props.projects.length}
+                <Show when={recent() && props.refreshing}>
+                  <span class="science-home__refreshing" role="status">
+                    Syncing…
                   </span>
                 </Show>
               </div>
-              <p>Recent research, files, and sessions.</p>
+              <p>Research workspaces, sessions, and files in one place.</p>
             </div>
-            <Show when={recent() && props.refreshing}>
-              <span class="science-home__refreshing" role="status">
-                Refreshing…
-              </span>
-            </Show>
+            <div class="science-home__heading-actions">
+              <button
+                class="science-home__button"
+                type="button"
+                aria-label="Import existing folder"
+                onClick={props.onImport}
+              >
+                <IconFolderAdd size={15} strokeWidth={1.45} />
+                Import folder
+              </button>
+              <button
+                class="science-home__button science-home__button--primary"
+                type="button"
+                aria-label="New project"
+                onClick={props.onCreate}
+              >
+                <IconPlus size={15} strokeWidth={1.5} />
+                New project
+              </button>
+            </div>
           </header>
+
+          <Show when={recent()}>
+            <div class="science-home__toolbar" aria-label="Project controls">
+              <label class="science-home__search" for="science-home-project-search">
+                <IconSearch size={16} strokeWidth={1.45} />
+                <input
+                  ref={input}
+                  id="science-home-project-search"
+                  type="search"
+                  aria-label="Search projects"
+                  aria-controls="science-home-project-list"
+                  value={props.query}
+                  placeholder="Search projects by name, folder, or ID"
+                  onInput={(event) => props.onQuery(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape") return
+                    props.onQuery("")
+                  }}
+                />
+                <Show when={props.query}>
+                  <button type="button" aria-label="Clear search" onClick={clearSearch}>
+                    <IconX size={13} strokeWidth={1.55} />
+                  </button>
+                </Show>
+              </label>
+              <span class="science-home__results-summary sr-only" role="status" aria-live="polite">
+                {countLabel()}
+              </span>
+            </div>
+          </Show>
 
           <Switch>
             <Match when={props.state === "loading"}>
@@ -206,9 +180,8 @@ export function ProjectsWorkbench(props: {
               <section class="science-home__state science-home__state--empty">
                 <div>
                   <strong>No projects yet</strong>
-                  <span>Create a project to keep sessions, files, and evidence together.</span>
+                  <span>Start a new project or import a folder to bring your research together.</span>
                 </div>
-                {actions()}
               </section>
             </Match>
 
@@ -216,75 +189,78 @@ export function ProjectsWorkbench(props: {
               <Show
                 when={props.projects.length > 0}
                 fallback={
-                  <section class="science-home__state science-home__state--empty" aria-live="polite">
+                  <section
+                    id="science-home-project-list"
+                    class="science-home__state science-home__state--empty"
+                    aria-live="polite"
+                  >
                     <div>
                       <strong>No matching projects</strong>
-                      <span>Clear the search or create a new project.</span>
+                      <span>No projects match “{props.query.trim()}”. Try another search or clear this one.</span>
                     </div>
-                    <div class="science-home__state-actions">
-                      <button class="science-home__button" type="button" onClick={clearSearch}>
-                        Clear search
-                      </button>
-                      <button
-                        class="science-home__button science-home__button--primary"
-                        type="button"
-                        onClick={props.onCreate}
-                      >
-                        <IconPlus size={14} strokeWidth={1.5} />
-                        Create project
-                      </button>
-                    </div>
+                    <button class="science-home__button" type="button" onClick={clearSearch}>
+                      Clear search
+                    </button>
                   </section>
                 }
               >
-                <ul class="science-home__projects" aria-labelledby="science-home-projects-title">
+                <ul
+                  id="science-home-project-list"
+                  class="science-home__projects"
+                  aria-labelledby="science-home-projects-title"
+                >
                   <For each={props.projects}>
                     {(project) => (
                       <li class="science-home__project-row" data-pinned={project.pinned ? "true" : undefined}>
-                        <button
-                          class="science-home__project-action science-home__project-pin"
-                          type="button"
-                          aria-label={`${project.pinned ? "Unpin" : "Pin"} ${projectName(project)}`}
-                          aria-pressed={project.pinned}
-                          title={project.pinned ? "Unpin project" : "Pin project"}
-                          onClick={() => props.onPin(project)}
-                        >
-                          <Show when={project.pinned} fallback={<IconPin size={14} strokeWidth={1.45} />}>
-                            <IconPinFilled size={14} strokeWidth={1.45} />
-                          </Show>
-                        </button>
                         <button
                           class="science-home__project"
                           type="button"
                           data-project={project.id}
                           title={`Open ${projectName(project)}`}
+                          onPointerEnter={preloadSession}
+                          onFocus={preloadSession}
                           onClick={() => props.onOpen(project)}
                         >
                           <span class="science-home__project-copy">
                             <strong>{projectName(project)}</strong>
-                            <span>{project.pinned ? "Pinned" : projectHint(project)}</span>
-                          </span>
-                          <Show when={project.sessions !== undefined}>
-                            <span class="science-home__sessions">
-                              {project.sessions} {project.sessions === 1 ? "session" : "sessions"}
+                            <span class="science-home__project-meta">
+                              <Show when={project.sessions !== undefined}>
+                                <span class="science-home__sessions">
+                                  {project.sessions} {project.sessions === 1 ? "session" : "sessions"}
+                                </span>
+                                <span class="science-home__meta-separator" aria-hidden="true">
+                                  ·
+                                </span>
+                              </Show>
+                              <time datetime={DateTime.fromMillis(project.updatedAt).toISO() ?? undefined}>
+                                {editedLabel(project)}
+                              </time>
                             </span>
-                          </Show>
-                          <time datetime={DateTime.fromMillis(project.updatedAt).toISO() ?? undefined}>
-                            {DateTime.fromMillis(project.updatedAt).toRelative({ style: "short" }) ?? "Recently"}
-                          </time>
-                          <span class="science-home__arrow" aria-hidden="true">
-                            <IconChevronRight size={14} strokeWidth={1.45} />
                           </span>
                         </button>
-                        <button
-                          class="science-home__project-action science-home__project-remove"
-                          type="button"
-                          aria-label={`Remove ${projectName(project)} from home`}
-                          title="Remove project from home"
-                          onClick={() => props.onRemove(project)}
-                        >
-                          <IconTrash size={13} strokeWidth={1.4} />
-                        </button>
+                        <div class="science-home__project-actions">
+                          <button
+                            class="science-home__project-action science-home__project-pin"
+                            type="button"
+                            aria-label={`${project.pinned ? "Unpin" : "Pin"} ${projectName(project)}`}
+                            aria-pressed={project.pinned}
+                            title={project.pinned ? "Unpin project" : "Pin project"}
+                            onClick={() => props.onPin(project)}
+                          >
+                            <Show when={project.pinned} fallback={<IconPin size={15} strokeWidth={1.4} />}>
+                              <IconPinFilled size={15} strokeWidth={1.4} />
+                            </Show>
+                          </button>
+                          <button
+                            class="science-home__project-action science-home__project-remove"
+                            type="button"
+                            aria-label={`Remove ${projectName(project)} from home`}
+                            title="Remove project from home"
+                            onClick={() => props.onRemove(project)}
+                          >
+                            <IconTrash size={14} strokeWidth={1.4} />
+                          </button>
+                        </div>
                       </li>
                     )}
                   </For>

@@ -9,7 +9,7 @@
     padding: 8px 12px;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
-    font-weight: 600;
+    font-weight: var(--font-weight-medium);
     color: var(--text-base);
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border-weaker-base);
@@ -125,7 +125,7 @@
     color: var(--text-error);
 
     [data-slot="notebook-error-name"] {
-      font-weight: 600;
+      font-weight: var(--font-weight-medium);
       padding: 4px 0;
     }
 

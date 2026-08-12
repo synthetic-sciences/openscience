@@ -2,31 +2,29 @@
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(112px, 0.8fr);
-  gap: 0;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg);
+  gap: 4px;
+  margin: 12px 12px 0;
+  border-radius: var(--atlas-radius-sm);
+  background: color-mix(in srgb, var(--color-bg-subtle) 72%, var(--color-bg));
+  padding: 4px;
 }
 
 .host-strip__metric {
   display: flex;
   min-width: 0;
-  min-height: 74px;
+  min-height: 60px;
   box-sizing: border-box;
   justify-content: center;
   flex-direction: column;
-  gap: 7px;
-  padding: 11px 14px;
-  border-right: 1px solid var(--color-border);
-}
-
-.host-strip__metric:last-child {
-  border-right: 0;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--atlas-radius-xs);
 }
 
 .host-strip__label {
-  color: var(--color-text-faint);
-  font-size: 10px;
-  font-weight: 500;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
 }
 
 .host-strip__metric p {
@@ -37,14 +35,18 @@
   margin: 0;
   overflow: hidden;
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: 12px;
   white-space: nowrap;
+}
+
+.host-strip__metric--kernels {
+  align-items: flex-start;
 }
 
 .host-strip__metric strong {
   color: var(--color-text);
   font-size: 15px;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
@@ -57,17 +59,17 @@
 .host-strip__meter {
   display: block;
   width: 100%;
-  height: 3px;
+  height: 2px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--color-border);
+  background: var(--border-weak-base);
 }
 
 .host-strip__meter i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 72%, var(--color-bg));
   transition: width 180ms ease;
 }
 
@@ -77,26 +79,35 @@
 
 @container compute (max-width: 500px) {
   .host-strip {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.16fr) minmax(0, 1fr) auto;
   }
 
   .host-strip__metric {
-    min-height: 68px;
-    padding: 10px 12px;
-  }
-
-  .host-strip__metric:nth-child(2) {
-    border-right: 0;
+    min-height: 58px;
+    padding: 8px;
   }
 
   .host-strip__metric--kernels {
-    min-height: 42px;
-    grid-column: 1 / -1;
-    border-top: 1px solid var(--color-border);
-    border-right: 0;
+    min-width: 58px;
   }
 
   .host-strip__metric--kernels .host-strip__label {
+    overflow: hidden;
+    max-width: 58px;
+    text-overflow: ellipsis;
+  }
+}
+
+@container compute (max-width: 360px) {
+  .host-strip {
+    margin-inline: 8px;
+  }
+
+  .host-strip__metric {
+    padding-inline: 7px;
+  }
+
+  .host-strip__metric p > span {
     display: none;
   }
 }

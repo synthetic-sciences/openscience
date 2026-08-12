@@ -10,6 +10,8 @@ export interface NotificationSettings {
 }
 
 export interface SoundSettings {
+  enabled: boolean
+  volume: number
   agent: string
   permissions: string
   errors: string
@@ -60,12 +62,13 @@ const defaultSettings: Settings = {
     errors: false,
   },
   sounds: {
-    // Silent by default — UI sounds are opt-in. ("" → soundSrc() returns
-    // undefined → playSound() is a no-op.) The agent/error sound firing on
-    // click-triggered notifications was jarring; enable per-sound in Settings.
-    agent: "",
-    permissions: "",
-    errors: "",
+    // Audio feedback is opt-in. The choices are ready when it is enabled, but
+    // fresh installs remain silent and playback stays deliberately subtle.
+    enabled: false,
+    volume: 0.3,
+    agent: "yup-01",
+    permissions: "bip-bop-01",
+    errors: "alert-01",
   },
   ui: {
     showChangesView: false,
@@ -169,6 +172,25 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       sounds: {
+        enabled: createMemo(() => {
+          const stored = store.sounds?.enabled
+          if (stored !== undefined) return stored
+          // Preserve the intent of pre-toggle settings: a previously chosen
+          // sound means the user had explicitly enabled audio feedback.
+          return Boolean(store.sounds?.agent || store.sounds?.permissions || store.sounds?.errors)
+        }),
+        setEnabled(value: boolean) {
+          setStore("sounds", "enabled", value)
+          if (!value) return
+          if (!store.sounds.agent) setStore("sounds", "agent", defaultSettings.sounds.agent)
+          if (!store.sounds.permissions) setStore("sounds", "permissions", defaultSettings.sounds.permissions)
+          if (!store.sounds.errors) setStore("sounds", "errors", defaultSettings.sounds.errors)
+        },
+        volume: createMemo(() => store.sounds?.volume ?? defaultSettings.sounds.volume),
+        setVolume(value: number) {
+          const next = Number.isFinite(value) ? value : defaultSettings.sounds.volume
+          setStore("sounds", "volume", Math.min(1, Math.max(0, next)))
+        },
         agent: createMemo(() => store.sounds?.agent ?? defaultSettings.sounds.agent),
         setAgent(value: string) {
           setStore("sounds", "agent", value)

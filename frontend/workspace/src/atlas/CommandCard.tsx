@@ -1,4 +1,5 @@
 import { createSignal, onCleanup, type JSX } from "solid-js"
+import { IconTerminal } from "@/atlas/shared/Icon"
 import { kernelMemoryLabel, type CommandStatus } from "@/notebook/runtime"
 
 const memory = (value?: number) => {
@@ -28,28 +29,35 @@ export function CommandCard(props: { command: CommandStatus; stopping: boolean; 
     <article class="kernel-card command-card" data-command-id={props.command.id} data-state="running">
       <div class="kernel-card__main">
         <span class="kernel-card__language" aria-hidden="true">
-          sh
+          <IconTerminal size={14} strokeWidth={1.4} />
         </span>
         <div class="kernel-card__copy">
           <strong title={props.command.description}>{props.command.description}</strong>
           <span title={props.command.command}>
             <i data-tone="active" aria-hidden="true" />
-            bash · {props.command.command}
+            Shell · {props.command.command}
           </span>
         </div>
       </div>
 
-      <span class="kernel-card__uptime" aria-label={`Uptime ${uptime(props.command.started_at, now())}`}>
-        {uptime(props.command.started_at, now())}
-      </span>
-      <Metric label="rss" value={memory(props.command.resources?.memory_bytes)} />
-      <Metric label="cores" value={cores(props.command.resources?.cpu_percent)} />
+      <div class="kernel-card__metrics" aria-label="Command resource use">
+        <span
+          class="kernel-card__uptime kernel-card__metric"
+          aria-label={`Runtime ${uptime(props.command.started_at, now())}`}
+        >
+          <strong>{uptime(props.command.started_at, now())}</strong>
+          <small>Runtime</small>
+        </span>
+        <Metric label="Memory" value={memory(props.command.resources?.memory_bytes)} />
+        <Metric label="CPU cores" value={cores(props.command.resources?.cpu_percent)} />
+      </div>
       <button
         type="button"
         class="kernel-card__stop"
         aria-label={`Stop ${props.command.description}`}
         title="Stop this live shell command and its child processes."
         disabled={props.stopping}
+        aria-busy={props.stopping}
         onClick={props.onStop}
       >
         {props.stopping ? "Stopping…" : "Stop"}

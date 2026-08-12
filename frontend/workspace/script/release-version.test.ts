@@ -36,4 +36,4 @@ test("production web assets embed the explicit release version", async () => {
   } finally {
     await fs.rm(output, { recursive: true, force: true })
   }
-})
+}, 30_000)

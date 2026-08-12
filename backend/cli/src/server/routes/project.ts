@@ -68,7 +68,7 @@ export const ProjectRoutes = lazy(() =>
       describeRoute({
         summary: "Inspect project trust",
         description:
-          "Inspect whether project-local code may execute. Project code is enabled by default and remains disabled only after an explicit revocation.",
+          "Inspect whether project-local code may execute. New and relocated projects are untrusted until their canonical root is explicitly approved.",
         operationId: "project.trust.get",
         responses: {
           200: {

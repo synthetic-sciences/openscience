@@ -61,6 +61,15 @@ test("canonical runtime records agent kernel executions with outputs", async () 
                 status: "available",
                 value: {
                   language: "python",
+                  environment_name: { status: "available", value: "python" },
+                  interpreter: {
+                    status: "available",
+                    value: {
+                      name: "python",
+                      binary: expect.any(String),
+                      version: { status: "available", value: expect.stringMatching(/^Python /) },
+                    },
+                  },
                   incarnation: { status: "available", value: 1 },
                   process_id: { status: "available", value: expect.any(Number) },
                   process_started_at: { status: "available", value: expect.any(String) },
@@ -99,6 +108,12 @@ test("canonical runtime records agent kernel executions with outputs", async () 
             messageID: "msg_kernel_origin",
             callID: "call_kernel_origin",
             kernelName: "agent",
+            kernelEnvironment: "python",
+            interpreter: {
+              name: "python",
+              binary: expect.any(String),
+              version: expect.stringMatching(/^Python /),
+            },
             executionCount: 1,
             stdout: "",
             stderr: "",

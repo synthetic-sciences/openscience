@@ -40,7 +40,7 @@ describe("launch settings truth pass", () => {
     expect(ids.indexOf("skills")).toBe(ids.indexOf("models") + 1)
     expect(panel.title).toBe("Skills")
     expect(panel.section).toBe("capabilities")
-    expect(panel.icon).toBe("brain")
+    expect(panel.icon).toBe("flask")
     expect(source("Skills.tsx")).toContain("<SkillsPage embedded />")
   })
 
@@ -51,7 +51,7 @@ describe("launch settings truth pass", () => {
     expect(SETTINGS_PANELS.find((item) => item.id === "general")?.section).toBe("app")
   })
 
-  test("keeps local and SSH compute independent from deferred Atlas targets", () => {
+  test("keeps local Python, R, shell, Modal, and SSH compute operational", () => {
     const compute = source("Compute.tsx")
 
     expect(compute).not.toContain("Model endpoints")
@@ -59,12 +59,19 @@ describe("launch settings truth pass", () => {
     expect(compute).not.toContain("GPU providers")
     expect(compute).toContain("call<Info>()")
     expect(compute).toContain('call<Info>("/ssh"')
-    expect(compute).toContain('title="Local machine"')
-    expect(compute).toContain('title="Remote compute"')
-    expect(compute).toContain("Connect directly over SSH. Atlas is not required.")
+    expect(compute).toContain('title="Local runtimes"')
+    expect(compute).toContain('title="Python and R kernels"')
+    expect(compute).toContain('title="Shell and local jobs"')
+    expect(compute).toContain("Session-owned kernels preserve in-memory state")
+    expect(compute).toContain('title="Remote hosts"')
+    expect(compute).toContain("Ready to dispatch")
+    expect(compute).toContain("Pin a host key, then dispatch staged jobs")
+    expect(compute).not.toContain("not execution targets")
+    expect(compute).not.toContain("Remote job dispatch remains unavailable")
     expect(compute).toContain('title="Cloud credentials"')
     expect(compute).not.toContain('title="Atlas Compute"')
-    expect(compute).not.toContain("coming later")
+    expect(compute).not.toContain("Coming soon")
+    expect(compute).not.toContain("/atlas-compute")
   })
 
   test("prefers an active Modal CLI profile without exposing its credentials", () => {
@@ -94,19 +101,38 @@ describe("launch settings truth pass", () => {
     expect(compute).toContain('aria-live="polite"')
   })
 
-  test("keeps deferred cloud storage out of Storage", () => {
+  test("exposes verified live storage relocation without restart copy", () => {
     const storage = source("Storage.tsx")
 
     expect(storage).not.toContain("Cloud storage")
     expect(storage).not.toContain("manage cloud credentials")
     expect(storage).not.toContain("window.prompt")
-    expect(storage).toContain('aria-label="New data directory"')
-    expect(storage).toContain("Copy data")
-    expect(storage).toContain("Reset location")
+    expect(storage).not.toContain("Copy data")
+    expect(storage).not.toContain("restart")
+    expect(storage).toContain("Change location")
+    expect(storage).toContain("Move data")
+    expect(storage).toContain('method: "DELETE"')
+    expect(storage).toContain("switches every running server")
+  })
+
+  test("states the effective grant-only sandbox boundary", () => {
+    const sandbox = source("Sandbox.tsx")
+
+    expect(sandbox).toContain('readIsolation?: "grant_only" | "unavailable"')
+    expect(sandbox).toContain('networkIsolation?: "deny_all" | "unavailable"')
+    expect(sandbox).toContain('capability === "grant_only" || (capability === undefined && nativeBackendActive())')
+    expect(sandbox).toContain('capability === "deny_all" || (capability === undefined && nativeBackendActive())')
+    expect(sandbox).toContain("Reads and writes are limited to the workspace and approved paths")
+    expect(sandbox).toContain("This backend always denies network access")
+    expect(sandbox).toContain("including loopback, LAN, link-local, and metadata endpoints")
+    expect(sandbox).not.toContain("private-network addresses may still be reachable")
+    expect(sandbox).not.toContain("host_readable")
+    expect(sandbox).not.toContain("does not isolate host reads")
   })
 
   test("connectors persist enablement and inspect real server capabilities", () => {
     const connectors = source("Connectors.tsx")
+    const connectorForm = source("connector-form.ts")
 
     expect(connectors).toContain("sdk.client.mcp.inspect({ name })")
     expect(connectors).toContain('sdk.client.mcp.config.set({ name, config: next, scope: "global" })')
@@ -115,12 +141,12 @@ describe("launch settings truth pass", () => {
     expect(connectors).toContain("saved, but could not connect")
     expect(connectors).toContain("<ConnectorInspection detail={detail()} />")
     expect(connectors).toContain("Stored header values are masked")
-    expect(connectors).toContain("restoreRecord")
-    expect(connectors).toContain("Add remote server")
-    expect(connectors).toContain("Add local command")
+    expect(connectorForm).toContain("restoreRecord")
+    expect(connectors).toContain('label="Hosted server"')
+    expect(connectors).toContain('label="Local process"')
     expect(connectors).toContain('label="Add connector"')
-    expect(connectors).toContain('label: "Remote URL"')
-    expect(connectors).toContain('label: "Local command"')
+    expect(connectors).toContain('label: "Hosted server"')
+    expect(connectors).toContain('label: "Local process"')
     expect(connectors).toContain('"Save connector"')
     expect(connectors).toContain('label="Cancel"')
     expect(connectors).toContain("Refresh status")
@@ -149,6 +175,16 @@ describe("launch settings truth pass", () => {
     expect(credentials).not.toContain("CodexConnection")
     expect(credentials).not.toContain("sdk.client.auth.set")
     expect(credentials).not.toContain("Provider keys")
+  })
+
+  test("describes stored credentials without claiming an untested service connection", () => {
+    const services = source("CredentialServices.tsx")
+
+    expect(services).toContain("Encrypted on this machine")
+    expect(services).toContain("{count()} saved")
+    expect(services).toContain('<span class="settings-chip">Saved</span>')
+    expect(services).not.toContain("connected={service.connected}")
+    expect(services).not.toContain("Connected and ready")
   })
 
   test("presents the four built-in specialists with product-facing names", () => {

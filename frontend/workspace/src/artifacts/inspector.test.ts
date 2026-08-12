@@ -291,6 +291,15 @@ describe("artifact inspector presentation", () => {
     expect(component).toContain('"min-height": CONTROL_HEIGHT')
     expect(component).toContain('"border-radius": GROUP_RADIUS')
     expect(component).not.toMatch(/"font-size": "(?:8|9|10|11|12)px"/)
+    expect(component).not.toMatch(/"font-weight":\s*(?:[1-9]\d{2}|"[1-9]\d{2}")/)
+    for (const strong of component.matchAll(/<strong\b[\s\S]*?<\/strong>/g)) {
+      expect(strong[0]).toContain('"font-weight": "var(--font-weight-')
+    }
+    expect(component).toMatch(/>\s*Close\s*</)
+    expect(component).toContain("<IconFlask size={16} /> Ask")
+    expect(component).toContain("<IconCopy size={16} /> Path")
+    expect(component).toContain("<IconDownload size={16} /> Download")
+    expect(component).toContain('title="Refresh file details"')
   })
 
   test("renders producing runs and messages instead of only empty states", () => {

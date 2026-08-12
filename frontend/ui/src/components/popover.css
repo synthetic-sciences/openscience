@@ -20,11 +20,12 @@
   }
 
   &[data-closed] {
-    animation: popover-close 0.15s ease-out;
+    pointer-events: none;
+    animation: popover-close var(--duration-fast) ease-in forwards;
   }
 
   &[data-expanded] {
-    animation: popover-open 0.15s ease-out;
+    animation: popover-open var(--duration-slow) var(--ease-out-expo);
   }
 
   [data-slot="popover-header"] {

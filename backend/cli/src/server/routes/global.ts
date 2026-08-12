@@ -91,9 +91,14 @@ export const GlobalRoutes = lazy(() =>
       ),
       async (c) => {
         const input = c.req.valid("json")
-        const project = await ManagedProject.create(input.name, (created) =>
-          SessionFilesystem.seedProject({ projectID: created.id, grants: input.sources }),
-        )
+        const project = await ManagedProject.create(input.name, async (created) => {
+          await Instance.provide({
+            directory: created.worktree,
+            fn: async () => {
+              await SessionFilesystem.seedProject({ projectID: created.id, grants: input.sources })
+            },
+          })
+        })
         return c.json(project, 201)
       },
     )

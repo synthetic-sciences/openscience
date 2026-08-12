@@ -15,10 +15,149 @@ import { OpenScience } from "../../openscience"
 import { Log } from "../../util/log"
 import { runLocalModelSetup } from "./local"
 import type { Hooks } from "@synsci/plugin"
+import z from "zod"
+import { WellKnownAuthCommand } from "../../auth/wellknown-command"
 
 const log = Log.create({ service: "cmd.logout" })
 
 type PluginAuth = NonNullable<Hooks["auth"]>
+
+const WellKnownAuth = z
+  .object({
+    auth: z
+      .object({
+        command: z
+          .array(
+            z
+              .string()
+              .min(1)
+              .max(4096)
+              .refine((value) => !value.includes("\0"), "argv cannot contain NUL"),
+          )
+          .min(1)
+          .max(32),
+        env: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "invalid environment variable name"),
+      })
+      .strict(),
+  })
+  .passthrough()
+
+export type WellKnownAuth = z.infer<typeof WellKnownAuth>
+
+export class WellKnownAuthApprovalRequired extends Error {
+  constructor() {
+    super("A command from an unsigned well-known endpoint requires interactive approval")
+    this.name = "WellKnownAuthApprovalRequired"
+  }
+}
+
+export class WellKnownAuthDeclined extends Error {
+  constructor() {
+    super("The well-known auth command was not approved")
+    this.name = "WellKnownAuthDeclined"
+  }
+}
+
+const WELLKNOWN_MAX_BYTES = 64 * 1024
+const WELLKNOWN_FETCH_TIMEOUT_MS = 10_000
+
+async function boundedResponse(response: Response, maxBytes = WELLKNOWN_MAX_BYTES): Promise<string> {
+  const declared = Number(response.headers.get("content-length"))
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error(`Well-known auth document exceeds ${maxBytes} bytes`)
+  }
+  if (!response.body) return ""
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  while (true) {
+    const next = await reader.read()
+    if (next.done) break
+    size += next.value.byteLength
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined)
+      throw new Error(`Well-known auth document exceeds ${maxBytes} bytes`)
+    }
+    chunks.push(next.value)
+  }
+  const body = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(body)
+}
+
+/** Fetch and validate only data. This function never executes anything from
+ * the response; the separate approval boundary below is mandatory. */
+export async function fetchWellKnownAuth(
+  endpoint: string,
+  options: { fetcher?: typeof fetch; timeoutMs?: number; maxBytes?: number } = {},
+): Promise<WellKnownAuth> {
+  const base = new URL(endpoint)
+  if (base.protocol !== "http:" && base.protocol !== "https:") throw new Error("Endpoint must use HTTP or HTTPS")
+  if (base.username || base.password) throw new Error("Endpoint URLs must not contain credentials")
+  if (base.search || base.hash) throw new Error("Endpoint URLs must not contain a query or fragment")
+  const url = `${base.toString().replace(/\/+$/, "")}/.well-known/openscience`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? WELLKNOWN_FETCH_TIMEOUT_MS)
+  try {
+    const response = await (options.fetcher ?? fetch)(url, {
+      signal: controller.signal,
+      redirect: "error",
+      headers: { accept: "application/json" },
+    })
+    if (!response.ok) throw new Error(`Well-known auth endpoint returned HTTP ${response.status}`)
+    const text = await boundedResponse(response, options.maxBytes)
+    let value: unknown
+    try {
+      value = JSON.parse(text)
+    } catch {
+      throw new Error("Well-known auth endpoint returned invalid JSON")
+    }
+    return WellKnownAuth.parse(value)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Require a fresh local decision for the exact argv. Non-interactive callers
+ * fail closed: piping input or running in CI is never treated as consent. */
+export async function approveWellKnownAuthCommand(
+  command: string[],
+  options: {
+    interactive?: boolean
+    confirm?: (message: string) => Promise<unknown>
+  } = {},
+): Promise<void> {
+  if (!(options.interactive ?? !!process.stdin.isTTY)) throw new WellKnownAuthApprovalRequired()
+  const message = `Run this command from the unsigned endpoint?\n${JSON.stringify(command)}`
+  const approved = await (options.confirm
+    ? options.confirm(message)
+    : prompts.confirm({ message, initialValue: false }))
+  if (prompts.isCancel(approved) || approved !== true) throw new WellKnownAuthDeclined()
+}
+
+/** The only composition that turns a well-known auth document into a local
+ * command. Tests inject the runner to prove refusal happens before execution. */
+export async function runApprovedWellKnownAuth(
+  wellknown: WellKnownAuth,
+  options: {
+    interactive?: boolean
+    confirm?: (message: string) => Promise<unknown>
+    onApproved?: () => void | Promise<void>
+    run?: (input: WellKnownAuthCommand.RunOptions) => Promise<string>
+  } = {},
+): Promise<string> {
+  await approveWellKnownAuthCommand(wellknown.auth.command, options)
+  await options.onApproved?.()
+  return (options.run ?? WellKnownAuthCommand.run)({ argv: wellknown.auth.command })
+}
 
 /**
  * Handle plugin-based authentication flow.
@@ -303,23 +442,29 @@ export const AuthLoginCommand = cmd({
         }
 
         if (endpointUrl) {
-          const wellknown = await fetch(`${endpointUrl}/.well-known/openscience`).then((x) => x.json() as any)
-          prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-          const proc = Bun.spawn({
-            cmd: wellknown.auth.command,
-            stdout: "pipe",
-          })
-          const exit = await proc.exited
-          if (exit !== 0) {
-            prompts.log.error("Failed")
+          const wellknown = await fetchWellKnownAuth(endpointUrl)
+          let token: string
+          try {
+            token = await runApprovedWellKnownAuth(wellknown, {
+              onApproved: () => prompts.log.info(`Running approved command ${JSON.stringify(wellknown.auth.command)}`),
+            })
+          } catch (error) {
+            if (error instanceof WellKnownAuthApprovalRequired) {
+              prompts.log.error(
+                "The endpoint requested a local command, but this shell cannot show an approval prompt.",
+              )
+            } else if (error instanceof WellKnownAuthDeclined) {
+              prompts.log.info("Command not run")
+            } else {
+              throw error
+            }
             prompts.outro("Done")
             return
           }
-          const token = await new Response(proc.stdout).text()
           await Auth.set(endpointUrl, {
             type: "wellknown",
             key: wellknown.auth.env,
-            token: token.trim(),
+            token,
           })
           prompts.log.success("Logged into " + endpointUrl)
           prompts.outro("Done")

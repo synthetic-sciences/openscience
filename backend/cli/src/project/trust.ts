@@ -5,6 +5,7 @@ import { Bus } from "../bus"
 import { BusEvent } from "../bus/bus-event"
 import { Storage } from "../storage/storage"
 import { Project } from "./project"
+import { AuthoritySignal } from "./authority-signal"
 
 export namespace ProjectTrust {
   export const Capability = z.enum([
@@ -14,6 +15,7 @@ export namespace ProjectTrust {
     "project_mcp",
     "project_formatter",
     "project_lsp",
+    "publication_export",
     "provider_token_command",
     "provider_module",
     "startup_script",
@@ -23,6 +25,7 @@ export namespace ProjectTrust {
     "local_job",
     "remote_job",
     "package_install",
+    "repository",
   ])
   export type Capability = z.infer<typeof Capability>
 
@@ -121,7 +124,7 @@ export namespace ProjectTrust {
     return {
       code: "trust_project_required" as const,
       message:
-        "Review this project's local configuration and code before allowing plugins, skills, MCP servers, formatters, LSP commands, provider token commands or modules, dependency installation, or startup scripts.",
+        "Review this project's local configuration and code before allowing plugins, skills, MCP servers, formatters, LSP commands, publication exporters, provider token commands or modules, dependency installation, repository commands, or startup scripts.",
       method: "PUT" as const,
       path: `/project/${project.id}/trust`,
       body: {
@@ -140,15 +143,27 @@ export namespace ProjectTrust {
   export async function status(project: Project.Info): Promise<Status> {
     const canonical = root(project)
     const saved = await record(project)
-    if (saved?.root !== canonical || saved.state !== "revoked") {
+    if (!saved || saved.root !== canonical) {
       return {
         projectID: project.id,
         root: canonical,
         revision: saved?.revision ?? 1,
-        state: "trusted",
+        state: "untrusted",
         source: saved ? "persisted" : "default",
-        canExecuteProjectCode: true,
+        canExecuteProjectCode: false,
         time: saved?.time,
+        remediation: remediation(project),
+      }
+    }
+    if (saved.state === "trusted") {
+      return {
+        projectID: project.id,
+        root: canonical,
+        revision: saved.revision,
+        state: "trusted",
+        source: "persisted",
+        canExecuteProjectCode: true,
+        time: saved.time,
       }
     }
     return {
@@ -168,49 +183,79 @@ export namespace ProjectTrust {
   }
 
   export async function update(project: Project.Info, input: Update): Promise<Status> {
-    const canonical = root(project)
-    const previous = await record(project)
-    const now = Date.now()
-    const revision = (previous?.revision ?? 1) + 1
-    if (input.trusted) {
-      const received = Project.canonicalize(input.root)
-      if (received !== canonical) {
-        throw new RootMismatchError({
-          projectID: project.id,
-          expected: canonical,
-          received,
+    return AuthoritySignal.exclusive(async () => {
+      const canonical = root(project)
+      const now = Date.now()
+      if (input.trusted) {
+        const received = Project.canonicalize(input.root)
+        if (received !== canonical) {
+          throw new RootMismatchError({
+            projectID: project.id,
+            expected: canonical,
+            received,
+          })
+        }
+        let changed = false
+        await Storage.upsert<z.infer<typeof Record>>(key(project), (raw) => {
+          const previous = raw ? Record.parse(raw) : undefined
+          if (previous?.root === canonical && previous.state === "trusted") return previous
+          changed = true
+          return {
+            projectID: project.id,
+            root: canonical,
+            revision: (previous?.revision ?? 1) + 1,
+            state: "trusted",
+            time: {
+              updated: now,
+              trusted: now,
+              revoked: previous?.time.revoked,
+            },
+          }
         })
+        const result = await status(project)
+        if (!changed) {
+          const revision = await AuthoritySignal.pending({ kind: "trust", projectID: project.id, denied: false })
+          if (!revision) return result
+          await Bus.publish(Event.Changed, { status: result })
+          await AuthoritySignal.settle(revision)
+          return result
+        }
+        const signal = await AuthoritySignal.publish({ kind: "trust", projectID: project.id, denied: false })
+        await Bus.publish(Event.Changed, { status: result })
+        await AuthoritySignal.settle(signal.revision)
+        return result
       }
-      await Storage.write<z.infer<typeof Record>>(key(project), {
-        projectID: project.id,
-        root: canonical,
-        revision,
-        state: "trusted",
-        time: {
-          updated: now,
-          trusted: now,
-          revoked: previous?.time.revoked,
-        },
+
+      let changed = false
+      await Storage.upsert<z.infer<typeof Record>>(key(project), (raw) => {
+        const previous = raw ? Record.parse(raw) : undefined
+        if (previous?.root === canonical && previous.state === "revoked") return previous
+        changed = true
+        return {
+          projectID: project.id,
+          root: canonical,
+          revision: (previous?.revision ?? 1) + 1,
+          state: "revoked",
+          time: {
+            updated: now,
+            trusted: previous?.time.trusted,
+            revoked: now,
+          },
+        }
       })
       const result = await status(project)
+      if (!changed) {
+        const revision = await AuthoritySignal.pending({ kind: "trust", projectID: project.id, denied: true })
+        if (!revision) return result
+        await Bus.publish(Event.Changed, { status: result })
+        await AuthoritySignal.settle(revision)
+        return result
+      }
+      const signal = await AuthoritySignal.publish({ kind: "trust", projectID: project.id, denied: true })
       await Bus.publish(Event.Changed, { status: result })
+      await AuthoritySignal.settle(signal.revision)
       return result
-    }
-
-    await Storage.write<z.infer<typeof Record>>(key(project), {
-      projectID: project.id,
-      root: canonical,
-      revision,
-      state: "revoked",
-      time: {
-        updated: now,
-        trusted: previous?.time.trusted,
-        revoked: now,
-      },
     })
-    const result = await status(project)
-    await Bus.publish(Event.Changed, { status: result })
-    return result
   }
 
   export async function require(project: Project.Info, capability: Capability) {

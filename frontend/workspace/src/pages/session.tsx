@@ -1,5 +1,4 @@
 import {
-  createComputed,
   createEffect,
   createMemo,
   createSignal,
@@ -24,14 +23,13 @@ import { useServer } from "@/context/server"
 import { usePlatform } from "@/context/platform"
 import { useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
-import { NewSessionView } from "@/components/session/session-new-view"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
-import { AppHeader, HeaderIconButton } from "@/atlas/AppHeader"
-import { RightPane } from "@/atlas/RightPane"
-import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
+import { AppHeader } from "@/atlas/AppHeader"
+import { FONT_SANS } from "@/styles/tokens"
 import { uiStore } from "@/atlas/store/ui"
 import { useGlobalKeys } from "@/atlas/useGlobalKeys"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { DropdownMenu } from "@synsci/ui/dropdown-menu"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { confirmDialog } from "@/atlas/dialogs"
@@ -44,14 +42,16 @@ import { ToastContainer } from "@/atlas/Toast"
 import {
   IconChevronDown,
   IconChevronLeft,
+  IconChevronRight,
+  IconHome,
   IconPlus,
   IconSearch,
-  IconCheckCircle,
   IconSettings,
   IconMessageSquare,
   IconMoreH,
   IconPin,
   IconPinFilled,
+  IconShield,
   IconX,
 } from "@/atlas/shared/Icon"
 import { StatusDot } from "@/atlas/shared/StatusDot"
@@ -62,6 +62,12 @@ import { createSessionTabs } from "@/atlas/store/sessionTabs"
 import { terminalEndpointAvailable } from "@/atlas/terminal-endpoint"
 import { productPreferences, type ProductPreferences } from "@/context/product-preferences"
 import { SIDEBAR_WIDTH, clampSidebarWidth } from "@/pages/session-sidebar-size"
+import { URLS } from "@/config/urls"
+import { SessionTabStrip, sessionTabID, type SessionTabItem } from "@/pages/session-tabs"
+import { sessionUnavailable } from "@/pages/session-availability"
+import { useExecutionAuthority } from "@/atlas/use-execution-authority"
+import "./session-header.css"
+import "../components/chat-surface.css"
 
 type SyncSession = ReturnType<typeof useSync>["data"]["session"][number]
 
@@ -122,6 +128,27 @@ export default function Page(): JSX.Element {
   const [sessionsCollapsed, setSessionsCollapsed] = createSignal(readSessionSidebar())
   const [sessionsWidth, setSessionsWidth] = createSignal(readSessionSidebarWidth())
   const sessionTabs = createSessionTabs()
+  const hydration = new Map<string, Promise<void>>()
+  const prewarmed = new Set<string>()
+
+  const hydrateSession = (id: string) => {
+    const pending = hydration.get(id)
+    if (pending) return pending
+    const request = sync.session.sync(id).finally(() => hydration.delete(id))
+    hydration.set(id, request)
+    return request
+  }
+
+  const discardUnavailableSession = (id: string, error: unknown) => {
+    if (!sessionUnavailable(error)) return false
+    prewarmed.delete(id)
+    const target = sessionTabs.close(id)
+    if (params.id === id) {
+      toast.error("Session is no longer available")
+      navigate(target ? `/${params.dir}/session/${target}` : `/${params.dir}/session/new`, { replace: true })
+    }
+    return true
+  }
 
   createEffect(
     on(
@@ -207,9 +234,11 @@ export default function Page(): JSX.Element {
     const next = sessions().find((s) => s.id !== sessionID)?.id
     try {
       await sync.session.delete(sessionID)
+      const open = sessionTabs.close(sessionID)
       toast.info("Session deleted")
       if (active) {
-        navigate(next ? `/${params.dir}/session/${next}` : `/${params.dir}/session/new`)
+        const target = open ?? next
+        navigate(target ? `/${params.dir}/session/${target}` : `/${params.dir}/session/new`)
       }
     } catch (error: unknown) {
       console.error("session.delete failed", error)
@@ -217,14 +246,16 @@ export default function Page(): JSX.Element {
     }
   }
 
-  async function renameSession(sessionID: string, title: string) {
+  async function renameSession(sessionID: string, title: string): Promise<boolean> {
     const trimmed = title.trim()
-    if (!trimmed) return
+    if (!trimmed) return false
     try {
       await sync.session.rename(sessionID, trimmed)
+      return true
     } catch (error: unknown) {
       console.error("session.rename failed", error)
       toast.error("Could not rename session", error instanceof Error ? error.message : String(error))
+      return false
     }
   }
 
@@ -268,8 +299,10 @@ export default function Page(): JSX.Element {
         if (!id || id === "new") return
         ;(async () => {
           try {
-            await sync.session.sync(id)
-          } catch {}
+            await hydrateSession(id)
+          } catch (error) {
+            discardUnavailableSession(id, error)
+          }
         })()
       },
     ),
@@ -309,11 +342,11 @@ export default function Page(): JSX.Element {
       ),
   )
 
-  createComputed(
+  createEffect(
     on(
       () => [sdk.scope, params.id] as const,
-      ([project, id]) => {
-        sessionTabs.activateProject(project)
+      ([scope, id]) => {
+        sessionTabs.activateProject(scope)
         if (!id || id === "new") return
         sessionTabs.open(id)
       },
@@ -334,24 +367,47 @@ export default function Page(): JSX.Element {
     sessionTabs.markRead(id, updated)
   })
 
-  const openSessions = createMemo(() =>
-    sessionTabs.tabs().map((id) => {
+  const openSessions = createMemo<SessionTabItem[]>(() => {
+    const tabs = sessionTabs.tabs().map((id) => {
       const session = sessions().find((item) => item.id === id)
       const updated = session?.time?.updated ?? 0
       return {
         id,
-        title: session?.title || "session",
+        title: session?.title?.trim() || "Session",
         working: Boolean(sync.data.session_status?.[id] && sync.data.session_status[id].type !== "idle"),
         dirty: sessionTabs.dirty(id),
         unread: sessionTabs.unread(id, updated),
+        editable: true,
+        closable: true,
+        reorderable: true,
       }
-    }),
-  )
+    })
+    if (params.id && params.id !== "new") return tabs
+    return [
+      ...tabs,
+      {
+        id: "new",
+        title: "New session",
+        working: false,
+        dirty: prompt.dirty(),
+        unread: false,
+        editable: false,
+        closable: tabs.length > 0,
+        reorderable: false,
+      },
+    ]
+  })
 
   const closeSessionTab = (id: string) => {
-    const next = sessionTabs.close(id)
-    if (params.id !== id) return
-    navigate(next ? `/${params.dir}/session/${next}` : `/${params.dir}/session/new`)
+    if (id === "new") {
+      const target = sessionTabs.active() ?? sessionTabs.tabs().at(-1)
+      if (target) navigate(`/${params.dir}/session/${target}`)
+      return target ?? "new"
+    }
+    const target = sessionTabs.close(id)
+    if (params.id !== id) return params.id ?? sessionTabs.active() ?? "new"
+    navigate(target ? `/${params.dir}/session/${target}` : `/${params.dir}/session/new`)
+    return target ?? "new"
   }
 
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
@@ -384,13 +440,10 @@ export default function Page(): JSX.Element {
       if (!(["files", "terminal", "canvas", "kernels", "trace"] as SessionContext[]).includes(context)) return
       openContext(context)
     }
-    const onReview = () => void runReview()
     document.addEventListener("openscience:open-context", onOpenContext)
-    document.addEventListener("openscience:run-review", onReview)
     onCleanup(() => {
       document.removeEventListener("openscience:open-file", onOpenFile)
       document.removeEventListener("openscience:open-context", onOpenContext)
-      document.removeEventListener("openscience:run-review", onReview)
     })
   })
   const turnMessages = createMemo(() => {
@@ -433,9 +486,9 @@ export default function Page(): JSX.Element {
     if (!ok) return
     try {
       await sync.session.revert(id, messageID)
-      toast.success("reverted", "files rolled back. send a message to continue from here")
+      toast.success("Reverted", "Files rolled back. Send a message to continue from here.")
     } catch (e: any) {
-      toast.error("undo failed", e?.message ?? String(e))
+      toast.error("Undo failed", e?.message ?? String(e))
     }
   }
 
@@ -444,9 +497,9 @@ export default function Page(): JSX.Element {
     if (!id) return
     try {
       await sync.session.unrevert(id)
-      toast.success("messages restored")
+      toast.success("Messages restored")
     } catch (e: any) {
-      toast.error("restore failed", e?.message ?? String(e))
+      toast.error("Restore failed", e?.message ?? String(e))
     }
   }
 
@@ -465,6 +518,81 @@ export default function Page(): JSX.Element {
     const list: CommandOption[] = []
     list.push(
       {
+        id: "session.new",
+        title: "New session",
+        description: "Start a new research conversation",
+        category: "Session",
+        onSelect: newSession,
+      },
+      {
+        id: "project.files",
+        title: "Open project files",
+        description: "Browse, preview, and edit files in this project",
+        category: "Project",
+        onSelect: () => openContext("files"),
+      },
+      {
+        id: "project.compute",
+        title: "Open compute monitor",
+        description: "View project kernels and compute jobs",
+        category: "Project",
+        onSelect: () => openContext("kernels"),
+      },
+      ...(productPreferences.atlas()
+        ? [
+            {
+              id: "project.atlas",
+              title: "Open Atlas",
+              description: "View this project's research map",
+              category: "Project",
+              onSelect: () => openContext("canvas"),
+            } satisfies CommandOption,
+          ]
+        : []),
+      ...(productPreferences.trace()
+        ? [
+            {
+              id: "session.trace",
+              title: "Open session trace",
+              description: "Inspect time, cost, and trust signals",
+              category: "Session",
+              onSelect: () => openContext("trace"),
+            } satisfies CommandOption,
+          ]
+        : []),
+      ...(artifactContext.active()
+        ? [
+            {
+              id: "file.details",
+              title: "Open file details",
+              description: "Inspect the active file and its provenance",
+              category: "Project",
+              onSelect: () => openContext("artifact"),
+            } satisfies CommandOption,
+          ]
+        : []),
+      {
+        id: "settings.open",
+        title: "Open settings",
+        description: "Configure models, capabilities, runtime, and the app",
+        category: "Application",
+        onSelect: () => dialog.show(() => <DialogSettings />),
+      },
+      {
+        id: "project.home",
+        title: "Back to projects",
+        description: "Return to the projects home",
+        category: "Navigation",
+        onSelect: () => navigate("/"),
+      },
+      {
+        id: "documentation.open",
+        title: "Open documentation",
+        description: "Read the Synthetic Sciences documentation",
+        category: "Help",
+        onSelect: () => platform.openLink(URLS.site),
+      },
+      {
         id: "terminal.toggle",
         title: language.t("command.terminal.toggle"),
         description: "Open or close the project terminal",
@@ -482,7 +610,7 @@ export default function Page(): JSX.Element {
         onSelect: () => {
           showTerminal()
           void terminal.new().catch((cause: unknown) => {
-            toast.error("could not start terminal", cause instanceof Error ? cause.message : String(cause))
+            toast.error("Could not start terminal", cause instanceof Error ? cause.message : String(cause))
           })
         },
       },
@@ -525,7 +653,7 @@ export default function Page(): JSX.Element {
           .command({ sessionID: id, command: "compact", arguments: "" } as any)
           .catch((e: unknown) => {
             console.error("compact failed", e)
-            toast.error("could not compact", e instanceof Error ? e.message : String(e))
+            toast.error("Could not compact", e instanceof Error ? e.message : String(e))
           })
       },
     })
@@ -541,7 +669,7 @@ export default function Page(): JSX.Element {
           .command({ sessionID: id, command: "handoff", arguments: "" } as any)
           .catch((e: unknown) => {
             console.error("handoff failed", e)
-            toast.error("could not write handoff", e instanceof Error ? e.message : String(e))
+            toast.error("Could not write handoff", e instanceof Error ? e.message : String(e))
           })
       },
     })
@@ -556,8 +684,8 @@ export default function Page(): JSX.Element {
   // The center belongs to the conversation for the lifetime of the route.
   // Files and other research surfaces mount only in the right context pane.
   const chatTitle = createMemo(() => {
-    const s = sessions().find((x) => x.id === params.id)
-    return s?.title || "New session"
+    if (!params.id || params.id === "new") return "New session"
+    return activeSession()?.title?.trim() || "Session"
   })
   // Chat scroll: stick to the bottom while the agent streams; detach the
   // moment the user scrolls up (a "jump to latest" button re-attaches).
@@ -570,21 +698,6 @@ export default function Page(): JSX.Element {
     const status = sync.data.session_status?.[id]
     return !!status && status.type !== "idle"
   })
-
-  // The reviewer is a direct action, never a chat prompt: POST /session/:id/review
-  // launches the reviewer pass on the open session (project-scoped like every
-  // other request) and its findings stream into the session as a turn.
-  const reviewDisabled = createMemo(() => !params.id || params.id === "new" || working())
-  const runReview = async () => {
-    const id = params.id
-    if (!id || id === "new" || working()) return
-    const response = await sdk.request(`/session/${id}/review`, { method: "POST" }).catch(() => undefined)
-    if (!response?.ok) {
-      toast.error("review failed", response ? `${response.status}` : "request failed")
-      return
-    }
-    toast.success("review started", "the reviewer streams into this session")
-  }
 
   const chatScroll = createAutoScroll({
     working,
@@ -603,6 +716,9 @@ export default function Page(): JSX.Element {
   let chatElement: HTMLDivElement | undefined
   let contentElement: HTMLDivElement | undefined
   let observer: ResizeObserver | undefined
+  let conversationPanelElement: HTMLElement | undefined
+  let promptDockElement: HTMLDivElement | undefined
+  let promptDockObserver: ResizeObserver | undefined
 
   const cancelRestoration = () => {
     restoration.target = undefined
@@ -654,7 +770,22 @@ export default function Page(): JSX.Element {
   onMount(() => {
     observer = new ResizeObserver(applyRestoration)
     if (contentElement) observer.observe(contentElement)
-    onCleanup(() => observer?.disconnect())
+
+    const measurePromptDock = () => {
+      if (!conversationPanelElement || !promptDockElement) return
+      const height = Math.ceil(promptDockElement.getBoundingClientRect().height)
+      if (height <= 0) return
+      conversationPanelElement.style.setProperty("--workspace-composer-height", `${height}px`)
+    }
+
+    measurePromptDock()
+    promptDockObserver = new ResizeObserver(measurePromptDock)
+    if (promptDockElement) promptDockObserver.observe(promptDockElement)
+
+    onCleanup(() => {
+      observer?.disconnect()
+      promptDockObserver?.disconnect()
+    })
   })
 
   return (
@@ -691,7 +822,7 @@ export default function Page(): JSX.Element {
           <button
             type="button"
             class="session-sidebar-backdrop"
-            aria-label="close sessions"
+            aria-label="Close sessions"
             onClick={() => setMobileSessionsOpen(false)}
           />
         </Show>
@@ -704,6 +835,7 @@ export default function Page(): JSX.Element {
           collapsed={sessionsCollapsed()}
           width={sessionsWidth()}
           mobileOpen={mobileSessionsOpen()}
+          onCloseMobile={() => setMobileSessionsOpen(false)}
           onNew={() => {
             setMobileSessionsOpen(false)
             newSession()
@@ -737,6 +869,13 @@ export default function Page(): JSX.Element {
             sessionTabs.open(id)
             navigate(`/${params.dir}/session/${id}`)
           }}
+          onWarm={(id) => {
+            if (id === params.id || prewarmed.has(id)) return
+            prewarmed.add(id)
+            void hydrateSession(id).catch((error) => {
+              if (!discardUnavailableSession(id, error)) prewarmed.delete(id)
+            })
+          }}
           onDelete={(id) => void deleteSession(id)}
           onRename={(id, title) => void renameSession(id, title)}
           onPin={(id, pinned) => void pinSession(id, pinned)}
@@ -756,22 +895,25 @@ export default function Page(): JSX.Element {
         >
           <Header
             title={chatTitle()}
-            onBack={() => navigate("/")}
-            onRunReview={() => void runReview()}
-            reviewDisabled={reviewDisabled()}
-            onToggleSessions={() => setMobileSessionsOpen((open) => !open)}
-          />
-          <SessionTabStrip
             tabs={openSessions()}
-            active={params.id}
+            active={params.id ?? "new"}
             onSelect={(id) => {
-              sessionTabs.open(id)
+              if (id !== "new") sessionTabs.open(id)
               navigate(`/${params.dir}/session/${id}`)
             }}
             onClose={closeSessionTab}
             onReorder={(id, to) => sessionTabs.move(id, to)}
+            onRename={renameSession}
+            onWarm={(id) => {
+              if (id === "new" || id === params.id || prewarmed.has(id)) return
+              prewarmed.add(id)
+              void hydrateSession(id).catch((error) => {
+                if (!discardUnavailableSession(id, error)) prewarmed.delete(id)
+              })
+            }}
+            onBack={() => navigate("/")}
+            onToggleSessions={() => setMobileSessionsOpen((open) => !open)}
           />
-
           <div
             style={{
               flex: 1,
@@ -784,6 +926,10 @@ export default function Page(): JSX.Element {
           >
             {/* conversation center — never replaced by file navigation */}
             <section
+              ref={(element) => (conversationPanelElement = element)}
+              id="session-conversation-panel"
+              role="tabpanel"
+              aria-labelledby={sessionTabID(params.id ?? "new")}
               data-component="conversation-center"
               aria-label="Conversation"
               style={{
@@ -832,11 +978,10 @@ export default function Page(): JSX.Element {
                         "overflow-x": "hidden",
                       }}
                     >
-                      {/* Sub-agent back-to-parent header only. Normal chats render
-                          NO fixed header — the sticky session title used to sit on top
-                          of the conversation and block content. The title is still
-                          shown/renamable in the session list. Kept outside contentRef
-                          so the ResizeObserver measures only the growing message list. */}
+                      {/* Sub-agent back-to-parent navigation only. The editable
+                          session title lives once in the workspace header above, so
+                          this row never repeats it. Kept outside contentRef so the
+                          ResizeObserver measures only the growing message list. */}
                       <Show when={activeSession()?.parentID}>
                         <div class="sticky top-0 z-30 bg-background-stronger w-full">
                           <div class="w-full px-4 md:px-6 md:max-w-200 md:mx-auto">
@@ -850,12 +995,6 @@ export default function Page(): JSX.Element {
                                 >
                                   <IconChevronLeft />
                                 </button>
-                              </Show>
-                              <Show when={activeSession()?.title}>
-                                <EditableTitle
-                                  title={activeSession()!.title!}
-                                  onRename={(t) => void renameSession(activeSession()!.id, t)}
-                                />
                               </Show>
                             </div>
                           </div>
@@ -888,14 +1027,14 @@ export default function Page(): JSX.Element {
                                           "align-items": "center",
                                           gap: "10px",
                                           padding: "2px 16px",
-                                          "font-size": "11px",
-                                          "letter-spacing": "0.06em",
-                                          "text-transform": "uppercase",
-                                          color: "var(--color-text-faint)",
+                                          "font-family": FONT_SANS,
+                                          "font-size": "12px",
+                                          "font-weight": "var(--font-weight-regular)",
+                                          color: "var(--color-text-muted)",
                                         }}
                                       >
                                         <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
-                                        <span>context compacted</span>
+                                        <span>Context compacted</span>
                                         <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
                                       </div>
                                     }
@@ -907,15 +1046,14 @@ export default function Page(): JSX.Element {
                                         "justify-content": "center",
                                         gap: "8px",
                                         padding: "6px 16px",
-                                        "font-family": FONT_MONO,
-                                        "font-size": "11px",
-                                        "letter-spacing": "0.06em",
-                                        "text-transform": "uppercase",
-                                        color: "var(--color-text-faint)",
+                                        "font-family": FONT_SANS,
+                                        "font-size": "12px",
+                                        "font-weight": "var(--font-weight-regular)",
+                                        color: "var(--color-text-muted)",
                                       }}
                                     >
                                       <AsciiSpinner size={10} />
-                                      <span>compacting conversation…</span>
+                                      <span>Compacting conversation…</span>
                                     </div>
                                   </Show>
                                 }
@@ -948,8 +1086,9 @@ export default function Page(): JSX.Element {
                     <Show when={chatScroll.userScrolled()}>
                       <button
                         type="button"
+                        class="session-jump-latest"
                         onClick={() => chatScroll.forceScrollToBottom()}
-                        title="Jump to latest"
+                        title="Jump to Latest"
                         style={{
                           position: "absolute",
                           // Share the dock reserve with the transcript so composer
@@ -964,26 +1103,27 @@ export default function Page(): JSX.Element {
                           "border-radius": "999px",
                           border: "1px solid var(--color-border-strong)",
                           background: "var(--color-surface-solid)",
-                          "box-shadow": "var(--shadow-md)",
-                          "font-family": FONT_MONO,
-                          "font-size": "11px",
+                          "box-shadow": "var(--atlas-shadow-sm)",
+                          "font-family": FONT_SANS,
+                          "font-size": "12px",
+                          "font-weight": "var(--font-weight-medium)",
                           color: "var(--color-text)",
                           cursor: "pointer",
                           "z-index": 6,
                         }}
                       >
                         <IconChevronDown size={13} strokeWidth={1.6} />
-                        jump to latest
+                        Jump to Latest
                       </button>
                     </Show>
                   </div>
                 </Match>
                 <Match when={true}>
-                  <NewSessionView />
+                  <div aria-hidden="true" style={{ flex: 1, "min-height": 0 }} />
                 </Match>
               </Switch>
 
-              <div class="session-prompt-dock">
+              <div ref={(element) => (promptDockElement = element)} class="session-prompt-dock">
                 <div class="session-prompt-dock__inner">
                   <Show when={revertInfo()}>
                     <div
@@ -1015,11 +1155,12 @@ export default function Page(): JSX.Element {
                           padding: "4px 10px",
                           "border-radius": "8px",
                           "font-size": "12px",
+                          "font-weight": "var(--font-weight-regular)",
                           cursor: "pointer",
                           "white-space": "nowrap",
                         }}
                       >
-                        restore
+                        Restore
                       </button>
                     </div>
                   </Show>
@@ -1029,155 +1170,34 @@ export default function Page(): JSX.Element {
             </section>
           </div>
         </div>
-
-        <RightPane project={sdk.scope} session={params.id ?? "new"} />
       </div>
     </div>
   )
 }
 
-const TAB_DRAG_TYPE = "text/openscience-session-tab"
-
-function SessionTabStrip(props: {
-  tabs: Array<{ id: string; title: string; working: boolean; dirty: boolean; unread: boolean }>
-  active: string | undefined
+function Header(props: {
+  title: string
+  tabs: SessionTabItem[]
+  active: string
   onSelect: (id: string) => void
   onClose: (id: string) => void
   onReorder: (id: string, to: number) => void
-}): JSX.Element {
-  const compact = createMediaQuery("(max-width: 719px)")
-  const limit = createMemo(() => (compact() ? 2 : 5))
-  const visible = createMemo(() => {
-    if (props.tabs.length <= limit()) return props.tabs
-    const first = props.tabs.slice(0, limit())
-    const active = props.tabs.find((tab) => tab.id === props.active)
-    if (!active || first.some((tab) => tab.id === active.id)) return first
-    return [...first.slice(0, -1), active]
-  })
-  const hidden = createMemo(() => {
-    const shown = new Set(visible().map((tab) => tab.id))
-    return props.tabs.filter((tab) => !shown.has(tab.id))
-  })
-  const tab = (item: (typeof props.tabs)[number], index: number) => (
-    <div
-      class="workspace-tab"
-      role="tab"
-      tabindex={0}
-      aria-selected={props.active === item.id}
-      aria-label={`${item.title}${item.working ? ", working" : item.unread ? ", unread" : ""}${item.dirty ? ", draft saved" : ""}`}
-      data-active={props.active === item.id ? "true" : undefined}
-      draggable="true"
-      onDragStart={(event) => {
-        event.dataTransfer?.setData(TAB_DRAG_TYPE, item.id)
-        if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"
-      }}
-      onDragOver={(event) => {
-        if (event.dataTransfer?.types.includes(TAB_DRAG_TYPE)) event.preventDefault()
-      }}
-      onDrop={(event) => {
-        const dragged = event.dataTransfer?.getData(TAB_DRAG_TYPE)
-        if (!dragged || dragged === item.id) return
-        event.preventDefault()
-        props.onReorder(dragged, index)
-      }}
-      onClick={() => props.onSelect(item.id)}
-      onKeyDown={(event) => {
-        if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-          event.preventDefault()
-          props.onReorder(item.id, index + (event.key === "ArrowRight" ? 1 : -1))
-          return
-        }
-        if (event.key !== "Enter" && event.key !== " ") return
-        event.preventDefault()
-        props.onSelect(item.id)
-      }}
-    >
-      <span class="workspace-tab__icon" aria-hidden="true">
-        <StatusDot status={item.working ? "active" : item.unread ? "pending" : "muted"} size={6} />
-      </span>
-      <span class="truncate">{item.title}</span>
-      <Show when={item.dirty}>
-        <span aria-label="Draft saved" title="Draft saved">
-          •
-        </span>
-      </Show>
-      <button
-        type="button"
-        class="workspace-tab__close"
-        aria-label={`Close ${item.title} tab`}
-        onClick={(event) => {
-          event.stopPropagation()
-          props.onClose(item.id)
-        }}
-      >
-        <IconX size={11} strokeWidth={1.5} />
-      </button>
-    </div>
-  )
-
-  return (
-    <Show when={props.tabs.length > 0}>
-      <nav class="workspace-tabs" aria-label="Open session tabs">
-        <div class="workspace-tabs__list" role="tablist">
-          <For each={visible()}>
-            {(item) =>
-              tab(
-                item,
-                props.tabs.findIndex((entry) => entry.id === item.id),
-              )
-            }
-          </For>
-        </div>
-        <Show when={hidden().length > 0}>
-          <details class="workspace-tabs__overflow">
-            <summary aria-label={`${hidden().length} more session tabs`}>
-              <IconMoreH size={14} strokeWidth={1.5} />
-              <span>{hidden().length}</span>
-            </summary>
-            <div role="menu">
-              <For each={hidden()}>
-                {(item) => (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    aria-current={props.active === item.id ? "page" : undefined}
-                    onClick={(event) => {
-                      props.onSelect(item.id)
-                      event.currentTarget.closest("details")?.removeAttribute("open")
-                    }}
-                    onKeyDown={(event) => {
-                      if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return
-                      event.preventDefault()
-                      const index = props.tabs.findIndex((entry) => entry.id === item.id)
-                      props.onReorder(item.id, index + (event.key === "ArrowRight" ? 1 : -1))
-                    }}
-                  >
-                    <StatusDot status={item.working ? "active" : item.unread ? "pending" : "muted"} size={6} />
-                    <span>{item.title}</span>
-                    <Show when={item.dirty}>•</Show>
-                  </button>
-                )}
-              </For>
-            </div>
-          </details>
-        </Show>
-      </nav>
-    </Show>
-  )
-}
-
-function Header(props: {
-  title: string
+  onRename: (id: string, title: string) => Promise<boolean>
+  onWarm: (id: string) => void
   onBack: () => void
-  onRunReview: () => void
-  reviewDisabled: boolean
   onToggleSessions: () => void
 }): JSX.Element {
   return (
     <AppHeader class="workspace-header">
-      <HeaderIconButton class="session-sidebar-toggle" onClick={props.onToggleSessions} title="Show sessions">
+      <button
+        type="button"
+        class="session-sidebar-toggle workspace-header__sessions"
+        onClick={props.onToggleSessions}
+        title="Show sessions"
+        aria-label="Show sessions"
+      >
         <IconMessageSquare size={13} strokeWidth={1.5} />
-      </HeaderIconButton>
+      </button>
       <button
         class="workspace-header__back"
         onClick={props.onBack}
@@ -1186,91 +1206,17 @@ function Header(props: {
       >
         <IconChevronLeft size={14} strokeWidth={1.6} />
       </button>
-      <div class="workspace-header__project" title={props.title}>
-        <span class="workspace-header__title">
-          <strong>{props.title}</strong>
-        </span>
-      </div>
-      <span class="workspace-header__spacer" />
-      <HeaderIconButton
-        class="workspace-header__review"
-        disabled={props.reviewDisabled}
-        onClick={props.onRunReview}
-        title={props.reviewDisabled ? "Open an idle session to run review" : "Run review"}
-      >
-        <IconCheckCircle size={14} strokeWidth={1.5} />
-      </HeaderIconButton>
-    </AppHeader>
-  )
-}
-
-// The conversation title in the sticky chat header — double-click to rename,
-// mirroring the sidebar's SessionRow. Enter/blur commits, Esc cancels.
-function EditableTitle(props: { title: string; onRename: (t: string) => void }): JSX.Element {
-  const [editing, setEditing] = createSignal(false)
-  const [draft, setDraft] = createSignal("")
-  const start = () => {
-    setDraft(props.title)
-    setEditing(true)
-  }
-  const commit = () => {
-    if (!editing()) return
-    const next = draft().trim()
-    setEditing(false)
-    if (next && next !== props.title) props.onRename(next)
-  }
-  return (
-    <Show
-      when={editing()}
-      fallback={
-        <h1
-          class="text-14-medium text-text-strong truncate"
-          style={{ cursor: "text" }}
-          title="Double-click to rename"
-          onDblClick={start}
-        >
-          {props.title}
-        </h1>
-      }
-    >
-      <input
-        ref={(el) =>
-          queueMicrotask(() => {
-            el.focus()
-            el.select()
-          })
-        }
-        class="text-14-medium text-text-strong truncate"
-        value={draft()}
-        onInput={(e) => setDraft(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          e.stopPropagation()
-          if (e.key === "Enter") {
-            e.preventDefault()
-            commit()
-          } else if (e.key === "Escape") {
-            e.preventDefault()
-            setEditing(false)
-          }
-        }}
-        onBlur={commit}
-        spellcheck={false}
-        autocomplete="off"
-        style={{
-          all: "unset",
-          "box-sizing": "border-box",
-          flex: 1,
-          "min-width": 0,
-          "font-family": FONT_SANS,
-          background: "var(--color-surface-solid)",
-          "box-shadow": "inset 0 0 0 1px var(--color-border-strong)",
-          "border-radius": "6px",
-          padding: "1px 6px",
-          margin: "0 -6px",
-          color: "var(--color-text-strong, var(--color-text))",
-        }}
+      <h1 class="sr-only">{props.title}</h1>
+      <SessionTabStrip
+        tabs={props.tabs}
+        active={props.active}
+        onSelect={props.onSelect}
+        onClose={props.onClose}
+        onReorder={props.onReorder}
+        onRename={props.onRename}
+        onWarm={props.onWarm}
       />
-    </Show>
+    </AppHeader>
   )
 }
 
@@ -1283,6 +1229,7 @@ function SessionsSidebar(props: {
   collapsed: boolean
   width: number
   mobileOpen: boolean
+  onCloseMobile: () => void
   onNew: () => void
   onBack: () => void
   onCollapse: () => void
@@ -1296,10 +1243,51 @@ function SessionsSidebar(props: {
   atlas: boolean
   trace: boolean
   onSelect: (id: string) => void
+  onWarm: (id: string) => void
   onDelete: (id: string) => void
   onRename: (id: string, title: string) => void
   onPin: (id: string, pinned: boolean) => void
 }): JSX.Element {
+  const compact = createMediaQuery("(max-width: 719px)")
+  const mobileHidden = () => compact() && !props.mobileOpen
+  let sidebar: HTMLElement | undefined
+
+  createEffect(() => {
+    if (!compact() || !props.mobileOpen || !sidebar) return
+    const previous = document.activeElement as HTMLElement | null
+    const selector =
+      'button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"]), [role="button"]'
+    queueMicrotask(() => sidebar?.querySelector<HTMLElement>(selector)?.focus())
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        props.onCloseMobile()
+        return
+      }
+      if (event.key !== "Tab" || !sidebar) return
+      const items = Array.from(sidebar.querySelectorAll<HTMLElement>(selector)).filter(
+        (item) => !item.hasAttribute("disabled") && item.getClientRects().length > 0,
+      )
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown, true)
+    onCleanup(() => {
+      document.removeEventListener("keydown", onKeyDown, true)
+      if (previous?.isConnected) previous.focus()
+    })
+  })
+
   const resize = (event: PointerEvent) => {
     if (props.collapsed) return
     event.preventDefault()
@@ -1318,30 +1306,58 @@ function SessionsSidebar(props: {
 
   return (
     <aside
+      ref={sidebar}
+      id="session-sidebar"
       class="atlas-scroll session-sidebar"
       data-mobile-open={props.mobileOpen ? "true" : "false"}
       data-collapsed={props.collapsed ? "true" : "false"}
       aria-label="Research sessions"
-      style={{ "--session-sidebar-width": `${props.width}px` }}
+      aria-hidden={mobileHidden() ? "true" : undefined}
+      aria-modal={compact() && props.mobileOpen ? "true" : undefined}
+      role={compact() && props.mobileOpen ? "dialog" : undefined}
+      inert={mobileHidden()}
+      style={{
+        "--session-sidebar-width": `${props.width}px`,
+        "--session-sidebar-collapsed-width": `${SIDEBAR_WIDTH.collapsed}px`,
+      }}
     >
       <div class="session-sidebar__top">
-        <button type="button" class="session-sidebar__project" aria-label="Back to projects" onClick={props.onBack}>
-          <IconChevronLeft size={13} strokeWidth={1.6} />
+        <button
+          type="button"
+          class="session-sidebar__project"
+          aria-label="Back to projects"
+          data-tooltip="Projects"
+          onClick={props.onBack}
+        >
+          <IconHome size={15} strokeWidth={1.5} />
           <strong>{props.projectName}</strong>
         </button>
         <button
           type="button"
           class="session-sidebar__collapse"
-          aria-label={props.collapsed ? "Expand sessions sidebar" : "Collapse sessions sidebar"}
-          title={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          onClick={props.onCollapse}
+          aria-label={
+            compact() ? "Close sessions" : props.collapsed ? "Expand sessions sidebar" : "Collapse sessions sidebar"
+          }
+          aria-controls="session-sidebar"
+          aria-expanded={compact() ? props.mobileOpen : !props.collapsed}
+          data-tooltip={compact() ? "Close sessions" : props.collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={() => (compact() ? props.onCloseMobile() : props.onCollapse())}
         >
-          <IconChevronLeft size={13} strokeWidth={1.6} />
+          <Show
+            when={compact()}
+            fallback={
+              <Show when={props.collapsed} fallback={<IconChevronLeft size={14} strokeWidth={1.6} />}>
+                <IconChevronRight size={14} strokeWidth={1.6} />
+              </Show>
+            }
+          >
+            <IconX size={14} strokeWidth={1.6} />
+          </Show>
         </button>
       </div>
 
       <nav class="session-sidebar__actions" aria-label="Research navigation">
-        <div class="session-sidebar__action-list">
+        <div class="session-sidebar__action-list session-sidebar__primary-actions">
           <SidebarAction
             class="session-sidebar__new"
             label={props.creating ? "Creating…" : "New"}
@@ -1355,8 +1371,8 @@ function SessionsSidebar(props: {
           </SidebarAction>
           <SidebarAction
             label="Search"
-            detail="Search and commands"
-            ariaLabel="Search project"
+            detail="Files, messages, and actions"
+            ariaLabel="Search this project"
             shortcut="⌘K"
             onClick={props.onSearch}
           >
@@ -1370,6 +1386,7 @@ function SessionsSidebar(props: {
           >
             <IconSettings size={15} strokeWidth={1.5} />
           </SidebarAction>
+          <ProjectTrustControl />
         </div>
 
         <SessionSidebarActions
@@ -1382,7 +1399,7 @@ function SessionsSidebar(props: {
         />
       </nav>
 
-      <Show when={!props.collapsed}>
+      <Show when={!props.collapsed && !compact()}>
         <div
           class="session-sidebar__resize"
           role="separator"
@@ -1401,18 +1418,18 @@ function SessionsSidebar(props: {
         />
       </Show>
 
-      <div class="session-sidebar__label">
-        <span>Recent sessions</span>
-        <span>{props.sessions.length}</span>
+      <div class="session-sidebar__label" id="session-sidebar-sessions">
+        Sessions
       </div>
 
-      <div class="session-sidebar__list">
+      <nav class="session-sidebar__list" aria-labelledby="session-sidebar-sessions">
         <For each={props.sessions}>
           {(s) => (
             <SessionRow
               session={s}
               active={props.activeId === s.id}
               onSelect={() => props.onSelect(s.id)}
+              onWarm={() => props.onWarm(s.id)}
               onDelete={() => props.onDelete(s.id)}
               onRename={(title) => props.onRename(s.id, title)}
               onPin={(pinned) => props.onPin(s.id, pinned)}
@@ -1422,8 +1439,45 @@ function SessionsSidebar(props: {
         <Show when={props.sessions.length === 0}>
           <div class="session-sidebar__empty">No sessions yet.</div>
         </Show>
-      </div>
+      </nav>
     </aside>
+  )
+}
+
+function ProjectTrustControl(): JSX.Element {
+  const authority = useExecutionAuthority("shell")
+  const dialog = useDialog()
+
+  const trust = async () => {
+    const root = authority.decision()?.remediation?.body.root
+    if (!root || authority.trusting()) return
+    const confirmed = await confirmDialog(dialog, {
+      title: "Trust this project?",
+      message: `Allow project code under ${root} to run using the current execution policy. If sandboxing is off or unavailable and fallback permits it, code may run with your user authority. Review Settings → Sandbox first.`,
+      confirmLabel: "Trust project",
+    })
+    if (!confirmed) return
+    try {
+      await authority.trust()
+      toast.success("Project trusted", "Project code can now run under the current execution policy.")
+    } catch (error) {
+      toast.error("Could not trust project", error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  return (
+    <Show when={authority.canTrust()}>
+      <SidebarAction
+        class="session-sidebar__trust"
+        label={authority.trusting() ? "Trusting…" : "Trust project"}
+        detail="Allow project code"
+        ariaLabel="Trust this project to run project code"
+        disabled={authority.trusting()}
+        onClick={() => void trust()}
+      >
+        <IconShield size={15} strokeWidth={1.5} />
+      </SidebarAction>
+    </Show>
   )
 }
 
@@ -1431,6 +1485,7 @@ function SessionRow(props: {
   session: SyncSession
   active: boolean
   onSelect: () => void
+  onWarm: () => void
   onDelete: () => void
   onRename: (title: string) => void
   onPin: (pinned: boolean) => void
@@ -1439,66 +1494,76 @@ function SessionRow(props: {
   const [menu, setMenu] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal("")
+  let tab: HTMLButtonElement | undefined
   const startEdit = () => {
     setDraft(props.session.title || "")
     setEditing(true)
   }
-  const commit = () => {
+  const finishEditing = (restoreFocus: boolean) => {
+    setEditing(false)
+    if (restoreFocus) queueMicrotask(() => tab?.focus())
+  }
+  const commit = (restoreFocus = false) => {
     if (!editing()) return
     const next = draft().trim()
-    setEditing(false)
+    finishEditing(restoreFocus)
     if (next && next !== (props.session.title || "")) props.onRename(next)
   }
-  const cancel = () => {
-    setEditing(false)
+  const cancel = (restoreFocus = false) => {
+    finishEditing(restoreFocus)
     setDraft("")
   }
   return (
     <div
       class="session-sidebar__session"
-      role="button"
-      tabindex="0"
-      aria-label={props.session.title || "session"}
+      role="presentation"
       data-active={props.active ? "true" : undefined}
       data-pinned={props.session.time?.pinned ? "true" : undefined}
-      data-actions={hover() && !editing() ? "true" : undefined}
-      onClick={() => {
-        if (editing()) return
-        props.onSelect()
-      }}
-      onDblClick={(e) => {
-        e.stopPropagation()
-        startEdit()
-      }}
-      onKeyDown={(e) => {
-        if (editing()) return
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          props.onSelect()
-        }
-      }}
+      data-actions={(hover() || menu()) && !editing() ? "true" : undefined}
+      data-menu-open={menu() ? "true" : undefined}
+      data-editing={editing() ? "true" : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onFocusIn={() => setHover(true)}
       onFocusOut={(e) => {
         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
         setHover(false)
-        setMenu(false)
       }}
-      style={{ cursor: editing() ? "text" : "pointer" }}
     >
-      <Show
-        when={props.session.time?.pinned}
-        fallback={<StatusDot status={props.active ? "active" : "muted"} size={7} />}
-      >
-        <IconPinFilled size={10} strokeWidth={1.4} />
-      </Show>
       <Show
         when={editing()}
         fallback={
-          <span class="session-sidebar__session-title" title="Double-click to rename">
-            {props.session.title || "session"}
-          </span>
+          <button
+            ref={tab}
+            type="button"
+            class="session-sidebar__session-main"
+            aria-current={props.active ? "page" : undefined}
+            aria-label={props.session.title || "Session"}
+            data-session-id={props.session.id}
+            onPointerEnter={props.onWarm}
+            onFocus={props.onWarm}
+            onClick={props.onSelect}
+            onDblClick={(event) => {
+              event.preventDefault()
+              startEdit()
+            }}
+          >
+            <span class="session-sidebar__session-status" aria-hidden="true">
+              <Show
+                when={props.session.time?.pinned}
+                fallback={
+                  <span class="session-sidebar__session-dot">
+                    <StatusDot status={props.active ? "active" : "muted"} size={7} />
+                  </span>
+                }
+              >
+                <IconPinFilled size={10} strokeWidth={1.4} />
+              </Show>
+            </span>
+            <span class="session-sidebar__session-title" title="Double-click to rename">
+              {props.session.title || "Session"}
+            </span>
+          </button>
         }
       >
         <input
@@ -1509,85 +1574,52 @@ function SessionRow(props: {
             })
           }
           class="session-sidebar__session-input"
+          aria-label="Rename session"
           value={draft()}
           onInput={(e) => setDraft(e.currentTarget.value)}
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
-            e.stopPropagation()
             if (e.key === "Enter") {
               e.preventDefault()
-              commit()
+              commit(true)
             } else if (e.key === "Escape") {
               e.preventDefault()
-              cancel()
+              cancel(true)
             }
           }}
-          onBlur={commit}
+          onBlur={() => commit()}
           spellcheck={false}
           autocomplete="off"
         />
       </Show>
-      <Show when={(hover() || menu()) && !editing()}>
-        <button
-          type="button"
-          class="session-sidebar__session-menu-button"
-          title="Session actions"
-          aria-label="Session actions"
-          aria-haspopup="menu"
-          aria-expanded={menu()}
-          onPointerDown={(e) => {
-            // Stop pointerdown on the parent row before its own click
-            // can fire — Solid runs the row's onClick first otherwise.
-            e.stopPropagation()
-          }}
-          onClick={(e) => {
-            e.stopPropagation()
-            e.preventDefault()
-            setMenu((open) => !open)
-          }}
-        >
-          <IconMoreH size={12} strokeWidth={1.5} />
-        </button>
-      </Show>
-      <Show when={menu()}>
-        <div class="session-sidebar__session-menu" role="menu" onClick={(event) => event.stopPropagation()}>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              props.onPin(!props.session.time?.pinned)
-              setMenu(false)
-            }}
+      <Show when={!editing()}>
+        <DropdownMenu open={menu()} onOpenChange={setMenu}>
+          <DropdownMenu.Trigger
+            class="session-sidebar__session-menu-button"
+            title="Session actions"
+            aria-label={`Session actions for ${props.session.title || "Session"}`}
+            tabindex={props.active || hover() || menu() ? 0 : -1}
           >
-            <Show when={props.session.time?.pinned} fallback={<IconPin size={12} strokeWidth={1.5} />}>
-              <IconPinFilled size={12} strokeWidth={1.5} />
-            </Show>
-            {props.session.time?.pinned ? "Unpin" : "Pin"}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenu(false)
-              startEdit()
-            }}
-          >
-            Rename
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-danger="true"
-            onClick={() => {
-              setMenu(false)
-              props.onDelete()
-            }}
-          >
-            <IconTrash size={12} strokeWidth={1.5} />
-            Delete
-          </button>
-        </div>
+            <IconMoreH size={12} strokeWidth={1.5} />
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content class="session-sidebar__session-menu-popover">
+              <DropdownMenu.Item onSelect={() => props.onPin(!props.session.time?.pinned)}>
+                <Show when={props.session.time?.pinned} fallback={<IconPin size={12} strokeWidth={1.5} />}>
+                  <IconPinFilled size={12} strokeWidth={1.5} />
+                </Show>
+                <DropdownMenu.ItemLabel>{props.session.time?.pinned ? "Unpin" : "Pin"}</DropdownMenu.ItemLabel>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={startEdit}>
+                <DropdownMenu.ItemLabel>Rename</DropdownMenu.ItemLabel>
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item class="session-sidebar__session-menu-danger" onSelect={props.onDelete}>
+                <IconTrash size={12} strokeWidth={1.5} />
+                <DropdownMenu.ItemLabel>Delete</DropdownMenu.ItemLabel>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu>
       </Show>
     </div>
   )

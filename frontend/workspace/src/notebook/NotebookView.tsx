@@ -282,7 +282,9 @@ export function NotebookView(props: {
         when={notebook()}
         fallback={
           <div style={empty()}>
-            <div style={{ "font-family": FONT_SANS, "font-size": "15px", "font-weight": 600 }}>
+            <div
+              style={{ "font-family": FONT_SANS, "font-size": "15px", "font-weight": "var(--font-weight-emphasis)" }}
+            >
               This notebook needs repair
             </div>
             <div style={{ "font-family": FONT_MONO, "font-size": "11px", color: "var(--color-text-faint)" }}>
@@ -787,7 +789,7 @@ function button(primary = false): JSX.CSSProperties {
     color: primary ? "var(--color-bg)" : "var(--color-text-muted)",
     "font-family": FONT_MONO,
     "font-size": "10px",
-    "font-weight": 600,
+    "font-weight": "var(--font-weight-emphasis)",
   }
 }
 

@@ -1,4 +1,15 @@
-import { createSignal, createEffect, createMemo, onMount, onCleanup, type JSX, Show, Switch, Match } from "solid-js"
+import {
+  createSignal,
+  createEffect,
+  createMemo,
+  onMount,
+  onCleanup,
+  untrack,
+  type JSX,
+  Show,
+  Switch,
+  Match,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -22,9 +33,11 @@ import type { ArtifactInspection } from "@/science/renderers"
 import { toast } from "@/atlas/Toast"
 import { IconFile } from "@/atlas/shared/Icon"
 import { FileToolbar } from "@/atlas/FileToolbar"
-import { describeFile, readFile, type FileData, type FileKind } from "@/atlas/file-viewer"
+import { describeFile, readFile, reconcileSavedDraft, type FileData, type FileKind } from "@/atlas/file-viewer"
 import { LANG, extension as ext } from "@/atlas/files/artifact-thumb"
 import { assetUrl } from "@/utils/markdown-assets"
+import { recoverFileDraft, rememberFileDraft } from "@/atlas/file-drafts"
+import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
 import "./FilePreview.css"
 
 /**
@@ -77,6 +90,7 @@ export function FileView(props: {
   onClose?: () => void
   active?: boolean
   writable?: boolean
+  onDirtyChange?: (dirty: boolean) => void
 }): JSX.Element {
   const sdk = useSDK()
   const sync = useSync()
@@ -99,6 +113,7 @@ export function FileView(props: {
   createEffect(() => {
     const dir = directory()
     const path = props.path
+    const activeSession = untrack(sessionID)
     view.refresh
     const id = ++request.current
     setView({
@@ -119,7 +134,7 @@ export function FileView(props: {
     // Keep the project directory as the backend instance boundary. External
     // absolute paths remain absolute and require a session filesystem grant.
     void readFile(async () => {
-      const response = await sdk.client.file.read({ path, sessionID: sessionID() })
+      const response = await sdk.client.file.read({ path, sessionID: activeSession })
       const envelope = response as unknown as { data?: FileData }
       return envelope.data ?? (response as unknown as FileData)
     }).then((result) => {
@@ -134,7 +149,7 @@ export function FileView(props: {
         status: "ready",
         data,
         error: undefined,
-        draft: text,
+        draft: recoverFileDraft(dir, path, text),
         saved: text,
       })
     })
@@ -151,6 +166,11 @@ export function FileView(props: {
   const b64 = () => data()?.content ?? ""
   const dataUrl = () => `data:${mime() || "application/octet-stream"};base64,${b64()}`
   const dirty = () => view.draft !== view.saved
+  createEffect(() => props.onDirtyChange?.(dirty()))
+  createEffect(() => {
+    if (view.status !== "ready") return
+    rememberFileDraft(directory(), props.path, view.draft, view.saved)
+  })
   const scientific = createMemo(() => (isBinary() ? undefined : detectScientificFile(e(), view.draft)))
   const biological = createMemo(() => (isBinary() ? undefined : detectBiologicalFormat(e())))
   const binaryScience = createMemo(() => detectBinaryScienceFormat(e()))
@@ -215,6 +235,7 @@ export function FileView(props: {
       inspection: view.inspection,
     }),
   )
+  const markdown = createMemo(() => splitAlignedMarkdown(view.draft))
 
   createEffect(() => {
     const current = context()
@@ -257,7 +278,11 @@ export function FileView(props: {
           : undefined
       if (request.current !== id) return
       const next = typeof saved === "string" ? saved : content
-      setView({ draft: next, saved: next, saving: false, saveError: undefined })
+      setView({
+        ...reconcileSavedDraft(view.draft, content, next),
+        saving: false,
+        saveError: undefined,
+      })
       toast.success("saved", title)
     } catch (error) {
       if (request.current !== id) return
@@ -273,6 +298,10 @@ export function FileView(props: {
   const [archiving, setArchiving] = createSignal(false)
   const artifact = async () => {
     if (archiving()) return
+    if (dirty()) {
+      toast.info("save file first", "Save your changes before creating an immutable artifact version.")
+      return
+    }
     const session = sessionID()
     if (!session) {
       toast.error("artifact unavailable", "Open this file inside a research session to save artifacts.")
@@ -335,6 +364,7 @@ export function FileView(props: {
         location={location()}
         description={description()}
         source={view.source}
+        sourceLabel={description().source && props.writable !== false ? "Edit" : undefined}
         dirty={dirty()}
         saving={view.saving}
         writable={props.writable}
@@ -384,7 +414,13 @@ export function FileView(props: {
               </section>
             }
           >
-            <div class="atlas-scroll atlas-file-scroll">
+            <div
+              class="atlas-scroll atlas-file-scroll"
+              classList={{
+                "is-managed-scroll": !view.source && (kind() === "table" || kind() === "pdf"),
+                "is-editor-scroll": view.source,
+              }}
+            >
               <Switch>
                 <Match when={truncated()}>
                   <div class="atlas-file-source atlas-file-truncated">
@@ -413,7 +449,21 @@ export function FileView(props: {
                 {/* ordinary Markdown opens as a quiet document */}
                 <Match when={kind() === "markdown" && !view.source && !manuscript()}>
                   <article class="atlas-file-document">
-                    <Markdown class="atlas-md" text={view.draft} resolveImage={image} />
+                    <Show
+                      when={markdown().lead}
+                      fallback={<Markdown class="atlas-md" text={view.draft} resolveImage={image} />}
+                    >
+                      {(lead) => (
+                        <>
+                          <div class="atlas-file-document-lead" data-align={lead().alignment}>
+                            <Markdown class="atlas-md" text={lead().text} resolveImage={image} />
+                          </div>
+                          <Show when={markdown().rest}>
+                            {(rest) => <Markdown class="atlas-md" text={rest()} resolveImage={image} />}
+                          </Show>
+                        </>
+                      )}
+                    </Show>
                   </article>
                 </Match>
 
@@ -473,7 +523,7 @@ export function FileView(props: {
                 {/* pdf */}
                 <Match when={kind() === "pdf"}>
                   <div class="atlas-file-pdf">
-                    <PdfViewer kind="pdf" data={{ base64: b64(), maxPages: 40 }} height={100000} />
+                    <PdfViewer kind="pdf" data={{ base64: b64(), maxPages: 40 }} />
                   </div>
                 </Match>
 
@@ -529,8 +579,15 @@ export function FileView(props: {
                     value={view.draft}
                     readOnly={props.writable === false}
                     spellcheck={false}
+                    wrap={kind() === "markdown" ? "soft" : "off"}
                     onInput={(event) => setView({ draft: event.currentTarget.value, saveError: undefined })}
                     class="atlas-scroll atlas-file-source-editor"
+                    classList={{ "is-prose-editor": kind() === "markdown" }}
+                    onKeyDown={(event) => {
+                      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") return
+                      event.preventDefault()
+                      void save()
+                    }}
                   />
                 </Match>
                 <Match when={kind() === "code"}>

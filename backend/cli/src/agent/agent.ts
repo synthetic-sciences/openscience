@@ -21,6 +21,7 @@ import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
+import { State } from "@/project/state"
 
 export namespace Agent {
   export const Info = z
@@ -49,8 +50,8 @@ export namespace Agent {
     })
   export type Info = z.infer<typeof Info>
 
-  const state = Instance.state(async () => {
-    const cfg = await Config.get()
+  const compute = async () => {
+    const cfg = await Config.getExecution()
 
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
@@ -424,14 +425,21 @@ export namespace Agent {
     }
 
     return result
-  })
+  }
+
+  const state = Instance.state(compute)
+
+  /** Rebuild project-defined specialists and permissions after trust changes. */
+  export function invalidate() {
+    State.clear(Instance.directory, compute)
+  }
 
   export async function get(agent: string) {
     return state().then((x) => x[agent])
   }
 
   export async function list() {
-    const cfg = await Config.get()
+    const cfg = await Config.getExecution()
     return pipe(
       await state(),
       values(),
@@ -440,7 +448,7 @@ export namespace Agent {
   }
 
   export async function defaultAgent() {
-    const cfg = await Config.get()
+    const cfg = await Config.getExecution()
     const agents = await state()
 
     if (cfg.default_agent) {
@@ -459,7 +467,7 @@ export namespace Agent {
   }
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
-    const cfg = await Config.get()
+    const cfg = await Config.getExecution()
     const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(model)

@@ -95,6 +95,8 @@ export const SOUND_OPTIONS = [
 export type SoundOption = (typeof SOUND_OPTIONS)[number]
 export type SoundID = SoundOption["id"]
 
+export const DEFAULT_SOUND_VOLUME = 0.3
+
 const soundById = Object.fromEntries(SOUND_OPTIONS.map((s) => [s.id, s.src])) as Record<SoundID, string>
 
 export function soundSrc(id: string | undefined) {
@@ -103,13 +105,48 @@ export function soundSrc(id: string | undefined) {
   return soundById[id as SoundID]
 }
 
-export function playSound(src: string | undefined) {
+const audioBySource = new Map<string, HTMLAudioElement>()
+
+function reducedFeedbackRequested() {
+  if (typeof window === "undefined") return false
+  if (typeof window.matchMedia !== "function") return false
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+function audioFor(src: string) {
+  const cached = audioBySource.get(src)
+  if (cached) return cached
+  if (typeof Audio === "undefined") return
+
+  const audio = new Audio(src)
+  audio.preload = "auto"
+  audioBySource.set(src, audio)
+  return audio
+}
+
+export function clampSoundVolume(value: number | undefined) {
+  if (!Number.isFinite(value)) return DEFAULT_SOUND_VOLUME
+  return Math.min(1, Math.max(0, value!))
+}
+
+export function preloadSound(src: string | undefined) {
+  if (!src || reducedFeedbackRequested()) return
+  const audio = audioFor(src)
+  audio?.load?.()
+}
+
+export function playSound(src: string | undefined, volume = DEFAULT_SOUND_VOLUME) {
   if (typeof Audio === "undefined") return
   if (!src) return
-  const audio = new Audio(src)
-  audio.play().catch(() => undefined)
+  if (reducedFeedbackRequested()) return
 
-  // Return a cleanup function to pause the sound.
+  const audio = audioFor(src)
+  if (!audio) return
+  audio.pause()
+  audio.currentTime = 0
+  audio.volume = clampSoundVolume(volume)
+  void audio.play().catch(() => undefined)
+
   return () => {
     audio.pause()
     audio.currentTime = 0

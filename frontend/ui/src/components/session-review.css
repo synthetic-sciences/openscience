@@ -128,7 +128,7 @@
     background: transparent;
     color: var(--text-base);
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     opacity: 0;
     transition: opacity 0.15s ease;
 
@@ -179,7 +179,7 @@
     max-width: 100%;
     max-height: 60vh;
     object-fit: contain;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border-weak-base);
     background: var(--background-base);
   }

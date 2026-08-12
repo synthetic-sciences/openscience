@@ -3,17 +3,38 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
 import { IconButton } from "@synsci/ui/icon-button"
+import { ProviderIcon } from "@synsci/ui/provider-icon"
+import { iconNames, type IconName } from "@synsci/ui/icons/provider"
 import { useDialog } from "@synsci/ui/context/dialog"
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type Component } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch, type Component } from "solid-js"
 import { useLocal } from "@/context/local"
-import { canonicalKey, displayProviderForModel, modelSummary } from "@/context/model-catalog"
-import { RECOMMENDED_MODELS } from "@/context/models"
+import { displayProviderForModel, modelContext, modelSummary } from "@/context/model-catalog"
 import { DialogSettings } from "./dialog-settings"
 import { modelGroup, modelGroupLabel, modelGroupLabelRank } from "./model-groups"
 import { modelControl } from "./model-presentation"
+import { curateQuickModels } from "./model-quick"
 import "./model-settings-popover.css"
 
 const row = "model-settings-row flex w-full min-w-0 items-center justify-between text-left transition-colors"
+const CATALOG_FIRST_CHUNK = 24
+const CATALOG_CHUNK = 32
+
+export function takeCatalogGroups<T>(groups: Array<[string, T[]]>, limit: number): Array<[string, T[]]> {
+  let remaining = Math.max(0, limit)
+  const result: Array<[string, T[]]> = []
+  for (const [label, models] of groups) {
+    if (remaining <= 0) break
+    const visible = models.slice(0, remaining)
+    if (visible.length > 0) result.push([label, visible])
+    remaining -= visible.length
+  }
+  return result
+}
+
+const providerIcon = (id: string) => {
+  const alias = id === "meta" ? "llama" : id === "openai-codex" ? "openai" : id
+  return iconNames.includes(alias as IconName) ? (alias as IconName) : undefined
+}
 
 export type InferenceSource = "managed" | "byok" | "chatgpt"
 
@@ -143,34 +164,26 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const [open, setOpen] = createSignal(false)
   const [view, setView] = createSignal<"root" | "models" | "effort" | "speed">("root")
   const [query, setQuery] = createSignal("")
+  const [catalogQuery, setCatalogQuery] = createSignal("")
+  const [catalogReady, setCatalogReady] = createSignal(false)
+  const [catalogLimit, setCatalogLimit] = createSignal(CATALOG_FIRST_CHUNK)
   const [notice, setNotice] = createSignal("")
   const refs = { content: undefined as HTMLElement | undefined }
   const current = createMemo(() => local.model.current())
-  const recommended = createMemo(() => {
-    const models = local.model.list()
-    return RECOMMENDED_MODELS.map((item) => {
-      const key = canonicalKey(item.providerID, item.modelID)
-      return models.find((model) => canonicalKey(model.provider.id, model.id) === key)
-    }).filter((model): model is NonNullable<typeof model> => Boolean(model))
-  })
   const quick = createMemo(() => {
-    // Pins are explicit. New installations instead see a calm recommended trio
-    // with the current model retained when it falls outside that set.
-    const models = [...local.model.pinned(), ...recommended(), current()].filter(
-      (model): model is NonNullable<typeof model> => Boolean(model),
-    )
-    const seen = new Set<string>()
-    return models
-      .filter((model) => {
-        const key = canonicalKey(model.provider.id, model.id)
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-      .slice(0, 5)
+    const pinned = local.model.pinned().filter((model): model is NonNullable<typeof model> => Boolean(model))
+    const recent = local.model.recent().filter((model): model is NonNullable<typeof model> => Boolean(model))
+    const available = local.model
+      .list()
+      .filter(
+        (model) =>
+          local.model.pin.has({ providerID: model.provider.id, modelID: model.id }) ||
+          local.model.visible({ providerID: model.provider.id, modelID: model.id }),
+      )
+    return curateQuickModels({ pinned, current: current(), recent, available })
   })
   const catalog = createMemo(() => {
-    const value = query().trim().toLowerCase()
+    const value = catalogQuery().trim().toLowerCase()
     return local.model
       .list()
       .filter(
@@ -196,6 +209,67 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
     return [...map.entries()].sort(
       ([left], [right]) => modelGroupLabelRank(left) - modelGroupLabelRank(right) || left.localeCompare(right),
     )
+  })
+  const visibleGroups = createMemo(() => (catalogReady() ? takeCatalogGroups(groups(), catalogLimit()) : []))
+
+  let prepareFrame = 0
+  let preparePaintFrame = 0
+  let searchTimer = 0
+
+  const prepareCatalog = () => {
+    if (catalogReady() || prepareFrame || preparePaintFrame) return
+    // Two frames guarantee the lightweight browser shell reaches the screen
+    // before deriving the full catalog. Usually this work is already warm by
+    // the time the reader chooses More models.
+    prepareFrame = requestAnimationFrame(() => {
+      prepareFrame = 0
+      preparePaintFrame = requestAnimationFrame(() => {
+        preparePaintFrame = 0
+        catalog()
+        groups()
+        setCatalogReady(true)
+      })
+    })
+  }
+
+  createEffect(() => {
+    if (open()) {
+      prepareCatalog()
+      return
+    }
+    window.clearTimeout(searchTimer)
+    if (prepareFrame) cancelAnimationFrame(prepareFrame)
+    if (preparePaintFrame) cancelAnimationFrame(preparePaintFrame)
+    prepareFrame = 0
+    preparePaintFrame = 0
+    setCatalogReady(false)
+  })
+
+  createEffect(() => {
+    if (view() !== "models" || !catalogReady()) return
+    catalogQuery()
+    const total = catalog().length
+    setCatalogLimit(Math.min(CATALOG_FIRST_CHUNK, total))
+    if (total <= CATALOG_FIRST_CHUNK) return
+    let frame = requestAnimationFrame(function load() {
+      setCatalogLimit((current) => Math.min(total, current + CATALOG_CHUNK))
+      if (catalogLimit() < total) frame = requestAnimationFrame(load)
+    })
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
+
+  const searchCatalog = (value: string) => {
+    setQuery(value)
+    window.clearTimeout(searchTimer)
+    // Keep keystrokes immediate, then do the catalog-wide filter once the
+    // short burst settles. This is state deferral, not visible animation.
+    searchTimer = window.setTimeout(() => setCatalogQuery(value), 70)
+  }
+
+  onCleanup(() => {
+    if (prepareFrame) cancelAnimationFrame(prepareFrame)
+    if (preparePaintFrame) cancelAnimationFrame(preparePaintFrame)
+    window.clearTimeout(searchTimer)
   })
   const control = createMemo(() =>
     modelControl({
@@ -246,8 +320,12 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   }
 
   const choose = () => {
+    window.clearTimeout(searchTimer)
     setQuery("")
+    setCatalogQuery("")
+    setCatalogLimit(CATALOG_FIRST_CHUNK)
     setView("models")
+    prepareCatalog()
     focus("[data-model-catalog-search]", true)
   }
 
@@ -285,8 +363,15 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
       onOpenChange={(next) => {
         setOpen(next)
         if (!next) {
+          window.clearTimeout(searchTimer)
+          if (prepareFrame) cancelAnimationFrame(prepareFrame)
+          if (preparePaintFrame) cancelAnimationFrame(preparePaintFrame)
+          prepareFrame = 0
+          preparePaintFrame = 0
           setView("root")
           setQuery("")
+          setCatalogQuery("")
+          setCatalogReady(false)
         }
       }}
       modal={mobile()}
@@ -311,9 +396,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
           fallback={
             <>
               <span class="truncate">{control().trigger}</span>
-              <span aria-hidden="true" class="shrink-0 text-text-weak">
-                ⌄
-              </span>
+              <Icon name="chevron-down" size="small" class="shrink-0 text-text-weak" />
             </>
           }
         >
@@ -363,7 +446,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
               <Match when={view() === "root"}>
                 <div data-model-menu-scope class="flex flex-col">
                   <div class="model-settings-models" role="radiogroup" aria-label="Model">
-                    <p class="model-settings-heading">Quick models</p>
+                    <p class="model-settings-heading">Suggested models</p>
                     <For each={quick()}>
                       {(model) => {
                         const selected = () =>
@@ -389,13 +472,21 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                             }}
                           >
                             <span class="model-settings-model">
-                              <strong>{model.name}</strong>
+                              <span class="model-settings-model-heading">
+                                <strong>{model.name}</strong>
+                                <span class="model-settings-provider">
+                                  <Show
+                                    when={providerIcon(displayProviderForModel(model.provider, model.id).id)}
+                                    fallback={<span aria-hidden="true">{provider().charAt(0).toUpperCase()}</span>}
+                                  >
+                                    {(icon) => <ProviderIcon id={icon()} aria-hidden="true" />}
+                                  </Show>
+                                  {provider()}
+                                </span>
+                              </span>
                               <small>
-                                {modelSummary({
-                                  reasoning: model.capabilities.reasoning,
-                                  context: model.limit.context,
-                                  provider: provider(),
-                                })}
+                                {model.capabilities.reasoning ? "Reasoning · " : ""}
+                                {modelContext(model.limit.context)} context
                               </small>
                             </span>
                             <Show when={selected()}>
@@ -414,7 +505,10 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                     class={`${row} model-settings-more`}
                     onClick={choose}
                   >
-                    <span data-model-menu-label>More models</span>
+                    <span class="model-settings-setting">
+                      <span data-model-menu-label>More models</span>
+                      <small>Browse models from your connected providers.</small>
+                    </span>
                     <span aria-hidden="true" data-model-menu-value>
                       ›
                     </span>
@@ -432,7 +526,10 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                         aria-expanded={view() === "effort"}
                         onClick={() => show("effort")}
                       >
-                        <span data-model-menu-label>{effort().label}</span>
+                        <span class="model-settings-setting">
+                          <span data-model-menu-label>{effort().label}</span>
+                          <small>Choose how deeply the model reasons.</small>
+                        </span>
                         <span data-model-menu-value class="flex min-w-0 items-center">
                           <span class="truncate">{effort().value}</span>
                           <span aria-hidden="true">›</span>
@@ -452,7 +549,10 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                         aria-expanded={view() === "speed"}
                         onClick={() => show("speed")}
                       >
-                        <span data-model-menu-label>{speed().label}</span>
+                        <span class="model-settings-setting">
+                          <span data-model-menu-label>{speed().label}</span>
+                          <small>Choose the provider's latency tier.</small>
+                        </span>
                         <span data-model-menu-value class="flex min-w-0 items-center">
                           <span class="truncate">{speed().value}</span>
                           <span aria-hidden="true">›</span>
@@ -481,63 +581,73 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                       data-model-catalog-search
                       type="search"
                       value={query()}
-                      onInput={(event) => setQuery(event.currentTarget.value)}
+                      onInput={(event) => searchCatalog(event.currentTarget.value)}
                       placeholder="Find a model or provider"
                       aria-label="Find a model or provider"
                     />
                   </label>
                   <div class="model-settings-catalog" role="radiogroup" aria-label="Available models">
-                    <For each={groups()}>
-                      {(group) => (
-                        <section class="model-settings-group" aria-label={group[0]}>
-                          <p class="model-settings-heading">{group[0]}</p>
-                          <For each={group[1]}>
-                            {(model) => {
-                              const selected = () =>
-                                current()?.provider.id === model.provider.id && current()?.id === model.id
-                              return (
-                                <button
-                                  type="button"
-                                  role="radio"
-                                  data-model-menu-item
-                                  data-model-catalog-item
-                                  aria-checked={selected()}
-                                  class={row}
-                                  onClick={() => {
-                                    local.model.set(
-                                      { providerID: model.provider.id, modelID: model.id },
-                                      { recent: true },
-                                    )
-                                    setOpen(false)
-                                  }}
-                                >
-                                  <span class="model-settings-model">
-                                    <strong>{model.name}</strong>
-                                    <small>
-                                      {modelSummary({
-                                        reasoning: model.capabilities.reasoning,
-                                        context: model.limit.context,
-                                        provider: displayProviderForModel(model.provider, model.id).name,
-                                      })}
-                                    </small>
-                                  </span>
-                                  <Show when={selected()}>
-                                    <Icon name="check" size="small" class="model-settings-check" aria-hidden="true" />
-                                  </Show>
-                                </button>
-                              )
-                            }}
-                          </For>
-                        </section>
-                      )}
-                    </For>
-                    <Show when={catalog().length === 0}>
-                      <p class="model-settings-empty">No models match “{query()}”.</p>
+                    <Show when={catalogReady()} fallback={<p class="model-settings-empty">Loading models…</p>}>
+                      <For each={visibleGroups()}>
+                        {(group) => (
+                          <section class="model-settings-group" aria-label={group[0]}>
+                            <p class="model-settings-heading">{group[0]}</p>
+                            <For each={group[1]}>
+                              {(model) => {
+                                const selected = () =>
+                                  current()?.provider.id === model.provider.id && current()?.id === model.id
+                                return (
+                                  <button
+                                    type="button"
+                                    role="radio"
+                                    data-model-menu-item
+                                    data-model-catalog-item
+                                    aria-checked={selected()}
+                                    class={row}
+                                    onClick={() => {
+                                      local.model.set(
+                                        { providerID: model.provider.id, modelID: model.id },
+                                        { recent: true },
+                                      )
+                                      setOpen(false)
+                                    }}
+                                  >
+                                    <span class="model-settings-model">
+                                      <strong>{model.name}</strong>
+                                      <small>
+                                        {modelSummary({
+                                          reasoning: model.capabilities.reasoning,
+                                          context: model.limit.context,
+                                          provider: displayProviderForModel(model.provider, model.id).name,
+                                        })}
+                                      </small>
+                                    </span>
+                                    <Show when={selected()}>
+                                      <Icon name="check" size="small" class="model-settings-check" aria-hidden="true" />
+                                    </Show>
+                                  </button>
+                                )
+                              }}
+                            </For>
+                          </section>
+                        )}
+                      </For>
+                      <Show when={catalog().length === 0}>
+                        <p class="model-settings-empty">No models match “{query()}”.</p>
+                      </Show>
+                      <Show when={catalogLimit() < catalog().length}>
+                        <p class="model-settings-catalog-progress" role="status">
+                          Loading more models…
+                        </p>
+                      </Show>
                     </Show>
                   </div>
                   <div class="model-settings-divider" />
                   <button type="button" data-model-menu-item class={`${row} model-settings-manage`} onClick={manage}>
-                    <span data-model-menu-label>Manage models</span>
+                    <span class="model-settings-setting">
+                      <span data-model-menu-label>Manage models</span>
+                      <small>Choose which connected models appear here.</small>
+                    </span>
                     <span aria-hidden="true" data-model-menu-value>
                       ›
                     </span>

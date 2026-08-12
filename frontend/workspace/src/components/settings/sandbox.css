@@ -1,0 +1,293 @@
+/* Sandbox is deliberately quieter than the previous icon-per-row layout.
+   One semantic mark communicates backend availability; policy, path, and test
+   actions rely on proximity and a consistent 32px control rhythm. */
+.settings-preferences-panel--sandbox .settings-page-header__inner {
+  position: relative;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-save-state {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 48px;
+  color: var(--text-weak);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: right;
+}
+
+.settings-preferences-panel--sandbox .settings-preferences-card {
+  overflow: hidden;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-control-row {
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: var(--settings-space-3);
+  padding: 10px var(--settings-space-4);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-control-row > :last-child {
+  max-width: 100%;
+  justify-self: end;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-status-row {
+  width: 100%;
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) max-content 16px;
+  align-items: center;
+  gap: var(--settings-space-3);
+  padding: 10px var(--settings-space-4);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-strong);
+  text-align: left;
+  transition: background-color 150ms ease;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-status-row:hover {
+  background: var(--settings-surface-hover);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-status-row:active {
+  background: var(--settings-selection);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-status-mark {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+  color: var(--text-warning-base);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-status-mark[data-tone="success"] {
+  background: color-mix(in srgb, var(--icon-success-base) 10%, transparent);
+  color: var(--icon-success-base);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-disclosure-icon {
+  color: var(--icon-weak-base);
+  transition: transform 200ms ease;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-disclosure-icon--open {
+  transform: rotate(180deg);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-backend-details {
+  padding: 0 var(--settings-space-4) var(--settings-space-4) 60px;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-backend-details dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--settings-space-3) var(--settings-space-4);
+  margin: 0;
+  padding: var(--settings-space-3);
+  border: 0;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-backend-details dl > div {
+  min-width: 0;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-backend-details dt {
+  margin: 0 0 2px;
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-backend-details dd {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+  font-synthesis: none;
+  font-variant-numeric: slashed-zero;
+  text-wrap: pretty;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-path-row {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: var(--settings-space-3);
+  padding: var(--settings-space-2) var(--settings-space-4);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-path-row code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-synthesis: none;
+  font-variant-numeric: slashed-zero;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-path-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: var(--settings-space-2);
+  padding: var(--settings-space-2) var(--settings-space-4) var(--settings-space-3);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-path-editor .settings-field {
+  min-width: 0;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-result {
+  padding: 0 var(--settings-space-4) var(--settings-space-4);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-result__summary {
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: var(--settings-space-2);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-result__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-danger);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-result__dot[data-tone="success"] {
+  background: var(--icon-success-base);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-checks {
+  display: grid;
+  gap: var(--settings-space-2);
+  margin-top: var(--settings-space-2);
+  padding: var(--settings-space-3);
+  border: 0;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-check {
+  display: grid;
+  grid-template-columns: 16px minmax(120px, auto) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--settings-space-2);
+  color: var(--text-strong);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.settings-preferences-panel--sandbox .settings-sandbox-check__detail {
+  min-width: 0;
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-synthesis: none;
+  font-variant-numeric: slashed-zero;
+  text-wrap: pretty;
+}
+
+.settings-preferences-panel--sandbox
+  :where(.settings-sandbox-status-row, .settings-preference-action, .settings-panel-action):focus-visible {
+  transition: none;
+}
+
+@container settings-main (max-width: 620px) {
+  .settings-preferences-panel--sandbox .settings-sandbox-backend-details dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container settings-main (max-width: 520px) {
+  .settings-preferences-panel--sandbox .settings-sandbox-control-row:not(.settings-sandbox-enable-row) {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-control-row:not(.settings-sandbox-enable-row) > :last-child {
+    justify-self: start;
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-status-row {
+    grid-template-areas:
+      "mark copy disclosure"
+      ". state state";
+    grid-template-columns: 32px minmax(0, 1fr) 16px;
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-status-mark {
+    grid-area: mark;
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-status-row .settings-row-copy {
+    grid-area: copy;
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-status-row .settings-preference-status {
+    grid-area: state;
+    justify-self: start;
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-disclosure-icon {
+    grid-area: disclosure;
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-backend-details {
+    padding-left: var(--settings-space-4);
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-result__summary {
+    grid-template-columns: 8px minmax(0, 1fr);
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-result__summary .settings-preference-action {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-check {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-check__detail {
+    grid-column: 2;
+  }
+}
+
+@container settings-main (max-width: 420px) {
+  .settings-preferences-panel--sandbox .settings-sandbox-backend-details dl,
+  .settings-preferences-panel--sandbox .settings-sandbox-path-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-preferences-panel--sandbox .settings-sandbox-path-editor .settings-panel-action {
+    justify-self: start;
+  }
+}

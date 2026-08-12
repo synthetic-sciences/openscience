@@ -1,5 +1,7 @@
 .files-source {
   position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .files-source__button {
@@ -7,21 +9,34 @@
   align-items: center;
   gap: 8px;
   max-width: 100%;
-  padding: 7px 10px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 8px;
-  background: var(--color-bg-subtle);
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
+  background: transparent;
   color: var(--color-text);
   font: inherit;
   font-size: 13px;
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.files-source__glyph {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-muted);
 }
 .files-source__button:hover {
-  background: var(--color-surface);
+  background: var(--color-bg-subtle);
+}
+.files-source__button[aria-expanded="true"] {
+  background: var(--color-bg-subtle);
 }
 .files-source__button:focus-visible {
-  outline: 1px solid var(--color-text);
-  outline-offset: 1px;
+  outline: 2px solid var(--color-border-base);
+  outline-offset: 0;
 }
 .files-source__name {
   overflow: hidden;
@@ -29,8 +44,9 @@
   white-space: nowrap;
 }
 .files-source__caret {
+  display: inline-flex;
+  flex: none;
   color: var(--color-text-faint);
-  font-size: 10px;
 }
 
 .files-menu-wrap {
@@ -51,25 +67,25 @@
 }
 
 .files-menu {
-  /* Never wider than the pane it opens inside: a docked pane is ~396px, and a
-     fixed-width menu plus a long path forces a horizontal scrollbar. */
+  /* Container-relative, not viewport-relative: the inspector can be 320px wide
+     inside a desktop viewport that is ten times larger. */
   position: absolute;
-  top: 40px;
+  top: 42px;
   left: 0;
-  width: min(300px, calc(100vw - 24px));
-  max-height: 400px;
+  width: min(300px, calc(100cqi - 44px), calc(100vw - 24px));
+  max-height: min(400px, calc(100vh - 96px));
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 10px;
+  padding: 6px;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--atlas-radius-md);
   background: var(--color-surface-solid);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--atlas-shadow-float);
 }
 .files-menu__group {
-  padding: 9px 8px 4px;
+  padding: 10px 10px 5px;
   font-size: 11px;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--letter-spacing-normal);
   color: var(--color-text-faint);
 }
 /* Two sibling controls, one row: picking the source and revoking it are
@@ -92,15 +108,19 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px;
+  min-height: 40px;
+  padding: 6px 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--atlas-radius-xs);
   background: none;
   color: var(--color-text);
   font: inherit;
   font-size: 13px;
   text-align: left;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 .files-menu__item:hover {
   background: var(--color-bg-subtle);
@@ -159,11 +179,13 @@
   font-size: 11px;
 }
 .files-menu__badge {
-  padding: 1px 5px;
-  border: 1px solid var(--color-border-weak-base);
+  min-height: 22px;
+  padding: 2px 6px;
+  border: 0;
   border-radius: 999px;
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
+  background: var(--color-bg-subtle);
+  font-size: 11px;
+  letter-spacing: var(--letter-spacing-normal);
   color: var(--color-text-muted);
 }
 .files-menu__dot {
@@ -174,18 +196,22 @@
 }
 .files-menu__revoke {
   flex: 0 0 auto;
-  padding: 2px 6px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--atlas-radius-xs) - 2px);
   background: none;
   font: inherit;
   font-family: var(--font-code);
   font-size: 10.5px;
   color: var(--color-text-muted);
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 .files-menu__revoke:hover {
-  border-color: var(--color-text-muted);
+  background: var(--color-bg-subtle);
   color: var(--color-text);
 }
 .files-menu__revoke:focus-visible {
@@ -200,8 +226,29 @@
 
 .files-table {
   flex: 1;
+  min-height: 0;
+  padding: 0 4px 10px;
   overflow-y: auto;
-  border-top: 1px solid var(--color-border-weak-base);
+}
+
+.files-table__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  background: var(--color-bg);
+  color: var(--color-text-faint);
+  font-size: 11px;
+}
+.files-table__header > :last-child {
+  min-width: 52px;
+  text-align: right;
 }
 
 .files-row {
@@ -210,26 +257,34 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 12px;
+  min-height: 40px;
+  margin: 1px 0;
+  padding: 5px 8px;
   border: 0;
-  border-bottom: 1px solid var(--color-border-weak-base);
+  border-radius: var(--atlas-radius-xs);
   background: none;
   color: var(--color-text);
   font: inherit;
   font-size: 13px;
   text-align: left;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
 }
 .files-row:hover {
   background: var(--color-bg-subtle);
 }
 .files-row:focus-visible {
-  outline: 1px solid var(--color-text);
+  outline: 2px solid var(--color-border-base);
   outline-offset: -2px;
 }
 .files-row__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-text-faint);
-  font-size: 13px;
 }
 .files-row__name {
   min-width: 0;
@@ -252,7 +307,7 @@
   color: var(--color-text-faint);
 }
 .files-empty {
-  padding: 30px 16px;
+  padding: 34px 18px;
   color: var(--color-text-faint);
   font-size: 12.5px;
   line-height: 1.6;
@@ -265,22 +320,32 @@
   background: none;
 }
 .files-trash__note {
-  margin: 0;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--color-border-weak-base);
+  margin: 6px 4px 8px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
+  background: var(--color-bg-subtle);
   color: var(--color-text-faint);
   font-size: 11.5px;
   line-height: 1.5;
 }
 .files-restore {
-  padding: 4px 9px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: calc(var(--atlas-radius-xs) - 2px);
   background: none;
   color: var(--color-text-muted);
   font: inherit;
   font-size: 11.5px;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
 }
 .files-restore:hover:not(:disabled) {
   background: var(--color-bg-subtle);
@@ -330,131 +395,273 @@
   background-color: color-mix(in srgb, var(--color-text) 32%, transparent);
 }
 
-.files-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 10px 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.files-tabs::-webkit-scrollbar {
-  display: none;
-}
-.files-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 210px;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.files-tab:focus-visible {
-  outline: 1px solid var(--color-text);
-  outline-offset: -2px;
-}
-.files-tab__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* The pair carries the tab's chrome so its two controls read as one tab. */
-.files-tab-pair {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  max-width: 210px;
-  padding-right: 5px;
-  border-radius: 7px;
-}
-.files-tab-pair:hover {
-  background: var(--color-bg-subtle);
-}
-.files-tab-pair:hover .files-tab {
-  color: var(--color-text);
-}
-.files-tab-pair--active {
-  background: var(--color-surface);
-}
-.files-tab-pair--active .files-tab {
-  color: var(--color-text);
-}
-.files-tab__close {
-  display: inline-flex;
-  align-items: center;
-  flex: none;
-  padding: 4px;
-  border: 0;
-  border-radius: 3px;
-  background: none;
-  color: var(--color-text-faint);
-  font: inherit;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-.files-tab__close:hover {
-  color: var(--color-text);
-}
-.files-tab__close:focus-visible {
-  outline: 1px solid var(--color-text);
-  outline-offset: 1px;
-}
-
 .files-pane {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
   background: var(--color-bg);
+  container: files-pane / inline-size;
 }
-.files-source-row {
+
+.files-browser {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.files-browser__header {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px 6px;
+  border: 0;
+}
+
+.files-browser__toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px 8px;
+  gap: 6px;
+  min-width: 0;
 }
-.files-search-row {
+
+.files-browser__toolbar .files-source {
+  max-width: min(48cqi, 210px);
+}
+
+.files-browser__toolbar .files-source__button {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* The source control names a location; this compact second line explains its
+   storage role. It yields to breadcrumbs as soon as the person navigates into
+   a folder, so the header never grows into three stacked toolbars. */
+.files-source-context {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px 10px;
+  gap: 7px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 4px;
+  color: var(--color-text-faint);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.files-source-context__label {
+  flex: none;
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+.files-source-context__divider {
+  flex: none;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--color-border-base);
+}
+.files-source-context__copy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-source-context__badge {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: var(--atlas-radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.files-path {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.files-path::-webkit-scrollbar {
+  display: none;
+}
+.files-path__root,
+.files-path__crumb {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.files-path__root {
+  width: 32px;
+  padding: 0;
+}
+.files-path__root:hover,
+.files-path__crumb:hover:not(:disabled) {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+.files-path__root:focus-visible,
+.files-path__crumb:focus-visible {
+  outline: 2px solid var(--color-border-base);
+  outline-offset: -2px;
+}
+.files-path__crumb:disabled {
+  max-width: 150px;
+  overflow: hidden;
+  color: var(--color-text);
+  cursor: default;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-path__separator {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-faint);
 }
 .files-search {
+  display: flex;
+  flex: 1 1 160px;
+  align-items: center;
+  min-height: 32px;
+  min-width: 0;
+  padding: 0 3px 0 10px;
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.files-search:focus-within {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-base);
+}
+.files-search__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-faint);
+}
+.files-search__input {
   flex: 1;
   min-width: 0;
-  padding: 8px 11px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 8px;
-  background: var(--color-bg-subtle);
+  padding: 0 8px;
+  border: 0;
+  outline: 0;
+  background: transparent;
   color: var(--color-text);
   font: inherit;
   font-size: 12.5px;
 }
-.files-search::placeholder {
+.files-search__input::-webkit-search-cancel-button {
+  appearance: none;
+}
+.files-search__input::placeholder {
   color: var(--color-text-faint);
 }
-.files-search:focus {
+.files-search__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.files-search__clear:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.files-search__clear:focus-visible {
   outline: none;
-  border-color: var(--color-text-muted);
+  box-shadow: inset 0 0 0 1px var(--color-text);
 }
 .files-connect {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 0 12px 10px;
-  padding: 10px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 8px;
+  margin: 4px 12px 8px;
+  padding: 12px;
+  border: 0;
+  border-radius: var(--atlas-radius-md);
   background: var(--color-bg-subtle);
+}
+.files-connect__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.files-connect__heading > span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.files-connect__heading strong {
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: var(--font-weight-emphasis);
+}
+.files-connect__heading small {
+  color: var(--color-text-faint);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.files-connect__dismiss {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.files-connect__dismiss:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 .files-connect__row {
   display: flex;
@@ -475,12 +682,26 @@
 }
 .files-connect__field select {
   width: 100%;
-  padding: 6px 8px;
+  min-height: 36px;
+  padding: 0 8px;
   border: 1px solid var(--color-border-weak-base);
-  border-radius: 6px;
+  border-radius: calc(var(--atlas-radius-xs) - 2px);
   background: var(--color-bg);
   color: var(--color-text);
   font: inherit;
+  font-size: 12px;
+}
+.files-connect__path {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: var(--atlas-radius-xs);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-family: var(--font-code);
   font-size: 12px;
 }
 .files-connect__note {
@@ -490,21 +711,28 @@
   line-height: 1.5;
 }
 .files-connect__note--blocked {
-  padding-left: 8px;
-  border-left: 2px solid var(--color-border-weak-base);
+  padding: 8px 9px;
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
+  background: var(--color-bg);
   color: var(--color-text-muted);
 }
 .files-connect__browse,
 .files-connect__cancel,
 .files-connect__submit {
-  padding: 7px 11px;
+  min-height: 34px;
+  padding: 0 11px;
   border: 1px solid var(--color-border-weak-base);
-  border-radius: 7px;
+  border-radius: var(--atlas-radius-xs);
   background: none;
   color: var(--color-text-muted);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 .files-connect__submit {
   border-color: var(--color-text-muted);
@@ -527,25 +755,59 @@
 }
 
 .files-notice {
-  margin: 0 12px 8px;
+  margin: 4px 12px 8px;
   padding: 8px 10px;
-  border-left: 2px solid var(--color-border-weak-base);
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
   background: var(--color-bg-subtle);
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.5;
+}
+.files-notice--error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.files-notice--error > span {
+  flex: 1;
+  min-width: 0;
+}
+.files-notice__retry {
+  min-width: 56px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: var(--font-weight-emphasis);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.files-notice__retry:hover {
+  background: var(--color-surface);
+}
+.files-notice__retry:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 2px;
 }
 
 /* ---------------------------------------------------------------- artifacts */
 
 .artifact-surface {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  /* The same gutter .files-search-row uses, so the count, the group headers and
-     the cards line up with the search box instead of hugging the pane edge. */
-  padding: 0 12px 12px;
+  min-height: 0;
+  /* Match the browser header so cards, groups, and controls share one axis. */
+  padding: 4px 12px 12px;
   overflow-y: auto;
 }
 
@@ -565,52 +827,68 @@
 .artifact-toolbar__sort,
 .artifact-toolbar__layout button,
 .artifact-toolbar__prefs {
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 7px;
-  background: var(--color-bg-subtle);
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
+  background: transparent;
   color: var(--color-text);
   font: inherit;
   font-size: 12.5px;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
 }
 .artifact-toolbar__sort {
-  padding: 4px 8px;
+  padding: 0 9px;
   white-space: nowrap;
 }
 .artifact-toolbar__layout {
   display: inline-flex;
   overflow: hidden;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 7px;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
+  background: var(--color-bg-subtle);
 }
 .artifact-toolbar__layout button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
   border: 0;
-  border-radius: 0;
-  padding: 4px 8px;
+  border-radius: calc(var(--atlas-radius-xs) - 2px);
+  padding: 0;
   background: transparent;
   color: var(--color-text-faint);
   line-height: 1.35;
 }
 .artifact-toolbar__layout button[aria-pressed="true"] {
-  background: var(--color-surface);
+  background: var(--color-surface-solid);
+  box-shadow: var(--atlas-shadow-xs);
   color: var(--color-text);
 }
 .artifact-toolbar__prefs {
-  padding: 4px 7px;
-  border-color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
   background: transparent;
   color: var(--color-text-faint);
   line-height: 1.3;
 }
 .artifact-toolbar__sort:hover,
+.artifact-toolbar__layout button:hover,
 .artifact-toolbar__prefs:hover {
-  background: var(--color-surface);
+  background: var(--color-bg-subtle);
 }
 .artifact-toolbar__sort:focus-visible,
 .artifact-toolbar__layout button:focus-visible,
 .artifact-toolbar__prefs:focus-visible {
-  outline: 1px solid var(--color-text);
-  outline-offset: 1px;
+  outline: 2px solid var(--color-border-base);
+  outline-offset: 0;
 }
 
 .artifact-group {
@@ -622,7 +900,7 @@
 .artifact-group__name {
   overflow: hidden;
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: var(--font-weight-emphasis);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -637,7 +915,7 @@
 /* auto-fill, so a wider pane gains columns instead of stretching cards. */
 .artifact-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(136px, 100%), 1fr));
   gap: 10px;
 }
 .artifact-list {
@@ -653,12 +931,16 @@
 .artifact-card[data-layout="grid"] {
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 10px;
+  border: 0;
+  border-radius: var(--atlas-radius-md);
   background: var(--color-bg-subtle);
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease;
 }
 .artifact-card[data-layout="grid"]:hover {
-  border-color: var(--color-border-base);
+  background: var(--color-surface);
+  box-shadow: var(--atlas-shadow-xs);
 }
 .artifact-card__open {
   display: flex;
@@ -678,8 +960,10 @@
 .artifact-card[data-layout="list"] {
   align-items: center;
   gap: 8px;
-  padding: 4px 6px;
-  border-radius: 8px;
+  min-height: 42px;
+  padding: 5px 4px 5px 6px;
+  border-radius: var(--atlas-radius-xs);
+  transition: background-color 140ms ease;
 }
 .artifact-card[data-layout="list"]:hover {
   background: var(--color-bg-subtle);
@@ -689,8 +973,8 @@
   gap: 10px;
 }
 .artifact-card__open:focus-visible {
-  outline: 1px solid var(--color-text);
-  outline-offset: -1px;
+  outline: 2px solid var(--color-border-base);
+  outline-offset: -2px;
 }
 
 .artifact-card__label {
@@ -714,6 +998,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.artifact-card[data-layout="grid"] .artifact-card__name {
+  display: -webkit-box;
+  min-height: 4.05em;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
 .artifact-card[data-layout="list"] .artifact-card__name {
   flex: 1;
 }
@@ -730,26 +1024,27 @@
   background: var(--color-bg-subtle);
 }
 .artifact-card[data-layout="grid"] .artifact-thumb {
-  height: 94px;
-  border-bottom: 1px solid var(--color-border-weak-base);
+  height: clamp(74px, 24cqi, 94px);
+  border: 0;
 }
 .artifact-card[data-layout="list"] .artifact-thumb {
   flex: none;
   width: 30px;
   height: 30px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 6px;
+  border: 0;
+  border-radius: calc(var(--atlas-radius-xs) - 2px);
 }
 .artifact-thumb--image {
   width: 100%;
   height: 100%;
-  background: #fff;
+  background: var(--color-surface-solid);
   object-fit: contain;
 }
 .artifact-card[data-layout="list"] .artifact-thumb--image {
   object-fit: cover;
 }
-/* Ten lines of real source, faded out rather than clipped mid-glyph. */
+/* A preview is a bounded sample, not a floating fade. Keeping the edge solid
+   prevents a gradient from being visibly clipped by the card boundary. */
 .artifact-thumb--text {
   width: 100%;
   margin: 0;
@@ -760,8 +1055,6 @@
   font-size: 7.4px;
   line-height: 1.55;
   white-space: pre;
-  mask-image: linear-gradient(180deg, #000 56%, transparent 100%);
-  -webkit-mask-image: linear-gradient(180deg, #000 56%, transparent 100%);
 }
 .artifact-card[data-layout="list"] .artifact-thumb--text {
   padding: 3px;
@@ -775,13 +1068,13 @@
 }
 .artifact-thumb--binary span {
   padding: 4px 9px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 6px;
+  border: 0;
+  border-radius: calc(var(--atlas-radius-xs) - 2px);
+  background: var(--color-surface-solid);
   color: var(--color-text-faint);
   font-family: var(--font-code);
   font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-normal);
 }
 .artifact-card[data-layout="list"] .artifact-thumb--binary span {
   padding: 0;
@@ -796,23 +1089,28 @@
   position: absolute;
   top: 6px;
   right: 6px;
-  padding: 1px 5px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 6px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--atlas-radius-xs) - 2px);
   opacity: 0;
   background: var(--color-surface-solid);
   color: var(--color-text);
   font: inherit;
-  font-size: 13px;
-  line-height: 1.35;
   cursor: pointer;
-  transition: opacity 90ms ease;
+  box-shadow: var(--atlas-shadow-xs);
+  transition:
+    opacity 140ms ease,
+    background-color 140ms ease;
 }
 .artifact-card[data-layout="list"] .artifact-card__actions {
   position: static;
   flex: none;
-  border-color: transparent;
   background: transparent;
+  box-shadow: none;
 }
 .artifact-card:hover .artifact-card__actions,
 .artifact-card__actions:focus-visible,
@@ -847,9 +1145,9 @@
   min-width: 168px;
   padding: 4px;
   border: 1px solid var(--color-border-base);
-  border-radius: 9px;
+  border-radius: var(--atlas-radius-sm);
   background: var(--color-surface-solid);
-  box-shadow: 0 12px 30px -12px rgb(0 0 0 / 0.55);
+  box-shadow: 0 12px 30px -12px rgb(8 10 14 / 0.38);
 }
 /* The toolbar spans the pane, so anchoring this one to its right edge keeps it
    inside without measurement. */
@@ -864,9 +1162,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 36px;
   padding: 6px 9px;
   border: 0;
-  border-radius: 6px;
+  border-radius: calc(var(--atlas-radius-xs) - 2px);
   background: transparent;
   color: var(--color-text);
   font: inherit;
@@ -874,6 +1173,9 @@
   text-align: left;
   text-decoration: none;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 .artifact-menu button:hover,
 .artifact-menu a:hover {
@@ -902,14 +1204,19 @@
   display: flex;
   flex: 1;
   flex-direction: column;
+  margin: 0;
   min-height: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .remote-view__bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border-weak-base);
+  padding: 10px 12px;
+  border: 0;
 }
 .remote-view__title {
   display: flex;
@@ -934,25 +1241,30 @@
   flex: none;
   align-items: center;
   gap: 5px;
-  padding: 4px 8px;
-  border: 1px solid var(--color-border-weak-base);
-  border-radius: 7px;
-  background: var(--color-bg-subtle);
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--atlas-radius-sm);
+  background: transparent;
   color: var(--color-text);
   font: inherit;
   font-size: 12.5px;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 .remote-view__action:hover {
-  background: var(--color-surface);
+  background: var(--color-bg-subtle);
 }
 .remote-view__action:focus-visible {
   outline: 1px solid var(--color-text);
   outline-offset: 1px;
 }
 .remote-view__action--icon {
-  padding: 4px 6px;
-  border-color: transparent;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
   background: transparent;
   color: var(--color-text-faint);
 }
@@ -978,7 +1290,7 @@
   display: block;
   max-width: 100%;
   margin: 12px auto;
-  background: #fff;
+  background: var(--color-surface-solid);
 }
 .remote-view__frame {
   width: 100%;
@@ -1007,7 +1319,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 8px;
+  padding: 4px 12px 8px;
   color: var(--color-text-muted);
   font-size: 12.5px;
 }
@@ -1032,10 +1344,111 @@
     animation: none;
     opacity: 0.6;
   }
+
+  .files-source__button,
+  .files-menu__item,
+  .files-menu__revoke,
+  .files-path__root,
+  .files-path__crumb,
+  .files-search,
+  .files-search__clear,
+  .files-connect__dismiss,
+  .files-connect__browse,
+  .files-connect__cancel,
+  .files-connect__submit,
+  .files-notice__retry,
+  .files-row,
+  .files-restore,
+  .artifact-toolbar__sort,
+  .artifact-toolbar__layout button,
+  .artifact-toolbar__prefs,
+  .artifact-card,
+  .artifact-card__actions,
+  .artifact-menu button,
+  .artifact-menu a,
+  .remote-view__action {
+    transition: none;
+  }
 }
 
 /* Shown but not actionable: the rows describe the folder being left. */
 .files-table--busy .files-row {
   opacity: 0.5;
   cursor: default;
+}
+
+@container files-pane (max-width: 340px) {
+  .files-browser__header,
+  .artifact-surface {
+    padding: 10px;
+  }
+
+  .files-connect__row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .files-connect__browse,
+  .files-connect__cancel,
+  .files-connect__submit {
+    width: 100%;
+  }
+
+  .files-connect__row--end {
+    flex-direction: row;
+  }
+
+  .artifact-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+/* Source details remain available in the picker at narrow widths. Removing
+   the helper row here preserves the primary source/search controls and avoids
+   spending scarce vertical space on text that would be truncated anyway. */
+@container files-pane (max-width: 400px) {
+  .files-source-context {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .files-source__button,
+  .files-menu__item,
+  .files-menu__revoke,
+  .files-row,
+  .files-path__root,
+  .files-path__crumb,
+  .files-search,
+  .files-search__clear,
+  .files-connect__dismiss,
+  .files-connect__browse,
+  .files-connect__cancel,
+  .files-connect__submit,
+  .files-notice__retry,
+  .files-restore,
+  .artifact-toolbar__sort,
+  .artifact-toolbar__layout button,
+  .artifact-toolbar__prefs,
+  .artifact-card__actions,
+  .artifact-menu button,
+  .artifact-menu a,
+  .remote-view__action {
+    min-height: 44px;
+  }
+
+  .files-search__clear,
+  .files-connect__dismiss,
+  .files-path__root,
+  .artifact-toolbar__prefs,
+  .artifact-card__actions,
+  .remote-view__action--icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .artifact-toolbar__layout button,
+  .artifact-toolbar__prefs {
+    min-width: 44px;
+  }
 }

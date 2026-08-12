@@ -4,8 +4,9 @@ import { $ } from "bun"
 import z from "zod"
 import { NamedError } from "@synsci/util/error"
 import { Log } from "../util/log"
-import { iife } from "@/util/iife"
 import { Flag } from "../flag/flag"
+import fs from "node:fs/promises"
+import os from "node:os"
 
 declare global {
   const OPENSCIENCE_VERSION: string
@@ -16,6 +17,14 @@ declare global {
 
 export namespace Installation {
   const log = Log.create({ service: "installation" })
+  const RELEASE_TIMEOUT_MS = 10_000
+
+  function releaseFetch(input: string | URL | Request, init: RequestInit = {}) {
+    return fetch(input, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(RELEASE_TIMEOUT_MS),
+    })
+  }
 
   export type Method = Awaited<ReturnType<typeof method>>
 
@@ -59,73 +68,32 @@ export namespace Installation {
     return CHANNEL === "local"
   }
 
-  export async function method() {
-    if (process.execPath.includes(path.join(".openscience", "bin"))) return "curl"
+  export function methodFromPaths(input: { execPath: string; scriptPath?: string }) {
+    const exec = input.execPath.replaceAll("\\", "/").toLowerCase()
+    const script = (input.scriptPath ?? "").replaceAll("\\", "/").toLowerCase()
+    const installed = `${exec}\n${script}`
+
+    if (exec.includes("/.openscience/bin/") || exec.includes("/.synsc/bin/")) return "curl" as const
     // legacy pre-rename curl installs lived under ~/.synsc/bin
-    if (process.execPath.includes(path.join(".synsc", "bin"))) return "curl"
     // ~/.local/bin is ALSO npm's target with `--prefix ~/.local`, pipx, and many
-    // package managers — so it's ambiguous. Defer it: let the package-manager
-    // probes below claim the install first, and only fall back to "curl" for
-    // .local/bin when none of them do (see after the loop). Otherwise a
-    // `npm i -g` into ~/.local was upgraded with the curl script.
-    const inLocalBin = process.execPath.includes(path.join(".local", "bin"))
-    const exec = process.execPath.toLowerCase()
+    // package managers. Prefer the wrapper's own immutable location over
+    // running package-manager discovery inside a user project: yarnPath,
+    // npmrc, PATH, or similar project configuration must never execute during
+    // a background update check.
+    if (installed.includes("/.bun/install/global/")) return "bun" as const
+    if (installed.includes("/.config/yarn/global/") || installed.includes("/yarn/global/")) return "yarn" as const
+    if (installed.includes("/.pnpm/") || installed.includes("/pnpm/global/")) return "pnpm" as const
+    if (installed.includes("/scoop/apps/openscience/")) return "scoop" as const
+    if (installed.includes("/chocolatey/")) return "choco" as const
+    if (installed.includes("/cellar/openscience/")) return "brew" as const
+    if (installed.includes("/node_modules/@synsci/openscience-")) return "npm" as const
+    if (script.includes("/node_modules/@synsci/openscience/")) return "npm" as const
+    if (exec.includes("/.local/bin/")) return "curl" as const
+    return "unknown" as const
+  }
 
-    const checks = [
-      {
-        name: "npm" as const,
-        command: () => $`npm list -g --depth=0`.throws(false).quiet().text(),
-      },
-      {
-        name: "yarn" as const,
-        command: () => $`yarn global list`.throws(false).quiet().text(),
-      },
-      {
-        name: "pnpm" as const,
-        command: () => $`pnpm list -g --depth=0`.throws(false).quiet().text(),
-      },
-      {
-        name: "bun" as const,
-        command: () => $`bun pm ls -g`.throws(false).quiet().text(),
-      },
-      {
-        name: "brew" as const,
-        command: () => $`brew list --formula openscience`.throws(false).quiet().text(),
-      },
-      {
-        name: "scoop" as const,
-        command: () => $`scoop list openscience`.throws(false).quiet().text(),
-      },
-      {
-        name: "choco" as const,
-        command: () => $`choco list --limit-output openscience`.throws(false).quiet().text(),
-      },
-    ]
-
-    checks.sort((a, b) => {
-      const aMatches = exec.includes(a.name)
-      const bMatches = exec.includes(b.name)
-      if (aMatches && !bMatches) return -1
-      if (!aMatches && bMatches) return 1
-      return 0
-    })
-
-    for (const check of checks) {
-      const output = await check.command()
-      const installedName =
-        check.name === "brew" || check.name === "choco" || check.name === "scoop"
-          ? "openscience"
-          : "@synsci/openscience"
-      if (output.includes(installedName)) {
-        return check.name
-      }
-    }
-
-    // No package manager claimed it — now honor the ambiguous ~/.local/bin as a
-    // curl install (the curl installer's default target).
-    if (inLocalBin) return "curl"
-
-    return "unknown"
+  export async function method() {
+    return methodFromPaths({ execPath: process.execPath, scriptPath: process.argv[1] })
   }
 
   export const UpgradeFailedError = NamedError.create(
@@ -144,16 +112,36 @@ export namespace Installation {
   }
 
   export async function upgrade(method: Method, target: string) {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-upgrade-"))
+    const allowed = [
+      "PATH",
+      "HOME",
+      "USERPROFILE",
+      "TMPDIR",
+      "TMP",
+      "TEMP",
+      "SystemRoot",
+      "COMSPEC",
+      "PATHEXT",
+      "APPDATA",
+      "LOCALAPPDATA",
+      "SSL_CERT_FILE",
+      "SSL_CERT_DIR",
+      "HTTPS_PROXY",
+      "HTTP_PROXY",
+      "NO_PROXY",
+      "https_proxy",
+      "http_proxy",
+      "no_proxy",
+    ]
+    const env = Object.fromEntries(allowed.flatMap((key) => (process.env[key] ? [[key, process.env[key]!]] : [])))
     let cmd
     switch (method) {
       case "curl":
         // openscience.sh/install serves the repo install script. The app
         // subdomain serves the dashboard SPA, so piping it into bash fails.
         // Override via OPENSCIENCE_INSTALL_URL if hosting the script elsewhere.
-        cmd = $`curl -fsSL ${process.env.OPENSCIENCE_INSTALL_URL || "https://openscience.sh/install"} | bash`.env({
-          ...process.env,
-          VERSION: target,
-        })
+        cmd = $`curl -fsSL ${process.env.OPENSCIENCE_INSTALL_URL || "https://openscience.sh/install"} | bash`
         break
       case "npm":
         cmd = $`npm install -g @synsci/openscience@${target}`
@@ -166,10 +154,7 @@ export namespace Installation {
         break
       case "brew": {
         const formula = await getBrewFormula()
-        cmd = $`brew upgrade ${formula}`.env({
-          HOMEBREW_NO_AUTO_UPDATE: "1",
-          ...process.env,
-        })
+        cmd = $`brew upgrade ${formula}`
         break
       }
       case "choco":
@@ -181,20 +166,31 @@ export namespace Installation {
       default:
         throw new Error(`Unknown method: ${method}`)
     }
-    const result = await cmd.quiet().throws(false)
-    if (result.exitCode !== 0) {
-      const stderr = method === "choco" ? "not running from an elevated command shell" : result.stderr.toString("utf8")
-      throw new UpgradeFailedError({
-        stderr: stderr,
+    const commandEnv =
+      method === "curl"
+        ? { ...env, VERSION: target }
+        : method === "brew"
+          ? { ...env, HOMEBREW_NO_AUTO_UPDATE: "1" }
+          : env
+    try {
+      const result = await cmd.cwd(cwd).env(commandEnv).quiet().throws(false)
+      if (result.exitCode !== 0) {
+        const stderr =
+          method === "choco" ? "not running from an elevated command shell" : result.stderr.toString("utf8")
+        throw new UpgradeFailedError({
+          stderr: stderr,
+        })
+      }
+      log.info("upgraded", {
+        method,
+        target,
+        stdout: result.stdout.toString(),
+        stderr: result.stderr.toString(),
       })
+      await $`${process.execPath} --version`.cwd(cwd).env(env).nothrow().quiet().text()
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true })
     }
-    log.info("upgraded", {
-      method,
-      target,
-      stdout: result.stdout.toString(),
-      stderr: result.stderr.toString(),
-    })
-    await $`${process.execPath} --version`.nothrow().quiet().text()
   }
 
   export const VERSION = typeof OPENSCIENCE_VERSION === "string" ? OPENSCIENCE_VERSION : "local"
@@ -229,15 +225,12 @@ export namespace Installation {
     const detectedMethod = installMethod || (await method())
 
     if (detectedMethod === "brew") {
-      const formula = await getBrewFormula()
-      if (formula === "openscience") {
-        return fetch("https://formulae.brew.sh/api/formula/openscience.json")
-          .then((res) => {
-            if (!res.ok) throw new Error(res.statusText)
-            return res.json()
-          })
-          .then((data: any) => data.versions.stable)
-      }
+      return releaseFetch("https://formulae.brew.sh/api/formula/openscience.json")
+        .then((res) => {
+          if (!res.ok) throw new Error(res.statusText)
+          return res.json()
+        })
+        .then((data: any) => data.versions.stable)
     }
 
     if (
@@ -246,13 +239,8 @@ export namespace Installation {
       detectedMethod === "pnpm" ||
       detectedMethod === "unknown"
     ) {
-      const registry = await iife(async () => {
-        const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
-        const reg = r || "https://registry.npmjs.org"
-        return reg.endsWith("/") ? reg.slice(0, -1) : reg
-      })
       const channel = npmReleaseChannel()
-      return fetch(`${registry}/@synsci/openscience/${channel}`)
+      return releaseFetch(`https://registry.npmjs.org/@synsci/openscience/${channel}`)
         .then((res) => {
           if (!res.ok) throw new Error(res.statusText)
           return res.json()
@@ -261,7 +249,7 @@ export namespace Installation {
     }
 
     if (detectedMethod === "choco") {
-      return fetch(chocoLatestVersionUrl(), { headers: { Accept: "application/json;odata=verbose" } })
+      return releaseFetch(chocoLatestVersionUrl(), { headers: { Accept: "application/json;odata=verbose" } })
         .then((res) => {
           if (!res.ok) throw new Error(res.statusText)
           return res.json()
@@ -270,7 +258,7 @@ export namespace Installation {
     }
 
     if (detectedMethod === "scoop") {
-      return fetch("https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/openscience.json", {
+      return releaseFetch("https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/openscience.json", {
         headers: { Accept: "application/json" },
       })
         .then((res) => {
@@ -280,7 +268,7 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    return fetch("https://api.github.com/repos/synthetic-sciences/OpenScience/releases/latest")
+    return releaseFetch("https://api.github.com/repos/synthetic-sciences/OpenScience/releases/latest")
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
         return res.json()

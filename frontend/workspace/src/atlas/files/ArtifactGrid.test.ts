@@ -93,12 +93,13 @@ describe("artifact grid", () => {
     const host = mount(() => subject.ArtifactGrid(props() as never))
     expect(host.querySelectorAll("[data-artifact-group]")).toHaveLength(2)
 
-    host.querySelector<HTMLButtonElement>("[data-artifact-sort]")!.click()
+    host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
+    host.querySelector<HTMLButtonElement>("[data-artifact-sort='name']")!.click()
 
     expect(host.querySelectorAll("[data-artifact-group]")).toHaveLength(0)
     expect([...host.querySelectorAll("[data-card-open]")].map((node) => node.getAttribute("aria-label"))).toEqual([
-      "Open a.py",
-      "Open b.py",
+      "Open a.py, version 1",
+      "Open b.py, version 1",
     ])
   })
 
@@ -114,16 +115,18 @@ describe("artifact grid", () => {
   test("switches layout and says so", () => {
     const host = mount(() => subject.ArtifactGrid(props() as never))
 
+    host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
     host.querySelector<HTMLButtonElement>("[data-artifact-layout='list']")!.click()
 
     expect(host.querySelector("[data-artifact-list]")).not.toBeNull()
     expect(host.querySelector("[data-artifact-grid]")).toBeNull()
-    expect(host.querySelector("[data-artifact-layout='list']")?.getAttribute("aria-pressed")).toBe("true")
+    expect(host.querySelector("[data-artifact-layout='list']")?.getAttribute("aria-checked")).toBe("true")
   })
 
   test("remembers sort and layout across a remount", () => {
     const first = mount(() => subject.ArtifactGrid(props() as never))
-    first.querySelector<HTMLButtonElement>("[data-artifact-sort]")!.click()
+    first.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
+    first.querySelector<HTMLButtonElement>("[data-artifact-sort='name']")!.click()
     first.querySelector<HTMLButtonElement>("[data-artifact-layout='list']")!.click()
 
     cleanups.splice(0).forEach((fn) => fn())
@@ -131,7 +134,8 @@ describe("artifact grid", () => {
 
     const second = mount(() => subject.ArtifactGrid(props() as never))
 
-    expect(second.querySelector("[data-artifact-sort]")?.textContent).toContain("Name")
+    second.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
+    expect(second.querySelector("[data-artifact-sort='name']")?.getAttribute("aria-checked")).toBe("true")
     expect(second.querySelector("[data-artifact-list]")).not.toBeNull()
   })
 
@@ -150,24 +154,61 @@ describe("artifact grid", () => {
   test("says a search matched nothing rather than claiming none are saved", () => {
     const host = mount(() => subject.ArtifactGrid(props({ artifacts: [], filtered: true }) as never))
 
-    expect(host.textContent).toContain("No artifacts match this search.")
-    expect(host.textContent).not.toContain("No artifacts saved yet.")
+    expect(host.textContent).toContain("No matching artifacts")
+    expect(host.textContent).toContain("clear the search")
+    expect(host.textContent).not.toContain("No saved artifacts yet")
   })
 
   test("names the empty state for artifacts, not folders", () => {
     const host = mount(() => subject.ArtifactGrid(props({ artifacts: [] }) as never))
 
-    expect(host.textContent).toContain("No artifacts saved yet.")
+    expect(host.textContent).toContain("No saved artifacts yet")
+    expect(host.textContent).toContain("versions intact")
     expect(host.textContent).not.toContain("folder")
     expect(host.querySelector("[data-artifact-count]")?.textContent).toBe("0 artifacts")
   })
 
-  // Two menus on one surface must not look like the same control.
-  test("keeps the preferences trigger distinct from a card's", () => {
+  // One plain-language view control reduces toolbar icons and cannot be
+  // confused with the ellipsis that acts on an individual artifact.
+  test("keeps the view trigger distinct from a card's action menu", () => {
     const host = mount(() => subject.ArtifactGrid(props() as never))
 
-    expect(host.querySelector("[data-artifact-prefs]")?.textContent).not.toBe("⋮")
-    expect(host.querySelector("[data-card-menu]")?.textContent).toBe("⋮")
+    expect(host.querySelector("[data-artifact-prefs] svg")).not.toBeNull()
+    expect(host.querySelector("[data-card-menu] svg")).not.toBeNull()
+    expect(host.querySelector("[data-artifact-prefs]")?.textContent).toContain("View")
+    expect(host.querySelector("[data-card-menu]")?.textContent?.trim()).toBe("")
+  })
+
+  test("groups sort, layout, and size choices behind one view control", () => {
+    const host = mount(() => subject.ArtifactGrid(props() as never))
+
+    expect(host.querySelector("[data-artifact-sort]")).toBeNull()
+    expect(host.querySelector("[data-artifact-layout]")).toBeNull()
+    host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
+
+    expect(host.querySelectorAll("[data-artifact-sort]")).toHaveLength(2)
+    expect(host.querySelectorAll("[data-artifact-layout]")).toHaveLength(2)
+    expect(host.querySelector("[data-pref='sizes']")).not.toBeNull()
+  })
+
+  test("moves focus through view options and Escape restores the trigger", async () => {
+    const host = mount(() => subject.ArtifactGrid(props() as never))
+    const trigger = host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!
+
+    trigger.click()
+    await Promise.resolve()
+    const options = [...host.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')]
+    expect(document.activeElement).toBe(options[0])
+
+    options[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
+    expect(document.activeElement).toBe(options[1])
+    options[1]?.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }))
+    expect(document.activeElement).toBe(options.at(-1)!)
+
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    await Promise.resolve()
+    expect(host.querySelector("[role='menu']")).toBeNull()
+    expect(document.activeElement).toBe(trigger)
   })
 
   test("pins the current session ahead of a newer one", () => {

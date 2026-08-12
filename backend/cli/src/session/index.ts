@@ -26,6 +26,8 @@ import { Project } from "@/project/project"
 import { NamedError } from "@synsci/util/error"
 import { SessionFilesystem } from "./filesystem"
 import { SessionTraceStore } from "./trace-store"
+import { AuthoritySignal } from "@/project/authority-signal"
+import { FileLease } from "@/util/file-lease"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -99,6 +101,26 @@ export namespace Session {
     })
   export type Info = z.output<typeof Info>
 
+  const Deletion = z.object({
+    version: z.literal(1),
+    info: Info,
+    time: z.object({ created: z.number().int().positive() }),
+  })
+  type Deletion = z.output<typeof Deletion>
+
+  const deletionKey = (projectID: string, sessionID: string) => ["session_delete", projectID, sessionID]
+  const deletionLock = (projectID: string, sessionID: string) =>
+    path.join(Global.Path.data, "session-delete", `${projectID}.${sessionID}.lock`)
+
+  async function deleting(projectID: string, sessionID: string) {
+    return Storage.read<Deletion>(deletionKey(projectID, sessionID))
+      .then((value) => Deletion.parse(value))
+      .catch((error) => {
+        if (Storage.NotFoundError.isInstance(error)) return undefined
+        throw error
+      })
+  }
+
   export const DirectoryMismatchError = NamedError.create(
     "SessionDirectoryMismatchError",
     z.object({
@@ -114,6 +136,11 @@ export namespace Session {
       sessionID: Identifier.schema("session"),
       directory: z.string(),
     }),
+  )
+
+  export const DeletingError = NamedError.create(
+    "SessionDeletingError",
+    z.object({ sessionID: Identifier.schema("session") }),
   )
 
   const validated = Instance.state(() => new Set<string>())
@@ -263,6 +290,7 @@ export namespace Session {
   }) {
     const id = Identifier.descending("session", input.id)
     const directory = Project.canonicalize(input.directory)
+    if (await deleting(Instance.project.id, id)) throw new DeletingError({ sessionID: id })
     const existing = input.id
       ? await load(id).catch((error) => {
           if (Storage.NotFoundError.isInstance(error)) return
@@ -294,7 +322,11 @@ export namespace Session {
     }
     log.info("created", result)
     await Storage.write(["session", Instance.project.id, result.id], result)
-    await SessionFilesystem.initialize(result.id, directory)
+    // No process can hold authority for a session that has not been returned
+    // or announced yet. Publishing its initial workspace as a "change" would
+    // schedule a redundant revocation that can race the session's first job.
+    // Lazy initialization of legacy sessions keeps the default revocation.
+    await SessionFilesystem.initialize(result.id, directory, { revokeExisting: false })
     validated().add(result.id)
     Bus.publish(Event.Created, {
       info: result,
@@ -394,30 +426,71 @@ export namespace Session {
 
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
     const project = Instance.project
-    const session = await get(sessionID)
+    await using lease = await FileLease.acquire(deletionLock(project.id, sessionID), 60_000)
+    let pending = await deleting(project.id, sessionID)
+    const session = pending?.info ?? (await get(sessionID))
+    if (!current(session)) bind(session)
     try {
-      for (const child of await children(sessionID)) {
-        await remove(child.id)
+      if (!pending) {
+        // Children must finish their own tombstone/reaper lifecycle before the
+        // parent becomes unroutable.
+        for (const child of await children(sessionID)) {
+          await remove(child.id)
+        }
+        pending = {
+          version: 1,
+          info: session,
+          time: { created: Date.now() },
+        }
+        // Publish the recovery record before any destructive mutation. A
+        // failed reaper or killed deleter can therefore retry by session id.
+        await Storage.write(deletionKey(project.id, sessionID), pending)
       }
+      // Cancellation must be visible before deletion waits for the authority
+      // lease held by a booting kernel. Otherwise that boot can become ready,
+      // run its first cell, and only then be reaped by filesystem teardown.
+      KernelRuntime.cancelSession(sessionID)
       await unshare(sessionID).catch(() => {})
+      // Remove the routable session record before filesystem authority. A
+      // process start that wins the authority lease first is subsequently
+      // revoked; one that runs after filesystem removal cannot lazily recreate
+      // grants from a still-visible session record. The durable tombstone,
+      // unlike the old ordering, still makes cleanup retryable.
+      await Storage.remove(["session", project.id, sessionID])
+      validated().delete(sessionID)
+      const signal = await SessionFilesystem.remove(sessionID)
+      await KernelRuntime.removeSession(project.id, sessionID)
+      await Bus.publish(Event.Deleted, {
+        info: session,
+      })
+      await AuthoritySignal.settle(signal.revision)
+
+      // User data is erased only after every runtime reaper acknowledges the
+      // deletion. A crash during this phase leaves the tombstone last, so the
+      // remaining idempotent removals are retried on startup.
       for (const msg of await Storage.list(["message", sessionID])) {
         for (const part of await Storage.list(["part", msg.at(-1)!])) {
           await Storage.remove(part)
         }
         await Storage.remove(msg)
       }
-      await KernelRuntime.removeSession(project.id, sessionID)
-      await SessionFilesystem.remove(sessionID)
       await SessionTraceStore.remove(sessionID)
-      await Storage.remove(["session", project.id, sessionID])
-      validated().delete(sessionID)
-      Bus.publish(Event.Deleted, {
-        info: session,
-      })
+      await Storage.remove(deletionKey(project.id, sessionID))
     } catch (e) {
       log.error(e)
+      throw e
     }
   })
+
+  /** Resume deletions whose durable tombstone outlived a failed/killed
+   * deleter. Call only after runtime cleanup subscribers are installed. */
+  export async function resumeDeleting() {
+    const projectID = Instance.project.id
+    for (const key of await Storage.list(["session_delete", projectID])) {
+      const sessionID = key.at(-1)
+      if (sessionID) await remove(sessionID)
+    }
+  }
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     await assertDirectory(msg.sessionID)

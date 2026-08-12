@@ -35,7 +35,7 @@
       display: inline-flex;
       align-items: center;
       padding: 2px 6px;
-      border-radius: 4px;
+      border-radius: var(--radius-xs);
       font-family: var(--font-family-mono);
       font-size: var(--font-size-x-small);
       font-weight: var(--font-weight-medium);
@@ -124,8 +124,8 @@
     height: 8px;
     bottom: 0px;
     background:
-      linear-gradient(to bottom, transparent, var(--surface-weak)),
-      linear-gradient(to bottom, transparent, var(--surface-weak));
+      linear-gradient(to bottom, transparent, var(--user-message-surface, var(--surface-weak))),
+      linear-gradient(to bottom, transparent, var(--user-message-surface, var(--surface-weak)));
     pointer-events: none;
   }
 
@@ -149,13 +149,13 @@
     height: 22px;
     width: 22px;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-xs);
     background: transparent;
     cursor: pointer;
     color: var(--text-weak);
 
     [data-slot="icon-svg"] {
-      transition: transform 0.15s ease;
+      transition: transform var(--duration-fast) var(--ease-standard);
     }
   }
 
@@ -181,7 +181,7 @@
   [data-slot="session-turn-message-title"] {
     width: 100%;
     font-size: var(--font-size-large);
-    font-weight: 500;
+    font-weight: var(--font-weight-emphasis);
     color: var(--text-strong);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -248,7 +248,7 @@
   [data-slot="session-turn-summary-title"] {
     font-size: 13px;
     /* text-12-medium */
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     color: var(--text-weak);
   }
 
@@ -505,7 +505,7 @@
     cursor: pointer;
     padding: 6px 10px;
     margin: -6px -10px;
-    border-radius: 8px;
+    border-radius: var(--radius-xs);
     border: 1px solid transparent;
     transition:
       background 0.12s ease,
@@ -544,7 +544,7 @@
   }
 
   [data-slot="session-turn-retry-message"] {
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     color: var(--syntax-critical);
   }
 
@@ -564,7 +564,7 @@
   [data-slot="session-turn-details-text"] {
     font-size: 13px;
     /* text-12-medium */
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
   }
 
   .error-card {
@@ -620,12 +620,11 @@
       color: var(--text-weak);
       font-size: 11px;
       line-height: 16px;
-      text-transform: uppercase;
-      letter-spacing: 0.035em;
+      letter-spacing: var(--letter-spacing-normal);
 
       strong {
         color: var(--text-base);
-        font-weight: 500;
+        font-weight: var(--font-weight-medium);
       }
     }
   }
@@ -648,7 +647,7 @@
     padding: 0;
     overflow: hidden;
     border: 1px solid var(--border-weak-base);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: var(--background-base);
     color: var(--text-base);
     font: inherit;
@@ -697,13 +696,12 @@
 
     strong {
       font-size: 12px;
-      font-weight: 500;
+      font-weight: var(--font-weight-medium);
     }
 
     small {
       color: var(--text-weak);
       font-size: 10px;
-      text-transform: capitalize;
     }
   }
 

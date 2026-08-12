@@ -1,30 +1,21 @@
-import { createSignal, Show, type JSX } from "solid-js"
+import { createSignal, type JSX } from "solid-js"
 import { Button } from "@synsci/ui/button"
+import { Dialog as ModalDialog } from "@synsci/ui/dialog"
+import { TextField } from "@synsci/ui/text-field"
 import { useDialog } from "@synsci/ui/context/dialog"
-import { FONT_CODE } from "@/styles/tokens"
 
-type Dialog = ReturnType<typeof useDialog>
+type DialogController = ReturnType<typeof useDialog>
 
-/**
- * Promise-based replacements for window.confirm / window.prompt / window.alert
- * that render inside the app's dialog portal so they match the atlas UI and
- * don't reflow or steal focus the way native dialogs do.
- */
-
-function card(): JSX.CSSProperties {
-  return {
-    width: "420px",
-    "max-width": "92vw",
-    background: "var(--color-surface-solid)",
-    border: "1px solid var(--color-border-strong)",
-    "border-radius": "var(--radius-xl)",
-    "box-shadow": "var(--shadow-md)",
-    overflow: "hidden",
-  }
+const actions: JSX.CSSProperties = {
+  display: "flex",
+  "justify-content": "flex-end",
+  gap: "8px",
+  padding: "4px 20px 20px",
 }
 
+/** Promise-based, focus-contained alternatives to browser confirm/prompt/alert. */
 export function confirmDialog(
-  dialog: Dialog,
+  dialog: DialogController,
   opts: { title: string; message?: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean },
 ): Promise<boolean> {
   return new Promise((resolve) => {
@@ -35,33 +26,18 @@ export function confirmDialog(
       resolve(value)
       dialog.close()
     }
+
     dialog.show(
       () => (
-        <div style={card()}>
-          <div style={{ padding: "18px 20px 8px" }}>
-            <div class="text-16-medium text-text-strong">{opts.title}</div>
-            <Show when={opts.message}>
-              <div
-                class="text-13-regular text-text-weak"
-                style={{
-                  "margin-top": "8px",
-                  "max-width": "58ch",
-                  "text-wrap": "pretty",
-                }}
-              >
-                {opts.message}
-              </div>
-            </Show>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              "justify-content": "flex-end",
-              gap: "8px",
-              padding: "12px 20px 18px",
-            }}
-          >
-            <Button size="normal" variant="secondary" onClick={() => done(false)}>
+        <ModalDialog
+          fit
+          transition
+          role={opts.danger ? "alertdialog" : "dialog"}
+          title={opts.title}
+          description={opts.message}
+        >
+          <div style={actions}>
+            <Button autofocus size="normal" variant="secondary" onClick={() => done(false)}>
               {opts.cancelLabel ?? "Cancel"}
             </Button>
             <Button
@@ -73,15 +49,15 @@ export function confirmDialog(
               {opts.confirmLabel ?? "Confirm"}
             </Button>
           </div>
-        </div>
+        </ModalDialog>
       ),
-      { onClose: () => done(false), lite: true },
+      { onClose: () => done(false) },
     )
   })
 }
 
 export function promptDialog(
-  dialog: Dialog,
+  dialog: DialogController,
   opts: { title: string; message?: string; placeholder?: string; initial?: string; confirmLabel?: string },
 ): Promise<string | null> {
   return new Promise((resolve) => {
@@ -93,55 +69,26 @@ export function promptDialog(
       dialog.close()
     }
     const [value, setValue] = createSignal(opts.initial ?? "")
+
     dialog.show(
       () => (
-        <div style={card()}>
-          <div style={{ padding: "18px 20px 8px" }}>
-            <div class="text-16-medium text-text-strong">{opts.title}</div>
-            <Show when={opts.message}>
-              <div
-                class="text-13-regular text-text-weak"
-                style={{
-                  "margin-top": "8px",
-                  "max-width": "58ch",
-                  "text-wrap": "pretty",
-                }}
-              >
-                {opts.message}
-              </div>
-            </Show>
-            <input
+        <ModalDialog fit transition title={opts.title} description={opts.message}>
+          <div style={{ padding: "4px 20px 16px" }}>
+            <TextField
               autofocus
+              hideLabel
+              label={opts.title}
               value={value()}
               placeholder={opts.placeholder}
-              onInput={(e) => setValue(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") done(value())
-              }}
-              style={{
-                all: "unset",
-                "box-sizing": "border-box",
-                width: "100%",
-                "margin-top": "12px",
-                padding: "9px 10px",
-                border: "1px solid var(--color-border)",
-                "border-radius": "4px",
-                background: "var(--color-bg)",
-                color: "var(--color-text)",
-                "font-family": FONT_CODE,
-                "font-size": "12px",
-                "line-height": "18px",
+              onChange={setValue}
+              onKeyDown={(event: KeyboardEvent) => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                done(value())
               }}
             />
           </div>
-          <div
-            style={{
-              display: "flex",
-              "justify-content": "flex-end",
-              gap: "8px",
-              padding: "12px 20px 18px",
-            }}
-          >
+          <div style={actions}>
             <Button size="normal" variant="secondary" onClick={() => done(null)}>
               Cancel
             </Button>
@@ -149,15 +96,15 @@ export function promptDialog(
               {opts.confirmLabel ?? "OK"}
             </Button>
           </div>
-        </div>
+        </ModalDialog>
       ),
-      { onClose: () => done(null), lite: true },
+      { onClose: () => done(null) },
     )
   })
 }
 
 export function alertDialog(
-  dialog: Dialog,
+  dialog: DialogController,
   opts: { title: string; message?: string; danger?: boolean },
 ): Promise<void> {
   return new Promise((resolve) => {
@@ -168,42 +115,24 @@ export function alertDialog(
       resolve()
       dialog.close()
     }
+
     dialog.show(
       () => (
-        <div style={card()}>
-          <div style={{ padding: "18px 20px 8px" }}>
-            <div
-              class="text-16-medium text-text-strong"
-              style={{ color: opts.danger ? "var(--color-error, #ef4444)" : undefined }}
-            >
-              {opts.title}
-            </div>
-            <Show when={opts.message}>
-              <div
-                class="text-13-regular text-text-weak"
-                style={{
-                  "margin-top": "8px",
-                  "max-width": "58ch",
-                  "text-wrap": "pretty",
-                }}
-              >
-                {opts.message}
-              </div>
-            </Show>
-          </div>
-          <div style={{ display: "flex", "justify-content": "flex-end", padding: "12px 20px 18px" }}>
-            <Button
-              size="normal"
-              variant="primary"
-              classList={{ "atlas-dialog__danger": opts.danger === true }}
-              onClick={done}
-            >
+        <ModalDialog
+          fit
+          transition
+          role={opts.danger ? "alertdialog" : "dialog"}
+          title={opts.title}
+          description={opts.message}
+        >
+          <div style={actions}>
+            <Button autofocus size="normal" variant="primary" onClick={done}>
               OK
             </Button>
           </div>
-        </div>
+        </ModalDialog>
       ),
-      { onClose: () => done(), lite: true },
+      { onClose: done },
     )
   })
 }

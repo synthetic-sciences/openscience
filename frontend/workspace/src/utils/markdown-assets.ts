@@ -43,7 +43,34 @@ export function resolvePath(base: string, reference: string): string {
  * against the workspace root) and run through `url` — typically
  * `(path) => sdk.request.url("/file/raw", { path, sessionID })`.
  */
-export function assetUrl(src: string, input: { base?: string; url: (path: string) => string }): string {
+const loopback = new Set(["localhost", "127.0.0.1", "[::1]"])
+
+/**
+ * Dev serves the UI and API on different ports. Chromium's ORB blocks an SVG
+ * image when one side says `localhost` and the other says `127.0.0.1`, even
+ * though both are the same machine. Keep the API port and capability query,
+ * but align loopback hostnames with the page so project-local images remain a
+ * same-site resource. Never rewrite a non-loopback URL.
+ */
+export function alignLoopbackAssetHost(value: string, pageOrigin?: string): string {
+  const origin = pageOrigin ?? (typeof location === "object" ? location.origin : undefined)
+  if (!origin) return value
+  try {
+    const target = new URL(value)
+    const page = new URL(origin)
+    if (!loopback.has(target.hostname) || !loopback.has(page.hostname)) return value
+    if (target.protocol !== page.protocol || target.hostname === page.hostname) return value
+    target.hostname = page.hostname
+    return target.toString()
+  } catch {
+    return value
+  }
+}
+
+export function assetUrl(
+  src: string,
+  input: { base?: string; url: (path: string) => string; pageOrigin?: string },
+): string {
   if (absolute.test(src)) return src
-  return input.url(resolvePath(input.base ?? "", decode(src)))
+  return alignLoopbackAssetHost(input.url(resolvePath(input.base ?? "", decode(src))), input.pageOrigin)
 }

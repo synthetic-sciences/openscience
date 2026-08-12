@@ -84,7 +84,7 @@ describe("artifact card", () => {
     expect(open).not.toBeNull()
     expect(menu).not.toBeNull()
     expect(open!.contains(menu!)).toBe(false)
-    expect(open!.getAttribute("aria-label")).toBe("Open train.py")
+    expect(open!.getAttribute("aria-label")).toBe("Open train.py, version 1")
     expect(menu!.getAttribute("aria-label")).toBe("Actions for train.py")
   })
 
@@ -165,6 +165,20 @@ describe("artifact card", () => {
 
     const sized = mount(() => subject.ArtifactCard(props({ sizes: true }) as never))
     expect(sized.querySelector("[data-card-meta]")?.textContent).toContain("100 B")
+  })
+
+  test("shows the current immutable version without adding a decorative badge", () => {
+    const item = artifact({ filename: "report.md" }) as unknown as {
+      versionCount: number
+      current: { version: number }
+    }
+    item.versionCount = 4
+    item.current.version = 4
+    const host = mount(() => subject.ArtifactCard(props({ artifact: item }) as never))
+
+    expect(host.querySelector("[data-card-version]")?.textContent).toBe("Version 4 of 4")
+    expect(host.querySelector("[data-card-open]")?.getAttribute("aria-label")).toContain("version 4 of 4")
+    expect(host.querySelector("[data-card-version] svg")).toBeNull()
   })
 
   test("carries its layout so the grid and list can style one component", () => {

@@ -71,7 +71,7 @@ test("keeps destructive confirmations on the workspace type scale", async ({ pag
   await row.locator(".session-sidebar__session-menu-button").click()
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click()
 
-  const confirmation = page.locator('[data-component="dialog-lite"]')
+  const confirmation = page.getByRole("alertdialog")
   const title = confirmation.getByText("Delete this session?", { exact: true })
   await expect(title).toBeVisible()
   await expect(title).toHaveCSS("font-family", /Inter/)
@@ -81,6 +81,7 @@ test("keeps destructive confirmations on the workspace type scale", async ({ pag
 
   const cancel = confirmation.getByRole("button", { name: "Cancel", exact: true })
   const remove = confirmation.getByRole("button", { name: "Delete session", exact: true })
+  await expect(cancel).toBeFocused()
   await expect(cancel).toHaveCSS("font-family", /Inter/)
   await expect(remove).toHaveCSS("font-family", /Inter/)
   await expect(cancel).toHaveCSS("font-size", "12px")

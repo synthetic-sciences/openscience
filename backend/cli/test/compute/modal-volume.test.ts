@@ -53,7 +53,7 @@ async function fixture() {
       "        assert os.environ.get('MODAL_TOKEN_SECRET') == 'as-test'",
       "        assert name == 'job-volume'",
       "        assert environment_name == 'main'",
-      "        return Handle(os.environ['FAKE_MODAL_ROOT'])",
+      `        return Handle(${JSON.stringify(volume)})`,
       "",
     ].join("\n"),
   )
@@ -65,12 +65,56 @@ async function fixture() {
     tokenSecret: "as-test",
     environment: "main",
     command: [python, "-I", "-c", run, root, await ModalVolume.driverPath()],
-    env: { ...process.env, FAKE_MODAL_ROOT: volume },
   }
   return { context, root, staging }
 }
 
 describe("ModalVolume", () => {
+  test("passes only runtime fields to the token-bearing bridge", () => {
+    const env = ModalVolume.environment({
+      PATH: "/usr/bin:/bin",
+      HOME: "/home/researcher",
+      LANG: "en_US.UTF-8",
+      OPENAI_API_KEY: "provider-secret",
+      AWS_SECRET_ACCESS_KEY: "cloud-secret",
+      MODAL_TOKEN_SECRET: "old-control-plane-secret",
+      OPENSCIENCE_CONFIG_CONTENT: "control-plane-state",
+      DYLD_INSERT_LIBRARIES: "/tmp/inject.dylib",
+      PYTHONSTARTUP: "/tmp/startup.py",
+    })
+
+    expect(env.PATH).toBe("/usr/bin:/bin")
+    expect(env.HOME).toBe("/home/researcher")
+    expect(env.LANG).toBe("en_US.UTF-8")
+    expect(env.PYTHONNOUSERSITE).toBe("1")
+    expect(env.OPENAI_API_KEY).toBeUndefined()
+    expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined()
+    expect(env.MODAL_TOKEN_SECRET).toBeUndefined()
+    expect(env.OPENSCIENCE_CONFIG_CONTENT).toBeUndefined()
+    expect(env.DYLD_INSERT_LIBRARIES).toBeUndefined()
+    expect(env.PYTHONSTARTUP).toBeUndefined()
+  })
+
+  test("redacts the exact Modal token pair from bounded bridge failures", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const error = await ModalVolume.check({
+      tokenId: "ak-never-log-this-id",
+      tokenSecret: "as-never-log-this-secret",
+      command: [
+        python,
+        "-I",
+        "-c",
+        "import os,sys; sys.stderr.write(os.environ['MODAL_TOKEN_ID'] + ':' + os.environ['MODAL_TOKEN_SECRET']); sys.exit(3)",
+      ],
+    }).catch((value) => value)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain("[REDACTED]:[REDACTED]")
+    expect((error as Error).message).not.toContain("ak-never-log-this-id")
+    expect((error as Error).message).not.toContain("as-never-log-this-secret")
+  })
+
   test("shares one complete driver path across concurrent callers", async () => {
     const paths = await Promise.all(Array.from({ length: 20 }, () => ModalVolume.driverPath()))
     expect(new Set(paths).size).toBe(1)
@@ -106,7 +150,10 @@ describe("ModalVolume", () => {
     ])
   })
 
-  test("uses control-plane list and download operations without a sandbox", async () => {
+  // This is four independent control-plane calls. Each call deliberately
+  // completes durable helper ownership and descendant reaping before the next
+  // one starts, so their combined deadline must not inherit Bun's 5s default.
+  test("uses the governed control-plane bridge for list and download operations", async () => {
     const item = await fixture()
 
     expect(await ModalVolume.check(item.context)).toBe("test-control-plane")
@@ -127,7 +174,7 @@ describe("ModalVolume", () => {
     ])
     expect(downloaded.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256))).toBe(true)
     expect(await Bun.file(path.join(item.staging, "outputs", "model.bin")).text()).toBe("weights")
-  })
+  }, 30_000)
 
   test("waits for a durable marker inside one driver process", async () => {
     const item = await fixture()

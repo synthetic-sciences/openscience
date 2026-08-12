@@ -85,11 +85,11 @@ describe("isolated config and data roots", () => {
         `Platform package: @synsci/openscience-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`,
       )
       expect(stdout).toContain(`Config root: ${config}`)
-      expect(stdout).toContain(`Data root: ${data}`)
+      expect(stdout).toContain(`Data root: ${await fs.realpath(data)}`)
       expect(stdout).toContain(`Cache root: ${path.join(scope, "cache", "openscience")}`)
       expect(stdout).toContain(`State root: ${path.join(scope, "state", "openscience")}`)
       expect(await tree(outside)).toEqual(before)
-      expect(await fs.readdir(config)).toEqual(["openscience.json"])
+      expect((await fs.readdir(config)).toSorted()).toEqual(["data-root-operations", "openscience.json"])
       expect(await fs.stat(data).then((stat) => stat.isDirectory())).toBe(true)
     } finally {
       await Promise.all([

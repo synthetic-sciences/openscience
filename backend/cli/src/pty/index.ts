@@ -9,9 +9,12 @@ import { Instance } from "../project/instance"
 import { lazy } from "@synsci/util/lazy"
 import { Shell } from "@/shell/shell"
 import { ExecutionAuthority } from "@/project/execution"
+import { AuthoritySignal } from "@/project/authority-signal"
+import { AuthorityProcessLedger } from "@/project/authority-process"
 import { Sandbox } from "@/sandbox/sandbox"
 import { OpenScience } from "@/openscience"
 import { terminalArgs, terminalEnv } from "./environment"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -77,10 +80,16 @@ export namespace Pty {
   const state = Instance.state(
     () => new Map<string, ActiveSession>(),
     async (sessions) => {
+      const projects = new Set<string>()
       for (const session of sessions.values()) {
-        try {
-          session.process.kill()
-        } catch {}
+        projects.add(session.info.projectID)
+      }
+      // Revoke durable ownership while each exact leader is still available
+      // for identity/group verification. Native PTY cleanup follows only as a
+      // local handle fallback during failed registration; registered sessions
+      // are already gone when revoke resolves.
+      await Promise.all([...projects].map((projectID) => AuthorityProcessLedger.revoke({ kind: "pty", projectID })))
+      for (const session of sessions.values()) {
         for (const ws of session.subscribers) {
           ws.close()
         }
@@ -98,82 +107,135 @@ export namespace Pty {
   }
 
   export async function create(input: CreateInput) {
-    const authority = await ExecutionAuthority.require({
-      projectID: Instance.project.id,
-      sessionID: input.sessionID,
-      capability: "terminal",
-    })
     const id = Identifier.create("pty", false)
     const command = Shell.preferred()
     const args = terminalArgs(command)
-    const cwd = authority.workspace
-    const source = await OpenScience.subprocessEnv(process.env)
-    const env = terminalEnv(source, Instance.project.id, input.sessionID, command)
-    const sandbox = Sandbox.wrapArgv({
-      file: command,
-      args,
-      workspace: authority.writable,
-      unreadable: OpenScience.kernelSensitivePaths(),
-      options: authority.sandbox,
-    })
-    log.info("creating session", { id, cmd: command, args, cwd })
-
     const spawn = await pty()
-    const ptyProcess = spawn(sandbox.file, sandbox.args, {
-      name: "xterm-256color",
-      cwd,
-      env,
-    })
+    return AuthoritySignal.exclusive(async () => {
+      const authority = await ExecutionAuthority.require({
+        projectID: Instance.project.id,
+        sessionID: input.sessionID,
+        capability: "terminal",
+      })
+      const cwd = authority.workspace
+      // Interactive PTY output is not a redaction boundary. Keep provider/cloud
+      // credentials on the host; terminals receive runtime discovery only.
+      const source = OpenScience.kernelEnv(process.env)
+      const env = terminalEnv(source, Instance.project.id, input.sessionID, command)
+      const sandbox = Sandbox.wrapArgv({
+        file: command,
+        args,
+        workspace: authority.writable,
+        readable: authority.readable,
+        unreadable: OpenScience.kernelSensitivePaths(),
+        options: authority.sandbox,
+      })
+      const launch = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
+      log.info("creating session", { id, cmd: command, args, cwd })
 
-    const info = {
-      id,
-      title: input.title || `Terminal ${id.slice(-4)}`,
-      command,
-      args,
-      cwd,
-      projectID: Instance.project.id,
-      sessionID: input.sessionID,
-      authority,
-      status: "running",
-      pid: ptyProcess.pid,
-    } as const
-    const session: ActiveSession = {
-      info,
-      process: ptyProcess,
-      buffer: "",
-      subscribers: new Set(),
-    }
-    state().set(id, session)
-    ptyProcess.onData((data) => {
-      let open = false
-      for (const ws of session.subscribers) {
-        if (ws.readyState !== 1) {
-          session.subscribers.delete(ws)
-          continue
+      const ptyProcess = (() => {
+        try {
+          return spawn(launch.file, launch.args, {
+            name: "xterm-256color",
+            cwd,
+            env,
+          })
+        } catch (error) {
+          Sandbox.cleanup(sandbox)
+          throw error
         }
-        open = true
-        ws.send(data)
+      })()
+
+      let session: ActiveSession | undefined
+      let earlyExit: number | undefined
+      let earlyBuffer = ""
+      ptyProcess.onData((data) => {
+        const active = session
+        if (!active) {
+          earlyBuffer += data
+          if (earlyBuffer.length > BUFFER_LIMIT) earlyBuffer = earlyBuffer.slice(-BUFFER_LIMIT)
+          return
+        }
+        let open = false
+        for (const ws of active.subscribers) {
+          if (ws.readyState !== 1) {
+            active.subscribers.delete(ws)
+            continue
+          }
+          open = true
+          ws.send(data)
+        }
+        if (open) return
+        active.buffer += data
+        if (active.buffer.length <= BUFFER_LIMIT) return
+        active.buffer = active.buffer.slice(-BUFFER_LIMIT)
+      })
+      ptyProcess.onExit(({ exitCode }) => {
+        Sandbox.cleanup(sandbox)
+        if (!session) {
+          earlyExit = exitCode
+          return
+        }
+        log.info("session exited", { id, exitCode })
+        session.info.status = "exited"
+        for (const ws of session.subscribers) ws.close()
+        session.subscribers.clear()
+        void Bus.publish(Event.Exited, { id, exitCode })
+        state().delete(id)
+        void AuthorityProcessLedger.complete(id).catch((error) =>
+          log.error("failed to complete terminal authority record", { id, error }),
+        )
+      })
+
+      const registered = await AuthorityProcessLedger.register({
+        id,
+        kind: "pty",
+        pid: ptyProcess.pid,
+        projectID: Instance.project.id,
+        sessionID: input.sessionID,
+        authorityGeneration: authority.generation,
+        windowsRelease: launch.release,
+      }).catch(async (error) => {
+        await AuthorityProcessLedger.revoke({ id, kind: "pty" }).catch(() => undefined)
+        try {
+          ptyProcess.kill()
+        } catch {}
+        Sandbox.cleanup(sandbox)
+        throw error
+      })
+      if (!registered || earlyExit !== undefined) {
+        await AuthorityProcessLedger.revoke({ id, kind: "pty" })
+        try {
+          ptyProcess.kill()
+        } catch {}
+        Sandbox.cleanup(sandbox)
+        throw new Error(
+          `Terminal process exited before durable authority registration (code ${earlyExit ?? "unknown"})`,
+        )
       }
-      if (open) return
-      session.buffer += data
-      if (session.buffer.length <= BUFFER_LIMIT) return
-      session.buffer = session.buffer.slice(-BUFFER_LIMIT)
+
+      const info = {
+        id,
+        title: input.title || `Terminal ${id.slice(-4)}`,
+        command,
+        args,
+        cwd,
+        projectID: Instance.project.id,
+        sessionID: input.sessionID,
+        authority,
+        status: "running",
+        pid: ptyProcess.pid,
+      } as const
+      session = {
+        info,
+        process: ptyProcess,
+        buffer: earlyBuffer,
+        subscribers: new Set(),
+      }
+      state().set(id, session)
+      void Bus.publish(Event.Created, { info })
+      return info
     })
-    ptyProcess.onExit(({ exitCode }) => {
-      log.info("session exited", { id, exitCode })
-      session.info.status = "exited"
-      for (const ws of session.subscribers) {
-        ws.close()
-      }
-      session.subscribers.clear()
-      Bus.publish(Event.Exited, { id, exitCode })
-      for (const ws of session.subscribers) {
-        ws.close()
-      }
-      state().delete(id)
-    })
-    Bus.publish(Event.Created, { info })
-    return info
   }
 
   export async function update(id: string, input: UpdateInput) {
@@ -193,9 +255,7 @@ export namespace Pty {
     const session = state().get(id)
     if (!session) return
     log.info("removing session", { id })
-    try {
-      session.process.kill()
-    } catch {}
+    await AuthorityProcessLedger.revoke({ id, kind: "pty" })
     for (const ws of session.subscribers) {
       ws.close()
     }

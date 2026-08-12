@@ -27,6 +27,9 @@ test("kernel tools advertise and validate isolated managed names", async () => {
   expect(python.parameters.parse({ code: "1 + 1", kernel: "descriptive-eda" }).kernel).toBe("descriptive-eda")
   expect(r.parameters.parse({ code: "1 + 1", kernel: "stratified_rates" }).kernel).toBe("stratified_rates")
   expect(() => python.parameters.parse({ code: "1 + 1", kernel: "invalid name" })).toThrow()
+  expect(python.parameters.parse({ code: "1 + 1", environment: "nbody" }).environment).toBe("nbody")
+  expect(() => python.parameters.parse({ code: "1 + 1", environment: "../nbody" })).toThrow("path separators")
+  expect(() => r.parameters.parse({ code: "1 + 1", environment: "r-4.5" })).toThrow("Unrecognized key")
 })
 
 test("four named notebook calls own four live managed kernels", async () => {

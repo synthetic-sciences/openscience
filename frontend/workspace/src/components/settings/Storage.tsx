@@ -1,16 +1,17 @@
-// Storage — real on-disk footprint of the OpenScience data directory and a
-// supported "change location" move.
+// Storage — real on-disk footprint of the OpenScience data directory.
 // Backed by /settings/storage (routes/settings/storage.ts).
-import { type Component, type JSX, For, Show, createMemo, createSignal, onMount } from "solid-js"
-import { Button } from "@synsci/ui/button"
+import { type Component, For, Show, createMemo, createSignal, onMount } from "solid-js"
+import { Icon } from "@synsci/ui/icon"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
-import { FONT_CODE, FONT_SANS } from "@/styles/tokens"
 import { settingsApi } from "./api"
+import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
+import "./preference-panels.css"
 
 type Entry = { name: string; path: string; bytes: number; kind: "dir" | "file" }
 type Usage = {
   data_dir: string
+  managed: boolean
   config_dir: string
   cache_dir: string
   state_dir: string
@@ -40,48 +41,56 @@ export const Storage: Component = () => {
 
   const [usage, setUsage] = createSignal<Usage>()
   const [error, setError] = createSignal<string>()
-  const [status, setStatus] = createSignal<string>()
+  const [loading, setLoading] = createSignal(true)
   const [busy, setBusy] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
   const [target, setTarget] = createSignal("")
+  const [status, setStatus] = createSignal<string>()
 
   const load = async () => {
+    setLoading(true)
     setError(undefined)
     try {
       setUsage(await settingsApi<Usage>(base(), fetchFn(), "/settings/storage"))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
     }
   }
   onMount(() => void load())
 
   const chooseLocation = async () => {
     if (busy()) return
+    setEditing(true)
     setError(undefined)
     setStatus(undefined)
-    setEditing(true)
     if (!platform.openDirectoryPickerDialog) return
-    const picked = await platform.openDirectoryPickerDialog({ title: "Choose a new data location" }).catch(() => null)
-    const path = Array.isArray(picked) ? picked[0] : picked
-    if (path) setTarget(path)
+    const picked = await platform
+      .openDirectoryPickerDialog({ title: "Choose a new OpenScience data location" })
+      .catch(() => null)
+    const selected = Array.isArray(picked) ? picked[0] : picked
+    if (selected) setTarget(selected)
   }
 
   const relocate = async () => {
-    const path = target().trim()
-    if (busy() || !path) return
+    const next = target().trim()
+    if (!next || busy()) return
     setBusy(true)
     setError(undefined)
     setStatus(undefined)
     try {
-      const res = await settingsApi<{ ok: boolean; target: string; restart_required: boolean }>(
+      const result = await settingsApi<{ ok: true; target: string; files: number; bytes: number; warning?: string }>(
         base(),
         fetchFn(),
         "/settings/storage/location",
-        { method: "POST", body: JSON.stringify({ path }) },
+        { method: "POST", body: JSON.stringify({ path: next }) },
       )
       setEditing(false)
       setTarget("")
-      setStatus(`Data copied to ${res.target}. Restart OpenScience to use the new location.`)
+      setStatus(
+        `Moved ${fmt(result.bytes)} across ${result.files} files. Every running OpenScience server now uses ${result.target}.${result.warning ? ` ${result.warning}` : ""}`,
+      )
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -96,8 +105,17 @@ export const Storage: Component = () => {
     setError(undefined)
     setStatus(undefined)
     try {
-      await settingsApi(base(), fetchFn(), "/settings/storage/location", { method: "DELETE" })
-      setStatus("Custom location cleared. Restart to return to the default directory.")
+      const result = await settingsApi<{ ok: true; target: string; backup?: string; warning?: string }>(
+        base(),
+        fetchFn(),
+        "/settings/storage/location",
+        { method: "DELETE" },
+      )
+      setStatus(
+        (result.backup
+          ? `Returned to ${result.target}. The previous default directory is preserved at ${result.backup}.`
+          : `Returned to ${result.target}.`) + (result.warning ? ` ${result.warning}` : ""),
+      )
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -106,200 +124,189 @@ export const Storage: Component = () => {
     }
   }
 
-  const cancelLocation = () => {
-    if (busy()) return
-    setEditing(false)
-    setTarget("")
-    setError(undefined)
-  }
-
   const maxBytes = createMemo(() => Math.max(1, ...(usage()?.entries.map((e) => e.bytes) ?? [1])))
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="settings-page-header">
-        <div class="settings-page-header__inner">
-          <h2 class="text-16-medium text-text-strong">Storage</h2>
-          <p class="text-13-regular text-text-weak">
-            Where OpenScience keeps data on disk, and how much space it uses.
-          </p>
-        </div>
-      </div>
-
-      <div class="settings-page-body">
-        <Show when={error()}>
-          <div role="alert" style={bannerStyle("var(--color-error)", "var(--color-error-muted)")}>
-            {error()}
-          </div>
-        </Show>
-        <Show when={status()}>
-          <div aria-live="polite" style={bannerStyle("var(--color-success)", "var(--color-success-muted)")}>
-            {status()}
-          </div>
-        </Show>
-
-        {/* Data location */}
-        <div class="flex flex-col gap-3">
-          <div class="flex flex-col gap-1">
-            <h3 class="text-13-medium text-text-weak tracking-wide">Data location</h3>
-            <p class="text-12-regular text-text-weak">
-              The directory holding sessions, credentials, skills, and logs. The default is ~/.openscience.
-            </p>
-          </div>
-          <div style={{ border: "1px solid var(--color-border)", "border-radius": "4px", padding: "16px 18px" }}>
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="flex flex-col gap-1 min-w-0">
-                <span
-                  class="text-13-regular text-text-strong truncate"
-                  style={{ "font-family": FONT_CODE }}
-                  title={usage()?.data_dir}
-                >
-                  {usage()?.data_dir ?? "…"}
-                </span>
-                <span class="text-12-regular text-text-weak">
-                  {fmt(usage()?.total_bytes ?? 0)} total
-                  <Show when={usage()?.pointer}> · custom location</Show>
-                </span>
-              </div>
-              <div class="flex gap-2 flex-shrink-0">
-                <Show when={usage()?.pointer}>
-                  <Button size="small" variant="secondary" disabled={busy()} onClick={() => void resetLocation()}>
-                    Reset location
-                  </Button>
-                </Show>
-                <Show when={!editing()}>
-                  <Button size="small" variant="secondary" disabled={busy()} onClick={() => void chooseLocation()}>
-                    Change location
-                  </Button>
-                </Show>
-              </div>
-            </div>
-            <Show when={editing()}>
-              <div class="flex flex-col gap-2 mt-4 pt-4 border-t border-border-weak-base">
-                <label for="storage-location-input" class="text-12-medium text-text-strong">
-                  New data directory
-                </label>
-                <input
-                  id="storage-location-input"
-                  aria-label="New data directory"
-                  value={target()}
-                  onInput={(event) => setTarget(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return
-                    event.preventDefault()
-                    void relocate()
-                  }}
-                  placeholder="/Users/you/OpenScience-data"
-                  spellcheck={false}
-                  autofocus
-                  class="text-12-mono text-text-strong bg-transparent outline-none"
-                  style={{
-                    width: "100%",
-                    "box-sizing": "border-box",
-                    padding: "8px 10px",
-                    border: "1px solid var(--color-border)",
-                    "border-radius": "4px",
-                    "font-family": FONT_CODE,
-                  }}
-                />
-                <p class="text-12-regular text-text-weak max-w-[62ch]">
-                  OpenScience copies the current data into an empty folder and switches to it after restart. The
-                  original stays in place as a safety copy.
-                </p>
-                <div class="flex flex-wrap items-center justify-end gap-2 mt-1">
-                  <Show when={platform.openDirectoryPickerDialog}>
-                    <Button size="small" variant="secondary" disabled={busy()} onClick={() => void chooseLocation()}>
-                      Browse…
-                    </Button>
-                  </Show>
-                  <Button size="small" variant="secondary" disabled={busy()} onClick={cancelLocation}>
-                    Cancel
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="primary"
-                    disabled={busy() || !target().trim()}
-                    onClick={() => void relocate()}
-                  >
-                    {busy() ? "Copying…" : "Copy data"}
-                  </Button>
-                </div>
-              </div>
-            </Show>
-          </div>
-        </div>
-
-        {/* Disk usage */}
-        <div class="flex flex-col gap-3">
-          <div class="flex flex-col gap-1">
-            <h3 class="text-13-medium text-text-weak tracking-wide">Disk usage</h3>
-            <p class="text-12-regular text-text-weak">Top-level entries inside the data directory, largest first.</p>
-          </div>
-          <Show
-            when={usage() && usage()!.entries.length > 0}
-            fallback={
-              <div
-                class="text-12-regular text-text-weak"
-                style={{
-                  border: "1px dashed var(--color-border-strong)",
-                  "border-radius": "4px",
-                  padding: "14px 16px",
-                }}
-              >
-                {usage() ? "Nothing stored yet." : "Loading…"}
-              </div>
-            }
-          >
-            <div style={{ border: "1px solid var(--color-border)", "border-radius": "4px", overflow: "hidden" }}>
-              <For each={usage()!.entries}>
-                {(entry) => (
-                  <div class="flex flex-col gap-1.5 px-4 py-3 border-b border-border-weak-base last:border-none">
-                    <div class="flex items-center justify-between gap-3">
-                      <span class="text-13-regular text-text-strong truncate" style={{ "font-family": FONT_CODE }}>
-                        {entry.name}
-                        {entry.kind === "dir" ? "/" : ""}
-                      </span>
-                      <span class="text-12-regular text-text-weak flex-shrink-0">{fmt(entry.bytes)}</span>
-                    </div>
-                    <div
-                      style={{
-                        height: "4px",
-                        "border-radius": "999px",
-                        background: "var(--color-border-weak-base, rgba(255,255,255,0.08))",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <div
-                        style={{
-                          height: "100%",
-                          width: `${Math.max(2, (entry.bytes / maxBytes()) * 100)}%`,
-                          background: "var(--color-text-interactive-base, var(--color-text))",
-                          "border-radius": "999px",
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </For>
+    <PanelScroll>
+      <div class="settings-preferences-panel settings-preferences-panel--storage">
+        <PanelHeader title="Storage" description="Manage local data and review its disk usage." />
+        <PanelBody>
+          <Show when={error()}>
+            <div class="settings-alert whitespace-pre-wrap" data-tone="critical" role="alert">
+              <span>{error()}</span>
+              <button type="button" class="settings-inline-action" disabled={loading()} onClick={() => void load()}>
+                Retry
+              </button>
             </div>
           </Show>
-        </div>
+          <Show when={status()}>
+            <div class="settings-alert" data-tone="success" aria-live="polite">
+              <span class="settings-preference-icon" data-tone="success" aria-hidden="true">
+                <Icon name="check" size="small" />
+              </span>
+              <span class="min-w-0 flex-1">{status()}</span>
+            </div>
+          </Show>
+
+          <Section title="Data location" description="Sessions, credentials, skills, and logs live here.">
+            <div class="settings-card settings-preferences-card">
+              <div class="settings-storage-location">
+                <span class="settings-preference-icon" aria-hidden="true">
+                  <Icon name="folder" size="small" />
+                </span>
+                <div class="settings-row-copy">
+                  <div class="flex min-w-0 flex-wrap items-center gap-2">
+                    <strong class="settings-storage-path min-w-0 truncate font-mono" title={usage()?.data_dir}>
+                      {usage()?.data_dir ?? "…"}
+                    </strong>
+                    <Show when={usage()?.pointer}>
+                      <span class="settings-preference-status">Custom</span>
+                    </Show>
+                  </div>
+                  <span class="settings-storage-size">
+                    {usage() ? `${fmt(usage()!.total_bytes)} total` : "Loading storage…"}
+                  </span>
+                </div>
+                <div class="settings-storage-location__actions flex shrink-0 items-center gap-1">
+                  <Show when={usage()?.pointer}>
+                    <button
+                      type="button"
+                      class="settings-preference-action"
+                      data-variant="quiet"
+                      disabled={busy() || !usage()?.managed}
+                      onClick={() => void resetLocation()}
+                    >
+                      Use default
+                    </button>
+                  </Show>
+                  <Show when={!editing()}>
+                    <button
+                      type="button"
+                      class="settings-preference-action"
+                      disabled={busy() || !usage()?.managed}
+                      onClick={() => void chooseLocation()}
+                    >
+                      Change location…
+                    </button>
+                  </Show>
+                </div>
+              </div>
+              <Show when={editing()}>
+                <div class="settings-inline-editor">
+                  <label for="storage-location-input" class="text-12-medium text-text-strong">
+                    New data directory
+                  </label>
+                  <input
+                    id="storage-location-input"
+                    class="settings-field min-w-0 flex-1 basis-[240px] font-mono"
+                    value={target()}
+                    placeholder="/Users/you/OpenScience-data"
+                    spellcheck={false}
+                    autofocus
+                    onInput={(event) => setTarget(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return
+                      event.preventDefault()
+                      void relocate()
+                    }}
+                  />
+                  <p class="max-w-[68ch] text-12-regular text-text-weak">
+                    OpenScience verifies files and SQLite data, pauses active writes, and switches every running server
+                    together. The current directory remains untouched as a safety copy.
+                  </p>
+                  <div class="settings-inline-editor__actions">
+                    <Show when={platform.openDirectoryPickerDialog}>
+                      <button
+                        type="button"
+                        class="settings-preference-action"
+                        data-variant="quiet"
+                        disabled={busy()}
+                        onClick={() => void chooseLocation()}
+                      >
+                        Browse…
+                      </button>
+                    </Show>
+                    <button
+                      type="button"
+                      class="settings-preference-action"
+                      data-variant="quiet"
+                      disabled={busy()}
+                      onClick={() => {
+                        setEditing(false)
+                        setTarget("")
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      class="settings-preference-action"
+                      data-variant="primary"
+                      disabled={busy() || !target().trim()}
+                      onClick={() => void relocate()}
+                    >
+                      {busy() ? "Moving…" : "Move data"}
+                    </button>
+                  </div>
+                </div>
+              </Show>
+              <Show when={usage() && !usage()!.managed}>
+                <div class="settings-alert m-3 mt-0" data-tone="neutral">
+                  <Icon name="alert-circle" size="small" class="shrink-0 text-icon-weak-base" />
+                  <span>OPENSCIENCE_DATA_DIR owns this process, so change that environment setting to move it.</span>
+                </div>
+              </Show>
+            </div>
+          </Section>
+
+          <Section title="Disk usage" description="Top-level entries inside the data directory, largest first.">
+            <Show
+              when={usage() && usage()!.entries.length > 0}
+              fallback={
+                <div class="settings-card settings-preferences-card">
+                  <div class="settings-row settings-preference-row text-12-regular text-text-weak">
+                    <span class="settings-preference-icon" aria-hidden="true">
+                      <Icon name="archive" size="small" />
+                    </span>
+                    {usage() ? "Nothing stored yet." : "Loading storage…"}
+                  </div>
+                </div>
+              }
+            >
+              <div class="settings-card settings-preferences-card">
+                <For each={usage()!.entries}>
+                  {(entry) => (
+                    <div class="settings-row settings-preference-row settings-storage-usage-row">
+                      <span class="settings-preference-icon" aria-hidden="true">
+                        <Icon name={entry.kind === "dir" ? "folder" : "file"} size="small" />
+                      </span>
+                      <code class="min-w-0 truncate text-13-regular text-text-strong">
+                        {entry.name}
+                        {entry.kind === "dir" ? "/" : ""}
+                      </code>
+                      <span class="settings-storage-metric text-12-regular text-text-weak flex-shrink-0">
+                        {fmt(entry.bytes)}
+                      </span>
+                      <div
+                        class="settings-storage-meter"
+                        role="progressbar"
+                        aria-label={`${entry.name} relative disk usage`}
+                        aria-valuemin="0"
+                        aria-valuemax={maxBytes()}
+                        aria-valuenow={entry.bytes}
+                      >
+                        <span style={{ width: `${Math.max(2, (entry.bytes / maxBytes()) * 100)}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </Section>
+        </PanelBody>
       </div>
-    </div>
+    </PanelScroll>
   )
 }
 
 export default Storage
-
-function bannerStyle(color: string, border: string): JSX.CSSProperties {
-  return {
-    "font-family": FONT_SANS,
-    "font-size": "12px",
-    "line-height": 1.5,
-    color,
-    border: `1px solid ${border}`,
-    "border-radius": "4px",
-    padding: "10px 12px",
-    "white-space": "pre-wrap",
-  }
-}

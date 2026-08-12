@@ -27,17 +27,23 @@ export const WebFetchTool = Tool.define("webfetch", {
     // Answering "always" adds the domain to the persisted allow-list (visible
     // in Network settings); conversation/project scopes approve quietly on
     // later requests without widening the stored list.
-    const host = await Network.blocked(params.url)
-    if (host) {
+    const approvedHosts = new Set<string>()
+    const authorize = async (input: { host: string; url: string }) => {
+      if (approvedHosts.has(input.host)) return
       await ctx.ask({
         permission: "network",
-        patterns: [host],
-        always: [host],
+        patterns: [input.host],
+        always: [input.host],
         metadata: {
-          url: params.url,
-          network: { host },
+          url: input.url,
+          network: { host: input.host },
         },
       })
+      approvedHosts.add(input.host)
+    }
+    const host = await Network.blocked(params.url)
+    if (host) {
+      await authorize({ host, url: params.url })
     }
 
     // Scope an "always" style grant to this site, never the whole tool.
@@ -89,81 +95,87 @@ export const WebFetchTool = Tool.define("webfetch", {
       "Accept-Language": "en-US,en;q=0.9",
     }
 
-    const initial = await fetch(params.url, { signal, headers })
+    try {
+      const initial = await Network.fetch(params.url, { signal, headers }, { authorize })
 
-    // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
-    const response =
-      initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
-        ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "openscience" } })
-        : initial
+      // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
+      const response =
+        initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
+          ? await Network.fetch(
+              params.url,
+              { signal, headers: { ...headers, "User-Agent": "openscience" } },
+              { authorize },
+            )
+          : initial
 
-    clearTimeout(timeoutId)
+      if (!response.ok) {
+        throw new Error(`Request failed with status code: ${response.status}`)
+      }
 
-    if (!response.ok) {
-      throw new Error(`Request failed with status code: ${response.status}`)
-    }
+      // Check content length
+      const contentLength = response.headers.get("content-length")
+      if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
+        throw new Error("Response too large (exceeds 5MB limit)")
+      }
 
-    // Check content length
-    const contentLength = response.headers.get("content-length")
-    if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
-      throw new Error("Response too large (exceeds 5MB limit)")
-    }
+      const arrayBuffer = await response.arrayBuffer()
+      if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
+        throw new Error("Response too large (exceeds 5MB limit)")
+      }
 
-    const arrayBuffer = await response.arrayBuffer()
-    if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
-      throw new Error("Response too large (exceeds 5MB limit)")
-    }
+      const content = new TextDecoder().decode(arrayBuffer)
+      const contentType = response.headers.get("content-type") || ""
 
-    const content = new TextDecoder().decode(arrayBuffer)
-    const contentType = response.headers.get("content-type") || ""
+      const title = `${params.url} (${contentType})`
 
-    const title = `${params.url} (${contentType})`
-
-    // Handle content based on requested format and actual content type
-    switch (params.format) {
-      case "markdown":
-        if (contentType.includes("text/html")) {
-          const markdown = convertHTMLToMarkdown(content)
+      // Handle content based on requested format and actual content type
+      switch (params.format) {
+        case "markdown":
+          if (contentType.includes("text/html")) {
+            const markdown = convertHTMLToMarkdown(content)
+            return {
+              output: markdown,
+              title,
+              metadata: {},
+            }
+          }
           return {
-            output: markdown,
+            output: content,
             title,
             metadata: {},
           }
-        }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
 
-      case "text":
-        if (contentType.includes("text/html")) {
-          const text = await extractTextFromHTML(content)
+        case "text":
+          if (contentType.includes("text/html")) {
+            const text = await extractTextFromHTML(content)
+            return {
+              output: text,
+              title,
+              metadata: {},
+            }
+          }
           return {
-            output: text,
+            output: content,
             title,
             metadata: {},
           }
-        }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
 
-      case "html":
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
+        case "html":
+          return {
+            output: content,
+            title,
+            metadata: {},
+          }
 
-      default:
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
+        default:
+          return {
+            output: content,
+            title,
+            metadata: {},
+          }
+      }
+    } finally {
+      clearTimeout(timeoutId)
     }
   },
 })

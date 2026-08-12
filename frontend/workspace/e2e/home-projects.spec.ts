@@ -16,8 +16,7 @@ test("home project search filters the recent list and clears back to it", async 
   await expect(page.getByText("No matching projects", { exact: true })).toBeVisible()
   await expect(card).toHaveCount(0)
 
-  // Two "Clear search" affordances exist while the empty state shows (the
-  // search-bar icon and the empty-state button); either restores the list.
+  // Clearing from either the search field or the no-results recovery restores the list.
   await page.getByRole("button", { name: "Clear search", exact: true }).first().click()
   await expect(card).toBeVisible()
 })
@@ -32,7 +31,7 @@ test("existing folder import remains available through the in-app picker", async
   await expect(location).toBeVisible()
   await location.fill(directory)
   await location.press("Enter")
-  await page.getByRole("button", { name: "use this folder", exact: true }).click()
+  await page.getByRole("button", { name: "Use this folder", exact: true }).click()
 
   await expect(page).toHaveURL(new RegExp(`/${slug}/session`))
   await expect(page.locator(promptSelector)).toBeVisible()

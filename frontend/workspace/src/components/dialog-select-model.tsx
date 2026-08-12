@@ -65,7 +65,7 @@ const ModelList: Component<{
 
   return (
     <List
-      class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 [&_[data-slot=list-search-input]]:!text-[13px] [&_[data-slot=list-header]]:!text-[11px] [&_[data-slot=list-header]]:!font-medium [&_[data-slot=list-header]]:!tracking-[0.02em] [&_[data-slot=list-item]]:focus-visible:!outline [&_[data-slot=list-item]]:focus-visible:!outline-1 [&_[data-slot=list-item]]:focus-visible:!outline-border-strong ${props.class ?? ""}`}
+      class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 [&_[data-slot=list-search-input]]:!text-[13px] [&_[data-slot=list-header]]:!text-[11px] [&_[data-slot=list-header]]:!font-medium [&_[data-slot=list-item]]:focus-visible:!outline [&_[data-slot=list-item]]:focus-visible:!outline-1 [&_[data-slot=list-item]]:focus-visible:!outline-border-strong ${props.class ?? ""}`}
       search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}

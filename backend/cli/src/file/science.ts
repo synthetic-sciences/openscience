@@ -1,7 +1,31 @@
 import path from "node:path"
+import fs from "node:fs/promises"
+import os from "node:os"
+import { spawn, type ChildProcess } from "node:child_process"
 import z from "zod"
+import { Config } from "@/config/config"
+import { CredentialProcessLedger } from "@/credentials/process-ledger"
+import { OpenScience } from "@/openscience"
+import { ProcessIdentity } from "@/process/process-identity"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
+import { AuthoritySignal } from "@/project/authority-signal"
+import { ExecutionAuthority } from "@/project/execution"
+import { Instance } from "@/project/instance"
+import { ProjectTrust } from "@/project/trust"
+import { Sandbox } from "@/sandbox/sandbox"
+import { CommandRuntime } from "@/science/command/registry"
+import { SessionFilesystem } from "@/session/filesystem"
+import { Shell } from "@/shell/shell"
 
 export namespace ScienceFile {
+  const TOOL_TIMEOUT_MS = 20_000
+  const MAX_STDOUT_BYTES = 8 * 1024 * 1024
+  const MAX_STDERR_BYTES = 64 * 1024
+
+  export interface InspectOptions {
+    sessionID?: string
+  }
+
   export const Format = z.enum(["bam", "cram", "h5ad", "loom"])
   export type Format = z.infer<typeof Format>
 
@@ -159,7 +183,7 @@ print(json.dumps(result))
     return format(file) !== undefined
   }
 
-  export async function inspect(full: string, relative: string): Promise<Inspection> {
+  export async function inspect(full: string, relative: string, options: InspectOptions = {}): Promise<Inspection> {
     const kind = format(relative)
     if (!kind) throw new Error(`Unsupported scientific binary format`)
     const file = Bun.file(full)
@@ -172,17 +196,33 @@ print(json.dumps(result))
       size: stat.size,
       modified: stat.mtimeMs,
     }
-    if (kind === "h5ad" || kind === "loom") return inspectHdf5(full, base, bytes)
-    return inspectAlignment(full, relative, base, bytes)
+    const trusted = await ProjectTrust.allowed(Instance.project)
+    if (kind === "h5ad" || kind === "loom") return inspectHdf5(full, relative, base, bytes, trusted, options)
+    return inspectAlignment(full, relative, base, bytes, trusted, options)
   }
 
   async function inspectHdf5(
     full: string,
+    relative: string,
     base: Pick<Inspection, "format" | "name" | "size" | "modified">,
     bytes: Uint8Array,
+    trusted: boolean,
+    options: InspectOptions,
   ): Promise<Inspection> {
-    const bin = Bun.which("python3") ?? Bun.which("python")
     const signature = [0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a].every((value, index) => bytes[index] === value)
+    if (!trusted) {
+      return {
+        ...base,
+        signature,
+        tool: {
+          name: "h5py",
+          available: false,
+          detail: "Trust this project to enable isolated h5py inspection",
+        },
+        details: {},
+      }
+    }
+    const bin = Bun.which("python3", { PATH: process.env.PATH }) ?? Bun.which("python", { PATH: process.env.PATH })
     if (!bin) {
       return {
         ...base,
@@ -191,7 +231,11 @@ print(json.dumps(result))
         details: {},
       }
     }
-    const result = await command([bin, "-c", python, full], 20_000)
+    const result = await command([bin, "-c", python, full], [full], relative, options).catch((error) => ({
+      code: 1,
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+    }))
     const data = result.code === 0 ? json(result.stdout) : undefined
     return {
       ...base,
@@ -214,24 +258,44 @@ print(json.dumps(result))
     relative: string,
     base: Pick<Inspection, "format" | "name" | "size" | "modified">,
     bytes: Uint8Array,
+    trusted: boolean,
+    options: InspectOptions,
   ): Promise<Inspection> {
-    const bin = Bun.which("samtools")
     const cram = base.format === "cram"
     const signature = cram
       ? bytes[0] === 0x43 && bytes[1] === 0x52 && bytes[2] === 0x41 && bytes[3] === 0x4d
       : bytes[0] === 0x1f && bytes[1] === 0x8b
-    const index = await findIndex(full, relative, cram)
+    const index = await findIndex(full, relative, cram, options)
     const version = cram && signature ? `${bytes[4] ?? 0}.${bytes[5] ?? 0}` : undefined
+    if (!trusted) {
+      return {
+        ...base,
+        signature,
+        index: index?.relative,
+        tool: {
+          name: "samtools",
+          available: false,
+          detail: "Trust this project to enable isolated samtools inspection",
+        },
+        details: version ? { version } : {},
+      }
+    }
+    const bin = Bun.which("samtools", { PATH: process.env.PATH })
     if (!bin) {
       return {
         ...base,
         signature,
-        index,
+        index: index?.relative,
         tool: { name: "samtools", available: false, detail: "Install samtools to inspect headers and references" },
         details: version ? { version } : {},
       }
     }
-    const header = await command([bin, "view", "-H", full], 20_000)
+    const readable = [full, ...(index ? [index.full] : [])]
+    const header = await command([bin, "view", "-H", full], readable, relative, options).catch((error) => ({
+      code: 1,
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+    }))
     const refs = header.stdout
       .split(/\r?\n/)
       .filter((line) => line.startsWith("@SQ"))
@@ -250,7 +314,13 @@ print(json.dumps(result))
       ?.split("\t")
       .slice(1)
       .map((part) => part.split(":", 2))
-    const stats = index ? await command([bin, "idxstats", full], 20_000) : undefined
+    const stats = index
+      ? await command([bin, "idxstats", full], readable, relative, options).catch((error) => ({
+          code: 1,
+          stdout: "",
+          stderr: error instanceof Error ? error.message : String(error),
+        }))
+      : undefined
     const chromosomes =
       stats?.code === 0
         ? stats.stdout
@@ -268,7 +338,7 @@ print(json.dumps(result))
     return {
       ...base,
       signature,
-      index,
+      index: index?.relative,
       tool: {
         name: "samtools",
         available: header.code === 0,
@@ -283,31 +353,236 @@ print(json.dumps(result))
     }
   }
 
-  async function findIndex(full: string, relative: string, cram: boolean): Promise<string | undefined> {
+  async function findIndex(
+    full: string,
+    relative: string,
+    cram: boolean,
+    options: InspectOptions,
+  ): Promise<{ full: string; relative: string } | undefined> {
     const extension = cram ? ".crai" : ".bai"
     const candidates = [full + extension, full.replace(/\.[^.]+$/, extension)]
     const found = await Promise.all(
-      candidates.map(async (candidate) => ((await Bun.file(candidate).exists()) ? candidate : undefined)),
+      candidates.map(async (candidate) => {
+        if (!(await Bun.file(candidate).exists())) return
+        const canonical = await fs.realpath(candidate).catch(() => undefined)
+        if (!canonical) return
+        if (options.sessionID) {
+          const authorized = await SessionFilesystem.authorize({
+            sessionID: options.sessionID,
+            path: canonical,
+            access: "read",
+          }).catch(() => undefined)
+          if (!authorized || path.resolve(authorized.path) !== path.resolve(canonical)) return
+        } else if (!(await Instance.containsCanonicalPath(canonical))) {
+          return
+        }
+        return canonical
+      }),
     )
     const value = found.find(Boolean)
     if (!value) return
-    return path.join(path.dirname(relative), path.basename(value)).replace(/^\.\//, "")
+    return {
+      full: value,
+      relative: path.join(path.dirname(relative), path.basename(value)).replace(/^\.\//, ""),
+    }
   }
 
-  async function command(args: string[], timeout: number): Promise<{ code: number; stdout: string; stderr: string }> {
-    const process = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
-    const timer = setTimeout(() => process.kill(), timeout)
-    const code = await process.exited
-    clearTimeout(timer)
-    const [stdout, stderr] = await Promise.all([
-      new Response(process.stdout).text(),
-      new Response(process.stderr).text(),
-    ])
-    return { code, stdout, stderr }
+  function environment(scratch: string): Record<string, string> {
+    const keys =
+      process.platform === "win32"
+        ? ["PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP"]
+        : ["PATH", "LANG"]
+    const result = Object.fromEntries(keys.flatMap((key) => (process.env[key] ? [[key, process.env[key]!]] : [])))
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value && key.startsWith("LC_")) result[key] = value
+    }
+    return {
+      ...result,
+      HOME: scratch,
+      TMPDIR: scratch,
+      TMP: scratch,
+      TEMP: scratch,
+      XDG_CACHE_HOME: path.join(scratch, "cache"),
+      XDG_CONFIG_HOME: path.join(scratch, "config"),
+      XDG_DATA_HOME: path.join(scratch, "data"),
+      PYTHONNOUSERSITE: "1",
+      PYTHONSAFEPATH: "1",
+      PYTHONDONTWRITEBYTECODE: "1",
+      PYTHONUNBUFFERED: "1",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+      GIT_TERMINAL_PROMPT: "0",
+    }
+  }
+
+  function output(stream: NodeJS.ReadableStream | null, limit: number, name: "stdout" | "stderr"): Promise<string> {
+    if (!stream) return Promise.resolve("")
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = []
+      let size = 0
+      let settled = false
+      const fail = (error: unknown) => {
+        if (settled) return
+        settled = true
+        reject(error)
+      }
+      stream.on("data", (value: Buffer | string) => {
+        if (settled) return
+        const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value)
+        size += chunk.length
+        if (size > limit) {
+          fail(new Error(`Scientific preview ${name} exceeded ${limit} bytes`))
+          return
+        }
+        chunks.push(chunk)
+      })
+      stream.once("error", fail)
+      stream.once("end", () => {
+        if (settled) return
+        settled = true
+        resolve(Buffer.concat(chunks, size).toString("utf8"))
+      })
+    })
+  }
+
+  async function stop(child: ChildProcess): Promise<void> {
+    await Shell.killTree(child, {
+      detached: process.platform !== "win32",
+      exited: () => child.exitCode !== null || child.signalCode !== null,
+    })
+  }
+
+  async function command(
+    args: string[],
+    readable: string[],
+    relative: string,
+    options: InspectOptions,
+  ): Promise<{ code: number; stdout: string; stderr: string }> {
+    const scratch = await fs.mkdtemp(path.join(os.tmpdir(), `openscience-science-preview-${process.pid}-`))
+    let sandbox: Sandbox.Wrapped | undefined
+    let child: ChildProcess | undefined
+    let registered: Awaited<ReturnType<typeof CommandRuntime.start>> | undefined
+    try {
+      const launched = await AuthoritySignal.exclusive(async () => {
+        const trust = await ProjectTrust.status(Instance.project)
+        if (!trust.canExecuteProjectCode) throw new Error("Project trust was revoked before scientific inspection")
+
+        let generation = `science-preview:${trust.revision}`
+        let policy = await Config.trustedSandbox()
+        if (options.sessionID) {
+          const decision = await ExecutionAuthority.decide({
+            projectID: Instance.project.id,
+            sessionID: options.sessionID,
+            capability: "kernel",
+          })
+          if (!decision.allowed) throw new ExecutionAuthority.DeniedError(decision)
+          const authorized = await SessionFilesystem.authorize({
+            sessionID: options.sessionID,
+            path: relative,
+            access: "read",
+          })
+          if (path.resolve(authorized.path) !== path.resolve(readable[0]!)) {
+            throw new Error("Scientific preview authority changed while the file was being inspected")
+          }
+          generation = decision.generation
+          policy = decision.sandbox
+        } else if (!(await Instance.containsCanonicalPath(readable[0]!))) {
+          throw new Error("Scientific preview target left the trusted project")
+        }
+
+        sandbox = Sandbox.wrapArgv({
+          file: args[0]!,
+          args: args.slice(1),
+          workspace: [],
+          readable,
+          extraWritable: [scratch],
+          unreadable: OpenScience.kernelSensitivePaths(),
+          options: { ...policy, network: "deny" },
+        })
+        const linuxOwner =
+          process.platform === "linux"
+            ? await ProcessIdentity.capture(process.pid).then((identity) =>
+                identity ? { pid: process.pid, identity } : undefined,
+              )
+            : undefined
+        if (process.platform === "linux" && !linuxOwner) {
+          throw new Error("Could not capture the Linux server identity for scientific preview")
+        }
+        const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args, linuxOwner })
+        child = spawn(wrapped.file, wrapped.args, {
+          cwd: scratch,
+          env: environment(scratch),
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: process.platform !== "win32",
+          windowsHide: true,
+        })
+        const completion = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+          child!.once("error", reject)
+          child!.once("close", (code, signal) => resolve({ code, signal }))
+        })
+        registered = await CommandRuntime.start(
+          {
+            projectID: Instance.project.id,
+            sessionID: options.sessionID ?? "file-preview",
+            messageID: "file.inspect",
+            description: `Inspect ${path.basename(relative)}`,
+            command: `${path.basename(args[0]!)} scientific preview`,
+          },
+          child,
+          () => stop(child!),
+          { authorityGeneration: generation, windowsRelease: wrapped.release },
+        )
+        if (process.platform === "linux" && wrapped.release) {
+          await WindowsJobLauncher.release(wrapped.release, child.pid!)
+        }
+        return { completion, child, registered }
+      })
+
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Scientific preview timed out after 20 seconds")), TOOL_TIMEOUT_MS)
+        timer.unref()
+      })
+      const [result, stdout, stderr] = await Promise.race([
+        Promise.all([
+          launched.completion,
+          output(launched.child.stdout, MAX_STDOUT_BYTES, "stdout"),
+          output(launched.child.stderr, MAX_STDERR_BYTES, "stderr"),
+        ]),
+        timeout,
+      ]).finally(() => clearTimeout(timer))
+      await CredentialProcessLedger.complete(launched.registered.id)
+      CommandRuntime.finish(launched.registered.id)
+      return { code: result.code ?? 1, stdout, stderr }
+    } catch (error) {
+      const failures: unknown[] = []
+      if (registered) {
+        await CredentialProcessLedger.revoke({ id: registered.id, kind: "command" }).catch((failure) =>
+          failures.push(failure),
+        )
+        if (!failures.length) CommandRuntime.finish(registered.id)
+      }
+      if (child && child.exitCode === null && child.signalCode === null) {
+        await stop(child).catch((failure) => failures.push(failure))
+      }
+      if (failures.length) {
+        throw new AggregateError([error, ...failures], "Scientific preview ownership cleanup failed")
+      }
+      throw error
+    } finally {
+      if (sandbox) Sandbox.cleanup(sandbox)
+      await fs.rm(scratch, { recursive: true, force: true })
+    }
   }
 
   function json(value: string): Record<string, unknown> | undefined {
-    return JSON.parse(value) as Record<string, unknown>
+    try {
+      const parsed: unknown = JSON.parse(value)
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return
+      return parsed as Record<string, unknown>
+    } catch {
+      return
+    }
   }
 
   function detail(stdout: string, stderr: string): string {

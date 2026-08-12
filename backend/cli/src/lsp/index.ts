@@ -4,17 +4,25 @@ import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { pathToFileURL } from "url"
-import { LSPServer } from "./server"
+import { LSPServer, spawnLSPChild, withLSPSandbox } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
-import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { OpenScience } from "@/openscience"
 import { ProjectTrust } from "@/project/trust"
+import { CredentialProcessLedger } from "@/credentials/process-ledger"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
+
+  async function completeProcess(id: string) {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (await CredentialProcessLedger.complete(id)) return
+      await Bun.sleep(20)
+    }
+    throw new Error(`Language-server process ${id} did not exit after completion`)
+  }
 
   export const Event = {
     Updated: BusEvent.define("lsp.updated", z.object({})),
@@ -91,6 +99,9 @@ export namespace LSP {
           servers,
           clients,
           spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
+          processes: new Set<import("child_process").ChildProcessWithoutNullStreams>(),
+          generation: 0,
+          projectID: Instance.project.id,
         }
       }
 
@@ -111,10 +122,16 @@ export namespace LSP {
         servers[name] = {
           ...existing,
           id: name,
+          configured: true,
           root: existing?.root ?? (async () => Instance.directory),
           extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
-            const env = { ...(await OpenScience.subprocessEnv(process.env)), ...item.env }
+            // Language servers need runtime/toolchain discovery, not account,
+            // provider, or cloud credentials. Explicit per-LSP config remains
+            // available for servers that genuinely require custom variables.
+            // Project/global config may use {env:SECRET}; pass only the
+            // credential-free runtime subset needed for toolchain discovery.
+            const env: Record<string, string> = OpenScience.kernelEnv({ ...process.env, ...item.env })
             const command = item.command[0]
             const target = path.isAbsolute(command)
               ? command
@@ -125,7 +142,7 @@ export namespace LSP {
               target !== null && (Instance.containsPath(target) || (await Instance.containsCanonicalPath(target)))
             if (project || local) await ProjectTrust.require(Instance.project, "project_lsp")
             return {
-              process: spawn(item.command[0], item.command.slice(1), {
+              process: await spawnLSPChild(item.command[0], item.command.slice(1), {
                 cwd: root,
                 env,
               }),
@@ -147,15 +164,47 @@ export namespace LSP {
         servers,
         clients,
         spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
+        processes: new Set<import("child_process").ChildProcessWithoutNullStreams>(),
+        generation: 0,
+        projectID: Instance.project.id,
       }
     },
     async (state) => {
-      await Promise.all(state.clients.map((client) => client.shutdown()))
+      // Revoke while every registered leader is still alive. The durable
+      // ledger snapshots the live PPID descendant closure here, including a
+      // direct child that already moved into its own process group. Killing a
+      // leader first would reparent that child and destroy the only safe link.
+      await CredentialProcessLedger.revoke({ kind: "lsp", projectID: state.projectID })
+      for (const process of state.processes) process.kill()
+      state.processes.clear()
+      const clients = state.clients.splice(0)
+      const results = await Promise.allSettled(clients.map((client) => client.shutdown()))
+      const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+      if (failures.length) log.warn("Language-server client cleanup failed after durable revocation", { failures })
     },
   )
 
   export async function init() {
     return state()
+  }
+
+  /** Stop every language server for the current project. A generation bump
+   * also invalidates servers whose spawn/initialize handshake was in flight
+   * when trust was revoked in this or another server process. */
+  export async function dispose() {
+    const current = await state()
+    current.generation++
+    current.spawning.clear()
+    // Preserve live ancestry until durable revocation has captured and killed
+    // direct setsid/start_new_session descendants.
+    await CredentialProcessLedger.revoke({ kind: "lsp", projectID: current.projectID })
+    const processes = [...current.processes]
+    current.processes.clear()
+    for (const process of processes) process.kill()
+    const clients = current.clients.splice(0)
+    const results = await Promise.allSettled(clients.map((client) => client.shutdown()))
+    const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+    if (failures.length) log.warn("Language-server client cleanup failed after durable revocation", { failures })
   }
 
   export const Status = z
@@ -191,7 +240,6 @@ export namespace LSP {
     const result: LSPClient.Info[] = []
 
     async function active(client: LSPClient.Info) {
-      if (!client.project) return true
       try {
         await ProjectTrust.require(Instance.project, "project_lsp")
         return true
@@ -205,8 +253,47 @@ export namespace LSP {
     }
 
     async function schedule(server: LSPServer.Info, root: string, key: string) {
-      const handle = await server
-        .spawn(root)
+      const generation = s.generation
+      // Even a globally installed LSP can execute project-owned config,
+      // plugins, hooks, or code merely by starting in the project root.
+      // Binary location is therefore not a safe trust classifier.
+      const policy = await Config.trustedSandbox()
+      const handle = await ProjectTrust.require(Instance.project, "project_lsp")
+        .then(() =>
+          withLSPSandbox(
+            {
+              root,
+              options: policy,
+              allowArgumentReadDirectories: server.configured !== true,
+              async register(process, windowsRelease) {
+                if (!process.pid) throw new Error("Language server started without a process id")
+                const id = `lsp-${crypto.randomUUID()}`
+                const registered = await CredentialProcessLedger.register({
+                  id,
+                  kind: "lsp",
+                  pid: process.pid,
+                  detached: globalThis.process.platform !== "win32",
+                  projectID: s.projectID,
+                  windowsRelease,
+                })
+                if (!registered) {
+                  throw new Error("Language server exited before durable process-group ownership was established")
+                }
+                s.processes.add(process)
+                let completed = false
+                return () => {
+                  if (completed) return
+                  completed = true
+                  s.processes.delete(process)
+                  void completeProcess(id).catch((error) =>
+                    log.error("Failed to complete durable language-server ownership", { error, id }),
+                  )
+                }
+              },
+            },
+            () => server.spawn(root),
+          ),
+        )
         .then((value) => {
           if (!value) s.broken.add(key)
           return value
@@ -222,6 +309,18 @@ export namespace LSP {
         })
 
       if (!handle) return undefined
+      handle.project = true
+      if (generation !== s.generation) {
+        handle.process.kill()
+        return undefined
+      }
+      try {
+        await ProjectTrust.require(Instance.project, "project_lsp")
+      } catch (error) {
+        handle.process.kill()
+        if (ProjectTrust.DeniedError.isInstance(error)) return undefined
+        throw error
+      }
       log.info("spawned lsp server", { serverID: server.id })
 
       const client = await LSPClient.create({
@@ -240,6 +339,10 @@ export namespace LSP {
         return undefined
       }
 
+      if (generation !== s.generation) {
+        await client.shutdown()
+        return undefined
+      }
       if (!(await active(client))) return undefined
 
       const existing = s.clients.find((x) => x.root === root && x.serverID === server.id)

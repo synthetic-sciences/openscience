@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createRoot, onCleanup } from "solid-js"
+import { createEffect, createMemo, createRoot, onCleanup, untrack } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@synsci/ui/context"
 import type { FileContent, FileNode } from "@synsci/sdk/v2"
@@ -184,18 +184,18 @@ function touchContent(path: string, bytes?: number) {
   contentLru.set(path, value)
 }
 
-type ViewSession = ReturnType<typeof createViewSession>
+type ViewSession = ReturnType<typeof createProjectView>
 
 type ViewCacheEntry = {
   value: ViewSession
   dispose: VoidFunction
 }
 
-function createViewSession(dir: string, id: string | undefined) {
-  const legacyViewKey = `${dir}/file${id ? "/" + id : ""}.v1`
+function createProjectView(dir: string, legacySession: string | undefined) {
+  const legacyViewKey = `${dir}/file${legacySession ? "/" + legacySession : ""}.v1`
 
   const [view, setView, _, ready] = persisted(
-    Persist.scoped(dir, id, "file-view", [legacyViewKey]),
+    Persist.workspace(dir, "file-view", [legacyViewKey, `${dir}/file.v1`]),
     createStore<{
       file: Record<string, FileViewState>
     }>({
@@ -418,8 +418,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       }
     }
 
-    const loadView = (dir: string, id: string | undefined) => {
-      const key = `${dir}:${id ?? WORKSPACE_KEY}`
+    const loadView = (dir: string) => {
+      const key = dir || WORKSPACE_KEY
       const existing = viewCache.get(key)
       if (existing) {
         viewCache.delete(key)
@@ -428,7 +428,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       }
 
       const entry = createRoot((dispose) => ({
-        value: createViewSession(dir, id),
+        value: createProjectView(
+          dir,
+          untrack(() => params.id),
+        ),
         dispose,
       }))
 
@@ -437,7 +440,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return entry.value
     }
 
-    const view = createMemo(() => loadView(storage(), params.id))
+    // File scroll, selection, and preview state belong to the project-owned
+    // inspector. Session changes update mutation authority at call time but do
+    // not replace the visible file surface.
+    const view = createMemo(() => loadView(storage()))
 
     function ensure(path: string) {
       if (!path) return

@@ -70,6 +70,13 @@ test("kernel env filtering keeps runtime configuration but drops credentials", (
   })
 })
 
+test("kernel subprocesses cannot fall back to host Git config or credential prompts", () => {
+  const env = OpenScience.kernelEnv({ PATH: "/usr/bin", HOME: "/home/researcher" })
+  expect(env.GIT_CONFIG_NOSYSTEM).toBe("1")
+  expect(env.GIT_CONFIG_GLOBAL).toBe("/dev/null")
+  expect(env.GIT_TERMINAL_PROMPT).toBe("0")
+})
+
 test("kernel credential mask covers Atlas and OpenScience credential stores", () => {
   const paths = OpenScience.kernelSensitivePaths()
   const names = paths.map((value) => path.basename(value))
@@ -77,6 +84,10 @@ test("kernel credential mask covers Atlas and OpenScience credential stores", ()
   expect(names).toContain("auth.json")
   expect(names).toContain("credentials.json")
   expect(names).toContain("mcp-auth.json")
+  expect(names).toContain(".ssh")
+  expect(names).toContain(".aws")
+  expect(names).toContain(".netrc")
+  expect(names).toContain(".git-credentials")
   expect(paths).toContain(
     process.env.ATLAS_CLI_CONFIG_PATH || path.join(process.env.HOME!, ".config", "atlas-cli", "config.json"),
   )

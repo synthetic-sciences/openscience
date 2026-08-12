@@ -41,7 +41,7 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         defaultOpen
-        icon="dot-grid"
+        icon="artifact"
         trigger={{ title: String(title()), subtitle: envelope()?.kind }}
       >
         <Show when={envelope()}>

@@ -13,6 +13,7 @@ import { SessionFilesystem } from "@/session/filesystem"
 import { KernelRuntime } from "@/science/kernel/registry"
 import { Network } from "@/settings/network"
 import { SessionTraceStore } from "@/session/trace-store"
+import { ProjectTrust } from "@/project/trust"
 
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
@@ -224,7 +225,15 @@ export namespace PermissionNext {
     async (input) => {
       const s = await state()
       const { ruleset, ...request } = input
-      const rules = spendFilter(request.permission, merge(ruleset, approvals(s, request.sessionID)))
+      // Configured agent/tool policy is not a user approval. In an untrusted
+      // clone it may never silently turn an external path request into a grant;
+      // explicit standing approvals and already-materialized filesystem grants
+      // remain separate, auditable user decisions.
+      const configured =
+        request.permission === "external_directory" && !(await ProjectTrust.allowed(Instance.project))
+          ? ruleset.filter((rule) => !(rule.action === "allow" && Wildcard.match(request.permission, rule.permission)))
+          : ruleset
+      const rules = spendFilter(request.permission, merge(configured, approvals(s, request.sessionID)))
       const evaluated = (request.patterns ?? []).map((pattern) => {
         const rule = evaluate(request.permission, pattern, rules)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })

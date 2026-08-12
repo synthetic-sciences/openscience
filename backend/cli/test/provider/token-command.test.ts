@@ -273,3 +273,117 @@ test("tokenCommand overrides a static apiKey (command wins)", async () => {
   expect(srv.seen[0]).toBe("Bearer fresh-token")
   expect(srv.seen[0]).not.toContain("static-key-should-lose")
 })
+
+test.skipIf(process.platform === "win32")("tokenCommand does not inherit ambient provider secrets", async () => {
+  const srv = echoServer()
+  process.env.OPENSCIENCE_TOKEN_HELPER_TEST_SECRET = "must-not-leak"
+  try {
+    await using tmp = await tmpdir({
+      init: (dir) =>
+        provider(dir, {
+          baseURL: srv.url,
+          tokenCommand:
+            'if [ -z "$OPENSCIENCE_TOKEN_HELPER_TEST_SECRET" ]; then printf scrubbed-token; else printf leaked-token; fi',
+        }),
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trust()
+        const model = await Provider.getModel("token-cmd", "m")
+        const language = await Provider.getLanguage(model)
+        await generateText({ model: language, prompt: "hi" }).catch(() => {})
+      },
+    })
+  } finally {
+    delete process.env.OPENSCIENCE_TOKEN_HELPER_TEST_SECRET
+    srv.stop()
+  }
+  expect(srv.seen[0]).toBe("Bearer scrubbed-token")
+})
+
+test.skipIf(process.platform === "win32")("tokenCommand preserves JWT cache and single-mint behavior", async () => {
+  const srv = echoServer()
+  const token = `e30.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.sig`
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const marker = path.join(dir, "token-mints")
+        await provider(dir, {
+          baseURL: srv.url,
+          tokenCommand: `printf x >> ${JSON.stringify(marker)}; printf %s ${JSON.stringify(token)}`,
+        })
+        return marker
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trust()
+        const model = await Provider.getModel("token-cmd", "m")
+        const language = await Provider.getLanguage(model)
+        await generateText({ model: language, prompt: "first" }).catch(() => {})
+        await generateText({ model: language, prompt: "second" }).catch(() => {})
+      },
+    })
+    expect(await Bun.file(tmp.extra).text()).toBe("x")
+  } finally {
+    srv.stop()
+  }
+  expect(srv.seen).toEqual([`Bearer ${token}`, `Bearer ${token}`])
+})
+
+test.skipIf(process.platform === "win32")(
+  "tokenCommand cache and single-flight never cross project or provider authority",
+  async () => {
+    const srv = echoServer()
+    const expires = Math.floor(Date.now() / 1000) + 3600
+    const token = (project: string) =>
+      `e30.${Buffer.from(JSON.stringify({ exp: expires, project })).toString("base64url")}.${project}`
+    const firstToken = token("first")
+    const secondToken = token("second")
+    try {
+      await using first = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "token"), firstToken)
+          await provider(dir, { baseURL: srv.url, tokenCommand: "cat token" })
+        },
+      })
+      await using second = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "token"), secondToken)
+          await provider(dir, { baseURL: srv.url, tokenCommand: "cat token" })
+        },
+      })
+
+      const request = (directory: string, prompt: string) =>
+        Instance.provide({
+          directory,
+          fn: async () => {
+            await trust()
+            const model = await Provider.getModel("token-cmd", "m")
+            const language = await Provider.getLanguage(model)
+            await generateText({ model: language, prompt })
+          },
+        })
+
+      // Sequential requests exercise the JWT cache. With a command-only key,
+      // the second project would reuse the first project's long-lived bearer.
+      await request(first.path, "first sequential")
+      await request(second.path, "second sequential")
+
+      // Concurrent requests exercise single-flight isolation for the same raw
+      // command text evaluated in two different project working directories.
+      Provider.invalidateTokenCache()
+      await Promise.all([request(first.path, "first concurrent"), request(second.path, "second concurrent")])
+
+      expect(srv.seen).toHaveLength(4)
+      expect(srv.seen.filter((value) => value === `Bearer ${firstToken}`)).toHaveLength(2)
+      expect(srv.seen.filter((value) => value === `Bearer ${secondToken}`)).toHaveLength(2)
+    } finally {
+      Provider.invalidateTokenCache()
+      srv.stop()
+    }
+  },
+  30_000,
+)

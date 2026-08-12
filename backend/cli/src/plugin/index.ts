@@ -11,9 +11,16 @@ import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@synsci/util/error"
 import { CopilotAuthPlugin } from "./copilot"
+import { ProjectTrust } from "../project/trust"
+import { State } from "../project/state"
+import { AuthoritySignal } from "../project/authority-signal"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
+  // Provenance must outlive the disposable state entry: a caller can retain a
+  // hook/tool object while revocation clears the cache. Weak ownership avoids
+  // retaining the object itself while preserving the per-call trust guard.
+  const projectHooks = new WeakSet<Hooks>()
 
   // Default plugins installed from npm at first run. Keep this list to packages
   // that actually resolve on the public registry: a package that 404s is retried
@@ -50,12 +57,13 @@ export namespace Plugin {
     }
   }
 
-  const state = Instance.state(async () => {
+  const compute = async () => {
     const client = createOpenScienceClient({
       baseUrl: "http://openscience.internal",
       fetch: Server.internalFetch(),
     })
     const config = await Config.getExecution()
+    const sandbox = await Config.trustedSandbox()
     const hooks: Hooks[] = []
     const input: PluginInput = {
       client,
@@ -84,6 +92,20 @@ export namespace Plugin {
           .some((name) => plugin.includes(name))
       )
         continue
+      const project = await Config.projectControlsPlugin(plugin)
+      if (project) {
+        await ProjectTrust.require(Instance.project, "project_plugin")
+        if (sandbox.enabled === true) {
+          const message =
+            `Project plugin ${plugin} was not loaded because project plugins run in the OpenScience host process ` +
+            "and cannot be isolated by the execution sandbox. Disable the sandbox globally only if you accept that host access."
+          log.warn("refusing in-process project plugin while sandbox is enabled", { plugin })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({ message }).toObject(),
+          })
+          continue
+        }
+      }
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")
@@ -109,16 +131,26 @@ export namespace Plugin {
         })
         if (!plugin) continue
       }
-      const mod = await import(plugin)
-      // Prevent duplicate initialization when plugins export the same function
-      // as both a named export and default export (e.g., `export const X` and `export default X`).
-      // Object.entries(mod) would return both entries pointing to the same function reference.
-      const seen = new Set<PluginInstance>()
-      for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        if (seen.has(fn)) continue
-        seen.add(fn)
-        const init = await fn(input)
-        hooks.push(init)
+      const load = async () => {
+        const mod = await import(plugin)
+        // Prevent duplicate initialization when plugins export the same function
+        // as both a named export and default export (e.g., `export const X` and `export default X`).
+        const seen = new Set<PluginInstance>()
+        for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+          if (seen.has(fn)) continue
+          seen.add(fn)
+          const init = await fn(input)
+          hooks.push(init)
+          if (project) projectHooks.add(init)
+        }
+      }
+      if (project) {
+        await AuthoritySignal.exclusive(async () => {
+          await ProjectTrust.require(Instance.project, "project_plugin")
+          await load()
+        })
+      } else {
+        await load()
       }
     }
 
@@ -126,7 +158,18 @@ export namespace Plugin {
       hooks,
       input,
     }
-  })
+  }
+
+  const state = Instance.state(compute)
+
+  /** Remove project plugin hooks from every subsequent trigger/tool lookup. */
+  export function invalidate() {
+    State.clear(Instance.directory, compute)
+  }
+
+  export function projectOwned(hook: Hooks) {
+    return projectHooks.has(hook)
+  }
 
   export async function trigger<
     Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
@@ -134,7 +177,9 @@ export namespace Plugin {
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
     if (!name) return output
-    for (const hook of await state().then((x) => x.hooks)) {
+    const current = await state()
+    for (const hook of current.hooks) {
+      if (projectHooks.has(hook)) await ProjectTrust.require(Instance.project, "project_plugin")
       const fn = hook[name]
       if (!fn) continue
       // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
@@ -157,8 +202,9 @@ export namespace Plugin {
       await hook.config?.(config)
     }
     Bus.subscribeAll(async (input) => {
-      const hooks = await state().then((x) => x.hooks)
-      for (const hook of hooks) {
+      const current = await state()
+      for (const hook of current.hooks) {
+        if (projectHooks.has(hook) && !(await ProjectTrust.allowed(Instance.project))) continue
         hook["event"]?.({
           event: input,
         })

@@ -67,6 +67,8 @@ describe("stored artifacts resource", () => {
 
     expect(snapshot.active).toEqual([])
     expect(snapshot.trash.map((item) => item.id)).toEqual(["art_2"])
+    expect(snapshot.errors.active).toContain("Artifact store unavailable")
+    expect(snapshot.errors.trash).toBeUndefined()
   })
 
   test("drops records the normalizer cannot vouch for instead of passing them through", async () => {

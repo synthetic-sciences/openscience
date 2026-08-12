@@ -40,6 +40,41 @@ import { LocalCommand } from "./cli/cmd/local"
 import { SandboxCommand } from "./cli/cmd/sandbox"
 import { InitCommand, DoctorCommand } from "./cli/onboard"
 import { OpenScience } from "./openscience"
+import { GROUP_LAUNCHER_ARG, run as runMcpGroupLauncher } from "./mcp/group-launcher"
+import { WINDOWS_JOB_LAUNCHER_ARG, WindowsJobLauncher } from "./process/windows-job-launcher"
+import {
+  DARWIN_RESPONSIBILITY_LAUNCHER_ARG,
+  DarwinResponsibilityLauncher,
+} from "./process/darwin-responsibility-launcher"
+import { DataRootBarrier } from "./global/data-root-barrier"
+import { Global } from "./global"
+
+if (process.argv[2] === WINDOWS_JOB_LAUNCHER_ARG) {
+  try {
+    process.exit(await WindowsJobLauncher.run(process.argv.slice(3)))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  }
+}
+
+if (process.argv[2] === DARWIN_RESPONSIBILITY_LAUNCHER_ARG) {
+  try {
+    process.exit(await DarwinResponsibilityLauncher.run(process.argv.slice(3)))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  }
+}
+
+if (process.argv[2] === GROUP_LAUNCHER_ARG) {
+  try {
+    process.exit(await runMcpGroupLauncher(process.argv.slice(3)))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  }
+}
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -52,6 +87,8 @@ process.on("uncaughtException", (e) => {
     e: e instanceof Error ? e.message : e,
   })
 })
+
+const cliDataRootOperation = { current: undefined as AsyncDisposable | undefined }
 
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
@@ -71,6 +108,13 @@ const cli = yargs(hideBin(process.argv))
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
   .middleware(async (opts) => {
+    const command = typeof opts._[0] === "string" ? opts._[0] : "web"
+    if (command !== "web" && command !== "serve" && !cliDataRootOperation.current) {
+      // Non-server CLI commands can mutate the same local stores as a running
+      // workspace. Hold one cross-process operation marker for the entire
+      // command so a live relocation either precedes it or waits for it.
+      cliDataRootOperation.current = await DataRootBarrier.enter(Global.Path.data, 120_000)
+    }
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
@@ -80,6 +124,7 @@ const cli = yargs(hideBin(process.argv))
         return "INFO"
       })(),
     })
+    OpenScience.reportApiBaseOverride()
 
     process.env.AGENT = "1"
     process.env.OPENSCIENCE = "1"
@@ -201,5 +246,9 @@ try {
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
+  if (cliDataRootOperation.current) {
+    await Promise.resolve(cliDataRootOperation.current[Symbol.asyncDispose]()).catch(() => undefined)
+  }
+  await Log.flush().catch(() => undefined)
   process.exit()
 }

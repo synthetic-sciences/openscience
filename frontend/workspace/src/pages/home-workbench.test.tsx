@@ -51,9 +51,8 @@ const props = {
       sessions: 4,
     },
   ],
+  totalProjects: 1,
   query: "",
-  home: "/Users/aayam",
-  dark: true,
   serverName: "Local server",
   serverStatus: "healthy" as const,
   onQuery: (_value: string) => {},
@@ -63,37 +62,32 @@ const props = {
   onCreate: () => {},
   onImport: () => {},
   onRetry: () => {},
-  onTheme: () => {},
   onSettings: () => {},
   onServer: () => {},
 }
 
 describe("ProjectsWorkbench", () => {
-  test("renders the compact project list and opens a selected project", async () => {
+  test("renders a useful project row and opens the selected project", async () => {
     const opened: string[] = []
     const host = mount(() => subject.ProjectsWorkbench({ ...props, onOpen: (project) => opened.push(project.id) }))
     const row = host.querySelector<HTMLButtonElement>('[data-project="prj_atlas"]')
 
     expect(host.querySelector("h1")?.textContent).toBe("Projects")
-    expect(host.textContent).toContain("Recent research, files, and sessions.")
-    expect(host.textContent).not.toContain("Continue your research")
+    expect(host.textContent).toContain("Research workspaces, sessions, and files in one place.")
     expect(row?.textContent).toContain("Atlas")
-    expect(row?.textContent).toContain("Local project")
+    expect(row?.textContent).not.toContain("Local project")
     expect(row?.textContent).toContain("4 sessions")
+    expect(row?.textContent).toContain("Edited")
     expect(row?.querySelector("time")?.dateTime).toBeTruthy()
     row?.click()
     expect(host.textContent).not.toContain("/Users/aayam")
     expect(opened).toEqual(["prj_atlas"])
   })
 
-  test("keeps search keyboard-accessible and wires the app-bar actions", async () => {
+  test("keeps in-page search keyboard-accessible and separates global from project actions", async () => {
     const queries: string[] = []
     const host = mount(() => subject.ProjectsWorkbench({ ...props, onQuery: (query) => queries.push(query) }))
     const search = host.querySelector<HTMLInputElement>('input[aria-label="Search projects"]')
-    const toggle = host.querySelector<HTMLButtonElement>('button[aria-controls="science-home-project-search"]')
-
-    toggle?.click()
-    expect(toggle?.getAttribute("aria-controls")).toBe(search?.id)
 
     if (search) {
       search.value = "atlas"
@@ -102,11 +96,30 @@ describe("ProjectsWorkbench", () => {
     }
 
     expect(queries).toEqual(["atlas", ""])
+    expect(search?.closest(".science-home__toolbar")).toBeTruthy()
+    expect(host.querySelector(".science-home__bar input")).toBeNull()
     expect(host.querySelector('button[aria-label="New project"]')).toBeTruthy()
     expect(host.querySelector('button[aria-label="Import existing folder"]')).toBeTruthy()
-    expect(host.querySelector('button[aria-label="Toggle theme"]')).toBeTruthy()
+    expect(host.querySelector('button[aria-label*="Switch to"]')).toBeNull()
     expect(host.querySelector('button[aria-label="Settings"]')).toBeTruthy()
     expect(host.querySelector('button[aria-label="Local server"]')).toBeTruthy()
+    expect(host.querySelector("button.atlas-wordmark")).toBeNull()
+    expect(host.querySelector('[role="img"][aria-label="OpenScience"]')).toBeTruthy()
+    const wordmark = host.querySelector<HTMLElement>(".atlas-wordmark > span")
+    expect(wordmark?.style.fontSize).toBe("14.5px")
+    expect(wordmark?.style.fontWeight).toBe("var(--font-weight-emphasis)")
+  })
+
+  test("announces dynamic result counts without leaving a visual count badge", async () => {
+    const total = mount(() => subject.ProjectsWorkbench({ ...props, totalProjects: 43 }))
+    expect(total.querySelector(".science-home__results-summary")?.textContent).toBe("43 projects")
+    expect(total.querySelector(".science-home__results-summary")?.classList.contains("sr-only")).toBe(true)
+    expect(total.querySelector(".science-home__count")).toBeNull()
+    cleanups.pop()?.()
+    total.remove()
+
+    const filtered = mount(() => subject.ProjectsWorkbench({ ...props, totalProjects: 43, query: "atlas" }))
+    expect(filtered.querySelector(".science-home__results-summary")?.textContent).toBe("1 of 43 projects")
   })
 
   test("exposes independent pin and remove controls without opening the project", async () => {
@@ -156,10 +169,9 @@ describe("ProjectsWorkbench", () => {
         onImport: () => calls.push("import"),
       }),
     )
-    const emptyActions = Array.from(empty.querySelectorAll<HTMLButtonElement>(".science-home__state button"))
-    emptyActions.forEach((button) => button.click())
-    expect(empty.querySelector(".science-home__state")?.textContent).toContain("Create project")
-    expect(empty.querySelector(".science-home__state")?.textContent).toContain("Import existing folder")
+    empty.querySelector<HTMLButtonElement>('button[aria-label="New project"]')?.click()
+    empty.querySelector<HTMLButtonElement>('button[aria-label="Import existing folder"]')?.click()
+    expect(empty.querySelector(".science-home__state")?.textContent).toContain("No projects yet")
     cleanups.pop()?.()
     empty.remove()
 
@@ -179,15 +191,20 @@ describe("ProjectsWorkbench", () => {
     expect(calls).toEqual(["create", "import", "query:"])
   })
 
-  test("locks the screen to the compact sizing contract", async () => {
+  test("keeps the widened, readable, responsive sizing contract", async () => {
     const css = await Bun.file(style).text()
 
-    expect(css).toContain("min-height: 48px")
-    expect(css).toContain("font-size: 17px")
-    expect(css).toContain("min-height: 46px")
-    expect(css).toContain("font-size: 13px")
-    expect(css).toContain("@media (max-width: 720px)")
-    expect(css).toContain("@media (prefers-reduced-transparency: reduce)")
+    expect(css).toContain("width: min(100%, 1100px)")
+    expect(css).toContain("font-size: 29px")
+    expect(css).toContain("min-height: 66px")
+    expect(css).toContain("font-size: 14.5px")
+    expect(css).toContain("@media (max-width: 760px)")
+    expect(css).toContain("@media (max-width: 520px)")
+    expect(css).toContain("@media (pointer: coarse)")
     expect(css).toContain("@media (prefers-contrast: more)")
+    expect(css).not.toContain(".science-home__count")
+    expect(css).toContain(":focus-visible")
+    expect(css).toContain(".science-home__project-action:active")
+    expect(css).toContain("transform: scale(0.97)")
   })
 })

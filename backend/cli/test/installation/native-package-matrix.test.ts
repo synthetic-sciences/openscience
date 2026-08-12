@@ -25,6 +25,8 @@ async function pack(dir: string, output: string) {
   return path.join(output, file)
 }
 
+// This exercises seven real, sequential npm resolver installs. Their combined
+// runtime legitimately exceeds Bun's 5s unit-test default on a loaded runner.
 test("npm selects every supported native package contract with lifecycle scripts disabled", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-native-matrix-"))
   const source = path.join(root, "packages")
@@ -148,4 +150,4 @@ test("npm selects every supported native package contract with lifecycle scripts
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
-})
+}, 30_000)

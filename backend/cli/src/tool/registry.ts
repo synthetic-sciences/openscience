@@ -40,15 +40,21 @@ import { AtlasRecordTool } from "./atlas-record"
 import { ArtifactSnapshotTool } from "./artifact-snapshot"
 import { ModalTool } from "./modal"
 import { ComputeJobTool } from "./compute-job"
+import { State } from "@/project/state"
+import { ProjectTrust } from "@/project/trust"
+import { AuthoritySignal } from "@/project/authority-signal"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
-  export const state = Instance.state(async () => {
+  const compute = async () => {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("{tool,tools}/*.{js,ts}")
 
-    for (const dir of await Config.directories()) {
+    // Importing a tool module executes its top-level code in the host process.
+    // Config.executableDirectories excludes project-owned directories until
+    // their canonical project root has been explicitly trusted.
+    for (const dir of await Config.executableDirectories()) {
       for await (const match of glob.scan({
         cwd: dir,
         absolute: true,
@@ -56,28 +62,50 @@ export namespace ToolRegistry {
         dot: true,
       })) {
         const namespace = path.basename(match, path.extname(match))
-        const mod = await import(match)
+        // A symlinked file is still project-owned when its directory entry is
+        // project-owned. Serialize the final trust check and module import with
+        // revocation so top-level module code cannot finish after a revoke has
+        // already been acknowledged.
+        const projectOwned = Instance.containsPath(dir)
+        const mod = projectOwned
+          ? await AuthoritySignal.exclusive(async () => {
+              await ProjectTrust.require(Instance.project, "project_plugin")
+              return import(match)
+            })
+          : await import(match)
         for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-          custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+          custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def, projectOwned))
         }
       }
     }
 
     const plugins = await Plugin.list()
     for (const plugin of plugins) {
+      const projectOwned = Plugin.projectOwned(plugin)
       for (const [id, def] of Object.entries(plugin.tool ?? {})) {
-        custom.push(fromPlugin(id, def))
+        custom.push(fromPlugin(id, def, projectOwned))
       }
     }
 
     return { custom }
-  })
+  }
 
-  function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
+  export const state = Instance.state(compute)
+
+  /** Evict imported project tools and plugin tools after a trust transition. */
+  export function invalidate() {
+    State.clear(Instance.directory, compute)
+  }
+
+  function fromPlugin(id: string, def: ToolDefinition, projectOwned = false): Tool.Info {
     return Tool.define(id, async (initCtx) => ({
       parameters: z.object(def.args),
       description: def.description,
       execute: async (args, ctx) => {
+        // Cache eviction removes the tool from future registries. This check is
+        // the fail-closed guard for a caller that retained an initialized tool
+        // object across revocation.
+        if (projectOwned) await ProjectTrust.require(Instance.project, "project_plugin")
         const pluginCtx = {
           ...ctx,
           directory: Instance.directory,

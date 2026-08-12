@@ -155,6 +155,37 @@ describe("tool.read external_directory permission", () => {
       },
     })
   })
+
+  test("refuses a file swapped to a symlink during read approval", async () => {
+    if (process.platform === "win32") return
+    await using outside = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "secret.txt"), "must remain private"),
+    })
+    await using tmp = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "target.txt"), "approved public bytes"),
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const target = path.join(tmp.path, "target.txt")
+        const read = await ReadTool.init()
+        await expect(
+          read.execute(
+            { filePath: target },
+            {
+              ...ctx,
+              ask: async (request) => {
+                if (request.permission !== "read") return
+                await fs.unlink(target)
+                await fs.symlink(path.join(outside.path, "secret.txt"), target)
+              },
+            },
+          ),
+        ).rejects.toThrow("symbolic link")
+        expect(await fs.readFile(path.join(outside.path, "secret.txt"), "utf8")).toBe("must remain private")
+      },
+    })
+  })
 })
 
 describe("tool.read env file permissions", () => {

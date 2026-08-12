@@ -44,8 +44,10 @@
   --text-lg: var(--font-size-large);
   --text-xl: var(--font-size-x-large);
 
+  --font-weight-normal: var(--font-weight-regular);
   --font-weight-regular: var(--font-weight-regular);
   --font-weight-medium: var(--font-weight-medium);
+  --font-weight-semibold: var(--font-weight-emphasis);
 
   --leading-lg: var(--line-height-large);
   --leading-xl: var(--line-height-x-large);

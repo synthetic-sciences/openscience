@@ -617,15 +617,21 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
 
   test('1c (narrowed): an autoloaded custom-loader provider that also appears in config.provider (for its whitelist) still reports source "config", not "custom"', async () => {
     // google-vertex autoloads off GOOGLE_CLOUD_PROJECT alone (no auth.json
-    // entry, and its models.dev `env` array — GOOGLE_VERTEX_PROJECT etc. —
-    // never matches, so the "load env" stage never registers it either).
+    // entry). This fixture clears its catalog `env` list below so unrelated
+    // ambient Vertex credentials cannot let the "load env" stage claim it.
     // CUSTOM_LOADERS is the first and only stage to register it, with
     // source "custom" — exactly the loader-assigned (not credential-derived)
     // case 1c must keep overwriting to "config" when a config.provider entry
     // exists, per the narrowed protected set (env/api/managed only).
     await using tmp = await tmpdir({
       config: {
-        provider: { "google-vertex": { whitelist: ["gemini-3.5-flash"] } },
+        provider: {
+          // Keep this provenance fixture hermetic when another suite case has
+          // installed a real Vertex credential in the process environment.
+          // GOOGLE_CLOUD_PROJECT still drives the custom-loader autoload below;
+          // an empty catalog env list ensures only that loader claims it first.
+          "google-vertex": { env: [], whitelist: ["gemini-3.5-flash"] },
+        },
       },
     })
     await Instance.provide({

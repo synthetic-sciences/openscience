@@ -16,6 +16,7 @@ import { ArtifactAnnotation } from "../../file/annotations"
 import { PublicationReview } from "../../file/review"
 import { Identifier } from "../../id/id"
 import { ArtifactStore } from "../../artifact/store"
+import { FileTrash } from "../../file/trash"
 
 const LineageRun = z.object({
   id: z.string(),
@@ -242,6 +243,49 @@ export const FileRoutes = lazy(() =>
         const body = c.req.valid("json")
         const content = await File.write(body.path, body.content, { sessionID: body.sessionID })
         return c.json(content)
+      },
+    )
+    .get(
+      "/file/trash",
+      describeRoute({
+        summary: "List recoverable source files",
+        description:
+          "List source and workspace files deleted by approved edit operations during the 30-day recovery window.",
+        operationId: "file.trash.list",
+        responses: {
+          200: {
+            description: "Recoverable files",
+            content: { "application/json": { schema: resolver(FileTrash.Record.array()) } },
+          },
+        },
+      }),
+      async (c) => c.json(await FileTrash.list(Instance.project.id)),
+    )
+    .post(
+      "/file/trash/:id/restore",
+      describeRoute({
+        summary: "Restore a deleted source file",
+        description:
+          "Restore a source or workspace file during its 30-day recovery window without overwriting an existing path.",
+        operationId: "file.trash.restore",
+        responses: {
+          200: {
+            description: "Restored file",
+            content: { "application/json": { schema: resolver(FileTrash.Record) } },
+          },
+          404: { description: "Recoverable file not found" },
+        },
+      }),
+      validator("param", z.object({ id: z.string().startsWith("ftr_") })),
+      validator("json", z.object({ sessionID: Identifier.schema("session") })),
+      async (c) => {
+        const result = await FileTrash.restore({
+          projectID: Instance.project.id,
+          sessionID: c.req.valid("json").sessionID,
+          id: c.req.valid("param").id,
+        })
+        if (!result) return c.json({ error: "Recoverable file not found" }, 404)
+        return c.json(result)
       },
     )
     .get(

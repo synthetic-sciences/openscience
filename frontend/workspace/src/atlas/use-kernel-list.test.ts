@@ -51,7 +51,7 @@ afterEach(() => {
 // as a metric value, so freshness assertions read this one field instead of
 // the whole card's textContent.
 const executions = (element: Element | null) =>
-  element?.querySelector('[data-slot="kernel-card-executions"]')?.textContent?.trim().split(" ")[0]
+  element?.querySelector('[data-slot="kernel-card-executions"]')?.textContent?.match(/· (\d+) cells?/)?.[1]
 
 const mount = (view: () => JSX.Element) => {
   const host = document.createElement("div")
@@ -143,8 +143,10 @@ describe("kernel list reconciliation", () => {
     // on a nested object (`resources`) rather than on the kernel itself — so
     // this pins that reconcile's patch reaches them and the head re-renders,
     // rather than the card holding the first reading it was given.
-    const usage = (element: Element | null) =>
-      [...(element?.querySelectorAll(".kernel-card__metric") ?? [])].map((metric) => metric.textContent).join(" · ")
+    const metric = (element: Element | null, label: string) =>
+      [...(element?.querySelectorAll(".kernel-card__metric") ?? [])]
+        .find((item) => item.querySelector("small")?.textContent === label)
+        ?.querySelector("strong")?.textContent
     const [source, setSource] = core.createSignal<KernelStatus[] | undefined>([
       kernel({ id: "kernel-a", resources: { cpu_percent: 0, memory_bytes: 16_000_000 } }),
     ])
@@ -152,15 +154,15 @@ describe("kernel list reconciliation", () => {
     await Promise.resolve()
 
     const card = host.querySelector('[data-kernel-id="kernel-a"]')
-    expect(usage(card)).toContain("16 MB")
-    expect(usage(card)).toContain("0.0cores")
+    expect(metric(card, "Memory")).toBe("16 MB")
+    expect(metric(card, "CPU cores")).toBe("0.0")
 
     setSource([kernel({ id: "kernel-a", resources: { cpu_percent: 187.5, memory_bytes: 2_400_000_000 } })])
     await Promise.resolve()
 
     expect(host.querySelector('[data-kernel-id="kernel-a"]')).toBe(card)
-    expect(usage(card)).toContain("2.4 GB")
-    expect(usage(card)).toContain("1.9cores")
+    expect(metric(card, "Memory")).toBe("2.4 GB")
+    expect(metric(card, "CPU cores")).toBe("1.9")
   })
 
   test("mounts a newly appeared kernel and unmounts one that disappeared", async () => {

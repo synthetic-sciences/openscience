@@ -3,6 +3,8 @@ import { Network } from "../../src/settings/network"
 import { WebFetchTool } from "../../src/tool/webfetch"
 import type { Tool } from "../../src/tool/tool"
 
+const realFetch = globalThis.fetch
+
 function context(ask: Tool.Context["ask"]): Tool.Context {
   return {
     sessionID: "session_test",
@@ -17,6 +19,7 @@ function context(ask: Tool.Context["ask"]): Tool.Context {
 }
 
 afterEach(async () => {
+  globalThis.fetch = realFetch
   await Network.set({ allowlistEnabled: false, enabled: ["package-management"], custom: [] })
 })
 
@@ -51,4 +54,30 @@ test("Network.blocked and Network.allow round-trip the allow-list", async () => 
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
   expect(await Network.blocked("https://other.test")).toBeUndefined()
   await expect(Network.blocked("not a url")).rejects.toThrow("Invalid network URL")
+})
+
+test("webfetch asks for every blocked redirect target before following it", async () => {
+  await Network.set({ allowlistEnabled: true, enabled: [], custom: ["example.com"] })
+  const calls: string[] = []
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    calls.push(url)
+    if (url.startsWith("https://example.com")) {
+      return new Response(null, { status: 302, headers: { Location: "https://example.org/result" } })
+    }
+    return new Response("result", { headers: { "content-type": "text/plain" } })
+  }) as typeof fetch
+  const asked: Parameters<Tool.Context["ask"]>[0][] = []
+  const webfetch = await WebFetchTool.init()
+  const result = await webfetch.execute(
+    { url: "https://example.com/start", format: "markdown" },
+    context(async (input) => {
+      asked.push(input)
+    }),
+  )
+
+  expect(result.output).toBe("result")
+  expect(calls).toHaveLength(2)
+  expect(asked.map((item) => item.permission)).toEqual(["webfetch", "network"])
+  expect(asked[1]?.patterns).toEqual(["example.org"])
 })

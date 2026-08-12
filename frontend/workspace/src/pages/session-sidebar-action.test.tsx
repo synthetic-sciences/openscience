@@ -132,10 +132,12 @@ describe("SessionSidebarActions", () => {
     expect(action.querySelector(".session-sidebar__action-copy strong")?.textContent).toBe("New research")
     expect(action.querySelector(".session-sidebar__action-copy > span")?.textContent).toBe("Start a session")
     expect(action.querySelector("kbd")?.textContent).toBe("⌘N")
+    expect(button(action, "New research")?.dataset.tooltip).toBe("New research")
+    expect(button(action, "New research")?.hasAttribute("title")).toBe(false)
     expect(actions.querySelector(".session-sidebar__group-label")).toBeNull()
   })
 
-  test("opens and toggles contextual surfaces from the left rail", async () => {
+  test("opens contextual surfaces without toggling the active surface closed", async () => {
     const subject = (await import("./session-sidebar-action")) as typeof import("./session-sidebar-action") & {
       SessionSidebarActions?: (props: {
         context: "files" | "terminal" | "canvas" | "kernels" | "artifact"
@@ -176,7 +178,8 @@ describe("SessionSidebarActions", () => {
 
     button(host, "Open Atlas")?.click()
     await Promise.resolve()
-    expect(state.open()).toBe(false)
+    expect(state.context()).toBe("canvas")
+    expect(state.open()).toBe(true)
 
     button(host, "Open project compute")?.click()
     await Promise.resolve()

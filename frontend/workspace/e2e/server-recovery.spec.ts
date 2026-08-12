@@ -22,7 +22,7 @@ test("retries a failed server health check immediately and clears the recovery b
   await expect(recovery).toBeVisible()
 
   available = true
-  await recovery.getByRole("button", { name: "retry now" }).click()
+  await recovery.getByRole("button", { name: "Retry Now", exact: true }).click()
   await expect(recovery).toHaveCount(0)
 })
 

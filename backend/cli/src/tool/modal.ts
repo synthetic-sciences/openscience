@@ -43,7 +43,12 @@ export const ModalTool = Tool.define("modal", {
       .min(1)
       .max(24 * 60)
       .describe("Required job limit chosen from the expected runtime plus a reasonable safety margin."),
-    wait: z.boolean().default(true).describe("Wait for completion and return the job log; use false for long jobs."),
+    wait: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Wait for completion and return the job log only when explicitly requested; dispatch returns immediately by default.",
+      ),
   }),
   async execute(input, ctx) {
     // Kept dynamic because ComputeSettings currently owns both route handlers and
@@ -71,6 +76,7 @@ export const ModalTool = Tool.define("modal", {
       sessionID: ctx.sessionID,
     }
     const plan = await ComputeJobs.plan(request, { modal: config })
+    if (plan.provider !== "modal") throw new Error("Modal approval returned a non-Modal plan")
     const metadata = { compute: { ...plan, name: input.name } }
     ctx.metadata({ title: `Review Modal job: ${input.name}`, metadata })
     await ctx.ask({

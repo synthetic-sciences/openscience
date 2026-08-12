@@ -1,0 +1,290 @@
+.settings-skills {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.settings-skills > .skills-workspace {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  font-optical-sizing: auto;
+}
+
+.settings-skills .skills-workspace__header {
+  padding: var(--settings-space-6) var(--settings-space-7) var(--settings-space-4);
+  border-bottom: 0;
+  background: var(--settings-canvas);
+}
+
+.settings-skills .skills-workspace__body {
+  padding: var(--settings-space-3) var(--settings-space-7) 64px;
+}
+
+.settings-skills .skills-workspace__heading,
+.settings-skills .skills-workspace__toolbar,
+.settings-skills .skills-workspace__content {
+  width: 100%;
+  max-width: 900px;
+  margin-inline: auto;
+}
+
+.settings-skills .skills-workspace__heading h2 {
+  font-size: var(--settings-type-title);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--settings-leading-title);
+  letter-spacing: -0.015em;
+}
+
+.settings-skills .skills-workspace__heading p {
+  max-width: 700px;
+  margin-top: 4px;
+  font-size: var(--settings-type-body);
+  line-height: var(--settings-leading-body);
+}
+
+.settings-skills .skills-workspace__summary {
+  color: var(--text-weak);
+  font-size: var(--settings-type-helper);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--settings-leading-helper);
+}
+
+/* Embedded Skills follows the same compact hierarchy as Compute and
+   Specialists. The standalone Skills workspace keeps its roomier catalog
+   scale in skills-page.css. */
+.settings-skills .skills-workspace__group-heading h3,
+.settings-skills .skills-workspace__identity strong,
+.settings-skills .skills-workspace__form-heading h3,
+.settings-skills .skills-workspace__state > strong {
+  font-size: var(--settings-type-body);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--settings-leading-body);
+  letter-spacing: 0;
+}
+
+.settings-skills .skills-workspace__group-heading > span,
+.settings-skills .skills-workspace__identity-copy > span,
+.settings-skills .skills-workspace__identity code,
+.settings-skills .skills-workspace__details > p,
+.settings-skills .skills-workspace__form-heading p,
+.settings-skills .skills-workspace__form-fields > label > span,
+.settings-skills .skills-workspace__form-fields input,
+.settings-skills .skills-workspace__form-fields textarea,
+.settings-skills .skills-workspace__security-note,
+.settings-skills .skills-workspace__state > p,
+.settings-skills .skills-workspace__state > button,
+.settings-skills .skills-workspace__form-actions button {
+  font-size: var(--settings-type-helper);
+  line-height: var(--settings-leading-helper);
+}
+
+/* The shared Settings toolbar is flex-based. Restore the catalog's denser
+   search/filter/action grid so it stays one calm toolbar at dialog widths. */
+.settings-skills .skills-workspace__toolbar-controls {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1fr) minmax(148px, max-content) minmax(168px, max-content)
+    max-content;
+}
+
+.settings-skills .skills-workspace .settings-control {
+  min-height: 32px;
+  height: 32px;
+  padding-inline: 10px;
+  border-color: transparent;
+  background: var(--settings-surface);
+  font-weight: var(--font-weight-regular);
+  font-size: var(--settings-type-helper);
+  line-height: var(--settings-leading-helper);
+}
+
+.settings-skills .skills-workspace .settings-toolbar > label input {
+  font-size: var(--settings-type-helper);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--settings-leading-helper);
+}
+
+.settings-skills .skills-workspace .settings-control:hover,
+.settings-skills .skills-workspace .settings-control[data-expanded] {
+  border-color: transparent;
+  background: var(--settings-surface-active);
+}
+
+.settings-skills .skills-workspace .settings-control:focus-within,
+.settings-skills .skills-workspace .settings-control:focus-visible {
+  border-color: transparent;
+  outline: 1px solid var(--settings-border-strong);
+  outline-offset: 0;
+  box-shadow: none;
+}
+
+.settings-skills .skills-workspace .settings-control[aria-label="Add skill"] {
+  background: var(--settings-surface-active);
+  color: var(--text-strong);
+}
+
+.settings-skills .skills-workspace .settings-control[aria-label="Add skill"]:hover,
+.settings-skills .skills-workspace .settings-control[aria-label="Add skill"][data-expanded] {
+  background: var(--settings-surface-hover);
+}
+
+.settings-skills .skills-workspace .settings-control[aria-label="Add skill"] [data-component="icon"] {
+  color: currentColor;
+}
+
+.settings-skills .skills-workspace__list {
+  gap: var(--settings-space-5);
+}
+
+.settings-skills .skills-workspace__group {
+  gap: 8px;
+}
+
+.settings-skills .skills-workspace__rows {
+  gap: 2px;
+  padding: 4px;
+  border: 0;
+  background: var(--settings-surface);
+  box-shadow: var(--settings-shadow-card);
+}
+
+.settings-skills .skills-workspace__row {
+  border: 0;
+  border-radius: var(--settings-radius-control);
+  background: transparent;
+}
+
+.settings-skills .skills-workspace__row:hover {
+  background: var(--settings-surface-hover);
+}
+
+.settings-skills .skills-workspace__form-icon,
+.settings-skills .skills-workspace__state-icon {
+  border: 0;
+}
+
+.settings-skills .skills-workspace__form-icon,
+.settings-skills .skills-workspace__state-icon,
+.settings-skills .skills-workspace__tags .settings-chip {
+  background: var(--settings-surface-active);
+}
+
+.settings-skills .skills-workspace__tags .settings-chip {
+  min-height: 20px;
+  padding: 1px 7px;
+  border: 0;
+  border-radius: var(--settings-radius-pill);
+  color: var(--text-strong);
+  font-size: var(--settings-type-helper);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--settings-leading-helper);
+}
+
+.settings-skills .skills-workspace__form-fields {
+  border: 0;
+  background: var(--settings-surface-muted);
+}
+
+.settings-skills .skills-workspace__form-fields .settings-field,
+.settings-skills .skills-workspace__security-note {
+  border-color: transparent;
+  background: var(--settings-surface);
+}
+
+.settings-skills .skills-workspace__form-fields input.settings-field {
+  min-height: 32px;
+  height: 32px;
+  padding-block: 5px;
+}
+
+.settings-skills .skills-workspace__form-fields textarea.settings-field {
+  min-height: 88px;
+}
+
+.settings-skills .skills-workspace__form-fields .settings-field:focus {
+  border-color: transparent;
+  outline: 1px solid var(--settings-border-strong);
+  outline-offset: 0;
+  box-shadow: none;
+}
+
+.settings-skills .skills-workspace__state > .settings-button {
+  min-height: 32px;
+  padding-inline: 12px;
+  border: 0;
+  background: var(--settings-surface-muted);
+}
+
+.settings-skills .skills-workspace [data-component="switch"][data-checked] [data-slot="switch-control"],
+.settings-skills
+  .skills-workspace
+  [data-component="switch"][data-checked]:hover:not([data-disabled], [data-readonly])
+  [data-slot="switch-control"] {
+  border-color: var(--settings-toggle-active);
+  background: var(--settings-toggle-active);
+}
+
+.settings-skills .skills-workspace [data-component="switch"] [data-slot="switch-control"] {
+  width: 32px;
+  height: 18px;
+}
+
+.settings-skills .skills-workspace [data-component="switch"] [data-slot="switch-thumb"] {
+  width: 14px;
+  height: 14px;
+  margin-inline: 1px;
+  border-width: 0;
+}
+
+.settings-skills .skills-workspace [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
+  transform: translateX(14px);
+}
+
+.settings-skills .skills-workspace__form-actions .settings-button {
+  min-height: 32px;
+  padding-inline: 12px;
+}
+
+.settings-skills .skills-workspace__form-actions .settings-button[data-variant="primary"] {
+  border-color: var(--settings-primary);
+  background: var(--settings-primary);
+  color: var(--settings-on-primary);
+  box-shadow: none;
+}
+
+@container skills-workspace (max-width: 960px) {
+  .settings-skills .skills-workspace__header {
+    padding: 24px 20px 16px;
+  }
+
+  .settings-skills .skills-workspace__body {
+    padding: 12px 20px 32px;
+  }
+}
+
+@container skills-workspace (max-width: 800px) {
+  .settings-skills .skills-workspace__toolbar-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container skills-workspace (max-width: 640px) {
+  /* Tags remain useful metadata in a resizable Settings pane. The base
+     workspace previously hid them at this width, which made the embedded
+     catalog look incomplete. */
+  .settings-skills .skills-workspace__tags {
+    display: flex;
+  }
+}
+
+@container skills-workspace (max-width: 460px) {
+  .settings-skills .skills-workspace__toolbar-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

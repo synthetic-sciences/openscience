@@ -1,5 +1,6 @@
 import z from "zod"
 import { Tool } from "../tool"
+import { Network } from "@/settings/network"
 
 const TIMEOUT = 30_000
 
@@ -7,7 +8,7 @@ async function fetchJSON(url: string, init?: RequestInit): Promise<any> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT)
   try {
-    const res = await fetch(url, {
+    const res = await Network.fetch(url, {
       ...init,
       signal: controller.signal,
       headers: { Accept: "application/json", "User-Agent": "openscience/biology", ...init?.headers },
@@ -23,7 +24,7 @@ async function fetchText(url: string): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT)
   try {
-    const res = await fetch(url, {
+    const res = await Network.fetch(url, {
       signal: controller.signal,
       headers: { "User-Agent": "openscience/biology" },
     })

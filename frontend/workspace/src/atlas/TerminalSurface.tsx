@@ -3,9 +3,19 @@ import { createStore } from "solid-js/store"
 import { preloadTerminal, Terminal, type TerminalController, type TerminalSearchResult } from "@/components/terminal"
 import { useSDK } from "@/context/sdk"
 import { useTerminal } from "@/context/terminal"
-import { IconChevronLeft, IconChevronRight, IconPlus, IconSearch, IconX } from "@/atlas/shared/Icon"
+import {
+  IconAlertCircle,
+  IconChevronLeft,
+  IconChevronRight,
+  IconPlus,
+  IconRefresh,
+  IconSearch,
+  IconTerminal,
+  IconX,
+} from "@/atlas/shared/Icon"
 import { terminalEndpointAvailable } from "@/atlas/terminal-endpoint"
 import { useExecutionAuthority } from "@/atlas/use-execution-authority"
+import "@/atlas/TerminalSurface.css"
 
 const EMPTY_RESULT: TerminalSearchResult = { current: 0, total: 0 }
 
@@ -81,6 +91,28 @@ export function TerminalSurface(): JSX.Element {
       .finally(() => setState("starting", false))
   }
 
+  const recover = () => {
+    const id = active()?.id
+    if (!id) {
+      launch()
+      return
+    }
+    if (!available() || state.starting || !authority.allowed()) return
+    setState({ starting: true, connecting: true, error: "" })
+    void terminal
+      .clone(id)
+      .then((replacement) => {
+        if (!replacement) throw new Error("The terminal tab is no longer available.")
+      })
+      .catch((cause: unknown) => {
+        setState({
+          connecting: false,
+          error: cause instanceof Error ? cause.message : "OpenScience could not reconnect the terminal.",
+        })
+      })
+      .finally(() => setState("starting", false))
+  }
+
   const autostart = { requested: false }
   createEffect(() => {
     if (autostart.requested || !available() || !terminal.ready() || terminal.all().length || state.starting) return
@@ -94,7 +126,12 @@ export function TerminalSurface(): JSX.Element {
       <Show when={state.error}>
         {(message) => (
           <div class="terminal-surface__error" role="alert">
-            {message()}
+            <IconAlertCircle size={14} strokeWidth={1.5} />
+            <span>{message()}</span>
+            <button type="button" onClick={recover} disabled={state.starting || !authority.allowed()}>
+              <IconRefresh size={12} strokeWidth={1.5} />
+              {state.starting ? "Retrying…" : "Try again"}
+            </button>
           </div>
         )}
       </Show>
@@ -112,10 +149,10 @@ export function TerminalSurface(): JSX.Element {
         fallback={
           <div class="terminal-surface__empty">
             <span class="terminal-surface__empty-mark" aria-hidden="true">
-              &gt;_
+              <IconTerminal size={17} strokeWidth={1.35} />
             </span>
             <strong>Local terminal unavailable</strong>
-            <p>Connect OpenScience to a local server to run a shell inside this project.</p>
+            <p>Connect to the local OpenScience server to run commands inside this project.</p>
           </div>
         }
       >
@@ -123,7 +160,7 @@ export function TerminalSurface(): JSX.Element {
           when={terminal.ready()}
           fallback={
             <div class="terminal-surface__empty" aria-live="polite">
-              <span class="terminal-surface__eyebrow">Preparing session shell…</span>
+              <span class="terminal-surface__eyebrow">Preparing terminal…</span>
             </div>
           }
         >
@@ -132,10 +169,10 @@ export function TerminalSurface(): JSX.Element {
             fallback={
               <div class="terminal-surface__empty">
                 <span class="terminal-surface__empty-mark" aria-hidden="true">
-                  &gt;_
+                  <IconTerminal size={17} strokeWidth={1.35} />
                 </span>
-                <strong>Run commands in this session</strong>
-                <p>Start a persistent shell, then open more tabs whenever you need parallel work.</p>
+                <strong>Project terminal</strong>
+                <p>Start a clean shell in this session. Open another tab only when you need parallel work.</p>
                 <button
                   type="button"
                   onClick={launch}
@@ -239,9 +276,9 @@ export function TerminalSurface(): JSX.Element {
               <Show when={state.connecting}>
                 <div class="terminal-surface__connecting" role="status" aria-live="polite">
                   <span class="terminal-surface__connecting-mark" aria-hidden="true">
-                    &gt;_
+                    <IconTerminal size={14} strokeWidth={1.35} />
                   </span>
-                  <span>Starting session shell…</span>
+                  <span>Starting terminal…</span>
                 </div>
               </Show>
               <For each={terminal.all()}>

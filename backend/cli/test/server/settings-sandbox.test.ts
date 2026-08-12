@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { SandboxSettingsRoutes } from "../../src/server/routes/settings/sandbox"
 import { Sandbox } from "../../src/sandbox/sandbox"
+import os from "node:os"
+import path from "node:path"
 
 const app = SandboxSettingsRoutes()
 
@@ -38,5 +40,19 @@ describe("/settings/sandbox routes", () => {
       expect(body.checks.some((c) => /outside/.test(c.name))).toBe(true)
       expect(body.ok).toBe(true)
     }
+  })
+
+  test("PUT rejects non-absolute and over-broad writable roots without persisting them", async () => {
+    const before = await (await app.request("/")).json()
+    for (const value of ["relative/path", "/", os.homedir(), path.dirname(os.homedir())]) {
+      const response = await app.request("/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowWrite: [value] }),
+      })
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({ error: expect.stringContaining("invalid or over-broad") })
+    }
+    expect(await (await app.request("/")).json()).toEqual(before)
   })
 })

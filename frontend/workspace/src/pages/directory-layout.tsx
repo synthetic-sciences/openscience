@@ -4,14 +4,18 @@ import {
   createEffect,
   createMemo,
   createResource,
+  lazy,
   onCleanup,
   Show,
+  Suspense,
   type ParentProps,
 } from "solid-js"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
+import { TerminalProvider } from "@/context/terminal"
+import { FileProvider } from "@/context/file"
 
 import { DataProvider } from "@synsci/ui/context"
 import { MarkdownImages } from "@synsci/ui/markdown"
@@ -22,6 +26,7 @@ import { useLanguage } from "@/context/language"
 import { uiStore } from "@/atlas/store/ui"
 import { artifactContext } from "@/artifacts/context"
 import { normalizeStoredArtifact } from "@/artifacts/store"
+import { ProjectWorkspaceFrame } from "@/atlas/ProjectWorkspaceFrame"
 import { useGlobalSync } from "@/context/global-sync"
 import { decode64, setCurrentDirectory } from "@/utils/base64"
 import { assetUrl } from "@/utils/markdown-assets"
@@ -33,6 +38,8 @@ import {
   resolveProjectAlias,
   resolveProjectRoute,
 } from "@/utils/project-route"
+
+const ProjectRightPane = lazy(() => import("@/atlas/ProjectRightPane"))
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
@@ -222,7 +229,21 @@ export default function Layout(props: ParentProps) {
                 onSaveArtifact={saveArtifact}
               >
                 <MarkdownImages resolve={image}>
-                  <LocalProvider>{props.children}</LocalProvider>
+                  <LocalProvider>
+                    <TerminalProvider>
+                      <FileProvider>
+                        <ProjectWorkspaceFrame
+                          inspector={
+                            <Suspense>
+                              <ProjectRightPane project={sdk.scope} session={params.id ?? "new"} />
+                            </Suspense>
+                          }
+                        >
+                          {props.children}
+                        </ProjectWorkspaceFrame>
+                      </FileProvider>
+                    </TerminalProvider>
+                  </LocalProvider>
                 </MarkdownImages>
               </DataProvider>
             )

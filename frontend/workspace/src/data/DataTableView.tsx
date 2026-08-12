@@ -1,16 +1,27 @@
-import { For, Show, createMemo, createSignal, type JSX } from "solid-js"
-import { FONT_CODE, FONT_MONO, FONT_SANS } from "@/styles/tokens"
+import { For, Show, createMemo, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { exportDelimited, parseTable, summarizeColumn, type DataTable, type TableFormat } from "./table"
+import "./DataTableView.css"
 
 const PAGE_SIZE = 100
 
+interface TableViewState {
+  query: string
+  sort?: { index: number; direction: "asc" | "desc" }
+  page: number
+  schema: boolean
+  plot: boolean
+  column: number
+}
+
 export function DataTableView(props: { text: string; format: TableFormat; name: string }): JSX.Element {
-  const [query, setQuery] = createSignal("")
-  const [sort, setSort] = createSignal<{ index: number; direction: "asc" | "desc" }>()
-  const [page, setPage] = createSignal(0)
-  const [schema, setSchema] = createSignal(false)
-  const [plot, setPlot] = createSignal(false)
-  const [column, setColumn] = createSignal(0)
+  const [view, setView] = createStore<TableViewState>({
+    query: "",
+    page: 0,
+    schema: false,
+    plot: false,
+    column: 0,
+  })
 
   const parsed = createMemo(() => {
     try {
@@ -30,13 +41,13 @@ export function DataTableView(props: { text: string; format: TableFormat; name: 
         .filter((value) => value.type === "number") ?? [],
   )
   const plottedColumn = () =>
-    numeric().some((value) => value.index === column()) ? column() : (numeric()[0]?.index ?? 0)
+    numeric().some((value) => value.index === view.column) ? view.column : (numeric()[0]?.index ?? 0)
   const filtered = createMemo(() => {
     const data = table()
     if (!data) return []
-    const term = query().trim().toLowerCase()
+    const term = view.query.trim().toLowerCase()
     const rows = term ? data.rows.filter((row) => row.some((value) => value.toLowerCase().includes(term))) : data.rows
-    const order = sort()
+    const order = view.sort
     if (!order) return rows
     const type = data.schema[order.index]?.type ?? "string"
     return rows
@@ -50,15 +61,21 @@ export function DataTableView(props: { text: string; format: TableFormat; name: 
       .map((value) => value.row)
   })
   const pages = () => Math.max(1, Math.ceil(filtered().length / PAGE_SIZE))
-  const visible = () => filtered().slice(page() * PAGE_SIZE, (page() + 1) * PAGE_SIZE)
+  const visible = () => filtered().slice(view.page * PAGE_SIZE, (view.page + 1) * PAGE_SIZE)
 
   const sortBy = (index: number) => {
-    setPage(0)
-    setSort((current) => {
+    setView("page", 0)
+    setView("sort", (current) => {
       if (!current || current.index !== index) return { index, direction: "asc" }
       if (current.direction === "asc") return { index, direction: "desc" }
       return undefined
     })
+  }
+
+  const sortState = (index: number) => {
+    const active = view.sort
+    if (!active || active.index !== index) return "none" as const
+    return active.direction === "asc" ? ("ascending" as const) : ("descending" as const)
   }
 
   const download = () => {
@@ -74,210 +91,128 @@ export function DataTableView(props: { text: string; format: TableFormat; name: 
   }
 
   return (
-    <div
-      data-component="data-table"
-      style={{
-        height: "100%",
-        "min-height": "100%",
-        display: "flex",
-        "flex-direction": "column",
-        background: "var(--color-bg-subtle)",
-      }}
-    >
+    <div class="data-table-view" data-component="data-table">
       <Show
         when={table()}
         fallback={
-          <div style={empty()}>
-            <strong style={{ "font-family": FONT_SANS, "font-size": "14px" }}>Could not read this table</strong>
-            <span style={{ "font-family": FONT_MONO, "font-size": "11px", color: "var(--color-text-faint)" }}>
-              {parsed().error}
-            </span>
-          </div>
+          <section class="data-table-empty" role="alert">
+            <strong>Couldn’t read this table</strong>
+            <span>{parsed().error}</span>
+          </section>
         }
       >
         {(data) => (
           <>
-            <div
-              style={{
-                display: "flex",
-                "align-items": "center",
-                gap: "8px",
-                padding: "10px 12px",
-                border: "0",
-                "border-bottom": "1px solid var(--color-border)",
-                background: "var(--color-bg)",
-                "flex-wrap": "wrap",
-              }}
-            >
-              <div style={{ display: "flex", "align-items": "baseline", gap: "6px", "margin-right": "4px" }}>
-                <strong style={{ "font-family": FONT_SANS, "font-size": "12px", color: "var(--color-text)" }}>
-                  {data().totalRows.toLocaleString()} rows
-                </strong>
-                <span style={{ "font-family": FONT_MONO, "font-size": "9px", color: "var(--color-text-faint)" }}>
-                  × {data().columns.length} columns
-                </span>
+            <header class="data-table-toolbar">
+              <div class="data-table-summary" aria-label="Dataset dimensions">
+                <strong>{data().totalRows.toLocaleString()} rows</strong>
+                <span aria-hidden="true">×</span>
+                <span>{data().columns.length.toLocaleString()} columns</span>
               </div>
-              <input
-                data-action="table-filter"
-                aria-label="Filter rows"
-                placeholder="filter every column…"
-                value={query()}
-                onInput={(event) => {
-                  setQuery(event.currentTarget.value)
-                  setPage(0)
-                }}
-                style={input()}
-              />
-              <Show when={query()}>
-                <span style={{ "font-family": FONT_MONO, "font-size": "9px", color: "var(--color-text-faint)" }}>
-                  {filtered().length.toLocaleString()} matches
-                </span>
-              </Show>
-              <div style={{ flex: 1 }} />
-              <button
-                type="button"
-                data-action="table-schema"
-                style={button(schema())}
-                onClick={() => setSchema((value) => !value)}
-              >
-                schema
-              </button>
-              <select
-                aria-label="Plot column"
-                value={String(plottedColumn())}
-                disabled={!numeric().length}
-                onChange={(event) => setColumn(Number(event.currentTarget.value))}
-                style={select()}
-              >
-                <For each={numeric()}>{(value) => <option value={value.index}>{value.name}</option>}</For>
-              </select>
-              <button
-                type="button"
-                data-action="table-plot"
-                disabled={!numeric().length}
-                style={button(plot())}
-                onClick={() => setPlot((value) => !value)}
-              >
-                distribution
-              </button>
-              <button type="button" data-action="table-export" style={button()} onClick={download}>
-                export filtered
-              </button>
-            </div>
 
-            <Show when={schema()}>
-              <div
-                class="atlas-scroll"
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  padding: "10px 12px",
-                  overflow: "auto hidden",
-                  border: "0",
-                  "border-bottom": "1px solid var(--color-border)",
-                  background: "color-mix(in srgb, var(--color-bg-subtle) 70%, var(--color-bg))",
-                }}
-              >
+              <label class="data-table-search">
+                <span class="sr-only">Filter every column</span>
+                <input
+                  type="search"
+                  data-action="table-filter"
+                  aria-label="Filter rows"
+                  placeholder="Filter every column…"
+                  value={view.query}
+                  onInput={(event) => {
+                    setView({ query: event.currentTarget.value, page: 0 })
+                  }}
+                />
+                <Show when={view.query}>
+                  <span class="data-table-matches" role="status">
+                    {filtered().length.toLocaleString()} matches
+                  </span>
+                </Show>
+              </label>
+
+              <div class="data-table-actions" aria-label="Table tools">
+                <button
+                  type="button"
+                  data-action="table-schema"
+                  classList={{ "is-active": view.schema }}
+                  aria-pressed={view.schema}
+                  onClick={() => setView("schema", (value) => !value)}
+                >
+                  Schema
+                </button>
+                <label class="data-table-column-picker">
+                  <span class="sr-only">Distribution column</span>
+                  <select
+                    aria-label="Plot column"
+                    value={String(plottedColumn())}
+                    disabled={!numeric().length}
+                    onChange={(event) => setView("column", Number(event.currentTarget.value))}
+                  >
+                    <For each={numeric()}>{(value) => <option value={value.index}>{value.name}</option>}</For>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  data-action="table-plot"
+                  classList={{ "is-active": view.plot }}
+                  aria-pressed={view.plot}
+                  disabled={!numeric().length}
+                  onClick={() => setView("plot", (value) => !value)}
+                >
+                  Distribution
+                </button>
+                <button type="button" data-action="table-export" onClick={download}>
+                  Export filtered
+                </button>
+              </div>
+            </header>
+
+            <Show when={view.schema}>
+              <section class="atlas-scroll data-table-schema" aria-label="Column schema">
                 <For each={data().schema}>
                   {(value) => (
-                    <div
-                      style={{
-                        width: "170px",
-                        "flex-shrink": 0,
-                        padding: "9px 10px",
-                        border: "1px solid var(--color-border)",
-                        "border-radius": "6px",
-                        background: "var(--color-bg)",
-                      }}
-                    >
-                      <div
-                        title={value.name}
-                        style={{
-                          "font-family": FONT_CODE,
-                          "font-size": "10px",
-                          color: "var(--color-text)",
-                          overflow: "hidden",
-                          "text-overflow": "ellipsis",
-                          "white-space": "nowrap",
-                        }}
-                      >
+                    <article class="data-table-schema-card">
+                      <div class="data-table-schema-name" title={value.name}>
                         {value.name}
                       </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "8px",
-                          "margin-top": "5px",
-                          "font-family": FONT_MONO,
-                          "font-size": "9px",
-                          color: "var(--color-text-faint)",
-                        }}
-                      >
+                      <div class="data-table-schema-meta">
                         <span>{value.type}</span>
                         <span>{value.unique.toLocaleString()} unique</span>
                         <span>{value.missing.toLocaleString()} missing</span>
                       </div>
-                      <div
-                        title={`${value.missing} missing values`}
-                        style={{
-                          height: "3px",
-                          "margin-top": "8px",
-                          "border-radius": "2px",
-                          background: `linear-gradient(90deg, var(--color-warning, #c8923d) ${(value.missing / Math.max(1, data().totalRows)) * 100}%, var(--color-border) 0)`,
-                        }}
-                      />
-                    </div>
+                      <div class="data-table-missing-track" title={`${value.missing} missing values`}>
+                        <span
+                          class="data-table-missing-value"
+                          style={{ width: `${(value.missing / Math.max(1, data().totalRows)) * 100}%` }}
+                        />
+                      </div>
+                    </article>
                   )}
                 </For>
-              </div>
+              </section>
             </Show>
 
-            <Show when={plot() && numeric().length}>
-              <Histogram table={data()} index={plottedColumn()} onClose={() => setPlot(false)} />
+            <Show when={view.plot && numeric().length}>
+              <Histogram table={data()} index={plottedColumn()} onClose={() => setView("plot", false)} />
             </Show>
 
-            <div class="atlas-scroll" style={{ flex: 1, "min-height": 0, overflow: "auto" }}>
-              <table
-                style={{
-                  width: "max-content",
-                  "min-width": "100%",
-                  "border-collapse": "separate",
-                  "border-spacing": 0,
-                  "font-family": FONT_CODE,
-                  "font-size": "10px",
-                  "font-variant-numeric": "tabular-nums",
-                }}
-              >
+            <div class="atlas-scroll data-table-scroll" tabindex={0} aria-label={`${props.name} table preview`}>
+              <table>
                 <thead>
                   <tr>
-                    <th style={{ ...head(), left: 0, "z-index": 3, width: "48px", "min-width": "48px" }}>#</th>
+                    <th class="data-table-index-head" scope="col">
+                      <span class="sr-only">Row</span>
+                      <span aria-hidden="true">#</span>
+                    </th>
                     <For each={data().columns}>
                       {(name, index) => (
-                        <th style={head()}>
-                          <button
-                            type="button"
-                            title={`Sort by ${name}`}
-                            onClick={() => sortBy(index())}
-                            style={{
-                              all: "unset",
-                              cursor: "pointer",
-                              width: "100%",
-                              display: "flex",
-                              "align-items": "center",
-                              gap: "6px",
-                            }}
-                          >
-                            <span
-                              style={{
-                                overflow: "hidden",
-                                "text-overflow": "ellipsis",
-                                "white-space": "nowrap",
-                              }}
-                            >
-                              {name}
+                        <th scope="col" aria-sort={sortState(index())}>
+                          <button type="button" title={`Sort by ${name}`} onClick={() => sortBy(index())}>
+                            <span class="data-table-column-label">
+                              <span class="data-table-column-name">{name}</span>
+                              <span class="data-table-column-type">{data().schema[index()]?.type ?? "string"}</span>
                             </span>
-                            <span style={{ color: "var(--color-text-faint)" }}>
-                              {sort()?.index === index() ? (sort()?.direction === "asc" ? "↑" : "↓") : ""}
+                            <span class="data-table-sort" aria-hidden="true">
+                              {view.sort?.index === index() ? (view.sort?.direction === "asc" ? "↑" : "↓") : "↕"}
                             </span>
                           </button>
                         </th>
@@ -289,17 +224,15 @@ export function DataTableView(props: { text: string; format: TableFormat; name: 
                   <For each={visible()}>
                     {(row, index) => (
                       <tr>
-                        <td style={{ ...cell(), position: "sticky", left: 0, background: "var(--color-bg-subtle)" }}>
-                          <span style={{ color: "var(--color-text-faint)" }}>
-                            {(page() * PAGE_SIZE + index() + 1).toLocaleString()}
-                          </span>
-                        </td>
+                        <th class="data-table-index" scope="row">
+                          {(view.page * PAGE_SIZE + index() + 1).toLocaleString()}
+                        </th>
                         <For each={data().columns}>
                           {(_, column) => (
-                            <td title={row[column()] ?? ""} style={cell()}>
+                            <td title={row[column()] ?? ""}>
                               <Show
                                 when={(row[column()] ?? "") !== ""}
-                                fallback={<span style={{ color: "var(--color-text-faint)" }}>—</span>}
+                                fallback={<span class="data-table-empty-value">—</span>}
                               >
                                 {row[column()]}
                               </Show>
@@ -313,40 +246,22 @@ export function DataTableView(props: { text: string; format: TableFormat; name: 
               </table>
             </div>
 
-            <div
-              style={{
-                height: "38px",
-                display: "flex",
-                "align-items": "center",
-                "justify-content": "center",
-                gap: "10px",
-                padding: "0 12px",
-                border: "0",
-                "border-top": "1px solid var(--color-border)",
-                background: "var(--color-bg)",
-              }}
-            >
-              <button
-                type="button"
-                disabled={page() === 0}
-                style={pager()}
-                onClick={() => setPage((value) => value - 1)}
-              >
-                ← previous
+            <footer class="data-table-pagination">
+              <button type="button" disabled={view.page === 0} onClick={() => setView("page", (value) => value - 1)}>
+                Previous
               </button>
-              <span style={{ "font-family": FONT_MONO, "font-size": "9px", color: "var(--color-text-faint)" }}>
-                page {page() + 1} / {pages()}
-                {data().truncated ? " · preview capped at 5,000 rows" : ""}
+              <span>
+                Page {view.page + 1} of {pages()}
+                {data().truncated ? " · Preview capped at 5,000 rows" : ""}
               </span>
               <button
                 type="button"
-                disabled={page() + 1 >= pages()}
-                style={pager()}
-                onClick={() => setPage((value) => value + 1)}
+                disabled={view.page + 1 >= pages()}
+                onClick={() => setView("page", (value) => value + 1)}
               >
-                next →
+                Next
               </button>
-            </div>
+            </footer>
           </>
         )}
       </Show>
@@ -375,56 +290,34 @@ function Histogram(props: { table: DataTable; index: number; onClose: () => void
   const peak = () => Math.max(1, ...bars().map((value) => value.count))
 
   return (
-    <div
-      data-slot="table-plot"
-      style={{
-        padding: "12px 16px 14px",
-        border: "0",
-        "border-bottom": "1px solid var(--color-border)",
-        background: "var(--color-bg)",
-      }}
-    >
-      <div style={{ display: "flex", "align-items": "center", gap: "12px", "margin-bottom": "10px" }}>
-        <strong style={{ "font-family": FONT_SANS, "font-size": "11px" }}>
-          {props.table.columns[props.index]} distribution
-        </strong>
-        <span style={metric()}>n {stats().count.toLocaleString()}</span>
-        <span style={metric()}>min {number(stats().min)}</span>
-        <span style={metric()}>mean {number(stats().mean)}</span>
-        <span style={metric()}>max {number(stats().max)}</span>
-        <div style={{ flex: 1 }} />
-        <button type="button" style={pager()} onClick={props.onClose}>
-          close
+    <section class="data-table-plot" data-slot="table-plot">
+      <header>
+        <strong>{props.table.columns[props.index]} distribution</strong>
+        <div class="data-table-metrics" aria-label="Distribution summary">
+          <span>N {stats().count.toLocaleString()}</span>
+          <span>Min {number(stats().min)}</span>
+          <span>Mean {number(stats().mean)}</span>
+          <span>Max {number(stats().max)}</span>
+        </div>
+        <button type="button" onClick={props.onClose}>
+          Close
         </button>
-      </div>
-      <svg
-        viewBox="0 0 720 150"
-        role="img"
-        aria-label={`${props.table.columns[props.index]} histogram`}
-        style={{ width: "100%", height: "150px" }}
-      >
-        <line x1="24" y1="132" x2="710" y2="132" stroke="var(--color-border-strong)" />
+      </header>
+      <svg viewBox="0 0 720 150" role="img" aria-label={`${props.table.columns[props.index]} histogram`}>
+        <line x1="24" y1="132" x2="710" y2="132" />
         <For each={bars()}>
           {(bar, index) => {
             const width = 674 / Math.max(1, bars().length)
             const height = (bar.count / peak()) * 112
             return (
-              <rect
-                x={28 + index() * width}
-                y={132 - height}
-                width={Math.max(2, width - 3)}
-                height={height}
-                rx="2"
-                fill="var(--color-text-muted)"
-                opacity="0.82"
-              >
+              <rect x={28 + index() * width} y={132 - height} width={Math.max(2, width - 3)} height={height} rx="2">
                 <title>{bar.count} rows</title>
               </rect>
             )
           }}
         </For>
       </svg>
-    </div>
+    </section>
   )
 }
 
@@ -439,115 +332,5 @@ function compare(left: string, right: string, type: string) {
 
 const number = (value: number | undefined) =>
   value === undefined ? "—" : new Intl.NumberFormat(undefined, { maximumSignificantDigits: 5 }).format(value)
-
-function input(): JSX.CSSProperties {
-  return {
-    width: "min(280px, 32vw)",
-    height: "28px",
-    padding: "0 9px",
-    border: "1px solid var(--color-border)",
-    "border-radius": "5px",
-    outline: "none",
-    background: "var(--color-bg-subtle)",
-    color: "var(--color-text)",
-    "font-family": FONT_SANS,
-    "font-size": "11px",
-  }
-}
-
-function button(active = false): JSX.CSSProperties {
-  return {
-    cursor: "pointer",
-    height: "28px",
-    padding: "0 9px",
-    border: "1px solid var(--color-border)",
-    "border-radius": "5px",
-    background: active ? "var(--color-text)" : "var(--color-bg)",
-    color: active ? "var(--color-bg)" : "var(--color-text-muted)",
-    "font-family": FONT_MONO,
-    "font-size": "9px",
-    "font-weight": 600,
-  }
-}
-
-function select(): JSX.CSSProperties {
-  return {
-    height: "28px",
-    "max-width": "150px",
-    padding: "0 24px 0 8px",
-    border: "1px solid var(--color-border)",
-    "border-radius": "5px",
-    background: "var(--color-bg)",
-    color: "var(--color-text-muted)",
-    "font-family": FONT_MONO,
-    "font-size": "9px",
-  }
-}
-
-function head(): JSX.CSSProperties {
-  return {
-    position: "sticky",
-    top: 0,
-    "z-index": 2,
-    height: "34px",
-    "min-width": "130px",
-    "max-width": "260px",
-    padding: "0 10px",
-    "text-align": "left",
-    "font-weight": 600,
-    color: "var(--color-text-muted)",
-    background: "var(--color-bg)",
-    "border-right": "1px solid var(--color-border)",
-    "border-bottom": "1px solid var(--color-border-strong)",
-  }
-}
-
-function cell(): JSX.CSSProperties {
-  return {
-    height: "31px",
-    "max-width": "320px",
-    padding: "0 10px",
-    overflow: "hidden",
-    "text-overflow": "ellipsis",
-    "white-space": "nowrap",
-    color: "var(--color-text-muted)",
-    background: "var(--color-bg)",
-    "border-right": "1px solid var(--color-border)",
-    "border-bottom": "1px solid var(--color-border)",
-  }
-}
-
-function pager(): JSX.CSSProperties {
-  return {
-    all: "unset",
-    cursor: "pointer",
-    padding: "4px 7px",
-    "border-radius": "4px",
-    "font-family": FONT_MONO,
-    "font-size": "9px",
-    color: "var(--color-text-faint)",
-  }
-}
-
-function metric(): JSX.CSSProperties {
-  return {
-    "font-family": FONT_MONO,
-    "font-size": "9px",
-    color: "var(--color-text-faint)",
-  }
-}
-
-function empty(): JSX.CSSProperties {
-  return {
-    flex: 1,
-    display: "flex",
-    "flex-direction": "column",
-    "align-items": "center",
-    "justify-content": "center",
-    gap: "9px",
-    padding: "32px",
-    color: "var(--color-text)",
-  }
-}
 
 export default DataTableView

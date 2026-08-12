@@ -12,16 +12,26 @@
  *   POST /push    { directory, branch? }
  *   POST /remote  { directory, url } — sets origin (add or replace)
  *
- * `directory` remains supported for legacy clients. Project-aware clients may
- * instead send the opaque project selector header/query/body field; any
- * directory supplied alongside it is treated only as a checked worktree
- * override.
+ * Every operation requires the opaque project selector. A directory may be
+ * supplied only as a checked worktree override; a caller-owned directory by
+ * itself never grants repository execution authority.
  */
 
 import { Hono } from "hono"
 import { spawn } from "child_process"
 import { lazy } from "../../util/lazy"
 import { projectSelection } from "../project-selection"
+import { Instance } from "@/project/instance"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { Project } from "@/project/project"
+import { ProjectTrust } from "@/project/trust"
+import { AuthoritySignal } from "@/project/authority-signal"
+import { Config } from "@/config/config"
+import { Sandbox } from "@/sandbox/sandbox"
+import { OpenScience } from "@/openscience"
+import { CommandRuntime } from "@/science/command/registry"
+import { Shell } from "@/shell/shell"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 interface RunResult {
   code: number
@@ -41,37 +51,84 @@ export function assertSafeRemoteUrl(url: unknown): string {
   return value
 }
 
-function run(command: string, args: string[], cwd: string, ok: number[] = [0]): Promise<RunResult> {
-  return new Promise((resolveP, rejectP) => {
-    const child = spawn(command, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      cwd,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        // Defense in depth: refuse the code-executing helper transports even if a
-        // malicious remote URL slips past assertSafeRemoteUrl.
-        GIT_CONFIG_COUNT: "2",
-        GIT_CONFIG_KEY_0: "protocol.ext.allow",
-        GIT_CONFIG_VALUE_0: "never",
-        GIT_CONFIG_KEY_1: "protocol.fake.allow",
-        GIT_CONFIG_VALUE_1: "never",
-      },
+async function run(command: string, args: string[], cwd: string, ok: number[] = [0]): Promise<RunResult> {
+  const launched = await AuthoritySignal.exclusive(async () => {
+    await ProjectTrust.require(Instance.project, "repository")
+    const options = await Config.trustedSandbox()
+    const sandbox = Sandbox.wrapArgv({
+      file: command,
+      args,
+      workspace: [cwd],
+      readable: [cwd],
+      unreadable: OpenScience.kernelSensitivePaths(),
+      options,
     })
-    let out = ""
-    let err = ""
-    child.stdout.on("data", (chunk) => (out += chunk.toString()))
-    child.stderr.on("data", (chunk) => (err += chunk.toString()))
-    child.on("error", rejectP)
-    child.on("close", (code) => {
-      const result: RunResult = { code: code ?? 1, out: out.trim(), err: err.trim() }
-      if (ok.includes(result.code)) {
-        resolveP(result)
-        return
+    const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
+    const child = (() => {
+      try {
+        return spawn(wrapped.file, wrapped.args, {
+          stdio: ["ignore", "pipe", "pipe"],
+          cwd,
+          env: {
+            ...OpenScience.kernelEnv(process.env),
+            GIT_CONFIG_COUNT: "2",
+            GIT_CONFIG_KEY_0: "protocol.ext.allow",
+            GIT_CONFIG_VALUE_0: "never",
+            GIT_CONFIG_KEY_1: "protocol.fake.allow",
+            GIT_CONFIG_VALUE_1: "never",
+          },
+          detached: process.platform !== "win32",
+        })
+      } catch (error) {
+        Sandbox.cleanup(sandbox)
+        throw error
       }
-      rejectP(new Error(result.err || result.out || `${command} exited ${code}`))
+    })()
+    const stop = () =>
+      Shell.killTree(child, { exited: () => child.exitCode !== null, detached: process.platform !== "win32" })
+    const output = new Promise<RunResult>((resolve, reject) => {
+      let out = ""
+      let err = ""
+      child.stdout?.on("data", (chunk) => (out += chunk.toString()))
+      child.stderr?.on("data", (chunk) => (err += chunk.toString()))
+      child.once("error", reject)
+      child.once("close", (code) => {
+        resolve({ code: code ?? 1, out: out.trim(), err: err.trim() })
+      })
     })
+    const registered = await CommandRuntime.start(
+      {
+        projectID: Instance.project.id,
+        sessionID: "repository",
+        messageID: "repository",
+        description: "Repository operation",
+        command: [command, ...args].join(" "),
+      },
+      child,
+      stop,
+      { windowsRelease: wrapped.release },
+    ).catch(async (error) => {
+      if (child.exitCode !== null || child.signalCode !== null) return undefined
+      await stop()
+      Sandbox.cleanup(sandbox)
+      throw error
+    })
+    return { registered, sandbox, stop, output }
   })
+
+  const timeout = new Promise<never>((_resolve, reject) => {
+    const timer = setTimeout(() => {
+      void launched.stop().finally(() => reject(new Error(`${command} timed out`)))
+    }, 120_000)
+    timer.unref()
+    launched.output.finally(() => clearTimeout(timer)).catch(() => undefined)
+  })
+  const result = await Promise.race([launched.output, timeout]).finally(() => {
+    Sandbox.cleanup(launched.sandbox)
+    if (launched.registered) CommandRuntime.finish(launched.registered.id)
+  })
+  if (ok.includes(result.code)) return result
+  throw new Error(result.err || result.out || `${command} exited ${result.code}`)
 }
 
 const git = (args: string[], directory: string, ok?: number[]) => run("git", args, directory, ok)
@@ -209,11 +266,31 @@ async function wrap<T>(fn: () => Promise<T>) {
   }
 }
 
+async function within<T>(
+  selected: Awaited<ReturnType<typeof projectSelection>>,
+  action: (directory: string) => Promise<T>,
+) {
+  if (!selected.project || !selected.directory) {
+    throw new Error("Repository operations require an opaque project selector")
+  }
+  return Instance.provide({
+    directory: selected.directory,
+    init: InstanceBootstrap,
+    async fn() {
+      if (Instance.project.id !== selected.project.id) {
+        throw new Project.MismatchError({ projectID: selected.project.id, directory: Instance.directory })
+      }
+      await ProjectTrust.require(Instance.project, "repository")
+      return action(Instance.directory)
+    },
+  })
+}
+
 export const RepoRoutes = lazy(() =>
   new Hono()
     .get("/status", async (c) => {
       const selected = await projectSelection(c)
-      const r = await wrap(() => status(selected.directory ?? ""))
+      const r = await wrap(() => within(selected, status))
       return c.json(r.body, r.ok ? 200 : 400)
     })
     .post("/commit", async (c) => {
@@ -225,7 +302,7 @@ export const RepoRoutes = lazy(() =>
         projectID: body.projectID ?? body.project,
         directory: body.directory,
       })
-      const r = await wrap(() => commit(selected.directory ?? "", body.message))
+      const r = await wrap(() => within(selected, (directory) => commit(directory, body.message)))
       return c.json(r.body, r.ok ? 200 : 400)
     })
     .post("/push", async (c) => {
@@ -237,7 +314,7 @@ export const RepoRoutes = lazy(() =>
         projectID: body.projectID ?? body.project,
         directory: body.directory,
       })
-      const r = await wrap(() => push(selected.directory ?? "", body.branch))
+      const r = await wrap(() => within(selected, (directory) => push(directory, body.branch)))
       return c.json(r.body, r.ok ? 200 : 400)
     })
     .post("/remote", async (c) => {
@@ -249,7 +326,7 @@ export const RepoRoutes = lazy(() =>
         projectID: body.projectID ?? body.project,
         directory: body.directory,
       })
-      const r = await wrap(() => setRemote(selected.directory ?? "", body.url))
+      const r = await wrap(() => within(selected, (directory) => setRemote(directory, body.url)))
       return c.json(r.body, r.ok ? 200 : 400)
     }),
 )

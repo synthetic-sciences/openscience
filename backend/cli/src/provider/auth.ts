@@ -6,9 +6,10 @@ import { fn } from "@/util/fn"
 import type { AuthOuathResult } from "@synsci/plugin"
 import { NamedError } from "@synsci/util/error"
 import { Auth } from "@/auth"
+import { State } from "@/project/state"
 
 export namespace ProviderAuth {
-  const state = Instance.state(async () => {
+  const compute = async () => {
     const methods = pipe(
       await Plugin.list(),
       filter((x) => x.auth?.provider !== undefined),
@@ -16,7 +17,13 @@ export namespace ProviderAuth {
       fromEntries(),
     )
     return { methods, pending: {} as Record<string, AuthOuathResult> }
-  })
+  }
+
+  const state = Instance.state(compute)
+
+  export function invalidate() {
+    State.clear(Instance.directory, compute)
+  }
 
   export const Method = z
     .object({

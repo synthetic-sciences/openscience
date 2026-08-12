@@ -1,45 +1,31 @@
-/**
- * Local storage inspector (settings ▸ Storage). Reports the real on-disk
- * footprint of Open Science's data directory (and the config/cache/state
- * siblings), plus a supported "change data location" operation.
- *
- * Change-location is a genuine move: it copies the current data directory to
- * the chosen target and writes a pointer file (config/data-location) that
- * `Global` honours on the next launch — so it takes effect after a restart.
- * The original directory is left in place as a safety copy.
- */
+/** Local storage usage plus verified live relocation/reset. */
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
-import fs from "fs/promises"
-import path from "path"
+import fs from "node:fs/promises"
+import path from "node:path"
 import z from "zod"
 import { Global } from "@/global"
+import { DataRelocation } from "@/global/data-relocation"
 import { lazy } from "@/util/lazy"
 
 const pointerPath = path.join(Global.Path.config, "data-location")
 
 async function dirSize(target: string): Promise<number> {
-  let total = 0
-  const stack: string[] = [target]
-  while (stack.length) {
-    const dir = stack.pop()!
-    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name)
-      if (entry.isSymbolicLink()) continue
-      if (entry.isDirectory()) {
-        stack.push(full)
-        continue
-      }
-      const stat = await fs.stat(full).catch(() => undefined)
-      if (stat) total += stat.size
-    }
-  }
-  return total
+  const entries = await fs.readdir(target, { withFileTypes: true }).catch(() => [])
+  const sizes = await Promise.all(
+    entries.map(async (entry) => {
+      if (entry.isSymbolicLink()) return 0
+      const full = path.join(target, entry.name)
+      if (entry.isDirectory()) return dirSize(full)
+      return (await fs.stat(full).catch(() => undefined))?.size ?? 0
+    }),
+  )
+  return sizes.reduce((sum, size) => sum + size, 0)
 }
 
 const Usage = z.object({
   data_dir: z.string(),
+  managed: z.boolean(),
   config_dir: z.string(),
   cache_dir: z.string(),
   state_dir: z.string(),
@@ -48,47 +34,62 @@ const Usage = z.object({
   entries: z.array(z.object({ name: z.string(), path: z.string(), bytes: z.number(), kind: z.enum(["dir", "file"]) })),
 })
 
+const Moved = z.object({
+  ok: z.literal(true),
+  source: z.string(),
+  target: z.string(),
+  files: z.number().int().nonnegative(),
+  bytes: z.number().int().nonnegative(),
+  backup: z.string().optional(),
+  warning: z.string().optional(),
+})
+
+function message(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
 export const StorageRoutes = lazy(() =>
   new Hono()
     .get(
       "/",
       describeRoute({
         summary: "Get storage usage",
-        description: "Real on-disk sizes for the OpenScience data directory and its top-level entries.",
+        description: "Real on-disk sizes for the active OpenScience data directory and its top-level entries.",
         operationId: "settings.storage.usage",
-        responses: {
-          200: {
-            description: "Usage",
-            content: { "application/json": { schema: resolver(Usage) } },
-          },
-        },
+        responses: { 200: { description: "Usage", content: { "application/json": { schema: resolver(Usage) } } } },
       }),
       async (c) => {
-        const dataDir = Global.Path.data
+        const dataDir = await fs.realpath(Global.Path.data)
         const dirents = await fs.readdir(dataDir, { withFileTypes: true }).catch(() => [])
         const entries = await Promise.all(
           dirents
-            .filter((e) => !e.isSymbolicLink())
-            .map(async (e) => {
-              const full = path.join(dataDir, e.name)
-              const bytes = e.isDirectory()
+            .filter((entry) => !entry.isSymbolicLink())
+            .map(async (entry) => {
+              const full = path.join(dataDir, entry.name)
+              const bytes = entry.isDirectory()
                 ? await dirSize(full)
                 : ((await fs.stat(full).catch(() => undefined))?.size ?? 0)
-              return { name: e.name, path: full, bytes, kind: e.isDirectory() ? ("dir" as const) : ("file" as const) }
+              return {
+                name: entry.name,
+                path: full,
+                bytes,
+                kind: entry.isDirectory() ? ("dir" as const) : ("file" as const),
+              }
             }),
         )
         entries.sort((a, b) => b.bytes - a.bytes)
         const pointer = await Bun.file(pointerPath)
           .text()
-          .then((t) => t.trim() || null)
+          .then((text) => text.trim() || null)
           .catch(() => null)
         return c.json({
           data_dir: dataDir,
+          managed: Global.Path.dataManaged,
           config_dir: Global.Path.config,
           cache_dir: Global.Path.cache,
           state_dir: Global.Path.state,
           pointer,
-          total_bytes: entries.reduce((sum, e) => sum + e.bytes, 0),
+          total_bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
           entries,
         })
       },
@@ -98,55 +99,44 @@ export const StorageRoutes = lazy(() =>
       describeRoute({
         summary: "Change data location",
         description:
-          "Copy the data directory to a new absolute path and record a pointer honoured on next launch. Requires restart.",
+          "Take a verified snapshot, drain active writers, atomically switch every running OpenScience process, and retain the source as a safety copy.",
         operationId: "settings.storage.relocate",
         responses: {
-          200: {
-            description: "Relocated",
-            content: {
-              "application/json": {
-                schema: resolver(z.object({ ok: z.boolean(), target: z.string(), restart_required: z.boolean() })),
-              },
-            },
-          },
+          200: { description: "Relocated", content: { "application/json": { schema: resolver(Moved) } } },
+          409: { description: "Relocation could not be completed safely" },
         },
       }),
       validator("json", z.object({ path: z.string().min(1) })),
       async (c) => {
         const raw = c.req.valid("json").path
-        const target = path.resolve(raw.replace(/^~(?=$|\/)/, Global.Path.home))
-        const source = path.resolve(Global.Path.data)
-        if (!path.isAbsolute(target)) return c.json({ error: "Path must be absolute" }, 400)
-        if (target === source) return c.json({ error: "Already the current location" }, 400)
-        const rel = path.relative(source, target)
-        if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel)))
-          return c.json({ error: "Target cannot be inside the current data directory" }, 400)
-
-        const existing = await fs.readdir(target).catch(() => undefined)
-        if (existing && existing.length > 0) return c.json({ error: "Target directory is not empty" }, 400)
-
-        await fs.mkdir(target, { recursive: true })
-        await fs.cp(source, target, { recursive: true, errorOnExist: false, force: true })
-        await Bun.write(pointerPath, target, { mode: 0o600 })
-        return c.json({ ok: true, target, restart_required: true })
+        if (!path.isAbsolute(raw.replace(/^~(?=$|\/)/, Global.Path.home))) {
+          return c.json({ error: "Path must be absolute", code: "invalid_storage_location" }, 400)
+        }
+        try {
+          return c.json({ ok: true as const, ...(await DataRelocation.relocate(raw)) })
+        } catch (error) {
+          return c.json({ error: message(error), code: "storage_relocation_failed" }, 409)
+        }
       },
     )
     .delete(
       "/location",
       describeRoute({
         summary: "Reset data location",
-        description: "Remove the data-location pointer so ~/.openscience is used on next launch.",
+        description:
+          "Reverse-migrate the active data into ~/.openscience, atomically switch every running process, and preserve the previous default as a timestamped backup.",
         operationId: "settings.storage.resetLocation",
         responses: {
-          200: {
-            description: "Reset",
-            content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } },
-          },
+          200: { description: "Reset", content: { "application/json": { schema: resolver(Moved) } } },
+          409: { description: "Reset could not be completed safely" },
         },
       }),
       async (c) => {
-        await fs.rm(pointerPath, { force: true })
-        return c.json({ ok: true })
+        try {
+          return c.json({ ok: true as const, ...(await DataRelocation.reset()) })
+        } catch (error) {
+          return c.json({ error: message(error), code: "storage_reset_failed" }, 409)
+        }
       },
     ),
 )

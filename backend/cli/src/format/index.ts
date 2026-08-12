@@ -10,6 +10,12 @@ import { mergeDeep } from "remeda"
 import { Instance } from "../project/instance"
 import { OpenScience } from "@/openscience"
 import { ProjectTrust } from "@/project/trust"
+import { AuthoritySignal } from "@/project/authority-signal"
+import { Sandbox } from "@/sandbox/sandbox"
+import { CommandRuntime } from "@/science/command/registry"
+import { Shell } from "@/shell/shell"
+import { spawn } from "node:child_process"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
@@ -28,7 +34,6 @@ export namespace Format {
   const state = Instance.state(async () => {
     const enabled: Record<string, boolean> = {}
     const cfg = await Config.getExecution()
-    const project = new Set<string>()
 
     const formatters: Record<string, Formatter.Info> = {}
     if (cfg.formatter === false) {
@@ -36,7 +41,6 @@ export namespace Format {
       return {
         enabled,
         formatters,
-        project,
       }
     }
 
@@ -44,7 +48,6 @@ export namespace Format {
       formatters[item.name] = item
     }
     for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
-      if (await Config.projectControls("formatter", name)) project.add(name)
       if (item.disabled) {
         delete formatters[name]
         continue
@@ -65,7 +68,6 @@ export namespace Format {
     return {
       enabled,
       formatters,
-      project,
     }
   })
 
@@ -95,6 +97,66 @@ export namespace Format {
     return result
   }
 
+  async function run(item: Formatter.Info, file: string): Promise<number> {
+    const command = item.command.map((value) => value.replace("$FILE", file))
+    const launched = await AuthoritySignal.exclusive(async () => {
+      // Global binaries can still execute project-owned config, plugins, or
+      // hooks merely by starting in the project root. Binary location is not a
+      // safe trust boundary, so every formatter spawn requires project trust.
+      await ProjectTrust.require(Instance.project, "project_formatter")
+      const options = await Config.trustedSandbox()
+      const sandbox = Sandbox.wrapArgv({
+        file: command[0]!,
+        args: command.slice(1),
+        workspace: [Instance.directory, Instance.worktree],
+        readable: [Instance.directory, Instance.worktree],
+        unreadable: OpenScience.kernelSensitivePaths(),
+        options,
+      })
+      const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
+      const child = (() => {
+        try {
+          return spawn(wrapped.file, wrapped.args, {
+            cwd: Instance.directory,
+            env: { ...OpenScience.kernelEnv(process.env), ...item.environment },
+            stdio: "ignore",
+            detached: process.platform !== "win32",
+          })
+        } catch (error) {
+          Sandbox.cleanup(sandbox)
+          throw error
+        }
+      })()
+      const exited = new Promise<number>((resolve, reject) => {
+        child.once("error", reject)
+        child.once("close", (code) => resolve(code ?? 1))
+      })
+      const stop = () =>
+        Shell.killTree(child, { exited: () => child.exitCode !== null, detached: process.platform !== "win32" })
+      const registered = await CommandRuntime.start(
+        {
+          projectID: Instance.project.id,
+          sessionID: "formatter",
+          messageID: "formatter",
+          description: `Format ${path.basename(file)}`,
+          command: command.join(" "),
+        },
+        child,
+        stop,
+        { windowsRelease: wrapped.release },
+      ).catch(async (error) => {
+        if (child.exitCode === null && child.signalCode === null) await stop()
+        Sandbox.cleanup(sandbox)
+        throw error
+      })
+      return { exited, registered, sandbox }
+    })
+    return launched.exited.finally(() => {
+      CommandRuntime.finish(launched.registered.id)
+      Sandbox.cleanup(launched.sandbox)
+    })
+  }
+
   export async function status() {
     const s = await state()
     const result: Status[] = []
@@ -115,31 +177,11 @@ export namespace Format {
       const file = payload.properties.file
       log.info("formatting", { file })
       const ext = path.extname(file)
-      const s = await state()
 
       for (const item of await getFormatter(ext)) {
         log.info("running", { command: item.command })
         try {
-          const env = { ...(await OpenScience.subprocessEnv(process.env)), ...item.environment }
-          const command = item.command[0]
-          const target = path.isAbsolute(command)
-            ? command
-            : command.includes("/") || command.includes("\\")
-              ? path.resolve(Instance.directory, command)
-              : Bun.which(command, { PATH: env.PATH })
-          const local =
-            target !== null && (Instance.containsPath(target) || (await Instance.containsCanonicalPath(target)))
-          if (item.project || s.project.has(item.name) || local) {
-            await ProjectTrust.require(Instance.project, "project_formatter")
-          }
-          const proc = Bun.spawn({
-            cmd: item.command.map((x) => x.replace("$FILE", file)),
-            cwd: Instance.directory,
-            env,
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
+          const exit = await run(item, file)
           if (exit !== 0)
             log.error("failed", {
               command: item.command,

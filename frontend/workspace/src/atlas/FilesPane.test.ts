@@ -82,7 +82,7 @@ const trashed = (id: string, title: string) => ({
   },
 })
 
-// The same record in its active state — what "All artifacts" is supposed to
+// The same record in its active state — what "Saved artifacts" is supposed to
 // list. `size` and `sourcePath` differ from the trashed fixture so a row
 // proves it read the artifact, not some other row's fields.
 const saved = (id: string, title: string) => ({
@@ -131,9 +131,31 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("All artifacts")
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Saved artifacts")
+    expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.placeholder).toBe("Search artifacts")
     expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
     expect(host.textContent).not.toContain("SHOULD_NOT_APPEAR.py")
+  })
+
+  test("keeps source and search together as the primary browser toolbar", async () => {
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store")) return listing([])
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    const toolbar = host.querySelector(".files-browser__toolbar")
+    expect(toolbar).not.toBeNull()
+    expect(toolbar?.querySelector("[data-source-button]")).not.toBeNull()
+    expect(toolbar?.querySelector('input[type="search"]')).not.toBeNull()
+    expect(host.querySelector(".files-location")).toBeNull()
+    // The artifact catalog owns its own count + retention summary; the shell
+    // does not repeat the same context line above it.
+    expect(host.querySelector("[data-source-context]")).toBeNull()
   })
 
   test("remembers the source it was left on", async () => {
@@ -175,7 +197,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("All artifacts")
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Saved artifacts")
     // The store is empty in this fixture, so the surface is the empty state
     // rather than a grid container.
     expect(host.querySelector(".artifact-surface")).not.toBeNull()
@@ -288,7 +310,7 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>("[data-source-button]")!.click()
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("All artifacts")
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Saved artifacts")
     // The store is empty in this fixture, so the surface is the empty state
     // rather than a grid container.
     expect(host.querySelector(".artifact-surface")).not.toBeNull()
@@ -324,8 +346,8 @@ describe("files pane", () => {
     expect([...host.querySelectorAll("[data-file-name]")].map((node) => node.textContent)).toEqual(["ckpt", "notes.md"])
   })
 
-  // A Volume file has no path on this machine, so a previewable one opens a tab
-  // backed by its bytes rather than by a path.
+  // A Volume file has no path on this machine, so a previewable one opens a
+  // focused byte-backed preview rather than pretending it is a local work tab.
   // A Volume listing spawns a Modal process and takes seconds. The rows still on
   // screen describe the folder being left, so clicking a second one appended its
   // name to the path the first click had already set -- asking the server for a
@@ -360,6 +382,7 @@ describe("files pane", () => {
 
     expect(host.querySelector("[data-files-loading]")).not.toBeNull()
     expect(host.querySelector<HTMLButtonElement>('[data-file-row="beta"]')?.disabled).toBe(true)
+    expect(host.textContent).not.toContain("This folder is empty.")
 
     // The click that used to produce volume/alpha/beta.
     host.querySelector<HTMLButtonElement>('[data-file-row="beta"]')?.click()
@@ -381,17 +404,24 @@ describe("files pane", () => {
     await settle()
     await enterModal(host)
     host.querySelector<HTMLButtonElement>('[data-file-row="weights"]')?.click()
-    await settle()
+    for (let attempt = 0; attempt < 20 && !host.querySelector('[data-file-row="notes.md"]'); attempt += 1)
+      await settle()
 
-    host.querySelector<HTMLButtonElement>('[data-file-row="notes.md"]')?.click()
-    await settle()
+    const notes = host.querySelector<HTMLButtonElement>('[data-file-row="notes.md"]')
+    expect(notes).not.toBeNull()
+    notes!.click()
+    for (let attempt = 0; attempt < 20 && !host.querySelector("[data-remote-text]"); attempt += 1) await settle()
 
-    expect(host.querySelector('[data-tab="notes.md"]')).not.toBeNull()
+    expect(host.querySelector('[role="tablist"]')).toBeNull()
     expect(host.querySelector("[data-remote-text]")?.textContent).toContain("remote bytes")
     expect(calls).toContain("/settings/compute/modal/volumes/weights/file?path=/notes.md")
+
+    host.querySelector<HTMLButtonElement>('[aria-label="Close notes.md"]')?.click()
+    expect(host.querySelector("[data-remote-text]")).toBeNull()
+    expect(host.querySelector('[data-file-row="notes.md"]')).not.toBeNull()
   })
 
-  test("downloads a Volume file it will not preview instead of opening an empty tab", async () => {
+  test("downloads a Volume file it will not preview instead of opening an empty preview", async () => {
     const got: string[] = []
     const { request } = modal({
       files: [
@@ -409,10 +439,11 @@ describe("files pane", () => {
     await settle()
 
     expect(got).toEqual(["model.safetensors"])
-    expect(host.querySelector('[data-tab="model.safetensors"]')).toBeNull()
+    expect(host.querySelector("[data-remote-unsupported]")).toBeNull()
+    expect(host.querySelector('[role="tablist"]')).toBeNull()
   })
 
-  test("renders the picker and table directly without a Browse tab", async () => {
+  test("renders the browser directly before any file is opened", async () => {
     startOn("project")
     const host = mount(() =>
       subject.FilesPane({
@@ -465,6 +496,38 @@ describe("files pane", () => {
     expect(host.textContent).not.toContain("This folder is empty.")
   })
 
+  test("shows the current folder as a breadcrumb and jumps straight to the source root", async () => {
+    startOn("project")
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (_path, _init, query) =>
+          query?.path?.endsWith("/data")
+            ? listing([{ name: "nested.csv", type: "file", size: 24 }])
+            : listing([{ name: "data", type: "directory" }]),
+        directory: DIRECTORY,
+        session: SESSION,
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector("[data-source-context]")?.textContent).toContain("Project files")
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="data"]')?.click()
+    await settle()
+
+    expect(host.querySelector("[data-source-context]")).toBeNull()
+    expect(host.querySelector('[data-path-crumb="0"]')?.textContent).toBe("data")
+    expect(host.querySelector('[data-path-crumb="0"]')?.getAttribute("aria-current")).toBe("page")
+    expect(host.querySelector('[data-file-row="nested.csv"]')).not.toBeNull()
+
+    host.querySelector<HTMLButtonElement>("[data-path-root]")?.click()
+    await settle()
+
+    expect(host.querySelector("[data-path-crumb]")).toBeNull()
+    expect(host.querySelector("[data-source-context]")?.textContent).toContain("Project files")
+    expect(host.querySelector('[data-file-row="data"]')).not.toBeNull()
+  })
+
   test("a failed listing degrades in place instead of throwing to the boundary", async () => {
     startOn("project")
     // The pane must not reach the app-wide ErrorBoundary. Mount it inside a real
@@ -487,6 +550,94 @@ describe("files pane", () => {
     expect(host.querySelector("[data-boundary]")).toBeNull()
     expect(host.textContent).toContain("could not be read")
     expect(host.querySelector(".files-table")).not.toBeNull()
+    expect(host.querySelector('[role="alert"][data-files-error]')).not.toBeNull()
+    expect(host.querySelector<HTMLButtonElement>(".files-notice__retry")?.textContent).toBe("Retry")
+    expect(host.textContent).not.toContain("This folder is empty.")
+  })
+
+  test("retries a recoverable listing error and replaces it with the new rows", async () => {
+    startOn("project")
+    let attempts = 0
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store")) return listing([])
+          if (path === "/file") {
+            attempts += 1
+            return attempts === 1
+              ? new Response("temporarily unavailable", { status: 503 })
+              : listing([{ name: "recovered.csv", type: "file", size: 12 }])
+          }
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector('[role="alert"][data-files-error]')).not.toBeNull()
+    host.querySelector<HTMLButtonElement>(".files-notice__retry")?.click()
+    await settle()
+
+    expect(attempts).toBe(2)
+    expect(host.querySelector("[data-files-error]")).toBeNull()
+    expect(host.querySelector('[data-file-row="recovered.csv"]')).not.toBeNull()
+  })
+
+  test("names a filtered-empty folder without claiming the folder itself is empty", async () => {
+    startOn("project")
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) =>
+          path.startsWith("/file/artifact-store")
+            ? listing([])
+            : listing([{ name: "analysis.ipynb", type: "file", size: 12 }]),
+      }),
+    )
+    await settle()
+
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!
+    expect(search.placeholder).toBe("Filter this folder")
+    search.value = "missing"
+    search.dispatchEvent(new Event("input", { bubbles: true }))
+    await settle()
+
+    expect(host.textContent).toContain("No matching files")
+    expect(host.textContent).not.toContain("This folder is empty.")
+    expect(host.querySelector("[data-search-clear]")).not.toBeNull()
+
+    host.querySelector<HTMLButtonElement>("[data-search-clear]")?.click()
+    await settle()
+
+    expect(host.querySelector('[data-file-row="analysis.ipynb"]')).not.toBeNull()
+    expect(host.querySelector("[data-search-clear]")).toBeNull()
+  })
+
+  test("surfaces and retries the selected artifact source independently", async () => {
+    let activeAttempts = 0
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path.includes("state=trash")) return listing([])
+          if (path.includes("state=active")) {
+            activeAttempts += 1
+            return activeAttempts === 1
+              ? new Response("artifact service warming up", { status: 503 })
+              : listing([saved("art_9", "recovered.ipynb")])
+          }
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector("[data-files-error]")?.textContent).toContain("Saved artifacts could not be loaded")
+    expect(host.textContent).not.toContain("No artifacts saved yet.")
+    host.querySelector<HTMLButtonElement>(".files-notice__retry")?.click()
+    await settle()
+
+    expect(activeAttempts).toBe(2)
+    expect(host.querySelector("[data-files-error]")).toBeNull()
+    expect(host.querySelector('[data-card-open][aria-label^="Open recovered.ipynb"]')).not.toBeNull()
   })
 
   test("reaches trashed artifacts from the source menu and restores one", async () => {
@@ -524,7 +675,7 @@ describe("files pane", () => {
     expect(host.querySelector('[data-trash-row="art_1"]')).toBeNull()
   })
 
-  test("lists saved artifacts under All artifacts rather than reporting an empty folder", async () => {
+  test("lists saved artifacts under Saved artifacts rather than reporting an empty folder", async () => {
     // The artifacts source short-circuited to [] and fell through to the file
     // table's "This folder is empty." — so a project with artifacts in it said
     // it had none. The active half of the snapshot was already being loaded
@@ -547,7 +698,7 @@ describe("files pane", () => {
     await settle()
 
     const names = [...host.querySelectorAll("[data-card-open]")].map((node) => node.getAttribute("aria-label"))
-    expect(names).toEqual(["Open peak_fit.ipynb"])
+    expect(names).toEqual(["Open peak_fit.ipynb, version 2 of 2"])
     expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
     expect(host.textContent).not.toContain("This folder is empty.")
     expect(host.textContent).not.toContain("SHOULD_NOT_APPEAR.py")
@@ -588,7 +739,7 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
     await settle()
 
-    expect(host.textContent).toContain("No artifacts saved yet.")
+    expect(host.textContent).toContain("No saved artifacts yet")
     expect(host.textContent).not.toContain("This folder is empty.")
   })
 
@@ -607,11 +758,8 @@ describe("files pane", () => {
           return listing([])
         },
         onOpenArtifact: (artifact) => opened.push(artifact.id),
-        view: (file) => {
+        onOpenFile: (file) => {
           viewed.push(file.path)
-          const node = document.createElement("p")
-          node.dataset.stubView = file.path
-          return node
         },
       }),
     )
@@ -848,17 +996,14 @@ describe("files pane", () => {
     expect(host.querySelector(".files-notice")?.textContent).toContain("has not started yet")
   })
 
-  test("opening a file swaps the browser for the file itself and closing swaps it back", async () => {
+  test("delegates local files to the inspector's single work-tab owner", async () => {
     startOn("project")
+    const opened: PaneFile[] = []
     const host = mount(() =>
       subject.FilesPane({
         directory: DIRECTORY,
         request: async () => listing([{ name: "train_lr.py", type: "file", size: 10, path: "src/train_lr.py" }]),
-        view: (file) => {
-          const node = document.createElement("p")
-          node.dataset.stubView = file.path
-          return node
-        },
+        onOpenFile: (file) => opened.push(file),
       }),
     )
     await settle()
@@ -867,21 +1012,47 @@ describe("files pane", () => {
 
     host.querySelector<HTMLButtonElement>('[data-file-row="train_lr.py"]')?.click()
 
-    // The tab is not just added — it becomes the pane's content.
-    expect(host.querySelector('[data-tab="train_lr.py"]')?.getAttribute("aria-selected")).toBe("true")
-    expect(host.querySelector("[data-stub-view]")?.getAttribute("data-stub-view")).toBe("src/train_lr.py")
-    expect(host.querySelector(".files-table")).toBeNull()
-    expect(host.querySelector("[data-source-button]")).toBeNull()
-
-    host.querySelector<HTMLElement>('[data-tab-close="train_lr.py"]')?.click()
-
-    expect(host.querySelector("[data-stub-view]")).toBeNull()
-    expect(host.querySelector('[data-tab="train_lr.py"]')).toBeNull()
+    expect(opened).toEqual([{ name: "train_lr.py", path: "src/train_lr.py", source: "proj", readonly: undefined }])
+    // FilesPane never creates a competing inner strip. In production the
+    // uiStore callback activates RightPane's persisted WorkTabStrip.
     expect(host.querySelector('[role="tablist"]')).toBeNull()
     expect(host.querySelector(".files-table")).not.toBeNull()
   })
 
-  test("a tab keeps the source it was opened from, not whichever one is selected later", async () => {
+  test("keeps same-named files distinct by their full paths", async () => {
+    startOn("project")
+    const opened: PaneFile[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        directory: DIRECTORY,
+        session: SESSION,
+        request: async (path, _init, query) => {
+          if (path.startsWith("/file/artifact-store")) return listing([])
+          if (query?.path?.endsWith("/src") || query?.path?.endsWith("/tests"))
+            return listing([{ name: "index.ts", type: "file", size: 12 }])
+          return listing([
+            { name: "src", type: "directory" },
+            { name: "tests", type: "directory" },
+          ])
+        },
+        onOpenFile: (file) => opened.push(file),
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="src"]')?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-row="index.ts"]')?.click()
+    host.querySelector<HTMLButtonElement>("[data-path-root]")?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-row="tests"]')?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-row="index.ts"]')?.click()
+
+    expect(opened.map((file) => file.path)).toEqual([`${DIRECTORY}/src/index.ts`, `${DIRECTORY}/tests/index.ts`])
+  })
+
+  test("an opened file keeps the source it came from when the browser moves", async () => {
     // writable/subtitle used to read the picker's *current* source, so a file
     // opened from a read-only grant became editable the moment the picker moved
     // on — the read/write boundary followed the menu instead of the file.
@@ -900,9 +1071,8 @@ describe("files pane", () => {
             { name: "inputs.csv", type: "file", size: 4, path: "/home/keertan/data/pdebench/inputs.csv" },
           ])
         },
-        view: (file) => {
+        onOpenFile: (file) => {
           seen.push(file as PaneFile)
-          return document.createElement("p")
         },
       }),
     )
@@ -917,12 +1087,10 @@ describe("files pane", () => {
 
     expect(seen.at(-1)).toMatchObject({ name: "inputs.csv", source: "pdebench", readonly: true })
 
-    // Back to the browser, move the picker to the project, then return to the tab.
-    host.querySelector<HTMLButtonElement>('[data-tab="files"]')?.click()
+    // Moving the browser after opening does not mutate the location already
+    // handed to the owning work tab.
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
     host.querySelector<HTMLButtonElement>('[data-source-item="project"]')?.click()
-    await settle()
-    host.querySelector<HTMLButtonElement>('[data-tab="inputs.csv"]')?.click()
     await settle()
 
     expect(seen.at(-1)).toMatchObject({ source: "pdebench", readonly: true })
@@ -1004,15 +1172,12 @@ describe("files pane", () => {
     expect(source).toContain("value={connect.path}")
   })
 
-  test("mounts the real FileView for the active tab when nothing overrides it", () => {
-    // The `view` seam above can only prove the switch, not what production
-    // renders through it. This guards the default the seam falls back to.
+  test("routes local files to the persisted inspector strip instead of mounting a second viewer", () => {
     const source = readFileSync(fileURLToPath(new URL("./FilesPane.tsx", import.meta.url)), "utf8")
 
-    expect(source).toContain('import { FileView } from "@/atlas/FilePreview"')
-    expect(source).toContain("props.view?.(file) ?? (")
-    expect(source).toContain("<FileView")
-    expect(source).toContain("path={file.path}")
-    expect(source).toContain("onClose={() => closeTab(file.name)}")
+    expect(source).toContain('import { uiStore } from "@/atlas/store/ui"')
+    expect(source).toContain("if (props.onOpenFile) return props.onOpenFile(file)")
+    expect(source).toContain("uiStore.openFile(projectRoot(), file.path)")
+    expect(source).not.toContain('import { FileView } from "@/atlas/FilePreview"')
   })
 })

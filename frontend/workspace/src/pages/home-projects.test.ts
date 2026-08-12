@@ -50,7 +50,7 @@ describe("home project preparation", () => {
     ])
   })
 
-  test("filters case-insensitively by project name or opaque ID", async () => {
+  test("filters case-insensitively by project name, folder path, or opaque ID", async () => {
     const subject = await load()
     if (!subject) return
 
@@ -69,6 +69,7 @@ describe("home project preparation", () => {
 
     expect(subject.filterProjects(projects, "protein")).toEqual([projects[0]])
     expect(subject.filterProjects(projects, "PRJ_WEATHER")).toEqual([projects[1]])
+    expect(subject.filterProjects(projects, "labs")).toEqual([projects[1]])
     expect(subject.filterProjects(projects, "   ")).toEqual(projects)
   })
 
@@ -83,8 +84,7 @@ describe("home project preparation", () => {
       time: { created: 10 },
     }
     expect(subject.projectName(project)).toBe("Atlas Research")
-    expect(subject.projectHint(project)).toBe("Local project")
-    expect(subject.projectHint(project)).not.toContain(project.worktree)
+    expect(subject.projectName(project)).not.toContain(project.worktree)
   })
 
   test("falls back to the folder when stored project metadata is corrupt", async () => {

@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { artifactControl, describeFile, readFile, sourceViews, toolbarControls } from "./file-viewer"
+import {
+  artifactControl,
+  describeFile,
+  readFile,
+  reconcileSavedDraft,
+  sourceViews,
+  toolbarControls,
+} from "./file-viewer"
 
 describe("file viewer capabilities", () => {
   test("describes rendered documents and data with plain file types", () => {
@@ -83,16 +90,32 @@ describe("file viewer capabilities", () => {
   })
 
   test("offers Save as artifact only when a session is in scope", () => {
-    expect(artifactControl({ session: false, busy: false })).toBeUndefined()
-    expect(artifactControl({ session: true, busy: false })).toEqual({
+    expect(artifactControl({ session: false, busy: false, dirty: false })).toBeUndefined()
+    expect(artifactControl({ session: true, busy: false, dirty: false })).toEqual({
       id: "artifact",
       label: "Save as artifact",
       disabled: false,
     })
-    expect(artifactControl({ session: true, busy: true })).toEqual({
+    expect(artifactControl({ session: true, busy: true, dirty: false })).toEqual({
       id: "artifact",
       label: "Saving artifact…",
       disabled: true,
+    })
+    expect(artifactControl({ session: true, busy: false, dirty: true })).toEqual({
+      id: "artifact",
+      label: "Save file first",
+      disabled: true,
+    })
+  })
+
+  test("preserves edits typed while an earlier save is in flight", () => {
+    expect(reconcileSavedDraft("second edit", "first edit", "first edit")).toEqual({
+      draft: "second edit",
+      saved: "first edit",
+    })
+    expect(reconcileSavedDraft("first edit", "first edit", "normalized first edit")).toEqual({
+      draft: "normalized first edit",
+      saved: "normalized first edit",
     })
   })
 

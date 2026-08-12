@@ -61,6 +61,7 @@ const SOURCES: Record<string, Source> = {
   gemini: { kind: "provider", id: "google" },
   xai: { kind: "provider", id: "xai" },
   meta: { kind: "vector", id: "meta" },
+  llama: { kind: "provider", id: "llama" },
   openrouter: { kind: "provider", id: "openrouter" },
   togetherai: { kind: "provider", id: "togetherai" },
   groq: { kind: "provider", id: "groq" },
@@ -86,10 +87,28 @@ const SOURCES: Record<string, Source> = {
   langsmith: { kind: "vector", id: "langsmith" },
 }
 
+// Provider catalogs and OpenRouter vendor slugs do not always use the same id
+// as the icon pack. Normalize the known spellings so a real provider never
+// falls back to a generic initial (notably DeepSeek, Kimi, and Z.AI).
+const ALIASES: Record<string, keyof typeof SOURCES> = {
+  "deep-seek": "deepseek",
+  "deepseek-ai": "deepseek",
+  together: "togetherai",
+  fireworks: "fireworks-ai",
+  moonshot: "moonshotai",
+  kimi: "moonshotai",
+  "z-ai": "zai",
+  zhipuai: "zai",
+  "x-ai": "xai",
+  "google-gemini": "google",
+  "meta-llama": "llama",
+}
+
 export const PROVIDER_LOGO_IDS = Object.keys(SOURCES)
 
 export function providerLogoSource(id: string) {
-  return SOURCES[id] ?? ({ kind: "fallback" } as const)
+  const normalized = id.trim().toLowerCase()
+  return SOURCES[ALIASES[normalized] ?? normalized] ?? ({ kind: "fallback" } as const)
 }
 
 const Mark: Component<{ source: Source; label: string; small?: boolean }> = (props) => {
@@ -113,7 +132,7 @@ const Mark: Component<{ source: Source; label: string; small?: boolean }> = (pro
     )
   }
   return (
-    <span class={props.small ? "text-[9px] font-semibold" : "text-11-medium"}>
+    <span class={props.small ? "text-[9px] font-medium" : "text-11-medium"}>
       {props.label.trim().charAt(0).toUpperCase()}
     </span>
   )
@@ -130,8 +149,8 @@ export const ProviderLogo: Component<{
   const source = () => providerLogoSource(props.id)
   return (
     <span
-      class="relative flex shrink-0 items-center justify-center overflow-hidden border border-border-weak-base bg-surface-base text-text-strong"
-      classList={{ "size-6 rounded-[7px]": small(), "size-8 rounded-[9px]": !small() }}
+      class="settings-provider-logo"
+      data-size={small() ? "small" : "default"}
       role="img"
       aria-label={`${label()} logo`}
       data-provider-logo={props.id}

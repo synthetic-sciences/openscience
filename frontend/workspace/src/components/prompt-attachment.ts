@@ -52,3 +52,18 @@ export function attachmentSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+export function attachmentFormat(file: { name: string; type: string }) {
+  const dot = file.name.lastIndexOf(".")
+  const extension =
+    dot > -1
+      ? file.name
+          .slice(dot + 1)
+          .trim()
+          .toUpperCase()
+      : ""
+  if (extension && extension.length <= 8) return extension
+  if (file.type === "application/pdf") return "PDF"
+  const subtype = file.type.split("/").pop()?.replace(/^x-/, "").toUpperCase()
+  return subtype || "FILE"
+}

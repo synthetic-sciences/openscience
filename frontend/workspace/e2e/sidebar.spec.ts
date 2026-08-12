@@ -13,12 +13,13 @@ test("sidebar keeps recent sessions visible without a permanent search field", a
   try {
     await gotoSession(one.id)
 
-    const sidebar = page.getByRole("complementary").filter({ has: page.getByRole("button", { name: "New research" }) })
+    const sidebar = page.locator(".session-sidebar")
     await expect(sidebar).toBeVisible()
     await expect(sidebar.getByRole("button", { name: "New research" })).toBeVisible()
     await expect(sidebar.getByPlaceholder("Search sessions")).toHaveCount(0)
-    await expect(sidebar.locator('[role="button"]').filter({ hasText: oneTitle })).toBeVisible()
-    await expect(sidebar.locator('[role="button"]').filter({ hasText: twoTitle })).toBeVisible()
+    await expect(sidebar.getByRole("tablist")).toHaveCount(0)
+    await expect(sidebar.getByRole("button", { name: oneTitle, exact: true })).toBeVisible()
+    await expect(sidebar.getByRole("button", { name: twoTitle, exact: true })).toBeVisible()
   } finally {
     await sdk.session.delete({ sessionID: one.id }).catch(() => undefined)
     await sdk.session.delete({ sessionID: two.id }).catch(() => undefined)
@@ -31,7 +32,7 @@ test.describe("mobile workspace", () => {
   test("sessions open as a drawer instead of squeezing the active pane", async ({ page, gotoSession }) => {
     await gotoSession()
 
-    const sidebar = page.getByRole("complementary").filter({ has: page.getByRole("button", { name: "New research" }) })
+    const sidebar = page.locator(".session-sidebar")
     await expect(sidebar).toHaveAttribute("data-mobile-open", "false")
 
     await page.getByRole("button", { name: "Show sessions" }).click()
@@ -41,7 +42,7 @@ test.describe("mobile workspace", () => {
     // The backdrop button spans the full viewport behind the drawer, so a
     // centered click lands on the drawer that covers it. Dispatch the click on
     // the backdrop element directly to exercise its close handler.
-    await page.getByRole("button", { name: "close sessions" }).dispatchEvent("click")
+    await page.getByRole("button", { name: "Close sessions" }).dispatchEvent("click")
     await expect(sidebar).toHaveAttribute("data-mobile-open", "false")
   })
 })

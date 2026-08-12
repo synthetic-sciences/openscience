@@ -43,6 +43,7 @@ export namespace ExecutionAuthority {
     grantRevision: z.number().int().positive(),
     generation: z.string(),
     workspace: z.string(),
+    readable: z.array(z.string()),
     writable: z.array(z.string()),
     sandbox: z.object({
       enabled: z.boolean(),
@@ -90,8 +91,11 @@ export namespace ExecutionAuthority {
     const unavailable = sandbox.enabled && !sandbox.available && sandbox.onUnavailable === "error"
     const reason = untrusted ? "project_untrusted" : unavailable ? "sandbox_unavailable" : "allowed"
     const mode = untrusted || unavailable ? "read_only" : sandbox.enabled ? "sandboxed" : "host"
-    const writable = await SessionFilesystem.processWriteRoots(input.sessionID)
-    const workspace = await SessionFilesystem.workspace(input.sessionID)
+    const [readable, writable, workspace] = await Promise.all([
+      SessionFilesystem.processReadRoots(input.sessionID),
+      SessionFilesystem.processWriteRoots(input.sessionID),
+      SessionFilesystem.workspace(input.sessionID),
+    ])
     const generation = crypto
       .createHash("sha256")
       .update(
@@ -116,6 +120,7 @@ export namespace ExecutionAuthority {
       grantRevision: filesystem.revision,
       generation,
       workspace,
+      readable,
       writable,
       sandbox,
       remediation: trust.remediation,

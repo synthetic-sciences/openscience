@@ -2,7 +2,6 @@ import { createMemo, createSignal, Show, type JSX } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { showToast } from "@synsci/ui/toast"
-import { useTheme } from "@synsci/ui/theme"
 import { CommandPalette } from "@/atlas/CommandPalette"
 import { DisconnectedPanel } from "@/atlas/DisconnectedPanel"
 import { FdaBanner } from "@/atlas/FdaBanner"
@@ -19,6 +18,7 @@ import { DialogSettings } from "@/components/dialog-settings"
 import { settingsApi } from "@/components/settings/api"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -37,8 +37,8 @@ export default function Home(): JSX.Element {
   const sdk = useGlobalSDK()
   const navigate = useNavigate()
   const server = useServer()
+  const commands = useCommand()
   const language = useLanguage()
-  const theme = useTheme()
   const [query, setQuery] = createSignal("")
   const [draft, setDraft] = createSignal({ name: "", sources: [] as string[] })
   const projects = createMemo(() =>
@@ -121,7 +121,6 @@ export default function Home(): JSX.Element {
 
     dialog.show(() => <FolderPicker onSelect={resolve} />, {
       onClose: () => resolve(null),
-      lite: true,
     })
   }
 
@@ -158,7 +157,6 @@ export default function Home(): JSX.Element {
           mergeSources(selection.result)
           resumeCreateProject()
         },
-        lite: true,
       },
     )
   }
@@ -187,8 +185,36 @@ export default function Home(): JSX.Element {
     dialog.show(createDialog)
   }
 
-  const isDark = () => theme.mode() === "dark"
-  const cycleScheme = () => theme.setColorScheme(isDark() ? "light" : "dark")
+  commands.register(() => [
+    {
+      id: "project.create",
+      title: "Create project",
+      description: "Start a new research workspace",
+      category: "Projects",
+      onSelect: showCreateProject,
+    },
+    {
+      id: "project.import",
+      title: "Import folder",
+      description: "Open an existing research folder",
+      category: "Projects",
+      onSelect: () => void importProject(),
+    },
+    {
+      id: "settings.open",
+      title: "Open settings",
+      description: "Configure models, capabilities, runtime, and the app",
+      category: "Application",
+      onSelect: () => dialog.show(() => <DialogSettings />),
+    },
+    {
+      id: "server.switch",
+      title: "Switch server",
+      description: "Choose or add an OpenScience server",
+      category: "Application",
+      onSelect: () => dialog.show(() => <DialogSelectServer />),
+    },
+  ])
 
   useGlobalKeys({ onNew: showCreateProject })
 
@@ -201,8 +227,8 @@ export default function Home(): JSX.Element {
       <ProjectsWorkbench
         state={state()}
         projects={filtered()}
+        totalProjects={projects().length}
         query={query()}
-        home={sync.data.path.home}
         refreshing={!sync.ready}
         accessory={<FdaBanner />}
         notice={
@@ -210,7 +236,6 @@ export default function Home(): JSX.Element {
             <DisconnectedPanel />
           </Show>
         }
-        dark={isDark()}
         serverName={server.name || "Local server"}
         serverStatus={status()}
         onQuery={setQuery}
@@ -220,7 +245,6 @@ export default function Home(): JSX.Element {
         onCreate={showCreateProject}
         onImport={() => void importProject()}
         onRetry={() => void server.refresh()}
-        onTheme={cycleScheme}
         onSettings={() => dialog.show(() => <DialogSettings />)}
         onServer={() => dialog.show(() => <DialogSelectServer />)}
       />

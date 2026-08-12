@@ -1,10 +1,10 @@
 import { createMemo, createResource, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
+import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { FONT_SANS } from "@/styles/tokens"
 import type { ContextFile } from "@/atlas/store/ui"
 import { FileView } from "@/atlas/FilePreview"
 import { IconFolder } from "@/atlas/shared/Icon"
@@ -19,6 +19,7 @@ import {
   type FilesystemSnapshot,
 } from "@/atlas/file-sources"
 import type { ProjectRequest } from "@/utils/openscience-fetch"
+import "./FileExplorer.css"
 
 interface ConnectInput {
   path: string
@@ -106,42 +107,28 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
         )}
       </Match>
       <Match when={!grant()}>
-        <div
-          role="region"
-          aria-label="File access required"
-          style={{
-            flex: 1,
-            "min-height": 0,
-            padding: "28px",
-            display: "flex",
-            "flex-direction": "column",
-            "justify-content": "center",
-            gap: "16px",
-            background: "var(--color-bg-subtle)",
-            "font-family": FONT_SANS,
-          }}
-        >
-          <span style={requestIcon()}>
-            <IconFolder size={24} strokeWidth={1.4} />
-          </span>
-          <div>
-            <h2 style={requestTitle()}>Connect a folder to open {props.file.name}</h2>
-            <p style={requestCopy()}>
-              This file is outside the session files. OpenScience will not silently change the project root or read it
-              without an approved folder grant.
-            </p>
-          </div>
-          <Show
-            when={sessionID()}
-            fallback={
-              <p role="status" style={alert()}>
-                Start a research session to request access.
+        <div class="external-file-access" role="region" aria-label="File access required">
+          <div class="external-file-access__content">
+            <span class="external-file-access__icon" aria-hidden="true">
+              <IconFolder size={22} strokeWidth={1.35} />
+            </span>
+            <div class="external-file-access__copy">
+              <h2>Connect a folder</h2>
+              <p>
+                <strong>{props.file.name}</strong> is outside this project. Choose the access OpenScience needs; the
+                folder will stay connected to this project until you remove it.
               </p>
-            }
-          >
-            <div style={fieldGrid()}>
-              <div style={field()}>
-                <span>Access</span>
+            </div>
+            <Show
+              when={sessionID()}
+              fallback={
+                <p class="external-file-access__notice" role="status">
+                  Start a research session before connecting an external folder.
+                </p>
+              }
+            >
+              <label class="external-file-access__field">
+                <span>Folder access</span>
                 <Select
                   aria-label="External file access"
                   options={accessOptions}
@@ -150,106 +137,35 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
                   label={(option) => option.label}
                   onSelect={(option) => option && setState("access", option.value)}
                   variant="secondary"
-                  triggerStyle={selectTrigger()}
+                  triggerVariant="settings"
                 />
-              </div>
-            </div>
-            <Show when={state.error ?? (snapshot.error ? errorMessage(snapshot.error) : undefined)}>
-              {(message) => (
-                <p role="alert" style={alert()}>
-                  {message()}
-                </p>
-              )}
+                <small>
+                  {state.access === "write"
+                    ? "OpenScience can read, create, and update files in this folder."
+                    : "OpenScience can inspect files but cannot change them."}
+                </small>
+              </label>
+              <Show when={state.error ?? (snapshot.error ? errorMessage(snapshot.error) : undefined)}>
+                {(message) => (
+                  <p class="external-file-access__notice" data-tone="critical" role="alert">
+                    {message()}
+                  </p>
+                )}
+              </Show>
             </Show>
-            <button type="button" onClick={request} disabled={state.busy} style={primary()}>
-              {state.busy ? "Requesting…" : "Request access"}
-            </button>
-          </Show>
-          <button type="button" onClick={props.onClose} style={secondary()}>
-            Back to Files
-          </button>
+            <div class="external-file-access__actions">
+              <Button type="button" variant="ghost" size="large" onClick={props.onClose}>
+                Back to files
+              </Button>
+              <Show when={sessionID()}>
+                <Button type="button" variant="primary" size="large" onClick={request} disabled={state.busy}>
+                  {state.busy ? "Connecting…" : "Connect folder"}
+                </Button>
+              </Show>
+            </div>
+          </div>
         </div>
       </Match>
     </Switch>
   )
 }
-
-const field = (): JSX.CSSProperties => ({
-  display: "flex",
-  "flex-direction": "column",
-  gap: "5px",
-  color: "var(--color-text-muted)",
-  "font-size": "11.5px",
-})
-
-const fieldGrid = (): JSX.CSSProperties => ({
-  display: "grid",
-  "grid-template-columns": "minmax(0, 1fr)",
-  gap: "8px",
-})
-
-const selectTrigger = (): JSX.CSSProperties => ({
-  width: "100%",
-  "min-height": "36px",
-  "justify-content": "space-between",
-  "border-radius": "6px",
-})
-
-const primary = (): JSX.CSSProperties => ({
-  border: "1px solid var(--color-text)",
-  "border-radius": "8px",
-  background: "var(--color-text)",
-  color: "var(--color-bg)",
-  "min-height": "36px",
-  padding: "0 12px",
-  cursor: "pointer",
-  "font-size": "12px",
-  "font-weight": 600,
-})
-
-const secondary = (): JSX.CSSProperties => ({
-  border: "1px solid var(--color-border)",
-  "border-radius": "8px",
-  background: "transparent",
-  color: "var(--color-text-muted)",
-  "min-height": "36px",
-  padding: "0 12px",
-  cursor: "pointer",
-  "font-size": "12px",
-})
-
-const alert = (): JSX.CSSProperties => ({
-  margin: 0,
-  padding: "9px 10px",
-  "border-radius": "8px",
-  background: "var(--color-error-subtle, var(--color-bg-subtle))",
-  color: "var(--color-error, var(--color-text))",
-  "font-size": "11.5px",
-  "line-height": 1.45,
-})
-
-const requestIcon = (): JSX.CSSProperties => ({
-  width: "48px",
-  height: "48px",
-  "border-radius": "12px",
-  display: "inline-flex",
-  "align-items": "center",
-  "justify-content": "center",
-  color: "var(--color-text-muted)",
-  background: "var(--color-surface-solid)",
-  border: "1px solid var(--color-border)",
-})
-
-const requestTitle = (): JSX.CSSProperties => ({
-  margin: 0,
-  color: "var(--color-text)",
-  "font-size": "17px",
-  "line-height": 1.3,
-})
-
-const requestCopy = (): JSX.CSSProperties => ({
-  margin: "8px 0 0",
-  color: "var(--color-text-muted)",
-  "font-size": "12.5px",
-  "line-height": 1.55,
-})

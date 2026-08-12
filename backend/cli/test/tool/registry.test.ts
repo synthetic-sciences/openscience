@@ -4,6 +4,12 @@ import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
+import { ProjectTrust } from "../../src/project/trust"
+
+async function trustProject() {
+  const status = await ProjectTrust.status(Instance.project)
+  await ProjectTrust.update(Instance.project, { trusted: true, root: status.root })
+}
 
 describe("tool.registry", () => {
   test("includes the native Atlas host broker", async () => {
@@ -65,6 +71,7 @@ describe("tool.registry", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        await trustProject()
         const ids = await ToolRegistry.ids()
         expect(ids).toContain("hello")
       },
@@ -99,6 +106,7 @@ describe("tool.registry", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        await trustProject()
         const ids = await ToolRegistry.ids()
         expect(ids).toContain("hello")
       },

@@ -11,6 +11,8 @@ export type ArtifactsRequest = (path: string, init?: RequestInit) => Promise<Res
 export interface ArtifactsSnapshot {
   active: StoredArtifact[]
   trash: StoredArtifact[]
+  /** Per-list failures stay visible without hiding the half that did load. */
+  errors: Partial<Record<"active" | "trash", string>>
 }
 
 async function listArtifacts(request: ArtifactsRequest, state: "active" | "trash") {
@@ -25,10 +27,19 @@ async function listArtifacts(request: ArtifactsRequest, state: "active" | "trash
  * only the active listing is broken, and the reverse.
  */
 export function loadStoredArtifacts(request: ArtifactsRequest): Promise<ArtifactsSnapshot> {
-  return Promise.all((["active", "trash"] as const).map((state) => listArtifacts(request, state).catch(() => []))).then(
-    ([active, trash]) => ({ active, trash }),
+  return Promise.allSettled((["active", "trash"] as const).map((state) => listArtifacts(request, state))).then(
+    ([active, trash]) => ({
+      active: active.status === "fulfilled" ? active.value : [],
+      trash: trash.status === "fulfilled" ? trash.value : [],
+      errors: {
+        ...(active.status === "rejected" ? { active: errorMessage(active.reason) } : {}),
+        ...(trash.status === "rejected" ? { trash: errorMessage(trash.reason) } : {}),
+      },
+    }),
   )
 }
+
+const errorMessage = (value: unknown) => (value instanceof Error ? value.message : String(value || "Request failed"))
 
 /** Undo a trash: POST /file/artifact-store/:id/restore (routes/file.ts:491). */
 export async function restoreStoredArtifact(request: ArtifactsRequest, id: string) {

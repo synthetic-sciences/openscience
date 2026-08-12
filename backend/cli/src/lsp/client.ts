@@ -15,6 +15,60 @@ import { Filesystem } from "../util/filesystem"
 import { ProjectTrust } from "../project/trust"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
+const INITIALIZE_TIMEOUT_MS = 45_000
+
+function waitForInitialize<T>(input: {
+  request: () => Promise<T>
+  process: LSPServer.Handle["process"]
+  serverID: string
+  timeoutMs: number
+}): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const cleanup = () => {
+      clearTimeout(timeout)
+      input.process.off("error", onError)
+      input.process.off("exit", onExit)
+    }
+    const finish = (action: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      action()
+    }
+    const onError = (error: Error) => finish(() => reject(error))
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
+      finish(() => {
+        const reason = signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`
+        reject(new Error(`Language server ${input.serverID} exited during initialization (${reason})`))
+      })
+    const timeout = setTimeout(
+      () => finish(() => reject(new Error(`Operation timed out after ${input.timeoutMs}ms`))),
+      input.timeoutMs,
+    )
+
+    input.process.once("error", onError)
+    input.process.once("exit", onExit)
+    // A fast failure can occur after spawn() returns but before these listeners
+    // are installed. ChildProcess preserves an exit code/signal (and lacks a
+    // pid after a spawn error), so close that observation gap explicitly.
+    if (input.process.exitCode !== null || input.process.signalCode !== null) {
+      onExit(input.process.exitCode, input.process.signalCode)
+    } else if (input.process.pid === undefined) {
+      onError(new Error(`Language server ${input.serverID} failed to spawn`))
+    }
+
+    if (settled) return
+    try {
+      input.request().then(
+        (result) => finish(() => resolve(result)),
+        (error) => finish(() => reject(error)),
+      )
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error(String(error)))
+    }
+  })
+}
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
@@ -40,7 +94,12 @@ export namespace LSPClient {
     ),
   }
 
-  export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
+  export async function create(input: {
+    serverID: string
+    server: LSPServer.Handle
+    root: string
+    initializationTimeoutMs?: number
+  }) {
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
 
@@ -80,43 +139,52 @@ export namespace LSPClient {
     connection.listen()
 
     l.info("sending initialize")
-    await withTimeout(
-      connection.sendRequest("initialize", {
-        rootUri: pathToFileURL(input.root).href,
-        processId: input.server.process.pid,
-        workspaceFolders: [
-          {
-            name: "workspace",
-            uri: pathToFileURL(input.root).href,
+    await waitForInitialize({
+      process: input.server.process,
+      serverID: input.serverID,
+      timeoutMs: input.initializationTimeoutMs ?? INITIALIZE_TIMEOUT_MS,
+      request: () =>
+        connection.sendRequest("initialize", {
+          rootUri: pathToFileURL(input.root).href,
+          processId: input.server.process.pid,
+          workspaceFolders: [
+            {
+              name: "workspace",
+              uri: pathToFileURL(input.root).href,
+            },
+          ],
+          initializationOptions: {
+            ...input.server.initialization,
           },
-        ],
-        initializationOptions: {
-          ...input.server.initialization,
-        },
-        capabilities: {
-          window: {
-            workDoneProgress: true,
-          },
-          workspace: {
-            configuration: true,
-            didChangeWatchedFiles: {
-              dynamicRegistration: true,
+          capabilities: {
+            window: {
+              workDoneProgress: true,
+            },
+            workspace: {
+              configuration: true,
+              didChangeWatchedFiles: {
+                dynamicRegistration: true,
+              },
+            },
+            textDocument: {
+              synchronization: {
+                didOpen: true,
+                didChange: true,
+              },
+              publishDiagnostics: {
+                versionSupport: true,
+              },
             },
           },
-          textDocument: {
-            synchronization: {
-              didOpen: true,
-              didChange: true,
-            },
-            publishDiagnostics: {
-              versionSupport: true,
-            },
-          },
-        },
-      }),
-      45_000,
-    ).catch((err) => {
+        }),
+    }).catch((err) => {
       l.error("initialize error", { error: err })
+      try {
+        connection.end()
+      } catch {
+        // The transport may already be closed because the server exited.
+      }
+      connection.dispose()
       throw new InitializeError(
         { serverID: input.serverID },
         {

@@ -3,7 +3,7 @@ import { Tool } from "./tool"
 import { spawn, type ChildProcess } from "child_process"
 import path from "path"
 import os from "os"
-import { unlinkSync } from "fs"
+import { accessSync, constants, statSync, unlinkSync } from "fs"
 import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
@@ -25,6 +25,7 @@ import type {
   KernelOutput,
   KernelProcess,
 } from "@/science/kernel/types"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 /**
  * Persistent R kernel, following the same pattern as the Python kernel in
@@ -113,7 +114,7 @@ run_cell <- function(code) {
 
 con <- file("stdin")
 open(con, blocking = TRUE)
-cat("__OPENSCIENCE_KERNEL_READY__\\n")
+cat("__OPENSCIENCE_KERNEL_READY__", R.version.string, "\\n", sep = "")
 flush(stdout())
 
 repeat {
@@ -139,13 +140,18 @@ const START = "__OPENSCIENCE_R_RESULT_START__\n"
 const END = "\n__OPENSCIENCE_R_END__"
 const IDLE_MS = 30 * 60 * 1000
 
-async function findRscript(override?: string): Promise<string | null> {
+async function findRscript(override?: string): Promise<{ binary: string; version?: string } | null> {
   const candidates = override ? [override] : ["Rscript"]
   for (const bin of candidates) {
     try {
-      const proc = Bun.spawn([bin, "--version"], { stdout: "pipe", stderr: "pipe" })
-      await proc.exited
-      if (proc.exitCode === 0) return bin
+      // Discovery is metadata-only. A project-selected runtime must not
+      // receive a preflight `--version` execution before KernelRuntime has
+      // acquired trust, sandbox authority and durable OS ownership. The
+      // registered interpreter reports its version in the READY frame.
+      const binary = path.isAbsolute(bin) ? bin : Bun.which(bin)
+      if (!binary || !statSync(binary).isFile()) continue
+      accessSync(binary, process.platform === "win32" ? constants.F_OK : constants.X_OK)
+      return { binary }
     } catch {}
   }
   return null
@@ -237,8 +243,8 @@ class RKernel implements Kernel {
     if (this.ready) return
     this.intentional = false
     this.stderrTail = ""
-    const bin = await findRscript(opts?.binary)
-    if (!bin) {
+    const interpreter = await findRscript(opts?.binary)
+    if (!interpreter) {
       throw new Error(
         "Rscript not found. Install R (https://www.r-project.org) so `Rscript` is on PATH to use the R kernel.",
       )
@@ -253,15 +259,19 @@ class RKernel implements Kernel {
     const workspace = opts?.sessionID
       ? await SessionFilesystem.processWriteRoots(opts.sessionID)
       : [Instance.directory, Instance.worktree]
+    const readable = opts?.sessionID
+      ? await SessionFilesystem.processReadRoots(opts.sessionID)
+      : [Instance.directory, Instance.worktree]
 
     // Confine the kernel to the workspace when the execution sandbox is on: the R
     // kernel runs arbitrary agent-authored code — the same threat model as the
     // bash tool — so it must respect the same boundary.
     const policy = await Config.trustedSandbox()
     const sandboxed = Sandbox.wrapArgv({
-      file: bin,
+      file: interpreter.binary,
       args: ["--vanilla", scriptPath],
       workspace,
+      readable,
       extraWritable: [scriptPath, configPath],
       unreadable: OpenScience.kernelSensitivePaths(),
       options: policy,
@@ -269,6 +279,11 @@ class RKernel implements Kernel {
     const cwd = opts?.cwd ?? (opts?.sessionID ? await SessionFilesystem.workspace(opts.sessionID) : Instance.directory)
     this.environment = {
       cwd,
+      interpreter: {
+        name: opts?.environmentName ?? "r",
+        binary: interpreter.binary,
+        version: interpreter.version,
+      },
       atlas: AtlasEnvironment,
       sandbox: {
         ...Sandbox.describe(),
@@ -279,19 +294,39 @@ class RKernel implements Kernel {
         warning: sandboxed.warning,
       },
     }
-    const proc = spawn(sandboxed.file, sandboxed.args, {
-      cwd,
-      env: {
-        ...OpenScience.kernelEnv(process.env),
-        ...(opts?.env ?? {}),
-        ATLAS_CLI_CONFIG_PATH: configPath,
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-      // Own process group so killing the kernel reaps its worker children (#102).
-      detached: process.platform !== "win32",
-    })
+    const wrapped = WindowsJobLauncher.wrap({ file: sandboxed.file, args: sandboxed.args })
+    let proc: ChildProcess
+    try {
+      proc = spawn(wrapped.file, wrapped.args, {
+        cwd,
+        env: {
+          ...OpenScience.kernelEnv(process.env),
+          ...(opts?.env ?? {}),
+          ATLAS_CLI_CONFIG_PATH: configPath,
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+        // Own process group so killing the kernel reaps its worker children (#102).
+        detached: process.platform !== "win32",
+      })
+    } catch (error) {
+      Sandbox.cleanup(sandboxed)
+      throw error
+    }
+    proc.once("exit", () => Sandbox.cleanup(sandboxed))
+    proc.once("error", () => Sandbox.cleanup(sandboxed))
     this.proc = proc
     this.process = KernelProcessIdentity.capture(proc)
+    try {
+      const ownership = opts?.processOwnership
+        ? { ...opts.processOwnership, windowsRelease: wrapped.release }
+        : undefined
+      const registered = await KernelProcessIdentity.register(proc, ownership)
+      if (!registered) throw new Error("R kernel exited before durable process registration")
+      this.process = registered
+    } catch (error) {
+      await this.terminate(proc)
+      throw error
+    }
     proc.once("exit", () => {
       if (!this.intentional) this.cleanupScript()
     })
@@ -309,7 +344,25 @@ class RKernel implements Kernel {
       let buf = ""
       const onData = (d: Buffer) => {
         buf += d.toString()
-        if (buf.includes(READY)) {
+        if (buf.length > 64 * 1024) {
+          clearTimeout(timer)
+          proc.stdout?.off("data", onData)
+          void this.terminate(proc)
+          reject(new Error("R kernel startup output exceeded 65536 bytes before the ready handshake"))
+          return
+        }
+        const start = buf.indexOf(READY)
+        const end = start === -1 ? -1 : buf.indexOf("\n", start)
+        if (start !== -1 && end !== -1) {
+          const version = buf.slice(start + READY.length, end).trim()
+          if (!version || version.length > 128 || /[\0\r]/.test(version)) {
+            clearTimeout(timer)
+            proc.stdout?.off("data", onData)
+            void this.terminate(proc)
+            reject(new Error("R kernel returned an invalid ready handshake"))
+            return
+          }
+          this.environment!.interpreter.version = version
           clearTimeout(timer)
           proc.stdout?.off("data", onData)
           resolve()
@@ -556,6 +609,7 @@ export const RKernelTool = Tool.define("rkernel", {
         .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
       timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
     })
+    .strict()
     .superRefine((params, issue) => {
       if (params.action !== "stop" && !params.code) {
         issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })

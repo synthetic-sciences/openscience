@@ -3,10 +3,14 @@ import {
   DEFAULT_PANE_WIDTH,
   INLINE_PANE_BREAKPOINT,
   MAX_PANE_WIDTH,
+  MIN_CONVERSATION_WIDTH,
   MIN_PANE_WIDTH,
   clampPaneWidth,
+  equalPaneWidth,
   legacyPaneWidthKey,
+  maxPaneWidthForWorkspace,
   paneWidthForViewport,
+  paneWidthForWorkspace,
   paneWidthKey,
   readPaneWidth,
   savePaneWidth,
@@ -24,6 +28,15 @@ describe("context pane layout", () => {
     expect(clampPaneWidth(0)).toBe(MIN_PANE_WIDTH)
     expect(clampPaneWidth(9999)).toBe(MAX_PANE_WIDTH)
     expect(clampPaneWidth(512)).toBe(512)
+  })
+
+  test("can divide the available workspace evenly without crushing conversation", () => {
+    expect(MIN_CONVERSATION_WIDTH).toBe(360)
+    expect(equalPaneWidth(1200)).toBe(600)
+    expect(equalPaneWidth(1600)).toBe(800)
+    expect(equalPaneWidth(620)).toBe(MIN_PANE_WIDTH)
+    expect(maxPaneWidthForWorkspace(1200)).toBe(840)
+    expect(paneWidthForWorkspace(900, 1200)).toBe(840)
   })
 
   test("keeps a true side pane at the reference desktop viewport without crushing the conversation", () => {
@@ -58,7 +71,7 @@ describe("context pane layout", () => {
     const legacy = legacyPaneWidthKey("project-a", "session-a")
     values.set(legacy, "612")
 
-    expect(readPaneWidth(current, storage, [legacy])).toBe(MAX_PANE_WIDTH)
+    expect(readPaneWidth(current, storage, [legacy])).toBe(612)
     expect(values.get(current)).toBe("612")
 
     const blocked = {

@@ -9,6 +9,22 @@ import { Server } from "../../src/server/server"
 import { KernelRuntime } from "../../src/science/kernel/registry"
 import { KernelMetrics } from "../../src/science/kernel/metrics"
 import { Sandbox } from "../../src/sandbox/sandbox"
+import fs from "node:fs/promises"
+import path from "node:path"
+
+async function createPythonEnvironment(root: string, name: string) {
+  const python = Bun.which("python3") ?? Bun.which("python")
+  if (!python) throw new Error("Python is required for the notebook route tests")
+  const target = path.join(root, ".venv", name)
+  const proc = Bun.spawn([python, "-m", "venv", "--without-pip", target], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited])
+  if (code !== 0) throw new Error(`Could not create ${name} test environment: ${stderr}`)
+  return process.platform === "win32" ? path.join(target, "Scripts", "python.exe") : path.join(target, "bin", "python")
+}
 
 const alive = (pid: number) => {
   try {
@@ -439,15 +455,24 @@ describe("/notebook routes", () => {
         const first = execute(
           "(__import__('time').sleep(0.5), globals().__setitem__('queue_value', ['first']), 'first')[-1]",
         )
-        const waitForKernel = async (attempt = 0): Promise<void> => {
-          const response = await app.request(
-            `/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.ipynb&language=python`,
-          )
-          const status = (await response.json()) as { active?: boolean }
-          if (status.active) return
-          if (attempt >= 100) throw new Error("kernel did not start")
-          await Bun.sleep(10)
-          return waitForKernel(attempt + 1)
+        const waitForKernel = async (): Promise<void> => {
+          // Kernel startup includes the governed-process handshake and has a
+          // bounded 15s production timeout. A fixed 101-poll budget made this
+          // test impose an unrelated ~1s timeout and fail under full-suite CPU
+          // pressure while the runtime was still correctly reporting
+          // `starting`. Keep the assertion bounded, but against the real
+          // startup contract and a monotonic deadline.
+          const deadline = performance.now() + 20_000
+          let last: unknown
+          while (performance.now() < deadline) {
+            const response = await app.request(
+              `/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.ipynb&language=python`,
+            )
+            last = await response.json()
+            if ((last as { active?: boolean }).active) return
+            await Bun.sleep(10)
+          }
+          throw new Error(`kernel did not start; last status: ${JSON.stringify(last)}`)
         }
         await waitForKernel()
         const secondCode = "(__import__('time').sleep(0.4), queue_value.append('second'), queue_value)[-1]"
@@ -507,7 +532,7 @@ describe("/notebook routes", () => {
         })
       },
     })
-  }, 30_000)
+  }, 45_000)
 
   test("holds the queue slot of the booting cell before the kernel reports active", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -1281,6 +1306,160 @@ describe("/notebook routes", () => {
 
     expect(response.status).toBe(400)
   })
+
+  test("rejects an invalid interpreter environment instead of running the default interpreter", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const response = await NotebookRoutes().request("/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionID: session.id,
+            id: "analysis.ipynb",
+            language: "python",
+            environment: "../nbody",
+            code: "raise RuntimeError('must not execute')",
+          }),
+        })
+
+        expect(response.status).toBe(400)
+        const missing = await NotebookRoutes().request("/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionID: session.id,
+            id: "analysis.ipynb",
+            language: "python",
+            environment: "nbody",
+            code: "raise RuntimeError('must not execute')",
+          }),
+        })
+        expect(missing.status).toBe(400)
+        expect(await missing.text()).toContain("Python environment 'nbody' was not found")
+        expect(KernelRuntime.list(session.id)).toEqual([])
+      },
+    })
+  })
+
+  test("addresses separate persistent Python processes and site-packages by environment", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const python = await createPythonEnvironment(tmp.path, "python")
+    const nbody = await createPythonEnvironment(tmp.path, "nbody")
+    const marker = `openscience_env_marker_${crypto.randomUUID().replaceAll("-", "")}`
+    const site = Bun.spawnSync([nbody, "-c", "import site; print(site.getsitepackages()[0])"])
+    expect(site.success).toBe(true)
+    await fs.writeFile(path.join(site.stdout.toString().trim(), `${marker}.py`), "VALUE = 99\n")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const execute = async (environment: string, code: string, id = "analysis.ipynb") => {
+          const response = await NotebookRoutes().request("/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionID: session.id,
+              id,
+              language: "python",
+              environment,
+              code,
+            }),
+          })
+          expect(response.status).toBe(200)
+          return (await response.json()) as {
+            ok: boolean
+            outputs: Array<{ output_type: string; name?: string; text?: string; data?: Record<string, string> }>
+          }
+        }
+        const status = async (environment: string) => {
+          const query = new URLSearchParams({
+            sessionID: session.id,
+            id: "analysis.ipynb",
+            language: "python",
+            environment,
+          })
+          const response = await NotebookRoutes().request(`/status?${query}`)
+          expect(response.status).toBe(200)
+          return (await response.json()) as {
+            process_id: number
+            environment_name: string
+            environment: { interpreter: { name: string; binary: string; version?: string } }
+          }
+        }
+
+        const [plain, isolated] = await Promise.all([
+          execute(
+            "python",
+            `import importlib.util\nx = 41\nprint(importlib.util.find_spec(${JSON.stringify(marker)}) is None)`,
+          ),
+          execute("nbody", `import ${marker}\nx = ${marker}.VALUE\nprint(x)`),
+        ])
+        expect(plain.ok).toBe(true)
+        expect(plain.outputs.some((output) => output.text?.trim() === "True")).toBe(true)
+        expect(isolated.ok).toBe(true)
+        expect(isolated.outputs.some((output) => output.text?.trim() === "99")).toBe(true)
+
+        const [plainState, isolatedState, plainStatus, isolatedStatus] = await Promise.all([
+          execute("python", "x + 1", "other.ipynb"),
+          execute("nbody", "x + 1", "other.ipynb"),
+          status("python"),
+          status("nbody"),
+        ])
+        expect(plainState.outputs.some((output) => output.data?.["text/plain"] === "42")).toBe(true)
+        expect(isolatedState.outputs.some((output) => output.data?.["text/plain"] === "100")).toBe(true)
+        expect(plainStatus.process_id).not.toBe(isolatedStatus.process_id)
+        expect(plainStatus.environment_name).toBe("python")
+        expect(isolatedStatus.environment_name).toBe("nbody")
+        expect(plainStatus.environment.interpreter).toMatchObject({ name: "python", binary: python })
+        expect(isolatedStatus.environment.interpreter).toMatchObject({ name: "nbody", binary: nbody })
+        expect(plainStatus.environment.interpreter.version).toMatch(/^Python /)
+        expect(isolatedStatus.environment.interpreter.version).toMatch(/^Python /)
+
+        const restarted = await NotebookRoutes().request("/restart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionID: session.id,
+            id: "analysis.ipynb",
+            language: "python",
+            environment: "nbody",
+          }),
+        })
+        expect(restarted.status).toBe(200)
+        const fresh = (await restarted.json()) as {
+          process_id: number
+          incarnation: number
+          environment: { interpreter: { name: string; binary: string } }
+        }
+        expect(fresh.process_id).not.toBe(isolatedStatus.process_id)
+        expect(fresh.incarnation).toBe(2)
+        expect(fresh.environment.interpreter).toMatchObject({ name: "nbody", binary: nbody })
+        const reset = await execute("nbody", '"x" in globals()', "after-restart.ipynb")
+        expect(reset.outputs.some((output) => output.data?.["text/plain"] === "False")).toBe(true)
+
+        await Promise.all(
+          ["python", "nbody"].map((environment) =>
+            NotebookRoutes().request("/stop", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sessionID: session.id,
+                id: "analysis.ipynb",
+                language: "python",
+                environment,
+              }),
+            }),
+          ),
+        )
+      },
+    })
+  }, 120_000)
 
   test("rejects kernel operations for a session outside the active project", async () => {
     await using tmp = await tmpdir({ git: true })

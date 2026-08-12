@@ -19,7 +19,13 @@ import { Binary } from "@synsci/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part } from "./message-part"
-import { artifactActions, generatedArtifacts, stripRedactedReasoning, writtenFiles } from "./tool-display"
+import {
+  artifactActions,
+  generatedArtifacts,
+  sentenceCaseLabel,
+  stripRedactedReasoning,
+  writtenFiles,
+} from "./tool-display"
 import { Markdown } from "./markdown"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -879,7 +885,7 @@ export function SessionTurn(
                                 </span>
                                 <span data-slot="session-turn-generated-copy">
                                   <strong>{artifact.title}</strong>
-                                  <small>{artifact.kind}</small>
+                                  <small>{sentenceCaseLabel(artifact.kind)}</small>
                                 </span>
                               </button>
                             )}

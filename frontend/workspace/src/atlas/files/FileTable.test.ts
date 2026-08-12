@@ -52,11 +52,11 @@ describe("file table", () => {
     ])
   })
 
-  test("shows a dash for a directory and a human size for a file", () => {
+  test("leaves folder size quiet and shows human sizes for files", () => {
     const host = mount(() => subject.FileTable({ rows: ROWS, depth: 0, onOpen: () => {}, onUp: () => {} }))
     const sizes = [...host.querySelectorAll("[data-file-size]")].map((n) => n.textContent)
 
-    expect(sizes[0]).toBe("—")
+    expect(sizes[0]).toBe("")
     expect(sizes).toContain("2.5 KB")
     expect(sizes).toContain("21 KB")
   })
@@ -65,6 +65,14 @@ describe("file table", () => {
     const host = mount(() => subject.FileTable({ rows: ROWS, depth: 0, onOpen: () => {}, onUp: () => {} }))
 
     expect(host.querySelector("[data-file-age]")).toBeNull()
+  })
+
+  test("uses a familiar Name and Size header with semantic file icons", () => {
+    const host = mount(() => subject.FileTable({ rows: ROWS, depth: 0, onOpen: () => {}, onUp: () => {} }))
+
+    expect(host.querySelector(".files-table__header")?.textContent).toContain("Name")
+    expect(host.querySelector(".files-table__header")?.textContent).toContain("Size")
+    expect(host.querySelectorAll("[data-file-row] .files-row__glyph svg")).toHaveLength(ROWS.length)
   })
 
   test("offers a parent row only below the root, and reports both actions", () => {
@@ -82,6 +90,7 @@ describe("file table", () => {
     deep.querySelector<HTMLButtonElement>('[data-file-row="train_lr.py"]')?.click()
 
     expect(ups).toBe(1)
+    expect(deep.querySelector("[data-file-up]")?.textContent).toContain("Parent folder")
     expect(opened).toEqual(["train_lr.py"])
   })
 
@@ -89,5 +98,27 @@ describe("file table", () => {
     const host = mount(() => subject.FileTable({ rows: [], depth: 1, onOpen: () => {}, onUp: () => {} }))
 
     expect(host.textContent).toContain("This folder is empty")
+  })
+
+  test("distinguishes a filtered result from a truly empty folder", () => {
+    const host = mount(() =>
+      subject.FileTable({ rows: [], depth: 0, filtered: true, onOpen: () => {}, onUp: () => {} }),
+    )
+
+    expect(host.textContent).toContain("No matching files")
+    expect(host.textContent).toContain("clear the search")
+    expect(host.textContent).not.toContain("This folder is empty")
+  })
+
+  test("does not claim the folder is empty while loading or unavailable", () => {
+    const loading = mount(() =>
+      subject.FileTable({ rows: [], depth: 0, loading: true, onOpen: () => {}, onUp: () => {} }),
+    )
+    const unavailable = mount(() =>
+      subject.FileTable({ rows: [], depth: 0, unavailable: true, onOpen: () => {}, onUp: () => {} }),
+    )
+
+    expect(loading.textContent).not.toContain("This folder is empty.")
+    expect(unavailable.textContent).not.toContain("This folder is empty.")
   })
 })

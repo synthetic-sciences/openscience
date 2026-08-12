@@ -110,3 +110,77 @@ test("clearSession leaves a hand-configured atlas profile alone", async () => {
   const config = JSON.parse(await Bun.file(atlas).text())
   expect(config.profiles.default.api_key).toBe("thk_mine.secret")
 })
+
+test("logout in one server removes synced env and revokes inherited children in another", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-logout-revision-"))
+  const config = path.join(root, "config")
+  const managedDir = path.join(config, "openscience")
+  const worker = path.join(root, "worker.ts")
+  const clear = path.join(root, "clear.ts")
+  const ready = path.join(root, "ready")
+  const openscience = new URL("../src/openscience/index.ts", import.meta.url).href
+  const lifecycle = new URL("../src/credentials/lifecycle.ts", import.meta.url).href
+  await fs.mkdir(managedDir, { recursive: true })
+  await Bun.write(
+    path.join(managedDir, "synced-env.json"),
+    JSON.stringify({ AWS_ACCESS_KEY_ID: "cross-managed-access", AWS_SECRET_ACCESS_KEY: "cross-managed-secret" }),
+  )
+  await Bun.write(
+    path.join(root, "openscience-session.json"),
+    JSON.stringify({ api_key: "thk_test.secret", user_id: "u" }),
+  )
+  await Bun.write(
+    clear,
+    [`import { OpenScience } from ${JSON.stringify(openscience)}`, `await OpenScience.clearSession()`].join("\n"),
+  )
+  await Bun.write(
+    worker,
+    [
+      `import fs from "node:fs/promises"`,
+      `import { spawn } from "node:child_process"`,
+      `import { OpenScience } from ${JSON.stringify(openscience)}`,
+      `import { CredentialLifecycle } from ${JSON.stringify(lifecycle)}`,
+      `await CredentialLifecycle.ensureFresh()`,
+      `const initial = await OpenScience.subprocessEnv(process.env)`,
+      `if (initial.AWS_SECRET_ACCESS_KEY !== "cross-managed-secret") throw new Error("worker did not load synced secret")`,
+      `const child = spawn(process.execPath, ["-e", "console.log(process.env.AWS_SECRET_ACCESS_KEY || 'absent'); setInterval(() => {}, 1000)"], { env: initial, stdio: ["ignore", "pipe", "pipe"] })`,
+      `const inherited = await new Promise((resolve, reject) => { child.stdout.once("data", (data) => resolve(String(data).trim())); child.once("error", reject) })`,
+      `if (inherited !== "cross-managed-secret") throw new Error("child did not inherit synced secret")`,
+      `let revoked = false`,
+      `CredentialLifecycle.onRevoke(async () => { revoked = true; child.kill("SIGTERM"); await new Promise((resolve) => child.once("exit", resolve)) })`,
+      `CredentialLifecycle.watch(25)`,
+      `await fs.writeFile(${JSON.stringify(ready)}, "ready")`,
+      `for (let i = 0; i < 400 && !revoked; i++) await Bun.sleep(10)`,
+      `await CredentialLifecycle.ensureFresh()`,
+      `if (!revoked || (child.exitCode === null && child.signalCode === null)) throw new Error("synced child was not revoked")`,
+      `if (process.env.AWS_SECRET_ACCESS_KEY !== undefined) throw new Error("logout left synced secret in process.env")`,
+      `const next = await OpenScience.subprocessEnv(process.env)`,
+      `if (next.AWS_SECRET_ACCESS_KEY !== undefined) throw new Error("new child env retained logged-out secret")`,
+      `CredentialLifecycle.stopWatching()`,
+    ].join("\n"),
+  )
+  const env = {
+    ...process.env,
+    AWS_ACCESS_KEY_ID: "cross-managed-access",
+    AWS_SECRET_ACCESS_KEY: "cross-managed-secret",
+    OPENSCIENCE_DATA_DIR: root,
+    OPENSCIENCE_CONFIG_DIR: managedDir,
+    OPENSCIENCE_TEST_HOME: path.join(root, "home"),
+    XDG_STATE_HOME: path.join(root, "state"),
+    XDG_CACHE_HOME: path.join(root, "cache"),
+  }
+
+  try {
+    const live = Bun.spawn([process.execPath, worker], { env, stdout: "pipe", stderr: "pipe" })
+    for (let i = 0; i < 400 && !(await Bun.file(ready).exists()); i++) await Bun.sleep(10)
+    expect(await Bun.file(ready).exists()).toBe(true)
+    const deleter = Bun.spawn([process.execPath, clear], { env, stdout: "pipe", stderr: "pipe" })
+    const [clearExit, clearError] = await Promise.all([deleter.exited, new Response(deleter.stderr).text()])
+    if (clearExit !== 0) throw new Error(clearError)
+    const [exit, error] = await Promise.all([live.exited, new Response(live.stderr).text()])
+    if (exit !== 0) throw new Error(error)
+    expect(exit).toBe(0)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})

@@ -1,6 +1,6 @@
 import type { SettingsBillingGetResponse } from "@synsci/sdk/v2/client"
 import { Button } from "@synsci/ui/button"
-import { For, Show, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { URLS } from "@/config/urls"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -36,23 +36,15 @@ const MODES: { value: Mode; title: string; body: string }[] = [
 const money = (value: number) => `$${value.toFixed(value >= 100 ? 0 : 2)}`
 
 /**
- * The write-then-refresh ordering a mode switch depends on: the billing write
- * must resolve and its data must be applied before the provider catalog is
- * refreshed, and the refresh must not run at all when the write comes back
- * without data (a failed save). Pulled out of `update()` and parameterized
- * over `write`/`apply`/`refresh` so the ordering is unit-testable with plain
- * async functions standing in for the SDK call and `refreshProviders()` —
- * no live backend, no mocking `sdk`/`globalSync`.
+ * Persist and apply the small billing response independently of the much larger
+ * provider-catalog refresh. The mode control must become usable as soon as the
+ * save finishes; reloading every provider/model is follow-up synchronization,
+ * not part of the button's acknowledgement path.
  */
-export async function commitBilling<T>(
-  write: () => Promise<{ data?: T }>,
-  apply: (data: T) => void,
-  refresh: () => Promise<void>,
-): Promise<boolean> {
+export async function commitBilling<T>(write: () => Promise<{ data?: T }>, apply: (data: T) => void): Promise<boolean> {
   const result = await write()
   if (!result.data) return false
   apply(result.data)
-  await refresh()
   return true
 }
 
@@ -61,8 +53,10 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   const globalSync = useGlobalSync()
   const platform = usePlatform()
   const [wallet, setWallet] = createSignal<Wallet>()
-  const [billing, setBilling] = createSignal<SettingsBillingGetResponse>()
+  const [mode, setMode] = createSignal<Mode>(globalSync.data.config.billing?.llm ?? null)
   const [busy, setBusy] = createSignal(false)
+  const [refreshing, setRefreshing] = createSignal(false)
+  const selected = createMemo(() => MODES.find((item) => item.value === mode()) ?? MODES[2])
 
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const fail = (error: unknown) => {
@@ -76,7 +70,10 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     sdk.client.settings.billing
       .get()
       .then((result) => {
-        if (result.data) return setBilling(result.data)
+        if (result.data) {
+          if (!busy()) setMode(result.data.llm)
+          return
+        }
         fail("Couldn't load managed inference settings.")
       })
       .catch(fail)
@@ -86,29 +83,42 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   }
   const update = (value: Mode) => {
     if (busy()) return
+    const previous = mode()
+    // Immediate visual acknowledgement: the network write may include account
+    // synchronization, but the pressed state should never wait on that work.
+    setMode(value)
     setBusy(true)
     props.onError?.(undefined)
-    // apply() only runs once the write has data, so a rejection past that
-    // point is the catalog refresh failing, not the save — the same split
-    // credentialChange draws for the other credential panels. A rejection
-    // before apply() is a genuine save failure and keeps the plain wording.
-    let saved = false
     void commitBilling(
       () => sdk.client.settings.billing.update({ llm: value }),
       (data) => {
-        saved = true
-        setBilling(data)
+        setMode(data.llm)
       },
-      () => globalSync.refreshProviders(),
     )
       .then((ok) => {
-        if (!ok) fail("Couldn't save managed inference settings.")
+        if (!ok) {
+          setMode(previous)
+          fail("Couldn't save managed inference settings.")
+          return
+        }
+
+        // Re-enable the mode controls before the multi-scope provider catalog
+        // reload. This fetch can be several megabytes and must not make the
+        // already-saved setting feel stuck.
+        setBusy(false)
+        setRefreshing(true)
+        void globalSync
+          .refreshProviders()
+          .catch((error) =>
+            props.onError?.(
+              `Managed inference settings saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
+            ),
+          )
+          .finally(() => setRefreshing(false))
       })
       .catch((error) => {
-        if (!saved) return fail(error)
-        props.onError?.(
-          `Managed inference settings saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
-        )
+        setMode(previous)
+        fail(error)
       })
       .finally(() => setBusy(false))
   }
@@ -134,55 +144,74 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     value === "managed" && wallet() !== undefined && (!wallet()!.signedIn || !wallet()!.managedSupported)
 
   return (
-    <div class="flex flex-col gap-3">
-      <div class="flex min-h-12 flex-wrap items-center gap-x-5 gap-y-2 rounded-[4px] border border-border-weak-base bg-surface-base/40 px-4 py-3">
-        <div class="flex min-w-[150px] flex-1 flex-col gap-0.5">
-          <span class="text-12-regular text-text-weak">OpenScience credits</span>
-          <Show when={wallet()} fallback={<span class="text-13-medium text-text-weak">Checking account…</span>}>
-            <span class="text-13-medium text-text-strong">
-              {wallet()!.signedIn
-                ? wallet()!.balanceUsd >= 0
-                  ? `${money(wallet()!.balanceUsd)} available`
-                  : "Balance unavailable"
-                : "Not signed in"}
-            </span>
-          </Show>
+    <div class="models-inference">
+      <div class="settings-card settings-account-summary models-account-summary">
+        <div class="settings-row models-compact-row">
+          <div class="models-account-summary__identity">
+            <div class="flex min-w-0 flex-col gap-0.5">
+              <span class="text-12-regular text-text-weak">OpenScience credits</span>
+              <Show when={wallet()} fallback={<span class="text-13-medium text-text-weak">Checking account…</span>}>
+                <span class="text-13-medium text-text-strong">
+                  {wallet()!.signedIn
+                    ? wallet()!.balanceUsd >= 0
+                      ? `${money(wallet()!.balanceUsd)} available`
+                      : "Balance unavailable"
+                    : "Not signed in"}
+                </span>
+              </Show>
+            </div>
+          </div>
+          <span class="models-row-action">
+            <Button
+              class="settings-panel-action models-secondary-action"
+              size="small"
+              variant="secondary"
+              onClick={() => platform.openLink(URLS.dashboardBilling)}
+            >
+              Add funds
+            </Button>
+          </span>
         </div>
-        <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
-          Add funds
-        </Button>
       </div>
 
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <For each={MODES}>
-          {(mode) => (
-            <button
-              type="button"
-              aria-pressed={billing() !== undefined && billing()!.llm === mode.value}
-              disabled={busy() || billing() === undefined || unsupported(mode.value)}
-              class="flex min-h-[92px] flex-col gap-1 rounded-[4px] border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-              classList={{
-                "border-border-strong-base bg-surface-raised-base":
-                  billing() !== undefined && billing()!.llm === mode.value,
-                "border-border-weak-base bg-surface-base/40 hover:bg-surface-raised-base":
-                  billing() === undefined || billing()!.llm !== mode.value,
-              }}
-              title={
-                unsupported(mode.value)
-                  ? "Managed inference requires a signed-in account with managed billing enabled"
-                  : undefined
-              }
-              onClick={() => update(mode.value)}
-            >
-              <span class="text-13-medium text-text-strong">{mode.title}</span>
-              <span class="text-12-regular leading-relaxed text-text-weak">{mode.body}</span>
-            </button>
-          )}
-        </For>
+      <div class="models-routing" aria-label="Inference routing">
+        <div class="models-routing__options" role="group" aria-label="Inference routing mode">
+          <For each={MODES}>
+            {(option) => (
+              <button
+                type="button"
+                aria-pressed={mode() === option.value}
+                aria-describedby={`managed-inference-${option.value ?? "automatic"}-description`}
+                aria-busy={busy()}
+                disabled={busy() || unsupported(option.value)}
+                class="models-routing__option"
+                title={
+                  unsupported(option.value)
+                    ? "Managed inference requires a signed-in account with managed billing enabled"
+                    : undefined
+                }
+                onClick={() => update(option.value)}
+              >
+                <span class="models-routing__option-label">
+                  <span>{option.title}</span>
+                </span>
+                <span id={`managed-inference-${option.value ?? "automatic"}-description`} class="sr-only">
+                  {option.body}
+                </span>
+              </button>
+            )}
+          </For>
+        </div>
+        <p class="models-routing__description" aria-live="polite">
+          {busy() ? `Saving ${selected().title.toLowerCase()}…` : selected().body}
+          <Show when={!busy() && refreshing()}>
+            <span class="models-routing__sync"> Updating model availability…</span>
+          </Show>
+        </p>
       </div>
 
       <Show when={wallet() && !wallet()!.signedIn}>
-        <p class="text-12-regular text-text-weak">
+        <p class="settings-inline-note text-12-regular text-text-weak">
           Sign in from General to enable managed credits. Own-key and automatic routing remain available.
         </p>
       </Show>

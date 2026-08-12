@@ -18,7 +18,6 @@ import { useSync } from "@/context/sync"
 import { SourceMenu } from "@/atlas/files/SourceMenu"
 import { ArtifactGrid } from "@/atlas/files/ArtifactGrid"
 import { FileTable, type FileRow } from "@/atlas/files/FileTable"
-import { FileTabs } from "@/atlas/files/FileTabs"
 import { TrashList } from "@/atlas/files/TrashList"
 import { buildSources, type PaneSource } from "@/atlas/files/sources"
 import { readSource, writeSource } from "@/atlas/files/last-source"
@@ -27,8 +26,8 @@ import { remotePreview } from "@/atlas/files/remote-preview"
 import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/resource"
 import type { StoredArtifact } from "@/artifacts/store"
 import { uiStore } from "@/atlas/store/ui"
-import { FileView } from "@/atlas/FilePreview"
 import { FolderPicker } from "@/atlas/FolderPicker"
+import { IconChevronRight, IconFolder, IconSearch, IconX } from "@/atlas/shared/Icon"
 import {
   connectedFilesystemGrants,
   parseFilesystemSnapshot,
@@ -42,23 +41,17 @@ import "@/atlas/files/FilesPane.css"
 
 export type Transport = (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
 
-/** An open tab: the name the strip shows, and the handle FileView reads. */
+/** The durable location handed to the inspector's single work-tab owner. */
 export interface PaneFile {
   name: string
   path: string
   /**
-   * The source the file was opened from. A tab outlives the picker's current
-   * selection, so it carries its own provenance rather than reading whichever
-   * source happens to be selected when it is next shown — otherwise a file
-   * opened from a read-only grant becomes editable the moment the picker moves.
+   * Provenance for integration callbacks. The work-tab owner receives the
+   * stable path, so it never reinterprets a file through the browser's later
+   * source selection.
    */
   source: string
   readonly?: boolean
-  /**
-   * Set when the tab is a file inside a Modal Volume. Such a file has no path on
-   * this machine, so it is previewed from its bytes rather than read from disk.
-   */
-  remote?: RemoteFile
 }
 
 async function json(response: Response): Promise<unknown> {
@@ -185,7 +178,8 @@ export function FilesPane(
     request?: Transport
     session?: string
     directory?: string
-    view?: (file: PaneFile) => JSX.Element
+    /** Test/integration seam. Production delegates to uiStore.openFile. */
+    onOpenFile?: (file: PaneFile) => void
     /**
      * Builds an absolute URL for an artifact's bytes. `sdk.request.url` supplies
      * it in production; a standalone mount has no SDK, and `transport` returns a
@@ -310,11 +304,12 @@ export function FilesPane(
   const [path, setPath] = createSignal<string[]>([])
   const [filter, setFilter] = createSignal("")
   const [error, setError] = createSignal("")
-  const [tabs, setTabs] = createSignal<PaneFile[]>([])
-  // Undefined is the browser itself. A sentinel string would be a filename a
-  // real file can carry, and "files" is one — the browser would then be
-  // unreachable behind a tab it cannot tell apart from itself.
-  const [active, setActive] = createSignal<string>()
+  const [listingError, setListingError] = createSignal("")
+  // Local/project/connected files are owned by RightPane's persisted work-tab
+  // strip. Modal Volume bytes cannot be represented by a local ContextFile, so
+  // they use one focused preview with an explicit return control instead of a
+  // second, competing tab system.
+  const [remoteOpen, setRemoteOpen] = createSignal<RemoteFile>()
   const [busy, setBusy] = createSignal(false)
   const [connect, setConnect] = createStore({
     open: false,
@@ -338,7 +333,7 @@ export function FilesPane(
   const key = createMemo(() => [where(), sessionID(), current().kind, current().id] as const, undefined, {
     equals: (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3],
   })
-  const [entries] = createResource(key, ([target, session, kind, id]) => {
+  const [entries, { refetch: refetchEntries }] = createResource(key, ([target, session, kind, id]) => {
     // The artifacts and trash pseudo-sources always have root "" — they are
     // backed by the artifact store, not the filesystem, and the server
     // falls back an empty path to the project root (File.list(dir || root)),
@@ -351,6 +346,7 @@ export function FilesPane(
       // describes anything on screen — leaving it up puts "this folder could
       // not be read" over a perfectly good trash list.
       setError("")
+      setListingError("")
       return Promise.resolve([] as FileRow[])
     }
     // A Volume is not on this machine: it lists over Modal's API, and its
@@ -364,7 +360,7 @@ export function FilesPane(
         return transport("/settings/compute/modal/volumes")
           .then(json)
           .then((value) => {
-            setError("")
+            setListingError("")
             if (!Array.isArray(value)) return [] as FileRow[]
             // Volumes are folders here: entering one lists it.
             return (value as Array<{ name: string }>).map((item) => ({
@@ -373,7 +369,7 @@ export function FilesPane(
             }))
           })
           .catch((value) => {
-            setError(`Modal Volumes could not be listed. ${concise(value)}`)
+            setListingError(`Modal Volumes could not be listed. ${concise(value)}`)
             return [] as FileRow[]
           })
       }
@@ -382,7 +378,7 @@ export function FilesPane(
       })
         .then(json)
         .then((value) => {
-          setError("")
+          setListingError("")
           if (!Array.isArray(value)) return [] as FileRow[]
           return (value as Array<{ path: string; type: string; size: number }>).map((entry) => ({
             name: entry.path.split("/").filter(Boolean).at(-1) ?? entry.path,
@@ -392,7 +388,7 @@ export function FilesPane(
           }))
         })
         .catch((value) => {
-          setError(`${volume} could not be read. ${concise(value)}`)
+          setListingError(`${volume} could not be read. ${concise(value)}`)
           return [] as FileRow[]
         })
     }
@@ -401,7 +397,7 @@ export function FilesPane(
     return transport("/file", undefined, query)
       .then(json)
       .then((value) => {
-        setError("")
+        setListingError("")
         // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
         // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
         // wrapper only exists on the generated client's RequestResult, never on the body.
@@ -410,10 +406,38 @@ export function FilesPane(
         return Array.isArray(data) ? (data as FileRow[]) : []
       })
       .catch(() => {
-        setError("This folder could not be read. The last listing may be out of date.")
+        setListingError("This folder could not be read. The last listing may be out of date.")
         return [] as FileRow[]
       })
   })
+
+  const sourceLoading = createMemo(() => {
+    const kind = current().kind
+    return kind === "artifacts" || kind === "trash" ? artifacts.loading : entries.loading
+  })
+
+  const sourceError = createMemo(() => {
+    const kind = current().kind
+    if (kind === "artifacts") {
+      const message = artifacts.latest?.errors.active
+      return message ? `Saved artifacts could not be loaded. ${message}` : ""
+    }
+    if (kind === "trash") {
+      const message = artifacts.latest?.errors.trash
+      return message ? `Trash could not be loaded. ${message}` : ""
+    }
+    return listingError()
+  })
+
+  const retrySource = () => {
+    const kind = current().kind
+    if (kind === "artifacts" || kind === "trash") {
+      void refetchArtifacts()
+      return
+    }
+    setListingError("")
+    void refetchEntries()
+  }
 
   const rows = createMemo(() => {
     const query = filter().trim().toLowerCase()
@@ -434,6 +458,54 @@ export function FilesPane(
     const query = filter().trim().toLowerCase()
     const list = artifacts.latest?.active ?? []
     return query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
+  })
+
+  const filterCopy = createMemo(() => {
+    if (current().kind === "artifacts") return "Search artifacts"
+    if (current().kind === "trash") return "Search trash"
+    return "Filter this folder"
+  })
+
+  /**
+   * The source picker answers "where?"; this line answers "what kind of place
+   * is this?" without turning the compact toolbar into a storage manual. Keep
+   * every claim inside the contracts the pane can actually observe.
+   */
+  const sourceContext = createMemo(() => {
+    const source = current()
+    // The artifact catalog and Trash already explain their retention model in
+    // their own first content row. Repeating it here would add a third label
+    // for the same concept directly above that row.
+    if (source.kind === "artifacts" || source.kind === "trash") return
+    if (source.kind === "session")
+      return {
+        label: "Session workspace",
+        copy: "Scratch files for this session.",
+        badge: "Scratch",
+      }
+    if (source.kind === "modal")
+      return {
+        label: "Remote files",
+        copy: "Browse and download from configured Modal Volumes.",
+        badge: "Read only",
+      }
+    if (source.kind === "connected")
+      return source.readonly
+        ? {
+            label: "Connected folder",
+            copy: "Files can be inspected without changing the folder.",
+            badge: "Read only",
+          }
+        : {
+            label: "Connected folder",
+            copy: "Approved file tools can write here; runtimes do not receive a writable mount.",
+            badge: "Tool write",
+          }
+    return {
+      label: "Project files",
+      copy: "Working files in this project's folder.",
+      badge: "This computer",
+    }
   })
 
   // Session titles label the grid's groups. They live in the sync store, which
@@ -549,63 +621,35 @@ export function FilesPane(
       .finally(() => setBusy(false))
   }
 
-  // Tabs are keyed by name because that is what the strip shows. Re-opening a
-  // name from a different folder re-points the existing tab rather than
-  // stacking a second, indistinguishable one.
   const open = (row: FileRow) => {
     const from = current()
+    const target = row.path ?? [where(), row.name].filter(Boolean).join("/")
     const file: PaneFile = {
       name: row.name,
-      path: row.path ?? [where(), row.name].filter(Boolean).join("/"),
+      path: target,
       source: from.name,
       readonly: from.readonly,
     }
-    const known = tabs().some((tab) => tab.name === file.name)
-    setTabs(known ? tabs().map((tab) => (tab.name === file.name ? file : tab)) : [...tabs(), file])
-    setActive(file.name)
+    if (props.onOpenFile) return props.onOpenFile(file)
+    uiStore.openFile(projectRoot(), file.path)
   }
 
-  const openRemote = (remote: RemoteFile) => {
-    const file: PaneFile = { name: remote.name, path: remote.path, source: current().name, readonly: true, remote }
-    const known = tabs().some((tab) => tab.name === file.name)
-    setTabs(known ? tabs().map((tab) => (tab.name === file.name ? file : tab)) : [...tabs(), file])
-    setActive(file.name)
-  }
-
-  const closeTab = (name: string) => {
-    setTabs(tabs().filter((tab) => tab.name !== name))
-    if (active() === name) setActive(undefined)
-  }
-
-  const move = (name: string, to: number) => {
-    const items = [...tabs()]
-    const index = items.findIndex((tab) => tab.name === name)
-    if (index === -1) return
-    const target = Math.max(0, Math.min(to, items.length - 1))
-    if (target === index) return
-    items.splice(target, 0, items.splice(index, 1)[0])
-    setTabs(items)
-  }
-
-  const selected = createMemo(() => tabs().find((tab) => tab.name === active()))
+  const openRemote = (remote: RemoteFile) => setRemoteOpen(remote)
 
   // The picker walks the real filesystem and hands back an absolute path. It
   // needs the dialog host, so outside a provider the typed path stays the
   // only route in — which is also what keeps this form testable.
   const browse = () => {
-    dialog?.show(
-      () => (
-        <FolderPicker
-          kind="folder"
-          title="Connect a folder"
-          onSelect={(result) => {
-            const picked = Array.isArray(result) ? result[0] : result
-            if (picked) setConnect("path", picked)
-          }}
-        />
-      ),
-      { lite: true },
-    )
+    dialog?.show(() => (
+      <FolderPicker
+        kind="folder"
+        title="Connect a folder"
+        onSelect={(result) => {
+          const picked = Array.isArray(result) ? result[0] : result
+          if (picked) setConnect("path", picked)
+        }}
+      />
+    ))
   }
 
   const submit = (event: SubmitEvent) => {
@@ -678,29 +722,134 @@ export function FilesPane(
   }
 
   const browser = () => (
-    <>
-      <div class="files-source-row">
-        <SourceMenu
-          sources={sources()}
-          active={current()}
-          onOpen={() => setOpened(opened() + 1)}
-          onPick={(next) => {
-            choose(next.id)
-            setPath([])
-            setFilter("")
-            // The notice describes the source being left, not the one arriving.
-            setError("")
-          }}
-          onRevoke={revoke}
-          onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "project" })}
-        />
-      </div>
+    <div class="files-browser" data-files-browser data-source-kind={current().kind}>
+      <header class="files-browser__header">
+        <div class="files-browser__toolbar">
+          <SourceMenu
+            sources={sources()}
+            active={current()}
+            onOpen={() => setOpened(opened() + 1)}
+            onPick={(next) => {
+              choose(next.id)
+              setPath([])
+              setFilter("")
+              // The notice describes the source being left, not the one arriving.
+              setError("")
+              setListingError("")
+            }}
+            onRevoke={revoke}
+            onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "project" })}
+          />
+
+          <div class="files-search" role="search">
+            <span class="files-search__icon" aria-hidden="true">
+              <IconSearch size={14} strokeWidth={1.5} />
+            </span>
+            <input
+              class="files-search__input"
+              type="search"
+              value={filter()}
+              placeholder={filterCopy()}
+              aria-label={filterCopy()}
+              onInput={(event) => setFilter(event.currentTarget.value)}
+            />
+            <Show when={filter()}>
+              <button
+                type="button"
+                class="files-search__clear"
+                data-search-clear
+                aria-label="Clear file search"
+                onClick={() => setFilter("")}
+              >
+                <IconX size={12} strokeWidth={1.6} />
+              </button>
+            </Show>
+          </div>
+        </div>
+
+        <Show
+          when={path().length > 0}
+          fallback={
+            <Show when={sourceContext()} keyed>
+              {(context) => (
+                <div
+                  class="files-source-context"
+                  data-source-context
+                  data-source-kind={current().kind}
+                  aria-label={`${context.label}. ${context.copy}`}
+                >
+                  <span class="files-source-context__label">{context.label}</span>
+                  <span class="files-source-context__divider" aria-hidden="true" />
+                  <span class="files-source-context__copy">{context.copy}</span>
+                  <span class="files-source-context__badge">{context.badge}</span>
+                </div>
+              )}
+            </Show>
+          }
+        >
+          <nav class="files-path" aria-label="Current folder">
+            <button
+              type="button"
+              class="files-path__root"
+              data-path-root
+              aria-label={`Open the root of ${current().name}`}
+              title={`Open the root of ${current().name}`}
+              onClick={() => {
+                setPath([])
+                setFilter("")
+              }}
+            >
+              <IconFolder size={14} strokeWidth={1.45} />
+            </button>
+            <For each={path()}>
+              {(part, index) => {
+                const last = () => index() === path().length - 1
+                return (
+                  <>
+                    <span class="files-path__separator" aria-hidden="true">
+                      <IconChevronRight size={12} strokeWidth={1.5} />
+                    </span>
+                    <button
+                      type="button"
+                      class="files-path__crumb"
+                      data-path-crumb={index()}
+                      aria-current={last() ? "page" : undefined}
+                      disabled={last()}
+                      title={part}
+                      onClick={() => {
+                        setPath(path().slice(0, index() + 1))
+                        setFilter("")
+                      }}
+                    >
+                      {part}
+                    </button>
+                  </>
+                )
+              }}
+            </For>
+          </nav>
+        </Show>
+      </header>
 
       <Show when={connect.open}>
         <form class="files-connect" aria-label="Connect a folder" onSubmit={submit}>
+          <div class="files-connect__heading">
+            <span>
+              <strong>Connect a folder</strong>
+              <small>Add another location to this session.</small>
+            </span>
+            <button
+              type="button"
+              class="files-connect__dismiss"
+              aria-label="Close folder connection form"
+              onClick={() => setConnect("open", false)}
+            >
+              <IconX size={13} strokeWidth={1.6} />
+            </button>
+          </div>
           <div class="files-connect__row">
             <input
-              class="files-search"
+              class="files-connect__path"
               value={connect.path}
               aria-label="Folder path"
               placeholder="/home/you/data"
@@ -755,22 +904,11 @@ export function FilesPane(
         </form>
       </Show>
 
-      <div class="files-search-row">
-        <input
-          class="files-search"
-          type="search"
-          value={filter()}
-          placeholder={`Search ${current().name}`}
-          aria-label={`Search ${current().name}`}
-          onInput={(event) => setFilter(event.currentTarget.value)}
-        />
-      </div>
-
       {/* A Volume listing spawns a Modal process and takes seconds. Without this
           the pane looks frozen, and the rows still on screen describe the folder
           being left -- which is how clicking a second one asked for a folder
           inside a folder that was never opened. */}
-      <Show when={entries.loading}>
+      <Show when={sourceLoading()}>
         <div class="files-loading" role="status" data-files-loading>
           <span class="files-loading__spark" aria-hidden="true" />
           Loading {current().name}…
@@ -778,8 +916,17 @@ export function FilesPane(
       </Show>
 
       <Show when={error()}>
-        <div class="files-notice" role="status">
+        <div class="files-notice" role="alert">
           {error()}
+        </div>
+      </Show>
+
+      <Show when={!sourceLoading() && sourceError()}>
+        <div class="files-notice files-notice--error" role="alert" data-files-error>
+          <span>{sourceError()}</span>
+          <button type="button" class="files-notice__retry" onClick={retrySource}>
+            Retry
+          </button>
         </div>
       </Show>
 
@@ -788,7 +935,14 @@ export function FilesPane(
           derive the exclusivity. */}
       <Switch>
         <Match when={current().kind === "trash"}>
-          <TrashList rows={trash()} busy={busy()} onRestore={restore} />
+          <TrashList
+            rows={trash()}
+            busy={busy()}
+            filtered={Boolean(filter().trim())}
+            loading={sourceLoading()}
+            unavailable={Boolean(sourceError())}
+            onRestore={restore}
+          />
         </Match>
 
         <Match when={current().kind === "artifacts"}>
@@ -797,6 +951,8 @@ export function FilesPane(
             titles={titles()}
             currentSession={sessionID()}
             filtered={Boolean(filter().trim())}
+            loading={sourceLoading()}
+            unavailable={Boolean(sourceError())}
             url={artifactUrl}
             read={readArtifact}
             onOpen={openArtifact}
@@ -809,7 +965,10 @@ export function FilesPane(
           <FileTable
             rows={rows()}
             depth={path().length}
-            busy={entries.loading}
+            busy={sourceLoading()}
+            filtered={Boolean(filter().trim())}
+            loading={sourceLoading()}
+            unavailable={Boolean(sourceError())}
             onUp={() => {
               setPath(path().slice(0, -1))
               // Symmetric with descending: a query typed for the folder being
@@ -837,45 +996,20 @@ export function FilesPane(
           />
         </Match>
       </Switch>
-    </>
+    </div>
   )
 
   return (
     <section class="files-pane" aria-label="Files">
-      <FileTabs
-        open={tabs().map((tab) => tab.name)}
-        active={active()}
-        onSelect={(id) => setActive(id)}
-        onClose={closeTab}
-        onReorder={move}
-      />
-
-      <Show when={selected()} keyed fallback={browser()}>
-        {(file) =>
-          file.remote ? (
-            <RemoteFileView
-              file={file.remote}
-              read={remoteBytes}
-              onDownload={(remote) => void downloadRemote({ name: remote.name, type: "file", path: remote.path })}
-              onClose={() => closeTab(file.name)}
-            />
-          ) : (
-            // FileView reads the SDK, sync and router contexts, so a standalone
-            // mount cannot render it; `view` lets that harness substitute a stub
-            // exactly as `request` substitutes the transport. Production never
-            // passes it and always gets the real viewer.
-            (props.view?.(file) ?? (
-              <FileView
-                directory={projectRoot()}
-                path={file.path}
-                subtitle={file.source}
-                active
-                writable={file.readonly ? false : undefined}
-                onClose={() => closeTab(file.name)}
-              />
-            ))
-          )
-        }
+      <Show when={remoteOpen()} keyed fallback={browser()}>
+        {(file) => (
+          <RemoteFileView
+            file={file}
+            read={remoteBytes}
+            onDownload={(remote) => void downloadRemote({ name: remote.name, type: "file", path: remote.path })}
+            onClose={() => setRemoteOpen()}
+          />
+        )}
       </Show>
     </section>
   )

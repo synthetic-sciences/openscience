@@ -4,6 +4,7 @@ import { JsonStore } from "../util/jsonstore"
 import z from "zod"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
+import { CredentialLifecycle } from "../credentials/lifecycle"
 
 export const OAUTH_DUMMY_KEY = "synsc-oauth-dummy-key"
 
@@ -71,7 +72,9 @@ export namespace Auth {
   }
 
   export async function set(key: string, info: Info) {
-    await JsonStore.update(filepath, (data) => ({ ...data, [key]: info }))
+    await CredentialLifecycle.mutate(`provider-auth.set:${key}`, () =>
+      JsonStore.update(filepath, (data) => ({ ...data, [key]: info })),
+    )
 
     // Adding a real (non-Atlas) OpenRouter key while Managed spend is on
     // means the user is bringing their own key - flip the toggle to Own
@@ -113,8 +116,10 @@ export namespace Auth {
   }
 
   export async function remove(key: string) {
-    await JsonStore.update(filepath, (data) => {
-      delete data[key]
-    })
+    await CredentialLifecycle.mutate(`provider-auth.remove:${key}`, () =>
+      JsonStore.update(filepath, (data) => {
+        delete data[key]
+      }),
+    )
   }
 }

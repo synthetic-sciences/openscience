@@ -1,14 +1,12 @@
 import { Select } from "@synsci/ui/select"
+import { Icon, type IconProps } from "@synsci/ui/icon"
 import { showToast } from "@synsci/ui/toast"
-import { Component, For, createMemo, type JSX } from "solid-js"
+import { Component, For, createMemo, createSignal, type JSX } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-
-type PermissionAction = "allow" | "ask" | "deny"
-
-type PermissionObject = Record<string, PermissionAction>
-type PermissionValue = PermissionAction | PermissionObject | string[] | undefined
-type PermissionMap = Record<string, PermissionValue>
+import type { Config } from "@synsci/sdk/v2/client"
+import { PanelBody, PanelHeader, PanelScroll, Section } from "./settings/_shared"
+import { commitPermissionDefault, permissionActionFor, type PermissionAction } from "./settings/permission-defaults"
 
 const ACTIONS = [
   { value: "allow", label: "settings.permissions.action.allow" },
@@ -19,132 +17,121 @@ const ACTIONS = [
 const ITEMS = [
   {
     id: "read",
+    icon: "file",
     title: "settings.permissions.tool.read.title",
     description: "settings.permissions.tool.read.description",
   },
   {
     id: "edit",
+    icon: "edit",
     title: "settings.permissions.tool.edit.title",
     description: "settings.permissions.tool.edit.description",
   },
   {
     id: "glob",
+    icon: "folder-tree",
     title: "settings.permissions.tool.glob.title",
     description: "settings.permissions.tool.glob.description",
   },
   {
     id: "grep",
+    icon: "magnifying-glass",
     title: "settings.permissions.tool.grep.title",
     description: "settings.permissions.tool.grep.description",
   },
   {
     id: "list",
+    icon: "bullet-list",
     title: "settings.permissions.tool.list.title",
     description: "settings.permissions.tool.list.description",
   },
   {
     id: "bash",
+    icon: "console",
     title: "settings.permissions.tool.bash.title",
     description: "settings.permissions.tool.bash.description",
   },
   {
     id: "task",
+    icon: "task",
     title: "settings.permissions.tool.task.title",
     description: "settings.permissions.tool.task.description",
   },
   {
     id: "skill",
+    icon: "flask",
     title: "settings.permissions.tool.skill.title",
     description: "settings.permissions.tool.skill.description",
   },
   {
     id: "lsp",
+    icon: "code",
     title: "settings.permissions.tool.lsp.title",
     description: "settings.permissions.tool.lsp.description",
   },
   {
     id: "todoread",
+    icon: "checklist",
     title: "settings.permissions.tool.todoread.title",
     description: "settings.permissions.tool.todoread.description",
   },
   {
     id: "todowrite",
+    icon: "checklist",
     title: "settings.permissions.tool.todowrite.title",
     description: "settings.permissions.tool.todowrite.description",
   },
   {
     id: "planwrite",
+    icon: "branch",
     title: "settings.permissions.tool.planwrite.title",
     description: "settings.permissions.tool.planwrite.description",
   },
   {
     id: "webfetch",
+    icon: "link",
     title: "settings.permissions.tool.webfetch.title",
     description: "settings.permissions.tool.webfetch.description",
   },
   {
     id: "websearch",
+    icon: "magnifying-glass",
     title: "settings.permissions.tool.websearch.title",
     description: "settings.permissions.tool.websearch.description",
   },
   {
     id: "codesearch",
+    icon: "code-lines",
     title: "settings.permissions.tool.codesearch.title",
     description: "settings.permissions.tool.codesearch.description",
   },
   {
     id: "external_directory",
+    icon: "folder",
     title: "settings.permissions.tool.external_directory.title",
     description: "settings.permissions.tool.external_directory.description",
   },
   {
     id: "doom_loop",
+    icon: "alert-circle",
     title: "settings.permissions.tool.doom_loop.title",
     description: "settings.permissions.tool.doom_loop.description",
   },
 ] as const
 
-const VALID_ACTIONS = new Set<PermissionAction>(["allow", "ask", "deny"])
-
-function toMap(value: unknown): PermissionMap {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as PermissionMap
-
-  const action = getAction(value)
-  if (action) return { "*": action }
-
-  return {}
-}
-
-function getAction(value: unknown): PermissionAction | undefined {
-  if (typeof value === "string" && VALID_ACTIONS.has(value as PermissionAction)) return value as PermissionAction
-  return
-}
-
-function getRuleDefault(value: unknown): PermissionAction | undefined {
-  const action = getAction(value)
-  if (action) return action
-
-  if (!value || typeof value !== "object" || Array.isArray(value)) return
-
-  return getAction((value as Record<string, unknown>)["*"])
-}
-
 export const SettingsPermissions: Component = () => {
   const language = useLanguage()
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-        <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
-          <h2 class="text-16-medium text-text-strong">{language.t("settings.permissions.title")}</h2>
-          <p class="text-13-regular text-text-weak">{language.t("settings.permissions.description")}</p>
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-6 px-4 pb-10 sm:px-8 max-w-[760px]">
+    <PanelScroll>
+      <PanelHeader
+        title={language.t("settings.permissions.title")}
+        description={language.t("settings.permissions.description")}
+      />
+      <PanelBody>
         <PermissionToolDefaults />
-      </div>
-    </div>
+      </PanelBody>
+    </PanelScroll>
   )
 }
 
@@ -153,6 +140,7 @@ export const SettingsPermissions: Component = () => {
 export const PermissionToolDefaults: Component = () => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
+  const [busy, setBusy] = createSignal(false)
 
   const actions = createMemo(
     (): Array<{ value: PermissionAction; label: string }> =>
@@ -162,44 +150,37 @@ export const PermissionToolDefaults: Component = () => {
       })),
   )
 
-  const permission = createMemo(() => toMap(globalSync.data.config.permission))
-
-  const actionFor = (id: string): PermissionAction => {
-    const value = permission()[id]
-    const direct = getRuleDefault(value)
-    if (direct) return direct
-    const wildcard = getRuleDefault(permission()["*"])
-    if (wildcard) return wildcard
-    return "allow"
-  }
-
   const setPermission = async (id: string, action: PermissionAction) => {
-    const before = globalSync.data.config.permission
-    const map = toMap(before)
-    const existing = map[id]
-    const nextValue =
-      existing && typeof existing === "object" && !Array.isArray(existing) ? { ...existing, "*": action } : action
-    globalSync.set("config", "permission", { ...map, [id]: nextValue })
-    globalSync.updateConfig({ permission: { [id]: nextValue } }).catch((err: unknown) => {
-      globalSync.set("config", "permission", before)
-      const message = err instanceof Error ? err.message : String(err)
-      showToast({ title: language.t("settings.permissions.toast.updateFailed.title"), description: message })
+    const result = await commitPermissionDefault(id, action, {
+      isBusy: busy,
+      permission: () => globalSync.data.config.permission,
+      setPermission: (permission) => globalSync.set("config", "permission", permission as Config["permission"]),
+      setBusy,
+      write: (permission) => globalSync.updateConfig({ permission }),
     })
+    if (!result.ok && "error" in result) {
+      showToast({ title: language.t("settings.permissions.toast.updateFailed.title"), description: result.error })
+    }
   }
 
   return (
-    <div class="flex flex-col gap-2">
-      <h3 class="text-13-medium text-text-weak tracking-wide">{language.t("settings.permissions.section.tools")}</h3>
-      <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+    <Section
+      title={language.t("settings.permissions.section.tools")}
+      description="Set the default response for each class of tool request."
+    >
+      <div class="settings-card">
         <For each={ITEMS}>
           {(item) => (
-            <SettingsRow title={language.t(item.title)} description={language.t(item.description)}>
+            <SettingsRow icon={item.icon} title={language.t(item.title)} description={language.t(item.description)}>
               <Select
                 aria-label={`${language.t(item.title)} permission`}
                 options={actions()}
-                current={actions().find((o) => o.value === actionFor(item.id))}
+                current={actions().find(
+                  (o) => o.value === permissionActionFor(globalSync.data.config.permission, item.id),
+                )}
                 value={(o) => o.value}
                 label={(o) => o.label}
+                disabled={busy()}
                 onSelect={(option) => option && setPermission(item.id, option.value)}
                 variant="secondary"
                 size="small"
@@ -209,11 +190,12 @@ export const PermissionToolDefaults: Component = () => {
           )}
         </For>
       </div>
-    </div>
+    </Section>
   )
 }
 
 interface SettingsRowProps {
+  icon: IconProps["name"]
   title: string
   description: string
   children: JSX.Element
@@ -221,12 +203,13 @@ interface SettingsRowProps {
 
 const SettingsRow: Component<SettingsRowProps> = (props) => {
   return (
-    <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5 border-b border-border-weak-base last:border-none">
-      <div class="flex flex-col gap-0.5 min-w-0">
+    <div class="settings-row justify-between">
+      <Icon name={props.icon} size="small" class="shrink-0 text-icon-weak-base" />
+      <div class="flex min-w-0 flex-1 basis-[220px] flex-col gap-0.5">
         <span class="text-14-medium text-text-strong">{props.title}</span>
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </div>
-      <div class="flex-shrink-0">{props.children}</div>
+      <div class="ml-auto max-w-full flex-shrink-0">{props.children}</div>
     </div>
   )
 }

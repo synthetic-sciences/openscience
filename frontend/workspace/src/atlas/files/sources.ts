@@ -1,11 +1,18 @@
-import { fileSourceName, type FilesystemGrant } from "@/atlas/file-sources"
+import { fileSourceName, normalizeFilePath, type FilesystemGrant } from "@/atlas/file-sources"
 
-export type SourceGroup = "Artifacts" | "This computer" | "Remote"
+/**
+ * The picker is an information architecture, not a list of storage backends.
+ * A saved deliverable, a working folder, and a recovery location have
+ * materially different lifetimes, so they do not share one ambiguous bucket.
+ */
+export type SourceGroup = "Saved" | "Working files" | "Remote" | "Recovery"
 
 export interface PaneSource {
   id: string
   group: SourceGroup
   name: string
+  /** A short, truthful description shown when a source has no useful path. */
+  detail?: string
   sub?: string
   root: string
   kind: "artifacts" | "trash" | "project" | "session" | "connected" | "modal"
@@ -13,7 +20,7 @@ export interface PaneSource {
   live?: boolean
 }
 
-const ORDER: SourceGroup[] = ["Artifacts", "This computer", "Remote"]
+const ORDER: SourceGroup[] = ["Saved", "Working files", "Remote", "Recovery"]
 
 export function buildSources(input: {
   projectRoot: string
@@ -24,25 +31,33 @@ export function buildSources(input: {
   modal?: boolean
 }): PaneSource[] {
   const list: PaneSource[] = [
-    { id: "artifacts", group: "Artifacts", name: "All artifacts", root: "", kind: "artifacts" },
-    // Listed unconditionally: a trash entry that appears only once something
-    // is in it is a recovery path nobody can find in advance, and the delete
-    // dialog promises this surface before anything has been deleted.
-    { id: "trash", group: "Artifacts", name: "Trash", root: "", kind: "trash" },
+    {
+      id: "artifacts",
+      group: "Saved",
+      name: "Saved artifacts",
+      detail: "Durable, versioned deliverables",
+      root: "",
+      kind: "artifacts",
+    },
     {
       id: "project",
-      group: "This computer",
+      group: "Working files",
       name: input.projectName,
       sub: input.projectRoot,
       root: input.projectRoot,
       kind: "project",
     },
   ]
-  if (input.sessionRoot) {
+  // Legacy sessions may report the project directory itself as their workspace
+  // grant. That is not isolated scratch space, and listing the same path twice
+  // under two lifetimes would be actively misleading. Only a distinct,
+  // normalized location earns the Session workspace source.
+  if (input.sessionRoot && normalizeFilePath(input.sessionRoot) !== normalizeFilePath(input.projectRoot)) {
     list.push({
       id: "session",
-      group: "This computer",
-      name: "Session files",
+      group: "Working files",
+      name: "Session workspace",
+      detail: "Scratch files for this session",
       sub: input.sessionRoot,
       root: input.sessionRoot,
       kind: "session",
@@ -51,7 +66,7 @@ export function buildSources(input: {
   for (const grant of input.grants) {
     list.push({
       id: grant.id,
-      group: "This computer",
+      group: "Working files",
       name: fileSourceName(grant.path),
       sub: grant.path,
       root: grant.path,
@@ -66,8 +81,28 @@ export function buildSources(input: {
   // It browses and downloads but never writes: the pane reaches Modal over its
   // API, not a mount, so there is nothing to save back through.
   if (input.modal) {
-    list.push({ id: "modal", group: "Remote", name: "Modal", sub: "Volumes", root: "", kind: "modal", readonly: true })
+    list.push({
+      id: "modal",
+      group: "Remote",
+      name: "Modal Volumes",
+      detail: "Connected remote storage",
+      root: "",
+      kind: "modal",
+      readonly: true,
+    })
   }
+
+  // Listed unconditionally and last: recovery should remain discoverable, but
+  // it should not sit between the primary saved destination and working files.
+  // The delete flow promises this location before the first item is deleted.
+  list.push({
+    id: "trash",
+    group: "Recovery",
+    name: "Trash",
+    detail: "Recoverable for 30 days",
+    root: "",
+    kind: "trash",
+  })
   return list
 }
 

@@ -5,6 +5,12 @@ const titlecase = (s: string) =>
     .map((w) => w[0].toUpperCase() + w.slice(1))
     .join(" ")
 
+export function sentenceCaseLabel(value: string): string {
+  const label = value.replace(/[\s_-]+/g, " ").trim()
+  if (!label) return label
+  return label[0].toLocaleUpperCase() + label.slice(1)
+}
+
 // There's no reliable signal to distinguish a first-party multi-word tool id
 // (e.g. "science_list_dbs") from an MCP "namespace_tool" id, so titlecase both.
 export function humanizeToolName(tool: string): string {

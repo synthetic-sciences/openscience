@@ -45,11 +45,27 @@ describe("workbench visual scale", () => {
   })
 
   test("defines one floating composer geometry contract", async () => {
+    const shell = await Bun.file(new URL("./atlas.css", import.meta.url)).text()
+    const composer = await Bun.file(new URL("../components/prompt-input.css", import.meta.url)).text()
+    const conversation = await Bun.file(new URL("../components/chat-surface.css", import.meta.url)).text()
+
+    expect(shell).toContain("--workspace-composer-reserve: 116px")
+    expect(shell).not.toContain("--workspace-composer-radius")
+    expect(shell).not.toContain("\n.workspace-composer {")
+    expect(conversation).toContain("width: min(100%, 740px)")
+    expect(composer).toMatch(/form\.workspace-composer\s*\{[^}]*min-height: 92px/s)
+    expect(composer).toContain("border-radius: var(--radius-xl)")
+  })
+})
+
+describe("workspace motion contract", () => {
+  test("uses shared timing tokens and explicit transition properties", async () => {
     const css = await Bun.file(new URL("./atlas.css", import.meta.url)).text()
 
-    expect(css).toContain("--workspace-composer-radius: 14px")
-    expect(css).toContain("--workspace-composer-reserve: 116px")
-    expect(css).toContain("width: min(100%, 740px)")
-    expect(css).toContain("min-height: 90px")
+    expect(css).not.toContain("transition: all")
+    expect(css).toContain("background-color var(--duration-fast) var(--ease-standard)")
+    expect(css).toContain("box-shadow var(--duration-slow) var(--ease-out-expo)")
+    expect(css).toContain(".atlas-btn:active:not(:disabled)")
+    expect(css).toContain("transform: scale(0.98)")
   })
 })

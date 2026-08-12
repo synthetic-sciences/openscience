@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@synsci/ui/context"
-import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, createSignal, onCleanup, untrack } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import { Persist, persisted } from "@/utils/persist"
@@ -9,23 +9,34 @@ export type LocalPTY = {
   id: string
   title: string
   titleNumber: number
+  /** Session whose execution authority created this project terminal. */
+  sessionID?: string
   rows?: number
   cols?: number
   buffer?: string
   scrollY?: number
 }
 
-const MAX_TERMINAL_SESSIONS = 20
+const MAX_TERMINAL_PROJECTS = 20
 
-type TerminalSession = ReturnType<typeof createTerminalSession>
+type TerminalSession = ReturnType<typeof createProjectTerminalSession>
 
 type TerminalCacheEntry = {
   value: TerminalSession
   dispose: VoidFunction
 }
 
-function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, session?: string) {
-  const legacy = session ? [`${dir}/terminal/${session}.v1`, `${dir}/terminal.v1`] : [`${dir}/terminal.v1`]
+function createProjectTerminalSession(
+  sdk: ReturnType<typeof useSDK>,
+  dir: string,
+  currentSession: () => string | undefined,
+  legacySession?: string,
+) {
+  // Capture the client for this project cache entry. The SDK provider itself
+  // is reactive, so reading `sdk.client` later from an old entry could send a
+  // cleanup for project A through project B after navigation.
+  const client = sdk.client
+  const legacy = legacySession ? [`${dir}/terminal/${legacySession}.v1`, `${dir}/terminal.v1`] : [`${dir}/terminal.v1`]
 
   const numberFromTitle = (title: string) => {
     const match = title.match(/^Terminal (\d+)$/)
@@ -35,8 +46,8 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
     return value
   }
 
-  const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, session, "terminal", legacy),
+  const [store, setStore, _, persistenceReady] = persisted(
+    Persist.workspace(dir, "terminal", legacy),
     createStore<{
       active?: string
       all: LocalPTY[]
@@ -45,8 +56,54 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
     }),
   )
 
-  const unsub = sdk.event.on("pty.exited", (event) => {
-    const id = event.properties.id
+  // The backend PTY list is the authority for process identity. Local
+  // persistence carries presentation state (active tab, terminal dimensions,
+  // buffered text) across reloads, then this reconciliation drops processes
+  // that no longer exist and adopts live ones without manufacturing new IDs.
+  const [hydrated, setHydrated] = createSignal(false)
+  let hydration: Promise<void> | undefined
+
+  const refresh = () => {
+    if (!persistenceReady()) return Promise.resolve()
+    if (hydration) return hydration
+    setHydrated(false)
+    hydration = client.pty
+      .list()
+      .then((response) => {
+        const remote = (response.data ?? []).filter((pty) => pty.status !== "exited")
+        const local = new Map(store.all.map((pty) => [pty.id, pty]))
+        const next = remote.map((pty, index) => {
+          const remembered = local.get(pty.id)
+          return {
+            ...remembered,
+            id: pty.id,
+            title: pty.title,
+            titleNumber: remembered?.titleNumber ?? numberFromTitle(pty.title) ?? index + 1,
+            sessionID: pty.sessionID,
+          } satisfies LocalPTY
+        })
+        batch(() => {
+          setStore("all", next)
+          if (!next.some((pty) => pty.id === store.active)) setStore("active", next[0]?.id)
+        })
+      })
+      .catch(() => {
+        // Keep the persisted project terminals visible while the local server
+        // is unavailable. Their sockets surface a precise reconnect state.
+      })
+      .finally(() => {
+        hydration = undefined
+        setHydrated(true)
+      })
+    return hydration
+  }
+
+  createEffect(() => {
+    if (!persistenceReady()) return
+    void refresh()
+  })
+
+  const removeExited = (id: string) => {
     if (!store.all.some((x) => x.id === id)) return
     batch(() => {
       setStore(
@@ -58,13 +115,18 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
         setStore("active", remaining[0]?.id)
       }
     })
+  }
+  const unsubExited = sdk.event.on("pty.exited", (event) => removeExited(event.properties.id))
+  const unsubDeleted = sdk.event.on("pty.deleted", (event) => removeExited(event.properties.id))
+  onCleanup(() => {
+    unsubExited()
+    unsubDeleted()
   })
-  onCleanup(unsub)
 
   const meta = { migrated: false }
 
   createEffect(() => {
-    if (!ready()) return
+    if (!persistenceReady()) return
     if (meta.migrated) return
     meta.migrated = true
 
@@ -82,10 +144,13 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
   })
 
   return {
-    ready,
+    has: (id: string) => store.all.some((pty) => pty.id === id),
+    refresh,
+    ready: () => persistenceReady() && hydrated(),
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
     new(opts?: { title?: string }) {
+      const session = currentSession()
       if (!session || session === "new") {
         return Promise.reject(new Error("Create or open a session before starting a terminal."))
       }
@@ -104,7 +169,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
           (number) => !existingTitleNumbers.has(number),
         ) ?? 1
 
-      return sdk.client.pty
+      return client.pty
         .create({
           sessionID: session,
           title: opts?.title ?? `Terminal ${nextNumber}`,
@@ -116,6 +181,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
             id,
             title: pty.data?.title ?? "Terminal",
             titleNumber: nextNumber,
+            sessionID: pty.data?.sessionID ?? session,
           }
           setStore("all", (all) => {
             const newAll = [...all, newTerminal]
@@ -134,7 +200,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
       if (index !== -1) {
         setStore("all", index, (existing) => ({ ...existing, ...pty }))
       }
-      sdk.client.pty
+      client.pty
         .update({
           ptyID: pty.id,
           title: pty.title,
@@ -148,29 +214,34 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
       const index = store.all.findIndex((x) => x.id === id)
       const pty = store.all[index]
       if (!pty) return
-      const clone = await sdk.client.pty
-        .create({
-          sessionID: session,
-          title: pty.title,
-        })
-        .catch((e) => {
-          console.error("Failed to clone terminal", e)
-          return undefined
-        })
-      if (!clone?.data) return
+      const session = currentSession()
+      if (!session || session === "new") {
+        throw new Error("Create or open a session before reconnecting a terminal.")
+      }
+      const clone = await client.pty.create({
+        sessionID: session,
+        title: pty.title,
+      })
+      if (!clone.data) throw new Error("The server did not return a replacement terminal.")
 
       const active = store.active === pty.id
+      const replacement = {
+        id: clone.data.id,
+        title: clone.data.title ?? pty.title,
+        titleNumber: pty.titleNumber,
+        sessionID: clone.data.sessionID ?? session,
+      }
 
       batch(() => {
-        setStore("all", index, {
-          id: clone.data.id,
-          title: clone.data.title ?? pty.title,
-          titleNumber: pty.titleNumber,
-        })
+        setStore("all", index, replacement)
         if (active) {
           setStore("active", clone.data.id)
         }
       })
+      await client.pty.remove({ ptyID: pty.id }).catch((error) => {
+        console.error("Failed to close replaced terminal", error)
+      })
+      return replacement
     },
     open(id: string) {
       setStore("active", id)
@@ -198,7 +269,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
         setStore("all", filtered)
       })
 
-      await sdk.client.pty.remove({ ptyID: id }).catch((e) => {
+      await client.pty.remove({ ptyID: id }).catch((e) => {
         console.error("Failed to close terminal", e)
       })
     },
@@ -233,7 +304,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     onCleanup(disposeAll)
 
     const prune = () => {
-      while (cache.size > MAX_TERMINAL_SESSIONS) {
+      while (cache.size > MAX_TERMINAL_PROJECTS) {
         const first = cache.keys().next().value
         if (!first) return
         const entry = cache.get(first)
@@ -242,17 +313,23 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
     }
 
-    const load = (dir: string, session?: string) => {
-      const key = `${dir}:${session ?? "new"}`
+    const load = (dir: string) => {
+      const key = dir
       const existing = cache.get(key)
       if (existing) {
         cache.delete(key)
         cache.set(key, existing)
+        void existing.value.refresh()
         return existing.value
       }
 
       const entry = createRoot((dispose) => ({
-        value: createTerminalSession(sdk, dir, session),
+        value: createProjectTerminalSession(
+          sdk,
+          dir,
+          () => params.id,
+          untrack(() => params.id),
+        ),
         dispose,
       }))
 
@@ -261,18 +338,22 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const workspace = createMemo(() => load(sdk.scope, params.id))
+    // Session navigation changes only the accessor used for future mutations.
+    // The project registry, PTY objects, mounted terminal emulators, and their
+    // WebSockets retain identity until the project itself changes.
+    const workspace = createMemo(() => load(sdk.scope))
+    const owner = (id: string) => Array.from(cache.values()).find((entry) => entry.value.has(id))?.value ?? workspace()
 
     return {
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
       new: (opts?: { title?: string }) => workspace().new(opts),
-      update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
-      clone: (id: string) => workspace().clone(id),
-      open: (id: string) => workspace().open(id),
-      close: (id: string) => workspace().close(id),
-      move: (id: string, to: number) => workspace().move(id, to),
+      update: (pty: Partial<LocalPTY> & { id: string }) => owner(pty.id).update(pty),
+      clone: (id: string) => owner(id).clone(id),
+      open: (id: string) => owner(id).open(id),
+      close: (id: string) => owner(id).close(id),
+      move: (id: string, to: number) => owner(id).move(id, to),
       next: () => workspace().next(),
       previous: () => workspace().previous(),
     }

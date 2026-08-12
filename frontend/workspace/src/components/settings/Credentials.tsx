@@ -1,21 +1,22 @@
 import { type Component } from "solid-js"
 import { CredentialServices } from "./CredentialServices"
+import { PanelBody, PanelHeader, PanelScroll } from "./_shared"
 
 export const Credentials: Component = () => (
-  <div class="flex h-full flex-col overflow-y-auto no-scrollbar">
-    <header class="settings-page-header">
-      <h2>Credentials</h2>
-      <p>Bring the rest of your research stack along. Add a service once, and it is ready when your tools need it.</p>
-    </header>
-    <div class="settings-page-body">
+  <PanelScroll>
+    <PanelHeader
+      title="Credentials"
+      description="Add service credentials once and make them available to the tools that need them."
+    />
+    <PanelBody>
       <CredentialServices
         category="integration"
         title="Integrations"
-        description="A quiet home for GitHub, OpenAlex, Hugging Face, Weights & Biases, and everything in between."
+        description="GitHub, OpenAlex, Hugging Face, Weights & Biases, and other research services."
         custom
       />
-    </div>
-  </div>
+    </PanelBody>
+  </PanelScroll>
 )
 
 export default Credentials

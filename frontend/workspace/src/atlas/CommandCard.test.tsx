@@ -54,8 +54,9 @@ test("live shell commands share the compact compute ledger", () => {
   )
 
   expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Preparing Titanic dataset")
-  expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("bash · python prepare.py")
-  expect(host.querySelectorAll(".kernel-card__metric")[0]?.textContent).toBe("12 MBrss")
-  expect(host.querySelectorAll(".kernel-card__metric")[1]?.textContent).toBe("0.8cores")
+  expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Shell · python prepare.py")
+  expect(host.querySelector(".kernel-card__uptime small")?.textContent).toBe("Runtime")
+  expect(host.querySelectorAll(".kernel-card__metric")[1]?.textContent).toBe("12 MBMemory")
+  expect(host.querySelectorAll(".kernel-card__metric")[2]?.textContent).toBe("0.8CPU cores")
   expect(host.querySelector('button[aria-label="Stop Preparing Titanic dataset"]')).not.toBeNull()
 })

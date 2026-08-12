@@ -4,6 +4,8 @@ import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
 import { resolveDataDirectory } from "./data-dir"
+import { DataRoot } from "./data-root"
+import { DataRootBarrier } from "./data-root-barrier"
 
 const app = "openscience"
 
@@ -57,13 +59,15 @@ const state = migrateDir(xdgState!)
 // file exists (config/data-location) we honour it; otherwise ~/.openscience.
 // Resolve once at boot so every Global.Path.data consumer sees one value.
 const explicit = override("OPENSCIENCE_DATA_DIR")
-const pointer = (() => {
+const storedPointer = (() => {
   try {
     return readFileSync(path.join(config, "data-location"), "utf8").trim() || undefined
   } catch {
     return
   }
 })()
+const anchored = explicit ? undefined : await DataRoot.active(config)
+const pointer = anchored ?? storedPointer
 const previous = migrateDir(xdgData!)
 const resolved = await resolveDataDirectory({
   home: process.env.OPENSCIENCE_TEST_HOME || os.homedir(),
@@ -71,7 +75,28 @@ const resolved = await resolveDataDirectory({
   explicit,
   pointer,
 })
-const data = resolved.path
+const selected = await DataRoot.ensure(config, resolved.path, !!explicit)
+const data = selected.path
+DataRootBarrier.configure({ root: data, config })
+
+// The stable link is authoritative. Reconcile the compatibility pointer after
+// an interrupted switch so an older OpenScience build selects the same root.
+if (selected.managed) {
+  const defaultRoot = await fs
+    .realpath(path.join(process.env.OPENSCIENCE_TEST_HOME || os.homedir(), ".openscience"))
+    .catch(() => path.resolve(process.env.OPENSCIENCE_TEST_HOME || os.homedir(), ".openscience"))
+  const pointerPath = path.join(config, "data-location")
+  if (selected.target === defaultRoot) {
+    await fs.rm(pointerPath, { force: true }).catch(() => undefined)
+  } else if (storedPointer !== selected.target) {
+    const temporary = `${pointerPath}.${process.pid}.${crypto.randomUUID()}.tmp`
+    await Bun.write(temporary, `${selected.target}\n`, { mode: 0o600 })
+    await fs.rename(temporary, pointerPath).catch(async (error) => {
+      await fs.rm(temporary, { force: true }).catch(() => undefined)
+      throw error
+    })
+  }
+}
 
 // Legacy file names inside the migrated dirs (pre-rename releases).
 migrateFile(data, "synsci-session.json", "openscience-session.json")
@@ -87,13 +112,18 @@ export namespace Global {
    *  as a permanent duplicate nothing ever tells the user they can delete.
    *  `openscience doctor` reports it and can remove it. Undefined once the
    *  data root is the same directory or the user has cleaned it up. */
-  export const LegacyData = previous === data ? undefined : previous
+  export const LegacyData = previous === selected.target ? undefined : previous
   export const Path = {
     // Allow override via OPENSCIENCE_TEST_HOME for test isolation
     get home() {
       return process.env.OPENSCIENCE_TEST_HOME || os.homedir()
     },
     data,
+    dataManaged: selected.managed,
+    /** Current physical destination behind the stable data-root link. */
+    get dataTarget() {
+      return selected.managed ? fs.realpath(data).catch(() => selected.target) : Promise.resolve(selected.target)
+    },
     bin: path.join(data, "bin"),
     log: path.join(data, "log"),
     cache,

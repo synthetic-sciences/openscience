@@ -14,6 +14,12 @@ import {
   type Embedding,
 } from "./binary"
 
+function sentence(value: string) {
+  const text = value.trim()
+  if (!text) return text
+  return `${text.charAt(0).toLocaleUpperCase()}${text.slice(1)}`
+}
+
 export function BinaryScienceView(props: {
   path: string
   directory: string
@@ -61,7 +67,7 @@ export function BinaryScienceView(props: {
                 {inspection.error instanceof Error ? inspection.error.message : String(inspection.error)}
               </span>
               <button type="button" style={button()} onClick={() => void refetch()}>
-                retry
+                Retry
               </button>
             </div>
           }
@@ -115,7 +121,7 @@ function Header(props: { file: BinaryInspection }): JSX.Element {
             color: "var(--color-accent)",
             "font-family": FONT_MONO,
             "font-size": "10px",
-            "font-weight": 700,
+            "font-weight": "var(--font-weight-emphasis)",
           }}
         >
           {props.file.format.toUpperCase()}
@@ -265,10 +271,10 @@ function Hdf5(props: { file: BinaryInspection }): JSX.Element {
             <table style={table()}>
               <thead>
                 <tr>
-                  <th style={head()}>path</th>
-                  <th style={head()}>shape</th>
-                  <th style={head()}>dtype</th>
-                  <th style={head()}>storage</th>
+                  <th style={head()}>Path</th>
+                  <th style={head()}>Shape</th>
+                  <th style={head()}>Data type</th>
+                  <th style={head()}>Storage</th>
                 </tr>
               </thead>
               <tbody>
@@ -378,9 +384,7 @@ function EmbeddingPlot(props: { value: Embedding }): JSX.Element {
         </svg>
         <Show when={labels().length}>
           <div style={{ display: "flex", "flex-direction": "column", gap: "7px", "min-width": 0 }}>
-            <span style={{ ...muted(), "font-size": "9px", "text-transform": "uppercase", "letter-spacing": "0.06em" }}>
-              {props.value.label ?? "groups"}
-            </span>
+            <span style={{ ...muted(), "font-size": "9px" }}>{sentence(props.value.label ?? "groups")}</span>
             <For each={labels().slice(0, 14)}>
               {(item) => (
                 <div
@@ -500,8 +504,8 @@ function Alignment(props: { file: BinaryInspection }): JSX.Element {
             <table style={table()}>
               <thead>
                 <tr>
-                  <th style={head()}>reference</th>
-                  <th style={head()}>length</th>
+                  <th style={head()}>Reference</th>
+                  <th style={head()}>Length</th>
                 </tr>
               </thead>
               <tbody>
@@ -533,14 +537,14 @@ function Alignment(props: { file: BinaryInspection }): JSX.Element {
 function Metric(props: { label: string; value: string; detail: string }): JSX.Element {
   return (
     <div style={card()}>
-      <span style={{ ...muted(), "text-transform": "uppercase", "letter-spacing": "0.06em" }}>{props.label}</span>
+      <span style={muted()}>{sentence(props.label)}</span>
       <strong
         style={{
           display: "block",
           "margin-top": "7px",
           "font-family": FONT_SANS,
           "font-size": "18px",
-          "font-weight": 600,
+          "font-weight": "var(--font-weight-emphasis)",
           color: "var(--color-text)",
           "letter-spacing": "-0.02em",
         }}
@@ -582,7 +586,7 @@ function Tags(props: { label: string; values: string[] }): JSX.Element {
   return (
     <Show when={props.values.length}>
       <div style={{ display: "grid", "grid-template-columns": "100px 1fr", gap: "8px" }}>
-        <span style={muted()}>{props.label}</span>
+        <span style={muted()}>{sentence(props.label)}</span>
         <div style={{ display: "flex", gap: "5px", "flex-wrap": "wrap" }}>
           <For each={props.values.slice(0, 30)}>
             {(value) => (
@@ -652,7 +656,7 @@ function Status(props: { ok: boolean; label: string }): JSX.Element {
         "white-space": "nowrap",
       }}
     >
-      {props.label}
+      {sentence(props.label)}
     </span>
   )
 }
@@ -701,10 +705,9 @@ function head(): JSX.CSSProperties {
     color: "var(--color-text-faint)",
     "font-family": FONT_MONO,
     "font-size": "9px",
-    "font-weight": 500,
+    "font-weight": "var(--font-weight-medium)",
     "text-align": "left",
-    "text-transform": "uppercase",
-    "letter-spacing": "0.04em",
+    "letter-spacing": "normal",
   }
 }
 

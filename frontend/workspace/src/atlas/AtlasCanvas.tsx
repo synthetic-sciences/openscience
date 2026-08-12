@@ -749,7 +749,7 @@ export function AtlasCanvas(): JSX.Element {
             style={{
               "font-family": FONT_SANS,
               "font-size": "13px",
-              "font-weight": 400,
+              "font-weight": "var(--font-weight-regular)",
               color: "var(--color-text)",
               overflow: "hidden",
               "text-overflow": "ellipsis",
@@ -765,7 +765,7 @@ export function AtlasCanvas(): JSX.Element {
                 "flex-shrink": 0,
                 "font-family": FONT_MONO,
                 "font-size": "10px",
-                "font-weight": 700,
+                "font-weight": "var(--font-weight-emphasis)",
                 color: "var(--color-text-muted)",
                 background: "var(--color-bg-subtle)",
                 border: "1px solid var(--color-border)",
@@ -785,21 +785,21 @@ export function AtlasCanvas(): JSX.Element {
         {/* Actions */}
         <div style={{ display: "flex", "align-items": "center", gap: "1px", "flex-shrink": 0 }}>
           <Show when={mode() === "orbit"}>
-            <CanvasAction title="reset pinned layout" disabled={saved().size === 0} onClick={resetLayout}>
-              <span style={{ "font-size": "10px", "letter-spacing": "0.04em" }}>reset</span>
+            <CanvasAction title="Reset Pinned Layout" disabled={saved().size === 0} onClick={resetLayout}>
+              <span style={{ "font-size": "10px", "letter-spacing": "0.04em" }}>Reset</span>
             </CanvasAction>
           </Show>
-          <CanvasAction title="fit to view" onClick={fit}>
+          <CanvasAction title="Fit to View" onClick={fit}>
             <FitGlyph />
           </CanvasAction>
           <CanvasAction
-            title={selectedID() ? "stage a child under the selected node" : "stage a node under the graph root"}
+            title={selectedID() ? "Stage a Child Under the Selected Node" : "Stage a Node Under the Graph Root"}
             disabled={creating() || !graphId()}
             onClick={() => void createNode()}
           >
             <IconPlus size={12} strokeWidth={1.7} />
           </CanvasAction>
-          <CanvasAction title="refresh" onClick={refresh}>
+          <CanvasAction title="Refresh" onClick={refresh}>
             <IconRefresh size={11} strokeWidth={1.6} />
           </CanvasAction>
         </div>
@@ -871,6 +871,8 @@ export function AtlasCanvas(): JSX.Element {
             ref={svgRef}
             width="100%"
             height="100%"
+            role="group"
+            aria-label="Atlas research graph. Use Tab to move between nodes and Enter to open one."
             style={{ display: "block", cursor: panStart ? "grabbing" : "grab", "touch-action": "none" }}
             onpointerdown={onPointerDown}
             onpointermove={onPointerMove}
@@ -933,11 +935,26 @@ export function AtlasCanvas(): JSX.Element {
                     <Show when={node()}>
                       <g
                         data-node-id={s.id}
+                        role="button"
+                        tabindex={0}
+                        aria-pressed={sel()}
+                        aria-label={`${node()!.title || node()!.slug_name || "Untitled node"}, ${node()!.kind || "untyped"}${node()!.outcome ? `, ${node()!.outcome}` : node()!.lifecycle === "staged" ? ", staged" : ""}`}
                         transform={(frame(), `translate(${s.x},${s.y})`)}
                         style={{ cursor: "pointer", opacity: dim() ? 0.26 : 1 }}
                         onmouseenter={(e) => setHover({ id: s.id, x: e.clientX, y: e.clientY })}
                         onmousemove={(e) => setHover({ id: s.id, x: e.clientX, y: e.clientY })}
                         onmouseleave={() => setHover((h) => (h?.id === s.id ? null : h))}
+                        onfocus={(event) => {
+                          const rect = event.currentTarget.getBoundingClientRect()
+                          setHover({ id: s.id, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+                        }}
+                        onblur={() => setHover((current) => (current?.id === s.id ? null : current))}
+                        onkeydown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return
+                          event.preventDefault()
+                          event.stopPropagation()
+                          setSelectedID((current) => (current === s.id ? null : s.id))
+                        }}
                       >
                         <Show
                           when={mode() === "cards"}
@@ -1090,7 +1107,8 @@ export function AtlasCanvas(): JSX.Element {
             <button
               type="button"
               onClick={() => setGraphMenu((v) => !v)}
-              title="switch graph"
+              title="Switch Graph"
+              aria-label="Switch Graph"
               style={{
                 all: "unset",
                 cursor: "pointer",
@@ -1110,7 +1128,7 @@ export function AtlasCanvas(): JSX.Element {
                 style={{
                   "font-family": FONT_SANS,
                   "font-size": "12px",
-                  "font-weight": 400,
+                  "font-weight": "var(--font-weight-regular)",
                   color: "var(--color-text)",
                   overflow: "hidden",
                   "text-overflow": "ellipsis",
@@ -1149,8 +1167,8 @@ export function AtlasCanvas(): JSX.Element {
               "pointer-events": "none",
             }}
           >
-            <div>scroll to zoom · drag to move</div>
-            <div>click a node to open</div>
+            <div>Scroll to zoom · drag to move</div>
+            <div>Click a node to open · Tab for keyboard access</div>
           </div>
         </div>
       </Show>
@@ -1191,7 +1209,7 @@ function CardNode(props: { node: AtlasNode; selected: boolean; hovered: boolean 
         y={-CARD_H / 2 + 36}
         font-size="13"
         fill="var(--color-text)"
-        style={{ "font-family": FONT_SANS, "font-weight": 400, "pointer-events": "none" }}
+        style={{ "font-family": FONT_SANS, "font-weight": "var(--font-weight-regular)", "pointer-events": "none" }}
       >
         {truncate(props.node.title || props.node.slug_name || "untitled", 28)}
       </text>
@@ -1242,7 +1260,7 @@ function OrbitTooltip(props: { node: AtlasNode; x: number; y: number; byId: Map<
         style={{
           "font-family": FONT_SANS,
           "font-size": "13px",
-          "font-weight": 400,
+          "font-weight": "var(--font-weight-regular)",
           color: "var(--color-text)",
           "line-height": 1.3,
         }}
@@ -1335,7 +1353,7 @@ function NodeDetail(props: { node: AtlasNode; onClose: () => void }): JSX.Elemen
           style={{
             "font-family": FONT_SANS,
             "font-size": "14px",
-            "font-weight": 400,
+            "font-weight": "var(--font-weight-regular)",
             color: "var(--color-text)",
             flex: 1,
             overflow: "hidden",
@@ -1560,7 +1578,7 @@ function EmptyHero(props: { onCreate: () => void }): JSX.Element {
           color: "var(--color-on-accent)",
           "font-family": FONT_MONO,
           "font-size": "11px",
-          "font-weight": 400,
+          "font-weight": "var(--font-weight-regular)",
           display: "inline-flex",
           "align-items": "center",
           gap: "6px",
@@ -1622,7 +1640,7 @@ function InitHero(props: { onInit: () => void; onChat: () => void; busy: boolean
           color: "var(--color-on-accent)",
           "font-family": FONT_MONO,
           "font-size": "11px",
-          "font-weight": 400,
+          "font-weight": "var(--font-weight-regular)",
           display: "inline-flex",
           "align-items": "center",
           gap: "6px",

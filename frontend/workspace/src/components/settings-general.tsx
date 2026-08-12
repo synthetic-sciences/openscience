@@ -1,4 +1,4 @@
-import { Component, For, createMemo, type JSX } from "solid-js"
+import { Component, For, createMemo, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
@@ -10,7 +10,8 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { URLS } from "@/config/urls"
-import { Link } from "./link"
+import { PanelBody, PanelHeader, PanelScroll, Section as SettingsSection } from "./settings/_shared"
+import "./settings-general.css"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -19,7 +20,7 @@ let demoSoundState = {
 
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
-const playDemoSound = (src: string) => {
+const playDemoSound = (src: string, volume: number) => {
   if (demoSoundState.cleanup) {
     demoSoundState.cleanup()
   }
@@ -27,11 +28,11 @@ const playDemoSound = (src: string) => {
   clearTimeout(demoSoundState.timeout)
 
   demoSoundState.timeout = setTimeout(() => {
-    demoSoundState.cleanup = playSound(src)
+    demoSoundState.cleanup = playSound(src, volume)
   }, 100)
 }
 
-// The appearance / theme / notification / sound / update controls, without any
+// The appearance / notification / sound / update controls, without any
 // outer scroll wrapper or header — so the new General settings panel can compose
 // them below its Account / Model / Licensing sections. `SettingsGeneral` below
 // keeps the standalone panel (scroll + header) for any legacy mount.
@@ -40,6 +41,12 @@ export const AppearanceSections: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
+
+  onCleanup(() => {
+    clearTimeout(demoSoundState.timeout)
+    demoSoundState.cleanup?.()
+    demoSoundState = { cleanup: undefined, timeout: undefined }
+  })
 
   const [store, setStore] = createStore({
     checking: false,
@@ -50,7 +57,7 @@ export const AppearanceSections: Component = () => {
     setStore("checking", true)
 
     void platform
-      .checkUpdate()
+      .checkUpdate({ refresh: true })
       .then((result) => {
         if (!result.updateAvailable) {
           showToast({
@@ -99,33 +106,6 @@ export const AppearanceSections: Component = () => {
       .finally(() => setStore("checking", false))
   }
 
-  // Swatch data for the theme picker — pull representative seed colors from the
-  // active mode's variant so each swatch previews how the theme actually looks.
-  const themeSwatches = createMemo(() => {
-    const mode = theme.mode()
-    return Object.entries(theme.themes()).map(([id, def]) => {
-      const variant = mode === "dark" ? def.dark : def.light
-      const seeds = variant?.seeds
-      return {
-        id,
-        name: def.name ?? id,
-        bg: seeds?.neutral ?? "#111111",
-        dots: [
-          seeds?.primary ?? seeds?.interactive ?? "#888888",
-          seeds?.info ?? "#6ea8fe",
-          seeds?.success ?? "#38b000",
-          seeds?.warning ?? "#f7a14d",
-        ],
-      }
-    })
-  })
-
-  const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
-    { value: "system", label: language.t("theme.scheme.system") },
-    { value: "light", label: language.t("theme.scheme.light") },
-    { value: "dark", label: language.t("theme.scheme.dark") },
-  ])
-
   const languageOptions = createMemo(() =>
     language.locales.map((locale) => ({
       value: locale,
@@ -133,15 +113,45 @@ export const AppearanceSections: Component = () => {
     })),
   )
 
+  const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
+    { value: "system", label: language.t("theme.scheme.system") },
+    { value: "light", label: language.t("theme.scheme.light") },
+    { value: "dark", label: language.t("theme.scheme.dark") },
+  ])
+
   const soundOptions = [...SOUND_OPTIONS]
 
   return (
-    <div class="flex flex-col gap-8 w-full max-w-[760px]">
-      {/* Appearance Section */}
-      <div class="flex flex-col gap-3">
-        <h3 class="text-13-medium text-text-weak tracking-wide">{language.t("settings.general.section.appearance")}</h3>
+    <>
+      <SettingsSection title={language.t("settings.general.section.appearance")}>
+        <div class="settings-card">
+          <SettingsRow
+            title={language.t("settings.general.row.appearance.title")}
+            description={language.t("settings.general.row.appearance.description")}
+          >
+            <div
+              role="group"
+              aria-label={language.t("settings.general.row.appearance.title")}
+              class="inline-flex max-w-full items-center rounded-md border border-border-weak-base bg-surface-base p-0.5"
+            >
+              <For each={colorSchemeOptions()}>
+                {(option) => (
+                  <button
+                    type="button"
+                    aria-pressed={theme.colorScheme() === option.value}
+                    class="h-8 min-w-[56px] rounded-sm px-2.5 text-12-medium text-text-weak transition-colors duration-150 hover:text-text-strong focus-visible:z-10"
+                    classList={{
+                      "bg-surface-raised-strong text-text-strong shadow-xs": theme.colorScheme() === option.value,
+                    }}
+                    onClick={() => theme.setColorScheme(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                )}
+              </For>
+            </div>
+          </SettingsRow>
 
-        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
           <SettingsRow
             title={language.t("settings.general.row.language.title")}
             description={language.t("settings.general.row.language.description")}
@@ -158,117 +168,11 @@ export const AppearanceSections: Component = () => {
               triggerVariant="settings"
             />
           </SettingsRow>
-
-          <SettingsRow
-            title={language.t("settings.general.row.appearance.title")}
-            description={language.t("settings.general.row.appearance.description")}
-          >
-            <div class="inline-flex items-center gap-0.5 p-0.5 rounded-xs border border-border-weak-base bg-surface-base">
-              <For each={colorSchemeOptions()}>
-                {(option) => (
-                  <button
-                    type="button"
-                    class="h-7 px-3 rounded-xs text-13-medium transition-colors"
-                    classList={{
-                      "bg-surface-raised-base-active text-text-strong shadow-xs": theme.colorScheme() === option.value,
-                      "text-text-weak hover:text-text-strong": theme.colorScheme() !== option.value,
-                    }}
-                    onClick={() => theme.setColorScheme(option.value)}
-                    onMouseEnter={() => theme.previewColorScheme(option.value)}
-                    onMouseLeave={() => theme.cancelPreview()}
-                  >
-                    {option.label}
-                  </button>
-                )}
-              </For>
-            </div>
-          </SettingsRow>
         </div>
-      </div>
+      </SettingsSection>
 
-      {/* Theme Section */}
-      <div class="flex flex-col gap-3">
-        <div class="flex flex-col gap-0.5">
-          <h3 class="text-13-medium text-text-weak tracking-wide">{language.t("settings.general.row.theme.title")}</h3>
-          <p class="text-12-regular text-text-weak">
-            {language.t("settings.general.row.theme.description")}{" "}
-            <Link href={URLS.docsThemes}>{language.t("common.learnMore")}</Link>
-          </p>
-        </div>
-
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-          <For each={themeSwatches()}>
-            {(swatch) => (
-              <button
-                type="button"
-                aria-label={`Use ${swatch.name} theme (${swatch.id})`}
-                class="group flex flex-col gap-2 p-2 rounded-[4px] text-left transition-all"
-                style={{
-                  border:
-                    theme.themeId() === swatch.id
-                      ? "2px solid var(--color-text-interactive-base, var(--color-text-strong))"
-                      : "2px solid var(--color-border-weak-base)",
-                  background:
-                    theme.themeId() === swatch.id
-                      ? "var(--color-surface-raised-base-active, transparent)"
-                      : "transparent",
-                }}
-                onClick={() => theme.setTheme(swatch.id)}
-                onMouseEnter={() => theme.previewTheme(swatch.id)}
-                onMouseLeave={() => theme.cancelPreview()}
-              >
-                <div
-                  class="h-14 rounded-xs flex items-center gap-1.5 px-3"
-                  style={{
-                    background: swatch.bg,
-                    "box-shadow": "inset 0 0 0 1px rgba(128,128,128,0.18)",
-                  }}
-                >
-                  <For each={swatch.dots}>
-                    {(dot) => (
-                      <span
-                        class="size-3.5 rounded-full"
-                        style={{ background: dot, "box-shadow": "0 1px 2px rgba(0,0,0,0.25)" }}
-                      />
-                    )}
-                  </For>
-                </div>
-                <span class="text-12-medium text-text-strong px-1 truncate">{swatch.name}</span>
-              </button>
-            )}
-          </For>
-        </div>
-      </div>
-
-      {/* Layout Section */}
-      <div class="flex flex-col gap-1">
-        <h3 class="text-13-medium text-text-weak tracking-wide pb-2">
-          {language.t("settings.general.section.layout")}
-        </h3>
-
-        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
-          <SettingsRow
-            title={language.t("settings.general.layout.showChanges.title")}
-            description={language.t("settings.general.layout.showChanges.description")}
-          >
-            <Switch
-              hideLabel
-              checked={settings.ui.showChangesView()}
-              onChange={(checked) => settings.ui.setShowChangesView(checked)}
-            >
-              {language.t("settings.general.layout.showChanges.title")}
-            </Switch>
-          </SettingsRow>
-        </div>
-      </div>
-
-      {/* System notifications Section */}
-      <div class="flex flex-col gap-1">
-        <h3 class="text-13-medium text-text-weak tracking-wide pb-2">
-          {language.t("settings.general.section.notifications")}
-        </h3>
-
-        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+      <SettingsSection title={language.t("settings.general.section.notifications")}>
+        <div class="settings-card">
           <SettingsRow
             title={language.t("settings.general.notifications.agent.title")}
             description={language.t("settings.general.notifications.agent.description")}
@@ -308,33 +212,62 @@ export const AppearanceSections: Component = () => {
             </Switch>
           </SettingsRow>
         </div>
-      </div>
+      </SettingsSection>
 
-      {/* Sound effects Section */}
-      <div class="flex flex-col gap-1">
-        <h3 class="text-13-medium text-text-weak tracking-wide pb-2">
-          {language.t("settings.general.section.sounds")}
-        </h3>
+      <SettingsSection title={language.t("settings.general.section.sounds")}>
+        <div class="settings-card">
+          <SettingsRow
+            title={language.t("settings.general.sounds.enabled.title")}
+            description={language.t("settings.general.sounds.enabled.description")}
+          >
+            <Switch
+              hideLabel
+              checked={settings.sounds.enabled()}
+              onChange={(checked) => settings.sounds.setEnabled(checked)}
+            >
+              {language.t("settings.general.sounds.enabled.title")}
+            </Switch>
+          </SettingsRow>
 
-        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+          <SettingsRow
+            title={language.t("settings.general.sounds.volume.title")}
+            description={language.t("settings.general.sounds.volume.description")}
+          >
+            <label class="settings-sound-volume">
+              <span class="sr-only">{language.t("settings.general.sounds.volume.title")}</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={settings.sounds.volume()}
+                disabled={!settings.sounds.enabled()}
+                aria-valuetext={`${Math.round(settings.sounds.volume() * 100)}%`}
+                onInput={(event) => settings.sounds.setVolume(Number(event.currentTarget.value))}
+              />
+              <output aria-live="polite">{Math.round(settings.sounds.volume() * 100)}%</output>
+            </label>
+          </SettingsRow>
+
           <SettingsRow
             title={language.t("settings.general.sounds.agent.title")}
             description={language.t("settings.general.sounds.agent.description")}
           >
             <Select
               aria-label={language.t("settings.general.sounds.agent.title")}
+              disabled={!settings.sounds.enabled()}
               options={soundOptions}
               current={soundOptions.find((o) => o.id === settings.sounds.agent())}
               value={(o) => o.id}
               label={(o) => language.t(o.label)}
               onHighlight={(option) => {
                 if (!option) return
-                playDemoSound(option.src)
+                playDemoSound(option.src, settings.sounds.volume())
               }}
               onSelect={(option) => {
                 if (!option) return
                 settings.sounds.setAgent(option.id)
-                playDemoSound(option.src)
+                playDemoSound(option.src, settings.sounds.volume())
               }}
               variant="secondary"
               size="small"
@@ -348,18 +281,19 @@ export const AppearanceSections: Component = () => {
           >
             <Select
               aria-label={language.t("settings.general.sounds.permissions.title")}
+              disabled={!settings.sounds.enabled()}
               options={soundOptions}
               current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
               value={(o) => o.id}
               label={(o) => language.t(o.label)}
               onHighlight={(option) => {
                 if (!option) return
-                playDemoSound(option.src)
+                playDemoSound(option.src, settings.sounds.volume())
               }}
               onSelect={(option) => {
                 if (!option) return
                 settings.sounds.setPermissions(option.id)
-                playDemoSound(option.src)
+                playDemoSound(option.src, settings.sounds.volume())
               }}
               variant="secondary"
               size="small"
@@ -373,18 +307,19 @@ export const AppearanceSections: Component = () => {
           >
             <Select
               aria-label={language.t("settings.general.sounds.errors.title")}
+              disabled={!settings.sounds.enabled()}
               options={soundOptions}
               current={soundOptions.find((o) => o.id === settings.sounds.errors())}
               value={(o) => o.id}
               label={(o) => language.t(o.label)}
               onHighlight={(option) => {
                 if (!option) return
-                playDemoSound(option.src)
+                playDemoSound(option.src, settings.sounds.volume())
               }}
               onSelect={(option) => {
                 if (!option) return
                 settings.sounds.setErrors(option.id)
-                playDemoSound(option.src)
+                playDemoSound(option.src, settings.sounds.volume())
               }}
               variant="secondary"
               size="small"
@@ -392,15 +327,10 @@ export const AppearanceSections: Component = () => {
             />
           </SettingsRow>
         </div>
-      </div>
+      </SettingsSection>
 
-      {/* Updates Section */}
-      <div class="flex flex-col gap-1">
-        <h3 class="text-13-medium text-text-weak tracking-wide pb-2">
-          {language.t("settings.general.section.updates")}
-        </h3>
-
-        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+      <SettingsSection title={language.t("settings.general.section.updates")}>
+        <div class="settings-card">
           <SettingsRow
             title={language.t("settings.updates.row.startup.title")}
             description={language.t("settings.updates.row.startup.description")}
@@ -419,9 +349,9 @@ export const AppearanceSections: Component = () => {
             title={language.t("settings.general.row.releaseNotes.title")}
             description={language.t("settings.general.row.releaseNotes.description")}
           >
-            <div class="flex items-center gap-2">
+            <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
               <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.releases)}>
-                view notes
+                View notes
               </Button>
               <Switch
                 hideLabel
@@ -444,8 +374,8 @@ export const AppearanceSections: Component = () => {
             </Button>
           </SettingsRow>
         </div>
-      </div>
-    </div>
+      </SettingsSection>
+    </>
   )
 }
 
@@ -454,14 +384,12 @@ export const AppearanceSections: Component = () => {
 export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-8 sm:pb-10">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-        <div class="flex flex-col gap-1 pt-8 pb-8 max-w-[760px]">
-          <h2 class="text-16-medium text-text-strong">{language.t("settings.tab.general")}</h2>
-        </div>
-      </div>
-      <AppearanceSections />
-    </div>
+    <PanelScroll>
+      <PanelHeader title={language.t("settings.tab.general")} description="Appearance, notifications, and updates." />
+      <PanelBody>
+        <AppearanceSections />
+      </PanelBody>
+    </PanelScroll>
   )
 }
 
@@ -473,12 +401,12 @@ interface SettingsRowProps {
 
 const SettingsRow: Component<SettingsRowProps> = (props) => {
   return (
-    <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5 border-b border-border-weak-base last:border-none">
-      <div class="flex flex-col gap-0.5 min-w-0">
+    <div class="settings-row justify-between">
+      <div class="flex min-w-0 flex-1 basis-[220px] flex-col gap-0.5">
         <span class="text-14-medium text-text-strong">{props.title}</span>
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </div>
-      <div class="flex-shrink-0">{props.children}</div>
+      <div class="ml-auto max-w-full flex-shrink-0">{props.children}</div>
     </div>
   )
 }

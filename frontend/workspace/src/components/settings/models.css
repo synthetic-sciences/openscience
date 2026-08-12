@@ -1,0 +1,534 @@
+.settings-models-panel {
+  --models-control-height: 32px;
+  --models-gap-1: 4px;
+  --models-gap-2: 8px;
+  --models-gap-3: 12px;
+  --models-gap-4: 16px;
+}
+
+/* Models uses the same restrained surface stack as Compute. The panel should
+   read as one Settings system, not a nested set of independently bordered
+   widgets. */
+.settings-dialog .settings-models-panel .settings-card {
+  gap: 2px;
+  padding: var(--models-gap-1);
+  border-radius: var(--settings-radius-card);
+  background: var(--settings-surface);
+  box-shadow: none;
+}
+
+.settings-dialog .settings-models-panel .models-compact-row {
+  min-height: 56px;
+  gap: var(--models-gap-3);
+  padding: 10px var(--models-gap-3);
+  border-radius: var(--settings-radius-control);
+}
+
+.models-inference,
+.models-provider-keys {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--models-gap-2);
+}
+
+.models-account-summary__identity,
+.models-connection-identity,
+.models-provider-identity,
+.models-model-identity {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 220px;
+  align-items: center;
+  gap: var(--models-gap-3);
+}
+
+.settings-dialog .settings-models-panel .settings-row-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+  color: var(--icon-strong-base);
+  box-shadow: none;
+}
+
+.models-row-action {
+  display: inline-flex;
+  max-width: 100%;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: auto;
+}
+
+.settings-dialog .settings-models-panel [data-component="button"] {
+  min-height: var(--models-control-height);
+  height: var(--models-control-height);
+  padding: 0 var(--models-gap-2);
+  border-radius: var(--settings-radius-control);
+  font-size: 12px;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.settings-dialog .settings-models-panel [data-component="button"].models-primary-action[data-variant="primary"] {
+  border-color: transparent;
+  background: var(--settings-primary);
+  color: var(--settings-on-primary);
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.settings-dialog
+  .settings-models-panel
+  [data-component="button"].models-primary-action[data-variant="primary"]:hover:not(:disabled),
+.settings-dialog
+  .settings-models-panel
+  [data-component="button"].models-primary-action[data-variant="primary"]:focus:not(:disabled) {
+  border-color: transparent;
+  background: var(--settings-primary-hover);
+}
+
+.settings-dialog .settings-models-panel [data-component="button"].models-secondary-action[data-variant="secondary"] {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-base);
+}
+
+.settings-dialog
+  .settings-models-panel
+  [data-component="button"].models-secondary-action[data-variant="secondary"]:hover:not(:disabled),
+.settings-dialog
+  .settings-models-panel
+  [data-component="button"].models-secondary-action[data-variant="secondary"]:focus:not(:disabled) {
+  background: var(--settings-surface-hover);
+}
+
+.settings-dialog .settings-models-panel :where(button, input):focus-visible,
+.settings-dialog .settings-models-panel [data-slot="select-select-trigger"]:focus-visible {
+  outline-color: var(--border-focus);
+}
+
+.models-routing {
+  min-width: 0;
+  padding: var(--models-gap-1);
+  border-radius: var(--settings-radius-card);
+  background: var(--settings-surface);
+  box-shadow: none;
+}
+
+.models-routing__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+}
+
+.settings-dialog .settings-models-panel .models-routing__option {
+  min-width: 0;
+  min-height: var(--models-control-height);
+  height: var(--models-control-height);
+  padding: 0 var(--models-gap-2);
+  border: 0;
+  border-radius: calc(var(--settings-radius-control) - 2px);
+  background: transparent;
+  color: var(--text-weak);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.settings-dialog .settings-models-panel .models-routing__option:hover:not(:disabled) {
+  background: var(--settings-surface-hover);
+  color: var(--text-strong);
+}
+
+.settings-dialog .settings-models-panel .models-routing__option:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.settings-dialog .settings-models-panel .models-routing__option[aria-pressed="true"] {
+  background: var(--settings-surface-hover);
+  color: var(--text-strong);
+  box-shadow: none;
+}
+
+.models-routing__option-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.models-routing__option-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.models-routing__description {
+  min-height: 28px;
+  margin: 0;
+  padding: 6px var(--models-gap-2) 2px;
+  color: var(--text-weak);
+  font-size: 12px;
+  line-height: 18px;
+  text-wrap: pretty;
+}
+
+.models-routing__sync {
+  color: var(--text-weaker);
+}
+
+.models-connection-row,
+.models-provider-row {
+  justify-content: space-between;
+}
+
+.models-connection-actions {
+  display: flex;
+  max-width: 100%;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--models-gap-2);
+  margin-left: auto;
+}
+
+.settings-dialog .settings-models-panel .settings-status {
+  min-height: 20px;
+  padding: 1px 6px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+}
+
+.models-provider-key-form {
+  display: grid !important;
+  grid-template-columns: minmax(160px, 0.65fr) minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: var(--models-gap-2) !important;
+  padding: var(--models-gap-3) !important;
+}
+
+.models-key-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--models-gap-1);
+}
+
+.models-provider-select {
+  position: relative;
+  min-width: 0;
+}
+
+.models-provider-select__mark {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  z-index: 1;
+  display: inline-flex;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.settings-dialog .settings-models-panel .models-provider-select [data-slot="select-select-trigger"] {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--models-control-height);
+  height: var(--models-control-height);
+  padding-block: 0;
+  border: 1px solid transparent;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+  box-shadow: none;
+}
+
+.settings-dialog
+  .settings-models-panel
+  .models-provider-select
+  [data-slot="select-select-trigger"]:hover:not(:disabled),
+.settings-dialog .settings-models-panel .models-provider-select [data-slot="select-select-trigger"][data-expanded] {
+  border-color: var(--border-base);
+  background: var(--settings-surface-muted);
+  box-shadow: none;
+}
+
+.settings-dialog .settings-models-panel .models-key-input {
+  min-height: var(--models-control-height);
+  height: var(--models-control-height);
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+  box-shadow: none;
+}
+
+.settings-dialog .settings-models-panel .models-key-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--surface-focus);
+}
+
+.settings-dialog .settings-models-panel .models-save-key {
+  align-self: end;
+  padding-inline: 10px;
+}
+
+.models-provider-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.models-provider-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--models-gap-1);
+}
+
+.models-provider-source {
+  color: var(--text-weak);
+  font-size: 11px;
+}
+
+.models-provider-source::before {
+  content: "·";
+  margin-right: var(--models-gap-1);
+  color: var(--text-weaker);
+}
+
+.models-provider-note {
+  max-width: min(100%, 260px);
+  margin-left: auto;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.settings-dialog .settings-models-panel .settings-provider-logo {
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+  color: var(--text-strong);
+  box-shadow: none;
+}
+
+.settings-dialog .settings-models-panel .settings-provider-logo[data-size="small"] {
+  border-radius: calc(var(--settings-radius-control) - 2px);
+}
+
+.settings-dialog .settings-models-panel .settings-defaults-card [data-slot="select-select-trigger"] {
+  min-width: 180px;
+  min-height: var(--models-control-height);
+  height: var(--models-control-height);
+  border-radius: var(--settings-radius-control);
+  background: transparent;
+}
+
+.settings-dialog
+  .settings-models-panel
+  .settings-defaults-card
+  [data-slot="select-select-trigger"]:hover:not(:disabled),
+.settings-dialog .settings-models-panel .settings-defaults-card [data-slot="select-select-trigger"][data-expanded] {
+  background: var(--settings-surface-hover);
+}
+
+.models-default-option {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--models-gap-2, 8px);
+}
+
+.models-default-option__provider {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-weak);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-dialog .settings-models-panel .settings-list-header {
+  min-height: 32px;
+  padding: 0 var(--models-gap-3);
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+}
+
+.settings-dialog .settings-models-panel .settings-model-row {
+  min-height: 52px;
+  padding-block: 6px;
+}
+
+.settings-dialog .settings-models-panel .settings-icon-action {
+  width: var(--models-control-height);
+  min-width: var(--models-control-height);
+  height: var(--models-control-height);
+  padding: 0;
+  border-radius: var(--settings-radius-control);
+}
+
+.settings-dialog .settings-models-panel .settings-filter-pill {
+  min-height: var(--models-control-height);
+  height: var(--models-control-height);
+  padding: 0 9px;
+  border-radius: var(--settings-radius-control);
+}
+
+.settings-dialog .settings-models-panel .settings-filter-pill[aria-pressed="true"] {
+  background: var(--settings-surface-hover);
+}
+
+.settings-dialog .settings-models-panel [data-component="switch"] {
+  min-height: var(--models-control-height);
+}
+
+.settings-dialog .settings-models-panel [data-component="switch"] [data-slot="switch-control"] {
+  box-sizing: border-box;
+  width: 30px;
+  height: 18px;
+  padding: 1px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 999px;
+  background: var(--settings-surface-muted);
+}
+
+.settings-dialog .settings-models-panel [data-component="switch"] [data-slot="switch-thumb"] {
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--icon-invert-base);
+  transform: translateX(0);
+}
+
+.settings-dialog .settings-models-panel [data-component="switch"][data-checked] [data-slot="switch-control"],
+.settings-dialog
+  .settings-models-panel
+  [data-component="switch"][data-checked]:hover:not([data-disabled], [data-readonly])
+  [data-slot="switch-control"] {
+  border-color: var(--settings-toggle-active);
+  background: var(--settings-toggle-active);
+}
+
+.settings-dialog .settings-models-panel [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
+  border: 0;
+  transform: translateX(12px);
+}
+
+.models-provider-options[data-component="select-content"] {
+  min-width: 240px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised-stronger-non-alpha);
+  box-shadow: var(--shadow-lg);
+}
+
+.models-provider-options[data-component="select-content"] [data-slot="select-select-content-list"] {
+  max-height: min(320px, 52vh);
+}
+
+.models-provider-options[data-slot="select-select-item"] {
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+.models-provider-options[data-slot="select-select-item"]:hover,
+.models-provider-options[data-slot="select-select-item"][data-highlighted] {
+  background: var(--surface-raised-base-hover);
+}
+
+.models-provider-options .settings-provider-logo,
+.models-default-option .settings-provider-logo {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(var(--settings-radius-control) - 2px);
+  background: var(--settings-surface-muted);
+  color: var(--text-strong);
+  box-shadow: none;
+}
+
+.settings-dialog .settings-models-panel .settings-model-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+}
+
+.models-catalog-progress {
+  min-height: 36px;
+  margin: 0;
+  padding: 9px var(--models-gap-3);
+  color: var(--text-weaker);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+@container settings-main (max-width: 680px) {
+  .models-provider-key-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  }
+
+  .settings-dialog .settings-models-panel .models-save-key {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}
+
+@container settings-main (max-width: 500px) {
+  .models-routing__options,
+  .models-provider-key-form {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-dialog .settings-models-panel .models-routing__option {
+    justify-content: flex-start;
+  }
+
+  .models-routing__option-label {
+    justify-content: start;
+  }
+
+  .models-connection-row,
+  .models-provider-row {
+    align-items: flex-start;
+  }
+
+  .models-connection-actions,
+  .models-row-action,
+  .models-provider-note {
+    margin-left: 40px;
+  }
+
+  .models-provider-note {
+    max-width: calc(100% - 40px);
+    text-align: left;
+  }
+
+  .settings-dialog .settings-models-panel .models-save-key {
+    grid-column: auto;
+    justify-self: stretch;
+  }
+}
+
+@media (pointer: coarse) {
+  .settings-dialog .settings-models-panel :where(button, [role="button"], [data-component="switch"]),
+  .settings-dialog .settings-models-panel :where(input, [data-slot="select-select-trigger"]) {
+    min-height: 44px;
+  }
+}

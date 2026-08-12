@@ -133,3 +133,9 @@
     }
   }
 }
+
+@media (pointer: coarse) {
+  [data-component="input"] [data-slot="input-input"] {
+    min-height: 44px;
+  }
+}

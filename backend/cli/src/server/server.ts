@@ -61,6 +61,11 @@ import { WalletSettingsRoutes } from "./routes/settings/wallet"
 import { SettingsUsageRoutes } from "./routes/settings/usage"
 import { UpdatesSettingsRoutes } from "./routes/settings/updates"
 import { projectSelection } from "./project-selection"
+import { CredentialLifecycle } from "../credentials/lifecycle"
+import { ComputeJobs } from "../compute/jobs"
+import { CommandRuntime } from "../science/command/registry"
+import { CredentialProcessLedger } from "../credentials/process-ledger"
+import { DataRootBarrier } from "../global/data-root-barrier"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -71,6 +76,24 @@ export namespace Server {
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
   let _server: Bun.Server<unknown> | undefined
+  let credentialLifecycleReady = false
+
+  function startCredentialLifecycle() {
+    if (credentialLifecycleReady) return
+    credentialLifecycleReady = true
+    CredentialLifecycle.onRevoke(async () => {
+      // Compute jobs and long-running Bash commands do not live in Instance
+      // state. MCP and LSP do, and their disposal callbacks close the
+      // underlying transports/processes.
+      await Promise.all([
+        ComputeJobs.cancelCredentialProcesses(),
+        CommandRuntime.stopAll(),
+        CredentialProcessLedger.revoke("mcp"),
+        Instance.disposeAll(),
+      ])
+    })
+    CredentialLifecycle.watch()
+  }
 
   // Per-process secret marking trusted in-process calls (Server.internalFetch).
   // Generated fresh each run, kept in memory, never sent to any client — a
@@ -181,6 +204,16 @@ export namespace Server {
             },
           }),
         )
+        // A live data-root switch publishes an intent, drains these request
+        // markers, swaps the stable root, then releases waiting requests onto
+        // the new destination. Keep the switch endpoint itself outside its own
+        // barrier and avoid pinning long-lived streams/websocket upgrades.
+        .use(async (c, next) => {
+          const switching = c.req.path === "/settings/storage/location"
+          const streaming = c.req.path === "/event" || c.req.path === "/log" || c.req.header("upgrade") === "websocket"
+          if (switching || streaming) return next()
+          await DataRootBarrier.during(Global.Path.data, next, 120_000)
+        })
         .route("/global", GlobalRoutes())
         .route("/account", AccountRoutes())
         // Settings panels backed by global (project-independent) stores, so
@@ -721,6 +754,7 @@ export namespace Server {
   }
 
   export function listen(opts: { port: number; cors?: string[] }) {
+    startCredentialLifecycle()
     _corsWhitelist = opts.cors ?? []
 
     const args = {

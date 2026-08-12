@@ -9,6 +9,7 @@ import { Lock } from "../util/lock"
 import { $ } from "bun"
 import { NamedError } from "@synsci/util/error"
 import z from "zod"
+import { DataRootBarrier } from "@/global/data-root-barrier"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
@@ -163,7 +164,9 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
+      await using operation = await DataRootBarrier.enter(target)
       using _ = await Lock.write(target)
+      await using __ = await interprocess(target)
       await fs.unlink(target).catch((error) => {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return
         throw error
@@ -199,11 +202,46 @@ export namespace Storage {
     })
   }
 
+  /** A narrow cross-process lock for storage mutations. OpenScience commonly
+   * runs a production and development server against one data directory; the
+   * in-memory Lock cannot serialize those writers. O_EXCL lock creation does,
+   * while the stale timeout recovers a lock left by a crashed process. */
+  async function interprocess(target: string) {
+    const lockfile = `${target}.lock`
+    const deadline = Date.now() + 10_000
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    for (;;) {
+      try {
+        const handle = await fs.open(lockfile, "wx", 0o600)
+        await handle.writeFile(JSON.stringify({ pid: process.pid, created: Date.now() }))
+        return {
+          async [Symbol.asyncDispose]() {
+            await handle.close().catch(() => {})
+            await fs.unlink(lockfile).catch((error) => {
+              if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+            })
+          },
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+        const stat = await fs.stat(lockfile).catch(() => undefined)
+        if (stat && Date.now() - stat.mtimeMs > 30_000) {
+          await fs.unlink(lockfile).catch(() => {})
+          continue
+        }
+        if (Date.now() >= deadline) throw new Error(`Timed out waiting for storage mutation lock: ${target}`)
+        await new Promise<void>((resolve) => setTimeout(resolve, 10 + Math.floor(Math.random() * 20)))
+      }
+    }
+  }
+
   export async function update<T>(key: string[], fn: (draft: T) => void) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
+      await using operation = await DataRootBarrier.enter(target)
       using _ = await Lock.write(target)
+      await using __ = await interprocess(target)
       const content = await Bun.file(target).json()
       fn(content)
       await publish(target, JSON.stringify(content, null, 2))
@@ -215,8 +253,33 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
+      await using operation = await DataRootBarrier.enter(target)
       using _ = await Lock.write(target)
+      await using __ = await interprocess(target)
       await publish(target, JSON.stringify(content, null, 2))
+    })
+  }
+
+  /** Atomically read-or-create and replace one record under the same
+   * interprocess lock. Callers use this when computing a revision from the
+   * previous value; splitting read() + write() would lose concurrent changes. */
+  export async function upsert<T>(key: string[], fn: (current: T | undefined) => T): Promise<T> {
+    const dir = await state().then((x) => x.dir)
+    const target = path.join(dir, ...key) + ".json"
+    return withErrorHandling(async () => {
+      await using operation = await DataRootBarrier.enter(target)
+      using _ = await Lock.write(target)
+      await using __ = await interprocess(target)
+      const current = await Bun.file(target)
+        .json()
+        .then((value) => value as T)
+        .catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return undefined
+          throw error
+        })
+      const next = fn(current)
+      await publish(target, JSON.stringify(next, null, 2))
+      return next
     })
   }
 

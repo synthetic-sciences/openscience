@@ -27,11 +27,14 @@
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import crypto from "crypto"
+import fs from "node:fs/promises"
+import { DataRootBarrier } from "@/global/data-root-barrier"
 import path from "path"
 import z from "zod"
 import { Global } from "@/global"
 import { Env } from "@/env"
 import { OpenScience } from "@/openscience"
+import { CredentialLifecycle } from "@/credentials/lifecycle"
 import { lazy } from "@/util/lazy"
 import { JsonStore } from "@/util/jsonstore"
 import { SecretFile } from "@/util/secret-file"
@@ -176,6 +179,7 @@ type Store = z.infer<typeof Store>
 
 const storePath = path.join(Global.Path.data, "credentials.json")
 const keyPath = path.join(Global.Path.data, "credentials.key")
+const gcpPath = path.join(Global.Path.data, "gcp-service-account.json")
 
 async function machineKey(): Promise<Buffer> {
   return SecretFile.key(keyPath)
@@ -311,6 +315,7 @@ function mapServiceEnv(id: string, f: Record<string, string>): Record<string, st
 interface CredentialEnv {
   env: Record<string, string>
   secrets: string[]
+  materializationError?: unknown
 }
 
 async function decryptFields(entry: StoreEntry): Promise<Record<string, string>> {
@@ -319,10 +324,48 @@ async function decryptFields(entry: StoreEntry): Promise<Record<string, string>>
     try {
       out[name] = await decrypt(cipher)
     } catch {
-      // Unreadable (rotated key / corrupt) — skip; the UI still shows it "set".
+      // Unreadable (rotated key / corrupt) — omit from runtime and API state.
     }
   }
   return out
+}
+
+function validField(id: string, name: string, value: string): boolean {
+  if (id !== "gcp" || name !== "service_account_json") return true
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return !!parsed && typeof parsed === "object" && !Array.isArray(parsed)
+  } catch {
+    return false
+  }
+}
+
+async function validDecryptedFields(id: string, entry: StoreEntry): Promise<Record<string, string>> {
+  const fields = await decryptFields(entry)
+  return Object.fromEntries(Object.entries(fields).filter(([name, value]) => validField(id, name, value)))
+}
+
+async function atomicSecretWrite(filepath: string, content: string): Promise<void> {
+  await using operation = await DataRootBarrier.enter(filepath)
+  const temp = `${filepath}.${process.pid}.${crypto.randomUUID()}.tmp`
+  await fs.mkdir(path.dirname(filepath), { recursive: true })
+  const handle = await fs.open(temp, "wx", 0o600)
+  await handle
+    .chmod(0o600)
+    .then(() => handle.writeFile(content, "utf8"))
+    .then(() => handle.sync())
+    .finally(() => handle.close())
+    .catch(async (error) => {
+      await fs.rm(temp, { force: true }).catch(() => undefined)
+      throw error
+    })
+  await fs.rename(temp, filepath).catch(async (error) => {
+    await fs.rm(temp, { force: true }).catch(() => undefined)
+    throw error
+  })
+  const directory = await fs.open(path.dirname(filepath), "r").catch(() => undefined)
+  await directory?.sync().catch(() => undefined)
+  await directory?.close().catch(() => undefined)
 }
 
 /** Decrypt the whole store into canonical env vars + the list of secret-bearing
@@ -331,24 +374,34 @@ async function readDecryptedEnv(): Promise<CredentialEnv> {
   const store = await readStore()
   const env: Record<string, string> = {}
   const secrets: string[] = []
+  let gcp: string | undefined
+  let materializationError: unknown
   for (const [id, entry] of Object.entries(store)) {
-    const fields = await decryptFields(entry)
-    if (id === "gcp" && fields.service_account_json) {
-      try {
-        const file = path.join(Global.Path.data, "gcp-service-account.json")
-        await Bun.write(file, fields.service_account_json, { mode: 0o600 })
-        env.GOOGLE_APPLICATION_CREDENTIALS = file
-      } catch {
-        // couldn't write — skip ADC; other GCP vars still apply
-      }
-    }
+    const fields = await validDecryptedFields(id, entry)
+    if (id === "gcp") gcp = fields.service_account_json
     const mapped = mapServiceEnv(id, fields)
     for (const [key, value] of Object.entries(mapped)) {
       env[key] = value
       if (!NON_SECRET_ENV.test(key)) secrets.push(value)
     }
   }
-  return { env, secrets }
+  if (gcp) {
+    try {
+      await atomicSecretWrite(gcpPath, gcp)
+      env.GOOGLE_APPLICATION_CREDENTIALS = gcpPath
+      secrets.push(gcp)
+    } catch (error) {
+      // A failed rotation must not leave the previous service-account document
+      // live under the canonical path.
+      await fs.rm(gcpPath, { force: true }).catch(() => undefined)
+      materializationError = error
+    }
+  } else {
+    // Deleted, corrupt, or undecryptable ciphertext is disconnected state.
+    // Remove the materialized plaintext before dropping the environment path.
+    await fs.rm(gcpPath, { force: true }).catch(() => undefined)
+  }
+  return { env, secrets, materializationError }
 }
 
 // Env keys this module has set, so a re-apply after save can update our own
@@ -359,13 +412,15 @@ const ownedKeys = new Set<string>()
  *  environment so the real consumers use them (see the module header). Explicit
  *  shell exports always win. Registers secret values for redaction. Best-effort;
  *  never throws. Call at boot and after every save/delete. */
-export async function applyCredentialEnv(): Promise<void> {
+export async function applyCredentialEnv(options: { strict?: boolean } = {}): Promise<boolean> {
   try {
-    const { env, secrets } = await readDecryptedEnv()
+    const { env, secrets, materializationError } = await readDecryptedEnv()
+    const state = { staleChildSnapshot: false }
     // Drop vars we previously injected that are gone now (credential removed) —
     // but never touch a key the user exported in their own shell.
     for (const key of [...ownedKeys]) {
       if (key in env) continue
+      state.staleChildSnapshot = true
       delete process.env[key]
       try {
         Env.remove(key)
@@ -376,6 +431,7 @@ export async function applyCredentialEnv(): Promise<void> {
     }
     for (const [key, value] of Object.entries(env)) {
       if (process.env[key] && !ownedKeys.has(key)) continue
+      if (ownedKeys.has(key) && process.env[key] !== value) state.staleChildSnapshot = true
       process.env[key] = value
       ownedKeys.add(key)
       try {
@@ -385,8 +441,14 @@ export async function applyCredentialEnv(): Promise<void> {
       }
     }
     OpenScience.registerSecretValues(secrets)
-  } catch {
+    if (materializationError && options.strict) {
+      throw new Error("Google Cloud credentials could not be materialized safely", { cause: materializationError })
+    }
+    return state.staleChildSnapshot
+  } catch (error) {
+    if (options.strict) throw error
     // best-effort; a broken store must not break boot or a save response
+    return false
   }
 }
 
@@ -410,46 +472,51 @@ const ServiceView = z.object({
   updated_at: z.string().nullable(),
 })
 
-function view(store: Store) {
+async function view(store: Store) {
   const seen = new Set<string>()
-  const known = CATALOG.map((spec) => {
-    seen.add(spec.id)
-    const entry = store[spec.id]
-    const set = entry ? Object.keys(entry.fields) : []
-    return {
-      id: spec.id,
-      label: spec.label,
-      description: spec.description,
-      category: spec.category,
-      custom: false,
-      fields: spec.fields.map((f) => ({
-        name: f.name,
-        label: f.label,
-        type: f.type,
-        optional: !!f.optional,
-        placeholder: f.placeholder,
-      })),
-      connected: set.length > 0,
-      set_fields: set,
-      updated_at: entry?.updated_at ?? null,
-    }
-  })
-  const custom = Object.entries(store)
-    .filter(([id]) => !seen.has(id))
-    .map(([id, entry]) => {
-      const names = Object.keys(entry.fields)
+  const known = await Promise.all(
+    CATALOG.map(async (spec) => {
+      seen.add(spec.id)
+      const entry = store[spec.id]
+      const set = entry ? Object.keys(await validDecryptedFields(spec.id, entry)) : []
+      const required = spec.fields.filter((field) => !field.optional).map((field) => field.name)
       return {
-        id,
-        label: entry.label ?? id,
-        description: "Custom credential.",
-        category: "integration" as const,
-        custom: true,
-        fields: names.map((name) => ({ name, label: name, type: "password" as const, optional: false })),
-        connected: names.length > 0,
-        set_fields: names,
-        updated_at: entry.updated_at,
+        id: spec.id,
+        label: spec.label,
+        description: spec.description,
+        category: spec.category,
+        custom: false,
+        fields: spec.fields.map((f) => ({
+          name: f.name,
+          label: f.label,
+          type: f.type,
+          optional: !!f.optional,
+          placeholder: f.placeholder,
+        })),
+        connected: required.length ? required.every((field) => set.includes(field)) : set.length > 0,
+        set_fields: set,
+        updated_at: entry?.updated_at ?? null,
       }
-    })
+    }),
+  )
+  const custom = await Promise.all(
+    Object.entries(store)
+      .filter(([id]) => !seen.has(id))
+      .map(async ([id, entry]) => {
+        const names = Object.keys(await validDecryptedFields(id, entry))
+        return {
+          id,
+          label: entry.label ?? id,
+          description: "Custom credential.",
+          category: "integration" as const,
+          custom: true,
+          fields: names.map((name) => ({ name, label: name, type: "password" as const, optional: false })),
+          connected: names.length > 0,
+          set_fields: names,
+          updated_at: entry.updated_at,
+        }
+      }),
+  )
   return [...known, ...custom]
 }
 
@@ -468,7 +535,7 @@ export const CredentialsRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => c.json({ services: view(await readStore()) }),
+      async (c) => c.json({ services: await view(await readStore()) }),
     )
     .put(
       "/:id",
@@ -503,23 +570,38 @@ export const CredentialsRoutes = lazy(() =>
         const id = c.req.valid("param").id
         const body = c.req.valid("json")
         const spec = specFor(id)
-        const store = await updateStore(async (current) => {
-          const entry = current[id] ?? { fields: {}, updated_at: new Date().toISOString() }
-          const fields = { ...entry.fields }
-          for (const [name, value] of Object.entries(body.fields)) {
-            const trimmed = value.trim()
-            if (!trimmed) continue
-            if (spec && !spec.fields.some((f) => f.name === name)) continue
-            fields[name] = await encrypt(trimmed)
-          }
-          current[id] = {
-            label: body.label ?? entry.label,
-            fields,
-            updated_at: new Date().toISOString(),
-          }
-        })
-        await applyCredentialEnv() // apply the new secret to the running process
-        return c.json({ services: view(store) })
+        const custom = id.startsWith("custom:")
+        if (!spec && !/^custom:[a-z0-9][a-z0-9-]{0,63}$/.test(id)) {
+          return c.json({ error: "Unknown credential service" }, 400)
+        }
+        const names = Object.keys(body.fields)
+        if (custom && names.some((name) => !/^[a-z][a-z0-9_]{0,63}$/.test(name))) {
+          return c.json({ error: "Custom credential field names must be valid environment fields" }, 400)
+        }
+        if (spec && names.some((name) => !spec.fields.some((field) => field.name === name))) {
+          return c.json({ error: "Credential contains an unknown field" }, 400)
+        }
+        const gcp = body.fields.service_account_json?.trim()
+        if (id === "gcp" && gcp && !validField(id, "service_account_json", gcp)) {
+          return c.json({ error: "Google Cloud service account credentials must be a JSON object" }, 400)
+        }
+        const store = await CredentialLifecycle.mutate(`settings-credential.set:${id}`, () =>
+          updateStore(async (current) => {
+            const entry = current[id] ?? { fields: {}, updated_at: new Date().toISOString() }
+            const fields = { ...entry.fields }
+            for (const [name, value] of Object.entries(body.fields)) {
+              const trimmed = value.trim()
+              if (!trimmed) continue
+              fields[name] = await encrypt(trimmed)
+            }
+            current[id] = {
+              label: body.label ?? entry.label,
+              fields,
+              updated_at: new Date().toISOString(),
+            }
+          }),
+        )
+        return c.json({ services: await view(store) })
       },
     )
     .delete(
@@ -537,11 +619,17 @@ export const CredentialsRoutes = lazy(() =>
       }),
       validator("param", z.object({ id: z.string() })),
       async (c) => {
-        const store = await updateStore((current) => {
-          delete current[c.req.valid("param").id]
-        })
-        await applyCredentialEnv() // re-sync process env after removal
-        return c.json({ services: view(store) })
+        const id = c.req.valid("param").id
+        const store = await CredentialLifecycle.mutate(`settings-credential.remove:${id}`, () =>
+          updateStore((current) => {
+            delete current[id]
+          }),
+        )
+        return c.json({ services: await view(store) })
       },
     ),
 )
+
+CredentialLifecycle.onRefresh(async () => {
+  await applyCredentialEnv({ strict: true })
+})

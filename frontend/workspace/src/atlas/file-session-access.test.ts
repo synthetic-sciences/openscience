@@ -20,7 +20,8 @@ describe("session-scoped file requests", () => {
     expect(pane).toContain("if (session) query.sessionID = session")
     expect(pane).toContain('transport("/file", undefined, query)')
     expect(preview).toContain('const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)')
-    expect(preview).toContain("sdk.client.file.read({ path, sessionID: sessionID() })")
+    expect(preview).toContain("const activeSession = untrack(sessionID)")
+    expect(preview).toContain("sdk.client.file.read({ path, sessionID: activeSession })")
     expect(preview).toContain("body: JSON.stringify({ path, content, sessionID: session })")
     expect(preview).toContain("sessionID: session,")
   })
@@ -36,5 +37,15 @@ describe("session-scoped file requests", () => {
     expect(inspector).toContain('read("/file/provenance", current.path)')
     expect(manuscript).toContain('sdk.request("/file/content", undefined, query(path))')
     expect(manuscript).toContain('sdk.request.url("/file/raw", query(path))')
+  })
+
+  test("keeps project-scoped drafts stable across session navigation and blocks stale artifact saves", () => {
+    const preview = read("./FilePreview.tsx")
+
+    expect(preview).toContain("untrack(sessionID)")
+    expect(preview).toContain("recoverFileDraft(dir, path, text)")
+    expect(preview).toContain("rememberFileDraft(directory(), props.path, view.draft, view.saved)")
+    expect(preview).toContain("reconcileSavedDraft(view.draft, content, next)")
+    expect(preview).toMatch(/const artifact = async \(\) => \{[\s\S]*if \(dirty\(\)\)[\s\S]*save file first/)
   })
 })

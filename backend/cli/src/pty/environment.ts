@@ -9,6 +9,8 @@ const inherited = new Set([
   "TERM_SESSION_ID",
 ])
 
+const shellName = (command: string) => command.replace(/\\/g, "/").split("/").at(-1)?.toLowerCase()
+
 export function terminalEnv(
   source: NodeJS.ProcessEnv,
   projectID: string,
@@ -22,14 +24,17 @@ export function terminalEnv(
     ),
   )
   const host = machine.split(".")[0]?.replace(/[^a-zA-Z0-9_-]/g, "") || "localhost"
-  const prompt: Record<string, string> = command.endsWith("zsh")
-    ? { PROMPT: `%n@${host} %1~ %# ` }
-    : command.endsWith("sh")
-      ? { PS1: `\\u@${host} \\W \\$ ` }
-      : {}
+  const shell = shellName(command)
+  const prompt: Record<string, string> =
+    shell === "zsh"
+      ? { PROMPT: `%n@${host} %1~ %# `, RPROMPT: "", PROMPT_EOL_MARK: "" }
+      : shell === "bash" || shell === "sh" || shell === "dash" || shell === "ksh"
+        ? { PS1: `\\u@${host} \\W \\$ ` }
+        : {}
   return {
     ...env,
     ...prompt,
+    ...(shell === "bash" ? { BASH_SILENCE_DEPRECATION_WARNING: "1" } : {}),
     TERM: "xterm-256color",
     HISTFILE: "/dev/null",
     SHELL_SESSIONS_DISABLE: "1",
@@ -40,7 +45,10 @@ export function terminalEnv(
 }
 
 export function terminalArgs(command: string) {
-  if (command.endsWith("zsh")) return ["-d", "-l"]
-  if (command.endsWith("sh")) return ["-l"]
+  const shell = shellName(command)
+  if (shell === "zsh") return ["-d", "-f", "-i"]
+  if (shell === "bash") return ["--noprofile", "--norc", "-i"]
+  if (shell === "fish") return ["--no-config", "--interactive"]
+  if (shell === "sh" || shell === "dash" || shell === "ksh") return ["-i"]
   return []
 }

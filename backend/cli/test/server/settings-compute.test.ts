@@ -17,6 +17,10 @@ Log.init({ print: false })
 
 const fetch = Server.internalFetch()
 const jobs = "http://openscience.internal/settings/compute/jobs"
+// These cases exercise real OS-owned process trees. On macOS the durable
+// responsibility handoff and verified descendant reap routinely exceed Bun's
+// 5s unit-test default even though the payload itself exits immediately.
+const nativeLifecycleTimeout = 30_000
 
 // Every env var the compute store can own — cleaned up so other test files
 // never see leftovers from this one.
@@ -275,47 +279,51 @@ test("preserves a provider variable replaced while a project instance is active"
   delete process.env["VAST_API_KEY"]
 })
 
-test("compute job routes execute a real local command and expose its log", async () => {
-  await using tmp = await tmpdir()
-  const current = await session(tmp.path)
-  const query = `?directory=${encodeURIComponent(tmp.path)}`
-  const started = await ComputeSettingsRoutes().request(`/jobs${query}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      sessionID: current.id,
-      name: "route smoke test",
-      command: "printf 'compute-route-ok\\n'",
-      target: { kind: "local" },
-    }),
-  })
-  expect(started.status).toBe(200)
-  const first = (await started.json()) as { id: string }
-  const final = await (async () => {
-    for (const _ of Array.from({ length: 100 })) {
-      const response = await ComputeSettingsRoutes().request(`/jobs${query}`)
-      const jobs = (await response.json()) as { id: string; status: string }[]
-      const job = jobs.find((item) => item.id === first.id)
-      if (job && ["succeeded", "failed", "cancelled"].includes(job.status)) return job
-      await Bun.sleep(20)
-    }
-    throw new Error("Timed out waiting for route compute job")
-  })()
-  expect(final.status).toBe("succeeded")
+test(
+  "compute job routes execute a real local command and expose its log",
+  async () => {
+    await using tmp = await tmpdir()
+    const current = await session(tmp.path)
+    const query = `?directory=${encodeURIComponent(tmp.path)}`
+    const started = await ComputeSettingsRoutes().request(`/jobs${query}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sessionID: current.id,
+        name: "route smoke test",
+        command: "printf 'compute-route-ok\\n'",
+        target: { kind: "local" },
+      }),
+    })
+    expect(started.status).toBe(200)
+    const first = (await started.json()) as { id: string }
+    const final = await (async () => {
+      for (const _ of Array.from({ length: 100 })) {
+        const response = await ComputeSettingsRoutes().request(`/jobs${query}`)
+        const jobs = (await response.json()) as { id: string; status: string }[]
+        const job = jobs.find((item) => item.id === first.id)
+        if (job && ["succeeded", "failed", "cancelled"].includes(job.status)) return job
+        await Bun.sleep(20)
+      }
+      throw new Error("Timed out waiting for route compute job")
+    })()
+    expect(final.status).toBe("succeeded")
 
-  const output = await ComputeSettingsRoutes().request(`/jobs/${first.id}/log${query}`)
-  expect(output.status).toBe(200)
-  expect(await output.json()).toEqual({ log: "compute-route-ok\n" })
+    const output = await ComputeSettingsRoutes().request(`/jobs/${first.id}/log${query}`)
+    expect(output.status).toBe(200)
+    expect(await output.json()).toEqual({ log: "compute-route-ok\n" })
 
-  const events = await ComputeSettingsRoutes().request(`/jobs/${first.id}/events${query}`)
-  expect(events.status).toBe(200)
-  expect(await events.json()).toEqual({ events: "" })
+    const events = await ComputeSettingsRoutes().request(`/jobs/${first.id}/events${query}`)
+    expect(events.status).toBe(200)
+    expect(await events.json()).toEqual({ events: "" })
 
-  const cleared = await ComputeSettingsRoutes().request(`/jobs/completed${query}`, { method: "DELETE" })
-  expect(cleared.status).toBe(200)
-})
+    const cleared = await ComputeSettingsRoutes().request(`/jobs/completed${query}`, { method: "DELETE" })
+    expect(cleared.status).toBe(200)
+  },
+  nativeLifecycleTimeout,
+)
 
-test("compute job routes fail closed while remote lifecycle support is incomplete", async () => {
+test("compute job routes reject an unknown SSH profile before dispatch", async () => {
   await using tmp = await tmpdir()
   const current = await session(tmp.path)
   const response = await ComputeSettingsRoutes().request(`/jobs?directory=${encodeURIComponent(tmp.path)}`, {
@@ -328,8 +336,8 @@ test("compute job routes fail closed while remote lifecycle support is incomplet
       target: { kind: "ssh", host_id: "does-not-exist" },
     }),
   })
-  expect(response.status).toBe(409)
-  expect(await response.json()).toMatchObject({ error: "remote_compute_unavailable" })
+  expect(response.status).toBe(400)
+  expect(await response.text()).toContain("The selected SSH compute profile was not found")
 })
 
 test("compute job routes require a valid project directory", async () => {
@@ -342,73 +350,83 @@ test("compute job routes require a valid project directory", async () => {
   expect(invalid.status).toBe(400)
 })
 
-test("compute job routes isolate list, log, cancel, and clear by project", async () => {
-  await using first = await tmpdir()
-  await using second = await tmpdir()
-  const current = await session(first.path)
-  const one = `?directory=${encodeURIComponent(first.path)}`
-  const two = `?directory=${encodeURIComponent(second.path)}`
-  const started = await ComputeSettingsRoutes().request(`/jobs${one}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      sessionID: current.id,
-      name: "project isolation",
-      command: "sleep 30",
-      target: { kind: "local" },
-    }),
-  })
-  expect(started.status).toBe(200)
-  const job = (await started.json()) as { id: string }
+test(
+  "compute job routes isolate list, log, cancel, and clear by project",
+  async () => {
+    await using first = await tmpdir()
+    await using second = await tmpdir()
+    const current = await session(first.path)
+    const one = `?directory=${encodeURIComponent(first.path)}`
+    const two = `?directory=${encodeURIComponent(second.path)}`
+    const started = await ComputeSettingsRoutes().request(`/jobs${one}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sessionID: current.id,
+        name: "project isolation",
+        command: "sleep 30",
+        target: { kind: "local" },
+      }),
+    })
+    expect(started.status).toBe(200)
+    const job = (await started.json()) as { id: string }
 
-  expect(await (await ComputeSettingsRoutes().request(`/jobs${two}`)).json()).toEqual([])
-  expect((await ComputeSettingsRoutes().request(`/jobs/${job.id}/log${two}`)).status).toBe(404)
-  expect((await ComputeSettingsRoutes().request(`/jobs/${job.id}/cancel${two}`, { method: "POST" })).status).toBe(404)
-  expect(await (await ComputeSettingsRoutes().request(`/jobs/completed${two}`, { method: "DELETE" })).json()).toEqual({
-    cleared: 0,
-  })
+    expect(await (await ComputeSettingsRoutes().request(`/jobs${two}`)).json()).toEqual([])
+    expect((await ComputeSettingsRoutes().request(`/jobs/${job.id}/log${two}`)).status).toBe(404)
+    expect((await ComputeSettingsRoutes().request(`/jobs/${job.id}/cancel${two}`, { method: "POST" })).status).toBe(404)
+    expect(await (await ComputeSettingsRoutes().request(`/jobs/completed${two}`, { method: "DELETE" })).json()).toEqual(
+      {
+        cleared: 0,
+      },
+    )
 
-  expect((await ComputeSettingsRoutes().request(`/jobs/${job.id}/cancel${one}`, { method: "POST" })).status).toBe(200)
-  expect((await ComputeSettingsRoutes().request(`/jobs/completed${one}`, { method: "DELETE" })).status).toBe(200)
-})
+    expect((await ComputeSettingsRoutes().request(`/jobs/${job.id}/cancel${one}`, { method: "POST" })).status).toBe(200)
+    expect((await ComputeSettingsRoutes().request(`/jobs/completed${one}`, { method: "DELETE" })).status).toBe(200)
+  },
+  nativeLifecycleTimeout,
+)
 
-test("mounted compute routes use an opaque project selector for every job operation", async () => {
-  await using tmp = await tmpdir()
-  const created = await Project.fromDirectory(tmp.path)
-  const current = await session(tmp.path)
-  const headers = {
-    "content-type": "application/json",
-    "x-openscience-project": created.project.id,
-  }
-  const started = await fetch(jobs, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      sessionID: current.id,
-      name: "project capability",
-      command: "printf 'project-capability-ok\\n'",
-      target: { kind: "local" },
-    }),
-  })
+test(
+  "mounted compute routes use an opaque project selector for every job operation",
+  async () => {
+    await using tmp = await tmpdir()
+    const created = await Project.fromDirectory(tmp.path)
+    const current = await session(tmp.path)
+    const headers = {
+      "content-type": "application/json",
+      "x-openscience-project": created.project.id,
+    }
+    const started = await fetch(jobs, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        sessionID: current.id,
+        name: "project capability",
+        command: "printf 'project-capability-ok\\n'",
+        target: { kind: "local" },
+      }),
+    })
 
-  expect(started.status).toBe(200)
-  const first = (await started.json()) as {
-    id: string
-    cwd: string
-    scope: { directory: string }
-  }
-  expect(first.cwd).toBe(tmp.path)
-  expect(first.scope.directory).toBe(tmp.path)
-  expect((await settle(jobs, first.id, headers)).status).toBe("succeeded")
+    expect(started.status).toBe(200)
+    const first = (await started.json()) as {
+      id: string
+      cwd: string
+      scope: { directory: string }
+    }
+    expect(first.cwd).toBe(tmp.path)
+    expect(first.scope.directory).toBe(tmp.path)
+    expect((await settle(jobs, first.id, headers)).status).toBe("succeeded")
 
-  const output = await fetch(`${jobs}/${first.id}/log`, { headers })
-  expect(output.status).toBe(200)
-  expect(await output.json()).toEqual({ log: "project-capability-ok\n" })
+    const output = await fetch(`${jobs}/${first.id}/log`, { headers })
+    expect(output.status).toBe(200)
+    expect(await output.json()).toEqual({ log: "project-capability-ok\n" })
 
-  const cleared = await fetch(`${jobs}/completed`, { method: "DELETE", headers })
-  expect(cleared.status).toBe(200)
-  expect(await cleared.json()).toEqual({ cleared: 1 })
-})
+    const cleared = await fetch(`${jobs}/completed`, { method: "DELETE", headers })
+    expect(cleared.status).toBe(200)
+    expect(await cleared.json()).toEqual({ cleared: 1 })
+  },
+  nativeLifecycleTimeout,
+)
 
 test("mounted compute routes reject unknown, stale, and mismatched project selectors", async () => {
   await using current = await tmpdir()
@@ -463,90 +481,98 @@ test("mounted compute routes reject unknown, stale, and mismatched project selec
   })
 })
 
-test("mounted compute routes never resolve another project's job id", async () => {
-  await using first = await tmpdir()
-  await using second = await tmpdir()
-  const one = await Project.fromDirectory(first.path)
-  const two = await Project.fromDirectory(second.path)
-  const current = await session(first.path)
-  const firstHeaders = {
-    "content-type": "application/json",
-    "x-openscience-project": one.project.id,
-  }
-  const secondHeaders = {
-    "content-type": "application/json",
-    "x-openscience-project": two.project.id,
-  }
-  const started = await fetch(jobs, {
-    method: "POST",
-    headers: firstHeaders,
-    body: JSON.stringify({
-      sessionID: current.id,
-      name: "cross-project isolation",
-      command: "printf 'cross-project-ok\\n'",
-      target: { kind: "local" },
-    }),
-  })
-  expect(started.status).toBe(200)
-  const job = (await started.json()) as { id: string }
-  expect((await settle(jobs, job.id, firstHeaders)).status).toBe("succeeded")
-
-  const [listed, output, cancelled, cleared] = await Promise.all([
-    fetch(jobs, { headers: secondHeaders }),
-    fetch(`${jobs}/${job.id}/log`, { headers: secondHeaders }),
-    fetch(`${jobs}/${job.id}/cancel`, { method: "POST", headers: secondHeaders }),
-    fetch(`${jobs}/completed`, { method: "DELETE", headers: secondHeaders }),
-  ])
-  expect(await listed.json()).toEqual([])
-  expect(output.status).toBe(404)
-  expect(cancelled.status).toBe(404)
-  expect(await cleared.json()).toEqual({ cleared: 0 })
-
-  expect(await (await fetch(`${jobs}/completed`, { method: "DELETE", headers: firstHeaders })).json()).toEqual({
-    cleared: 1,
-  })
-})
-
-test("legacy directory requests and project selectors share one canonical symlink scope", async () => {
-  await using tmp = await tmpdir()
-  const created = await Project.fromDirectory(tmp.path)
-  const current = await session(tmp.path)
-  const link = path.join(path.dirname(tmp.path), `${path.basename(tmp.path)}-compute-alias`)
-  await fs.symlink(tmp.path, link)
-  const legacy = `${jobs}?directory=${encodeURIComponent(link)}`
-  const started = await fetch(legacy, {
-    method: "POST",
-    headers: {
+test(
+  "mounted compute routes never resolve another project's job id",
+  async () => {
+    await using first = await tmpdir()
+    await using second = await tmpdir()
+    const one = await Project.fromDirectory(first.path)
+    const two = await Project.fromDirectory(second.path)
+    const current = await session(first.path)
+    const firstHeaders = {
       "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      sessionID: current.id,
-      name: "legacy symlink",
-      command: "printf 'legacy-symlink-ok\\n'",
-      target: { kind: "local" },
-    }),
-  })
+      "x-openscience-project": one.project.id,
+    }
+    const secondHeaders = {
+      "content-type": "application/json",
+      "x-openscience-project": two.project.id,
+    }
+    const started = await fetch(jobs, {
+      method: "POST",
+      headers: firstHeaders,
+      body: JSON.stringify({
+        sessionID: current.id,
+        name: "cross-project isolation",
+        command: "printf 'cross-project-ok\\n'",
+        target: { kind: "local" },
+      }),
+    })
+    expect(started.status).toBe(200)
+    const job = (await started.json()) as { id: string }
+    expect((await settle(jobs, job.id, firstHeaders)).status).toBe("succeeded")
 
-  expect(started.status).toBe(200)
-  const job = (await started.json()) as {
-    id: string
-    cwd: string
-    scope: { directory: string }
-  }
-  expect(job.cwd).toBe(tmp.path)
-  expect(job.scope.directory).toBe(tmp.path)
+    const [listed, output, cancelled, cleared] = await Promise.all([
+      fetch(jobs, { headers: secondHeaders }),
+      fetch(`${jobs}/${job.id}/log`, { headers: secondHeaders }),
+      fetch(`${jobs}/${job.id}/cancel`, { method: "POST", headers: secondHeaders }),
+      fetch(`${jobs}/completed`, { method: "DELETE", headers: secondHeaders }),
+    ])
+    expect(await listed.json()).toEqual([])
+    expect(output.status).toBe(404)
+    expect(cancelled.status).toBe(404)
+    expect(await cleared.json()).toEqual({ cleared: 0 })
 
-  const headers = {
-    "x-openscience-project": created.project.id,
-  }
-  expect((await settle(jobs, job.id, headers)).status).toBe("succeeded")
-  const output = await fetch(`${jobs}/${job.id}/log?directory=${encodeURIComponent(tmp.path)}`)
-  expect(output.status).toBe(200)
-  expect(await output.json()).toEqual({ log: "legacy-symlink-ok\n" })
-  expect(await (await fetch(`${jobs}/completed`, { method: "DELETE", headers })).json()).toEqual({ cleared: 1 })
+    expect(await (await fetch(`${jobs}/completed`, { method: "DELETE", headers: firstHeaders })).json()).toEqual({
+      cleared: 1,
+    })
+  },
+  nativeLifecycleTimeout,
+)
 
-  await fs.rm(link, { force: true })
-})
+test(
+  "legacy directory requests and project selectors share one canonical symlink scope",
+  async () => {
+    await using tmp = await tmpdir()
+    const created = await Project.fromDirectory(tmp.path)
+    const current = await session(tmp.path)
+    const link = path.join(path.dirname(tmp.path), `${path.basename(tmp.path)}-compute-alias`)
+    await fs.symlink(tmp.path, link)
+    const legacy = `${jobs}?directory=${encodeURIComponent(link)}`
+    const started = await fetch(legacy, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        sessionID: current.id,
+        name: "legacy symlink",
+        command: "printf 'legacy-symlink-ok\\n'",
+        target: { kind: "local" },
+      }),
+    })
+
+    expect(started.status).toBe(200)
+    const job = (await started.json()) as {
+      id: string
+      cwd: string
+      scope: { directory: string }
+    }
+    expect(job.cwd).toBe(tmp.path)
+    expect(job.scope.directory).toBe(tmp.path)
+
+    const headers = {
+      "x-openscience-project": created.project.id,
+    }
+    expect((await settle(jobs, job.id, headers)).status).toBe("succeeded")
+    const output = await fetch(`${jobs}/${job.id}/log?directory=${encodeURIComponent(tmp.path)}`)
+    expect(output.status).toBe(200)
+    expect(await output.json()).toEqual({ log: "legacy-symlink-ok\n" })
+    expect(await (await fetch(`${jobs}/completed`, { method: "DELETE", headers })).json()).toEqual({ cleared: 1 })
+
+    await fs.rm(link, { force: true })
+  },
+  nativeLifecycleTimeout,
+)
 
 test("read-only projects cannot start compute jobs or create side effects", async () => {
   await using tmp = await tmpdir()
@@ -583,34 +609,38 @@ test("read-only projects cannot start compute jobs or create side effects", asyn
   expect(await (await fetch(jobs, { headers })).json()).toEqual([])
 })
 
-test("revoking project trust cancels its running compute jobs", async () => {
-  if (!Sandbox.available()) return
-  await using tmp = await tmpdir()
-  const created = await Project.fromDirectory(tmp.path)
-  const current = await session(tmp.path)
-  const headers = {
-    "content-type": "application/json",
-    "x-openscience-project": created.project.id,
-  }
-  const started = await fetch(jobs, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      sessionID: current.id,
-      name: "trust-bound job",
-      command: "sleep 30",
-      target: { kind: "local" },
-    }),
-  })
-  expect(started.status).toBe(200)
-  const job = (await started.json()) as { id: string }
+test(
+  "revoking project trust cancels its running compute jobs",
+  async () => {
+    if (!Sandbox.available()) return
+    await using tmp = await tmpdir()
+    const created = await Project.fromDirectory(tmp.path)
+    const current = await session(tmp.path)
+    const headers = {
+      "content-type": "application/json",
+      "x-openscience-project": created.project.id,
+    }
+    const started = await fetch(jobs, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        sessionID: current.id,
+        name: "trust-bound job",
+        command: "sleep 30",
+        target: { kind: "local" },
+      }),
+    })
+    expect(started.status).toBe(200)
+    const job = (await started.json()) as { id: string }
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      await ProjectTrust.update(Instance.project, { trusted: false })
-    },
-  })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
+      },
+    })
 
-  expect((await settle(jobs, job.id, headers)).status).toBe("cancelled")
-})
+    expect((await settle(jobs, job.id, headers)).status).toBe("cancelled")
+  },
+  nativeLifecycleTimeout,
+)

@@ -10,7 +10,7 @@ import { useSettings } from "@/context/settings"
 import { Binary } from "@synsci/util/binary"
 import { EventSessionError } from "@synsci/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
-import { playSound, soundSrc } from "@/utils/sound"
+import { playSound, preloadSound, soundSrc } from "@/utils/sound"
 import { projectForDirectory, projectHref, resolveProjectRoute } from "@/utils/project-route"
 
 type NotificationBase = {
@@ -86,6 +86,12 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       setStore("list", pruneNotifications(store.list))
     })
 
+    createEffect(() => {
+      if (!settings.sounds.enabled()) return
+      preloadSound(soundSrc(settings.sounds.agent()))
+      preloadSound(soundSrc(settings.sounds.errors()))
+    })
+
     const append = (notification: Notification) => {
       setStore("list", (list) => pruneNotifications([...list, notification]))
     }
@@ -158,7 +164,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           const session = match.found ? syncStore.session[match.index] : undefined
           if (session?.parentID) break
 
-          playSound(soundSrc(settings.sounds.agent()))
+          if (settings.sounds.enabled()) {
+            playSound(soundSrc(settings.sounds.agent()), settings.sounds.volume())
+          }
 
           append({
             directory,
@@ -188,7 +196,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           const error = "error" in event.properties ? event.properties.error : undefined
           if (isTransientError(error)) break
 
-          playSound(soundSrc(settings.sounds.errors()))
+          if (settings.sounds.enabled()) {
+            playSound(soundSrc(settings.sounds.errors()), settings.sounds.volume())
+          }
 
           append({
             directory,

@@ -1,6 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../global"
+import { DataRootBarrier } from "../global/data-root-barrier"
 import z from "zod"
 
 export namespace Log {
@@ -54,6 +55,11 @@ export namespace Log {
     process.stderr.write(msg)
     return msg.length
   }
+  let pending = Promise.resolve()
+
+  export function flush() {
+    return pending
+  }
 
   export async function init(options: Options) {
     if (options.level) level = options.level
@@ -63,13 +69,23 @@ export namespace Log {
       Global.Path.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
-    const logfile = Bun.file(logpath)
     await fs.truncate(logpath).catch(() => {})
-    const writer = logfile.writer()
-    write = async (msg: any) => {
-      const num = writer.write(msg)
-      writer.flush()
-      return num
+    write = (msg: any) => {
+      const content = String(msg)
+      // Resolve the stable data-root link for every serialized append instead
+      // of retaining an fd into one physical root. Relocation intent blocks a
+      // new append, drains earlier ones, snapshots the logs, switches the link,
+      // then releases the same precomputed path onto the new target.
+      pending = pending
+        .catch(() => undefined)
+        .then(async () => {
+          await using operation = await DataRootBarrier.enter(logpath, 120_000)
+          await fs.appendFile(logpath, content)
+        })
+        .catch((error) => {
+          process.stderr.write(`OpenScience log write failed: ${String(error)}\n`)
+        })
+      return content.length
     }
   }
 

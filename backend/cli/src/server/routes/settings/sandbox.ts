@@ -11,7 +11,7 @@ const log = Log.create({ service: "settings-sandbox" })
 const PatchSchema = z.object({
   enabled: z.boolean().optional(),
   network: z.enum(["allow", "deny"]).optional(),
-  allowWrite: z.array(z.string()).optional(),
+  allowWrite: z.array(z.string().trim().min(1).max(4096)).max(64).optional(),
   onUnavailable: z.enum(["warn", "error", "allow"]).optional(),
 })
 
@@ -36,8 +36,15 @@ export const SandboxSettingsRoutes = lazy(() =>
     // Persist a partial config patch (machine-wide / global).
     .put("/", validator("json", PatchSchema), async (c) => {
       const patch = c.req.valid("json")
+      const roots = patch.allowWrite?.map((value) => ({ value, canonical: Sandbox.writableGrant(value) }))
+      const invalid = roots?.find((value) => !value.canonical)
+      if (invalid) return c.json({ error: `Writable sandbox path is invalid or over-broad: ${invalid.value}` }, 400)
+      const next = {
+        ...patch,
+        ...(roots ? { allowWrite: [...new Set(roots.map((value) => value.canonical!))] } : {}),
+      }
       log.info("updating sandbox config", { keys: Object.keys(patch) })
-      await Config.setSandbox(patch)
+      await Config.setSandbox(next)
       return c.json({ config: await currentConfig(), status: Sandbox.describe() })
     })
 

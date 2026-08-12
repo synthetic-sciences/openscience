@@ -16,6 +16,8 @@ import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { OpenScience } from "../openscience"
 import { isAtlasProxyURL, managedOpenRouterBaseURL } from "../openscience/synced-env-policy"
+import { CredentialLifecycle } from "../credentials/lifecycle"
+import { ProviderTokenCommand } from "./token-command"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -1683,6 +1685,7 @@ export namespace Provider {
 
   // Returns the memoised state, creating it on first call or after invalidate().
   async function state() {
+    await CredentialLifecycle.ensureFresh()
     const directory = Instance.directory
     const trusted = await ProjectTrust.allowed(Instance.project)
     if (_stateCacheDirectory !== directory || _stateCacheTrust !== trusted) {
@@ -1732,15 +1735,38 @@ export namespace Provider {
   // its stdout as `Authorization: Bearer <token>`, re-minting shortly before the
   // token's JWT exp. Module-level so the cache + single-flight are shared across the
   // (memoized) SDK instances rather than re-run per request.
-  const tokenCache = new Map<string, { token: string; expires: number }>()
-  const tokenInflight = new Map<string, Promise<string>>()
+  type TokenScope = {
+    projectID: string
+    providerID: string
+    command: string
+    endpoint: string
+  }
+  type TokenCacheEntry = TokenScope & { token: string; expires: number }
+  type TokenInflightEntry = TokenScope & { promise: Promise<string> }
+
+  const tokenCache = new Map<string, TokenCacheEntry>()
+  const tokenInflight = new Map<string, TokenInflightEntry>()
+  let tokenGeneration = 0
+
+  export function invalidateTokenCache(projectID?: string): void {
+    // Advancing the generation prevents an already-running mint from
+    // repopulating a cache that was invalidated while the helper was active.
+    tokenGeneration++
+    if (!projectID) {
+      tokenCache.clear()
+      tokenInflight.clear()
+      return
+    }
+    for (const [key, entry] of tokenCache) {
+      if (entry.projectID === projectID) tokenCache.delete(key)
+    }
+    for (const [key, entry] of tokenInflight) {
+      if (entry.projectID === projectID) tokenInflight.delete(key)
+    }
+  }
 
   async function projectToken(model: Model, command: string) {
-    const config = await Config.get()
-    const declared = config.provider?.[model.providerID]?.options?.tokenCommand
-    if (declared !== command) return false
-    const executable = await Config.getExecution()
-    return executable.provider?.[model.providerID]?.options?.tokenCommand !== command
+    return Config.projectControlsProviderToken(model.providerID, command)
   }
 
   async function projectModule(model: Model) {
@@ -1753,22 +1779,26 @@ export namespace Provider {
     return configured(await Config.getExecution()) !== model.api.npm
   }
 
-  async function mintToken(command: string): Promise<string> {
-    const cached = tokenCache.get(command)
+  async function mintToken(model: Model, command: string, endpoint: string, projectDeclared: boolean): Promise<string> {
+    // A token command is evaluated relative to the active project and its
+    // result is sent to one provider endpoint. Command text alone is therefore
+    // not an authority boundary: two projects may intentionally use the same
+    // command while resolving different files from different working trees.
+    const scope: TokenScope = {
+      projectID: Instance.project.id,
+      providerID: model.providerID,
+      command,
+      endpoint,
+    }
+    const key = JSON.stringify(scope)
+    const cached = tokenCache.get(key)
     // Re-mint a minute early so an in-flight request never ships an expired token.
     if (cached && cached.expires > Date.now() + 60_000) return cached.token
-    const pending = tokenInflight.get(command)
-    if (pending) return pending
+    const pending = tokenInflight.get(key)
+    if (pending) return pending.promise
+    const generation = tokenGeneration
     const run = (async () => {
-      const proc = Bun.spawn(["sh", "-c", command], { stdout: "pipe", stderr: "pipe" })
-      const [out, err, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ])
-      const token = out.trim()
-      if (code !== 0) throw new Error(`tokenCommand exited ${code}: ${err.trim() || "no stderr"}`)
-      if (!token) throw new Error("tokenCommand produced no output")
+      const token = await ProviderTokenCommand.run({ command, projectDeclared })
       // Decode a JWT exp (seconds) so we can re-mint just before it lapses; a
       // non-JWT token has no exp, so expire it immediately (re-mint every request).
       const claims = token.split(".")
@@ -1780,10 +1810,14 @@ export namespace Provider {
           /* not a JWT — leave exp 0 */
         }
       }
-      tokenCache.set(command, { token, expires: exp ? exp * 1000 : 0 })
+      if (generation === tokenGeneration) {
+        tokenCache.set(key, { ...scope, token, expires: exp ? exp * 1000 : 0 })
+      }
       return token
-    })().finally(() => tokenInflight.delete(command))
-    tokenInflight.set(command, run)
+    })().finally(() => {
+      if (tokenInflight.get(key)?.promise === run) tokenInflight.delete(key)
+    })
+    tokenInflight.set(key, { ...scope, promise: run })
     return run
   }
 
@@ -1858,10 +1892,12 @@ export namespace Provider {
         // Headers.set is case-insensitive, so it replaces the placeholder key the
         // SDK attached at construction.
         if (tokenCommand) {
-          if (await projectToken(model, tokenCommand)) {
+          const projectDeclared = await projectToken(model, tokenCommand)
+          if (projectDeclared) {
             await ProjectTrust.require(Instance.project, "provider_token_command")
           }
-          const token = await mintToken(tokenCommand)
+          const endpoint = String(options["baseURL"] ?? model.api.url ?? "")
+          const token = await mintToken(model, tokenCommand, endpoint, projectDeclared)
           const headers = new Headers(opts.headers as HeadersInit | undefined)
           headers.set("authorization", `Bearer ${token}`)
           opts.headers = headers
@@ -2112,3 +2148,8 @@ export namespace Provider {
     }),
   )
 }
+
+CredentialLifecycle.onRefresh(() => {
+  Provider.invalidateTokenCache()
+  Provider.invalidate()
+})

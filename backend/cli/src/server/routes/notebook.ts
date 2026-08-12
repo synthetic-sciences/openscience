@@ -1,26 +1,45 @@
 import { Hono, type Context } from "hono"
+import { HTTPException } from "hono/http-exception"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { Instance } from "../../project/instance"
 import "../../tool/notebook"
 import "../../tool/rkernel"
-import type { ExecuteResult, KernelOutput } from "../../science/kernel/types"
+import type { ExecuteResult, KernelOutput, KernelStartOptions } from "../../science/kernel/types"
 import { KernelRuntime, KernelStartupCancelled, KernelStatus, type KernelIdentity } from "../../science/kernel/registry"
 import { KernelMetrics } from "../../science/kernel/metrics"
 import { KernelHost } from "../../science/kernel/host"
-import { SessionFilesystem } from "../../session/filesystem"
 import { Identifier } from "../../id/id"
 import { Session } from "../../session"
 import { lazy } from "../../util/lazy"
 import { Storage } from "../../storage/storage"
 import { CommandRuntime, CommandStatus } from "../../science/command/registry"
+import {
+  KernelEnvironmentName,
+  KernelEnvironmentUnavailable,
+  pythonEnvironment,
+} from "../../science/kernel/interpreter"
 
 const Language = z.enum(["python", "r"])
-const Key = z.object({
+const KeyShape = {
   sessionID: Identifier.schema("session"),
   id: z.string().trim().min(1).max(1024),
   language: Language,
-})
+  environment: KernelEnvironmentName.optional(),
+}
+const validateEnvironment = (
+  input: { language: z.infer<typeof Language>; environment?: string },
+  issue: z.RefinementCtx,
+) => {
+  if (input.language === "r" && input.environment && input.environment !== "r") {
+    issue.addIssue({
+      code: "custom",
+      path: ["environment"],
+      message: "Named interpreter environments currently support Python; use environment 'r' for R.",
+    })
+  }
+}
+const Key = z.object(KeyShape).superRefine(validateEnvironment)
 const List = z.object({
   sessionID: Identifier.schema("session").optional(),
 })
@@ -36,19 +55,41 @@ const KernelParam = z.object({
 const CommandParam = z.object({
   commandID: z.string().regex(/^command-[a-f0-9-]+$/),
 })
-const Execute = Key.extend({
-  code: z.string().max(2_000_000),
-  timeout: z.number().int().min(5_000).max(600_000).optional(),
-})
+const Execute = z
+  .object({
+    ...KeyShape,
+    code: z.string().max(2_000_000),
+    timeout: z.number().int().min(5_000).max(600_000).optional(),
+  })
+  .strict()
+  .superRefine(validateEnvironment)
 
 type Language = z.infer<typeof Language>
 
-const identity = (input: { sessionID: string; id: string; language: Language }): KernelIdentity => ({
+const identity = (input: {
+  sessionID: string
+  id: string
+  language: Language
+  environment?: string
+}): KernelIdentity => ({
   projectID: Instance.project.id,
   sessionID: input.sessionID,
-  name: `notebook:${input.id}`,
+  name: input.environment ? `environment:${input.environment}` : `notebook:${input.id}`,
   language: input.language,
+  environmentName: input.environment && input.environment !== input.language ? input.environment : undefined,
 })
+
+const runtime = async (input: KernelIdentity): Promise<KernelStartOptions> => {
+  if (input.language !== "python") return { environmentName: "r" }
+  try {
+    return await pythonEnvironment(Instance.directory, input.environmentName ?? "python")
+  } catch (error) {
+    if (error instanceof KernelEnvironmentUnavailable) {
+      throw new HTTPException(400, { message: error.message })
+    }
+    throw error
+  }
+}
 
 const owner = async (c: Context, sessionID: string) =>
   Session.get(sessionID)
@@ -298,7 +339,7 @@ export const NotebookRoutes = lazy(() =>
         if (!input) {
           return c.json({ error: "kernel_not_found", message: "The kernel does not exist in this session." }, 404)
         }
-        return c.json(await KernelRuntime.restart(input, { cwd: await SessionFilesystem.workspace(body.sessionID) }))
+        return c.json(await KernelRuntime.restart(input, await runtime(input)))
       },
     )
     .post(
@@ -396,11 +437,12 @@ export const NotebookRoutes = lazy(() =>
         const body = c.req.valid("json")
         const denied = await owner(c, body.sessionID)
         if (denied) return denied
+        const selected = identity(body)
         const result = await KernelRuntime.execute(
-          identity(body),
+          selected,
           body.code,
           { timeout: body.timeout, origin: { source: body.id } },
-          { cwd: await SessionFilesystem.workspace(body.sessionID) },
+          await runtime(selected),
         ).catch((error) => {
           if (error instanceof KernelStartupCancelled) return error
           throw error
@@ -450,9 +492,8 @@ export const NotebookRoutes = lazy(() =>
         const denied = await owner(c, body.sessionID)
         if (denied) return denied
         await KernelRuntime.restoreSession(Instance.project.id, body.sessionID)
-        return c.json(
-          await KernelRuntime.restart(identity(body), { cwd: await SessionFilesystem.workspace(body.sessionID) }),
-        )
+        const selected = identity(body)
+        return c.json(await KernelRuntime.restart(selected, await runtime(selected)))
       },
     )
     .post(

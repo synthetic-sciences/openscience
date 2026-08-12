@@ -22,7 +22,8 @@
   4. Use the user's configured `sans` font-family by default.
   5. Use the user's configured `sans` font-feature-settings by default.
   6. Use the user's configured `sans` font-variation-settings by default.
-  7. Disable tap highlights on iOS.
+  7. Apply the shared quiet body weight by default.
+  8. Disable tap highlights on iOS.
 */
 
 html,
@@ -33,7 +34,8 @@ html,
   font-family: var(--font-family-sans); /* 4 */
   font-feature-settings: var(--font-family-sans--font-feature-settings, normal); /* 5 */
   font-variation-settings: var(--font-family-sans--font-variation-settings, normal); /* 6 */
-  -webkit-tap-highlight-color: transparent; /* 7 */
+  font-weight: var(--font-weight-regular); /* 7 */
+  -webkit-tap-highlight-color: transparent; /* 8 */
   /* Reserve scrollbar space even when content fits — without this, modal
      scroll-lock removes the scrollbar and the page shifts ~15px right,
      which reads as a flicker the moment a dialog spawns. */

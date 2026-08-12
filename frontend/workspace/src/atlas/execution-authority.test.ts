@@ -93,10 +93,51 @@ describe("frontend execution authority", () => {
     )
   })
 
+  test("submits only the canonical trust remediation returned by the server", async () => {
+    const calls: Array<{ url: URL; init?: RequestInit }> = []
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: new URL(String(input)), init })
+      return Response.json({ state: "trusted" })
+    }) as typeof fetch
+    const request = createProjectRequest({
+      baseUrl: () => "http://127.0.0.1:4096",
+      projectID: () => "prj_alpha",
+      directory: () => "/managed/project",
+      fetch: () => fetcher,
+    })
+    const blocked = decision({
+      allowed: false,
+      reason: "project_untrusted",
+      mode: "read_only",
+      remediation: {
+        code: "trust_project_required",
+        message: "Trust required",
+        method: "PUT",
+        path: "/project/prj_alpha/trust",
+        body: { trusted: true, root: "/managed/project" },
+      },
+    })
+
+    await createExecutionAuthorityAPI(request).trust(blocked)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url.pathname).toBe("/project/prj_alpha/trust")
+    expect(calls[0].init?.method).toBe("PUT")
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ trusted: true, root: "/managed/project" })
+    await expect(
+      createExecutionAuthorityAPI(request).trust({
+        ...blocked,
+        remediation: { ...blocked.remediation!, path: "/project/prj_other/trust" },
+      }),
+    ).rejects.toThrow("valid project-trust action")
+  })
+
   test("fails closed without dereferencing a failed authority resource", () => {
     expect(hook).toContain("if (decision.error || decision.loading) return false")
     expect(hook).toContain("value.projectID === expected.projectID")
     expect(hook).toContain("value.sessionID === expected.sessionID")
     expect(hook).toContain("value.capability === expected.capability")
+    expect(hook).toContain("await api.trust(value)")
+    expect(hook).toContain("await controls.refetch()")
   })
 })

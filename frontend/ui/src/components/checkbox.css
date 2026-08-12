@@ -1,5 +1,6 @@
 [data-component="checkbox"] {
   display: flex;
+  min-height: 32px;
   align-items: center;
   gap: 12px;
   cursor: default;
@@ -117,5 +118,12 @@
   &[data-readonly] {
     cursor: default;
     pointer-events: none;
+  }
+}
+
+@media (pointer: coarse) {
+  [data-component="checkbox"] {
+    min-width: 44px;
+    min-height: 44px;
   }
 }

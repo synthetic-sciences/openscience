@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { ComputeJobs } from "../../src/compute/jobs"
+import { Bus } from "../../src/bus"
 import { File } from "../../src/file"
 import { PermissionNext } from "../../src/permission/next"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -33,6 +34,45 @@ async function wait(sessionID: string, attempt = 0): Promise<PermissionNext.Requ
 }
 
 describe("session filesystem grants", () => {
+  test("does not broadcast a revocation for a new session's initial workspace", async () => {
+    await using external = await tmpdir()
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const changes: string[] = []
+        const unsubscribe = Bus.subscribe(SessionFilesystem.Event.Changed, (event) => {
+          changes.push(event.properties.sessionID)
+        })
+        const session = await Session.create({})
+        await using cleanup = {
+          [Symbol.asyncDispose]: () => Session.remove(session.id),
+        }
+
+        expect(changes).toEqual([])
+        expect(await SessionFilesystem.list(session.id)).toContainEqual(
+          expect.objectContaining({
+            path: tmp.path,
+            access: "write",
+            scope: "session",
+            source: "workspace",
+          }),
+        )
+
+        const grant = await SessionFilesystem.grant({
+          sessionID: session.id,
+          path: external.path,
+          access: "read",
+          scope: "session",
+        })
+        expect(changes).toEqual([session.id])
+        await SessionFilesystem.revoke(session.id, grant.id)
+        expect(changes).toEqual([session.id, session.id])
+        unsubscribe()
+      },
+    })
+  })
+
   test("creates a durable read-write workspace grant with each session", async () => {
     await using tmp = await tmpdir()
     await withSession(tmp.path, async (session) => {
@@ -81,6 +121,8 @@ describe("session filesystem grants", () => {
           access: "write",
         }),
       ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      expect(await SessionFilesystem.processReadRoots(session.id)).toContain(external.path)
+      expect(await SessionFilesystem.processWriteRoots(session.id)).not.toContain(external.path)
     })
   })
 
@@ -97,6 +139,7 @@ describe("session filesystem grants", () => {
         access: "read",
         scope: "once",
       })
+      expect(await SessionFilesystem.processReadRoots(session.id)).not.toContain(external.path)
       await expect(
         SessionFilesystem.authorize({
           sessionID: session.id,
@@ -144,7 +187,7 @@ describe("session filesystem grants", () => {
     })
   })
 
-  test("never turns an external write grant into a code-writable mount", async () => {
+  test("keeps process read and write grants directional", async () => {
     await using external = await tmpdir()
     await using tmp = await tmpdir()
     await withSession(tmp.path, async (session) => {
@@ -156,11 +199,12 @@ describe("session filesystem grants", () => {
       })
       const roots = await SessionFilesystem.processWriteRoots(session.id)
       expect(roots).toContain(tmp.path)
-      expect(roots).not.toContain(external.path)
+      expect(roots).toContain(external.path)
+      expect(await SessionFilesystem.processReadRoots(session.id)).toContain(external.path)
       expect((await SessionFilesystem.snapshot(session.id)).enforcement).toEqual({
         broker: "enforced",
-        processWrite: "workspace_only",
-        processRead: "policy_only",
+        processWrite: "grant_only",
+        processRead: Sandbox.describe().readIsolation === "grant_only" ? "grant_only" : "policy_only",
       })
     })
   })

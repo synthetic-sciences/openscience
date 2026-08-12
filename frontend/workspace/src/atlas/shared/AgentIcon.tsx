@@ -1,4 +1,5 @@
 import { type JSX } from "solid-js"
+import { IconResearch } from "./Icon"
 
 interface AgentIconProps {
   size?: number
@@ -23,19 +24,7 @@ export function AgentIcon(props: AgentIconProps): JSX.Element {
       }}
       aria-hidden="true"
     >
-      <svg
-        width={size()}
-        height={size()}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width={strokeWidth()}
-        stroke-linecap="round"
-      >
-        <ellipse cx="12" cy="12" rx="10" ry="4" />
-        <ellipse cx="12" cy="12" rx="4" ry="10" />
-        <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
-      </svg>
+      <IconResearch size={size()} strokeWidth={strokeWidth()} />
     </span>
   )
 }

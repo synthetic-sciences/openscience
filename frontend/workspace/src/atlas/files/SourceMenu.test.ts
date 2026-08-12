@@ -35,10 +35,17 @@ const mount = (view: () => JSX.Element) => {
 }
 
 const SOURCES = [
-  { id: "artifacts", group: "Artifacts" as const, name: "All artifacts", root: "", kind: "artifacts" as const },
+  {
+    id: "artifacts",
+    group: "Saved" as const,
+    name: "Saved artifacts",
+    detail: "Durable, versioned deliverables",
+    root: "",
+    kind: "artifacts" as const,
+  },
   {
     id: "project",
-    group: "This computer" as const,
+    group: "Working files" as const,
     name: "openscience-demoo",
     sub: "/home/keertan/codes/openscience-demoo",
     root: "/p",
@@ -46,7 +53,7 @@ const SOURCES = [
   },
   {
     id: "ro",
-    group: "This computer" as const,
+    group: "Working files" as const,
     name: "pdebench",
     sub: "/home/keertan/data/pdebench",
     root: "/d",
@@ -61,27 +68,30 @@ describe("source menu", () => {
     const button = host.querySelector<HTMLButtonElement>("[data-source-button]")
 
     expect(button?.textContent).toContain("openscience-demoo")
+    expect(button?.querySelector(".files-source__glyph svg")).not.toBeNull()
     expect(host.querySelector("[data-source-menu]")).toBeNull()
 
     button?.click()
 
     expect(host.querySelector("[data-source-menu]")).not.toBeNull()
     expect([...host.querySelectorAll("[data-source-group]")].map((n) => n.textContent)).toEqual([
-      "Artifacts",
-      "This computer",
+      "Saved",
+      "Working files",
     ])
   })
 
-  test("reports the chosen source and closes", () => {
+  test("reports the chosen source, closes, and restores focus", async () => {
     const picked: string[] = []
     const host = mount(() =>
       subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: (s) => picked.push(s.id) }),
     )
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
     host.querySelector<HTMLButtonElement>('[data-source-item="ro"]')?.click()
+    await Promise.resolve()
 
     expect(picked).toEqual(["ro"])
     expect(host.querySelector("[data-source-menu]")).toBeNull()
+    expect(document.activeElement).toBe(host.querySelector("[data-source-button]"))
   })
 
   test("marks the active source and badges a read-only grant", () => {
@@ -90,10 +100,22 @@ describe("source menu", () => {
 
     expect(host.querySelector('[data-source-item="project"]')?.getAttribute("aria-checked")).toBe("true")
     expect(host.querySelector('[data-source-item="ro"]')?.getAttribute("aria-checked")).toBe("false")
-    expect(host.querySelector('[data-source-item="ro"]')?.textContent).toContain("ro")
+    expect(host.querySelector('[data-source-item="ro"]')?.textContent).toContain("Read only")
   })
 
-  test("offers revoke on a connected grant only, and revoking does not also pick it", () => {
+  test("explains saved artifacts without pretending they are a filesystem path", () => {
+    const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[0]!, onPick: () => {} }))
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    expect(host.querySelector('[data-source-item="artifacts"] .files-menu__context')?.textContent).toBe(
+      "Durable, versioned deliverables",
+    )
+    expect(host.querySelector('[data-source-item="project"] .files-menu__sub')?.textContent).toContain(
+      "/home/keertan/codes",
+    )
+  })
+
+  test("offers revoke on a connected grant only, and revoking does not also pick it", async () => {
     const picked: string[] = []
     const revoked: string[] = []
     const host = mount(() =>
@@ -110,10 +132,12 @@ describe("source menu", () => {
     expect(host.querySelector('[data-source-revoke="artifacts"]')).toBeNull()
 
     host.querySelector<HTMLElement>('[data-source-revoke="ro"]')?.click()
+    await Promise.resolve()
 
     expect(revoked).toEqual(["ro"])
     expect(picked).toEqual([])
     expect(host.querySelector("[data-source-menu]")).toBeNull()
+    expect(document.activeElement).toBe(host.querySelector("[data-source-button]"))
   })
 
   test("keeps revoke a sibling of the source it revokes, not a control inside it", () => {
@@ -131,12 +155,12 @@ describe("source menu", () => {
     expect(item.contains(revoke)).toBe(false)
     expect(item.querySelector("button, [role='button']")).toBeNull()
     expect(item.textContent).not.toContain("Revoke")
-    // Each control is a real button, so each is keyboard reachable and carries
-    // its own accessible name with no tabindex or key handler of its own.
+    // Each control is a real button with a distinct accessible name. The menu
+    // owns one roving tab stop and Arrow-key traversal.
     expect(item.tagName).toBe("BUTTON")
     expect(revoke.tagName).toBe("BUTTON")
     expect(revoke.getAttribute("aria-label")).toBe("Revoke access to pdebench")
-    expect(revoke.getAttribute("tabindex")).toBeNull()
+    expect(revoke.getAttribute("tabindex")).toBe("-1")
   })
 
   test("hides the revoke control when no handler can act on it", () => {
@@ -150,9 +174,50 @@ describe("source menu", () => {
     const css = readFileSync(fileURLToPath(new URL("./FilesPane.css", import.meta.url)), "utf8")
 
     expect(css).toMatch(/\.files-menu\s*\{[^}]*overflow-x: hidden/s)
-    expect(css).toMatch(/\.files-menu\s*\{[^}]*width: min\(/s)
+    expect(css).toMatch(/\.files-menu\s*\{[^}]*width: min\([^}]*100cqi/s)
+    expect(css).toMatch(/\.files-browser\s*\{[^}]*overflow: visible/s)
     // A 1fr grid track will not shrink below its content without this.
     expect(css).toMatch(/\.files-menu__item\s*>\s*span:nth-child\(2\)\s*\{[^}]*min-width: 0/s)
+  })
+
+  test("moves focus into the menu and Escape returns it to the trigger", async () => {
+    const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
+    const trigger = host.querySelector<HTMLButtonElement>("[data-source-button]")!
+
+    trigger.click()
+    await Promise.resolve()
+
+    expect(document.activeElement).toBe(host.querySelector('[role="menuitemradio"]'))
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    await Promise.resolve()
+
+    expect(host.querySelector("[data-source-menu]")).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  test("uses roving arrow navigation and keeps the invisible scrim out of the tab order", async () => {
+    const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
+    const trigger = host.querySelector<HTMLButtonElement>("[data-source-button]")!
+
+    trigger.click()
+    await Promise.resolve()
+    const options = [...host.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+    const last = options.at(-1)!
+    expect(document.activeElement).toBe(options[0])
+    expect(host.querySelector(".files-menu__scrim")?.getAttribute("tabindex")).toBe("-1")
+    expect(host.querySelector(".files-menu__scrim")?.getAttribute("aria-hidden")).toBe("true")
+
+    options[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
+    expect(document.activeElement).toBe(options[1])
+    options[1]?.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }))
+    expect(document.activeElement).toBe(last)
+    last.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }))
+    expect(document.activeElement).toBe(options[0])
+
+    options[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }))
+    await Promise.resolve()
+    expect(host.querySelector("[data-source-menu]")).toBeNull()
+    expect(document.activeElement).toBe(trigger)
   })
 
   // The kinds were text glyphs (a square for anything with a root), so a
@@ -172,5 +237,6 @@ describe("source menu", () => {
 
     expect(glyphs.length).toBe(host.querySelectorAll("[data-source-item]").length + 1)
     expect(host.querySelector(".files-menu__glyph")?.textContent?.trim()).toBe("")
+    expect(host.querySelector(".files-source__caret svg")).not.toBeNull()
   })
 })

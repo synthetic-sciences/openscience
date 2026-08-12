@@ -23,6 +23,8 @@ import { Provenance } from "@/science/provenance/store"
 import { ProvenanceEnvelope } from "@/science/provenance/envelope"
 import { ExecutionAuthority } from "@/project/execution"
 import { CommandRuntime } from "@/science/command/registry"
+import { AuthoritySignal } from "@/project/authority-signal"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENSCIENCE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 0
@@ -160,6 +162,7 @@ export const BashTool = Tool.define("bash", async () => {
         capability: "shell",
       })
       const writable = authority.writable
+      const readable = new Set(authority.readable)
       const workspace = authority.workspace
       const requested = params.workdir || workspace
       const target = path.isAbsolute(requested) ? requested : path.resolve(workspace, requested)
@@ -255,11 +258,12 @@ export const BashTool = Tool.define("bash", async () => {
             },
           },
         })
-        await SessionFilesystem.authorize({
+        const authorized = await SessionFilesystem.authorize({
           sessionID: ctx.sessionID,
           path: directory,
           access,
         })
+        readable.add(authorized.path)
       }
       const { existsSync, mkdirSync } = await import("fs")
       if (!existsSync(cwd)) mkdirSync(cwd, { recursive: true })
@@ -277,53 +281,94 @@ export const BashTool = Tool.define("bash", async () => {
       // provider keys (auth.json + shell env), not just synced managed ones.
       await OpenScience.refreshByokSecrets(process.env).catch(() => {})
 
-      const env = await OpenScience.subprocessEnv(process.env)
-      // Wrap the command in the authority's effective OS-sandbox policy. The
-      // permission checks above decide *whether* to run; this decides *with what
-      // authority*. An explicit trusted machine-level opt-out returns the raw
-      // command unchanged.
-      const sandbox = Sandbox.plan({
-        command: params.command,
-        shell,
-        cwd,
-        workspace: writable,
-        options: authority.sandbox,
+      // Permission callbacks may durably add the filesystem grant requested
+      // above. Capture the post-prompt generation so that legitimate grant is
+      // part of this launch while a later concurrent mutation still fails the
+      // final check inside the authority lease.
+      const prepared = await ExecutionAuthority.require({
+        projectID: Instance.project.id,
+        sessionID: ctx.sessionID,
+        capability: "shell",
       })
 
       const started = Date.now()
-      const proc = sandbox.sandboxed
-        ? spawn(sandbox.file, sandbox.args ?? [], {
-            cwd,
-            env,
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: process.platform !== "win32",
-          })
-        : spawn(sandbox.file, {
-            shell: sandbox.useShell,
-            cwd,
-            env,
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: process.platform !== "win32",
-          })
-
       let exited = false
       let aborted = false
-      const kill = () => Shell.killTree(proc, { exited: () => exited, detached: process.platform !== "win32" })
-      const command = CommandRuntime.start(
-        {
+      const { proc, command, kill, sandbox, completion } = await AuthoritySignal.exclusive(async () => {
+        const current = await ExecutionAuthority.require({
           projectID: Instance.project.id,
           sessionID: ctx.sessionID,
-          messageID: ctx.messageID,
-          ...(ctx.callID ? { callID: ctx.callID } : {}),
-          description: params.description,
+          capability: "shell",
+        })
+        if (current.generation !== prepared.generation) {
+          throw new Error("Execution authority changed while the shell command was being prepared; retry it")
+        }
+        // Build the wrapper only after the final authority check, while trust
+        // and filesystem mutations are excluded through durable registration.
+        const sandbox = Sandbox.plan({
           command: params.command,
-        },
-        proc,
-        async () => {
-          aborted = true
-          await kill()
-        },
-      )
+          shell,
+          cwd,
+          workspace: current.writable,
+          readable: [...readable],
+          unreadable: OpenScience.kernelSensitivePaths(),
+          options: current.sandbox,
+        })
+        return OpenScience.withSubprocessEnv(process.env, async (env) => {
+          let child: ReturnType<typeof spawn>
+          const wrapped = WindowsJobLauncher.wrap({
+            file: sandbox.file,
+            args: sandbox.args ?? [],
+            shell: sandbox.sandboxed ? false : sandbox.useShell,
+          })
+          try {
+            child = spawn(wrapped.file, wrapped.args, {
+              shell: process.platform === "win32" ? false : sandbox.sandboxed ? false : sandbox.useShell,
+              cwd,
+              env,
+              stdio: ["ignore", "pipe", "pipe"],
+              detached: process.platform !== "win32",
+            })
+          } catch (error) {
+            Sandbox.cleanup(sandbox)
+            throw error
+          }
+          const completion = new Promise<void>((resolve, reject) => {
+            child.once("exit", () => {
+              exited = true
+              resolve()
+            })
+            child.once("error", (error) => {
+              exited = true
+              reject(error)
+            })
+          })
+          const stop = () => Shell.killTree(child, { exited: () => exited, detached: process.platform !== "win32" })
+          try {
+            const registered = await CommandRuntime.start(
+              {
+                projectID: Instance.project.id,
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                ...(ctx.callID ? { callID: ctx.callID } : {}),
+                description: params.description,
+                command: params.command,
+              },
+              child,
+              async () => {
+                aborted = true
+                await stop()
+              },
+              { authorityGeneration: current.generation, windowsRelease: wrapped.release },
+            )
+            return { proc: child, command: registered, kill: stop, sandbox, completion }
+          } catch (error) {
+            await stop()
+            Sandbox.cleanup(sandbox)
+            throw error
+          }
+        })
+      })
       let output = ""
 
       // Initialize metadata with empty output
@@ -385,25 +430,11 @@ export const BashTool = Tool.define("bash", async () => {
             }, timeout + 100)
           : undefined
 
-      await new Promise<void>((resolve, reject) => {
-        const cleanup = () => {
-          if (timeoutTimer) clearTimeout(timeoutTimer)
-          ctx.abort.removeEventListener("abort", abortHandler)
-        }
-
-        proc.once("exit", () => {
-          exited = true
-          CommandRuntime.finish(command.id)
-          cleanup()
-          resolve()
-        })
-
-        proc.once("error", (error) => {
-          exited = true
-          CommandRuntime.finish(command.id)
-          cleanup()
-          reject(error)
-        })
+      await completion.finally(() => {
+        if (timeoutTimer) clearTimeout(timeoutTimer)
+        ctx.abort.removeEventListener("abort", abortHandler)
+        CommandRuntime.finish(command.id)
+        Sandbox.cleanup(sandbox)
       })
 
       const completed = Date.now()

@@ -3,4 +3,4 @@
 // that Event put "[object Event]" in the disconnect toast — normalize anything
 // non-Error into a readable fallback instead.
 export const connectionError = (cause: unknown) =>
-  cause instanceof Error ? cause : new Error("connection to the server was lost")
+  cause instanceof Error ? cause : new Error("Connection to the server was lost.")

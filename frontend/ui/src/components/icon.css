@@ -1,34 +1,54 @@
 [data-component="icon"] {
+  --icon-size: 18px;
+  --icon-stroke-width: 1.5;
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  /* resize: both; */
-  aspect-ratio: 1/1;
-  color: var(--icon-base);
+  width: var(--icon-size);
+  height: var(--icon-size);
+  aspect-ratio: 1;
+  line-height: 0;
+  color: currentColor;
+  pointer-events: none;
+  vertical-align: middle;
 
   &[data-size="small"] {
-    width: 16px;
-    height: 16px;
+    --icon-size: 16px;
   }
 
   &[data-size="normal"] {
-    width: 20px;
-    height: 20px;
+    --icon-size: 18px;
   }
 
   &[data-size="medium"] {
-    width: 24px;
-    height: 24px;
+    --icon-size: 20px;
   }
 
   &[data-size="large"] {
-    width: 24px;
-    height: 24px;
+    --icon-size: 24px;
   }
 
   [data-slot="icon-svg"] {
+    display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
+    overflow: visible;
+    stroke-width: var(--icon-stroke-width);
+    shape-rendering: geometricPrecision;
+  }
+
+  [data-slot="icon-svg"] :where([stroke]) {
+    stroke-width: var(--icon-stroke-width);
+  }
+
+  [data-slot="icon-svg"] :where(path, line, polyline, polygon, rect, circle, ellipse) {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  &[data-icon="stop"] [data-slot="icon-svg"] :where(path, rect) {
+    fill: currentColor;
   }
 }

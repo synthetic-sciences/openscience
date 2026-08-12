@@ -5,6 +5,7 @@ import z from "zod"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
+import { DataRootBarrier } from "@/global/data-root-barrier"
 
 // Persistent, curated memory: standing notes/instructions grouped into
 // categories that get injected into agent context on every turn (when enabled).
@@ -97,6 +98,7 @@ export namespace Memory {
 
   export async function set(scope: Scope, doc: Doc): Promise<Doc> {
     const file = fileFor(scope)
+    await using operation = await DataRootBarrier.enter(file)
     await fs.mkdir(path.dirname(file), { recursive: true })
     await Bun.write(file, JSON.stringify(doc, null, 2))
     return doc

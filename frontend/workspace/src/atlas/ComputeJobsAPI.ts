@@ -8,6 +8,21 @@ export interface Artifact {
   size: number
   sha256: string
   modified_at: string
+  artifact_id?: string
+  version_id?: string
+  version?: number
+}
+
+export interface Host {
+  id: string
+  label: string
+  host: string
+  user?: string
+  port?: number
+  scheduler: "none" | "slurm" | "pbs"
+  workdir?: string
+  fingerprint?: string
+  concurrency: number
 }
 
 export interface Resources {
@@ -82,6 +97,16 @@ export interface Job {
     sdk: string
     volume?: string
   }
+  ssh?: {
+    protocol: 1
+    host: Host
+    root: string
+    cwd: string
+    fingerprint: string
+    uploads: { path: string; size: number; sha256: string }[]
+    upload_bytes: number
+    approval: string
+  }
 }
 
 export interface JobInput {
@@ -101,7 +126,7 @@ export interface JobInput {
   approval?: string
 }
 
-export interface Plan {
+export interface ModalPlan {
   digest: string
   provider: "modal"
   app: string
@@ -116,6 +141,26 @@ export interface Plan {
   outputs: string[]
   warning: string
 }
+
+export interface SshPlan {
+  digest: string
+  provider: "ssh"
+  host_id: string
+  host: string
+  label: string
+  scheduler: "none" | "slurm" | "pbs"
+  fingerprint: string
+  command: string
+  local_cwd: string
+  remote_root: string
+  remote_cwd: string
+  uploads: { path: string; size: number; sha256: string }[]
+  upload_bytes: number
+  outputs: string[]
+  warning: string
+}
+
+export type Plan = ModalPlan | SshPlan
 
 export function stableJobs(previous: Job[] | undefined, next: Job[]) {
   if (!previous) return next
@@ -165,12 +210,19 @@ export function createComputeJobsAPI(request: ProjectRequest) {
     return response.json() as Promise<T>
   }
   return {
+    settings: () =>
+      request("/settings/compute", { cache: "no-store" }).then(async (response) => {
+        if (!response.ok)
+          throw new Error((await response.text().catch(() => "")) || `${response.status} ${response.statusText}`)
+        return response.json() as Promise<{ ssh_hosts: Host[] }>
+      }),
     list: () => call<Job[]>("", { cache: "no-store" }),
     plan: (input: JobInput) => call<Plan>("/plan", { method: "POST", body: JSON.stringify(input) }),
     start: (input: JobInput) => call<Job>("", { method: "POST", body: JSON.stringify(input) }),
     log: (id: string) => call<{ log: string }>(`/${id}/log`, { cache: "no-store" }),
     events: (id: string) => call<{ events: string }>(`/${id}/events`, { cache: "no-store" }),
     retry: (id: string) => call<Job>(`/${id}/retry`, { method: "POST" }),
+    release: (id: string) => call<Job>(`/${id}/release`, { method: "POST" }),
     cancel: (id: string) => call<Job>(`/${id}/cancel`, { method: "POST" }),
     clear: () => call<{ cleared: number }>("/completed", { method: "DELETE" }),
   }

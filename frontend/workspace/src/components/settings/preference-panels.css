@@ -1,0 +1,657 @@
+/*
+ * Calm grouped settings surfaces for the system and app preference panels.
+ *
+ * The panel components opt into this layer with `.settings-preferences-panel`.
+ * It intentionally keeps one semantic surface around each related group, uses
+ * spacing instead of nested separators, and leaves advanced controls behind
+ * explicit disclosure actions.
+ */
+.settings-preferences-panel {
+  --settings-preferences-accent: var(--settings-accent);
+  min-width: 0;
+  min-height: 100%;
+}
+
+.settings-preferences-panel .settings-page-header {
+  padding-bottom: var(--settings-space-3);
+  border-bottom: 0;
+}
+
+.settings-preferences-panel .settings-page-header h2 {
+  text-wrap: balance;
+}
+
+.settings-preferences-panel :where(.settings-page-header p, .settings-section-heading p, .settings-row-copy span) {
+  text-wrap: pretty;
+}
+
+.settings-preferences-panel .settings-page-body {
+  gap: var(--settings-space-5);
+  padding-top: var(--settings-space-3);
+}
+
+.settings-preferences-panel .settings-section {
+  gap: var(--settings-space-3);
+}
+
+.settings-preferences-panel .settings-card {
+  border: 0;
+  border-radius: var(--settings-radius-card);
+  background: var(--settings-surface);
+  box-shadow: none;
+}
+
+.settings-preferences-panel .settings-list-item + .settings-list-item {
+  border-top: 0;
+}
+
+.settings-preferences-panel .settings-row,
+.settings-preference-row {
+  position: relative;
+  min-height: 56px;
+  gap: var(--settings-space-3);
+  padding: 10px var(--settings-space-3);
+  border-bottom: 0;
+}
+
+.settings-preference-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--settings-radius-control);
+  background: var(--surface-base-hover);
+  color: var(--icon-strong-base);
+}
+
+.settings-preference-icon[data-tone="success"] {
+  background: color-mix(in srgb, var(--icon-success-base) 11%, var(--settings-surface-muted));
+  color: var(--icon-success-base);
+}
+
+.settings-preference-icon[data-tone="warning"] {
+  background: color-mix(in srgb, var(--text-warning-base) 12%, var(--settings-surface-muted));
+  color: var(--text-warning-base);
+}
+
+.settings-row-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-row-copy strong {
+  color: var(--text-strong);
+  font-size: var(--settings-type-body);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--settings-leading-body);
+}
+
+.settings-row-copy span {
+  color: var(--text-weak);
+  font-size: var(--settings-type-helper);
+  line-height: var(--settings-leading-helper);
+}
+
+.settings-preference-status {
+  min-height: 24px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--settings-surface-muted);
+  color: var(--text-weak);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-preference-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.72;
+}
+
+.settings-preference-status[data-tone="success"] {
+  background: color-mix(in srgb, var(--icon-success-base) 10%, transparent);
+  color: var(--icon-success-base);
+}
+
+.settings-preference-status[data-tone="warning"] {
+  background: color-mix(in srgb, var(--text-warning-base) 10%, transparent);
+  color: var(--text-warning-base);
+}
+
+.settings-preference-action {
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--settings-space-2);
+  padding: 0 var(--settings-space-3);
+  border: 0;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.settings-preference-action:hover:not(:disabled) {
+  background: var(--settings-surface-hover);
+}
+
+.settings-preference-action[data-variant="primary"] {
+  background: var(--settings-primary);
+  color: var(--settings-on-primary);
+}
+
+.settings-preference-action[data-variant="primary"]:hover:not(:disabled) {
+  background: var(--settings-primary-hover);
+}
+
+.settings-preference-action[data-variant="quiet"] {
+  background: transparent;
+  color: var(--text-weak);
+}
+
+.settings-preference-action[data-variant="danger"] {
+  background: transparent;
+  color: var(--text-danger);
+}
+
+.settings-preference-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.settings-preferences-panel .settings-icon-action {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--settings-radius-control);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.settings-preferences-panel :where(button, [role="button"], input, select, textarea):focus-visible {
+  transition: none;
+}
+
+.settings-preference-disclosure {
+  padding: 0 var(--settings-space-4) var(--settings-space-3) 56px;
+}
+
+.settings-preference-domain-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--settings-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-preference-domain-list code {
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 18px;
+  font-variant-numeric: slashed-zero;
+}
+
+.settings-inline-editor {
+  display: grid;
+  gap: var(--settings-space-3);
+  padding: 2px var(--settings-space-4) var(--settings-space-4) 56px;
+}
+
+.settings-inline-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--settings-space-2);
+}
+
+.settings-preferences-panel .settings-field {
+  border-color: transparent;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+  box-shadow: none;
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.settings-preferences-panel .settings-field:focus {
+  border-color: transparent;
+  background: var(--settings-surface-hover);
+  box-shadow: none;
+}
+
+.settings-preferences-panel .settings-alert {
+  border: 0;
+  border-radius: var(--settings-radius-control);
+  box-shadow: none;
+}
+
+.settings-preferences-panel .settings-alert[data-tone="success"] {
+  background: color-mix(in srgb, var(--icon-success-base) 7%, transparent);
+  color: var(--text-strong);
+}
+
+.settings-panel-loading-copy {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  padding: var(--settings-space-3) var(--settings-space-4);
+  color: var(--text-weak);
+  font-size: 12px;
+}
+
+.settings-empty-copy {
+  display: block;
+  padding: var(--settings-space-4);
+  color: var(--text-weak);
+  font-size: 12px;
+  text-wrap: pretty;
+}
+
+/* Network follows the same flat row language as Compute. Repeated service
+   icons were removed; the large disclosure target and switches carry the
+   interaction without another visual column. */
+.settings-preferences-panel--network .settings-page-header__inner {
+  position: relative;
+}
+
+.settings-preferences-panel--network .settings-network-save-state {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 48px;
+  color: var(--text-weak);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: right;
+}
+
+.settings-preferences-panel--network .settings-network-loading-rows {
+  gap: 2px;
+  padding: 4px;
+  border: 0;
+  background: var(--settings-surface);
+  box-shadow: none;
+}
+
+.settings-preferences-panel--network .settings-network-loading-rows > span {
+  height: 56px;
+  background: var(--settings-surface-muted);
+}
+
+.settings-preferences-panel--network .settings-network-loading-rows--domains > span {
+  height: 44px;
+}
+
+.settings-preferences-panel--network .settings-network-loading-rows--domains > span:last-child {
+  height: 48px;
+}
+
+.settings-preferences-panel--network .settings-network-policy-row,
+.settings-preferences-panel--network .settings-network-group-row,
+.settings-preferences-panel--network .settings-network-domain-row {
+  flex-wrap: nowrap;
+}
+
+.settings-preferences-panel--network .settings-network-policy-row {
+  min-height: 60px;
+  padding-block: var(--settings-space-2);
+}
+
+.settings-preferences-panel--network .settings-network-group-row {
+  min-height: 56px;
+  padding-block: var(--settings-space-2);
+}
+
+.settings-preferences-panel--network .settings-network-domain-row {
+  min-height: 44px;
+  padding-block: 6px;
+}
+
+.settings-preferences-panel--network .settings-network-disclosure {
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  flex: 1 1 260px;
+  align-items: center;
+  align-self: stretch;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  color: var(--text-strong);
+  text-align: left;
+  transition: color 150ms ease;
+}
+
+.settings-preferences-panel--network .settings-network-disclosure:hover {
+  color: var(--text-base);
+}
+
+.settings-preferences-panel--network .settings-network-disclosure .settings-row-copy {
+  text-align: left;
+}
+
+.settings-preferences-panel--network .settings-network-disclosure__icon {
+  flex: 0 0 auto;
+  color: var(--icon-weak-base);
+  transition: color 150ms ease;
+}
+
+.settings-preferences-panel--network .settings-network-disclosure:hover .settings-network-disclosure__icon {
+  color: var(--icon-strong-base);
+}
+
+.settings-preferences-panel--network .settings-preference-disclosure {
+  padding: 0 var(--settings-space-4) var(--settings-space-3) 38px;
+}
+
+.settings-preferences-panel--network .settings-network-domain-value {
+  flex: 1 1 220px;
+  font-variant-numeric: slashed-zero;
+}
+
+.settings-preferences-panel--network .settings-network-add-row {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding-block: var(--settings-space-2);
+}
+
+.settings-preferences-panel--network .settings-network-empty-copy {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding-block: var(--settings-space-2);
+}
+
+/* Compute uses one calm surface hierarchy and lets action groups wrap before
+   they squeeze the operational copy into a narrow right-aligned column. */
+.settings-compute-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--settings-space-4);
+  padding: var(--settings-space-4);
+}
+
+.settings-compute-provider-row,
+.settings-compute-summary-row,
+.settings-compute-host-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--settings-space-3);
+}
+
+.settings-compute-provider-row {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.settings-compute-summary-row,
+.settings-compute-host-row {
+  flex-wrap: nowrap;
+}
+
+.settings-compute-summary-action {
+  max-width: 100%;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.settings-compute-actions,
+.settings-compute-host-actions {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--settings-space-2);
+}
+
+.settings-compute-actions {
+  justify-content: flex-end;
+}
+
+.settings-compute-remote {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--settings-space-3);
+}
+
+.settings-compute-host-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1 1 320px;
+  align-items: flex-start;
+  gap: var(--settings-space-3);
+}
+
+.settings-compute-host-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.settings-permission-defaults[data-expanded="false"] .settings-card > .settings-row:nth-child(n + 7) {
+  display: none;
+}
+
+.settings-disclosure-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--settings-space-2);
+}
+
+.settings-disclosure-group,
+.settings-general-extras {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.settings-disclosure-group {
+  gap: var(--settings-space-2);
+}
+
+.settings-general-extras {
+  gap: var(--settings-space-5);
+}
+
+.settings-general-extras[data-expanded="false"] > .settings-section:nth-child(n + 3) {
+  display: none;
+}
+
+.settings-storage-location {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--settings-space-3);
+  padding: var(--settings-space-4);
+}
+
+.settings-storage-path,
+.settings-storage-size,
+.settings-storage-metric {
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-storage-path {
+  font-variant-numeric: slashed-zero;
+}
+
+.settings-storage-usage-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--settings-space-3);
+  row-gap: var(--settings-space-2);
+}
+
+.settings-storage-meter {
+  grid-column: 2 / -1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--settings-surface-muted);
+}
+
+.settings-storage-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--surface-brand-base);
+}
+
+.settings-sandbox-checks {
+  display: grid;
+  gap: var(--settings-space-2);
+  padding: 0 var(--settings-space-4) var(--settings-space-4) 56px;
+}
+
+.settings-sandbox-check {
+  display: grid;
+  grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--settings-space-2);
+  color: var(--text-strong);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.settings-sandbox-check__detail {
+  color: var(--text-weak);
+  text-wrap: pretty;
+}
+
+.settings-account-value {
+  max-width: min(360px, 100%);
+  color: var(--text-strong);
+  font-size: 13px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+@container settings-main (max-width: 680px) {
+  .settings-compute-host-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .settings-compute-host-actions {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+    padding-left: calc(32px + var(--settings-space-3));
+  }
+
+  .settings-compute-actions {
+    justify-content: flex-start;
+  }
+}
+
+@container settings-main (max-width: 560px) {
+  .settings-preferences-panel .settings-row,
+  .settings-preference-row,
+  .settings-storage-location {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .settings-preference-row__actions,
+  .settings-storage-location__actions {
+    width: 100%;
+    padding-left: 42px;
+  }
+
+  .settings-inline-editor,
+  .settings-preference-disclosure,
+  .settings-sandbox-checks {
+    padding-left: var(--settings-space-4);
+  }
+
+  .settings-account-value {
+    width: 100%;
+    padding-left: 42px;
+    text-align: left;
+  }
+
+  .settings-preferences-panel--network .settings-network-policy-row,
+  .settings-preferences-panel--network .settings-network-group-row,
+  .settings-preferences-panel--network .settings-network-domain-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .settings-preferences-panel--network .settings-network-disclosure {
+    width: 100%;
+  }
+
+  .settings-preferences-panel--network .settings-network-group-description {
+    block-size: var(--settings-leading-helper);
+    max-block-size: var(--settings-leading-helper);
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-wrap: nowrap;
+    white-space: nowrap;
+  }
+
+  .settings-compute-summary-action {
+    width: 100%;
+    margin-left: 0;
+    padding-left: calc(32px + var(--settings-space-3));
+  }
+}
+
+@container settings-main (max-width: 420px) {
+  .settings-preferences-panel--network .settings-network-add-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-preferences-panel--network .settings-network-add-row .settings-preference-action {
+    justify-self: start;
+  }
+
+  .settings-compute-host-actions,
+  .settings-compute-summary-action {
+    padding-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-preferences-panel *,
+  .settings-preferences-panel *::before,
+  .settings-preferences-panel *::after {
+    transition-duration: 0.01ms !important;
+  }
+}

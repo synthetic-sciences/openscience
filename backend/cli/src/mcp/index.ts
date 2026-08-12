@@ -23,10 +23,30 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import open from "open"
 import { OpenScience } from "@/openscience"
+import { CredentialProcessLedger } from "@/credentials/process-ledger"
+import { ProjectTrust } from "@/project/trust"
+import { AuthoritySignal } from "@/project/authority-signal"
+import { Sandbox } from "@/sandbox/sandbox"
+import fs from "node:fs"
+import fsp from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { invocation as groupLauncherInvocation } from "./group-launcher"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 30_000
+  const CLI_ENTRY = fileURLToPath(new URL("../index.ts", import.meta.url))
+
+  async function waitForOwnedGroup(marker: string, pid: number): Promise<void> {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const owner = await fsp.readFile(marker, "utf8").catch(() => undefined)
+      if (owner?.trim() === String(pid)) return
+      await Bun.sleep(10)
+    }
+    throw new Error(`Local MCP process ${pid} did not establish an owned process group`)
+  }
 
   export const Resource = z
     .object({
@@ -62,6 +82,49 @@ export namespace MCP {
   )
 
   type MCPClient = Client
+  const credentialProcesses = new WeakMap<MCPClient, string>()
+  const localClients = new WeakSet<MCPClient>()
+  const localSandboxes = new WeakMap<MCPClient, Sandbox.Wrapped>()
+
+  async function closeClient(client: MCPClient): Promise<void> {
+    const id = credentialProcesses.get(client)
+    try {
+      // Enumerate and revoke while the owned launcher is still alive. Closing
+      // stdio first would let a direct setsid child reparent outside both the
+      // leader's descendant closure and its original process group.
+      if (id && localClients.has(client)) await CredentialProcessLedger.revoke({ id, kind: "mcp" })
+      await client.close()
+    } finally {
+      if (id) {
+        for (let attempt = 0; attempt < 100; attempt++) {
+          if (await CredentialProcessLedger.complete(id)) break
+          await Bun.sleep(20)
+        }
+        credentialProcesses.delete(client)
+      }
+      const sandbox = localSandboxes.get(client)
+      if (sandbox) {
+        Sandbox.cleanup(sandbox)
+        localSandboxes.delete(client)
+      }
+      localClients.delete(client)
+    }
+  }
+
+  /** Stop project-controlled local transports without disturbing remote MCP
+   * connections. Trust revocation also reaps dead-owner transports through the
+   * durable credential-process ledger in ProjectBootstrap. */
+  export async function disposeLocal(): Promise<void> {
+    const current = await state()
+    const local = Object.entries(current.clients).filter(([, client]) => localClients.has(client))
+    const results = await Promise.allSettled(local.map(([, client]) => closeClient(client)))
+    for (const [name] of local) {
+      delete current.clients[name]
+      current.status[name] = { status: "disabled" }
+    }
+    const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+    if (failures.length) throw new AggregateError(failures, "Local MCP servers could not be stopped")
+  }
 
   export const Status = z
     .discriminatedUnion("status", [
@@ -150,7 +213,12 @@ export namespace MCP {
   }
 
   // Convert MCP tool definition to AI SDK Tool type
-  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise<Tool> {
+  async function convertMcpTool(
+    mcpTool: MCPToolDef,
+    client: MCPClient,
+    timeout?: number,
+    projectOwned = false,
+  ): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
 
     // Spread first, then override type to ensure it's always "object"
@@ -165,6 +233,7 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
+        if (projectOwned) await ProjectTrust.require(Instance.project, "project_mcp")
         return client.callTool(
           {
             name: mcpTool.name,
@@ -205,6 +274,72 @@ export namespace MCP {
     }
   }
 
+  function localReadRoots(values: string[], cwd: string): string[] {
+    const roots = new Set<string>([cwd])
+    const dependencies = (modules: string) => {
+      const queue = fs
+        .readdirSync(modules, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+        .flatMap((entry) => {
+          const candidate = path.join(modules, entry.name)
+          if (!entry.name.startsWith("@")) return [candidate]
+          return fs
+            .readdirSync(candidate, { withFileTypes: true })
+            .filter((child) => child.isDirectory() || child.isSymbolicLink())
+            .map((child) => path.join(candidate, child.name))
+        })
+      for (const candidate of queue) {
+        const real = (() => {
+          try {
+            return fs.realpathSync.native(candidate)
+          } catch {
+            return undefined
+          }
+        })()
+        if (!real) continue
+        const stores = [
+          `${path.sep}node_modules${path.sep}.bun${path.sep}`,
+          `${path.sep}node_modules${path.sep}.pnpm${path.sep}`,
+        ]
+        const marker = stores.find((value) => real.includes(value))
+        if (marker) {
+          roots.add(real.slice(0, real.indexOf(marker) + marker.length - 1))
+          return
+        }
+        roots.add(real)
+      }
+    }
+    for (const value of values) {
+      if (!path.isAbsolute(value)) continue
+      const start = (() => {
+        try {
+          return fs.statSync(value).isDirectory() ? value : path.dirname(value)
+        } catch {
+          return path.dirname(value)
+        }
+      })()
+      let cursor = start
+      while (true) {
+        if (fs.existsSync(path.join(cursor, "package.json"))) {
+          roots.add(cursor)
+          const modules = path.join(cursor, "node_modules")
+          if (fs.existsSync(modules)) {
+            roots.add(modules)
+            dependencies(modules)
+          }
+          break
+        }
+        const parent = path.dirname(cursor)
+        if (parent === cursor) {
+          roots.add(start)
+          break
+        }
+        cursor = parent
+      }
+    }
+    return [...roots]
+  }
+
   const state = Instance.state(
     async () => {
       const cfg = await Config.getExecution()
@@ -243,7 +378,7 @@ export namespace MCP {
     async (state) => {
       await Promise.all(
         Object.values(state.clients).map((client) =>
-          client.close().catch((error) => {
+          closeClient(client).catch((error) => {
             log.error("Failed to close MCP client", {
               error,
             })
@@ -315,7 +450,7 @@ export namespace MCP {
     if (!result.mcpClient) {
       const existingClient = s.clients[name]
       if (existingClient) {
-        await existingClient.close().catch((error) => {
+        await closeClient(existingClient).catch((error) => {
           log.error("Failed to close existing MCP client", { name, error })
         })
         delete s.clients[name]
@@ -328,7 +463,7 @@ export namespace MCP {
     // Close existing client if present to prevent memory leaks
     const existingClient = s.clients[name]
     if (existingClient) {
-      await existingClient.close().catch((error) => {
+      await closeClient(existingClient).catch((error) => {
         log.error("Failed to close existing MCP client", { name, error })
       })
     }
@@ -456,25 +591,90 @@ export namespace MCP {
     if (mcp.type === "local") {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
-      const env = localEnv(await OpenScience.subprocessEnv(process.env), cmd, mcp.environment)
-      const transport = new StdioClientTransport({
-        stderr: "pipe",
-        command: cmd,
-        args,
-        cwd,
-        env,
-      })
-      transport.stderr?.on("data", (chunk: Buffer) => {
-        log.info(`mcp stderr: ${OpenScience.redactSecrets(chunk.toString())}`, { key })
-      })
-
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       try {
-        const client = new Client({
-          name: "openscience",
-          version: Installation.VERSION,
+        const launched = await AuthoritySignal.exclusive(async () => {
+          await ProjectTrust.require(Instance.project, "project_mcp")
+          const options = await Config.trustedSandbox()
+          const sandbox = Sandbox.wrapArgv({
+            file: cmd,
+            args,
+            workspace: [Instance.directory, Instance.worktree],
+            readable: localReadRoots(args, cwd),
+            unreadable: OpenScience.kernelSensitivePaths(),
+            options,
+          })
+          return OpenScience.withSubprocessEnv(process.env, async (base) => {
+            const ready = path.join(os.tmpdir(), `openscience-mcp-group-${process.pid}-${crypto.randomUUID()}`)
+            const launcher = groupLauncherInvocation({
+              execPath: process.execPath,
+              sourceEntry: CLI_ENTRY,
+              ready,
+              file: sandbox.file,
+              args: sandbox.args,
+            })
+            const transport = new StdioClientTransport({
+              stderr: "pipe",
+              // The SDK transport does not expose child_process.detached.
+              // Launch through a tiny trusted proxy that calls setsid(), then
+              // keeps the sandboxed server and its ordinary descendants in a
+              // dedicated, durably reapable process group.
+              command: launcher.command,
+              args: launcher.args,
+              cwd,
+              env: localEnv(base, sandbox.file, mcp.environment),
+            })
+            transport.stderr?.on("data", (chunk: Buffer) => {
+              log.info(`mcp stderr: ${OpenScience.redactSecrets(chunk.toString())}`, { key })
+            })
+            const client = new Client({
+              name: "openscience",
+              version: Installation.VERSION,
+            })
+            try {
+              // Start and durably register the process before releasing either
+              // the authority or credential-mutation lease. Client.connect()
+              // normally starts the SDK transport itself, so replace that
+              // second start with a no-op after the owned first start.
+              await withTimeout(transport.start(), connectTimeout)
+              const pid = transport.pid
+              if (!pid) throw new Error("Local MCP transport started without a process id")
+              await withTimeout(waitForOwnedGroup(ready, pid), connectTimeout)
+              const id = `mcp-${crypto.randomUUID()}`
+              const registered = await CredentialProcessLedger.register({
+                id,
+                kind: "mcp",
+                pid,
+                detached: true,
+                projectID: Instance.project.id,
+                windowsRelease: launcher.release,
+              })
+              if (!registered) throw new Error("Local MCP transport exited before durable registration")
+              credentialProcesses.set(client, id)
+              localClients.add(client)
+              localSandboxes.set(client, sandbox)
+              transport.start = async () => undefined
+              return { client, transport }
+            } catch (error) {
+              Sandbox.cleanup(sandbox)
+              await transport.close().catch(() => undefined)
+              throw error
+            } finally {
+              await fsp.rm(ready, { force: true }).catch(() => undefined)
+              await fsp.rm(`${ready}.release`, { force: true }).catch(() => undefined)
+              if (launcher.release && launcher.release !== `${ready}.release`) {
+                await fsp.rm(launcher.release, { force: true }).catch(() => undefined)
+              }
+            }
+          })
         })
-        await withTimeout(client.connect(transport), connectTimeout)
+        const client = launched.client
+        try {
+          await withTimeout(client.connect(launched.transport), connectTimeout)
+        } catch (error) {
+          await closeClient(client).catch(() => launched.transport.close().catch(() => undefined))
+          throw error
+        }
         registerNotificationHandlers(client, key)
         mcpClient = client
         status = {
@@ -513,7 +713,7 @@ export namespace MCP {
       return undefined
     })
     if (!result) {
-      await mcpClient.close().catch((error) => {
+      await closeClient(mcpClient).catch((error) => {
         log.error("Failed to close MCP client", {
           error,
         })
@@ -617,7 +817,13 @@ export namespace MCP {
   }
 
   export async function clients() {
-    return state().then((state) => state.clients)
+    const [current, cfg] = await Promise.all([state(), Config.getExecution()])
+    const allowed = new Set(
+      Object.entries(cfg.mcp ?? {})
+        .filter(([, entry]) => isMcpConfigured(entry) && entry.enabled !== false)
+        .map(([name]) => name),
+    )
+    return Object.fromEntries(Object.entries(current.clients).filter(([name]) => allowed.has(name)))
   }
 
   export async function connect(name: string) {
@@ -651,7 +857,7 @@ export namespace MCP {
       // Close existing client if present to prevent memory leaks
       const existingClient = s.clients[name]
       if (existingClient) {
-        await existingClient.close().catch((error) => {
+        await closeClient(existingClient).catch((error) => {
           log.error("Failed to close existing MCP client", { name, error })
         })
       }
@@ -663,7 +869,7 @@ export namespace MCP {
     const s = await state()
     const client = s.clients[name]
     if (client) {
-      await client.close().catch((error) => {
+      await closeClient(client).catch((error) => {
         log.error("Failed to close MCP client", { name, error })
       })
       delete s.clients[name]
@@ -677,7 +883,7 @@ export namespace MCP {
     const s = await state()
     const client = s.clients[name]
     if (client) {
-      await client.close().catch((error) => {
+      await closeClient(client).catch((error) => {
         log.error("Failed to close MCP client", { name, error })
       })
       delete s.clients[name]
@@ -715,10 +921,16 @@ export namespace MCP {
       const mcpConfig = config[clientName]
       const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
       const timeout = entry?.timeout ?? defaultTimeout
+      const projectOwned = await Config.projectControlsMcp(clientName)
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
+        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(
+          mcpTool,
+          client,
+          timeout,
+          projectOwned,
+        )
       }
     }
     return result
@@ -767,6 +979,9 @@ export namespace MCP {
   }
 
   export async function getPrompt(clientName: string, name: string, args?: Record<string, string>) {
+    if (await Config.projectControlsMcp(clientName)) {
+      await ProjectTrust.require(Instance.project, "project_mcp")
+    }
     const clientsSnapshot = await clients()
     const client = clientsSnapshot[clientName]
 
@@ -795,6 +1010,9 @@ export namespace MCP {
   }
 
   export async function readResource(clientName: string, resourceUri: string) {
+    if (await Config.projectControlsMcp(clientName)) {
+      await ProjectTrust.require(Instance.project, "project_mcp")
+    }
     const clientsSnapshot = await clients()
     const client = clientsSnapshot[clientName]
 

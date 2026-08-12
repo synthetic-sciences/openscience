@@ -5,6 +5,7 @@ import { createServer } from "vite"
 import solid from "vite-plugin-solid"
 import type { ProjectCreateInput } from "./dialog-create-project"
 
+const style = fileURLToPath(new URL("./dialog-create-project.css", import.meta.url))
 const cleanups: Array<() => void> = []
 const server = await createServer({
   root: fileURLToPath(new URL("../..", import.meta.url)),
@@ -79,6 +80,7 @@ describe("DialogCreateProject", () => {
     )
 
     host.querySelector<HTMLButtonElement>("button")?.click()
+    expect(document.body.textContent).toContain("optionally connect folders")
     const input = document.body.querySelector<HTMLInputElement>('input[name="name"]')
     if (input) {
       input.value = "Cell atlas"
@@ -138,7 +140,7 @@ describe("DialogCreateProject", () => {
       input.dispatchEvent(new InputEvent("input", { bubbles: true }))
     }
     expect(document.body.textContent).toContain("kras-speedrun")
-    expect(document.body.textContent).toContain("Read & write · this project")
+    expect(document.body.textContent).toContain("/Users/aayam/kras-speedrun")
     const create = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button")).find(
       (button) => button.textContent === "Create project",
     )
@@ -151,5 +153,16 @@ describe("DialogCreateProject", () => {
         sources: [{ path: "/Users/aayam/kras-speedrun", access: "write" }],
       },
     ])
+  })
+
+  test("uses one quiet responsive surface hierarchy", async () => {
+    const css = await Bun.file(style).text()
+
+    expect(css).toContain(".project-create__source-empty")
+    expect(css).toContain("background: transparent")
+    expect(css).toContain("font-size: 0.875rem")
+    expect(css).toContain("@media (pointer: coarse)")
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)")
+    expect(css).not.toContain("text-transform")
   })
 })

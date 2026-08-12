@@ -122,8 +122,9 @@ test("built-in project LSP denies, executes when trusted, and stops its cached c
       const marker = path.join(dir, "lsp-started")
       const bin = path.join(dir, "node_modules", ".bin", "biome")
       const file = path.join(dir, "test.jsonc")
-      const server = path.join(import.meta.dir, "../fixture/lsp/fake-lsp-server.js")
+      const server = path.join(dir, "fake-lsp-server.js")
       await fs.mkdir(path.dirname(bin), { recursive: true })
+      await fs.copyFile(path.join(import.meta.dir, "../fixture/lsp/fake-lsp-server.js"), server)
       await Bun.write(path.join(dir, "biome.json"), "{}")
       await Bun.write(
         bin,

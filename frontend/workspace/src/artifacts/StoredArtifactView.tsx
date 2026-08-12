@@ -37,6 +37,12 @@ const tabs: Array<{ id: Tab; label: string }> = [
   { id: "review", label: "Review" },
 ]
 
+function sentence(value: string) {
+  const text = value.replace(/[-_]+/g, " ").trim()
+  if (!text) return text
+  return `${text.charAt(0).toLocaleUpperCase()}${text.slice(1)}`
+}
+
 function size(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   const units = ["KB", "MB", "GB"]
@@ -469,8 +475,8 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
                               <div style={findingHead()}>
                                 <strong style={findingTitle()}>{finding.claim}</strong>
                                 <span style={chip(finding.verdict === "refutes")}>
-                                  {finding.verdict === "refutes" ? finding.severity : "supported"}
-                                  {finding.status ? ` · ${finding.status}` : ""}
+                                  {sentence(finding.verdict === "refutes" ? finding.severity : "supported")}
+                                  {finding.status ? ` · ${sentence(finding.status)}` : ""}
                                 </span>
                               </div>
                               <p style={copy()}>{finding.issue}</p>
@@ -548,7 +554,7 @@ function Preview(props: {
 function Fact(props: { label: string; value: string; mono?: boolean }): JSX.Element {
   return (
     <div style={{ display: "grid", gap: "4px" }}>
-      <dt style={factLabel()}>{props.label}</dt>
+      <dt style={factLabel()}>{sentence(props.label)}</dt>
       <dd style={{ ...factValue(), "font-family": props.mono ? FONT_MONO : FONT_SANS }}>{props.value}</dd>
     </div>
   )
@@ -579,7 +585,7 @@ const title = (): JSX.CSSProperties => ({
   "white-space": "nowrap",
   color: "var(--color-text)",
   "font-size": "13px",
-  "font-weight": 600,
+  "font-weight": "var(--font-weight-emphasis)",
 })
 const meta = (): JSX.CSSProperties => ({
   display: "block",
@@ -644,7 +650,7 @@ const field = (): JSX.CSSProperties => ({
   gap: "5px",
   color: "var(--color-text-muted)",
   "font-size": "10px",
-  "font-weight": 600,
+  "font-weight": "var(--font-weight-emphasis)",
 })
 const input = (): JSX.CSSProperties => ({
   width: "100%",
@@ -675,7 +681,7 @@ const secondary = (): JSX.CSSProperties => ({
   padding: "7px 9px",
   color: "var(--color-text)",
   "font-size": "11px",
-  "font-weight": 600,
+  "font-weight": "var(--font-weight-emphasis)",
   background: "var(--color-bg-subtle)",
   border: "1px solid var(--color-border)",
   "border-radius": "7px",
@@ -738,9 +744,8 @@ const facts = (): JSX.CSSProperties => ({ margin: 0, display: "grid", gap: "14px
 const factLabel = (): JSX.CSSProperties => ({
   color: "var(--color-text-faint)",
   "font-size": "10px",
-  "font-weight": 600,
-  "text-transform": "uppercase",
-  "letter-spacing": "0.06em",
+  "font-weight": "var(--font-weight-emphasis)",
+  "letter-spacing": "normal",
 })
 const factValue = (): JSX.CSSProperties => ({
   margin: 0,
@@ -791,9 +796,8 @@ const chip = (flagged: boolean): JSX.CSSProperties => ({
   padding: "3px 6px",
   color: flagged ? "var(--color-danger, #b42318)" : "var(--color-text-muted)",
   "font-size": "9px",
-  "font-weight": 700,
-  "text-transform": "uppercase",
-  "letter-spacing": "0.04em",
+  "font-weight": "var(--font-weight-emphasis)",
+  "letter-spacing": "normal",
   background: "var(--color-bg-subtle)",
   border: "1px solid var(--color-border-subtle)",
   "border-radius": "999px",
@@ -809,7 +813,7 @@ const primary = (): JSX.CSSProperties => ({
   padding: "8px 11px",
   color: "var(--color-bg)",
   "font-size": "11px",
-  "font-weight": 600,
+  "font-weight": "var(--font-weight-emphasis)",
   background: "var(--color-text)",
   border: 0,
   "border-radius": "7px",

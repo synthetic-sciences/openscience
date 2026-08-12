@@ -4,6 +4,7 @@ import * as fs from "fs/promises"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { FileTrash } from "../../src/file/trash"
 
 const baseCtx = {
   sessionID: "test",
@@ -74,7 +75,7 @@ describe("tool.apply_patch freeform", () => {
     await expect(execute({ patchText: emptyPatch }, ctx)).rejects.toThrow("patch rejected: empty patch")
   })
 
-  test("applies add/update/delete in one patch", async () => {
+  test("rejects multi-file patches before permission or side effects", async () => {
     await using fixture = await tmpdir({ git: true })
     const { ctx, calls } = makeCtx()
 
@@ -89,32 +90,35 @@ describe("tool.apply_patch freeform", () => {
         const patchText =
           "*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Delete File: delete.txt\n*** Update File: modify.txt\n@@\n-line2\n+changed\n*** End Patch"
 
-        const result = await execute({ patchText }, ctx)
+        await expect(execute({ patchText }, ctx)).rejects.toThrow("multi-file patches are not atomic")
+        expect(calls).toEqual([])
+        await expect(fs.readFile(path.join(fixture.path, "nested", "new.txt"), "utf-8")).rejects.toThrow()
+        expect(await fs.readFile(modifyPath, "utf-8")).toBe("line1\nline2\n")
+        expect(await fs.readFile(deletePath, "utf-8")).toBe("obsolete\n")
+        expect(await FileTrash.list(Instance.project.id)).toEqual([])
+      },
+    })
+  })
 
-        expect(result.title).toContain("Success. Updated the following files")
-        expect(result.output).toContain("Success. Updated the following files")
-        expect(result.metadata.diff).toContain("Index:")
-        expect(calls.length).toBe(1)
+  test("deletes one file into recoverable trash", async () => {
+    await using fixture = await tmpdir({ git: true })
+    const { ctx, calls } = makeCtx()
 
-        // Verify permission metadata includes files array for UI rendering
-        const permissionCall = calls[0]
-        expect(permissionCall.metadata.files).toHaveLength(3)
-        expect(permissionCall.metadata.files.map((f) => f.type).sort()).toEqual(["add", "delete", "update"])
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "delete.txt")
+        await fs.writeFile(target, "obsolete\n", "utf8")
+        const result = await execute({ patchText: "*** Begin Patch\n*** Delete File: delete.txt\n*** End Patch" }, ctx)
 
-        const addFile = permissionCall.metadata.files.find((f) => f.type === "add")
-        expect(addFile).toBeDefined()
-        expect(addFile!.relativePath).toBe("nested/new.txt")
-        expect(addFile!.after).toBe("created\n")
-
-        const updateFile = permissionCall.metadata.files.find((f) => f.type === "update")
-        expect(updateFile).toBeDefined()
-        expect(updateFile!.before).toContain("line2")
-        expect(updateFile!.after).toContain("changed")
-
-        const added = await fs.readFile(path.join(fixture.path, "nested", "new.txt"), "utf-8")
-        expect(added).toBe("created\n")
-        expect(await fs.readFile(modifyPath, "utf-8")).toBe("line1\nchanged\n")
-        await expect(fs.readFile(deletePath, "utf-8")).rejects.toThrow()
+        expect(calls).toHaveLength(1)
+        expect(calls[0]?.metadata.files).toMatchObject([{ type: "delete", before: "obsolete\n", after: "" }])
+        expect(result.metadata.trash).toHaveLength(1)
+        expect(result.output).toContain("Recoverable for 30 days: ftr_")
+        await expect(fs.readFile(target)).rejects.toThrow()
+        expect(await FileTrash.list(Instance.project.id)).toMatchObject([
+          { id: result.metadata.trash[0]?.id, originalPath: target, state: "trash" },
+        ])
       },
     })
   })
@@ -145,6 +149,7 @@ describe("tool.apply_patch freeform", () => {
         expect(moveFile.movePath).toBe(path.join(fixture.path, "renamed/dir/name.txt"))
         expect(moveFile.before).toBe("old content\n")
         expect(moveFile.after).toBe("new content\n")
+        expect(await FileTrash.list(Instance.project.id)).toHaveLength(1)
       },
     })
   })
@@ -233,7 +238,7 @@ describe("tool.apply_patch freeform", () => {
     })
   })
 
-  test("moves file overwriting existing destination", async () => {
+  test("refuses to move over an existing destination", async () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
@@ -250,15 +255,15 @@ describe("tool.apply_patch freeform", () => {
         const patchText =
           "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-from\n+new\n*** End Patch"
 
-        await execute({ patchText }, ctx)
-
-        await expect(fs.readFile(original, "utf-8")).rejects.toThrow()
-        expect(await fs.readFile(destination, "utf-8")).toBe("new\n")
+        await expect(execute({ patchText }, ctx)).rejects.toThrow("Refusing to overwrite")
+        expect(await fs.readFile(original, "utf-8")).toBe("from\n")
+        expect(await fs.readFile(destination, "utf-8")).toBe("existing\n")
+        expect(await FileTrash.list(Instance.project.id)).toEqual([])
       },
     })
   })
 
-  test("adds file overwriting existing file", async () => {
+  test("refuses to add over an existing file", async () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
@@ -270,8 +275,72 @@ describe("tool.apply_patch freeform", () => {
 
         const patchText = "*** Begin Patch\n*** Add File: duplicate.txt\n+new content\n*** End Patch"
 
-        await execute({ patchText }, ctx)
-        expect(await fs.readFile(target, "utf-8")).toBe("new content\n")
+        await expect(execute({ patchText }, ctx)).rejects.toThrow("Refusing to overwrite")
+        expect(await fs.readFile(target, "utf-8")).toBe("old content\n")
+      },
+    })
+  })
+
+  test("refuses an add destination that appears during approval", async () => {
+    await using fixture = await tmpdir()
+    const target = path.join(fixture.path, "appeared.txt")
+    const ctx: ToolCtx = {
+      ...baseCtx,
+      ask: async () => {
+        await fs.writeFile(target, "concurrent owner\n")
+      },
+    }
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const patchText = "*** Begin Patch\n*** Add File: appeared.txt\n+agent bytes\n*** End Patch"
+        await expect(execute({ patchText }, ctx)).rejects.toThrow("Refusing to overwrite")
+        expect(await fs.readFile(target, "utf8")).toBe("concurrent owner\n")
+      },
+    })
+  })
+
+  test("refuses changed bytes after edit approval", async () => {
+    await using fixture = await tmpdir()
+    const target = path.join(fixture.path, "changed.txt")
+    await fs.writeFile(target, "approved\n")
+    const ctx: ToolCtx = {
+      ...baseCtx,
+      ask: async () => {
+        await fs.writeFile(target, "concurrent\n")
+      },
+    }
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const patchText = "*** Begin Patch\n*** Update File: changed.txt\n@@\n-approved\n+agent\n*** End Patch"
+        await expect(execute({ patchText }, ctx)).rejects.toThrow("changed after approval")
+        expect(await fs.readFile(target, "utf8")).toBe("concurrent\n")
+      },
+    })
+  })
+
+  test("refuses a replacement inode even when bytes match approval", async () => {
+    await using fixture = await tmpdir()
+    const target = path.join(fixture.path, "identity.txt")
+    await fs.writeFile(target, "approved\n")
+    const ctx: ToolCtx = {
+      ...baseCtx,
+      ask: async () => {
+        const replacement = path.join(fixture.path, "replacement.txt")
+        await fs.writeFile(replacement, "approved\n")
+        await fs.rename(replacement, target)
+      },
+    }
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const patchText = "*** Begin Patch\n*** Update File: identity.txt\n@@\n-approved\n+agent\n*** End Patch"
+        await expect(execute({ patchText }, ctx)).rejects.toThrow("identity changed after approval")
+        expect(await fs.readFile(target, "utf8")).toBe("approved\n")
       },
     })
   })

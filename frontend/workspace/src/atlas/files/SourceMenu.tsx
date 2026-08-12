@@ -1,6 +1,15 @@
 import { For, Show, createSignal, type JSX } from "solid-js"
 import { groupSources, type PaneSource } from "@/atlas/files/sources"
-import { IconArchive, IconCloud, IconFolder, IconFolderAdd, IconLink, IconTrash } from "@/atlas/shared/Icon"
+import {
+  IconArchive,
+  IconChevronDown,
+  IconCloud,
+  IconFolder,
+  IconFolderAdd,
+  IconLink,
+  IconTrash,
+} from "@/atlas/shared/Icon"
+import "./file-items.css"
 
 /**
  * One icon per kind of place files come from. A connected folder is drawn as a
@@ -30,43 +39,104 @@ export function SourceMenu(props: {
   onOpen?: () => void
 }): JSX.Element {
   const [open, setOpen] = createSignal(false)
-  const pick = (source: PaneSource) => {
+  const refs: { trigger?: HTMLButtonElement; menu?: HTMLDivElement } = {}
+  const items = () => Array.from(refs.menu?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])
+  const focusItem = (item: HTMLElement | undefined) => {
+    if (!item) return
+    items().forEach((candidate) => (candidate.tabIndex = candidate === item ? 0 : -1))
+    item.focus()
+  }
+  const close = (restoreFocus = false) => {
     setOpen(false)
+    if (restoreFocus)
+      queueMicrotask(() => {
+        const active = document.activeElement
+        if (active?.isConnected && active !== document.body) return
+        refs.trigger?.focus()
+      })
+  }
+  const toggle = () => {
+    if (open()) {
+      close()
+      return
+    }
+    props.onOpen?.()
+    setOpen(true)
+    queueMicrotask(() => focusItem(items()[0]))
+  }
+  const pick = (source: PaneSource) => {
+    close(true)
     props.onPick(source)
   }
   const revoke = (source: PaneSource) => {
-    setOpen(false)
+    close(true)
     props.onRevoke?.(source)
   }
 
   return (
     <div class="files-source">
       <button
+        ref={(element) => {
+          refs.trigger = element
+        }}
         type="button"
         class="files-source__button"
         data-source-button
+        data-source-kind={props.active.kind}
         aria-haspopup="menu"
         aria-expanded={open()}
-        onClick={() => {
-          if (!open()) props.onOpen?.()
-          setOpen(!open())
-        }}
+        aria-label={`File source: ${props.active.name}`}
+        title={props.active.detail ?? props.active.sub}
+        onClick={toggle}
       >
+        <span class="files-source__glyph" aria-hidden="true">
+          {glyph(props.active.kind)({ size: 15, strokeWidth: 1.5 })}
+        </span>
         <span class="files-source__name">{props.active.name}</span>
         <span class="files-source__caret" aria-hidden="true">
-          ▾
+          <IconChevronDown size={12} strokeWidth={1.5} />
         </span>
       </button>
 
       <Show when={open()}>
         <div class="files-menu-wrap">
-          <button
-            type="button"
-            class="files-menu__scrim"
-            aria-label="Close source menu"
-            onClick={() => setOpen(false)}
-          />
-          <div class="files-menu" data-source-menu role="menu">
+          <button type="button" class="files-menu__scrim" tabindex="-1" aria-hidden="true" onClick={() => close()} />
+          <div
+            ref={(element) => {
+              refs.menu = element
+            }}
+            class="files-menu"
+            data-source-menu
+            role="menu"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" || event.key === "Tab") {
+                event.preventDefault()
+                event.stopPropagation()
+                close(true)
+                return
+              }
+              const options = items()
+              const current = options.indexOf(document.activeElement as HTMLElement)
+              const target =
+                event.key === "Home"
+                  ? options[0]
+                  : event.key === "End"
+                    ? options.at(-1)
+                    : event.key === "ArrowDown"
+                      ? options[(current + 1 + options.length) % options.length]
+                      : event.key === "ArrowUp"
+                        ? options[(current - 1 + options.length) % options.length]
+                        : undefined
+              if (!target) return
+              event.preventDefault()
+              focusItem(target)
+            }}
+            onFocusOut={(event) => {
+              const next = event.relatedTarget
+              if (next instanceof Node && (refs.menu?.contains(next) || refs.trigger?.contains(next))) return
+              close()
+            }}
+          >
             <For each={groupSources(props.sources)}>
               {(group) => (
                 <>
@@ -87,7 +157,9 @@ export function SourceMenu(props: {
                           type="button"
                           class="files-menu__item"
                           role="menuitemradio"
+                          tabindex="-1"
                           data-source-item={source.id}
+                          data-source-kind={source.kind}
                           aria-checked={source === props.active}
                           onClick={() => pick(source)}
                         >
@@ -99,10 +171,21 @@ export function SourceMenu(props: {
                             <Show when={source.sub}>
                               <span class="files-menu__sub">{source.sub}</span>
                             </Show>
+                            <Show when={!source.sub && source.detail}>
+                              <span class="files-menu__context">{source.detail}</span>
+                            </Show>
                           </span>
                           <span class="files-menu__tail">
                             <Show when={source.readonly}>
-                              <span class="files-menu__badge">ro</span>
+                              <span class="files-menu__badge">Read only</span>
+                            </Show>
+                            <Show when={source.kind === "connected" && !source.readonly}>
+                              <span
+                                class="files-menu__badge"
+                                title="Approved file tools may write here; runtimes do not receive a writable mount."
+                              >
+                                Tool write
+                              </span>
                             </Show>
                             <Show when={source.live}>
                               <span class="files-menu__dot" aria-label="Reachable" />
@@ -119,6 +202,7 @@ export function SourceMenu(props: {
                             type="button"
                             class="files-menu__revoke"
                             role="menuitem"
+                            tabindex="-1"
                             data-source-revoke={source.id}
                             aria-label={`Revoke access to ${source.name}`}
                             onClick={() => revoke(source)}
@@ -138,8 +222,10 @@ export function SourceMenu(props: {
                 type="button"
                 class="files-menu__item"
                 data-source-add
+                role="menuitem"
+                tabindex="-1"
                 onClick={() => {
-                  setOpen(false)
+                  close(true)
                   props.onAdd?.()
                 }}
               >

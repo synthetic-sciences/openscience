@@ -26,7 +26,7 @@
   gap: 20px;
   padding: 16px 20px;
   pointer-events: auto;
-  transition: all 150ms ease-out;
+  transition: transform var(--duration-slow) var(--ease-out-expo);
 
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-weak-base);
@@ -41,11 +41,12 @@
   }
 
   &[data-opened] {
-    animation: toastPopIn 150ms ease-out;
+    animation: toastPopIn var(--duration-slow) var(--ease-out-expo);
   }
 
   &[data-closed] {
-    animation: toastPopOut 100ms ease-in forwards;
+    pointer-events: none;
+    animation: toastPopOut var(--duration-fast) ease-in forwards;
   }
 
   &[data-swipe="move"] {
@@ -54,11 +55,11 @@
 
   &[data-swipe="cancel"] {
     transform: translateX(0);
-    transition: transform 200ms ease-out;
+    transition: transform var(--duration-slow) var(--ease-out-expo);
   }
 
   &[data-swipe="end"] {
-    animation: toastSwipeOut 100ms ease-out forwards;
+    animation: toastSwipeOut var(--duration-fast) ease-in forwards;
   }
 
   /* &[data-variant="success"] { */
@@ -169,7 +170,7 @@
     height: 100%;
     width: var(--kb-toast-progress-fill-width);
     background-color: var(--color-primary);
-    transition: width 250ms linear;
+    transition: width var(--duration-slow) linear;
   }
 }
 

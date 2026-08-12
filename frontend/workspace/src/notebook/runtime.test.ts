@@ -52,6 +52,8 @@ describe("kernel runtime presentation", () => {
   test("turns canonical names into concise scientist-facing labels", () => {
     expect(kernelLabel(kernel())).toBe("analysis.ipynb")
     expect(kernelLabel(kernel({ name: "agent", language: "r" }))).toBe("R analysis")
+    expect(kernelLabel(kernel({ name: "agent", environment_name: "nbody" }))).toBe("nbody analysis")
+    expect(kernelLabel(kernel({ name: "environment:nbody", environment_name: "nbody" }))).toBe("nbody environment")
   })
 
   test("maps lifecycle states to stable semantic tones", () => {

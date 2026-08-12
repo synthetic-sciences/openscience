@@ -36,6 +36,11 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
       .catch(() => undefined)
   const [data, api] = createResource(load)
   const reading = createMemo(() => hostReading(data.latest))
+  const processDetail = () => {
+    const detail = reading().kernels
+    if (detail === "kernel count unavailable" || /^\d/.test(detail)) return detail
+    return `${reading().live} ${detail}`
+  }
   const refresh = () => {
     if (document.hidden) return
     void api.refetch()
@@ -50,10 +55,10 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
   return (
     <section class="host-strip" aria-label="Machine resources" data-testid="host-strip">
       <div class="host-strip__metric" data-host-tile="memory">
-        <span class="host-strip__label">Machine</span>
+        <span class="host-strip__label">Memory</span>
         <p>
           <strong class="host-strip__headline">{reading().headline}</strong>
-          <span>{reading().memory}</span>
+          <span>{reading().memory.replace(/ memory$/, "")}</span>
         </p>
         <Meter value={reading().memoryFill} />
       </div>
@@ -62,16 +67,16 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
         <span class="host-strip__label">CPU</span>
         <p>
           <strong class="host-strip__cores-value">{reading().cores}</strong>
-          <span>cores CPU</span>
+          <span>cores</span>
         </p>
         <Meter value={reading().cpuFill} />
       </div>
 
       <div class="host-strip__metric host-strip__metric--kernels" data-host-tile="kernels">
-        <span class="host-strip__label">Live</span>
-        <p>
+        <span class="host-strip__label">Active</span>
+        <p title={processDetail()} aria-label={`${reading().live} active processes. ${processDetail()}`}>
           <strong class="host-strip__kernels-value">{reading().live}</strong>
-          <span>{reading().kernels}</span>
+          <span>processes</span>
         </p>
       </div>
     </section>

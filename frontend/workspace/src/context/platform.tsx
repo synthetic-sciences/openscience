@@ -39,7 +39,7 @@ export type Platform = {
   storage?: (name?: string) => SyncStorage | AsyncStorage
 
   /** Check for updates (Tauri only) */
-  checkUpdate?(): Promise<{ updateAvailable: boolean; version?: string }>
+  checkUpdate?(options?: { refresh?: boolean }): Promise<{ updateAvailable: boolean; version?: string }>
 
   /** Install updates (Tauri only) */
   update?(): Promise<void>

@@ -1,5 +1,14 @@
-import { DiffLineAnnotation, FileContents, FileDiffOptions, type SelectedLineRange } from "@pierre/diffs"
+import {
+  DiffLineAnnotation,
+  FileContents,
+  FileDiffOptions,
+  registerCustomTheme,
+  type SelectedLineRange,
+} from "@pierre/diffs"
 import { ComponentProps } from "solid-js"
+import { registerOpenScienceDiffTheme } from "../context/marked"
+
+registerOpenScienceDiffTheme({ registerCustomTheme })
 
 export type DiffProps<T = {}> = FileDiffOptions<T> & {
   before: FileContents

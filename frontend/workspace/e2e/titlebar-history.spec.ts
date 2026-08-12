@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures"
-import { promptSelector, sessionTab } from "./utils"
+import { promptSelector, sessionHeading } from "./utils"
 
 test("browser back/forward navigates between sessions", async ({ page, slug, sdk, gotoSession }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
@@ -17,26 +17,26 @@ test("browser back/forward navigates between sessions", async ({ page, slug, sdk
     await gotoSession(one.id)
 
     const sidebar = page.getByRole("complementary").filter({ has: page.getByRole("button", { name: "New research" }) })
-    const target = sidebar.locator('[role="button"]').filter({ hasText: twoTitle })
+    const target = sidebar.getByRole("button", { name: twoTitle })
     await expect(target).toBeVisible()
     await target.scrollIntoViewIfNeeded()
     await target.click()
 
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
     await expect(page.locator(promptSelector)).toBeVisible()
-    await expect(sessionTab(page, twoTitle)).toHaveAttribute("aria-selected", "true")
+    await expect(sessionHeading(page, twoTitle)).toBeVisible()
 
     await page.goBack()
 
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${one.id}(?:\\?|#|$)`))
     await expect(page.locator(promptSelector)).toBeVisible()
-    await expect(sessionTab(page, oneTitle)).toHaveAttribute("aria-selected", "true")
+    await expect(sessionHeading(page, oneTitle)).toBeVisible()
 
     await page.goForward()
 
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
     await expect(page.locator(promptSelector)).toBeVisible()
-    await expect(sessionTab(page, twoTitle)).toHaveAttribute("aria-selected", "true")
+    await expect(sessionHeading(page, twoTitle)).toBeVisible()
   } finally {
     await sdk.session.delete({ sessionID: one.id }).catch(() => undefined)
     await sdk.session.delete({ sessionID: two.id }).catch(() => undefined)

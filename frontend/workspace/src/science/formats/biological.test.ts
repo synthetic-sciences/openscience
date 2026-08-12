@@ -191,4 +191,21 @@ describe("scientific data workbench integration", () => {
     expect(view).toContain("Variant classes")
     expect(view).toContain("Spectrum inventory")
   })
+
+  test("keeps scientific controls readable without changing scientific acronyms", () => {
+    const view = read("./ScientificDataView.tsx")
+
+    expect(view).toContain('const CONTROL_FONT_SIZE = "12px"')
+    expect(view).toContain('const HELPER_FONT_SIZE = "11.5px"')
+    expect(view).toContain('const TABLE_FONT_SIZE = "12px"')
+    expect(view).not.toMatch(/"font-size": "(?:8|9|10|11)px"/)
+    expect(view).not.toContain("FONT_MONO")
+    expect(view).toMatch(/>\s*Overview\s*</)
+    expect(view).toMatch(/>\s*Records\s*</)
+    expect(view).toContain('placeholder="Filter records…"')
+    expect(view).toContain("{sentence(column)}")
+    expect(view).toContain('label="GC"')
+    expect(view).toContain('"REF", "ALT"')
+    expect(view).toContain('"MAPQ", "CIGAR"')
+  })
 })

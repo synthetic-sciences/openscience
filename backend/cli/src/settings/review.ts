@@ -2,6 +2,7 @@ import path from "path"
 import fs from "fs/promises"
 import z from "zod"
 import { Global } from "../global"
+import { DataRootBarrier } from "@/global/data-root-barrier"
 
 // Reviewer preferences. Manual review is always available; `auto` opts into
 // kicking off a reviewer pass automatically after a significant result (a
@@ -36,6 +37,7 @@ export namespace ReviewSettings {
   }
 
   export async function set(state: State): Promise<State> {
+    await using operation = await DataRootBarrier.enter(file)
     await fs.mkdir(path.dirname(file), { recursive: true })
     await Bun.write(file, JSON.stringify(state, null, 2))
     return state

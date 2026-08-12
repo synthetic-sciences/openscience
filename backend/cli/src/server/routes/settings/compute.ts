@@ -18,7 +18,6 @@ import { JsonStore } from "../../../util/jsonstore"
 import { SecretFile } from "../../../util/secret-file"
 import { OpenScience } from "../../../openscience"
 import { ModalAdapter } from "../../../compute/modal/adapter"
-import { ModalPlan } from "../../../compute/modal/plan"
 import { ModalVolume } from "../../../compute/modal/volume"
 import { Env } from "../../../env"
 
@@ -62,8 +61,7 @@ async function project<T>(context: Context, fn: () => T): Promise<T> {
 //     Vast.ai, RunPod). The provider API key is encrypted AT REST with a
 //     machine-local AES-256-GCM key (mirroring the credentials route) and is
 //     NEVER returned to the client — only presence + metadata are surfaced.
-//   • Legacy SSH host profiles retained for migration. Public dispatch stays
-//     unavailable until the full remote lifecycle is verified end to end.
+//   • SSH host profiles with pinned host-key identity and governed dispatch.
 //
 // Modal credentials are inert and resolve only inside its trusted adapter.
 // Providers that still run through shipped CLI skills retain their legacy
@@ -490,6 +488,20 @@ export namespace ComputeSettings {
   export async function findSshHost(target: string): Promise<SshHost | undefined> {
     return (await read()).ssh_hosts.find((host) => host.id === target)
   }
+
+  export async function verifySshHost(target: string, probe: ComputeJobs.Probe): Promise<Info> {
+    if (!probe.ok || !probe.host_key || !probe.fingerprint) throw new Error(`SSH host ${target} was not verified`)
+    const stored = await update((current) => {
+      const index = current.ssh_hosts.findIndex((host) => host.id === target)
+      if (index < 0) throw new Error(`SSH host ${target} was not found`)
+      current.ssh_hosts[index] = SshHost.parse({
+        ...current.ssh_hosts[index]!,
+        host_key: probe.host_key,
+        fingerprint: probe.fingerprint,
+      })
+    })
+    return view(stored)
+  }
 }
 
 export const ComputeSettingsRoutes = lazy(() =>
@@ -704,17 +716,7 @@ export const ComputeSettingsRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator(
-        "json",
-        z.object({
-          label: z.string().min(1),
-          host: z.string().min(1),
-          user: z.string().optional(),
-          port: z.number().int().positive().optional(),
-          scheduler: ComputeJobs.Scheduler.default("none"),
-          workdir: z.string().optional(),
-        }),
-      ),
+      validator("json", ComputeSettings.SshHost.omit({ id: true, fingerprint: true, host_key: true })),
       async (c) => c.json(await ComputeSettings.addSshHost(c.req.valid("json"))),
     )
     .post(
@@ -734,7 +736,9 @@ export const ComputeSettingsRoutes = lazy(() =>
       async (c) => {
         const host = await ComputeSettings.findSshHost(c.req.valid("param").id)
         if (!host) return c.json({ error: "SSH host not found" }, 404)
-        return c.json(await ComputeJobs.probe(host))
+        const probe = await ComputeJobs.probe(host)
+        if (probe.ok) await ComputeSettings.verifySshHost(host.id, probe)
+        return c.json(probe)
       },
     )
     .delete(
@@ -773,12 +777,12 @@ export const ComputeSettingsRoutes = lazy(() =>
     .post(
       "/jobs/plan",
       describeRoute({
-        summary: "Prepare an exact Modal run plan for approval",
+        summary: "Prepare an exact remote run plan for approval",
         operationId: "settings.compute.jobs.plan",
         responses: {
           200: {
-            description: "Modal run plan",
-            content: { "application/json": { schema: resolver(ModalPlan.Schema) } },
+            description: "Remote run plan",
+            content: { "application/json": { schema: resolver(ComputeJobs.Plan) } },
           },
           ...errors(400, 409),
         },
@@ -788,14 +792,20 @@ export const ComputeSettingsRoutes = lazy(() =>
       async (c) => {
         return project(c, async () => {
           const input = c.req.valid("json")
-          return c.json(await ComputeJobs.plan(input, { modal: await ComputeSettings.modalConfig() }))
+          const settings = await ComputeSettings.get()
+          return c.json(
+            await ComputeJobs.plan(input, {
+              hosts: settings.ssh_hosts,
+              modal: input.target.kind === "modal" ? await ComputeSettings.modalConfig() : undefined,
+            }),
+          )
         })
       },
     )
     .post(
       "/jobs",
       describeRoute({
-        summary: "Start a local compute job",
+        summary: "Start a compute job",
         operationId: "settings.compute.jobs.start",
         responses: {
           200: { description: "Started job", content: { "application/json": { schema: resolver(ComputeJobs.Job) } } },
@@ -807,19 +817,20 @@ export const ComputeSettingsRoutes = lazy(() =>
       async (c) => {
         return project(c, async () => {
           const input = c.req.valid("json")
-          if (input.target.kind === "ssh") {
-            return c.json(
-              {
-                error: "remote_compute_unavailable",
-                message:
-                  "SSH dispatch is unavailable until staged inputs, durable remote IDs, reattachment, cancellation, logs, and outputs pass real-host validation.",
-              },
-              409,
-            )
+          const settings = input.target.kind === "ssh" ? await ComputeSettings.get() : undefined
+          const sshHostID = input.target.kind === "ssh" ? input.target.host_id : undefined
+          if (sshHostID && !settings?.ssh_hosts.some((host) => host.id === sshHostID)) {
+            throw new HTTPException(400, { message: "The selected SSH compute profile was not found." })
           }
           const modal = input.target.kind === "modal" ? await ComputeSettings.modalConfig() : undefined
           const resolveCredentials = input.target.kind === "modal" ? ComputeSettings.modalResolver() : undefined
-          return c.json(await ComputeJobs.start(input, { modal, resolveCredentials }))
+          return c.json(
+            await ComputeJobs.start(input, {
+              hosts: settings?.ssh_hosts,
+              modal,
+              resolveCredentials,
+            }),
+          )
         })
       },
     )
@@ -892,7 +903,7 @@ export const ComputeSettingsRoutes = lazy(() =>
     .post(
       "/jobs/:id/retry",
       describeRoute({
-        summary: "Retry delivery from a retained Modal resource",
+        summary: "Retry output delivery from a retained remote resource",
         operationId: "settings.compute.jobs.retry",
         responses: {
           200: {
@@ -909,6 +920,33 @@ export const ComputeSettingsRoutes = lazy(() =>
           const job = await ComputeJobs.get(c.req.valid("param").id)
           if (!job) return c.json({ error: "Compute job not found" }, 404)
           return c.json(await ComputeJobs.retry(job.id, { resolveCredentials: ComputeSettings.modalResolver() }))
+        })
+      },
+    )
+    .post(
+      "/jobs/:id/release",
+      describeRoute({
+        summary: "Release retained compute resources",
+        operationId: "settings.compute.jobs.release",
+        responses: {
+          200: {
+            description: "Resources released",
+            content: { "application/json": { schema: resolver(ComputeJobs.Job) } },
+          },
+          ...errors(400, 404, 409),
+        },
+      }),
+      validator("param", z.object({ id: z.string() })),
+      validator("query", Directory),
+      async (c) => {
+        return project(c, async () => {
+          const job = await ComputeJobs.get(c.req.valid("param").id)
+          if (!job) return c.json({ error: "Compute job not found" }, 404)
+          const settings = await ComputeSettings.get()
+          const provider = settings.providers.find((item) => item.id === "modal")
+          const resolveCredentials =
+            job.target.kind === "modal" && provider?.enabled ? ComputeSettings.modalResolver() : undefined
+          return c.json(await ComputeJobs.release(job.id, { hosts: settings.ssh_hosts, resolveCredentials }))
         })
       },
     )

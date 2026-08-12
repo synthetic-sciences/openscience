@@ -37,10 +37,10 @@ interface Cached {
 /**
  * Files already fetched out of a Volume.
  *
- * Switching tabs unmounts this viewer, so without it every switch went back to
- * Modal -- seconds each time for bytes already in hand. Keyed by volume, path
- * and size: a Volume file can change, unlike an artifact version, and the size
- * is the cheapest signal of that a listing gives us. A file edited in place to
+ * Closing a focused preview unmounts this viewer, so without it reopening went
+ * back to Modal -- seconds each time for bytes already in hand. Keyed by volume,
+ * path and size: a Volume file can change, unlike an artifact version, and the
+ * size is the cheapest signal a listing gives us. A file edited in place to
  * exactly the same length serves the previous bytes until the pane reloads.
  */
 const fetched = new Map<string, Cached>()

@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { getJSON, getText, request, clearCache, resetRateLimits, orFallback } from "../../src/science/connectors/http"
+import {
+  getJSON as getJSONRaw,
+  getText as getTextRaw,
+  request as requestRaw,
+  clearCache,
+  resetRateLimits,
+  orFallback,
+  type HttpOptions,
+} from "../../src/science/connectors/http"
 import { Network } from "../../src/settings/network"
 
 // The shared http helper is the ONLY reliability layer under science/connectors,
@@ -7,10 +15,16 @@ import { Network } from "../../src/settings/network"
 // negative-cache rules, content negotiation, and the per-host throttle.
 
 const realFetch = globalThis.fetch
+const publicResolution = async () => ["93.184.216.34"]
+const withResolution = (opts: HttpOptions = {}): HttpOptions => ({ ...opts, resolveAddresses: publicResolution })
+const getText = (url: string, opts?: HttpOptions) => getTextRaw(url, withResolution(opts))
+const getJSON = (url: string, opts?: HttpOptions) => getJSONRaw(url, withResolution(opts))
+const request = (url: string, opts?: HttpOptions) => requestRaw(url, withResolution(opts))
 
-beforeEach(() => {
+beforeEach(async () => {
   clearCache()
   resetRateLimits()
+  await Network.set({ allowlistEnabled: false, enabled: ["package-management"], custom: [] })
 })
 
 afterEach(async () => {
@@ -125,6 +139,18 @@ describe("http network allow-list", () => {
 
     await expect(getText("https://blocked.test/a")).rejects.toThrow("allow-list")
     expect(calls).toBe(0)
+  })
+
+  test("blocks a redirect to a disallowed host before following it", async () => {
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return new Response(null, { status: 302, headers: { Location: "https://blocked.test/private" } })
+    }) as unknown as typeof fetch
+    await Network.set({ allowlistEnabled: true, enabled: [], custom: ["allowed.test"] })
+
+    await expect(getText("https://allowed.test/start", { retries: 0 })).rejects.toThrow("blocked.test")
+    expect(calls).toBe(1)
   })
 })
 

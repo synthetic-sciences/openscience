@@ -73,8 +73,8 @@ test("completed Modal GPU work shows resources, delivered result, and released l
 
   expect(host.textContent).toContain("GPU")
   expect(host.textContent).toContain("Modal · A100 · 4 CPU · 16 GB")
-  expect(host.textContent).toContain("succeeded")
-  expect(host.textContent).toContain("exit 0 · 1 artifact · remote released")
+  expect(host.textContent).toContain("Succeeded")
+  expect(host.textContent).toContain("Exit 0 · 1 artifact · Remote released")
   expect(host.textContent).not.toContain("Cancel")
   host.querySelector<HTMLButtonElement>(".remote-job-card__actions button")!.click()
   await new Promise((resolve) => setTimeout(resolve, 0))
@@ -98,5 +98,28 @@ test("a live Modal job remains cancellable and counts as live", () => {
   )
 
   expect(subject.jobLive(running)).toBe(true)
+  expect(subject.jobStatusLabel("interrupted")).toBe("Interrupted")
   expect(host.textContent).toContain("Cancel")
+})
+
+test("keeps live work and a bounded newest-first set of completed results", () => {
+  const running = {
+    ...job,
+    id: "job_running",
+    status: "running" as const,
+    completed_at: undefined,
+    lifecycle: { ...job.lifecycle, execution: "running", resource: "active" as const },
+  }
+  const older = {
+    ...job,
+    id: "job_older",
+    completed_at: "2026-08-08T09:01:01.000Z",
+  }
+  const newer = {
+    ...job,
+    id: "job_newer",
+    completed_at: "2026-08-08T11:01:01.000Z",
+  }
+
+  expect(subject.visibleJobs([older, running, newer], 1).map((item) => item.id)).toEqual(["job_running", "job_newer"])
 })

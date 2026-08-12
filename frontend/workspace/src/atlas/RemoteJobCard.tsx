@@ -2,11 +2,25 @@ import { Show, createSignal, onCleanup, type JSX } from "solid-js"
 import type { Job, Status } from "@/atlas/ComputeJobsAPI"
 
 const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
+const RECENT_COMPLETED_LIMIT = 8
 
 export function jobLive(job: Job) {
   if (!terminal.has(job.status)) return true
   const resource = job.lifecycle?.resource
   return job.target.kind === "modal" && (resource === "starting" || resource === "active" || resource === "unknown")
+}
+
+const jobTime = (job: Job) => Date.parse(job.completed_at ?? job.started_at ?? job.created_at) || 0
+
+export function visibleJobs(jobs: Job[], completedLimit = RECENT_COMPLETED_LIMIT) {
+  const active: Job[] = []
+  const completed: Job[] = []
+  for (const job of jobs) {
+    if (jobLive(job)) active.push(job)
+    else completed.push(job)
+  }
+  completed.sort((a, b) => jobTime(b) - jobTime(a))
+  return [...active, ...completed.slice(0, completedLimit)]
 }
 
 const elapsed = (job: Job, now: number) => {
@@ -25,16 +39,20 @@ const resource = (job: Job) => {
   const count = job.resources?.gpus && job.resources.gpus > 1 ? ` × ${job.resources.gpus}` : ""
   const cpu = job.resources?.cpus ? `${job.resources.cpus} CPU` : undefined
   const memory = job.resources?.memory_gb ? `${job.resources.memory_gb} GB` : undefined
-  return [gpu ? `${gpu}${count}` : undefined, cpu, memory].filter(Boolean).join(" · ") || "provider defaults"
+  return [gpu ? `${gpu}${count}` : undefined, cpu, memory].filter(Boolean).join(" · ") || "Provider defaults"
+}
+
+export const jobStatusLabel = (status: Status) => {
+  return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
 const result = (job: Job) => {
   const files = (job.artifacts?.length ?? 0) + (job.checkpoint ? 1 : 0)
-  const exit = job.exit_code === undefined || job.exit_code === null ? undefined : `exit ${job.exit_code}`
+  const exit = job.exit_code === undefined || job.exit_code === null ? undefined : `Exit ${job.exit_code}`
   const closed =
     job.target.kind === "modal"
       ? job.lifecycle?.resource === "closed"
-        ? "remote released"
+        ? "Remote released"
         : job.lifecycle?.resource
       : undefined
   return [exit, `${files} ${files === 1 ? "artifact" : "artifacts"}`, closed].filter(Boolean).join(" · ")
@@ -74,25 +92,36 @@ export function RemoteJobCard(props: {
         <div class="kernel-card__copy">
           <strong title={props.job.name}>{props.job.name}</strong>
           <span title={props.job.command}>
-            <i data-tone={jobLive(props.job) ? "active" : props.job.status === "succeeded" ? "ready" : "danger"} />
+            <i
+              data-tone={jobLive(props.job) ? "active" : props.job.status === "succeeded" ? "ready" : "danger"}
+              aria-hidden="true"
+            />
             {props.job.target_label} · {resource(props.job)}
           </span>
         </div>
       </div>
 
-      <span class="kernel-card__uptime" aria-label={`Runtime ${elapsed(props.job, now())}`}>
-        {elapsed(props.job, now())}
-      </span>
-      <span class="remote-job-card__result">
-        <strong>{props.job.status}</strong>
-        <small>{result(props.job)}</small>
-      </span>
+      <div class="remote-job-card__summary" aria-label="Remote job status and runtime">
+        <span class="kernel-card__uptime kernel-card__metric" aria-label={`Runtime ${elapsed(props.job, now())}`}>
+          <strong>{elapsed(props.job, now())}</strong>
+          <small>Runtime</small>
+        </span>
+        <span class="remote-job-card__result">
+          <strong>{jobStatusLabel(props.job.status)}</strong>
+          <small>{result(props.job)}</small>
+        </span>
+      </div>
       <div class="remote-job-card__actions">
-        <button type="button" onClick={read} aria-expanded={output() !== undefined}>
+        <button type="button" onClick={read} aria-expanded={output() !== undefined} aria-busy={loading()}>
           {loading() ? "Loading…" : output() === undefined ? "Output" : "Hide"}
         </button>
         <Show when={jobLive(props.job)}>
-          <button type="button" disabled={props.cancelling} onClick={() => void props.onCancel()}>
+          <button
+            type="button"
+            disabled={props.cancelling}
+            aria-busy={props.cancelling}
+            onClick={() => void props.onCancel()}
+          >
             {props.cancelling ? "Cancelling…" : "Cancel"}
           </button>
         </Show>

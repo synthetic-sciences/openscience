@@ -21,22 +21,27 @@ import { FileView } from "@/atlas/FilePreview"
 import { TerminalSurface } from "@/atlas/TerminalSurface"
 import { SessionTraceSurface } from "@/atlas/SessionTraceSurface"
 import { artifactContext } from "@/artifacts/context"
+import { useDialog } from "@synsci/ui/context/dialog"
 import { ArtifactInspector } from "@/artifacts/ArtifactInspector"
 import { StoredArtifactView } from "@/artifacts/StoredArtifactView"
+import { confirmDialog } from "@/atlas/dialogs"
+import { discardFileDraft } from "@/atlas/file-drafts"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
-import { IconChevronLeft, IconCollapse, IconExpand, IconX } from "@/atlas/shared/Icon"
+import { IconChevronLeft, IconCollapse, IconExpand, IconSplit, IconX } from "@/atlas/shared/Icon"
 import {
   DEFAULT_PANE_WIDTH,
-  MAX_PANE_WIDTH,
   MIN_PANE_WIDTH,
   INLINE_PANE_BREAKPOINT,
   clampPaneWidth,
+  equalPaneWidth,
   legacyPaneWidthKey,
-  paneWidthForViewport,
+  maxPaneWidthForWorkspace,
+  paneWidthForWorkspace,
   paneWidthKey,
   readPaneWidth,
   savePaneWidth,
 } from "@/atlas/right-pane-layout"
+import "./right-pane-tabs.css"
 
 const RESIZE_STEP = 16
 const labels: Record<ContextTab, string> = {
@@ -50,7 +55,14 @@ const labels: Record<ContextTab, string> = {
 
 export function RightPaneGate(props: { children: JSX.Element }): JSX.Element {
   createEffect(() => uiStore.syncArtifact(Boolean(artifactContext.active())))
-  return <Show when={uiStore.rightPaneOpen()}>{props.children}</Show>
+  const retained = () => uiStore.workTabs().some((tab) => tab.kind === "file")
+  return (
+    <Show when={uiStore.rightPaneOpen() || retained()}>
+      <div class="right-pane-gate" data-open={uiStore.rightPaneOpen() ? "true" : "false"}>
+        {props.children}
+      </div>
+    </Show>
+  )
 }
 
 const focusable =
@@ -63,6 +75,7 @@ export function RightPaneFrame(props: {
   expanded?: boolean
   width: number
   onClose: () => void
+  onPane?: (element: HTMLElement) => void
   children: JSX.Element
 }): JSX.Element {
   const refs: {
@@ -109,7 +122,7 @@ export function RightPaneFrame(props: {
     }
     if (event.key !== "Tab" || !refs.pane) return
     const items = Array.from(refs.pane.querySelectorAll<HTMLElement>(focusable)).filter(
-      (item) => item.getAttribute("aria-hidden") !== "true",
+      (item) => !item.closest('[hidden], [aria-hidden="true"], [inert]'),
     )
     if (!items.length) {
       event.preventDefault()
@@ -140,18 +153,18 @@ export function RightPaneFrame(props: {
           tabindex={-1}
           onClick={props.onClose}
           style={{
-            all: "unset",
             position: "fixed",
             inset: 0,
             "z-index": 69,
             cursor: "default",
-            background: "color-mix(in srgb, var(--color-bg) 62%, transparent)",
-            "backdrop-filter": "blur(1px)",
           }}
         />
       </Show>
       <aside
-        ref={(element) => (refs.pane = element)}
+        ref={(element) => {
+          refs.pane = element
+          props.onPane?.(element)
+        }}
         class="session-right-pane"
         aria-label="Research inspector"
         role={props.modal ? "dialog" : undefined}
@@ -215,12 +228,62 @@ export function RightPane(
   }
   const [width, setWidth] = createSignal(initial())
   const [expanded, setExpanded] = createSignal(false)
-  const [viewport, setViewport] = createSignal(typeof window === "undefined" ? 1440 : window.innerWidth)
+  const [dirtyFiles, setDirtyFiles] = createSignal<string[]>([])
+  const dialog = useDialog()
+  const [workspace, setWorkspace] = createSignal(typeof window === "undefined" ? 1200 : window.innerWidth)
   const [narrow, setNarrow] = createSignal(typeof window !== "undefined" && window.innerWidth < INLINE_PANE_BREAKPOINT)
   const [seen, setSeen] = createSignal(context() === "files")
-  const paneWidth = createMemo(() => paneWidthForViewport(width(), viewport()))
+  const limit = createMemo(() => maxPaneWidthForWorkspace(workspace()))
+  const paneWidth = createMemo(() => paneWidthForWorkspace(width(), workspace()))
   const drag = { start: null as { x: number; width: number } | null }
+  const frame: { observer?: ResizeObserver; pane?: HTMLElement } = {}
   const browser = () => context() === "files" && !uiStore.file() && !uiStore.saved()
+  const fileTabs = createMemo(() =>
+    uiStore.workTabs().filter((tab): tab is Extract<WorkTab, { kind: "file" }> => tab.kind === "file"),
+  )
+  const selectedFile = (tab: Extract<WorkTab, { kind: "file" }>) => {
+    const current = uiStore.file()
+    return current?.directory === tab.file.directory && current.path === tab.file.path
+  }
+  const visibleFile = (tab: Extract<WorkTab, { kind: "file" }>) =>
+    context() === "files" && uiStore.activeWorkTab() === tab.id
+  const markDirty = (id: string, dirty: boolean) =>
+    setDirtyFiles((items) => (dirty ? [...new Set([...items, id])] : items.filter((item) => item !== id)))
+  const openDirty = () => dirtyFiles().filter((id) => fileTabs().some((tab) => tab.id === id))
+  const closeWorkTab = async (id?: string) => {
+    const target = uiStore.workTabs().find((tab) => tab.id === (id ?? uiStore.activeWorkTab()))
+    if (target?.kind === "file" && openDirty().includes(target.id)) {
+      const confirmed = await confirmDialog(dialog, {
+        title: "Discard unsaved changes?",
+        message: `${target.file.name} has changes that have not been saved.`,
+        confirmLabel: "Discard and close",
+        danger: true,
+      })
+      if (!confirmed) return
+      markDirty(target.id, false)
+    }
+    if (target?.kind === "file") discardFileDraft(target.file.directory, target.file.path)
+    uiStore.closeWorkTab(id)
+  }
+  const closePane = async () => {
+    const pending = openDirty()
+    if (pending.length > 0) {
+      const confirmed = await confirmDialog(dialog, {
+        title: "Close with unsaved changes?",
+        message: `${pending.length} ${pending.length === 1 ? "file has" : "files have"} changes that have not been saved.`,
+        confirmLabel: "Discard and close",
+        danger: true,
+      })
+      if (!confirmed) return
+      setDirtyFiles([])
+    }
+    for (const id of pending) {
+      const tab = fileTabs().find((item) => item.id === id)
+      if (tab) discardFileDraft(tab.file.directory, tab.file.path)
+      uiStore.closeWorkTab(id)
+    }
+    uiStore.closeContext()
+  }
 
   createEffect(on(key, () => setWidth(initial())))
   createEffect(() => {
@@ -229,12 +292,33 @@ export function RightPane(
 
   onMount(() => {
     const resize = () => {
-      setViewport(window.innerWidth)
       setNarrow(window.innerWidth < INLINE_PANE_BREAKPOINT)
+      if (!frame.pane?.parentElement) setWorkspace(window.innerWidth)
     }
     window.addEventListener("resize", resize)
-    onCleanup(() => window.removeEventListener("resize", resize))
+    onCleanup(() => {
+      window.removeEventListener("resize", resize)
+      frame.observer?.disconnect()
+    })
   })
+
+  const observePane = (element: HTMLElement) => {
+    frame.observer?.disconnect()
+    frame.pane = element
+    const parent = element.parentElement
+    if (!parent) return
+    const main = element.previousElementSibling
+    const measure = () => {
+      const center = main instanceof HTMLElement ? main.clientWidth + element.clientWidth : 0
+      setWorkspace(center || parent.clientWidth || window.innerWidth)
+    }
+    measure()
+    if (typeof ResizeObserver === "undefined") return
+    frame.observer = new ResizeObserver(measure)
+    frame.observer.observe(parent)
+    frame.observer.observe(element)
+    if (main instanceof HTMLElement) frame.observer.observe(main)
+  }
 
   const onHandlePointerDown = (event: PointerEvent) => {
     drag.start = { x: event.clientX, width: paneWidth() }
@@ -244,7 +328,7 @@ export function RightPane(
   }
   const onHandlePointerMove = (event: PointerEvent) => {
     if (!drag.start) return
-    const next = clampPaneWidth(drag.start.width + (drag.start.x - event.clientX))
+    const next = clampPaneWidth(drag.start.width + (drag.start.x - event.clientX), limit())
     setWidth(next)
   }
   const onHandlePointerUp = (event: PointerEvent) => {
@@ -260,7 +344,14 @@ export function RightPane(
     const delta = event.key === "ArrowLeft" ? RESIZE_STEP : event.key === "ArrowRight" ? -RESIZE_STEP : 0
     if (!delta) return
     event.preventDefault()
-    const next = clampPaneWidth(paneWidth() + delta)
+    const next = clampPaneWidth(paneWidth() + delta, limit())
+    setWidth(next)
+    try {
+      savePaneWidth(key(), next)
+    } catch {}
+  }
+  const splitEvenly = () => {
+    const next = equalPaneWidth(workspace())
     setWidth(next)
     try {
       savePaneWidth(key(), next)
@@ -270,12 +361,13 @@ export function RightPane(
   return (
     <RightPaneGate>
       <RightPaneFrame
-        modal={narrow() || expanded()}
-        mobile={narrow()}
+        modal={uiStore.rightPaneOpen() && (narrow() || expanded())}
+        mobile={uiStore.rightPaneOpen() && narrow()}
         stacked={false}
         expanded={expanded()}
         width={paneWidth()}
-        onClose={() => (expanded() ? setExpanded(false) : uiStore.closeContext())}
+        onClose={() => (expanded() ? setExpanded(false) : void closePane())}
+        onPane={observePane}
       >
         <>
           <div
@@ -283,7 +375,7 @@ export function RightPane(
             aria-orientation="vertical"
             aria-label="Resize research inspector"
             aria-valuemin={MIN_PANE_WIDTH}
-            aria-valuemax={MAX_PANE_WIDTH}
+            aria-valuemax={limit()}
             aria-valuenow={paneWidth()}
             tabindex={narrow() ? -1 : 0}
             onKeyDown={onHandleKeyDown}
@@ -291,20 +383,10 @@ export function RightPane(
             on:pointermove={onHandlePointerMove}
             on:pointerup={onHandlePointerUp}
             on:pointercancel={onHandlePointerUp}
+            onDblClick={splitEvenly}
             aria-hidden={narrow() ? "true" : undefined}
-            hidden={expanded()}
-            style={{
-              position: "absolute",
-              left: "-3px",
-              top: 0,
-              width: "6px",
-              height: "100%",
-              cursor: "ew-resize",
-              "z-index": 5,
-              "touch-action": "none",
-            }}
-            onMouseEnter={(event) => (event.currentTarget.style.background = "var(--color-accent-subtle)")}
-            onMouseLeave={(event) => (event.currentTarget.style.background = "transparent")}
+            hidden={narrow() || expanded()}
+            class="research-inspector__resize"
           />
           <div class="research-inspector__header">
             <Show
@@ -319,11 +401,22 @@ export function RightPane(
                 tabs={uiStore.workTabs()}
                 active={uiStore.activeWorkTab()}
                 onSelect={uiStore.activateWorkTab}
-                onClose={uiStore.closeWorkTab}
+                onClose={(id) => void closeWorkTab(id)}
                 onReorder={uiStore.moveWorkTab}
               />
             </Show>
             <div class="research-inspector__controls">
+              <Show when={!narrow() && !expanded()}>
+                <button
+                  type="button"
+                  class="research-inspector__control"
+                  onClick={splitEvenly}
+                  title="Split workspace evenly"
+                  aria-label="Split workspace evenly"
+                >
+                  <IconSplit size={16} strokeWidth={1.45} />
+                </button>
+              </Show>
               <Show when={!narrow()}>
                 <button
                   type="button"
@@ -340,7 +433,7 @@ export function RightPane(
               <button
                 type="button"
                 class="research-inspector__control"
-                onClick={() => (narrow() ? uiStore.closeContext() : uiStore.closeWorkTab())}
+                onClick={() => (narrow() ? void closePane() : void closeWorkTab())}
                 title={narrow() ? "Back to conversation" : "Close context"}
                 aria-label={narrow() ? "Back to conversation" : "Close context"}
                 data-modal-initial-focus
@@ -352,39 +445,41 @@ export function RightPane(
             </div>
           </div>
           <Suspense fallback={<InspectorLoading label={labels[context()]} />}>
-            <Show when={uiStore.file()} keyed>
-              {(file) => (
+            <For each={fileTabs()}>
+              {(tab) => (
                 <div
-                  aria-hidden={context() === "files" ? undefined : "true"}
+                  aria-hidden={visibleFile(tab) ? undefined : "true"}
+                  hidden={!visibleFile(tab)}
                   style={{
                     flex: 1,
                     "min-height": 0,
                     "min-width": 0,
-                    display: context() === "files" ? "flex" : "none",
+                    display: visibleFile(tab) ? "flex" : "none",
                     "flex-direction": "column",
                   }}
                 >
                   <Show
-                    when={!file.external}
+                    when={!tab.file.external}
                     fallback={
                       <ExternalFileAccess
-                        file={file}
-                        active={context() === "files" || context() === "artifact"}
-                        onClose={() => uiStore.closeFile()}
+                        file={tab.file}
+                        active={selectedFile(tab) && (context() === "files" || context() === "artifact")}
+                        onClose={() => void closeWorkTab(tab.id)}
                       />
                     }
                   >
                     <FileView
-                      directory={file.directory}
-                      path={file.path}
+                      directory={tab.file.directory}
+                      path={tab.file.path}
                       subtitle="Session files"
-                      active={context() === "files" || context() === "artifact"}
-                      onClose={() => uiStore.closeFile()}
+                      active={selectedFile(tab) && (context() === "files" || context() === "artifact")}
+                      onDirtyChange={(dirty) => markDirty(tab.id, dirty)}
+                      onClose={() => void closeWorkTab(tab.id)}
                     />
                   </Show>
                 </div>
               )}
-            </Show>
+            </For>
             <Show when={seen()}>
               <div
                 data-component="files-context"
@@ -443,51 +538,72 @@ function WorkTabStrip(props: {
   onReorder: (id: string, to: number) => void
 }): JSX.Element {
   return (
-    <nav class="inspector-tabs" aria-label="Contextual work tabs">
+    <nav class="inspector-tabs" aria-label="Contextual work tabs" role="tablist" aria-orientation="horizontal">
       <For each={props.tabs}>
         {(tab, index) => (
           <div
-            class="inspector-tab"
-            role="tab"
-            tabindex={0}
+            class="inspector-tab-pair"
             title={tab.kind === "file" ? tab.file.path : tab.kind === "saved" ? tab.artifact.title : workTabLabel(tab)}
-            aria-selected={props.active === tab.id}
             data-active={props.active === tab.id ? "true" : undefined}
-            draggable="true"
-            onDragStart={(event) => {
-              event.dataTransfer?.setData(WORK_TAB_DRAG, tab.id)
-              if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"
-            }}
-            onDragOver={(event) => {
-              if (event.dataTransfer?.types.includes(WORK_TAB_DRAG)) event.preventDefault()
-            }}
-            onDrop={(event) => {
-              const dragged = event.dataTransfer?.getData(WORK_TAB_DRAG)
-              if (!dragged || dragged === tab.id) return
-              event.preventDefault()
-              props.onReorder(dragged, index())
-            }}
-            onClick={() => props.onSelect(tab.id)}
-            onKeyDown={(event) => {
-              if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-                event.preventDefault()
-                props.onReorder(tab.id, index() + (event.key === "ArrowRight" ? 1 : -1))
-                return
-              }
-              if (event.key !== "Enter" && event.key !== " ") return
-              event.preventDefault()
-              props.onSelect(tab.id)
-            }}
+            role="presentation"
           >
-            <span class="inspector-tab__name">{workTabLabel(tab)}</span>
+            <button
+              type="button"
+              class="inspector-tab"
+              role="tab"
+              data-work-tab={tab.id}
+              tabindex={props.active === tab.id ? 0 : -1}
+              aria-selected={props.active === tab.id}
+              data-active={props.active === tab.id ? "true" : undefined}
+              draggable="true"
+              onDragStart={(event) => {
+                event.dataTransfer?.setData(WORK_TAB_DRAG, tab.id)
+                if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"
+              }}
+              onDragOver={(event) => {
+                if (event.dataTransfer?.types.includes(WORK_TAB_DRAG)) event.preventDefault()
+              }}
+              onDrop={(event) => {
+                const dragged = event.dataTransfer?.getData(WORK_TAB_DRAG)
+                if (!dragged || dragged === tab.id) return
+                event.preventDefault()
+                props.onReorder(dragged, index())
+              }}
+              onClick={() => props.onSelect(tab.id)}
+              onKeyDown={(event) => {
+                if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+                  event.preventDefault()
+                  props.onReorder(tab.id, index() + (event.key === "ArrowRight" ? 1 : -1))
+                  return
+                }
+                const target =
+                  event.key === "Home"
+                    ? props.tabs[0]
+                    : event.key === "End"
+                      ? props.tabs.at(-1)
+                      : event.key === "ArrowLeft"
+                        ? props.tabs[(index() - 1 + props.tabs.length) % props.tabs.length]
+                        : event.key === "ArrowRight"
+                          ? props.tabs[(index() + 1) % props.tabs.length]
+                          : undefined
+                if (!target) return
+                event.preventDefault()
+                const strip = event.currentTarget.closest(".inspector-tabs")
+                props.onSelect(target.id)
+                queueMicrotask(() =>
+                  Array.from(strip?.querySelectorAll<HTMLElement>("[data-work-tab]") ?? [])
+                    .find((item) => item.dataset.workTab === target.id)
+                    ?.focus(),
+                )
+              }}
+            >
+              <span class="inspector-tab__name">{workTabLabel(tab)}</span>
+            </button>
             <button
               type="button"
               class="inspector-tab__close"
               aria-label={`Close ${workTabLabel(tab)}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                props.onClose(tab.id)
-              }}
+              onClick={() => props.onClose(tab.id)}
             >
               <IconX size={11} strokeWidth={1.5} />
             </button>
@@ -504,7 +620,7 @@ function InspectorLoading(props: { label: string }): JSX.Element {
       data-component="inspector-loading"
       style={{ flex: 1, display: "flex", "align-items": "center", "justify-content": "center" }}
     >
-      <AsciiSpinner size={10} label={`loading ${props.label.toLowerCase()}…`} color="var(--color-text-faint)" />
+      <AsciiSpinner size={10} label={`Loading ${props.label.toLowerCase()}…`} color="var(--color-text-faint)" />
     </div>
   )
 }

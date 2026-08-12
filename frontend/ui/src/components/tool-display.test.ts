@@ -3,6 +3,7 @@ import {
   artifactActions,
   generatedArtifacts,
   humanizeToolName,
+  sentenceCaseLabel,
   savedArtifact,
   scienceTaskLabel,
   skillName,
@@ -17,6 +18,18 @@ describe("humanizeToolName", () => {
   })
   test("titlecases a multi-word namespace_tool id", () => {
     expect(humanizeToolName("playwright_browser_click")).toBe("Playwright Browser Click")
+  })
+})
+
+describe("sentenceCaseLabel", () => {
+  test("normalizes interface identifiers without relying on CSS casing", () => {
+    expect(sentenceCaseLabel("general")).toBe("General")
+    expect(sentenceCaseLabel("code_review")).toBe("Code review")
+    expect(sentenceCaseLabel("  research-agent  ")).toBe("Research agent")
+  })
+
+  test("preserves technical acronyms", () => {
+    expect(sentenceCaseLabel("PDF")).toBe("PDF")
   })
 })
 

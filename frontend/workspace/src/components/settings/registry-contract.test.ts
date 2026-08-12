@@ -1,0 +1,54 @@
+import { describe, expect, test } from "bun:test"
+import { SETTINGS_PANELS, SETTINGS_PANEL_IDS, SETTINGS_SECTIONS } from "./registry"
+
+const root = new URL("./", import.meta.url)
+const modules: Record<(typeof SETTINGS_PANEL_IDS)[number], string> = {
+  models: "Models",
+  skills: "Skills",
+  connectors: "Connectors",
+  specialists: "Specialists",
+  compute: "Compute",
+  network: "Network",
+  permissions: "Permissions",
+  sandbox: "Sandbox",
+  credentials: "Credentials",
+  storage: "Storage",
+  general: "General",
+}
+
+describe("settings registry source contract", () => {
+  test("enumerates every reachable panel once and in rail order", () => {
+    expect(SETTINGS_PANELS.map((panel) => panel.id)).toEqual([...SETTINGS_PANEL_IDS])
+    expect(new Set(SETTINGS_PANELS.map((panel) => panel.id)).size).toBe(SETTINGS_PANEL_IDS.length)
+
+    for (const section of SETTINGS_SECTIONS) {
+      expect(
+        SETTINGS_PANELS.some((panel) => panel.section === section.id),
+        section.id,
+      ).toBe(true)
+    }
+  })
+
+  test("keeps every panel inside the shared settings frame", async () => {
+    for (const id of SETTINGS_PANEL_IDS) {
+      const source = await Bun.file(new URL(`${modules[id]}.tsx`, root)).text()
+      if (id === "skills") {
+        expect(source, id).toContain("<SkillsFrame>")
+        continue
+      }
+      expect(source, id).toContain("<PanelScroll>")
+      expect(source, id).toContain("<PanelHeader")
+      expect(source, id).toContain("<PanelBody>")
+    }
+  })
+
+  test("keeps nested model and general surfaces in the audited source set", async () => {
+    const models = await Bun.file(new URL("Models.tsx", root)).text()
+    const general = await Bun.file(new URL("General.tsx", root)).text()
+
+    expect(models).toContain("<ManagedInference")
+    expect(models).toContain("<CodexConnection")
+    expect(models).toContain("<ProviderKeys")
+    expect(general).toContain("<AppearanceSections")
+  })
+})

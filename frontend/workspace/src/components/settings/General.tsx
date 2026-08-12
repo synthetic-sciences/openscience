@@ -1,20 +1,25 @@
-// General — Account and Licensing, plus the appearance/theme
+// General — account, workspace navigation, and appearance
 // controls. Everything here is wired to a real endpoint:
 //   • Account   → client.account.get / client.account.logout, billing link.
 //   • Licensing  → /settings/preferences (real JSON store, persisted to ~/.openscience).
-//   • Appearance → the extracted AppearanceSections (theme, sounds, updates, …).
+//   • Appearance → the extracted AppearanceSections (display mode, sounds, updates, …).
 import { Component, Show, createSignal, onMount, type JSX } from "solid-js"
 import { Button } from "@synsci/ui/button"
+import { Icon, type IconProps } from "@synsci/ui/icon"
+import { useDialog } from "@synsci/ui/context/dialog"
 import { Switch } from "@synsci/ui/switch"
 import { showToast } from "@synsci/ui/toast"
+import { confirmDialog } from "@/atlas/dialogs"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { URLS } from "@/config/urls"
-import { FONT_CODE, FONT_SANS } from "@/styles/tokens"
 import { AppearanceSections } from "../settings-general"
 import { settingsApi } from "./api"
+import { commitPreference } from "./preference-write"
 import { productPreferences } from "@/context/product-preferences"
+import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
+import "./preference-panels.css"
 
 type Account = {
   session?: boolean
@@ -24,7 +29,6 @@ type Account = {
 }
 
 type Preferences = {
-  intent: "commercial" | "non-commercial"
   extra_budget_usd: number
   show_trace: boolean
   atlas_enabled: boolean
@@ -34,6 +38,7 @@ export default function General() {
   const sdk = useGlobalSDK()
   const platform = usePlatform()
   const server = useServer()
+  const dialog = useDialog()
 
   const fetchFn = () => platform.fetch ?? fetch
   const base = () => server.url
@@ -42,6 +47,8 @@ export default function General() {
   const [prefs, setPrefs] = createSignal<Preferences | undefined>()
   const [error, setError] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
+  const [preferenceBusy, setPreferenceBusy] = createSignal(false)
+  const [showAdvanced, setShowAdvanced] = createSignal(false)
 
   const loadAccount = async () => {
     try {
@@ -66,16 +73,32 @@ export default function General() {
   })
 
   const savePref = async (patch: Partial<Preferences>) => {
-    const next = await settingsApi<Preferences>(base(), fetchFn(), "/settings/preferences", {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    })
-    setPrefs(next)
-    productPreferences.sync(next)
+    if (preferenceBusy()) return
+    setPreferenceBusy(true)
+    setError(undefined)
+    const result = await commitPreference(
+      () =>
+        settingsApi<Preferences>(base(), fetchFn(), "/settings/preferences", {
+          method: "PATCH",
+          body: JSON.stringify(patch),
+        }),
+      (next) => {
+        setPrefs(next)
+        productPreferences.sync(next)
+      },
+    )
+    if (!result.ok) setError(result.error)
+    setPreferenceBusy(false)
   }
 
   const signOut = async () => {
-    if (!window.confirm("Disconnect this local server from OpenScience?")) return
+    const confirmed = await confirmDialog(dialog, {
+      title: "Disconnect this server?",
+      message: "This signs the local server out of OpenScience. Local projects and files stay on this machine.",
+      confirmLabel: "Disconnect",
+      danger: true,
+    })
+    if (!confirmed) return
     setBusy(true)
     try {
       const res = await sdk.client.account.logout()
@@ -89,130 +112,129 @@ export default function General() {
     }
   }
 
-  const plan = () => (account()?.user?.subscription_plan as string | undefined) ?? undefined
+  const plan = () => {
+    const value = account()?.user?.subscription_plan as string | undefined
+    if (!value) return "—"
+    return `${value.charAt(0).toLocaleUpperCase()}${value.slice(1)}`
+  }
   const org = () => {
     const u = account()?.user ?? {}
     return (u.organization ?? u.org ?? u.team ?? u.organization_name) as string | undefined
   }
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="settings-page-header">
-        <div class="settings-page-header__inner">
-          <h2 class="text-16-medium text-text-strong">General</h2>
-          <p class="text-13-regular text-text-weak">Your account, workspace, licensing, and appearance.</p>
-        </div>
-      </div>
+    <PanelScroll>
+      <div class="settings-preferences-panel settings-preferences-panel--general">
+        <PanelHeader title="General" description="Manage your account and everyday workspace preferences." />
+        <PanelBody>
+          <Show when={error()}>
+            <div class="settings-alert" data-tone="critical" role="alert">
+              {error()}
+            </div>
+          </Show>
 
-      <div class="settings-page-body">
-        <Show when={error()}>
-          <div
-            style={{
-              "font-family": FONT_SANS,
-              "font-size": "12px",
-              color: "var(--color-error)",
-              border: "1px solid var(--color-error-muted)",
-              "border-radius": "4px",
-              padding: "10px 12px",
-            }}
-          >
-            {error()}
-          </div>
-        </Show>
-
-        {/* Account */}
-        <Section title="Account" description="Your OpenScience identity and subscription.">
-          <div class="overflow-hidden rounded-[8px] border border-border-weak-base bg-surface-base/25">
-            <Row title="Email">
-              <span class="text-13-regular text-text-strong">
-                {(account()?.user?.email as string) ?? (account()?.session === false ? "Not connected" : "—")}
-              </span>
-            </Row>
-            <Row title="Plan">
-              <span class="text-13-regular text-text-strong capitalize">{plan() ?? "Free"}</span>
-            </Row>
-            <Show when={org()}>
-              <Row title="Organization">
-                <span class="text-13-regular text-text-strong">{org()}</span>
+          {/* Account */}
+          <Section title="Account" description="Your OpenScience identity and subscription.">
+            <div class="settings-card settings-preferences-card">
+              <Row icon="providers" title="Email">
+                <span class="settings-account-value">
+                  {(account()?.user?.email as string) ?? (account()?.session === false ? "Not connected" : "—")}
+                </span>
               </Row>
-            </Show>
-            <Row title="Billing" description="Manage your subscription, wallet, and invoices.">
-              <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
-                Manage
-              </Button>
-            </Row>
-            <Row title="Session" description="Disconnect this machine from OpenScience.">
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={busy() || account()?.session === false}
-                onClick={() => void signOut()}
-              >
-                Disconnect
-              </Button>
-            </Row>
-            <Show when={account()?.session === false}>
-              <div class="px-4 py-3">
-                <p class="text-12-regular text-text-weak">
-                  Signed out — run{" "}
-                  <code style={{ "font-family": FONT_CODE, "font-size": "11px" }}>openscience connect login</code> in a
-                  terminal to reconnect this machine.
-                </p>
-              </div>
-            </Show>
-          </div>
-        </Section>
+              <Row icon="star" title="Plan">
+                <span class="settings-account-value">{plan()}</span>
+              </Row>
+              <Show when={org()}>
+                <Row icon="home" title="Organization">
+                  <span class="settings-account-value">{org()}</span>
+                </Row>
+              </Show>
+              <Row icon="bolt" title="Billing" description="Manage your subscription, wallet, and invoices.">
+                <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
+                  Manage
+                </Button>
+              </Row>
+              <Row icon="link" title="Session" description="Disconnect this machine from OpenScience.">
+                <Button
+                  size="small"
+                  variant="secondary"
+                  disabled={busy() || account()?.session === false}
+                  onClick={() => void signOut()}
+                >
+                  Disconnect
+                </Button>
+              </Row>
+              <Show when={account()?.session === false}>
+                <div class="px-4 py-3">
+                  <p class="text-12-regular text-text-weak">
+                    Signed out — run <code class="font-mono text-11-regular">openscience connect login</code> in a
+                    terminal to reconnect this machine.
+                  </p>
+                </div>
+              </Show>
+            </div>
+          </Section>
 
-        {/* Licensing */}
-        <Section title="Licensing" description="How you intend to use outputs from OpenScience.">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <IntentCard
-              active={prefs()?.intent === "non-commercial"}
-              title="Non-commercial"
-              body="Research, evaluation, and personal projects."
-              onClick={() => void savePref({ intent: "non-commercial" })}
-            />
-            <IntentCard
-              active={prefs()?.intent === "commercial"}
-              title="Commercial"
-              body="Use in a product or for-profit work."
-              onClick={() => void savePref({ intent: "commercial" })}
-            />
-          </div>
-        </Section>
-
-        <Section title="Navigation" description="Choose which optional research surfaces appear in each project.">
-          <div class="overflow-hidden rounded-[8px] border border-border-weak-base bg-surface-base/25">
-            <Row
-              title="Atlas"
-              description="Show the research map in project navigation. Your map data is never changed."
-            >
-              <Switch
-                hideLabel
-                checked={prefs()?.atlas_enabled ?? false}
-                disabled={!prefs()}
-                onChange={(atlas_enabled) => void savePref({ atlas_enabled })}
+          <Section title="Navigation" description="Choose which optional research surfaces appear in each project.">
+            <div class="settings-card settings-preferences-card">
+              <Row
+                icon="branch"
+                title="Atlas"
+                description="Show the research map in project navigation. Your map data is never changed."
               >
-                Show Atlas
-              </Switch>
-            </Row>
-            <Row title="Trace" description="Show the local time, cost, and activity trace in session navigation.">
-              <Switch
-                hideLabel
-                checked={prefs()?.show_trace ?? false}
-                disabled={!prefs()}
-                onChange={(show_trace) => void savePref({ show_trace })}
+                <Switch
+                  hideLabel
+                  checked={prefs()?.atlas_enabled ?? false}
+                  disabled={!prefs() || preferenceBusy()}
+                  onChange={(atlas_enabled) => void savePref({ atlas_enabled })}
+                >
+                  Show Atlas
+                </Switch>
+              </Row>
+              <Row
+                icon="activity"
+                title="Trace"
+                description="Show the local time, cost, and activity trace in session navigation."
               >
-                Show Trace
-              </Switch>
-            </Row>
-          </div>
-        </Section>
+                <Switch
+                  hideLabel
+                  checked={prefs()?.show_trace ?? false}
+                  disabled={!prefs() || preferenceBusy()}
+                  onChange={(show_trace) => void savePref({ show_trace })}
+                >
+                  Show Trace
+                </Switch>
+              </Row>
+            </div>
+          </Section>
 
-        {/* Appearance / theme / notifications / sounds / updates */}
-        <AppearanceSections />
+          {/* Keep frequently used display and notification controls visible;
+              disclose sound and update preferences only when requested. */}
+          <div class="settings-disclosure-group">
+            <div class="settings-general-extras" data-expanded={showAdvanced() ? "true" : "false"}>
+              <AppearanceSections />
+            </div>
+            <div class="settings-disclosure-footer">
+              <button
+                type="button"
+                class="settings-preference-action"
+                data-variant="quiet"
+                aria-expanded={showAdvanced()}
+                onClick={() => setShowAdvanced((value) => !value)}
+              >
+                <Icon
+                  name="chevron-down"
+                  size="small"
+                  classList={{ "rotate-180": showAdvanced() }}
+                  aria-hidden="true"
+                />
+                {showAdvanced() ? "Show fewer settings" : "Show sound and update settings"}
+              </button>
+            </div>
+          </div>
+        </PanelBody>
       </div>
-    </div>
+    </PanelScroll>
   )
 }
 
@@ -220,56 +242,19 @@ function message(err: unknown) {
   return err instanceof Error ? err.message : String(err)
 }
 
-const Section: Component<{ title: string; description?: string; children: JSX.Element }> = (props) => (
-  <div class="flex flex-col gap-3">
-    <div class="flex flex-col gap-0.5">
-      <h3 class="text-14-medium text-text-strong tracking-[-0.01em]">{props.title}</h3>
-      <Show when={props.description}>
-        <p class="text-12-regular text-text-weak">{props.description}</p>
-      </Show>
-    </div>
-    {props.children}
-  </div>
-)
-
-const Row: Component<{ title: string; description?: string; children: JSX.Element }> = (props) => (
-  <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5 border-b border-border-weak-base last:border-none">
-    <div class="flex flex-col gap-0.5 min-w-0">
-      <span class="text-14-medium text-text-strong">{props.title}</span>
-      <Show when={props.description}>
-        <span class="text-12-regular text-text-weak">{props.description}</span>
-      </Show>
-    </div>
-    <div class="flex-shrink-0">{props.children}</div>
-  </div>
-)
-
-const IntentCard: Component<{ active: boolean; title: string; body: string; onClick: () => void }> = (props) => (
-  <button
-    type="button"
-    onClick={props.onClick}
-    style={{
-      all: "unset",
-      cursor: "pointer",
-      display: "flex",
-      "flex-direction": "column",
-      gap: "5px",
-      padding: "14px 16px",
-      "border-radius": "4px",
-      border: "1px solid var(--color-border)",
-      "box-shadow": props.active ? "inset 0 0 0 1px var(--color-text-interactive-base, var(--color-text))" : "none",
-      background: props.active ? "var(--color-surface-interactive-weak, var(--color-accent-subtle))" : "transparent",
-      transition: "border-color 120ms, box-shadow 120ms, background 120ms",
-    }}
-  >
-    <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
-      <span class="text-14-medium text-text-strong">{props.title}</span>
-      <Show when={props.active}>
-        <span style={{ "font-family": FONT_SANS, "font-size": "11px", color: "var(--color-text-muted)" }}>Active</span>
-      </Show>
-    </div>
-    <span class="text-12-regular text-text-weak" style={{ "line-height": 1.5 }}>
-      {props.body}
+const Row: Component<{ icon: IconProps["name"]; title: string; description?: string; children: JSX.Element }> = (
+  props,
+) => (
+  <div class="settings-row settings-preference-row justify-between">
+    <span class="settings-preference-icon" aria-hidden="true">
+      <Icon name={props.icon} size="small" />
     </span>
-  </button>
+    <div class="settings-row-copy">
+      <strong>{props.title}</strong>
+      <Show when={props.description}>
+        <span>{props.description}</span>
+      </Show>
+    </div>
+    <div class="ml-auto max-w-full flex-shrink-0">{props.children}</div>
+  </div>
 )

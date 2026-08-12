@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { existsSync, readFileSync, writeFileSync, chmodSync } from "fs"
 import { randomUUID, createHash } from "crypto"
 import { Global } from "../global"
+import { DataRootBarrier } from "../global/data-root-barrier"
 import { Log } from "../util/log"
 import { Lock } from "../util/lock"
 import { Env } from "../env"
@@ -16,6 +17,7 @@ import {
 } from "./synced-env-policy"
 import { resolveAtlasPackageDir } from "./atlas-package"
 import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
+import { CredentialLifecycle } from "../credentials/lifecycle"
 
 const log = Log.create({ service: "openscience" })
 
@@ -32,16 +34,6 @@ export const API_BASE = MANAGED_API_BASE
 // (NO_COLOR / TERM=dumb / piped output → plain text) and (b) only
 // renders when both stdout AND stderr are TTYs. Piping to a log file
 // no longer drops a one-line dev banner into structured output.
-if (API_BASE !== DEFAULT_API_BASE) {
-  log.info("openscience.api_base.override", { api_base: API_BASE })
-  if (process.stderr.isTTY) {
-    const { UI } = require("../cli/ui") as typeof import("../cli/ui")
-    process.stderr.write(
-      `${UI.Style.TEXT_DIM}[openscience] API base: ${API_BASE} (override via SYNSC_API_BASE)${UI.Style.TEXT_NORMAL}\n`,
-    )
-  }
-}
-
 // User-facing URL the CLI prints during `openscience login`. Defaults
 // to the unified Atlas frontend's /cli route — Plan tab, key management,
 // and billing all live there. SYNSC_AUTH_URL overrides (e.g. point at a
@@ -294,6 +286,20 @@ function withAtlasOnPath(env: Record<string, string>): Record<string, string> {
 }
 
 export namespace OpenScience {
+  /** Report a non-production API override after the CLI has initialized its
+   * log sink. Keeping this out of module initialization is important: runtime
+   * launchers and library consumers import OpenScience inside child processes,
+   * and import-time diagnostics would become command stderr or provenance. */
+  export function reportApiBaseOverride(): void {
+    if (API_BASE === DEFAULT_API_BASE) return
+    log.info("openscience.api_base.override", { api_base: API_BASE })
+    if (!process.stderr.isTTY) return
+    const { UI } = require("../cli/ui") as typeof import("../cli/ui")
+    process.stderr.write(
+      `${UI.Style.TEXT_DIM}[openscience] API base: ${API_BASE} (override via SYNSC_API_BASE)${UI.Style.TEXT_NORMAL}\n`,
+    )
+  }
+
   const filepath = path.join(Global.Path.data, "openscience-session.json")
 
   /** Friendly device label sent to the backend. Surfaced in the
@@ -369,11 +375,15 @@ export namespace OpenScience {
     }
   }
 
-  export async function saveSession(session: OpenScienceSession) {
+  async function writeSession(session: OpenScienceSession) {
     // Atomic temp+rename so a crash or a concurrent reader never sees a torn
     // session file (which getSession would mis-read as a logout).
     await atomicWrite(filepath, JSON.stringify(session, null, 2), { mode: 0o600 })
     await ensureAtlasCliConfig(session)
+  }
+
+  export async function saveSession(session: OpenScienceSession) {
+    await CredentialLifecycle.mutate("managed-session.set", () => writeSession(session))
   }
 
   /**
@@ -402,7 +412,7 @@ export namespace OpenScience {
       }
       const next = { ...existing, active_profile: existing.active_profile ?? "default", profiles }
       await fs.mkdir(path.dirname(configPath), { recursive: true, mode: 0o700 })
-      await fs.writeFile(configPath, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 })
+      await atomicWrite(configPath, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 })
     } catch (e) {
       log.warn("could not seed atlas-cli config", { error: e instanceof Error ? e.message : String(e) })
     }
@@ -414,10 +424,15 @@ export namespace OpenScience {
    *  update racing a background cached_v update) can't lose each other's field
    *  in the read-modify-write. */
   async function updateSession(patch: Partial<OpenScienceSession>): Promise<void> {
-    using _ = await Lock.write(filepath)
-    const session = await getSession()
-    if (!session) return
-    await saveSession({ ...session, ...patch })
+    await CredentialLifecycle.serialized(async () => {
+      using _ = await Lock.write(filepath)
+      const session = await getSession()
+      if (!session) return
+      // Sync bookkeeping is not credential material; publishing a credential
+      // revision for every TTL timestamp would unnecessarily stop live children.
+      // Do not rewrite the Atlas credential mirror for a timestamp-only patch.
+      await atomicWrite(filepath, JSON.stringify({ ...session, ...patch }, null, 2), { mode: 0o600 })
+    })
   }
 
   /** TTL gate for the cheap version probe. */
@@ -503,6 +518,31 @@ export namespace OpenScience {
     }
   }
 
+  /** Reconcile this process with the credential snapshot another server wrote. */
+  export async function reloadSyncedEnv(): Promise<void> {
+    const fresh = await readSyncedSnapshot()
+    const previous = new Map(syncedSecretValues)
+    for (const [key, value] of previous.entries()) {
+      if (fresh.has(key)) continue
+      unsetSyncedVar(key, value)
+    }
+    syncedSecretValues.clear()
+    for (const [key, value] of fresh.entries()) {
+      if (!isSyncedEnvAllowed(key, value)) continue
+      const current = process.env[key]
+      const ownsSlot = !current || previous.get(key) === current || current === value
+      if (ownsSlot) {
+        process.env[key] = value
+        try {
+          Env.set(key, value)
+        } catch {
+          /* Instance not initialized */
+        }
+      }
+      syncedSecretValues.set(key, value)
+    }
+  }
+
   /** Clear the api_key this CLI seeded into the bundled atlas CLI's config
    *  (see ensureAtlasCliConfig). Only removes the key when it is the one the
    *  session seeded (or, with no readable session, when the profile points at
@@ -522,7 +562,7 @@ export namespace OpenScience {
       const seeded = session?.api_key ? record.api_key === session.api_key : record.base_url === `${API_BASE}/api/v1`
       if (!seeded) return
       delete record.api_key
-      await fs.writeFile(configPath, JSON.stringify(existing, null, 2) + "\n", { mode: 0o600 })
+      await atomicWrite(configPath, JSON.stringify(existing, null, 2) + "\n", { mode: 0o600 })
     } catch {
       /* missing/unreadable config — nothing to clear */
     }
@@ -550,30 +590,32 @@ export namespace OpenScience {
    * logout and the 401-triggered clear. Best-effort; never throws.
    */
   export async function clearSession() {
-    const session = await getSession()
-    // Remove the synced credential artifacts FIRST, then delete the session file
-    // LAST. A crash after unlinking the session but before removing
-    // synced-env.json would otherwise leave preload-env.ts replaying the managed
-    // key into process.env on the next boot — the signed-out account's wallet
-    // kept being debited, the exact thing this function exists to prevent.
-    // Union of what this process synced (in-memory map) and what the last
-    // sync persisted (disk snapshot, replayed by preload-env.ts at boot) —
-    // a fresh `logout` process has only the latter.
-    const synced = await readSyncedSnapshot()
-    for (const [key, value] of syncedSecretValues.entries()) synced.set(key, value)
-    for (const name of ["synced-env.json", "openscience-synced.json", syncedGcpFilename]) {
+    await CredentialLifecycle.mutate("managed-session.clear", async () => {
+      const session = await getSession()
+      // Remove the synced credential artifacts FIRST, then delete the session file
+      // LAST. A crash after unlinking the session but before removing
+      // synced-env.json would otherwise leave preload-env.ts replaying the managed
+      // key into process.env on the next boot — the signed-out account's wallet
+      // kept being debited, the exact thing this function exists to prevent.
+      // Union of what this process synced (in-memory map) and what the last
+      // sync persisted (disk snapshot, replayed by preload-env.ts at boot) —
+      // a fresh `logout` process has only the latter.
+      const synced = await readSyncedSnapshot()
+      for (const [key, value] of syncedSecretValues.entries()) synced.set(key, value)
+      for (const name of ["synced-env.json", "openscience-synced.json", syncedGcpFilename]) {
+        try {
+          await fs.unlink(path.join(getSyncedConfigDir(), name))
+        } catch {}
+      }
+      for (const [key, value] of synced.entries()) unsetSyncedVar(key, value)
+      syncedSecretValues.clear()
+      await clearAtlasCliConfig(session)
+      await dropUsageQueue()
+      // Session file last, once the managed-key-replaying artifacts are gone.
       try {
-        await fs.unlink(path.join(getSyncedConfigDir(), name))
+        await fs.unlink(filepath)
       } catch {}
-    }
-    for (const [key, value] of synced.entries()) unsetSyncedVar(key, value)
-    syncedSecretValues.clear()
-    await clearAtlasCliConfig(session)
-    await dropUsageQueue()
-    // Session file last, once the managed-key-replaying artifacts are gone.
-    try {
-      await fs.unlink(filepath)
-    } catch {}
+    })
   }
 
   /**
@@ -766,14 +808,30 @@ export namespace OpenScience {
    *  a torn openscience-synced.json throws during config load and bricks the CLI
    *  until it's removed by hand. */
   async function atomicWrite(filepath: string, content: string, options?: { mode?: number }): Promise<void> {
+    await using operation = await DataRootBarrier.enter(filepath)
     // Unique per call (not just per PID): two concurrent syncs in the SAME
     // process (e.g. a per-request /sync and the processor's background sync)
     // would otherwise write the identical temp path, interleave, and publish a
     // torn file or fail the rename.
     const tmp = `${filepath}.${process.pid}.${randomUUID()}.tmp`
-    await Bun.write(tmp, content, options)
-    if (options?.mode !== undefined && process.platform !== "win32") await fs.chmod(tmp, options.mode)
-    await fs.rename(tmp, filepath)
+    await fs.mkdir(path.dirname(filepath), { recursive: true })
+    try {
+      const handle = await fs.open(tmp, "wx", options?.mode ?? 0o600)
+      await handle
+        .writeFile(content, "utf8")
+        .then(() =>
+          options?.mode !== undefined && process.platform !== "win32" ? handle.chmod(options.mode) : undefined,
+        )
+        .then(() => handle.sync())
+        .finally(() => handle.close())
+      await fs.rename(tmp, filepath)
+      const directory = await fs.open(path.dirname(filepath), "r").catch(() => undefined)
+      await directory?.sync().catch(() => undefined)
+      await directory?.close().catch(() => undefined)
+    } catch (error) {
+      await fs.rm(tmp, { force: true }).catch(() => undefined)
+      throw error
+    }
   }
 
   /** Fetch all connected service credentials and inject as env vars */
@@ -783,10 +841,6 @@ export namespace OpenScience {
   } | null> {
     const session = await getSession()
     if (!session) return null
-
-    // Keep the bundled atlas CLI authenticated for the agent on every startup
-    // sync (covers existing sessions that never re-run saveSession).
-    await ensureAtlasCliConfig(session)
 
     try {
       const res = await atlasFetch(`${API_BASE}/api/cli/sync`, {
@@ -835,146 +889,156 @@ export namespace OpenScience {
         }
       }
 
-      // Atlas transfers a GCP service-account document as an in-memory secret.
-      // Materialize it to an owner-only file before persistence so Google SDKs
-      // receive their standard GOOGLE_APPLICATION_CREDENTIALS path and the JSON
-      // never enters an agent shell.
-      const gcp = fresh.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-      const gcpFile = path.join(getSyncedConfigDir(), syncedGcpFilename)
-      if (gcp) {
-        fresh.delete("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-        const dir = getSyncedConfigDir()
-        const saved = await fs
-          .mkdir(dir, { recursive: true })
-          .then(() => atomicWrite(gcpFile, gcp, { mode: 0o600 }))
-          .then(() => true)
-          .catch((error) => {
-            log.warn("failed to materialize synced GCP credentials", {
-              error: error instanceof Error ? error.message : String(error),
-            })
-            return false
-          })
-        if (saved) fresh.set("GOOGLE_APPLICATION_CREDENTIALS", gcpFile)
-        if (!saved) await fs.unlink(gcpFile).catch(() => {})
-      }
-      if (!gcp) await fs.unlink(gcpFile).catch(() => {})
-
-      // Keep user-owned provider keys and the narrow OpenRouter managed route.
-      // The policy rejects direct-provider proxy tokens and untrusted provider
-      // base URLs before anything is applied or persisted.
-      for (const [key, value] of [...fresh.entries()]) {
-        if (!isSyncedEnvAllowed(key, value)) fresh.delete(key)
-      }
-
-      // Older Atlas sync responses can carry only OPENROUTER_API_KEY=thk_*.
-      // Managed OpenRouter must also carry the Atlas proxy baseURL; otherwise
-      // provider init correctly refuses to send a wallet token to public
-      // openrouter.ai and the UI shows ProviderInitError.
-      const openrouterKey = fresh.get("OPENROUTER_API_KEY")
-      if (isManagedAtlasKey(openrouterKey ?? "") && !fresh.has("OPENROUTER_BASE_URL")) {
-        fresh.set("OPENROUTER_BASE_URL", managedOpenRouterBaseURL())
-      }
-
-      // Count distinct APPLIED credential values (post-filter, ignoring routing
-      // *_BASE_URL vars) so the returned total reflects what the CLI honours —
-      // never the credentials that were dropped above.
-      const credentials = new Set(
-        [...fresh.entries()].filter(([key]) => !key.endsWith("_BASE_URL")).map(([, value]) => value),
-      ).size
-
-      // Unset previously-synced vars that are absent from the new response —
-      // mirrors the ownedKeys cleanup in server/routes/settings/credentials.ts.
-      // "Previously synced" is the union of this process's map and the on-disk
-      // snapshot preload-env.ts replayed at boot; a var is only removed when
-      // its live value still matches, so shell exports survive.
-      const previous = await readSyncedSnapshot()
-      for (const [key, value] of syncedSecretValues.entries()) previous.set(key, value)
-      for (const [key, value] of previous.entries()) {
-        if (fresh.has(key)) continue
-        unsetSyncedVar(key, value)
-      }
-      syncedSecretValues.clear()
-      for (const [key, value] of fresh.entries()) {
-        // Respect precedence: never clobber a user's own shell export or BYOK
-        // value. Only write the synced value when the slot is empty or already
-        // holds a previously-synced value — mirroring preload-env.ts's "shell
-        // exports win". Without this, a background sync could overwrite an
-        // exported ANTHROPIC_API_KEY with a managed thk_ key mid-session,
-        // silently turning a free BYOK call into a billed managed one.
-        const current = process.env[key]
-        const ownsSlot = !current || previous.get(key) === current || current === value
-        if (ownsSlot) {
-          try {
-            Env.set(key, value)
-          } catch {
-            /* Instance not initialized */
-          }
-          process.env[key] = value
+      return await CredentialLifecycle.mutate("managed-services.sync", async () => {
+        const current = await getSession()
+        if (!current || current.api_key !== session.api_key) {
+          throw new Error("Managed session changed while services were syncing; discarded the stale response")
         }
-        // Track the synced value regardless (for redaction + later cleanup). A
-        // shadowing shell export is left untouched by the unset pass above, which
-        // only removes a var whose live value still equals the synced one.
-        syncedSecretValues.set(key, value)
-      }
+        // Keep the bundled atlas CLI authenticated for the agent on every
+        // successful sync (covers existing sessions that never re-run login).
+        await ensureAtlasCliConfig(session)
 
-      // Write model lockdown config to managed config dir (highest priority config layer)
-      if (data.config) {
+        // Atlas transfers a GCP service-account document as an in-memory secret.
+        // Materialize it to an owner-only file before persistence so Google SDKs
+        // receive their standard GOOGLE_APPLICATION_CREDENTIALS path and the JSON
+        // never enters an agent shell.
+        const gcp = fresh.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+        const gcpFile = path.join(getSyncedConfigDir(), syncedGcpFilename)
+        if (gcp) {
+          fresh.delete("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+          const dir = getSyncedConfigDir()
+          const saved = await fs
+            .mkdir(dir, { recursive: true })
+            .then(() => atomicWrite(gcpFile, gcp, { mode: 0o600 }))
+            .then(() => true)
+            .catch((error) => {
+              log.warn("failed to materialize synced GCP credentials", {
+                error: error instanceof Error ? error.message : String(error),
+              })
+              return false
+            })
+          if (saved) fresh.set("GOOGLE_APPLICATION_CREDENTIALS", gcpFile)
+          if (!saved) await fs.unlink(gcpFile).catch(() => {})
+        }
+        if (!gcp) await fs.unlink(gcpFile).catch(() => {})
+
+        // Keep user-owned provider keys and the narrow OpenRouter managed route.
+        // The policy rejects direct-provider proxy tokens and untrusted provider
+        // base URLs before anything is applied or persisted.
+        for (const [key, value] of [...fresh.entries()]) {
+          if (!isSyncedEnvAllowed(key, value)) fresh.delete(key)
+        }
+
+        // Older Atlas sync responses can carry only OPENROUTER_API_KEY=thk_*.
+        // Managed OpenRouter must also carry the Atlas proxy baseURL; otherwise
+        // provider init correctly refuses to send a wallet token to public
+        // openrouter.ai and the UI shows ProviderInitError.
+        const openrouterKey = fresh.get("OPENROUTER_API_KEY")
+        if (isManagedAtlasKey(openrouterKey ?? "") && !fresh.has("OPENROUTER_BASE_URL")) {
+          fresh.set("OPENROUTER_BASE_URL", managedOpenRouterBaseURL())
+        }
+
+        // Count distinct APPLIED credential values (post-filter, ignoring routing
+        // *_BASE_URL vars) so the returned total reflects what the CLI honours —
+        // never the credentials that were dropped above.
+        const credentials = new Set(
+          [...fresh.entries()].filter(([key]) => !key.endsWith("_BASE_URL")).map(([, value]) => value),
+        ).size
+
+        // Unset previously-synced vars that are absent from the new response —
+        // mirrors the ownedKeys cleanup in server/routes/settings/credentials.ts.
+        // "Previously synced" is the union of this process's map and the on-disk
+        // snapshot preload-env.ts replayed at boot; a var is only removed when
+        // its live value still matches, so shell exports survive.
+        const previous = await readSyncedSnapshot()
+        for (const [key, value] of syncedSecretValues.entries()) previous.set(key, value)
+        for (const [key, value] of previous.entries()) {
+          if (fresh.has(key)) continue
+          unsetSyncedVar(key, value)
+        }
+        syncedSecretValues.clear()
+        for (const [key, value] of fresh.entries()) {
+          // Respect precedence: never clobber a user's own shell export or BYOK
+          // value. Only write the synced value when the slot is empty or already
+          // holds a previously-synced value — mirroring preload-env.ts's "shell
+          // exports win". Without this, a background sync could overwrite an
+          // exported ANTHROPIC_API_KEY with a managed thk_ key mid-session,
+          // silently turning a free BYOK call into a billed managed one.
+          const current = process.env[key]
+          const ownsSlot = !current || previous.get(key) === current || current === value
+          if (ownsSlot) {
+            try {
+              Env.set(key, value)
+            } catch {
+              /* Instance not initialized */
+            }
+            process.env[key] = value
+          }
+          // Track the synced value regardless (for redaction + later cleanup). A
+          // shadowing shell export is left untouched by the unset pass above, which
+          // only removes a var whose live value still equals the synced one.
+          syncedSecretValues.set(key, value)
+        }
+
+        // Write model lockdown config to managed config dir (highest priority config layer)
+        if (data.config) {
+          try {
+            const managedDir = getSyncedConfigDir()
+            await fs.mkdir(managedDir, { recursive: true })
+            await atomicWrite(
+              path.join(managedDir, "openscience-synced.json"),
+              JSON.stringify({ $schema: "https://syntheticsciences.ai/config.json", ...data.config }, null, 2),
+              { mode: 0o600 },
+            )
+            log.info("wrote managed config", { dir: managedDir })
+          } catch (e) {
+            log.warn("failed to write managed config", { error: e instanceof Error ? e.message : String(e) })
+          }
+        }
+
+        // Persist the synced env to disk so the NEXT CLI invocation can
+        // load it synchronously at module init (./preload-env.ts) — before
+        // any provider SDK reads process.env. Without this, the first call
+        // in a fresh process races: SDKs initialize empty, sync populates
+        // process.env too late.
         try {
           const managedDir = getSyncedConfigDir()
           await fs.mkdir(managedDir, { recursive: true })
-          await atomicWrite(
-            path.join(managedDir, "openscience-synced.json"),
-            JSON.stringify({ $schema: "https://syntheticsciences.ai/config.json", ...data.config }, null, 2),
-            { mode: 0o600 },
-          )
-          log.info("wrote managed config", { dir: managedDir })
+          const envSnapshot: Record<string, string> = {}
+          for (const [k, v] of fresh.entries()) {
+            envSnapshot[k] = v
+          }
+          await atomicWrite(path.join(managedDir, "synced-env.json"), JSON.stringify(envSnapshot, null, 2), {
+            mode: 0o600,
+          })
         } catch (e) {
-          log.warn("failed to write managed config", { error: e instanceof Error ? e.message : String(e) })
+          log.warn("failed to persist synced env", { error: e instanceof Error ? e.message : String(e) })
         }
-      }
 
-      // Persist the synced env to disk so the NEXT CLI invocation can
-      // load it synchronously at module init (./preload-env.ts) — before
-      // any provider SDK reads process.env. Without this, the first call
-      // in a fresh process races: SDKs initialize empty, sync populates
-      // process.env too late.
-      try {
-        const managedDir = getSyncedConfigDir()
-        await fs.mkdir(managedDir, { recursive: true })
-        const envSnapshot: Record<string, string> = {}
-        for (const [k, v] of fresh.entries()) {
-          envSnapshot[k] = v
-        }
-        await atomicWrite(path.join(managedDir, "synced-env.json"), JSON.stringify(envSnapshot, null, 2), {
-          mode: 0o600,
+        log.info("synced services", {
+          services: Object.entries(data.services)
+            .filter(([, s]) => s.connected)
+            .map(([id]) => id),
+          credentials,
         })
-      } catch (e) {
-        log.warn("failed to persist synced env", { error: e instanceof Error ? e.message : String(e) })
-      }
 
-      log.info("synced services", {
-        services: Object.entries(data.services)
-          .filter(([, s]) => s.connected)
-          .map(([id]) => id),
-        credentials,
-      })
-
-      // Log disconnected providers that have a reason so users can diagnose
-      // BYOK/managed issues without opening the dashboard.
-      for (const [id, svc] of Object.entries(data.services)) {
-        if (!svc.connected && svc.reason) {
-          log.warn(describeReason(id, svc.reason))
+        // Log disconnected providers that have a reason so users can diagnose
+        // BYOK/managed issues without opening the dashboard.
+        for (const [id, svc] of Object.entries(data.services)) {
+          if (!svc.connected && svc.reason) {
+            log.warn(describeReason(id, svc.reason))
+          }
         }
-      }
 
-      // Compatibility only: older releases stored learned skills and the
-      // third-party install ledger in Atlas. Import those records once after a
-      // successful login, then keep all skill state local forever.
-      void import("../skill/migrate")
-        .then((module) => module.SkillMigration.run())
-        .catch((error) => log.warn("legacy skill migration failed", { error: String(error) }))
+        // Compatibility only: older releases stored learned skills and the
+        // third-party install ledger in Atlas. Import those records once after a
+        // successful login, then keep all skill state local forever.
+        void import("../skill/migrate")
+          .then((module) => module.SkillMigration.run())
+          .catch((error) => log.warn("legacy skill migration failed", { error: String(error) }))
 
-      return { user: data.user, credentials }
+        return { user: data.user, credentials }
+      })
     } catch (e) {
       log.warn("sync error", { error: e instanceof Error ? e.message : String(e) })
       return null
@@ -1115,19 +1179,47 @@ export namespace OpenScience {
   }
 
   export function kernelEnv(env: NodeJS.ProcessEnv = process.env) {
-    return filterEnvForKernel(env)
+    return {
+      ...filterEnvForKernel(env),
+      // A denied ~/.gitconfig is a hard error in Git (unlike a missing file).
+      // Arbitrary kernels must not read host Git credentials/config, so point
+      // Git at an inert explicit config instead of widening the read policy.
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_TERMINAL_PROMPT: "0",
+    }
   }
 
   /** Host credential files that an OS-sandboxed kernel must not read. Atlas
    * access is intentionally provided by the native host broker instead. */
   export function kernelSensitivePaths() {
+    const home = os.homedir()
     return [
       filepath,
       path.join(Global.Path.data, "auth.json"),
       path.join(Global.Path.data, "credentials.json"),
+      path.join(Global.Path.data, "credentials.key"),
+      path.join(Global.Path.data, "gcp-service-account.json"),
+      CredentialLifecycle.revisionPath(),
       path.join(Global.Path.data, "mcp-auth.json"),
+      path.join(Global.Path.data, "file-trash"),
       path.join(getSyncedConfigDir(), "synced-env.json"),
-      process.env.ATLAS_CLI_CONFIG_PATH || path.join(os.homedir(), ".config", "atlas-cli", "config.json"),
+      path.join(getSyncedConfigDir(), syncedGcpFilename),
+      process.env.ATLAS_CLI_CONFIG_PATH || path.join(home, ".config", "atlas-cli", "config.json"),
+      path.join(home, ".ssh"),
+      path.join(home, ".aws"),
+      path.join(home, ".azure"),
+      path.join(home, ".kaggle"),
+      path.join(home, ".docker"),
+      path.join(home, ".config", "gcloud"),
+      path.join(home, ".config", "gh"),
+      path.join(home, ".config", "huggingface"),
+      path.join(home, ".config", "pip", "pip.conf"),
+      path.join(home, ".config", "rclone", "rclone.conf"),
+      path.join(home, ".netrc"),
+      path.join(home, ".git-credentials"),
+      path.join(home, ".npmrc"),
+      path.join(home, ".pypirc"),
     ]
   }
 
@@ -1234,11 +1326,30 @@ export namespace OpenScience {
    *  use a key the user connected with `openscience login`, without leaking the
    *  shared managed keys. */
   export async function subprocessEnv(env: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
+    // This is the credential-bearing child-process choke point. It blocks while
+    // another server is rotating a store and reconciles a committed revision
+    // before taking the environment snapshot below.
+    await CredentialLifecycle.ensureFresh()
     const base = filterEnvForSubprocess(env)
     const auth = await Auth.all().catch(() => ({}) as Record<string, Auth.Info>)
     // Prepend the bundled atlas CLI to PATH so the agent's native `atlas`
     // commands resolve without a separate global install.
-    return withAtlasOnPath(mergeByokEnv(base, auth))
+    return {
+      ...withAtlasOnPath(mergeByokEnv(base, auth)),
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_TERMINAL_PROMPT: "0",
+    }
+  }
+
+  /** Build and consume a credential-bearing child environment while the
+   * durable credential mutation lease is held. The callback must spawn and
+   * durably register its child before returning. */
+  export function withSubprocessEnv<T>(
+    env: NodeJS.ProcessEnv,
+    action: (snapshot: Record<string, string>) => T | Promise<T>,
+  ): Promise<T> {
+    return CredentialLifecycle.admit(async () => action(await subprocessEnv(env)))
   }
 
   // Default thread/worker caps for scientific Python kernels. Without these,
@@ -1336,6 +1447,7 @@ export namespace OpenScience {
 
   async function persistToQueue(params: UsageParams, account?: string) {
     try {
+      await using operation = await DataRootBarrier.enter(pendingQueuePath)
       // Serialize against flushPendingUsage so an append can't land between
       // the flusher's read and its final rewrite (which would delete it).
       using _ = await Lock.write(pendingQueuePath)
@@ -1442,6 +1554,7 @@ export namespace OpenScience {
    *  survives. Best-effort: never throws. */
   export async function flushPendingUsage(): Promise<void> {
     try {
+      await using operation = await DataRootBarrier.enter(pendingQueuePath)
       using _ = await Lock.write(pendingQueuePath)
       const raw = await fs.readFile(pendingQueuePath, "utf-8").catch(() => "")
       const lines = raw.split("\n").filter(Boolean)
@@ -1775,3 +1888,5 @@ export namespace OpenScience {
     }
   }
 }
+
+CredentialLifecycle.onRefresh(() => OpenScience.reloadSyncedEnv())

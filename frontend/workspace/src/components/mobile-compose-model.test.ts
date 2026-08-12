@@ -94,7 +94,7 @@ describe("mobile compose and model sheets", () => {
     expect(css).toContain("width: 100% !important")
     expect(css).toContain("transform: none !important")
     expect(css).toContain("inset: auto 0 0 !important")
-    expect(css).toContain("border-radius: 16px 16px 0 0 !important")
+    expect(css).toContain("border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important")
   })
 
   test("renders model discovery as a scrollable edge-to-edge mobile dialog", async () => {
@@ -104,7 +104,7 @@ describe("mobile compose and model sheets", () => {
     expect(picker).toContain('class="model-picker-sheet__list"')
     expect(picker).toContain("onSelect={() => dialog.close()}")
     expect(css).toContain("width: 100%")
-    expect(css).toContain("border-radius: 20px 20px 0 0")
+    expect(css).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0")
     expect(css).toContain("min-height: 63px")
     expect(css).toContain("font-size: 16px")
     expect(css).toContain("font-size: 13px")

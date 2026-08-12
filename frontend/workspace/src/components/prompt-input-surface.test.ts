@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 
 const source = await Bun.file(new URL("./prompt-input.tsx", import.meta.url)).text()
 const css = await Bun.file(new URL("../styles/atlas.css", import.meta.url)).text()
+const componentCss = await Bun.file(new URL("./prompt-input.css", import.meta.url)).text()
+const chatCss = await Bun.file(new URL("./chat-surface.css", import.meta.url)).text()
 const popover = await Bun.file(new URL("./model-settings-popover.tsx", import.meta.url)).text()
 
 describe("floating prompt surface", () => {
@@ -9,17 +11,68 @@ describe("floating prompt surface", () => {
     expect(source).toContain('"workspace-composer": true')
     expect(source).not.toContain("bg-surface-raised-stronger-non-alpha shadow-xs-border relative")
     expect(source).not.toContain('"rounded-[14px] overflow-clip focus-within:shadow-xs-border"')
-    expect(css).toContain("border-radius: var(--workspace-composer-radius)")
-    expect(css).toContain(".workspace-composer {\n  min-height: 90px;")
-    expect(css).toContain("box-shadow: 0 12px 30px")
+    expect(css).not.toContain("\n.workspace-composer {")
+    expect(css).not.toContain("\n.workspace-composer__footer {")
+    expect(chatCss).toContain("width: min(100%, 740px)")
+    expect(componentCss).toMatch(/form\.workspace-composer\s*\{[^}]*min-height: 92px/s)
+    expect(componentCss).toContain("border-radius: var(--radius-xl)")
+    expect(componentCss).toContain("background: var(--color-surface-solid")
+    expect(componentCss).toContain("box-shadow: var(--atlas-shadow-xs)")
   })
 
   test("keeps primary composer controls visible at the compact research scale", () => {
     expect(source).toContain('class="workspace-composer__attach')
     expect(source).toContain('class="workspace-composer__send')
-    expect(source).toContain('class="size-5"')
-    expect(source).toContain("text-[15px]")
+    expect(source).toContain('name="paperclip" class="size-4"')
     expect(source).toContain('icon={working() ? "stop" : "arrow-up"}')
+    expect(source).toContain('data-composer-action={working() ? "stop" : prompt.dirty() ? "send" : "idle"}')
+    expect(componentCss).toContain('.workspace-composer__send[data-composer-action="stop"]')
+  })
+
+  test("keeps placeholder, caret, and entered text on one responsive type geometry", () => {
+    expect(source).toContain("data-composer-mode={store.mode}")
+    expect(source).not.toContain('"font-mono!": store.mode === "shell"')
+    expect(source).not.toContain("text-[15px] leading-[1.45]")
+    expect(componentCss).toContain(
+      'form.workspace-composer :is([data-component="prompt-input"], .workspace-composer__placeholder)',
+    )
+    expect(componentCss).toContain("--composer-editor-font-size: var(--font-size-base)")
+    expect(componentCss).toContain("--composer-editor-line-height: 20px")
+    expect(componentCss).toContain("--composer-editor-font-weight: var(--font-weight-regular)")
+    expect(componentCss).toContain("padding: var(--composer-editor-padding-block-start)")
+    expect(componentCss).toContain("font-optical-sizing: auto")
+    expect(componentCss).toContain("font-synthesis: none")
+    expect(componentCss).toContain('.workspace-composer__editor[data-composer-mode="shell"]')
+    expect(componentCss).toContain("--composer-editor-font-family: var(--font-family-mono)")
+    expect(componentCss).toContain("position: absolute")
+    expect(componentCss).toContain("inset: 0 0 auto")
+    expect(source).toContain("aria-label={placeholder()}")
+    expect(source).toContain('aria-hidden="true" dir="auto"')
+    expect(componentCss).toContain("--composer-editor-font-size: 16px")
+    expect(componentCss).toContain("--composer-editor-line-height: 24px")
+    expect(componentCss).not.toMatch(/font-weight:\s*(?:400|450|500|550|600|700)/)
+  })
+
+  test("uses the shared icon system and accessible control groups instead of text glyphs", () => {
+    expect(source).toContain('role="group"')
+    expect(source).toContain('aria-label="Composer tools"')
+    expect(source).toContain('aria-label="Model and send"')
+    expect(source).toContain('<Icon name="flask" class="size-4" />')
+    expect(source).not.toContain('<Icon name="sliders" class="size-4" />')
+    expect(source).toContain('aria-label="Research capabilities"')
+    expect(source).toContain("aria-expanded={modeOpen()}")
+    expect(source).toContain('<Icon name="chevron-right" size="small" />')
+    expect(source).toContain('<Icon name="chevron-left" size="small" />')
+    expect(source).not.toContain(">›</span>")
+    expect(source).not.toContain('<span aria-hidden="true">‹</span>')
+  })
+
+  test("keeps compact desktop controls and explicit coarse-pointer targets", () => {
+    expect(componentCss).toContain("width: 34px")
+    expect(componentCss).toContain("height: 34px")
+    expect(componentCss).toContain("@media (pointer: coarse)")
+    expect(componentCss).toContain("min-width: 44px")
+    expect(componentCss).toContain("min-height: 44px")
   })
 
   test("uses one geometry token for message and jump-to-latest clearance", () => {

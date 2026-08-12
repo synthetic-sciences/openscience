@@ -11,9 +11,16 @@ export const FONT_MONO = FONT_SANS
 /** Alias kept for call sites that reference the UI sans token. */
 export const FONT_UI_SANS = FONT_SANS
 
+/** Semantic UI weight scale — mirrors the variables in @synsci/ui/theme.css. */
+export const FONT_WEIGHT = {
+  regular: 380,
+  medium: 480,
+  emphasis: 500,
+} as const
+
 /** Control radius in px — keep in lockstep with --radius in atlas.css. */
 export const RADIUS = 12
-/** Primary panel radius — keep in lockstep with --radius-lg in atlas.css. */
+/** Primary panel radius — keep in lockstep with --atlas-radius-lg in atlas.css. */
 export const SURFACE_RADIUS = 20
 
 export const Z = {
@@ -33,11 +40,11 @@ export const ICON_SIZE = {
   xl: 20,
 } as const
 
-/** The one uppercase "eyebrow" label spec — mirror of .atlas-section-label. */
+/** Quiet section-label spec — mirror of .atlas-section-label. */
 export const sectionTitle: JSX.CSSProperties = {
   "font-family": FONT_SANS,
   "font-size": "12px",
-  "font-weight": 500,
+  "font-weight": FONT_WEIGHT.medium,
   "letter-spacing": "0.02em",
   color: "var(--color-text-faint)",
 }

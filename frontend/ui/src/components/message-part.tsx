@@ -52,7 +52,7 @@ import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { NotebookView, type NotebookCellProps } from "./notebook-cell"
-import { savedArtifact, scienceTaskLabel, skillName, stripRedactedReasoning } from "./tool-display"
+import { savedArtifact, scienceTaskLabel, sentenceCaseLabel, skillName, stripRedactedReasoning } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
 
 export { ARTIFACT_TOOL, ToolRegistry, type ToolComponent, type ToolProps } from "./tool-registry"
@@ -293,7 +293,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
     case "task":
       return {
         icon: "task",
-        title: i18n.t("ui.tool.agent", { type: input.subagent_type || "task" }),
+        title: i18n.t("ui.tool.agent", { type: sentenceCaseLabel(String(input.subagent_type || "task")) }),
         subtitle: input.description,
       }
     case "bash":
@@ -473,6 +473,21 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
   }
 
+  const attachmentFormat = (file: FilePart) => {
+    const name = file.filename?.trim() ?? ""
+    const dot = name.lastIndexOf(".")
+    const extension =
+      dot > -1
+        ? name
+            .slice(dot + 1)
+            .trim()
+            .toUpperCase()
+        : ""
+    if (extension && extension.length <= 8) return extension
+    if (file.mime === "application/pdf") return "PDF"
+    return file.mime.split("/").pop()?.replace(/^x-/, "").toUpperCase() || "FILE"
+  }
+
   const handleCopy = async () => {
     const content = text()
     if (!content) return
@@ -492,11 +507,16 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
             {(file) => (
-              <div
+              <a
                 data-slot="user-message-attachment"
                 data-type={file.mime.startsWith("image/") ? "image" : "file"}
-                onClick={() => {
+                href={file.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`${file.mime.startsWith("image/") ? "Preview" : "Open"} ${file.filename ?? i18n.t("ui.message.attachment.alt")}`}
+                onClick={(event) => {
                   if (file.mime.startsWith("image/") && file.url) {
+                    event.preventDefault()
                     openImagePreview(file.url, file.filename)
                   }
                 }}
@@ -505,44 +525,35 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                   when={file.mime.startsWith("image/") && file.url}
                   fallback={
                     <div data-slot="user-message-attachment-icon">
-                      <Icon name="folder" />
+                      <Icon name="file" />
                     </div>
                   }
                 >
-                  <img
-                    data-slot="user-message-attachment-image"
-                    src={file.url}
-                    alt={file.filename ?? i18n.t("ui.message.attachment.alt")}
-                  />
+                  <img data-slot="user-message-attachment-image" src={file.url} alt="" />
                 </Show>
-              </div>
+                <span data-slot="user-message-attachment-copy">
+                  <strong title={file.filename}>{file.filename ?? i18n.t("ui.message.attachment.alt")}</strong>
+                  <span>
+                    {attachmentFormat(file)} · {file.mime.startsWith("image/") ? "Preview" : "Open"}
+                  </span>
+                </span>
+              </a>
             )}
           </For>
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
-          <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
-          <button
-            data-slot="user-message-expand"
-            type="button"
-            aria-label={expanded() ? i18n.t("ui.message.collapse") : i18n.t("ui.message.expand")}
-            onClick={(event) => {
-              event.stopPropagation()
-              toggleExpanded()
-            }}
-          >
-            <Icon name="chevron-down" size="small" />
-          </button>
-          <div data-slot="user-message-copy-wrapper">
+        <div data-slot="user-message-row">
+          <div data-slot="user-message-copy-wrapper" data-copied={copied()}>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               placement="top"
               gutter={8}
             >
               <IconButton
+                type="button"
                 icon={copied() ? "check" : "copy"}
-                variant="secondary"
+                variant="ghost"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -551,6 +562,20 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               />
             </Tooltip>
+          </div>
+          <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
+            <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+            <button
+              data-slot="user-message-expand"
+              type="button"
+              aria-label={expanded() ? i18n.t("ui.message.collapse") : i18n.t("ui.message.expand")}
+              onClick={(event) => {
+                event.stopPropagation()
+                toggleExpanded()
+              }}
+            >
+              <Icon name="chevron-down" size="small" />
+            </button>
           </div>
         </div>
       </Show>
@@ -1300,8 +1325,9 @@ ToolRegistry.register({
                     icon="task"
                     defaultOpen={true}
                     trigger={{
-                      title: i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }),
-                      titleClass: "capitalize",
+                      title: i18n.t("ui.tool.agent", {
+                        type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)),
+                      }),
                       subtitle: props.input.description,
                     }}
                     onSubtitleClick={handleSubtitleClick}
@@ -1323,8 +1349,9 @@ ToolRegistry.register({
                       icon="task"
                       defaultOpen={true}
                       trigger={{
-                        title: i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }),
-                        titleClass: "capitalize",
+                        title: i18n.t("ui.tool.agent", {
+                          type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)),
+                        }),
                         subtitle: props.input.description,
                       }}
                       onSubtitleClick={handleSubtitleClick}
@@ -1342,8 +1369,9 @@ ToolRegistry.register({
               icon="task"
               defaultOpen={true}
               trigger={{
-                title: i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }),
-                titleClass: "capitalize",
+                title: i18n.t("ui.tool.agent", {
+                  type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)),
+                }),
                 subtitle: props.input.description,
               }}
               onSubtitleClick={handleSubtitleClick}

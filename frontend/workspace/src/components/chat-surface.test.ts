@@ -1,0 +1,115 @@
+import { describe, expect, test } from "bun:test"
+
+const source = await Bun.file(new URL("./prompt-input.tsx", import.meta.url)).text()
+const composerCss = await Bun.file(new URL("./prompt-input.css", import.meta.url)).text()
+const chatCss = await Bun.file(new URL("./chat-surface.css", import.meta.url)).text()
+const shellCss = await Bun.file(new URL("../styles/atlas.css", import.meta.url)).text()
+const session = await Bun.file(new URL("../pages/session.tsx", import.meta.url)).text()
+
+describe("conversation surface", () => {
+  test("aligns the transcript content edge with the 740px composer", () => {
+    expect(source).not.toContain('import "./chat-surface.css"')
+    expect(session).toContain('import "../components/chat-surface.css"')
+    expect(chatCss).toContain("width: min(100%, 740px)")
+    expect(chatCss).toContain("width: min(100%, 772px)")
+    expect(chatCss).toContain('[data-slot="session-turn-message-container"]')
+    expect(chatCss).toContain("padding-inline: 16px")
+    expect(chatCss).toContain("padding-inline: 12px")
+  })
+
+  test("keeps user messages quiet, readable, and separate from their copy action", () => {
+    expect(chatCss).toContain("--user-message-surface:")
+    expect(chatCss).toContain("max-width: min(76%, 580px)")
+    expect(chatCss).toContain("--user-message-radius: var(--radius-lg)")
+    expect(chatCss).toContain("--user-message-tail-radius: var(--radius-xs)")
+    expect(chatCss).toContain("font-size: 14px")
+    expect(chatCss).toContain("font-weight: var(--font-weight-regular)")
+    expect(chatCss).toContain("box-shadow: none")
+    expect(chatCss).toContain("min-width: 32px")
+    expect(chatCss).toContain('[data-slot="user-message-copy-wrapper"] [data-component="icon-button"]')
+    expect(chatCss).toContain("min-width: 44px")
+    expect(chatCss).not.toContain("position: absolute")
+    expect(shellCss).not.toContain('.session-scroller [data-component="user-message"] [data-slot="user-message-text"]')
+    expect(shellCss).not.toContain("\n.session-transcript {")
+  })
+
+  test("uses regular transcript type and sentence-case generated-state labels", () => {
+    expect(chatCss).toContain('[data-slot="session-turn-markdown"]')
+    expect(chatCss).toContain("line-height: 1.58")
+    expect(chatCss).toContain('data-diffs="true"')
+    expect(chatCss).toContain("text-wrap: pretty")
+    expect(chatCss).toContain("text-wrap: balance")
+    expect(chatCss).toContain('[data-slot="session-turn-generated"] > header')
+    expect(chatCss).toContain("text-transform: none")
+    expect(chatCss).toContain("letter-spacing: normal")
+  })
+
+  test("keeps model-authored data tables compact and scrollable inside resized panes", () => {
+    expect(chatCss).toContain("container-name: conversation")
+    expect(chatCss).toContain("container-type: inline-size")
+    expect(chatCss).toContain("@container conversation (max-width: 640px)")
+    expect(chatCss).toContain('[data-slot="session-turn-markdown"] table')
+    expect(chatCss).toContain("overflow-x: auto")
+    expect(chatCss).toContain("font-size: 12.5px")
+    expect(chatCss).toContain("font-variant-numeric: tabular-nums")
+    expect(chatCss).toContain('font-feature-settings: "tnum" 1')
+    expect(chatCss).toContain("min-width: max-content")
+    expect(chatCss).toContain("td:not(:last-child)")
+    expect(chatCss).toContain("white-space: nowrap")
+    expect(chatCss).toContain("min-width: min(240px, 58cqi)")
+    expect(chatCss).toContain("max-width: 32ch")
+  })
+
+  test("measures the variable-height composer and reserves a separate reading gap", () => {
+    expect(session).toContain("promptDockObserver = new ResizeObserver(measurePromptDock)")
+    expect(session).toContain('style.setProperty("--workspace-composer-height"')
+    expect(session).toContain("ref={(element) => (promptDockElement = element)}")
+    expect(chatCss).toContain("--workspace-composer-clearance: var(--space-5)")
+    expect(chatCss).toContain("--workspace-composer-reserve: calc(")
+    expect(chatCss).toContain("env(safe-area-inset-bottom)")
+  })
+
+  test("uses fast hover feedback, accessible targets, and reduced-motion fallbacks", () => {
+    expect(chatCss).toContain("150ms ease")
+    expect(chatCss).toContain("animation-duration: 180ms")
+    expect(chatCss).toContain("@media (pointer: coarse)")
+    expect(chatCss).toContain(':where(button, [role="button"])')
+    expect(chatCss).toContain('[data-component="icon-button"]')
+    expect(chatCss).toContain("min-width: 44px")
+    expect(chatCss).toContain("min-height: 44px")
+    expect(chatCss).toContain("@media (prefers-reduced-motion: reduce)")
+    expect(session).toContain('class="session-jump-latest"')
+  })
+})
+
+describe("composer and state behavior", () => {
+  test("uses one restrained composer surface and one text baseline", () => {
+    expect(composerCss).toMatch(/form\.workspace-composer\s*\{[^}]*min-height: 92px/s)
+    expect(composerCss).toContain("border-radius: var(--radius-xl)")
+    expect(composerCss).toContain("--composer-editor-font-size: var(--font-size-base)")
+    expect(composerCss).toContain("--composer-editor-font-weight: var(--font-weight-regular)")
+    expect(composerCss).toContain("--composer-editor-line-height: 20px")
+    expect(composerCss).toContain("max-height: 240px")
+    expect(composerCss).toContain("box-shadow: var(--atlas-shadow-xs)")
+    expect(composerCss).toContain("@container conversation (max-width: 540px)")
+    expect(composerCss).toContain("@container conversation (max-width: 390px)")
+    expect(composerCss).toContain("38cqi")
+  })
+
+  test("preserves attachments, model selection, send, and stop controls", () => {
+    expect(source).toContain('class="workspace-composer__attachments"')
+    expect(source).toContain("<ModelSettingsPopover")
+    expect(source).toContain('icon={working() ? "stop" : "arrow-up"}')
+    expect(source).toContain('data-composer-action={working() ? "stop" : prompt.dirty() ? "send" : "idle"}')
+    expect(source).toContain('aria-label="Model and send"')
+    expect(source).toContain('data-attachment-status="attached"')
+    expect(source).toContain("attachmentFormat")
+    expect(source).toContain("multiple")
+  })
+
+  test("sentence-cases the revert action at a consistent weight", () => {
+    expect(session).toContain('"font-weight": "var(--font-weight-regular)"')
+    expect(session).toContain("Restore\n")
+    expect(session).not.toContain("\n                        restore\n")
+  })
+})
