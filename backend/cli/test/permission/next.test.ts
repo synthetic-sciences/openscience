@@ -849,6 +849,129 @@ test("ask - spend permissions ignore wildcard allows", async () => {
   })
 })
 
+test("modal approvals can be scoped only to one exact immutable plan", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const digest = "a".repeat(64)
+      const first = PermissionNext.ask({
+        id: "permission_modal_scoped",
+        sessionID: "session_modal_scoped",
+        permission: "modal",
+        patterns: [digest],
+        metadata: {},
+        always: [digest],
+        ruleset: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      await PermissionNext.reply({ requestID: "permission_modal_scoped", reply: "always" })
+      await expect(first).resolves.toBeUndefined()
+
+      await expect(
+        PermissionNext.ask({
+          sessionID: "session_modal_other_conversation",
+          permission: "modal",
+          patterns: [digest],
+          metadata: {},
+          always: [digest],
+          ruleset: [],
+        }),
+      ).resolves.toBeUndefined()
+
+      const different = PermissionNext.ask({
+        id: "permission_modal_different",
+        sessionID: "session_modal_scoped",
+        permission: "modal",
+        patterns: ["b".repeat(64)],
+        metadata: {},
+        always: ["b".repeat(64)],
+        ruleset: [],
+      })
+      await PermissionNext.reply({ requestID: "permission_modal_different", reply: "reject" })
+      await expect(different).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+
+      const standing = await PermissionNext.standing()
+      expect(standing).toContainEqual(
+        expect.objectContaining({ permission: "modal", pattern: digest, scope: "global" }),
+      )
+      for (const entry of standing.filter((entry) => entry.permission === "modal" && entry.pattern === digest)) {
+        expect(await PermissionNext.revoke({ id: entry.id })).toBe(true)
+      }
+    },
+  })
+})
+
+test("SSH approvals require an exact remote plan while local compute remains configurable", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const digest = "c".repeat(64)
+      const configured: PermissionNext.Ruleset = [
+        { permission: "compute_job", pattern: "*", action: "allow" },
+        { permission: "*", pattern: "*", action: "allow" },
+      ]
+      const first = PermissionNext.ask({
+        id: "permission_ssh_scoped",
+        sessionID: "session_ssh_scoped",
+        permission: "remote_compute",
+        patterns: [digest],
+        metadata: {},
+        always: [digest],
+        ruleset: configured,
+      })
+      expect(first).toBeInstanceOf(Promise)
+      await PermissionNext.reply({ requestID: "permission_ssh_scoped", reply: "project" })
+      await expect(first).resolves.toBeUndefined()
+
+      await expect(
+        PermissionNext.ask({
+          sessionID: "session_ssh_other_conversation",
+          permission: "remote_compute",
+          patterns: [digest],
+          metadata: {},
+          always: [digest],
+          ruleset: configured,
+        }),
+      ).resolves.toBeUndefined()
+
+      const changed = PermissionNext.ask({
+        id: "permission_ssh_changed",
+        sessionID: "session_ssh_scoped",
+        permission: "remote_compute",
+        patterns: ["d".repeat(64)],
+        metadata: {},
+        always: ["d".repeat(64)],
+        ruleset: configured,
+      })
+      expect(changed).toBeInstanceOf(Promise)
+      await PermissionNext.reply({ requestID: "permission_ssh_changed", reply: "reject" })
+      await expect(changed).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+
+      await expect(
+        PermissionNext.ask({
+          sessionID: "session_local_compute",
+          permission: "compute_job",
+          patterns: [digest],
+          metadata: {},
+          always: [],
+          ruleset: configured,
+        }),
+      ).resolves.toBeUndefined()
+
+      const standing = await PermissionNext.standing()
+      expect(standing).toContainEqual(
+        expect.objectContaining({ permission: "remote_compute", pattern: digest, scope: "project" }),
+      )
+      for (const entry of standing.filter(
+        (entry) => entry.permission === "remote_compute" && entry.pattern === digest,
+      )) {
+        expect(await PermissionNext.revoke({ id: entry.id })).toBe(true)
+      }
+    },
+  })
+})
+
 test("reply - reject cancels all pending for same session", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({

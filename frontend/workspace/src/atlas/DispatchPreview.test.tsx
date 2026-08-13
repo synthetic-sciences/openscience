@@ -39,6 +39,7 @@ const mount = (view: () => JSX.Element) => {
 }
 
 const staged = (value: Partial<Staged> = {}): Staged => ({
+  purpose: "Train the approved model and save evaluation metrics.",
   command: "python train.py --config config.yaml",
   cwd: "/work/project",
   ...value,
@@ -60,7 +61,7 @@ describe("dispatch preview", () => {
     const host = mount(() =>
       subject.DispatchPreview({
         staged: staged({
-          remote: { label: "Cluster", host: "hpc.example.edu", scheduler: "slurm" },
+          remote: { kind: "ssh", label: "Cluster", host: "hpc.example.edu", scheduler: "slurm" },
           resources: { cpus: 4, gpus: 1, memory_gb: 16, time_minutes: 120, partition: "gpu" },
           modules: ["cuda/12.4"],
         }),
@@ -82,7 +83,7 @@ describe("dispatch preview", () => {
     const host = mount(() =>
       subject.DispatchPreview({
         staged: staged({
-          remote: { label: "Campus PBS", host: "pbs.example.edu", scheduler: "pbs" },
+          remote: { kind: "ssh", label: "Campus PBS", host: "pbs.example.edu", scheduler: "pbs" },
           resources: { cpus: 2, time_minutes: 30, partition: "batch" },
           container: "pytorch.sif",
         }),
@@ -100,7 +101,7 @@ describe("dispatch preview", () => {
   test("states plain SSH execution for hosts without a scheduler", () => {
     const host = mount(() =>
       subject.DispatchPreview({
-        staged: staged({ remote: { label: "GPU box", host: "gpu.example.edu", scheduler: "none" } }),
+        staged: staged({ remote: { kind: "ssh", label: "GPU box", host: "gpu.example.edu", scheduler: "none" } }),
       }),
     )
 
@@ -114,10 +115,22 @@ describe("dispatch preview", () => {
   })
 
   test("enables dispatch only after the command was reviewed", () => {
-    expect(subject.dispatchReady({ name: "run", command: "python x.py", reviewed: false, busy: false })).toBe(false)
-    expect(subject.dispatchReady({ name: "run", command: "python x.py", reviewed: true, busy: true })).toBe(false)
-    expect(subject.dispatchReady({ name: " ", command: "python x.py", reviewed: true, busy: false })).toBe(false)
-    expect(subject.dispatchReady({ name: "run", command: " ", reviewed: true, busy: false })).toBe(false)
-    expect(subject.dispatchReady({ name: "run", command: "python x.py", reviewed: true, busy: false })).toBe(true)
+    const purpose = "Compare candidate models"
+    expect(subject.dispatchReady({ name: "run", purpose, command: "python x.py", reviewed: false, busy: false })).toBe(
+      false,
+    )
+    expect(subject.dispatchReady({ name: "run", purpose, command: "python x.py", reviewed: true, busy: true })).toBe(
+      false,
+    )
+    expect(subject.dispatchReady({ name: " ", purpose, command: "python x.py", reviewed: true, busy: false })).toBe(
+      false,
+    )
+    expect(
+      subject.dispatchReady({ name: "run", purpose: " ", command: "python x.py", reviewed: true, busy: false }),
+    ).toBe(false)
+    expect(subject.dispatchReady({ name: "run", purpose, command: " ", reviewed: true, busy: false })).toBe(false)
+    expect(subject.dispatchReady({ name: "run", purpose, command: "python x.py", reviewed: true, busy: false })).toBe(
+      true,
+    )
   })
 })

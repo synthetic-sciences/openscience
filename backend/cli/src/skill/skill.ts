@@ -26,11 +26,11 @@ export namespace Skill {
     location: z.string(),
     category: z.string().optional(),
     tags: z.array(z.string()).optional(),
-    origin: z.enum(["default", "installed", "learned", "user", "project"]),
+    origin: z.enum(["default", "installed", "user", "project"]),
     /** Whether the skill is user-facing (shows in / autocomplete) or an
      *  internal helper used transitively by other skills. Defaults to true.
      *  Driven by `openscience-skills.json` `entries[]` for URL-installed skills;
-     *  bundled / learned skills omit this and are always entries. */
+     *  bundled skills omit this and are always entries. */
     entry: z.boolean().optional(),
   })
   export type Info = z.infer<typeof Info>
@@ -62,7 +62,7 @@ export namespace Skill {
   const SKILL_GLOB = new Bun.Glob("**/SKILL.md")
   const USER_SKILL_DIR = path.join(Global.Path.data, "user-skills")
   const UserSkillName = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
-  const priority = { default: 0, installed: 1, learned: 2, user: 3, project: 4 } as const
+  const priority = { default: 0, installed: 1, user: 2, project: 3 } as const
 
   async function compute() {
     const skills: Record<string, Info> = {}
@@ -188,25 +188,6 @@ export namespace Skill {
           count++
         }
         log.info("Loaded bundled skills", { path: root, count })
-      }
-    }
-
-    // Learned skills are private local state. Atlas login does not change or
-    // synchronize this directory.
-    const learnedDir = path.join(Global.Path.data, "learned-skills")
-    if (await Filesystem.isDir(learnedDir)) {
-      let learnedCount = 0
-      for await (const match of SKILL_GLOB.scan({
-        cwd: learnedDir,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-      })) {
-        await addSkill(match, "learned")
-        learnedCount++
-      }
-      if (learnedCount > 0) {
-        log.info("Loaded learned skills", { count: learnedCount })
       }
     }
 

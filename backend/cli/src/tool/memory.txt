@@ -1,9 +1,0 @@
-Persistent memory that survives across sessions. Two scopes: "project" (this directory — the default) and "global" (all projects). Saved notes are injected into your context at the start of every session, so save only stable, durable knowledge: user preferences, project conventions, environment quirks, hard-won lessons. Never save task logs, transient state, secrets/credentials, or anything you could re-derive from the repo.
-
-Actions:
-- add: save a new note (`text`, optional `category`, optional `scope`). Exact duplicates are rejected. Each scope has a character budget; when it is full the tool errors and you must consolidate — merge, shorten, or remove existing notes via replace/remove — before adding more.
-- replace: surgically edit the single note containing `old_text` (exact, case-sensitive substring); every occurrence of `old_text` inside that note becomes `text`. Errors if zero or more than one note matches. Prefer replace over adding a near-duplicate when a fact changes.
-- remove: delete the single note containing `old_text` (exact, case-sensitive substring). Errors if zero or more than one note matches.
-- search: full-text search (keyword BM25 with a recency tiebreak — not semantic) over saved notes in both scopes and past session transcripts of this project (`query`, optional `limit`). Use it before answering "didn't we already..." questions or when the user references earlier work.
-
-Every response includes a capacity gauge like [67% — 1340/2000 chars]. Consolidate when the gauge runs high. The user controls memory in Settings → Memory; when it is disabled there, this tool refuses writes and says so.

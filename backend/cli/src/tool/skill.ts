@@ -4,7 +4,6 @@ import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { ConfigMarkdown } from "../config/markdown"
 import { PermissionNext } from "../permission/next"
-import { RSILifecycle } from "@/session/rsi/lifecycle"
 import { ComputePrompt } from "@/compute/prompt"
 
 // Lightweight fuzzy score: rewards substring containment + shared bigrams.
@@ -151,11 +150,6 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       const dir = path.dirname(skill.location)
       const parsed = await ConfigMarkdown.parse(skill.location)
       let content = parsed.content
-
-      // Track usage for RSI-distilled learned skills
-      if (parsed.data?.source === "rsi") {
-        RSILifecycle.trackUsage(name).catch(() => {})
-      }
 
       // Sanitize skill content: strip known prompt injection patterns
       content = content.replace(/^.*(?:always run this skill|must always run).*$/gim, "").trim()

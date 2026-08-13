@@ -1,22 +1,21 @@
 import { createSignal, onCleanup, type JSX } from "solid-js"
-import { IconTerminal } from "@/atlas/shared/Icon"
-import { kernelMemoryLabel, type CommandStatus } from "@/notebook/runtime"
+import { kernelMemoryLabel, type CommandStatus } from "@/atlas/kernel-runtime"
 
 const memory = (value?: number) => {
   const label = kernelMemoryLabel(value)
-  return label === "Unavailable" ? "—" : label
+  return label === "Unavailable" ? "Not captured" : label
 }
 
 const cores = (value?: number) => {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return "—"
-  return (value / 100).toFixed(1)
+  if (value === undefined || !Number.isFinite(value) || value < 0) return "Not captured"
+  return `${(value / 100).toFixed(1)} cores`
 }
 
 const uptime = (started: number, now: number) => {
   const seconds = Math.max(0, Math.floor((now - started) / 1_000))
   if (seconds < 60) return `${seconds}s`
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m`
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }
 
@@ -26,51 +25,65 @@ export function CommandCard(props: { command: CommandStatus; stopping: boolean; 
   onCleanup(() => clearInterval(timer))
 
   return (
-    <article class="kernel-card command-card" data-command-id={props.command.id} data-state="running">
-      <div class="kernel-card__main">
-        <span class="kernel-card__language" aria-hidden="true">
-          <IconTerminal size={14} strokeWidth={1.4} />
-        </span>
-        <div class="kernel-card__copy">
-          <strong title={props.command.description}>{props.command.description}</strong>
-          <span title={props.command.command}>
-            <i data-tone="active" aria-hidden="true" />
-            Shell · {props.command.command}
-          </span>
+    <article class="activity-card command-card" data-command-id={props.command.id} data-state="running">
+      <header class="activity-card__header">
+        <div class="activity-card__identity">
+          <span class="activity-card__kind">Shell</span>
+          <div class="kernel-card__copy">
+            <strong title={props.command.description}>{props.command.description}</strong>
+            <span>Running · {uptime(props.command.started_at, now())}</span>
+          </div>
         </div>
+        <span class="activity-card__status" data-tone="active">
+          Running
+        </span>
+      </header>
+
+      <div class="activity-card__actions">
+        <button
+          type="button"
+          class="kernel-card__stop activity-card__danger"
+          aria-label={`Stop ${props.command.description}`}
+          title="Stop this live shell command and its child processes."
+          disabled={props.stopping}
+          aria-busy={props.stopping}
+          onClick={props.onStop}
+        >
+          {props.stopping ? "Stopping…" : "Stop"}
+        </button>
       </div>
 
-      <div class="kernel-card__metrics" aria-label="Command resource use">
-        <span
-          class="kernel-card__uptime kernel-card__metric"
-          aria-label={`Runtime ${uptime(props.command.started_at, now())}`}
-        >
-          <strong>{uptime(props.command.started_at, now())}</strong>
-          <small>Runtime</small>
-        </span>
-        <Metric label="Memory" value={memory(props.command.resources?.memory_bytes)} />
-        <Metric label="CPU cores" value={cores(props.command.resources?.cpu_percent)} />
+      <div class="activity-card__disclosures">
+        <details class="activity-disclosure">
+          <summary>Command</summary>
+          <div class="activity-disclosure__body">
+            <pre>
+              <code>{props.command.command}</code>
+            </pre>
+          </div>
+        </details>
+        <details class="activity-disclosure" data-quiet="true">
+          <summary>Process details</summary>
+          <div class="activity-disclosure__body">
+            <dl class="activity-card__facts">
+              <Fact label="Runtime" value={uptime(props.command.started_at, now())} />
+              <Fact label="Memory" value={memory(props.command.resources?.memory_bytes)} />
+              <Fact label="CPU" value={cores(props.command.resources?.cpu_percent)} />
+              <Fact label="Process" value={props.command.process_id.toString()} mono />
+              <Fact label="Command ID" value={props.command.id} mono />
+            </dl>
+          </div>
+        </details>
       </div>
-      <button
-        type="button"
-        class="kernel-card__stop"
-        aria-label={`Stop ${props.command.description}`}
-        title="Stop this live shell command and its child processes."
-        disabled={props.stopping}
-        aria-busy={props.stopping}
-        onClick={props.onStop}
-      >
-        {props.stopping ? "Stopping…" : "Stop"}
-      </button>
     </article>
   )
 }
 
-function Metric(props: { label: string; value: string }): JSX.Element {
+function Fact(props: { label: string; value: string; mono?: boolean }): JSX.Element {
   return (
-    <span class="kernel-card__metric">
-      <strong>{props.value}</strong>
-      <small>{props.label}</small>
-    </span>
+    <div>
+      <dt>{props.label}</dt>
+      <dd data-mono={props.mono ? "true" : undefined}>{props.value}</dd>
+    </div>
   )
 }

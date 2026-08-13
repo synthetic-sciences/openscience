@@ -9,23 +9,23 @@ import type { ExecuteResult, KernelOutput, KernelStartOptions } from "../../scie
 import { KernelRuntime, KernelStartupCancelled, KernelStatus, type KernelIdentity } from "../../science/kernel/registry"
 import { KernelMetrics } from "../../science/kernel/metrics"
 import { KernelHost } from "../../science/kernel/host"
+import { KernelEnvironmentMutation } from "../../science/kernel/environment-mutation"
 import { Identifier } from "../../id/id"
 import { Session } from "../../session"
 import { lazy } from "../../util/lazy"
 import { Storage } from "../../storage/storage"
 import { CommandRuntime, CommandStatus } from "../../science/command/registry"
-import {
-  KernelEnvironmentName,
-  KernelEnvironmentUnavailable,
-  pythonEnvironment,
-} from "../../science/kernel/interpreter"
+import { KernelEnvironmentName, KernelEnvironmentUnavailable } from "../../science/kernel/interpreter"
 
 const Language = z.enum(["python", "r"])
-const KeyShape = {
+const CanonicalKeyShape = {
   sessionID: Identifier.schema("session"),
-  id: z.string().trim().min(1).max(1024),
   language: Language,
   environment: KernelEnvironmentName.optional(),
+}
+const LegacyKeyShape = {
+  ...CanonicalKeyShape,
+  id: z.string().trim().min(1).max(1024),
 }
 const validateEnvironment = (
   input: { language: z.infer<typeof Language>; environment?: string },
@@ -39,7 +39,8 @@ const validateEnvironment = (
     })
   }
 }
-const Key = z.object(KeyShape).superRefine(validateEnvironment)
+const CanonicalKey = z.object(CanonicalKeyShape).strict().superRefine(validateEnvironment)
+const LegacyKey = z.object(LegacyKeyShape).strict().superRefine(validateEnvironment)
 const List = z.object({
   sessionID: Identifier.schema("session").optional(),
 })
@@ -49,15 +50,30 @@ const Owner = z.object({
 const ControlStatus = KernelStatus.extend({
   state_preserved: z.boolean().optional(),
 })
+const RuntimeStatus = KernelStatus.omit({ last_cell: true }).extend({
+  last_execution: KernelStatus.shape.last_cell,
+})
+const RuntimeControlStatus = RuntimeStatus.extend({
+  state_preserved: z.boolean().optional(),
+})
 const KernelParam = z.object({
   kernelID: z.string().regex(/^kernel-[a-z0-9]+$/),
 })
 const CommandParam = z.object({
   commandID: z.string().regex(/^command-[a-f0-9-]+$/),
 })
-const Execute = z
+const CanonicalExecute = z
   .object({
-    ...KeyShape,
+    ...CanonicalKeyShape,
+    source: z.string().trim().min(1).max(1024).optional(),
+    code: z.string().max(2_000_000),
+    timeout: z.number().int().min(5_000).max(600_000).optional(),
+  })
+  .strict()
+  .superRefine(validateEnvironment)
+const LegacyExecute = z
+  .object({
+    ...LegacyKeyShape,
     code: z.string().max(2_000_000),
     timeout: z.number().int().min(5_000).max(600_000).optional(),
   })
@@ -66,23 +82,28 @@ const Execute = z
 
 type Language = z.infer<typeof Language>
 
-const identity = (input: {
-  sessionID: string
-  id: string
-  language: Language
-  environment?: string
-}): KernelIdentity => ({
+const identity = (
+  input: {
+    sessionID: string
+    id?: string
+    language: Language
+    environment?: string
+  },
+  canonical: boolean,
+): KernelIdentity => ({
   projectID: Instance.project.id,
   sessionID: input.sessionID,
-  name: input.environment ? `environment:${input.environment}` : `notebook:${input.id}`,
+  name: canonical ? input.language : input.environment ? `environment:${input.environment}` : `notebook:${input.id}`,
   language: input.language,
   environmentName: input.environment && input.environment !== input.language ? input.environment : undefined,
 })
 
+const canonicalIdentity = (input: KernelIdentity) => input.name === input.language
+
 const runtime = async (input: KernelIdentity): Promise<KernelStartOptions> => {
-  if (input.language !== "python") return { environmentName: "r" }
+  if (input.language !== "python") return KernelEnvironmentMutation.rRuntime()
   try {
-    return await pythonEnvironment(Instance.directory, input.environmentName ?? "python")
+    return await KernelEnvironmentMutation.pythonRuntime(input.environmentName ?? "python")
   } catch (error) {
     if (error instanceof KernelEnvironmentUnavailable) {
       throw new HTTPException(400, { message: error.message })
@@ -138,14 +159,37 @@ function response(result: ExecuteResult) {
   }
 }
 
-export const NotebookRoutes = lazy(() =>
-  new Hono()
+type RouteSurface = "kernels" | "notebook"
+
+function present<T extends { last_cell: unknown }>(value: T, canonical: boolean) {
+  if (!canonical) return value
+  const { last_cell, ...status } = value
+  return { ...status, last_execution: last_cell }
+}
+
+function routes(surface: RouteSurface) {
+  const canonical = surface === "kernels"
+  const keySchema = canonical ? CanonicalKey : LegacyKey
+  const executeSchema = canonical ? CanonicalExecute : LegacyExecute
+  const operation = (name: string, legacy = name) => `${surface}.${canonical ? name : legacy}`
+  const inventoryPath = canonical ? "/" : "/kernels"
+  const recordPath = canonical ? "/:kernelID" : "/kernels/:kernelID"
+  const statusSchema = canonical ? RuntimeStatus : KernelStatus
+  const controlStatusSchema = canonical ? RuntimeControlStatus : ControlStatus
+
+  return new Hono()
     .get(
       "/compute",
       describeRoute({
-        summary: "Report live local compute capacity",
-        operationId: "notebook.compute",
-        responses: { 200: { description: "Machine capacity and the share live kernels and commands hold" } },
+        summary: canonical ? "Report live local runtime capacity" : "Report live local compute capacity",
+        operationId: operation("compute"),
+        responses: {
+          200: {
+            description: canonical
+              ? "Machine capacity and the share live runtimes and commands hold"
+              : "Machine capacity and the share live kernels and commands hold",
+          },
+        },
       }),
       async (c) => {
         // Both samplers measure across the window since THIS caller's previous
@@ -217,7 +261,7 @@ export const NotebookRoutes = lazy(() =>
       "/commands",
       describeRoute({
         summary: "List live project shell commands",
-        operationId: "notebook.commands",
+        operationId: operation("commands"),
         responses: {
           200: {
             description: "Live shell commands and process resource usage",
@@ -250,7 +294,7 @@ export const NotebookRoutes = lazy(() =>
       "/commands/:commandID/stop",
       describeRoute({
         summary: "Stop a live shell command",
-        operationId: "notebook.command.stop",
+        operationId: operation("command.stop"),
         responses: { 200: { description: "Command stopped" }, 404: { description: "Command not found" } },
       }),
       validator("param", CommandParam),
@@ -267,14 +311,16 @@ export const NotebookRoutes = lazy(() =>
       },
     )
     .get(
-      "/kernels",
+      inventoryPath,
       describeRoute({
-        summary: "List session kernel records",
-        operationId: "notebook.kernels",
+        summary: canonical ? "List session runtime records" : "List session kernel records",
+        operationId: operation("list", "kernels"),
         responses: {
           200: {
-            description: "Project kernel records and live process state",
-            content: { "application/json": { schema: resolver(z.object({ kernels: KernelStatus.array() })) } },
+            description: canonical
+              ? "Project runtime records and live process state"
+              : "Project kernel records and live process state",
+            content: { "application/json": { schema: resolver(z.object({ kernels: statusSchema.array() })) } },
           },
         },
       }),
@@ -295,7 +341,9 @@ export const NotebookRoutes = lazy(() =>
             owners.add(session.id)
           }
         }
-        const live = KernelRuntime.list(query.sessionID).filter((kernel) => owners.has(kernel.sessionID))
+        const live = KernelRuntime.list(query.sessionID).filter(
+          (kernel) => owners.has(kernel.sessionID) && (!canonical || kernel.name === kernel.language),
+        )
         // Scoped per caller for the same reason /compute is: the CPU figure is a
         // delta across the window since THIS caller's previous poll, so two
         // panels sharing one scope truncate each other's window to the stagger
@@ -311,20 +359,21 @@ export const NotebookRoutes = lazy(() =>
         )
         const kernels = live.map((kernel) => {
           const resources = kernel.process_id === null ? undefined : samples.get(kernel.process_id)
-          return resources && Object.keys(resources).length ? { ...kernel, resources } : kernel
+          const value = resources && Object.keys(resources).length ? { ...kernel, resources } : kernel
+          return present(value, canonical)
         })
         return c.json({ kernels })
       },
     )
     .post(
-      "/kernels/:kernelID/restart",
+      `${recordPath}/restart`,
       describeRoute({
-        summary: "Restart a kernel in a fresh runtime",
-        operationId: "notebook.kernel.restart",
+        summary: canonical ? "Restart in a fresh runtime" : "Restart a kernel in a fresh runtime",
+        operationId: operation("restartByID", "kernel.restart"),
         responses: {
           200: {
-            description: "Fresh live kernel state",
-            content: { "application/json": { schema: resolver(KernelStatus) } },
+            description: canonical ? "Fresh live runtime state" : "Fresh live kernel state",
+            content: { "application/json": { schema: resolver(statusSchema) } },
           },
         },
       }),
@@ -336,21 +385,21 @@ export const NotebookRoutes = lazy(() =>
         if (denied) return denied
         await KernelRuntime.restoreSession(Instance.project.id, body.sessionID)
         const input = KernelRuntime.owned(c.req.valid("param").kernelID, Instance.project.id, body.sessionID)
-        if (!input) {
+        if (!input || (canonical && !canonicalIdentity(input))) {
           return c.json({ error: "kernel_not_found", message: "The kernel does not exist in this session." }, 404)
         }
-        return c.json(await KernelRuntime.restart(input, await runtime(input)))
+        return c.json(present(await KernelRuntime.restart(input, await runtime(input)), canonical))
       },
     )
     .post(
-      "/kernels/:kernelID/stop",
+      `${recordPath}/stop`,
       describeRoute({
-        summary: "Stop a kernel process",
-        operationId: "notebook.kernel.stop",
+        summary: canonical ? "Stop a runtime process" : "Stop a kernel process",
+        operationId: operation("stopByID", "kernel.stop"),
         responses: {
           200: {
-            description: "Stopped kernel state",
-            content: { "application/json": { schema: resolver(KernelStatus) } },
+            description: canonical ? "Stopped runtime state" : "Stopped kernel state",
+            content: { "application/json": { schema: resolver(statusSchema) } },
           },
         },
       }),
@@ -362,22 +411,22 @@ export const NotebookRoutes = lazy(() =>
         if (denied) return denied
         await KernelRuntime.restoreSession(Instance.project.id, body.sessionID)
         const input = KernelRuntime.owned(c.req.valid("param").kernelID, Instance.project.id, body.sessionID)
-        if (!input) {
+        if (!input || (canonical && !canonicalIdentity(input))) {
           return c.json({ error: "kernel_not_found", message: "The kernel does not exist in this session." }, 404)
         }
         await KernelRuntime.release(input)
-        return c.json(KernelRuntime.status(input))
+        return c.json(present(KernelRuntime.status(input), canonical))
       },
     )
     .post(
-      "/kernels/:kernelID/interrupt",
+      `${recordPath}/interrupt`,
       describeRoute({
-        summary: "Interrupt a live kernel",
-        operationId: "notebook.kernel.interrupt",
+        summary: canonical ? "Interrupt a live runtime" : "Interrupt a live kernel",
+        operationId: operation("interruptByID", "kernel.interrupt"),
         responses: {
           200: {
-            description: "Kernel state",
-            content: { "application/json": { schema: resolver(ControlStatus) } },
+            description: canonical ? "Runtime state" : "Kernel state",
+            content: { "application/json": { schema: resolver(controlStatusSchema) } },
           },
         },
       }),
@@ -389,18 +438,20 @@ export const NotebookRoutes = lazy(() =>
         if (denied) return denied
         await KernelRuntime.restoreSession(Instance.project.id, body.sessionID)
         const input = KernelRuntime.owned(c.req.valid("param").kernelID, Instance.project.id, body.sessionID)
-        if (!input) {
+        if (!input || (canonical && !canonicalIdentity(input))) {
           return c.json({ error: "kernel_not_found", message: "The kernel does not exist in this session." }, 404)
         }
-        return c.json(await KernelRuntime.interrupt(input))
+        return c.json(present(await KernelRuntime.interrupt(input), canonical))
       },
     )
     .delete(
-      "/kernels/:kernelID",
+      recordPath,
       describeRoute({
-        summary: "Forget an inactive kernel record",
-        operationId: "notebook.kernel.delete",
-        responses: { 204: { description: "Kernel record forgotten" } },
+        summary: canonical ? "Forget an inactive runtime record" : "Forget an inactive kernel record",
+        operationId: operation("delete", "kernel.delete"),
+        responses: {
+          204: { description: canonical ? "Runtime record forgotten" : "Kernel record forgotten" },
+        },
       }),
       validator("param", KernelParam),
       validator("query", Owner),
@@ -410,7 +461,7 @@ export const NotebookRoutes = lazy(() =>
         if (denied) return denied
         await KernelRuntime.restoreSession(Instance.project.id, query.sessionID)
         const input = KernelRuntime.owned(c.req.valid("param").kernelID, Instance.project.id, query.sessionID)
-        if (!input) {
+        if (!input || (canonical && !canonicalIdentity(input))) {
           return c.json({ error: "kernel_not_found", message: "The kernel does not exist in this session." }, 404)
         }
         const status = KernelRuntime.status(input)
@@ -427,21 +478,30 @@ export const NotebookRoutes = lazy(() =>
     .post(
       "/execute",
       describeRoute({
-        summary: "Execute a notebook cell",
-        description: "Execute code in a persistent project-scoped Python or R kernel.",
-        operationId: "notebook.execute",
-        responses: { 200: { description: "Jupyter-compatible cell outputs" } },
+        summary: canonical ? "Run Python or R code" : "Execute a notebook cell",
+        description: canonical
+          ? "Run code in a long-lived project-scoped Python or R process. State persists until restart, stop, or idle expiry."
+          : "Execute code in a persistent project-scoped Python or R kernel.",
+        operationId: operation("execute"),
+        responses: {
+          200: { description: canonical ? "Structured execution outputs" : "Jupyter-compatible cell outputs" },
+        },
       }),
-      validator("json", Execute),
+      validator("json", executeSchema),
       async (c) => {
         const body = c.req.valid("json")
         const denied = await owner(c, body.sessionID)
         if (denied) return denied
-        const selected = identity(body)
+        const selected = identity(body, canonical)
         const result = await KernelRuntime.execute(
           selected,
           body.code,
-          { timeout: body.timeout, origin: { source: body.id } },
+          {
+            timeout: body.timeout,
+            origin: {
+              source: canonical ? ("source" in body ? body.source : undefined) : "id" in body ? body.id : undefined,
+            },
+          },
           await runtime(selected),
         ).catch((error) => {
           if (error instanceof KernelStartupCancelled) return error
@@ -456,88 +516,97 @@ export const NotebookRoutes = lazy(() =>
     .get(
       "/status",
       describeRoute({
-        summary: "Get notebook kernel status",
-        operationId: "notebook.status",
+        summary: canonical ? "Get runtime status" : "Get notebook kernel status",
+        operationId: operation("status"),
         responses: {
           200: {
-            description: "Kernel state",
-            content: { "application/json": { schema: resolver(KernelStatus) } },
+            description: canonical ? "Runtime state" : "Kernel state",
+            content: { "application/json": { schema: resolver(statusSchema) } },
           },
         },
       }),
-      validator("query", Key),
+      validator("query", keySchema),
       async (c) => {
         const query = c.req.valid("query")
         const denied = await owner(c, query.sessionID)
         if (denied) return denied
         await KernelRuntime.restoreSession(Instance.project.id, query.sessionID)
-        return c.json(KernelRuntime.status(identity(query)))
+        return c.json(present(KernelRuntime.status(identity(query, canonical)), canonical))
       },
     )
     .post(
       "/restart",
       describeRoute({
-        summary: "Restart a notebook kernel",
-        operationId: "notebook.restart",
+        summary: canonical ? "Restart a runtime" : "Restart a notebook kernel",
+        operationId: operation("restart"),
         responses: {
           200: {
-            description: "Fresh live kernel state",
-            content: { "application/json": { schema: resolver(KernelStatus) } },
+            description: canonical ? "Fresh live runtime state" : "Fresh live kernel state",
+            content: { "application/json": { schema: resolver(statusSchema) } },
           },
         },
       }),
-      validator("json", Key),
+      validator("json", keySchema),
       async (c) => {
         const body = c.req.valid("json")
         const denied = await owner(c, body.sessionID)
         if (denied) return denied
         await KernelRuntime.restoreSession(Instance.project.id, body.sessionID)
-        const selected = identity(body)
-        return c.json(await KernelRuntime.restart(selected, await runtime(selected)))
+        const selected = identity(body, canonical)
+        return c.json(present(await KernelRuntime.restart(selected, await runtime(selected)), canonical))
       },
     )
     .post(
       "/stop",
       describeRoute({
-        summary: "Stop a notebook kernel",
-        operationId: "notebook.stop",
+        summary: canonical ? "Stop a runtime" : "Stop a notebook kernel",
+        operationId: operation("stop"),
         responses: {
           200: {
-            description: "Stopped kernel state",
-            content: { "application/json": { schema: resolver(KernelStatus) } },
+            description: canonical ? "Stopped runtime state" : "Stopped kernel state",
+            content: { "application/json": { schema: resolver(statusSchema) } },
           },
         },
       }),
-      validator("json", Key),
+      validator("json", keySchema),
       async (c) => {
         const body = c.req.valid("json")
         const denied = await owner(c, body.sessionID)
         if (denied) return denied
         await KernelRuntime.restoreSession(Instance.project.id, body.sessionID)
-        await KernelRuntime.release(identity(body))
-        return c.json(KernelRuntime.status(identity(body)))
+        const selected = identity(body, canonical)
+        await KernelRuntime.release(selected)
+        return c.json(present(KernelRuntime.status(selected), canonical))
       },
     )
     .post(
       "/interrupt",
       describeRoute({
-        summary: "Interrupt a notebook kernel",
-        description: "Stop the running cell while preserving kernel state when the runtime supports interruption.",
-        operationId: "notebook.interrupt",
+        summary: canonical ? "Interrupt a running execution" : "Interrupt a notebook kernel",
+        description: canonical
+          ? "Stop the running execution while preserving process state when the runtime supports interruption."
+          : "Stop the running cell while preserving kernel state when the runtime supports interruption.",
+        operationId: operation("interrupt"),
         responses: {
           200: {
-            description: "Kernel state",
-            content: { "application/json": { schema: resolver(ControlStatus) } },
+            description: canonical ? "Runtime state" : "Kernel state",
+            content: { "application/json": { schema: resolver(controlStatusSchema) } },
           },
         },
       }),
-      validator("json", Key),
+      validator("json", keySchema),
       async (c) => {
         const body = c.req.valid("json")
         const denied = await owner(c, body.sessionID)
         if (denied) return denied
         await KernelRuntime.restoreSession(Instance.project.id, body.sessionID)
-        return c.json(await KernelRuntime.interrupt(identity(body)))
+        return c.json(present(await KernelRuntime.interrupt(identity(body, canonical)), canonical))
       },
-    ),
-)
+    )
+}
+
+/** Canonical plain Python/R runtime API. */
+export const KernelRoutes = lazy(() => routes("kernels"))
+
+/** @deprecated Compatibility API for existing notebook clients. */
+export const NotebookRoutes = lazy(() => routes("notebook"))

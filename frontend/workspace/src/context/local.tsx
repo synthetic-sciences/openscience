@@ -48,15 +48,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    const RESEARCH_AGENTS = ["research"] as const
-    const BIOLOGY_AGENTS = ["biology"] as const
-    const ALL_CYCLABLE = ["research", "biology", "physics", "ml"] as const
-
     const agent = (() => {
       // Planning is adaptive in the research agent, so the legacy read-only
       // plan agent is not exposed as a picker entry.
       const agents = () => (Array.isArray(sync.data.agent) ? sync.data.agent : [])
-      const list = createMemo(() => agents().filter((x) => x.mode !== "subagent" && !x.hidden && x.name !== "plan"), [])
+      const list = createMemo(() => agents().filter((x) => x.name === "research"), [])
       const all = createMemo(() => agents().filter((x) => x.mode !== "subagent"), [])
       const [store, setStore] = createStore<{
         current?: string
@@ -102,74 +98,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               providerID: value.model.providerID,
               modelID: value.model.modelID,
             })
-        },
-      }
-    })()
-
-    const research = (() => {
-      let previousAgent: string | undefined
-      return {
-        current() {
-          const name = agent.current()?.name
-          if (name && RESEARCH_AGENTS.includes(name as any)) return name as (typeof RESEARCH_AGENTS)[number]
-          return undefined
-        },
-        list() {
-          return RESEARCH_AGENTS.filter((name) => agent.all().some((a) => a.name === name))
-        },
-        cycle() {
-          if (biology.current()) {
-            biology.cycle()
-            return
-          }
-          const levels = this.list()
-          if (levels.length === 0) return
-          const current = this.current()
-          if (!current) {
-            previousAgent = agent.current()?.name
-            agent.set(levels[0])
-            return
-          }
-          const index = levels.indexOf(current)
-          if (index === -1 || index === levels.length - 1) {
-            const restore = previousAgent && !ALL_CYCLABLE.includes(previousAgent as any) ? previousAgent : "research"
-            previousAgent = undefined
-            agent.set(restore)
-            return
-          }
-          agent.set(levels[index + 1])
-        },
-      }
-    })()
-
-    const biology = (() => {
-      let previousAgent: string | undefined
-      return {
-        current() {
-          const name = agent.current()?.name
-          if (name && BIOLOGY_AGENTS.includes(name as any)) return name as (typeof BIOLOGY_AGENTS)[number]
-          return undefined
-        },
-        list() {
-          return BIOLOGY_AGENTS.filter((name) => agent.all().some((a) => a.name === name))
-        },
-        cycle() {
-          const levels = this.list()
-          if (levels.length === 0) return
-          const current = this.current()
-          if (!current) {
-            previousAgent = agent.current()?.name
-            agent.set(levels[0])
-            return
-          }
-          const index = levels.indexOf(current)
-          if (index === -1 || index === levels.length - 1) {
-            const restore = previousAgent && !ALL_CYCLABLE.includes(previousAgent as any) ? previousAgent : "research"
-            previousAgent = undefined
-            agent.set(restore)
-            return
-          }
-          agent.set(levels[index + 1])
         },
       }
     })()
@@ -368,8 +296,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       slug: createMemo(() => sdk.scope),
       model,
       agent,
-      research,
-      biology,
     }
     return result
   },

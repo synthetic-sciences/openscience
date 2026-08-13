@@ -56,7 +56,8 @@ export const RunCommand = cmd({
       })
       .option("agent", {
         type: "string",
-        describe: "agent to use",
+        describe: "legacy primary agent override",
+        hidden: true,
       })
       .option("format", {
         type: "string",
@@ -85,6 +86,12 @@ export const RunCommand = cmd({
       .option("variant", {
         type: "string",
         describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
+      })
+      .option("effort", {
+        type: "string",
+        choices: ["normal", "ultra"] as const,
+        default: "normal" as const,
+        describe: "research effort: normal or ultra",
       })
       .option("bare", {
         type: "boolean",
@@ -237,12 +244,19 @@ export const RunCommand = cmd({
               message: `Permission required: ${permission.permission} (${permission.patterns.join(", ")})`,
               options: [
                 { value: "once", label: "Allow once" },
-                { value: "always", label: "Always allow: " + permission.always.join(", ") },
+                { value: "session", label: "This conversation" },
+                { value: "project", label: "This project" },
+                { value: "always", label: "Global" },
                 { value: "reject", label: "Reject" },
               ],
               initialValue: "once",
             }).catch(() => "reject")
-            const response = (result.toString().includes("cancel") ? "reject" : result) as "once" | "always" | "reject"
+            const response = (result.toString().includes("cancel") ? "reject" : result) as
+              | "once"
+              | "session"
+              | "project"
+              | "always"
+              | "reject"
             await sdk.permission.respond({
               sessionID,
               permissionID: permission.id,
@@ -254,7 +268,7 @@ export const RunCommand = cmd({
 
       // Validate agent if specified
       const resolvedAgent = await (async () => {
-        if (!args.agent) return undefined
+        if (!args.agent) return "research"
         const agent = await Agent.get(args.agent)
         if (!agent) {
           UI.println(
@@ -262,7 +276,7 @@ export const RunCommand = cmd({
             UI.Style.TEXT_NORMAL,
             `agent "${args.agent}" not found. Falling back to default agent`,
           )
-          return undefined
+          return "research"
         }
         if (agent.mode === "subagent") {
           UI.println(
@@ -270,7 +284,7 @@ export const RunCommand = cmd({
             UI.Style.TEXT_NORMAL,
             `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
           )
-          return undefined
+          return "research"
         }
         return args.agent
       })()
@@ -292,6 +306,7 @@ export const RunCommand = cmd({
           agent: resolvedAgent,
           model: modelParam,
           variant: args.variant,
+          effort: args.effort,
           parts: [...fileParts, { type: "text", text: message }],
           ...(toolsOverride ? { tools: toolsOverride } : {}),
         })

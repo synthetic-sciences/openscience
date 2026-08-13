@@ -37,7 +37,6 @@ interface PersistedArtifacts {
 const STORAGE_KEY = "openscience-artifact-context-v1"
 
 const kinds: Partial<Record<string, ArtifactContextKind>> = {
-  ipynb: "notebook",
   csv: "dataset",
   tsv: "dataset",
   jsonl: "dataset",

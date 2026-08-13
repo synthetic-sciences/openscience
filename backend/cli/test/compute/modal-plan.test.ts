@@ -20,6 +20,7 @@ async function project() {
 
 function input(root: string) {
   return {
+    purpose: "Fit the approved model and save evaluation metrics.",
     command: "python src/train.py",
     cwd: root,
     image: "python:3.12-slim",
@@ -47,12 +48,16 @@ describe("ModalPlan", () => {
       },
     ])
     expect(first.plan.network).toBe("none")
+    expect(first.plan.purpose).toBe("Fit the approved model and save evaluation metrics.")
     expect(first.plan.packages).toEqual(["numpy==2.3.2", "scikit-learn==1.7.1"])
     expect(first.plan.warning).toContain("may incur charges")
 
     await fs.writeFile(path.join(root, "src", "train.py"), "print('changed')\n")
     expect((await ModalPlan.prepare(input(root))).plan.digest).not.toBe(first.plan.digest)
     expect((await ModalPlan.prepare({ ...input(root), packages: ["numpy==2.3.3"] })).plan.digest).not.toBe(
+      first.plan.digest,
+    )
+    expect((await ModalPlan.prepare({ ...input(root), purpose: "Run a different experiment." })).plan.digest).not.toBe(
       first.plan.digest,
     )
   })
@@ -66,6 +71,19 @@ describe("ModalPlan", () => {
     const prepared = await ModalPlan.prepare(input(alias))
 
     expect(prepared.plan.uploads.map((file) => file.path)).toEqual(["src/train.py"])
+  })
+
+  test("keeps exact approval stable across isolated conversation scratch roots", async () => {
+    const firstRoot = await project()
+    const secondRoot = await project()
+
+    const first = await ModalPlan.prepare(input(firstRoot))
+    const second = await ModalPlan.prepare(input(secondRoot))
+
+    expect(first.plan.cwd).not.toBe(second.plan.cwd)
+    expect(first.plan.workspace_cwd).toBe(".")
+    expect(second.plan.workspace_cwd).toBe(".")
+    expect(first.plan.digest).toBe(second.plan.digest)
   })
 
   test("denies secrets, control directories, and paths outside the project", async () => {

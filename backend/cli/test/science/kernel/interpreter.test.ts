@@ -10,7 +10,7 @@ import { tmpdir } from "../../fixture/fixture"
 import { Instance } from "../../../src/project/instance"
 import { ProjectTrust } from "../../../src/project/trust"
 import { Session } from "../../../src/session"
-import { NotebookTool } from "../../../src/tool/notebook"
+import { PythonTool } from "../../../src/tool/notebook"
 import { ExecutionAuthority } from "../../../src/project/execution"
 import { KernelRuntime, type KernelIdentity } from "../../../src/science/kernel/registry"
 import { AuthorityProcessLedger } from "../../../src/project/authority-process"
@@ -69,7 +69,7 @@ test("an untrusted project .venv interpreter cannot execute during discovery", a
     fn: async () => {
       await ProjectTrust.update(Instance.project, { trusted: false })
       const session = await Session.create({})
-      const tool = await NotebookTool.init()
+      const tool = await PythonTool.init()
       const run = tool.execute(
         { code: "print('should not run')", timeout: 5_000 },
         {

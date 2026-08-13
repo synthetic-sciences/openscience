@@ -2,9 +2,52 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { Instance } from "../../src/project/instance"
 import { ProvenanceRoutes } from "../../src/server/routes/provenance"
+import { ProvenanceEnvelope } from "../../src/science/provenance/envelope"
+import { Provenance } from "../../src/science/provenance/store"
 import { tmpdir } from "../fixture/fixture"
 
 describe("/provenance routes", () => {
+  test("lists project and session scoped execution history for Activity", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Provenance.recordOwned({ projectID: Instance.project.id, directory: Instance.directory }, {
+          id: "run_activity_route",
+          kind: "run",
+          label: "Python execution",
+          tool: "python",
+          sessionID: "ses_activity",
+          status: "ok",
+          provenance: ProvenanceEnvelope.create({
+            kind: "kernel",
+            projectID: Instance.project.id,
+            sessionID: "ses_activity",
+            runID: "run_activity_route",
+            code: "1 + 1",
+            kernel: { id: "kernel-activity", language: "python", incarnation: 1 },
+            status: "succeeded",
+            outputs: [],
+            createdAt: 1_000,
+            startedAt: 1_000,
+            completedAt: 1_010,
+          }),
+        } as Parameters<typeof Provenance.record>[0])
+        const response = await ProvenanceRoutes().request("/executions?sessionID=ses_activity")
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject([
+          {
+            id: "run_activity_route",
+            session_id: "ses_activity",
+            sequence: 1,
+            language: "python",
+            status: "succeeded",
+          },
+        ])
+      },
+    })
+  })
+
   test("records, reviews, scopes, traces, and exports a project audit graph", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

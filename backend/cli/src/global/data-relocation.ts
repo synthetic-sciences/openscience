@@ -4,7 +4,6 @@ import { createReadStream } from "node:fs"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Global } from "@/global"
-import { MemoryIndex } from "@/settings/memory-index"
 import { DataRoot } from "./data-root"
 import { DataRootBarrier } from "./data-root-barrier"
 
@@ -246,7 +245,6 @@ export namespace DataRelocation {
     if (reset && source === target) throw new Error("The default data location is already active")
     await validateTarget(source, target, reset)
     const stage = path.join(path.dirname(target), `.${path.basename(target)}.openscience-${randomUUID()}`)
-    await MemoryIndex.reset().catch(() => undefined)
     const copied = await snapshot(source, stage).catch(async (error) => {
       await fs.rm(stage, { recursive: true, force: true }).catch(() => undefined)
       throw error

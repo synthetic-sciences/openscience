@@ -11,17 +11,17 @@ describe("launch settings truth pass", () => {
     expect(DEFAULT_PANEL).toBe("models")
   })
 
-  test("keeps local models and memory out of Customize for now", () => {
+  test("keeps local models, memory, and specialist internals out of Customize for now", () => {
     const ids = SETTINGS_PANELS.map((item) => item.id as string)
 
     expect(ids).not.toContain("local-models")
     expect(ids).not.toContain("memory")
+    expect(ids).not.toContain("specialists")
     expect(source("LocalModels.tsx")).toContain("const LocalModels: Component = () =>")
     expect(ids).toEqual([
       "models",
       "skills",
       "connectors",
-      "specialists",
       "compute",
       "network",
       "permissions",
@@ -185,14 +185,5 @@ describe("launch settings truth pass", () => {
     expect(services).toContain('<span class="settings-chip">Saved</span>')
     expect(services).not.toContain("connected={service.connected}")
     expect(services).not.toContain("Connected and ready")
-  })
-
-  test("presents the four built-in specialists with product-facing names", () => {
-    const specialists = source("Specialists.tsx")
-
-    expect(specialists).toContain('research: "Research"')
-    expect(specialists).toContain('ml: "ML"')
-    expect(specialists).toContain('biology: "Bio"')
-    expect(specialists).toContain('physics: "Physics"')
   })
 })

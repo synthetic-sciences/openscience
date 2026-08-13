@@ -85,9 +85,9 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
       <div class="artifact-toolbar">
         <span class="artifact-toolbar__primary">
           <span class="artifact-toolbar__count" data-artifact-count>
-            {props.artifacts.length} {props.artifacts.length === 1 ? "artifact" : "artifacts"}
+            {props.artifacts.length} {props.artifacts.length === 1 ? "result" : "results"}
           </span>
-          <span class="artifact-toolbar__hint">Versioned deliverables</span>
+          <span class="artifact-toolbar__hint">Immutable versions</span>
         </span>
 
         {/* Sorting, layout and the optional size column are one mental model:
@@ -217,7 +217,7 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
             {/* "No artifacts saved yet." is false when a search simply matched
                 nothing, and the count beside it already says 0. */}
             <div class="files-empty files-empty--artifacts" data-artifact-empty>
-              <strong>{props.filtered ? "No matching artifacts" : "No saved artifacts yet"}</strong>
+              <strong>{props.filtered ? "No matching results" : "No saved results yet"}</strong>
               <span>
                 {props.filtered
                   ? "Try a different name or clear the search."

@@ -15,7 +15,7 @@ interface SkillRow {
   name: string
   description: string
   location: string
-  origin?: "default" | "installed" | "learned" | "user" | "project"
+  origin?: "default" | "installed" | "user" | "project"
   category?: string
   tags?: string[]
   entry?: boolean
@@ -24,7 +24,6 @@ interface SkillRow {
 function originOf(skill: SkillRow): string {
   if (skill.origin) return skill.origin
   if (skill.location.includes("installed-skills")) return "installed"
-  if (skill.location.includes("learned-skills")) return "learned"
   return "default"
 }
 

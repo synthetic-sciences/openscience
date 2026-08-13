@@ -7,7 +7,6 @@ import { ArtifactFile } from "@/file/artifacts"
 import { Instance } from "@/project/instance"
 import { Provenance } from "@/science/provenance/store"
 import type { Node, Run } from "@/science/provenance/store"
-import { RLMArtifacts } from "@/session/rlm/artifacts"
 
 function result(title: string, output: string, metadata: Record<string, unknown> = {}) {
   return { title, output, metadata }
@@ -16,39 +15,99 @@ function result(title: string, output: string, metadata: Record<string, unknown>
 const runnable = (node: Node | undefined): node is Run =>
   node?.kind === "run" && "tool" in node && typeof node.tool === "string"
 
+function savedExecution(run: Run): Omit<ArtifactStore.Execution, "id" | "artifactVersionID" | "createdAt"> {
+  const envelope = run.provenance
+  const status = (() => {
+    switch (envelope?.outputs.status) {
+      case "succeeded":
+        return "succeeded" as const
+      case "failed":
+        return "failed" as const
+      case "cancelled":
+      case "interrupted":
+        return "cancelled" as const
+      default:
+        return "unknown" as const
+    }
+  })()
+  const files = (envelope?.outputs.items ?? []).flatMap((item) =>
+    item.path.status === "available" ? [{ path: item.path.value, sha256: item.sha256, size: item.size }] : [],
+  )
+  return {
+    command: run.tool,
+    ...(envelope?.input.code.status === "available" ? { code: envelope.input.code.value } : {}),
+    status,
+    ...(typeof run.meta?.stdout === "string" ? { stdout: run.meta.stdout } : {}),
+    ...(typeof run.meta?.stderr === "string" ? { stderr: run.meta.stderr } : {}),
+    ...(typeof run.meta?.effort === "string" ? { effort: run.meta.effort } : {}),
+    source: run.id,
+    ...(run.inputs ? { inputs: run.inputs } : {}),
+    captureQuality: "exact",
+    files,
+    ...(envelope
+      ? {
+          environment: {
+            host: envelope.environment.host,
+            kernel: envelope.environment.kernel,
+            runID: envelope.identity.run_id,
+          },
+        }
+      : {}),
+  }
+}
+
+async function traceSavedArtifact(saved: ArtifactStore.Artifact, run: Run) {
+  const scope = { projectID: Instance.project.id, directory: Instance.directory }
+  const version = saved.current
+  const id = ArtifactStore.reviewTargetID(version.id, version.sha256)
+  const existing = await Provenance.find(scope, id)
+  if (
+    existing &&
+    (existing.kind !== "artifact" ||
+      !("contentHash" in existing) ||
+      existing.contentHash !== version.sha256 ||
+      existing.meta?.artifactID !== saved.id ||
+      existing.meta?.versionID !== version.id)
+  ) {
+    throw new Error(`Provenance target ${id} conflicts with the immutable artifact version`)
+  }
+  if (!existing) {
+    await Provenance.recordOwned(scope, {
+      id,
+      kind: "artifact",
+      label: `${saved.title} · version ${version.version}`,
+      artifactType: saved.kind,
+      path: version.sourcePath,
+      contentHash: version.sha256,
+      size: version.size,
+      meta: {
+        artifactStore: true,
+        artifactID: saved.id,
+        versionID: version.id,
+        version: version.version,
+        filename: version.filename,
+        mimeType: version.mimeType,
+        sha256: version.sha256,
+        sessionID: version.sessionID,
+        sourcePath: version.sourcePath,
+        captureQuality: version.captureQuality,
+      },
+    } as Parameters<typeof Provenance.record>[0])
+  }
+  await Provenance.linkOwned(scope, { from: run.id, to: id, relation: "produced" })
+}
+
 export const ArtifactTool = Tool.define("artifact", {
-  description: [
-    "Store and retrieve large data artifacts by reference.",
-    "Use this to keep large outputs (DataFrames, analysis results, raw data) out of context.",
-    "Actions:",
-    "  - save_file: Promote a finished workspace file into the durable, immutable, versioned artifact store",
-    "  - register: Store content on disk, returns a reference ID + summary",
-    "  - update: Replace the current content while retaining an immutable version",
-    "  - resolve: Retrieve full content by artifact ID",
-    "  - list: Show all artifacts in this session",
-    "  - list_versions: Show immutable versions of an artifact",
-    "  - read_version: Retrieve one immutable version by version ID",
-  ].join(" "),
+  description:
+    "Save an important workspace file as a durable Result with a stable identity, immutable versions, and optional execution provenance. Keep drafts and large mutable working data in the workspace instead.",
   parameters: z.object({
-    action: z
-      .enum(["save_file", "register", "update", "resolve", "list", "list_versions", "read_version"])
-      .describe("The action"),
-    path: z.string().trim().min(1).max(10_000).optional().describe("For save_file: workspace file path"),
-    type: z.string().optional().describe('For register/update: artifact type (e.g. "dataframe", "analysis")'),
-    content: z.string().optional().describe("For register/update: the large content to store"),
-    summary: z.string().optional().describe("For register/update: brief summary for context window"),
-    artifact_id: z.string().optional().describe("For update/resolve/version actions: the artifact ID"),
-    version_id: z.string().optional().describe("For read_version: the immutable version ID"),
-    durable: z
-      .boolean()
-      .optional()
-      .describe(
-        "For register/update: keep the stored version durable so cleanup never expires it. Use when the user asks to save or keep a result.",
-      ),
+    action: z.literal("save_file").describe("Save a workspace file as a durable Result"),
+    path: z.string().trim().min(1).max(10_000).describe("Workspace file path"),
+    summary: z.string().optional().describe("Concise user-facing Result title"),
     provenance_id: z
       .string()
       .optional()
-      .describe("For register/update: a producing run provenance ID from this project and session"),
+      .describe("Producing Python/R or job provenance ID from this project and session"),
   }),
   async execute(params, ctx) {
     const node = params.provenance_id
@@ -70,18 +129,7 @@ export const ArtifactTool = Tool.define("artifact", {
     if (params.provenance_id && (!entry || entry.sessionID !== ctx.sessionID || owner !== Instance.project.id)) {
       return result("Invalid provenance", "The producing run was not found in this project and session.")
     }
-    const run =
-      entry?.provenance?.identity.run_id.status === "available" ? entry.provenance.identity.run_id.value : entry?.id
-    const source = {
-      projectID: Instance.project.id,
-      agent: ctx.agent,
-      messageID: ctx.messageID,
-      ...(ctx.callID ? { callID: ctx.callID } : {}),
-      ...(typeof run === "string" ? { runID: run } : ctx.callID ? { runID: ctx.callID } : {}),
-      ...(params.provenance_id ? { provenanceID: params.provenance_id } : {}),
-    }
-    if (params.action === "save_file") {
-      if (!params.path) return result("Error", "save_file requires `path`")
+    {
       const file = await File.raw(params.path, { sessionID: ctx.sessionID })
       const name = path.basename(params.path)
       const classified = ArtifactFile.classify(name)
@@ -109,11 +157,13 @@ export const ArtifactTool = Tool.define("artifact", {
         mimeType: file.type,
         messageID: ctx.messageID,
         captureQuality: "declared",
+        ...(entry ? { execution: savedExecution(entry) } : {}),
       })
+      if (entry) await traceSavedArtifact(saved, entry)
       return result(
-        `Saved artifact: ${saved.title}`,
+        `Saved Result: ${saved.title}`,
         [
-          "Workspace file saved as a durable, immutable artifact version.",
+          "Workspace file saved as a durable Result with an immutable version.",
           `  ID: ${saved.id}`,
           `  Version: ${saved.current.version}`,
           `  Kind: ${saved.kind}`,
@@ -121,7 +171,7 @@ export const ArtifactTool = Tool.define("artifact", {
           `  Size: ${saved.current.size} bytes`,
           `  SHA-256: ${saved.current.sha256}`,
           "",
-          "The artifact is available project-wide in Files and can be opened, reviewed, renamed, versioned, or downloaded.",
+          "The Result is available project-wide in Files and can be opened, reviewed, renamed, versioned, or downloaded.",
         ].join("\n"),
         {
           savedArtifact: {
@@ -139,133 +189,5 @@ export const ArtifactTool = Tool.define("artifact", {
         },
       )
     }
-    if (params.action === "register") {
-      if (!params.type || !params.content) {
-        return result("Error", "register requires `type` and `content` parameters")
-      }
-      const ref = await RLMArtifacts.register(ctx.sessionID, params.type, params.content, params.summary, source, {
-        durable: params.durable,
-      })
-      if (params.durable) {
-        // Dynamic import: the review launcher reaches back into the session
-        // prompt loop, which owns the tool registry this file lives in.
-        const { SessionReview } = await import("@/session/review")
-        void SessionReview.auto(ctx.sessionID, ctx.agent).catch(() => {})
-      }
-      return result(
-        `Registered artifact: ${ref.id}`,
-        [
-          `Artifact stored successfully.`,
-          `  ID: ${ref.id}`,
-          `  Version: ${ref.versionID}`,
-          `  Type: ${ref.type}`,
-          `  Summary: ${ref.summary}`,
-          `  Size: ${params.content.length} bytes`,
-          "",
-          "Use artifact_id in resolve to retrieve full content later.",
-        ].join("\n"),
-        { id: ref.id, versionID: ref.versionID, version: ref.version, type: ref.type },
-      )
-    }
-
-    if (params.action === "update") {
-      if (!params.artifact_id || !params.content) {
-        return result("Error", "update requires `artifact_id` and `content` parameters")
-      }
-      const ref = await RLMArtifacts.update(ctx.sessionID, params.artifact_id, params.content, {
-        type: params.type,
-        summary: params.summary,
-        source,
-        durable: params.durable,
-      })
-      if (!ref) {
-        return result("Not found", `Artifact "${params.artifact_id}" not found in this session.`)
-      }
-      if (params.durable) {
-        const { SessionReview } = await import("@/session/review")
-        void SessionReview.auto(ctx.sessionID, ctx.agent).catch(() => {})
-      }
-      return result(
-        `Updated artifact: ${ref.id}`,
-        [
-          "Artifact updated successfully.",
-          `  ID: ${ref.id}`,
-          `  Version: ${ref.versionID}`,
-          `  Type: ${ref.type}`,
-          `  Summary: ${ref.summary}`,
-          `  Size: ${params.content.length} bytes`,
-          "",
-          "Prior versions remain available through list_versions and read_version.",
-        ].join("\n"),
-        { id: ref.id, versionID: ref.versionID, version: ref.version, type: ref.type },
-      )
-    }
-
-    if (params.action === "resolve") {
-      if (!params.artifact_id) {
-        return result("Error", "resolve requires `artifact_id` parameter")
-      }
-      const content = await RLMArtifacts.resolve(ctx.sessionID, params.artifact_id)
-      if (!content) {
-        return result("Not found", `Artifact "${params.artifact_id}" not found in this session.`)
-      }
-      return result(`Resolved artifact: ${params.artifact_id}`, content, { id: params.artifact_id })
-    }
-
-    if (params.action === "list_versions") {
-      if (!params.artifact_id) {
-        return result("Error", "list_versions requires `artifact_id` parameter")
-      }
-      const versions = await RLMArtifacts.listVersions(ctx.sessionID, params.artifact_id)
-      if (!versions.length) {
-        return result("No versions", `No versions found for artifact "${params.artifact_id}".`)
-      }
-      const lines = versions.map((version) => {
-        const source = version.source?.agent ? ` by ${version.source.agent}` : ""
-        const expiry = version.retention.expiresAt
-          ? `, expires ${new Date(version.retention.expiresAt).toISOString()}`
-          : ""
-        return `- ${version.id}: v${version.version} at ${new Date(version.createdAt).toISOString()}${source} (${version.size} bytes, ${version.retention.status}${expiry})`
-      })
-      return result(`${versions.length} version(s)`, lines.join("\n"), {
-        count: versions.length,
-        versions: versions.map((version) => version.id),
-        retention: versions.map((version) => ({
-          versionID: version.id,
-          ...version.retention,
-        })),
-      })
-    }
-
-    if (params.action === "read_version") {
-      if (!params.artifact_id || !params.version_id) {
-        return result("Error", "read_version requires `artifact_id` and `version_id` parameters")
-      }
-      const version = await RLMArtifacts.readVersion(ctx.sessionID, params.artifact_id, params.version_id)
-      if (!version) {
-        return result("Not found", `Version "${params.version_id}" was not found for artifact "${params.artifact_id}".`)
-      }
-      return result(`Resolved artifact version: ${params.version_id}`, version.content, {
-        id: params.artifact_id,
-        versionID: version.info.id,
-        version: version.info.version,
-        createdAt: version.info.createdAt,
-        source: version.info.source,
-        sha256: version.info.sha256,
-        retention: version.info.retention,
-        provenanceID: version.info.source?.provenanceID,
-        provenance: version.info.provenance,
-      })
-    }
-
-    const artifacts = await RLMArtifacts.list(ctx.sessionID)
-    if (artifacts.length === 0) {
-      return result("No artifacts", "No artifacts registered in this session.")
-    }
-    const lines = artifacts.map((artifact) => {
-      const version = artifact.version ? `, v${artifact.version}` : ""
-      return `- ${artifact.id}: ${artifact.summary} (${artifact.type}${version})`
-    })
-    return result(`${artifacts.length} artifact(s)`, lines.join("\n"), { count: artifacts.length })
   },
 })

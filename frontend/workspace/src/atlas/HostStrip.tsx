@@ -13,7 +13,7 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
   const client = identify()
   const load = () =>
     Promise.all([
-      request(`/notebook/compute?client=${encodeURIComponent(client)}`).then((response) =>
+      request(`/kernels/compute?client=${encodeURIComponent(client)}`).then((response) =>
         response.ok ? (response.json() as Promise<Capacity>) : undefined,
       ),
       request("/settings/compute/jobs")

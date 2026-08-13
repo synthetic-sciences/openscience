@@ -223,7 +223,7 @@ export default function Page(): JSX.Element {
   async function deleteSession(sessionID: string) {
     const ok = await confirmDialog(dialog, {
       title: "Delete this session?",
-      message: "This removes the conversation and its session-owned workspace. Saved artifacts stay available.",
+      message: "This removes the conversation and its session workspace. Saved Results stay available.",
       confirmLabel: "Delete session",
       danger: true,
     })
@@ -533,8 +533,8 @@ export default function Page(): JSX.Element {
       },
       {
         id: "project.compute",
-        title: "Open compute monitor",
-        description: "View project kernels and compute jobs",
+        title: "Open project compute",
+        description: "View local executions, live runtimes, and remote jobs",
         category: "Project",
         onSelect: () => openContext("kernels"),
       },

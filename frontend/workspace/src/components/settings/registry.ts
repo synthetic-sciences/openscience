@@ -32,7 +32,6 @@ export const SETTINGS_PANEL_IDS = [
   "models",
   "skills",
   "connectors",
-  "specialists",
   "compute",
   "network",
   "permissions",
@@ -81,13 +80,6 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "mcp",
     section: "capabilities",
     component: lazy(() => import("./Connectors")),
-  },
-  {
-    id: "specialists",
-    title: "Specialists",
-    icon: "brain",
-    section: "capabilities",
-    component: lazy(() => import("./Specialists")),
   },
   // Local models remain implemented but hidden until chat, tool-call, and
   // streaming behavior pass a full runtime smoke.

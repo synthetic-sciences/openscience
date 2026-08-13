@@ -715,14 +715,14 @@ describe("OpenScience data directory", () => {
     const home = await root()
     const legacy = path.join(home, "share", "openscience")
     const target = path.join(home, ".openscience")
-    // `settings/memory/index.db` is the second WAL database (memory-index.ts)
-    // and nothing merges it, so what the copy decides is what survives.
-    await fs.mkdir(path.join(legacy, "settings", "memory"), { recursive: true })
+    // A pre-existing cache database in the current root must not receive a
+    // journal from a different legacy database.
+    await fs.mkdir(path.join(legacy, "settings", "cache"), { recursive: true })
     await fs.mkdir(path.join(legacy, "settings", "notes"), { recursive: true })
-    await fs.mkdir(path.join(target, "settings", "memory"), { recursive: true })
-    await fs.writeFile(path.join(legacy, "settings", "memory", "index.db"), "legacy-index")
-    await fs.writeFile(path.join(legacy, "settings", "memory", "index.db-wal"), "memory-journal")
-    await fs.writeFile(path.join(target, "settings", "memory", "index.db"), "current-index")
+    await fs.mkdir(path.join(target, "settings", "cache"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "settings", "cache", "index.db"), "legacy-index")
+    await fs.writeFile(path.join(legacy, "settings", "cache", "index.db-wal"), "cache-journal")
+    await fs.writeFile(path.join(target, "settings", "cache", "index.db"), "current-index")
     await fs.writeFile(path.join(legacy, "settings", "notes", "index.db"), "legacy-notes")
     await fs.writeFile(path.join(legacy, "settings", "notes", "index.db-wal"), "notes-journal")
 
@@ -733,9 +733,9 @@ describe("OpenScience data directory", () => {
     // would lose every transaction still in the log.
     expect(await fs.readFile(path.join(target, "settings", "notes", "index.db"), "utf8")).toBe("legacy-notes")
     expect(await fs.readFile(path.join(target, "settings", "notes", "index.db-wal"), "utf8")).toBe("notes-journal")
-    // memory/index.db is not — the target has its own — so the legacy journal
+    // cache/index.db is not — the target has its own — so the legacy journal
     // must not land beside a database it never described.
-    expect(await fs.readFile(path.join(target, "settings", "memory", "index.db"), "utf8")).toBe("current-index")
-    expect(fsSync.existsSync(path.join(target, "settings", "memory", "index.db-wal"))).toBe(false)
+    expect(await fs.readFile(path.join(target, "settings", "cache", "index.db"), "utf8")).toBe("current-index")
+    expect(fsSync.existsSync(path.join(target, "settings", "cache", "index.db-wal"))).toBe(false)
   })
 })

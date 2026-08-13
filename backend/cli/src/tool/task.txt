@@ -1,26 +1,28 @@
-Launch one bounded child agent for an independent unit of work.
+Delegate one bounded, independent unit of work when parallel investigation or execution will
+materially improve the result.
 
-Available agent types and the tools they have access to:
+Internal profiles:
 {agents}
 
-When using the Task tool, specify the subagent_type that fits the bounded task.
+Choose the profile by work type, not scientific domain:
+- `explore` finds and reads relevant code, files, or sources.
+- `execute` performs a bounded implementation, analysis, or computation.
+- `review` checks an observable result when the cost of an error justifies an independent pass.
 
-Use the Task tool when:
-- A genuinely independent investigation or implementation can run concurrently and merge cleanly into the primary result.
-- A named biology, physics, or machine-learning specialist is needed for a distinct domain concern.
-- A custom slash command explicitly requires a child invocation.
+Domain expertise comes from lazy skills. Do not invent a biology, physics, literature, writing,
+statistics, or ML persona; give the selected profile the exact task and let it load a relevant
+skill only when useful.
 
-Do not use the Task tool when:
-- The work is sequential, small, already in context, or limited to a few known files. Default to zero child agents.
-- A direct Read, Glob, Grep, shell, or kernel action would answer the question more cheaply.
-- One child's result is required to define another child's task.
-- You only want a second opinion on your plan or answer.
-- You are considering several literature agents for one search. Retrieve once, share the source records, and synthesize centrally.
+Research effort controls optional parallelism:
+- Normal: default to zero children; at most two can run concurrently.
+- Ultra: use a wider investigation only when branches are genuinely independent; at most four
+  can run concurrently.
 
 Rules:
-1. At most two child agents can run concurrently. Use fewer when compute or kernels are already consuming the machine.
-2. The primary agent owns the outcome. Merge useful completed work without waiting for optional stragglers.
-3. A failed child must not block a usable primary answer.
-4. Each invocation is stateless unless you provide a session_id. Give it a bounded objective, relevant context, allowed actions, and an exact return contract.
-5. Treat child output as evidence to inspect, not authority to trust blindly.
-6. The child result is not directly visible to the user. Report only the useful merged outcome and material limitations.
+1. Fan-out is shallow. A child cannot create more child tasks.
+2. Do not delegate sequential work, a small known-file edit, or a second opinion by ceremony.
+3. Retrieve a source set once and share it; never launch duplicate literature searches.
+4. The lead Research agent owns synthesis and verification. Treat child output as evidence, not
+   authority, and do not let an optional failed child block a usable result.
+5. Continue a child only with its `session_id`. Otherwise give a self-contained prompt with the
+   objective, relevant context, allowed actions, and the useful return shape.

@@ -674,24 +674,6 @@
   }
 
   [data-slot="kernel-tool-source"] {
-    max-height: calc(5 * 1.55em + 20px);
-    margin: 0;
-    padding: 10px 12px;
-    overflow: auto;
-    color: var(--text-base);
-    background: var(--background-base);
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-small);
-    line-height: 1.55;
-    tab-size: 2;
-    white-space: pre;
-
-    code {
-      font: inherit;
-    }
-  }
-
-  [data-slot="kernel-tool-output"] {
     border-top: 1px solid var(--border-weak-base);
 
     summary {
@@ -704,9 +686,30 @@
     }
 
     & > pre {
+      max-height: calc(5 * 1.55em + 20px);
+      margin: 0;
+      padding: 10px 12px;
+      overflow: auto;
+      color: var(--text-base);
+      font-family: var(--font-family-mono);
+      font-size: var(--font-size-small);
+      line-height: 1.55;
+      tab-size: 2;
+      white-space: pre;
+
+      code {
+        font: inherit;
+      }
+    }
+  }
+
+  [data-slot="kernel-tool-result"] {
+    border-top: 1px solid var(--border-weak-base);
+
+    & > pre {
       max-height: 260px;
       margin: 0;
-      padding: 8px 12px 10px;
+      padding: 10px 12px;
       overflow: auto;
       color: var(--text-base);
       font-family: var(--font-family-mono);
@@ -862,6 +865,56 @@
     gap: 8px;
     justify-content: flex-end;
     flex-wrap: wrap;
+  }
+
+  [data-slot="permission-summary"][data-kind="remote-compute"],
+  [data-slot="permission-summary"][data-kind="environment-mutation"] {
+    display: grid;
+    gap: 5px;
+  }
+
+  [data-slot="permission-compute-title"] {
+    color: var(--text-strong);
+    font-size: 12px;
+    font-weight: var(--font-weight-emphasis);
+  }
+
+  [data-slot="permission-compute-purpose"] {
+    color: var(--text-base);
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+
+  [data-slot="permission-compute-details"] {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 3px 10px;
+    padding-block: 2px;
+    font-variant-numeric: tabular-nums;
+
+    > span {
+      color: var(--text-weak);
+    }
+
+    > strong {
+      min-width: 0;
+      color: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      overflow-wrap: anywhere;
+    }
+  }
+
+  [data-slot="permission-compute-warning"] {
+    color: var(--text-base);
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+
+  [data-slot="permission-compute-scope"] {
+    color: var(--text-weak);
+    font-size: 11px;
+    line-height: 1.45;
+    text-wrap: pretty;
   }
 }
 

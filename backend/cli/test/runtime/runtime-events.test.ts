@@ -1,0 +1,350 @@
+import { describe, expect, test } from "bun:test"
+import z from "zod"
+import { Bus } from "../../src/bus"
+import { BusEvent } from "../../src/bus/bus-event"
+import { Instance } from "../../src/project/instance"
+import { RuntimeEvents } from "../../src/runtime/events"
+import { Session } from "../../src/session"
+import { handoffRuntimeEvents, RuntimeRoutes } from "../../src/server/routes/runtime"
+import { Server } from "../../src/server/server"
+import { Storage } from "../../src/storage/storage"
+import { tmpdir } from "../fixture/fixture"
+
+const Tick = BusEvent.define(
+  "test.runtime.tick",
+  z.object({
+    sessionID: z.string(),
+    value: z.number(),
+  }),
+)
+
+describe("public runtime event journal", () => {
+  test("durably sequences a run, associates bus events, and replays after a cursor", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const seen: number[] = []
+        const unsubscribe = RuntimeEvents.subscribe(session.id, (event) => {
+          seen.push(event.sequence)
+        })
+
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_stable",
+          acceptedAt: 100,
+          effort: "ultra",
+        })
+        await Bus.publish(Tick, { sessionID: session.id, value: 7 })
+        await RuntimeEvents.finish({ sessionID: session.id, runID: "run_stable", messageID: "msg_result" })
+        await Bus.publish(Tick, { sessionID: session.id, value: 8 })
+        unsubscribe()
+
+        expect(seen).toEqual([1, 2, 3])
+        expect(await RuntimeEvents.replay(session.id, 1)).toMatchObject({
+          oldestSequence: 1,
+          latestSequence: 3,
+          events: [
+            { sequence: 2, runID: "run_stable", type: "test.runtime.tick", properties: { value: 7 } },
+            { sequence: 3, runID: "run_stable", type: "runtime.completed" },
+          ],
+        })
+      },
+    })
+  })
+
+  test("rejects overlapping runs and cursors that would reconnect with a gap", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_first",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+        await expect(
+          RuntimeEvents.begin({
+            sessionID: session.id,
+            runID: "run_second",
+            acceptedAt: 101,
+            effort: "normal",
+          }),
+        ).rejects.toBeInstanceOf(RuntimeEvents.ActiveRunError)
+        await RuntimeEvents.finish({ sessionID: session.id, runID: "run_first", messageID: "msg_done" })
+
+        await Storage.write(["runtime_event", Instance.project.id, session.id], {
+          nextSequence: 5,
+          events: [
+            {
+              sequence: 4,
+              sessionID: session.id,
+              runID: "run_later",
+              type: "runtime.completed",
+              properties: {},
+              time: 200,
+            },
+          ],
+        })
+        await expect(RuntimeEvents.replay(session.id, 1)).rejects.toBeInstanceOf(RuntimeEvents.CursorExpiredError)
+        await expect(RuntimeEvents.replay(session.id, 5)).rejects.toBeInstanceOf(RuntimeEvents.CursorAheadError)
+      },
+    })
+  })
+
+  test("fails closed when the durable journal is malformed", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await Storage.write(["runtime_event", Instance.project.id, session.id], {
+          nextSequence: "broken",
+          events: [],
+        })
+        await expect(RuntimeEvents.replay(session.id)).rejects.toBeDefined()
+      },
+    })
+  })
+
+  test("closes a run abandoned by a crashed server before accepting the next prompt", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await Storage.write(["runtime_event", Instance.project.id, session.id], {
+          nextSequence: 2,
+          events: [
+            {
+              sequence: 1,
+              sessionID: session.id,
+              runID: "run_orphaned",
+              type: "runtime.accepted",
+              properties: { effort: "normal" },
+              time: 100,
+            },
+          ],
+          activeRunID: "run_orphaned",
+          activeOwner: { pid: 2_147_483_647, identity: "0".repeat(64) },
+        })
+
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_recovered",
+          acceptedAt: 200,
+          effort: "ultra",
+        })
+        expect((await RuntimeEvents.replay(session.id)).events).toMatchObject([
+          { sequence: 1, runID: "run_orphaned", type: "runtime.accepted" },
+          {
+            sequence: 2,
+            runID: "run_orphaned",
+            type: "runtime.failed",
+            properties: { recovered: true },
+          },
+          { sequence: 3, runID: "run_recovered", type: "runtime.accepted" },
+        ])
+        await RuntimeEvents.finish({ sessionID: session.id, runID: "run_recovered", messageID: "msg_done" })
+      },
+    })
+  })
+
+  test("caps retained events and rejects a cursor before the retained window", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const events = Array.from({ length: RuntimeEvents.RETAINED_EVENTS }, (_, index) => ({
+          sequence: index + 1,
+          sessionID: session.id,
+          runID: "run_retained",
+          type: "test.runtime.retained",
+          properties: { index },
+          time: index + 1,
+        }))
+        await Storage.write(["runtime_event", Instance.project.id, session.id], {
+          nextSequence: RuntimeEvents.RETAINED_EVENTS + 1,
+          events,
+        })
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_latest",
+          acceptedAt: 10_000,
+          effort: "normal",
+        })
+
+        const retained = await RuntimeEvents.replay(session.id, 1)
+        expect(retained.events).toHaveLength(RuntimeEvents.RETAINED_EVENTS)
+        expect(retained.oldestSequence).toBe(2)
+        expect(retained.latestSequence).toBe(RuntimeEvents.RETAINED_EVENTS + 1)
+        await expect(RuntimeEvents.replay(session.id, 0)).rejects.toBeInstanceOf(RuntimeEvents.CursorExpiredError)
+      },
+    })
+  })
+})
+
+describe("/runtime routes", () => {
+  test("drains events queued at the snapshot-to-live boundary exactly once", () => {
+    const make = (sequence: number): RuntimeEvents.Event => ({
+      sequence,
+      sessionID: "ses_handoff",
+      runID: "run_handoff",
+      type: "test.runtime.tick",
+      properties: { sequence },
+      time: sequence,
+    })
+    const queued = [make(2)]
+    const delivered: number[] = []
+    let receive = (event: RuntimeEvents.Event): void => {
+      queued.push(event)
+    }
+
+    handoffRuntimeEvents(
+      queued,
+      (event) => {
+        delivered.push(event.sequence)
+        if (event.sequence === 2) receive(make(3))
+      },
+      (live) => {
+        receive = live
+      },
+    )
+    receive(make(4))
+
+    expect(delivered).toEqual([2, 3, 4])
+    expect(queued).toHaveLength(0)
+  })
+
+  test("publishes the prompt, replay, and SSE schemas without changing legacy routes", async () => {
+    const specs = await Server.openapi()
+    expect(specs.paths?.["/runtime/prompt"]?.post).toBeDefined()
+    expect(await Bun.file(new URL("../../src/server/routes/runtime.ts", import.meta.url)).text()).toContain(
+      'agent: "research"',
+    )
+    expect(specs.paths?.["/runtime/events"]?.get).toBeDefined()
+    expect(specs.paths?.["/runtime/events/replay"]?.get).toBeDefined()
+    expect(specs.paths?.["/session/{sessionID}/prompt_async"]?.post).toBeDefined()
+    expect(specs.paths?.["/event"]?.get).toBeDefined()
+  })
+
+  test("returns an accepted run immediately and exposes its durable event", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const response = await RuntimeRoutes().request("/prompt", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id, message: "Inspect the data", effort: "normal" }),
+        })
+        expect(response.status).toBe(202)
+        const accepted = (await response.json()) as { runID: string; acceptedAt: number }
+        expect(accepted.runID).toStartWith("run_")
+        expect(accepted.acceptedAt).toBeGreaterThan(0)
+
+        const replay = await RuntimeRoutes().request(`/events/replay?sessionID=${session.id}&afterSequence=0`)
+        expect(replay.status).toBe(200)
+        expect(await replay.json()).toMatchObject({
+          events: [
+            {
+              sequence: 1,
+              sessionID: session.id,
+              runID: accepted.runID,
+              type: "runtime.accepted",
+              properties: { effort: "normal" },
+            },
+          ],
+        })
+      },
+    })
+  })
+
+  test("rejects omitted or unsupported effort before accepting a run", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        for (const body of [
+          { sessionID: session.id, message: "No effort" },
+          { sessionID: session.id, message: "Bad effort", effort: "maximum" },
+        ]) {
+          const response = await RuntimeRoutes().request("/prompt", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          })
+          expect(response.status).toBe(400)
+        }
+        expect((await RuntimeEvents.replay(session.id)).events).toHaveLength(0)
+      },
+    })
+  })
+
+  test("frames replayed events with SSE sequence ids", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_sse",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+
+        const controller = new AbortController()
+        const response = await RuntimeRoutes().request(`/events?sessionID=${session.id}&afterSequence=0`, {
+          signal: controller.signal,
+        })
+        expect(response.status).toBe(200)
+        expect(response.headers.get("content-type")).toContain("text/event-stream")
+        const reader = response.body!.getReader()
+        const chunk = await reader.read()
+        const text = new TextDecoder().decode(chunk.value)
+        expect(text).toContain("id: 1")
+        expect(text).toContain("event: runtime.accepted")
+        expect(text).toContain('"runID":"run_sse"')
+        controller.abort()
+        await reader.cancel()
+      },
+    })
+  })
+
+  test("prefers Last-Event-ID over the original query cursor on reconnect", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_reconnect",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+        await Bus.publish(Tick, { sessionID: session.id, value: 2 })
+
+        const controller = new AbortController()
+        const response = await RuntimeRoutes().request(`/events?sessionID=${session.id}&afterSequence=0`, {
+          headers: { "Last-Event-ID": "1" },
+          signal: controller.signal,
+        })
+        const reader = response.body!.getReader()
+        const chunk = await reader.read()
+        const text = new TextDecoder().decode(chunk.value)
+        expect(text).toContain("id: 2")
+        expect(text).not.toContain("id: 1")
+        controller.abort()
+        await reader.cancel()
+      },
+    })
+  })
+})

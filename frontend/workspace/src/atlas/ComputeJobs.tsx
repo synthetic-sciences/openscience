@@ -66,6 +66,7 @@ export function ComputeJobs(
     reviewed: false,
     busy: false,
     name: "",
+    purpose: "",
     command: "",
     cwd: "",
     target: "local" as "local" | "modal" | `ssh:${string}`,
@@ -103,6 +104,8 @@ export function ComputeJobs(
   const setBusy: Setter<boolean> = (value) => setState("busy", value)
   const name = () => state.name
   const setName: Setter<string> = (value) => setState("name", value)
+  const purpose = () => state.purpose
+  const setPurpose: Setter<string> = (value) => setState("purpose", value)
   const command = () => state.command
   const setCommand: Setter<string> = (value) => setState("command", value)
   const cwd = () => state.cwd
@@ -263,6 +266,7 @@ export function ComputeJobs(
 
   const reset = () => {
     setName("")
+    setPurpose("")
     setCommand("")
     setCwd("")
     setTarget("local")
@@ -298,9 +302,20 @@ export function ComputeJobs(
 
   const staged = () => {
     return {
+      purpose: purpose().trim(),
       command: command().trim(),
       cwd: cwd().trim() || "Session workspace",
-      target: target() === "modal" ? "Modal" : (selectedHost()?.label ?? "This computer"),
+      remote:
+        target() === "modal"
+          ? { kind: "modal" as const, label: "Modal", host: "Your Modal account", scheduler: "none" as const }
+          : selectedHost()
+            ? {
+                kind: "ssh" as const,
+                label: selectedHost()!.label,
+                host: selectedHost()!.host,
+                scheduler: selectedHost()!.scheduler,
+              }
+            : undefined,
       resources: resources(),
       modules: listValue(modules()),
       container: container().trim() || undefined,
@@ -310,6 +325,7 @@ export function ComputeJobs(
   const signature = () =>
     JSON.stringify({
       name: name().trim(),
+      purpose: purpose().trim(),
       command: command().trim(),
       cwd: cwd().trim(),
       target: target(),
@@ -324,7 +340,8 @@ export function ComputeJobs(
     })
 
   const approved = () => reviewed() && stamp() === signature()
-  const ready = () => dispatchReady({ name: name(), command: command(), reviewed: approved(), busy: busy() })
+  const ready = () =>
+    dispatchReady({ name: name(), purpose: purpose(), command: command(), reviewed: approved(), busy: busy() })
 
   const review = async () => {
     if (target() === "local") {
@@ -340,6 +357,7 @@ export function ComputeJobs(
       .plan({
         sessionID,
         name: name().trim(),
+        purpose: purpose().trim(),
         command: command().trim(),
         cwd: cwd().trim() || undefined,
         target: selectedHost() ? { kind: "ssh", host_id: selectedHost()!.id } : { kind: "modal" },
@@ -379,6 +397,7 @@ export function ComputeJobs(
       .start({
         sessionID,
         name: name().trim(),
+        purpose: purpose().trim(),
         command: command().trim(),
         cwd: cwd().trim() || undefined,
         target: selectedHost()
@@ -575,6 +594,15 @@ export function ComputeJobs(
               value={name()}
               placeholder="Experiment name"
               onInput={(event) => setName(event.currentTarget.value)}
+            />
+          </Field>
+          <Field label="Purpose">
+            <input
+              aria-label="Job purpose"
+              style={input}
+              value={purpose()}
+              placeholder="What this run should establish or produce"
+              onInput={(event) => setPurpose(event.currentTarget.value)}
             />
           </Field>
           <div
@@ -782,6 +810,8 @@ export function ComputeJobs(
                 <div style={manifestGrid}>
                   <span>App</span>
                   <strong>{value().app}</strong>
+                  <span>Purpose</span>
+                  <strong>{value().purpose}</strong>
                   <span>Image</span>
                   <strong>{value().image}</strong>
                   <span>GPU</span>
@@ -813,10 +843,20 @@ export function ComputeJobs(
                 <div style={manifestGrid}>
                   <span>Host</span>
                   <strong>{value().label}</strong>
+                  <span>Purpose</span>
+                  <strong>{value().purpose}</strong>
                   <span>Scheduler</span>
                   <strong>{value().scheduler === "none" ? "Direct SSH" : value().scheduler.toUpperCase()}</strong>
                   <span>Host key</span>
                   <strong>{value().fingerprint}</strong>
+                  <Show when={value().host_notes}>
+                    {(notes) => (
+                      <>
+                        <span>Host notes</span>
+                        <strong>{notes()}</strong>
+                      </>
+                    )}
+                  </Show>
                   <span>Remote folder</span>
                   <strong>{value().remote_root}</strong>
                   <span>Inputs</span>
@@ -842,7 +882,7 @@ export function ComputeJobs(
               <button
                 type="button"
                 style={secondaryButton}
-                disabled={!name().trim() || !command().trim()}
+                disabled={!name().trim() || !purpose().trim() || !command().trim()}
                 onClick={() => void review()}
               >
                 {target() !== "local" && busy() ? "Preparing plan…" : "Review command"}

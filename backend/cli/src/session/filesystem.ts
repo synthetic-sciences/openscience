@@ -131,10 +131,13 @@ export namespace SessionFilesystem {
     throw new InvalidPathError({ path: target })
   }
 
-  function sessions() {
+  function managedProject() {
     const root = Project.canonicalize(path.join(Global.Path.data, "projects"))
     const worktree = Project.canonicalize(Instance.project.worktree)
-    if (path.dirname(worktree) !== root || !uuid.test(path.basename(worktree))) return
+    return path.dirname(worktree) === root && uuid.test(path.basename(worktree))
+  }
+
+  function sessions() {
     return SessionWorkspace.root()
   }
 
@@ -274,23 +277,34 @@ export namespace SessionFilesystem {
     })
     if (existing) return assert(State.parse(existing))
 
-    const base = sessions()
     const workspace = await SessionWorkspace.create({
       sessionID,
       directory: root,
-      mode: base ? "isolated" : "legacy",
+      mode: "isolated",
     })
     const canonicalWorkspace = await canonical(workspace.scratchRoot)
-    const grants = [...new Set(base ? [canonicalWorkspace] : [root, worktree])].map(
-      (value): Grant => ({
+    const grants: Grant[] = [
+      {
         id: `fsg_${crypto.randomUUID()}`,
-        path: value,
+        path: canonicalWorkspace,
         access: "write",
         scope: "session",
         source: "workspace",
         time: { created: Date.now() },
-      }),
-    )
+      },
+      ...(!managedProject()
+        ? [...new Set([root, worktree])].map(
+            (value): Grant => ({
+              id: `fsg_${crypto.randomUUID()}`,
+              path: value,
+              access: "write",
+              scope: "session",
+              source: "api",
+              time: { created: Date.now() },
+            }),
+          )
+        : []),
+    ]
     const record: State = {
       version: 1,
       revision: 1,
@@ -519,8 +533,9 @@ export namespace SessionFilesystem {
     return result
   }
 
-  /** Public policy packet. macOS Seatbelt enforces canonical read grants;
-   * bubblewrap currently retains a read-only host root and reports policy_only. */
+  /** Public policy packet. Native Seatbelt and bubblewrap backends enforce
+   * canonical read grants; policy_only is reserved for an unavailable native
+   * sandbox where brokered file access still remains enforced. */
   export async function snapshot(sessionID: string): Promise<Snapshot> {
     const filesystem = await state(sessionID)
     const workspace = await SessionWorkspace.touch(sessionID)

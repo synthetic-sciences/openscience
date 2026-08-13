@@ -4,9 +4,9 @@ import { PermissionNext } from "@/permission/next"
 import { Instance } from "@/project/instance"
 import { Provenance } from "@/science/provenance/store"
 import { Session } from "@/session"
+import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { Todo } from "@/session/todo"
-import { ReviewSettings } from "@/settings/review"
 import { Log } from "@/util/log"
 import z from "zod"
 
@@ -166,24 +166,18 @@ export namespace SessionReview {
   export async function start(sessionID: string, target?: Target): Promise<Bound | undefined> {
     if (!target) await grant(sessionID)
     const review = await packet(sessionID, target)
-    const settings = await ReviewSettings.get().catch(() => undefined)
+    const effort = await Session.messages({ sessionID })
+      .then((messages) => {
+        const latest = messages.findLast((message) => message.info.role === "user")
+        return MessageV2.resolveResearchEffort(latest?.info.role === "user" ? latest.info.effort : undefined)
+      })
+      .catch(() => "normal" as const)
     void SessionPrompt.prompt({
       sessionID,
       agent: review.agent,
-      model: settings?.model ?? undefined,
+      effort,
       parts: [{ type: "text", text: review.text }],
     }).catch((error) => log.error("review pass failed", { sessionID, error }))
     return "target" in review ? review.target : undefined
-  }
-
-  /** Optional auto-review after a significant result (a durable artifact
-   *  save). Off unless the user enabled it; never triggers on the reviewer's
-   *  own work. */
-  export async function auto(sessionID: string, agent: string) {
-    if (agent === "reviewer") return
-    const settings = await ReviewSettings.get().catch(() => undefined)
-    if (!settings?.auto) return
-    log.info("auto review triggered", { sessionID })
-    await start(sessionID)
   }
 }

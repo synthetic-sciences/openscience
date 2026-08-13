@@ -6,6 +6,7 @@ import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { ProjectTrust } from "../../src/project/trust"
 import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import { Server } from "../../src/server/server"
 import { ComputeSettings, ComputeSettingsRoutes } from "../../src/server/routes/settings/compute"
 import { Sandbox } from "../../src/sandbox/sandbox"
@@ -85,6 +86,84 @@ test("connecting a provider stores its key without exposing it to the process en
   const info = JSON.parse(body)
   expect(info.providers.find((p: { id: string }) => p.id === "tensorpool").connected).toBe(true)
   expect(info.providers.find((p: { id: string }) => p.id === "tensorpool").enabled).toBe(false)
+})
+
+test("SSH host notes persist, remain editable, and clear without changing connection identity", async () => {
+  const created = await ComputeSettingsRoutes().request("/ssh", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      label: "Notes test cluster",
+      host: "notes-test.example.org",
+      scheduler: "slurm",
+      workdir: "/scratch/research",
+      notes: "Load cuda/12.4. Use the gpu partition.",
+      concurrency: 2,
+    }),
+  })
+  expect(created.status).toBe(200)
+  const host = ((await created.json()) as ComputeSettings.Info).ssh_hosts.find(
+    (item) => item.host === "notes-test.example.org",
+  )
+  expect(host?.notes).toBe("Load cuda/12.4. Use the gpu partition.")
+  if (!host) throw new Error("SSH notes test host was not created")
+
+  try {
+    const updated = await ComputeSettingsRoutes().request(`/ssh/${host.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ notes: "  Scratch: /scratch/research. Install packages in the project venv.  " }),
+    })
+    expect(updated.status).toBe(200)
+    const saved = ((await updated.json()) as ComputeSettings.Info).ssh_hosts.find((item) => item.id === host.id)
+    expect(saved).toMatchObject({
+      host: host.host,
+      scheduler: host.scheduler,
+      workdir: host.workdir,
+      notes: "Scratch: /scratch/research. Install packages in the project venv.",
+    })
+
+    const cleared = await ComputeSettingsRoutes().request(`/ssh/${host.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ notes: "" }),
+    })
+    expect(cleared.status).toBe(200)
+    expect(
+      ((await cleared.json()) as ComputeSettings.Info).ssh_hosts.find((item) => item.id === host.id)?.notes,
+    ).toBeUndefined()
+  } finally {
+    await ComputeSettingsRoutes().request(`/ssh/${host.id}`, { method: "DELETE" })
+  }
+})
+
+test("SSH config discovery reads literal hosts without executing or expanding config directives", async () => {
+  await using tmp = await tmpdir()
+  const config = path.join(tmp.path, "config")
+  await Bun.write(
+    config,
+    [
+      "Host lab login",
+      '  HostName "login.cluster.example" # display target',
+      "  User researcher",
+      "  Port 2222",
+      "  ProxyJump bastion",
+      "Host *.internal !blocked.internal",
+      "  User wildcard-user",
+      "Match host lab",
+      "  User should-not-override",
+      "Include ~/.ssh/conf.d/*",
+      "Host tokenized",
+      "  HostName %h.example.org",
+      "  Port invalid",
+    ].join("\n"),
+  )
+
+  expect(await ComputeSettings.sshConfigHosts(config)).toEqual([
+    { alias: "lab", hostname: "login.cluster.example", user: "researcher", port: 2222 },
+    { alias: "login", hostname: "login.cluster.example", user: "researcher", port: 2222 },
+    { alias: "tokenized" },
+  ])
 })
 
 test("modal credentials resolve only for the trusted control plane while enabled", async () => {
@@ -413,8 +492,12 @@ test(
       cwd: string
       scope: { directory: string }
     }
-    expect(first.cwd).toBe(tmp.path)
-    expect(first.scope.directory).toBe(tmp.path)
+    const workspace = await Instance.provide({
+      directory: tmp.path,
+      fn: () => SessionFilesystem.workspace(current.id),
+    })
+    expect(first.cwd).toBe(workspace)
+    expect(first.scope.directory).toBe(workspace)
     expect((await settle(jobs, first.id, headers)).status).toBe("succeeded")
 
     const output = await fetch(`${jobs}/${first.id}/log`, { headers })
@@ -557,8 +640,12 @@ test(
       cwd: string
       scope: { directory: string }
     }
-    expect(job.cwd).toBe(tmp.path)
-    expect(job.scope.directory).toBe(tmp.path)
+    const workspace = await Instance.provide({
+      directory: tmp.path,
+      fn: () => SessionFilesystem.workspace(current.id),
+    })
+    expect(job.cwd).toBe(workspace)
+    expect(job.scope.directory).toBe(workspace)
 
     const headers = {
       "x-openscience-project": created.project.id,

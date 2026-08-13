@@ -280,8 +280,6 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       if (msg.info.role === "assistant" && msg.info.summary) break loop
       for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
         const part = msg.parts[partIndex]
-        // Preserve RLM state blocks — they carry planner progress
-        if (part.type === "text" && part.text.includes("<rlm_state>")) continue
         if (part.type === "tool")
           if (part.state.status === "completed") {
             if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
@@ -485,6 +483,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
         },
         agent: userMessage.agent,
         model: userMessage.model,
+        effort: MessageV2.resolveResearchEffort(userMessage.effort),
       })
       await Session.updatePart({
         id: Identifier.ascending("part"),
@@ -512,6 +511,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
         providerID: z.string(),
         modelID: z.string(),
       }),
+      effort: MessageV2.ResearchEffort.optional(),
       auto: z.boolean(),
       focus: z.string().optional(),
       handoffFile: z.string().optional(),
@@ -524,6 +524,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
         model: input.model,
         sessionID: input.sessionID,
         agent: input.agent,
+        effort: input.effort ?? "normal",
         time: {
           created: Date.now(),
         },

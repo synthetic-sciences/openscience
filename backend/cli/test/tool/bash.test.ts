@@ -99,8 +99,9 @@ describe("tool.bash permissions", () => {
     })
   })
 
-  test("asks for external_directory permission when cd to parent", async () => {
+  test("asks for external_directory permission when cd leaves the workspace", async () => {
     await using tmp = await tmpdir({ git: true })
+    await using outside = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -124,8 +125,8 @@ describe("tool.bash permissions", () => {
         }
         await bash.execute(
           {
-            command: "cd ../",
-            description: "Change to parent directory",
+            command: `cd ${outside.path}`,
+            description: "Change to an external directory",
           },
           testCtx,
         )

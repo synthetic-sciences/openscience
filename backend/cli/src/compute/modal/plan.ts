@@ -12,6 +12,7 @@ export namespace ModalPlan {
   export const Schema = z.object({
     digest: z.string().length(64),
     provider: z.literal("modal"),
+    purpose: z.string(),
     app: z.string(),
     environment: z.string().optional(),
     image: z.string(),
@@ -28,6 +29,7 @@ export namespace ModalPlan {
     network: z.enum(["unrestricted", "none"]),
     command: z.string(),
     cwd: z.string(),
+    workspace_cwd: z.string(),
     uploads: z.array(
       z.object({
         path: z.string(),
@@ -42,8 +44,10 @@ export namespace ModalPlan {
   export type Schema = z.infer<typeof Schema>
 
   export type Input = {
+    purpose?: string
     command: string
     cwd: string
+    workspaceCwd?: string
     image: string
     packages: string[]
     gpu: string
@@ -57,6 +61,14 @@ export namespace ModalPlan {
   export type Prepared = { plan: Schema; files: ModalAdapter.File[] }
 
   const posix = (value: string) => value.split(path.sep).join("/").replace(/^\.\//, "")
+
+  function workspaceCwd(value: string | undefined) {
+    const current = posix(value?.trim() || ".")
+    if (path.posix.isAbsolute(current) || current.split("/").includes("..")) {
+      throw new Error(`Modal working directory must stay inside the session workspace: ${value}`)
+    }
+    return current || "."
+  }
 
   async function hash(file: string) {
     const data = await Bun.file(file).arrayBuffer()
@@ -138,6 +150,7 @@ export namespace ModalPlan {
     const upload = await files(input.cwd, input.uploads)
     const value = {
       provider: "modal" as const,
+      purpose: input.purpose?.trim() || "Research computation",
       app: input.context.app,
       environment: input.context.environment,
       image: input.image,
@@ -148,12 +161,16 @@ export namespace ModalPlan {
       network: input.context.network,
       command: input.command,
       cwd: input.cwd,
+      workspace_cwd: workspaceCwd(input.workspaceCwd),
       uploads: upload.files.map((file) => ({ path: file.path, size: file.size, sha256: file.sha256 })),
       upload_bytes: upload.bytes,
       outputs: input.outputs.toSorted(),
       warning: "This run uses your Modal account and may incur charges until it exits, times out, or is cancelled.",
     }
-    const digest = new Bun.CryptoHasher("sha256").update(JSON.stringify(value)).digest("hex")
+    // The absolute cwd is a per-conversation scratch path. Bind the stable
+    // workspace-relative cwd plus reviewed input paths and hashes so exact
+    // project/global approvals can carry across isolated conversations.
+    const digest = new Bun.CryptoHasher("sha256").update(JSON.stringify({ ...value, cwd: undefined })).digest("hex")
     return { plan: Schema.parse({ digest, ...value }), files: upload.files }
   }
 }

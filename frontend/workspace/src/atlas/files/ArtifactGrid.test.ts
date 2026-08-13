@@ -86,7 +86,7 @@ describe("artifact grid", () => {
   test("counts what it shows", () => {
     const host = mount(() => subject.ArtifactGrid(props() as never))
 
-    expect(host.querySelector("[data-artifact-count]")?.textContent).toBe("2 artifacts")
+    expect(host.querySelector("[data-artifact-count]")?.textContent).toBe("2 results")
   })
 
   test("groups under Created and flattens under Name", () => {
@@ -154,18 +154,18 @@ describe("artifact grid", () => {
   test("says a search matched nothing rather than claiming none are saved", () => {
     const host = mount(() => subject.ArtifactGrid(props({ artifacts: [], filtered: true }) as never))
 
-    expect(host.textContent).toContain("No matching artifacts")
+    expect(host.textContent).toContain("No matching results")
     expect(host.textContent).toContain("clear the search")
-    expect(host.textContent).not.toContain("No saved artifacts yet")
+    expect(host.textContent).not.toContain("No saved results yet")
   })
 
   test("names the empty state for artifacts, not folders", () => {
     const host = mount(() => subject.ArtifactGrid(props({ artifacts: [] }) as never))
 
-    expect(host.textContent).toContain("No saved artifacts yet")
+    expect(host.textContent).toContain("No saved results yet")
     expect(host.textContent).toContain("versions intact")
     expect(host.textContent).not.toContain("folder")
-    expect(host.querySelector("[data-artifact-count]")?.textContent).toBe("0 artifacts")
+    expect(host.querySelector("[data-artifact-count]")?.textContent).toBe("0 results")
   })
 
   // One plain-language view control reduces toolbar icons and cannot be

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
-import { settingsApi } from "../settings/api"
 
 const root = join(import.meta.dir, "../..")
 const read = (relative: string) => readFileSync(join(root, relative), "utf8")
@@ -49,30 +48,15 @@ describe("reviewer workflow truth pass", () => {
     expect(model).toContain('"open" | "addressed" | "confirmed"')
   })
 
-  test("the auto-review toggle persists through the review settings store", () => {
-    const specialists = read("components/settings/Specialists.tsx")
+  test("review stays an on-demand Research capability, not a separate settings mode", () => {
+    const registry = read("components/settings/registry.ts")
+    const stored = read("artifacts/StoredArtifactView.tsx")
 
-    expect(specialists).toContain('"/settings/review"')
-    expect(specialists).toContain("Automatically review significant results")
-    expect(specialists).toContain("Checks durable results without interrupting the active research session.")
-    expect(specialists).toContain('method: "PUT"')
-  })
-
-  test("the review settings round-trip preserves the auto flag", async () => {
-    const calls: Array<{ url: string; method?: string }> = []
-    const fetchFn = (async (url: RequestInfo | URL, init?: RequestInit) => {
-      calls.push({ url: String(url), method: init?.method })
-      const body = typeof init?.body === "string" ? init.body : JSON.stringify({ auto: false })
-      return new Response(body, { headers: { "content-type": "application/json" } })
-    }) as typeof fetch
-
-    const state = await settingsApi<{ auto: boolean }>("http://127.0.0.1:4096", fetchFn, "/settings/review", {
-      method: "PUT",
-      body: JSON.stringify({ auto: true }),
-    })
-
-    expect(state).toEqual({ auto: true })
-    expect(calls).toEqual([{ url: "http://127.0.0.1:4096/settings/review", method: "PUT" }])
+    expect(registry).not.toContain('title: "Specialists"')
+    expect(registry).not.toContain('title: "Reviewer"')
+    expect(stored).toContain("Run independent review")
+    expect(stored).not.toContain("Automatically review")
+    expect(stored).not.toContain("Reviewer model")
   })
 
   test("deterministic checks present as a preflight, never as scientific review", () => {

@@ -42,6 +42,9 @@ export namespace ExecutionAuthority {
     trustRevision: z.number().int().positive(),
     grantRevision: z.number().int().positive(),
     generation: z.string(),
+    /** Canonical project instance directory. Older persisted job decisions
+     * omitted this and recover through their historical workspace value. */
+    directory: z.string().optional(),
     workspace: z.string(),
     readable: z.array(z.string()),
     writable: z.array(z.string()),
@@ -119,6 +122,7 @@ export namespace ExecutionAuthority {
       trustRevision: trust.revision,
       grantRevision: filesystem.revision,
       generation,
+      directory: Instance.directory,
       workspace,
       readable,
       writable,

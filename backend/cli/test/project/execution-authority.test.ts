@@ -84,7 +84,8 @@ test("read-only project authority rejects terminal, shell, and kernel before pro
         },
       })
       expect(decision.grantRevision).toBeGreaterThanOrEqual(1)
-      expect(decision.workspace).toBe(tmp.path)
+      expect(decision.directory).toBe(tmp.path)
+      expect(decision.workspace).toBe(await SessionFilesystem.workspace(session.id))
       expect(decision.writable).toContain(tmp.path)
 
       await expect(Pty.create({ sessionID: session.id })).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)

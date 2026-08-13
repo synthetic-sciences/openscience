@@ -82,7 +82,7 @@ export namespace Agent {
         name: "research",
         description: "Primary research agent for focused questions, analysis, synthesis, and durable outputs.",
         options: {},
-        color: "#06b6d4",
+        color: "#d48765",
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
@@ -109,6 +109,7 @@ export namespace Agent {
         ),
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       // --- Physics ---
       physics: {
@@ -126,6 +127,7 @@ export namespace Agent {
         ),
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       // --- Machine learning ---
       ml: {
@@ -143,6 +145,7 @@ export namespace Agent {
         ),
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       // --- Utilities ---
       write: {
@@ -160,6 +163,7 @@ export namespace Agent {
         ),
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       plan: {
         name: "plan",
@@ -183,8 +187,53 @@ export namespace Agent {
         ),
         mode: "primary",
         native: true,
+        hidden: true,
       },
-      // --- Subagents (not shown in picker) ---
+      // --- Internal delegation profiles ---
+      // The product exposes capabilities and effort, not a catalog of domain
+      // personas. Research loads domain knowledge lazily through skills and
+      // delegates only by the kind of work that needs doing.
+      execute: {
+        name: "execute",
+        description:
+          "Bounded implementation or computational work with the active project permissions. Returns concrete results to Research.",
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+        hidden: true,
+      },
+      review: {
+        name: "review",
+        steps: 60,
+        description:
+          "Proportionate, read-only review of observable files, results, citations, and provenance when the risk justifies it.",
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+            read: "allow",
+            glob: "allow",
+            grep: "allow",
+            provenance_query: "allow",
+            provenance_review: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_REVIEWER,
+        options: {},
+        mode: "subagent",
+        native: true,
+        hidden: true,
+      },
+      // --- Compatibility aliases (retrievable, never advertised) ---
       task: {
         name: "task",
         description:
@@ -200,6 +249,7 @@ export namespace Agent {
         options: {},
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       explore: {
         name: "explore",
@@ -227,6 +277,7 @@ export namespace Agent {
         options: {},
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       "literature-review": {
         name: "literature-review",
@@ -252,6 +303,7 @@ export namespace Agent {
         color: "#818cf8",
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       critique: {
         name: "critique",
@@ -274,6 +326,7 @@ export namespace Agent {
         color: "#ef4444",
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       "physics-critique": {
         name: "physics-critique",
@@ -296,6 +349,7 @@ export namespace Agent {
         color: "#c084fc",
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       reviewer: {
         name: "reviewer",
@@ -319,6 +373,7 @@ export namespace Agent {
         color: "#f59e0b",
         mode: "subagent",
         native: true,
+        hidden: true,
       },
       "artifact-reviewer": {
         name: "artifact-reviewer",
@@ -455,7 +510,12 @@ export namespace Agent {
       const agent = agents[cfg.default_agent]
       if (!agent) throw new Error(`default agent "${cfg.default_agent}" not found`)
       if (agent.mode === "subagent") throw new Error(`default agent "${cfg.default_agent}" is a subagent`)
-      if (agent.hidden === true) throw new Error(`default agent "${cfg.default_agent}" is hidden`)
+      // Plan is no longer advertised, but an older trusted config may still
+      // name it explicitly. Keep that deliberate compatibility path working;
+      // arbitrary hidden agents remain invalid defaults.
+      if (agent.hidden === true && agent.name !== "plan") {
+        throw new Error(`default agent "${cfg.default_agent}" is hidden`)
+      }
       return agent.name
     }
 

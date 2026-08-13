@@ -188,7 +188,7 @@ export default function Layout(props: ParentProps) {
                   window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
                   showToast({
                     variant: "success",
-                    title: "saved as artifact",
+                    title: "saved as Result",
                     description: `${path} · v${ref.current?.version ?? 1}`,
                   })
                   return { version: ref.current?.version ?? 1 }

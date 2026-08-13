@@ -24,6 +24,7 @@ type Host = {
   port?: number
   scheduler: Scheduler
   workdir?: string
+  notes?: string
   fingerprint?: string
   concurrency: number
 }
@@ -32,6 +33,12 @@ type Provider = {
   connected: boolean
   enabled: boolean
   source: "stored" | "modal_toml" | null
+}
+type ConfigHost = {
+  alias: string
+  hostname?: string
+  user?: string
+  port?: number
 }
 type Modal = {
   app: string
@@ -43,6 +50,7 @@ type Modal = {
 type Info = {
   providers: Provider[]
   ssh_hosts: Host[]
+  ssh_config_hosts: ConfigHost[]
   modal: Modal
   modal_file: { found: boolean; ready: boolean }
 }
@@ -87,7 +95,10 @@ const Compute: Component = () => {
     port: "",
     scheduler: "none" as Scheduler,
     workdir: "",
+    notes: "",
     sshConcurrency: "4",
+    editingHost: undefined as string | undefined,
+    notesDraft: "",
     token: "",
     secret: "",
     app: "",
@@ -112,8 +123,9 @@ const Compute: Component = () => {
   const isBusy = (key: string) => Boolean(state.busy[key])
   const hasBusyPrefix = (prefix: string) => Object.keys(state.busy).some((key) => key.startsWith(prefix))
   const modalBusy = () => hasBusyPrefix("modal:")
-  const sshMutationBusy = () => isBusy("ssh:add") || hasBusyPrefix("ssh:remove:")
-  const hostBusy = (id: string) => isBusy(`ssh:test:${id}`) || isBusy(`ssh:remove:${id}`)
+  const sshMutationBusy = () =>
+    isBusy("ssh:add") || hasBusyPrefix("ssh:remove:") || hasBusyPrefix("ssh:update:") || hasBusyPrefix("ssh:import:")
+  const hostBusy = (id: string) => isBusy(`ssh:test:${id}`) || isBusy(`ssh:remove:${id}`) || isBusy(`ssh:update:${id}`)
   const probes = () => state.probes
   const setProbes: Setter<Record<string, Probe>> = (value) => setState("probes", value)
   const label = () => state.label
@@ -128,8 +140,13 @@ const Compute: Component = () => {
   const setScheduler: Setter<Scheduler> = (value) => setState("scheduler", value)
   const workdir = () => state.workdir
   const setWorkdir: Setter<string> = (value) => setState("workdir", value)
+  const notes = () => state.notes
+  const setNotes: Setter<string> = (value) => setState("notes", value)
   const sshConcurrency = () => state.sshConcurrency
   const setSshConcurrency: Setter<string> = (value) => setState("sshConcurrency", value)
+  const editingHost = () => state.editingHost
+  const notesDraft = () => state.notesDraft
+  const setNotesDraft: Setter<string> = (value) => setState("notesDraft", value)
   const token = () => state.token
   const setToken: Setter<string> = (value) => setState("token", value)
   const secret = () => state.secret
@@ -155,6 +172,12 @@ const Compute: Component = () => {
     return value
   }
   const modal = () => data()?.providers.find((item) => item.id === "modal")
+  const configHosts = () => {
+    const saved = new Set(data()?.ssh_hosts.flatMap((item) => [item.label, item.host]) ?? [])
+    return (
+      data()?.ssh_config_hosts.filter((item) => !saved.has(item.alias) && !saved.has(item.hostname ?? item.alias)) ?? []
+    )
+  }
   const dirty = () => {
     const value = data()?.modal
     if (!value) return false
@@ -366,6 +389,7 @@ const Compute: Component = () => {
     setPort("")
     setScheduler("none")
     setWorkdir("")
+    setNotes("")
     setSshConcurrency("4")
     setAdding(false)
   }
@@ -391,6 +415,7 @@ const Compute: Component = () => {
         port: parsedPort,
         scheduler: scheduler(),
         workdir: workdir().trim() || undefined,
+        notes: notes().trim() || undefined,
         concurrency: limit,
       }),
     }).catch((error) => {
@@ -424,6 +449,56 @@ const Compute: Component = () => {
       title: result.ok ? `${item.label} is reachable` : `Could not reach ${item.label}`,
       description: result.ok ? `${result.latency_ms} ms · ${capabilities(result)}` : result.error,
     })
+  }
+
+  const importHost = async (item: ConfigHost) => {
+    const busyKey = `ssh:import:${item.alias}`
+    setBusy(busyKey, true)
+    const next = await call<Info>("/ssh", {
+      method: "POST",
+      body: JSON.stringify({
+        label: item.alias,
+        host: item.hostname ?? item.alias,
+        user: item.user,
+        port: item.port,
+        scheduler: "none",
+        concurrency: 4,
+      }),
+    }).catch((error) => {
+      showToast({ title: "Could not import SSH host", description: message(error) })
+      return undefined
+    })
+    setBusy(busyKey, false)
+    if (!next) return
+    control.mutate(next)
+    showToast({ variant: "success", title: `${item.alias} imported`, description: "Test it to pin the host key." })
+  }
+
+  const beginNotes = (item: Host) => {
+    setState("editingHost", item.id)
+    setNotesDraft(item.notes ?? "")
+  }
+
+  const cancelNotes = () => {
+    setState("editingHost", undefined)
+    setNotesDraft("")
+  }
+
+  const saveNotes = async (item: Host) => {
+    const busyKey = `ssh:update:${item.id}`
+    setBusy(busyKey, true)
+    const next = await call<Info>(`/ssh/${item.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ notes: notesDraft().trim() }),
+    }).catch((error) => {
+      showToast({ title: "Could not save host notes", description: message(error) })
+      return undefined
+    })
+    setBusy(busyKey, false)
+    if (!next) return
+    control.mutate(next)
+    cancelNotes()
+    showToast({ variant: "success", title: "Host notes saved" })
   }
 
   const remove = async (item: Host) => {
@@ -601,6 +676,7 @@ const Compute: Component = () => {
                   <div class="settings-compute-actions">
                     <Button
                       class="settings-panel-action settings-panel-action--quiet"
+                      type="button"
                       size="small"
                       variant="secondary"
                       disabled={!modal()?.enabled || modalBusy()}
@@ -665,78 +741,175 @@ const Compute: Component = () => {
                       {(item) => {
                         const probe = () => probes()[item.id]
                         return (
-                          <div class="settings-row settings-compute-host-row">
-                            <div class="settings-compute-host-copy">
-                              <div class="settings-row-icon mt-0.5" aria-hidden="true">
-                                <Icon name="server" size="small" />
-                              </div>
-                              <div class="min-w-0 flex-1">
-                                <div class="flex min-w-0 flex-wrap items-center gap-2">
-                                  <span class="truncate text-14-medium text-text-strong">{item.label}</span>
-                                  <Badge tone={probe()?.ok || item.fingerprint ? "ready" : "muted"}>
-                                    {probe()?.ok
-                                      ? "Ready to dispatch"
-                                      : item.fingerprint
-                                        ? "Host key pinned"
-                                        : schedulerLabel(item.scheduler)}
-                                  </Badge>
+                          <>
+                            <div class="settings-row settings-compute-host-row">
+                              <div class="settings-compute-host-copy">
+                                <div class="settings-row-icon mt-0.5" aria-hidden="true">
+                                  <Icon name="server" size="small" />
                                 </div>
-                                <p class="mt-0.5 truncate text-12-regular text-text-weak">
-                                  {destination(item)}
-                                  {item.workdir ? ` · ${item.workdir}` : ""}
-                                </p>
-                                <Show when={probe()}>
-                                  {(result) => (
-                                    <p
-                                      class={
-                                        result().ok
-                                          ? "mt-1 text-11-regular text-text-success"
-                                          : "mt-1 text-11-regular text-text-danger"
-                                      }
-                                    >
-                                      {result().ok
-                                        ? `${result().latency_ms} ms · ${capabilities(result())}`
-                                        : result().error}
-                                    </p>
-                                  )}
-                                </Show>
-                                <Show when={item.fingerprint}>
-                                  <p
-                                    class="mt-1 truncate font-mono text-11-regular text-text-weak"
-                                    title={item.fingerprint}
-                                  >
-                                    {item.fingerprint} · {item.concurrency} concurrent job
-                                    {item.concurrency === 1 ? "" : "s"}
+                                <div class="min-w-0 flex-1">
+                                  <div class="flex min-w-0 flex-wrap items-center gap-2">
+                                    <span class="truncate text-14-medium text-text-strong">{item.label}</span>
+                                    <Badge tone={probe()?.ok || item.fingerprint ? "ready" : "muted"}>
+                                      {probe()?.ok
+                                        ? "Ready to dispatch"
+                                        : item.fingerprint
+                                          ? "Host key pinned"
+                                          : schedulerLabel(item.scheduler)}
+                                    </Badge>
+                                  </div>
+                                  <p class="mt-0.5 truncate text-12-regular text-text-weak">
+                                    {destination(item)}
+                                    {item.workdir ? ` · ${item.workdir}` : ""}
                                   </p>
-                                </Show>
+                                  <Show when={item.notes}>
+                                    <p class="settings-compute-host-notes-copy">{item.notes}</p>
+                                  </Show>
+                                  <Show when={probe()}>
+                                    {(result) => (
+                                      <p
+                                        class={
+                                          result().ok
+                                            ? "mt-1 text-11-regular text-text-success"
+                                            : "mt-1 text-11-regular text-text-danger"
+                                        }
+                                      >
+                                        {result().ok
+                                          ? `${result().latency_ms} ms · ${capabilities(result())}`
+                                          : result().error}
+                                      </p>
+                                    )}
+                                  </Show>
+                                  <Show when={item.fingerprint}>
+                                    <p
+                                      class="mt-1 truncate font-mono text-11-regular text-text-weak"
+                                      title={item.fingerprint}
+                                    >
+                                      {item.fingerprint} · {item.concurrency} concurrent job
+                                      {item.concurrency === 1 ? "" : "s"}
+                                    </p>
+                                  </Show>
+                                </div>
+                              </div>
+                              <div class="settings-compute-host-actions">
+                                <Button
+                                  class="settings-panel-action settings-panel-action--quiet"
+                                  size="small"
+                                  variant="secondary"
+                                  disabled={hostBusy(item.id) || sshMutationBusy()}
+                                  onClick={() => void test(item)}
+                                >
+                                  {isBusy(`ssh:test:${item.id}`) ? "Testing…" : "Test"}
+                                </Button>
+                                <Button
+                                  class="settings-panel-action settings-panel-action--quiet"
+                                  size="small"
+                                  variant="ghost"
+                                  disabled={hostBusy(item.id) || sshMutationBusy()}
+                                  onClick={() => beginNotes(item)}
+                                >
+                                  Edit notes
+                                </Button>
+                                <Button
+                                  class="settings-panel-action settings-panel-action--danger-quiet"
+                                  size="small"
+                                  variant="ghost"
+                                  disabled={hostBusy(item.id) || sshMutationBusy()}
+                                  onClick={() => void remove(item)}
+                                >
+                                  Remove
+                                </Button>
                               </div>
                             </div>
-                            <div class="settings-compute-host-actions">
-                              <Button
-                                class="settings-panel-action settings-panel-action--quiet"
-                                size="small"
-                                variant="secondary"
-                                disabled={hostBusy(item.id) || sshMutationBusy()}
-                                onClick={() => void test(item)}
+                            <Show when={editingHost() === item.id}>
+                              <form
+                                class="settings-compute-host-notes-editor"
+                                onSubmit={(event) => {
+                                  event.preventDefault()
+                                  void saveNotes(item)
+                                }}
                               >
-                                {isBusy(`ssh:test:${item.id}`) ? "Testing…" : "Test"}
-                              </Button>
-                              <Button
-                                class="settings-panel-action settings-panel-action--danger-quiet"
-                                size="small"
-                                variant="ghost"
-                                disabled={hostBusy(item.id) || sshMutationBusy()}
-                                onClick={() => void remove(item)}
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          </div>
+                                <TextArea
+                                  label="Host notes"
+                                  value={notesDraft()}
+                                  placeholder="Modules, partitions, scratch paths, or installation rules"
+                                  onInput={setNotesDraft}
+                                />
+                                <p>Advisory only. Notes are shown during review and never run as commands.</p>
+                                <div class="settings-inline-editor__actions">
+                                  <Button
+                                    class="settings-panel-action settings-panel-action--quiet"
+                                    type="button"
+                                    size="small"
+                                    variant="ghost"
+                                    disabled={isBusy(`ssh:update:${item.id}`)}
+                                    onClick={cancelNotes}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    class="settings-panel-action"
+                                    type="submit"
+                                    size="small"
+                                    variant="primary"
+                                    disabled={isBusy(`ssh:update:${item.id}`)}
+                                  >
+                                    {isBusy(`ssh:update:${item.id}`) ? "Saving…" : "Save notes"}
+                                  </Button>
+                                </div>
+                              </form>
+                            </Show>
+                          </>
                         )
                       }}
                     </For>
                   </Panel>
                 </Show>
+              </Show>
+
+              <Show when={configHosts().length > 0}>
+                <div class="settings-compute-config-import">
+                  <div class="settings-compute-config-import__heading">
+                    <div>
+                      <h4>From ~/.ssh/config</h4>
+                      <p>
+                        Literal host entries only. Imports host, user, and port; Match, Include, identity files, and
+                        proxy commands stay untouched.
+                      </p>
+                    </div>
+                  </div>
+                  <Panel>
+                    <For each={configHosts()}>
+                      {(item) => (
+                        <div class="settings-row settings-compute-host-row">
+                          <div class="settings-compute-host-copy">
+                            <div class="settings-row-icon mt-0.5" aria-hidden="true">
+                              <Icon name="server" size="small" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                              <p class="text-13-medium text-text-strong">{item.alias}</p>
+                              <p class="mt-0.5 truncate text-11-regular text-text-weak">
+                                {[item.user, item.hostname ?? item.alias].filter(Boolean).join("@")}
+                                {item.port ? `:${item.port}` : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <div class="settings-compute-host-actions">
+                            <Button
+                              class="settings-panel-action settings-panel-action--quiet"
+                              size="small"
+                              variant="secondary"
+                              disabled={sshMutationBusy() || isBusy(`ssh:import:${item.alias}`)}
+                              onClick={() => void importHost(item)}
+                            >
+                              {isBusy(`ssh:import:${item.alias}`) ? "Importing…" : "Import"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </Panel>
+                </div>
               </Show>
 
               <Show when={(data()?.ssh_hosts.length ?? 0) > 0 && !adding()}>
@@ -802,10 +975,19 @@ const Compute: Component = () => {
                       inputMode="numeric"
                       onInput={setSshConcurrency}
                     />
+                    <div class="sm:col-span-2">
+                      <TextArea
+                        label="Host notes"
+                        value={notes()}
+                        placeholder="Modules, partitions, scratch paths, or installation rules"
+                        onInput={setNotes}
+                      />
+                    </div>
                   </div>
                   <div class="settings-compute-actions">
                     <Button
                       class="settings-panel-action settings-panel-action--quiet"
+                      type="button"
                       size="small"
                       variant="ghost"
                       disabled={isBusy("ssh:add")}
@@ -851,6 +1033,25 @@ const Field: Component<{
       placeholder={props.placeholder}
       type={props.type}
       inputMode={props.inputMode}
+      onInput={(event) => props.onInput(event.currentTarget.value)}
+    />
+  </label>
+)
+
+const TextArea: Component<{
+  label: string
+  value: string
+  placeholder: string
+  onInput: (value: string) => void
+}> = (props) => (
+  <label class="flex min-w-0 flex-col gap-1.5">
+    <span class="text-12-medium text-text-strong">{props.label}</span>
+    <textarea
+      class="settings-field settings-compute-notes-field"
+      value={props.value}
+      placeholder={props.placeholder}
+      maxlength={4_000}
+      rows={3}
       onInput={(event) => props.onInput(event.currentTarget.value)}
     />
   </label>

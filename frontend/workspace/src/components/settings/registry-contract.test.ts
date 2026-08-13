@@ -6,7 +6,6 @@ const modules: Record<(typeof SETTINGS_PANEL_IDS)[number], string> = {
   models: "Models",
   skills: "Skills",
   connectors: "Connectors",
-  specialists: "Specialists",
   compute: "Compute",
   network: "Network",
   permissions: "Permissions",
@@ -50,5 +49,12 @@ describe("settings registry source contract", () => {
     expect(models).toContain("<CodexConnection")
     expect(models).toContain("<ProviderKeys")
     expect(general).toContain("<AppearanceSections")
+  })
+
+  test("keeps specialist and memory implementations unavailable from the settings surface", () => {
+    expect(SETTINGS_PANEL_IDS).not.toContain("specialists" as never)
+    expect(SETTINGS_PANEL_IDS).not.toContain("memory" as never)
+    expect(SETTINGS_PANELS.map((panel) => panel.title)).not.toContain("Specialists")
+    expect(SETTINGS_PANELS.map((panel) => panel.title)).not.toContain("Memory")
   })
 })

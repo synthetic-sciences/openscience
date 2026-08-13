@@ -3,6 +3,7 @@ import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { OpenScience } from "../../src/openscience"
 import { Provenance } from "../../src/science/provenance/store"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import { executionSession, tmpdir } from "../fixture/fixture"
 
 async function context() {
@@ -26,6 +27,7 @@ describe("tool.bash provenance", () => {
       directory: tmp.path,
       fn: async () => {
         const ctx = await context()
+        const workspace = await SessionFilesystem.workspace(ctx.sessionID)
         const bash = await BashTool.init()
         const result = await bash.execute(
           {
@@ -55,7 +57,7 @@ describe("tool.bash provenance", () => {
             },
             input: {
               code: { status: "available", value: "echo provenance" },
-              cwd: { status: "available", value: tmp.path },
+              cwd: { status: "available", value: workspace },
             },
             environment: {
               host: {
@@ -87,7 +89,7 @@ describe("tool.bash provenance", () => {
             messageID: ctx.messageID,
             callID: ctx.callID,
             exit: 0,
-            cwd: tmp.path,
+            cwd: workspace,
             stdout: "provenance\n",
             stderr: "",
           },

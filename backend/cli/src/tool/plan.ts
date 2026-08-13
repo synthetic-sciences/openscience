@@ -17,6 +17,13 @@ async function getLastModel(sessionID: string) {
   return Provider.defaultModel()
 }
 
+async function getLastEffort(sessionID: string) {
+  for await (const item of MessageV2.stream(sessionID)) {
+    if (item.info.role === "user") return MessageV2.resolveResearchEffort(item.info.effort)
+  }
+  return "normal" as const
+}
+
 export const PlanExitTool = Tool.define("plan_exit", {
   description: EXIT_DESCRIPTION,
   parameters: z.object({}),
@@ -43,6 +50,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
     if (answer === "No") throw new Question.RejectedError()
 
     const model = await getLastModel(ctx.sessionID)
+    const effort = await getLastEffort(ctx.sessionID)
 
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),
@@ -53,6 +61,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
       },
       agent: "research",
       model,
+      effort,
     }
     await Session.updateMessage(userMsg)
     await Session.updatePart({
@@ -100,6 +109,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
     if (answer === "No") throw new Question.RejectedError()
 
     const model = await getLastModel(ctx.sessionID)
+    const effort = await getLastEffort(ctx.sessionID)
 
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),
@@ -110,6 +120,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
       },
       agent: "plan",
       model,
+      effort,
     }
     await Session.updateMessage(userMsg)
     await Session.updatePart({

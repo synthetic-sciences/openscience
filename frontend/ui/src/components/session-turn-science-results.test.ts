@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 const source = readFileSync(fileURLToPath(new URL("./session-turn.tsx", import.meta.url)), "utf8")
 
 test("successful science results stay outside collapsed steps while failures remain inspectable", () => {
-  expect(source).toContain('new Set(["notebook", "rkernel", "modal", "compute_job"])')
+  expect(source).toContain('new Set(["python", "r", "notebook", "rkernel", "modal", "compute_job"])')
   expect(source).toContain('aria-label="Analysis code and results"')
   expect(source).toContain("hidePromotedTools")
   expect(source).toContain(".filter(isPromotedTool)")

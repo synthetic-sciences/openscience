@@ -1,5 +1,4 @@
 export const artifactKinds = [
-  "notebook",
   "dataset",
   "figure",
   "report",
@@ -96,21 +95,6 @@ export function formatArtifactKind(kind: ArtifactKind): string {
 export function artifactActions(artifact: ArtifactInfo): ArtifactAction[] {
   const path = artifact.path
   const actions: Record<ArtifactKind, Array<Omit<ArtifactAction, "prompt"> & { instruction: string }>> = {
-    notebook: [
-      {
-        id: "run-notebook",
-        label: "Run & repair",
-        description: "Execute cells, preserve outputs, and fix failures.",
-        instruction: "Open this notebook, inspect it, and run it cell by cell. Repair failures without losing outputs.",
-      },
-      {
-        id: "export-notebook",
-        label: "Prepare report",
-        description: "Turn the executed notebook into a concise report.",
-        instruction:
-          "Turn this notebook into a concise, reproducible report with the strongest figures and limitations.",
-      },
-    ],
     dataset: [
       {
         id: "inspect-quality",
@@ -129,8 +113,8 @@ export function artifactActions(artifact: ArtifactInfo): ArtifactAction[] {
       {
         id: "analyze",
         label: "Analyze",
-        description: "Answer the most decision-relevant question in a notebook.",
-        instruction: "Analyze this dataset in a reproducible notebook. State assumptions and save reusable outputs.",
+        description: "Answer the most decision-relevant question with a reproducible analysis.",
+        instruction: "Analyze this dataset reproducibly. State assumptions and save reusable code and outputs.",
       },
     ],
     figure: [

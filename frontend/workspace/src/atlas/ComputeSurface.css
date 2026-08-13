@@ -1,9 +1,11 @@
 .compute-surface {
   container: compute / inline-size;
-  --compute-divider: var(--border-weak-base);
-  --compute-tint: color-mix(in srgb, var(--color-bg-subtle) 56%, var(--color-bg));
-  --compute-radius-control: 10px;
-  --compute-radius-card: 12px;
+  --activity-surface: color-mix(in srgb, var(--color-bg-subtle) 68%, var(--color-bg));
+  --activity-surface-raised: color-mix(in srgb, var(--color-bg-subtle) 88%, var(--color-bg));
+  --activity-research: color-mix(in srgb, var(--color-bg-subtle) 54%, var(--color-bg));
+  --activity-local: color-mix(in srgb, var(--color-success) 3%, var(--color-bg));
+  --activity-remote: color-mix(in srgb, var(--color-warning) 3%, var(--color-bg));
+  --activity-divider: color-mix(in srgb, var(--color-border) 68%, transparent);
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -15,8 +17,80 @@
   color: var(--color-text);
   font-family: inherit;
   font-size: 13px;
+  line-height: 1.4;
+}
+
+.activity-surface__capacity {
+  flex: none;
+  margin: 8px 10px 0;
+  border: 0;
+  border-radius: 11px;
+  background: var(--activity-surface);
+  color: var(--color-text-muted);
+}
+
+.activity-surface__capacity > summary {
+  display: flex;
+  min-height: 32px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: inherit;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 140ms ease;
+}
+
+.activity-surface__capacity > summary::-webkit-details-marker {
+  display: none;
+}
+
+.activity-surface__capacity > summary::after {
+  content: "+";
+  flex: none;
+  color: var(--color-text-faint);
+  font-size: 15px;
   font-weight: var(--font-weight-regular);
-  line-height: 1.35;
+  line-height: 1;
+}
+
+.activity-surface__capacity[open] > summary::after {
+  content: "−";
+}
+
+.activity-surface__capacity > summary:hover {
+  background: var(--activity-surface-raised);
+}
+
+.activity-surface__capacity > summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.activity-surface__capacity > summary span {
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+}
+
+.activity-surface__capacity > summary small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-surface__capacity .host-strip {
+  margin: 0;
+  padding-inline: 10px;
+  border-top: 1px solid var(--activity-divider);
+  border-radius: 0 0 11px 11px;
+  background: transparent;
 }
 
 .compute-surface__panel,
@@ -35,24 +109,24 @@
   padding: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .compute-surface .kernel-panel__message {
-  min-height: 38px;
+  min-height: 36px;
   box-sizing: border-box;
   margin: 10px 12px 0;
   padding: 9px 11px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--atlas-radius-xs);
-  background: var(--color-bg);
+  border: 0;
+  border-radius: 10px;
+  background: var(--activity-surface);
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
 
 .compute-surface .kernel-panel__message--error {
-  border-color: color-mix(in srgb, var(--color-error) 24%, var(--color-border));
-  background: color-mix(in srgb, var(--color-error) 4%, var(--color-bg));
+  background: color-mix(in srgb, var(--color-error) 7%, var(--color-bg));
   color: var(--color-error);
 }
 
@@ -85,35 +159,25 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 20px;
-  padding: 18px 12px 24px;
+  gap: 22px;
+  padding: 16px 10px 24px;
 }
 
 .compute-surface .kernel-session {
   min-width: 0;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
 }
 
 .compute-surface .kernel-session__header {
-  display: grid;
+  display: flex;
   min-width: 0;
-  min-height: 36px;
+  min-height: 32px;
   box-sizing: border-box;
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: 0 4px 8px;
-  border-bottom: 0;
-  background: transparent;
+  padding: 0 4px 7px;
   color: var(--color-text-muted);
-  font-size: 12px;
-}
-
-.compute-surface .kernel-session[data-current="true"] .kernel-session__header {
-  background: transparent;
+  font-size: 11px;
 }
 
 .compute-surface .kernel-session__identity {
@@ -135,46 +199,68 @@
 .compute-surface .kernel-session__identity em {
   flex: none;
   padding: 1px 6px;
-  border: 0;
   border-radius: 999px;
-  background: var(--color-bg-subtle);
+  background: var(--activity-surface);
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 10px;
   font-style: normal;
-  line-height: 1.2;
+  line-height: 1.4;
 }
 
 .compute-surface .kernel-session__summary {
-  display: flex;
   min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.compute-surface .kernel-session__summary > span {
   overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.compute-surface .kernel-session__summary > span + span {
-  position: relative;
-  padding-left: 10px;
+.compute-surface .activity-boundary {
+  min-width: 0;
+  padding: 5px;
+  border-radius: 14px;
 }
 
-.compute-surface .kernel-session__summary > span + span::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 2px;
-  height: 2px;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0.55;
+.compute-surface .activity-boundary + .activity-boundary {
+  margin-top: 10px;
+}
+
+.compute-surface .activity-boundary[data-location="local"] {
+  background: var(--activity-local);
+}
+
+.compute-surface .activity-boundary[data-location="research"] {
+  background: var(--activity-research);
+}
+
+.compute-surface .activity-boundary[data-location="remote"] {
+  background: var(--activity-remote);
+}
+
+.compute-surface .activity-boundary__header {
+  display: flex;
+  min-height: 28px;
+  align-items: baseline;
+  gap: 7px;
+  padding: 4px 7px 7px;
+}
+
+.compute-surface .activity-boundary__header strong {
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.01em;
+}
+
+.compute-surface .activity-boundary__header span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .compute-surface .kernel-panel__list {
@@ -184,45 +270,66 @@
   gap: 4px;
 }
 
-.compute-surface .kernel-card {
+.compute-surface .activity-card {
   display: grid;
   min-width: 0;
-  min-height: 66px;
   box-sizing: border-box;
-  grid-template-columns: minmax(150px, 1fr) minmax(190px, auto) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px 10px;
+  padding: 10px 11px;
   border: 0;
-  border-radius: var(--compute-radius-card);
-  background: color-mix(in srgb, var(--color-bg-subtle) 72%, var(--color-bg));
-  box-shadow: none;
-  transition: background-color 140ms ease;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--color-bg) 94%, var(--color-bg-subtle));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent);
+  transition:
+    background-color 140ms ease,
+    transform 140ms ease;
 }
 
-.compute-surface .kernel-card:hover {
-  background: color-mix(in srgb, var(--color-bg-subtle) 92%, var(--color-bg));
+.compute-surface .activity-card:hover {
+  background: color-mix(in srgb, var(--color-bg-subtle) 58%, var(--color-bg));
 }
 
-.compute-surface .kernel-card__main {
+.compute-surface .activity-card__header {
   display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 9px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.compute-surface .kernel-card__language {
-  display: grid;
-  width: 32px;
-  height: 32px;
+.compute-surface .execution-card .activity-card__header,
+.compute-surface .activity-card__summary,
+.compute-surface .remote-job-card__warning,
+.compute-surface .remote-job-card__billing,
+.compute-surface .activity-card__disclosures {
+  grid-column: 1 / -1;
+}
+
+.compute-surface .activity-card__identity {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.compute-surface .activity-card__kind {
+  display: inline-flex;
+  min-width: 28px;
+  height: 23px;
+  box-sizing: border-box;
   flex: none;
-  place-items: center;
-  border-radius: var(--compute-radius-control);
-  background: color-mix(in srgb, var(--color-focus) 10%, var(--color-bg));
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border-radius: 7px;
+  background: var(--activity-surface);
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: var(--font-weight-medium);
-  letter-spacing: 0;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .compute-surface .kernel-card__copy {
@@ -232,98 +339,84 @@
   gap: 2px;
 }
 
-.compute-surface .kernel-card__copy strong {
+.compute-surface .kernel-card__copy strong,
+.compute-surface .activity-card__identity > strong {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: var(--font-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.compute-surface .kernel-card__copy > span {
-  display: flex;
+.compute-surface .kernel-card__copy span {
   min-width: 0;
-  align-items: center;
-  gap: 5px;
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compute-surface .kernel-card__copy i {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: 999px;
-  background: var(--color-text-faint);
-}
-
-.compute-surface .kernel-card__copy i[data-tone="active"] {
-  background: var(--color-success);
-}
-
-.compute-surface .kernel-card__copy i[data-tone="pending"] {
-  background: var(--color-warning);
-}
-
-.compute-surface .kernel-card__copy i[data-tone="danger"] {
-  background: var(--color-error);
-}
-
-.compute-surface .kernel-card__copy i[data-tone="ready"] {
-  background: var(--color-success);
-}
-
-.compute-surface .kernel-card__uptime,
-.compute-surface .kernel-card__metric {
-  min-width: 0;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.compute-surface .kernel-card__metrics {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: repeat(3, minmax(54px, auto));
-  align-items: center;
-  gap: 12px;
-}
-
-.compute-surface .kernel-card__metric {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.compute-surface .kernel-card__metric strong {
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
-  text-overflow: ellipsis;
-}
-
-.compute-surface .kernel-card__metric small {
   overflow: hidden;
   color: var(--color-text-muted);
   font-size: 11px;
-  letter-spacing: 0;
-  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.compute-surface .activity-card__status {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--activity-surface);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+}
+
+.compute-surface .activity-card__status[data-tone="active"],
+.compute-surface .activity-card__status[data-tone="running"],
+.compute-surface .activity-card__status[data-tone="pending"],
+.compute-surface .activity-card__status[data-tone="queued"] {
+  background: color-mix(in srgb, var(--color-warning) 11%, var(--color-bg));
+  color: color-mix(in srgb, var(--color-warning) 76%, var(--color-text));
+}
+
+.compute-surface .activity-card__status[data-tone="ready"],
+.compute-surface .activity-card__status[data-tone="succeeded"] {
+  background: color-mix(in srgb, var(--color-success) 10%, var(--color-bg));
+  color: color-mix(in srgb, var(--color-success) 76%, var(--color-text));
+}
+
+.compute-surface .activity-card__status[data-tone="danger"],
+.compute-surface .activity-card__status[data-tone="failed"],
+.compute-surface .activity-card__status[data-tone="interrupted"],
+.compute-surface .activity-card__status[data-tone="inconclusive"] {
+  background: color-mix(in srgb, var(--color-error) 9%, var(--color-bg));
+  color: var(--color-error);
+}
+
+.compute-surface .activity-card__summary {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.compute-surface .activity-card__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.compute-surface .activity-card__actions button,
 .compute-surface .kernel-card__stop {
   min-width: 48px;
   height: 32px;
+  box-sizing: border-box;
   padding: 0 9px;
-  border: 1px solid transparent;
-  border-radius: var(--compute-radius-control);
+  border: 0;
+  border-radius: 9px;
   background: transparent;
   color: var(--color-text-muted);
   font: inherit;
@@ -331,261 +424,285 @@
   cursor: pointer;
   transition:
     background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
+    color 140ms ease,
+    transform 140ms ease;
 }
 
-.compute-surface .kernel-card__stop:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--color-error) 36%, var(--color-border));
-  background: color-mix(in srgb, var(--color-error) 5%, transparent);
+.compute-surface .activity-card__actions button:hover:not(:disabled) {
+  background: var(--activity-surface);
+  color: var(--color-text);
+}
+
+.compute-surface .activity-card__actions .activity-card__danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-error) 7%, var(--color-bg));
   color: var(--color-error);
 }
 
-.compute-surface .kernel-card__stop:disabled {
+.compute-surface .activity-card__actions button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.compute-surface .activity-card__actions button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.compute-surface .kernel-card__stop:focus-visible {
+.compute-surface .activity-card__actions button:focus-visible,
+.compute-surface .activity-disclosure > summary:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 
-.compute-surface .kernel-card__cell {
-  grid-column: 1 / -1;
+.compute-surface .activity-card__disclosures {
+  display: flex;
   min-width: 0;
-  margin: 0 0 2px 41px;
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: var(--compute-radius-control);
-  background: var(--color-bg);
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding-top: 1px;
 }
 
-.compute-surface .kernel-card__cell summary {
-  min-height: 36px;
+.compute-surface .activity-disclosure {
   min-width: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  flex: 1 1 auto;
+  margin: 0;
+  border: 0;
+}
+
+.compute-surface .activity-disclosure > summary {
+  display: flex;
+  min-height: 32px;
+  box-sizing: border-box;
   align-items: center;
-  gap: 7px;
-  padding: 7px 9px;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
-  list-style-position: inside;
-}
-
-.compute-surface .kernel-card__cell summary strong,
-.compute-surface .kernel-card__cell summary small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  list-style: none;
   white-space: nowrap;
 }
 
-.compute-surface .kernel-card__cell summary strong {
-  color: var(--color-text);
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
+.compute-surface .activity-disclosure > summary::-webkit-details-marker {
+  display: none;
 }
 
-.compute-surface .kernel-card__cell summary small {
+.compute-surface .activity-disclosure > summary::after {
+  content: "+";
+  margin-left: 5px;
+  color: var(--color-text-faint);
+}
+
+.compute-surface .activity-disclosure[open] > summary::after {
+  content: "−";
+}
+
+.compute-surface .activity-disclosure[data-quiet="true"] > summary {
+  color: var(--color-text-faint);
+}
+
+.compute-surface .activity-disclosure__body {
+  min-width: min(320px, 100%);
+  padding: 8px 9px;
+  border-radius: 9px;
+  background: var(--activity-surface);
   color: var(--color-text-muted);
-  font-size: 12px;
 }
 
-.compute-surface .kernel-card__cell pre {
-  max-height: calc(5 * 1.45em + 16px);
+.compute-surface .activity-disclosure__caption,
+.compute-surface .activity-disclosure__note {
+  margin: 0 0 7px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.compute-surface .activity-disclosure__note {
+  margin: 8px 0 0;
+}
+
+.compute-surface .activity-disclosure pre {
+  max-height: 180px;
   margin: 0;
-  padding: 8px 10px;
   overflow: auto;
-  border-top: 1px solid var(--compute-divider);
-  background: var(--compute-tint);
   color: var(--color-text-muted);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  line-height: 1.45;
+  font-variant-numeric: tabular-nums slashed-zero;
+  line-height: 1.5;
   white-space: pre;
 }
 
-.compute-surface .kernel-card__cell code {
+.compute-surface .activity-disclosure code {
   font: inherit;
 }
 
-.compute-surface .remote-job-card {
-  grid-template-columns: minmax(160px, 1fr) minmax(190px, auto) auto;
-}
-
-.compute-surface .remote-job-card__summary {
+.compute-surface .activity-card__facts {
   display: grid;
   min-width: 0;
-  grid-template-columns: 64px minmax(110px, auto);
-  align-items: center;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 0;
 }
 
-.compute-surface .remote-job-card__result {
+.compute-surface .activity-card__facts > div {
+  min-width: 0;
+}
+
+.compute-surface .activity-card__facts dt {
+  margin: 0 0 1px;
+  color: var(--color-text-faint);
+  font-size: 10px;
+}
+
+/* Compatibility styling for extensions still rendering the former metric row. */
+.compute-surface .kernel-card__metric small {
+  color: var(--color-text-muted);
+}
+
+.compute-surface .activity-card__facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.compute-surface .activity-card__facts dd[data-mono="true"] {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+.compute-surface .execution-card__files {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 2px;
-  color: var(--color-text-muted);
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.compute-surface .remote-job-card__result strong {
-  color: var(--color-text);
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
-}
-
-.compute-surface .remote-job-card__result small {
-  overflow: hidden;
-  color: var(--color-text-muted);
+.compute-surface .execution-card__files li {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 12px;
   font-size: 11px;
+}
+
+.compute-surface .execution-card__files li span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.compute-surface .remote-job-card__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 5px;
-}
-
-.compute-surface .remote-job-card__actions button {
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: var(--compute-radius-control);
-  background: transparent;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
-}
-
-.compute-surface .remote-job-card__actions button:hover:not(:disabled) {
-  color: var(--color-text);
-  border-color: var(--color-border-strong, var(--color-border));
-  background: var(--compute-tint);
-}
-
-.compute-surface .remote-job-card__actions button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.compute-surface .remote-job-card__actions button:focus-visible,
-.compute-surface .kernel-card__cell summary:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.compute-surface .remote-job-card__warning,
-.compute-surface .remote-job-card__output {
-  grid-column: 1 / -1;
-  margin: 0 0 2px 41px;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--compute-radius-control);
-  background: var(--compute-tint);
-  color: var(--color-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.compute-surface .execution-card__files li small {
+  flex: none;
+  color: var(--color-text-faint);
+  font-size: 10px;
 }
 
 .compute-surface .remote-job-card__warning {
-  border-color: color-mix(in srgb, var(--color-error) 28%, var(--color-border));
+  margin: 1px 0 0;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-error) 6%, var(--color-bg));
   color: var(--color-error);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.compute-surface .remote-job-card__billing {
+  margin: 1px 0 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 @container compute (max-width: 470px) {
+  .activity-surface__capacity > summary small {
+    display: none;
+  }
+
+  .compute-surface .kernel-panel__sessions {
+    padding-inline: 8px;
+  }
+
   .compute-surface .kernel-session__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .compute-surface .activity-card {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
-    padding-block: 9px;
   }
 
-  .compute-surface .kernel-session__summary {
+  .compute-surface .activity-card__header,
+  .compute-surface .activity-card__actions {
+    grid-column: 1;
+  }
+
+  .compute-surface .activity-card__actions {
     justify-content: flex-start;
-    line-height: 1.35;
   }
 
-  .compute-surface .kernel-card {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
-    padding: 10px 12px;
-  }
-
-  .compute-surface .kernel-card__main {
-    grid-column: 1 / -1;
-  }
-
-  .compute-surface .kernel-card__metrics {
-    grid-column: 1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding-left: 41px;
-  }
-
-  .compute-surface .remote-job-card {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .compute-surface .remote-job-card__summary {
-    grid-column: 1;
-    grid-template-columns: minmax(50px, auto) minmax(0, 1fr);
-    padding-left: 0;
-  }
-
-  .compute-surface .remote-job-card__actions {
-    grid-column: 2;
-    grid-row: 2;
+  .compute-surface .activity-card__facts {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @container compute (max-width: 350px) {
   .compute-surface .kernel-panel__sessions {
-    padding-inline: 8px;
+    padding-inline: 6px;
   }
 
-  .compute-surface .kernel-session__summary > span:nth-child(n + 2) {
-    display: none;
+  .compute-surface .activity-boundary {
+    padding: 4px;
   }
 
-  .compute-surface .kernel-card__metrics {
-    padding-left: 0;
+  .compute-surface .activity-card {
+    padding: 9px;
   }
 
-  .compute-surface .kernel-card__metric small {
-    font-size: 10px;
+  .compute-surface .activity-card__header {
+    gap: 6px;
   }
 
-  .compute-surface .remote-job-card__summary {
-    grid-template-columns: minmax(46px, auto) minmax(0, 1fr);
+  .compute-surface .activity-card__identity {
+    gap: 6px;
   }
 
-  .compute-surface .remote-job-card__result small {
-    white-space: normal;
+  .compute-surface .activity-card__status {
+    padding-inline: 5px;
+  }
+
+  .compute-surface .activity-disclosure__body {
+    min-width: 100%;
   }
 }
 
 @media (pointer: coarse) {
+  .activity-surface__capacity > summary,
+  .compute-surface .activity-card__actions button,
   .compute-surface .kernel-card__stop,
-  .compute-surface .remote-job-card__actions button,
-  .compute-surface .kernel-card__cell summary {
+  .compute-surface .activity-disclosure > summary {
     min-height: 44px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .compute-surface * {
+  .compute-surface *,
+  .activity-surface__capacity > summary {
     scroll-behavior: auto;
     transition-duration: 0.01ms !important;
+  }
+
+  .compute-surface .activity-card__actions button:active:not(:disabled) {
+    transform: none;
   }
 }

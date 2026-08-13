@@ -30,12 +30,11 @@ async function openInEditor(initial: string): Promise<string> {
   return out
 }
 
-type SkillGroup = "default" | "local" | "learned" | "installed"
+type SkillGroup = "default" | "local" | "installed"
 
 function classifySkill(skill: Skill.Info): { group: SkillGroup; namespace?: string } {
   const installed = skill.location.match(/[\\/]installed-skills[\\/]([^\\/]+)[\\/]/)
   if (installed) return { group: "installed", namespace: installed[1] }
-  if (skill.origin === "learned") return { group: "learned" }
   if (skill.origin === "default") return { group: "default" }
   return { group: "local" }
 }
@@ -256,8 +255,8 @@ const SkillListCommand = cmd({
     }),
   handler: async (args) => {
     // Skill.state() needs project-instance context so it can walk the
-    // .claude/.openscience config dirs alongside the global cache + learned +
-    // installed dirs. Mirror what ModelsCommand does.
+    // .claude/.openscience config dirs alongside the global and installed
+    // skill directories. Mirror what ModelsCommand does.
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
@@ -265,7 +264,6 @@ const SkillListCommand = cmd({
         const showAll = args.all as boolean
         const defaults: Skill.Info[] = []
         const local: Skill.Info[] = []
-        const learned: Skill.Info[] = []
         const installed: Record<string, Skill.Info[]> = {}
 
         for (const s of all) {
@@ -273,8 +271,6 @@ const SkillListCommand = cmd({
           if (cls.group === "installed") {
             const ns = cls.namespace ?? "_"
             ;(installed[ns] ??= []).push(s)
-          } else if (cls.group === "learned") {
-            learned.push(s)
           } else if (cls.group === "default") {
             defaults.push(s)
           } else {
@@ -283,12 +279,10 @@ const SkillListCommand = cmd({
         }
 
         const totalInstalled = Object.values(installed).reduce((a, l) => a + l.length, 0)
-        const totalLearned = learned.length
         const totalDefault = defaults.length
 
         UI.println(`OpenScience default skills: ${totalDefault}`)
         UI.println(`project and personal skills: ${local.length}`)
-        UI.println(`learned skills: ${totalLearned}`)
         UI.println(`installed skills: ${totalInstalled}`)
         UI.println("")
 
@@ -319,17 +313,9 @@ const SkillListCommand = cmd({
           UI.println("")
         }
 
-        if (totalLearned === 0 && totalInstalled === 0) {
+        if (totalInstalled === 0) {
           UI.println("Install third-party skills with: openscience skill add <git-url>")
           return
-        }
-
-        if (totalLearned > 0) {
-          UI.println(`learned skills (${totalLearned})`)
-          for (const s of learned.sort((a, b) => a.name.localeCompare(b.name))) {
-            UI.println(`  ${s.name}`)
-          }
-          UI.println("")
         }
 
         if (totalInstalled > 0) {

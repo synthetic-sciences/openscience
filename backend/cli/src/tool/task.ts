@@ -11,13 +11,14 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
-import { RLMState } from "../session/rlm/state"
 import { HierarchicalSemaphore } from "../util/semaphore"
 
-const ARTIFACT_AGENTS = ["research", "biology", "ml"]
+export const DELEGATION_PROFILES = ["explore", "execute", "review"] as const
 const COMPUTE_SUBAGENTS = new Set(["biology", "ml", "physics"])
-export const MAX_CHILD_AGENTS = 2
+export const NORMAL_CHILD_AGENTS = MessageV2.ResearchEffortLimits.normal
+export const MAX_CHILD_AGENTS = MessageV2.ResearchEffortLimits.ultra
 const childSlots = new HierarchicalSemaphore(MAX_CHILD_AGENTS)
+const normalChildSlots = new HierarchicalSemaphore(NORMAL_CHILD_AGENTS)
 const configuredComputeCap = Number(process.env.OPENSCIENCE_MAX_COMPUTE_SUBAGENTS)
 const MAX_COMPUTE_SUBAGENTS =
   Number.isFinite(configuredComputeCap) && configuredComputeCap >= 1 ? Math.floor(configuredComputeCap) : 2
@@ -26,13 +27,24 @@ const computeSlots = new HierarchicalSemaphore(MAX_COMPUTE_SUBAGENTS)
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
-  subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+  subagent_type: z.enum(DELEGATION_PROFILES).describe("The internal explore, execute, or review profile"),
   session_id: z.string().describe("Existing Task session to continue").optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
 
+export function childPermissionRules(primaryTools: string[] = []): PermissionNext.Ruleset {
+  return [
+    ...primaryTools.map((permission) => ({ permission, pattern: "*", action: "allow" as const })),
+    { permission: "todowrite", pattern: "*", action: "deny" },
+    { permission: "todoread", pattern: "*", action: "deny" },
+    { permission: "task", pattern: "*", action: "deny" },
+  ]
+}
+
 export const TaskTool = Tool.define("task", async (ctx) => {
-  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+  const agents = await Promise.all(DELEGATION_PROFILES.map((name) => Agent.get(name))).then((items) =>
+    items.filter((agent): agent is Agent.Info => agent !== undefined),
+  )
 
   // Filter agents by permissions if agent provided
   const caller = ctx?.agent
@@ -52,6 +64,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
       const started = Date.now()
+      const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
+      const maxConcurrentChildren = MessageV2.childAgentLimit(effort)
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -67,9 +81,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
 
       const agent = await Agent.get(params.subagent_type)
-      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-
-      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+      if (!agent) throw new Error(`Internal delegation profile ${params.subagent_type} is unavailable`)
 
       const session = await iife(async () => {
         if (params.session_id) {
@@ -82,38 +94,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         return await Session.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
-          permission: [
-            {
-              permission: "todowrite",
-              pattern: "*",
-              action: "deny",
-            },
-            {
-              permission: "todoread",
-              pattern: "*",
-              action: "deny",
-            },
-            ...(hasTaskPermission
-              ? []
-              : [
-                  {
-                    permission: "task" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(config.experimental?.primary_tools?.map((t) => ({
-              pattern: "*",
-              action: "allow" as const,
-              permission: t,
-            })) ?? []),
-          ],
+          permission: childPermissionRules(config.experimental?.primary_tools),
         })
       })
 
-      // Child work is exceptional and bounded. The hierarchical lease prevents
-      // nested agents from bypassing the global ceiling or deadlocking while
-      // their parent waits for them.
+      // Normal is intentionally small; Ultra has a wider but still hard global
+      // ceiling. All child sessions have Task denied below, so fan-out stays one
+      // level deep instead of multiplying recursively.
+      const releaseNormalSlot =
+        effort === "normal"
+          ? await normalChildSlots.acquire(session.id, { parent: ctx.sessionID, signal: ctx.abort })
+          : undefined
+      using _normalChildSlot = defer(() => releaseNormalSlot?.())
       const releaseChildSlot = await childSlots.acquire(session.id, { parent: ctx.sessionID, signal: ctx.abort })
       using _childSlot = defer(() => releaseChildSlot())
 
@@ -140,7 +132,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           sessionId: session.id,
           model,
           startedAt: started,
-          maxConcurrentChildren: MAX_CHILD_AGENTS,
+          effort,
+          maxConcurrentChildren,
+          maxGlobalChildren: MAX_CHILD_AGENTS,
         },
       })
 
@@ -167,7 +161,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             model,
             startedAt: started,
             elapsedMs: Date.now() - started,
-            maxConcurrentChildren: MAX_CHILD_AGENTS,
+            effort,
+            maxConcurrentChildren,
+            maxGlobalChildren: MAX_CHILD_AGENTS,
           },
         })
       })
@@ -178,6 +174,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+      const childReminder = {
+        type: "text" as const,
+        text: [
+          "<system-reminder>",
+          `Research effort is ${effort.toUpperCase()}. Complete this one bounded assignment and return natural, concise findings to the lead Research agent.`,
+          "Do not create child tasks. Load a domain skill only when it materially improves this assignment.",
+          "</system-reminder>",
+        ].join("\n"),
+      }
 
       const result = await SessionPrompt.prompt({
         messageID,
@@ -187,13 +192,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           providerID: model.providerID,
         },
         agent: agent.name,
+        effort,
         tools: {
           todowrite: false,
           todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
+          task: false,
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
-        parts: promptParts,
+        parts: [childReminder, ...promptParts],
       }).finally(() => {
         unsub()
       })
@@ -231,30 +237,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       )
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
-      const callingAgent = msg.info.agent
-      const useStructuredOutput = callingAgent && ARTIFACT_AGENTS.includes(callingAgent)
-
-      const output = (() => {
-        if (!useStructuredOutput) {
-          return text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n")
-        }
-        const compressed = RLMState.parseExecutorOutput(text)
-        return [
-          "<task_result>",
-          `<status>${compressed.status}</status>`,
-          `<findings>${JSON.stringify(compressed.findings)}</findings>`,
-          `<failures>${JSON.stringify(compressed.failures)}</failures>`,
-          `<assumptions>${JSON.stringify(compressed.assumptions)}</assumptions>`,
-          `<parameters>${JSON.stringify(compressed.parameters)}</parameters>`,
-          `<artifact_refs>${JSON.stringify(compressed.artifactRefs)}</artifact_refs>`,
-          `<suggestions>${JSON.stringify(compressed.suggestions)}</suggestions>`,
-          "</task_result>",
-          "",
-          "<task_metadata>",
-          `session_id: ${session.id}`,
-          "</task_metadata>",
-        ].join("\n")
-      })()
+      const output = [
+        text,
+        "",
+        `<task_metadata>${JSON.stringify({ session_id: session.id, profile: agent.name, effort })}</task_metadata>`,
+      ].join("\n")
 
       return {
         title: params.description,
@@ -266,7 +253,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           toolCalls: summary.length,
           failedToolCalls: summary.filter((part) => part.state.status === "error").length,
           usage,
-          maxConcurrentChildren: MAX_CHILD_AGENTS,
+          effort,
+          maxConcurrentChildren,
+          maxGlobalChildren: MAX_CHILD_AGENTS,
         },
         output,
       }

@@ -48,15 +48,19 @@ describe("session filesystem grants", () => {
         await using cleanup = {
           [Symbol.asyncDispose]: () => Session.remove(session.id),
         }
+        const workspace = await SessionFilesystem.workspace(session.id)
 
         expect(changes).toEqual([])
         expect(await SessionFilesystem.list(session.id)).toContainEqual(
           expect.objectContaining({
-            path: tmp.path,
+            path: workspace,
             access: "write",
             scope: "session",
             source: "workspace",
           }),
+        )
+        expect(await SessionFilesystem.list(session.id)).toContainEqual(
+          expect.objectContaining({ path: tmp.path, access: "write", scope: "session", source: "api" }),
         )
 
         const grant = await SessionFilesystem.grant({
@@ -76,14 +80,18 @@ describe("session filesystem grants", () => {
   test("creates a durable read-write workspace grant with each session", async () => {
     await using tmp = await tmpdir()
     await withSession(tmp.path, async (session) => {
+      const workspace = await SessionFilesystem.workspace(session.id)
       const grants = await SessionFilesystem.list(session.id)
       expect(grants).toContainEqual(
         expect.objectContaining({
-          path: tmp.path,
+          path: workspace,
           access: "write",
           scope: "session",
           source: "workspace",
         }),
+      )
+      expect(grants).toContainEqual(
+        expect.objectContaining({ path: tmp.path, access: "write", scope: "session", source: "api" }),
       )
       await expect(
         SessionFilesystem.authorize({
@@ -198,6 +206,7 @@ describe("session filesystem grants", () => {
         scope: "session",
       })
       const roots = await SessionFilesystem.processWriteRoots(session.id)
+      expect(roots).toContain(await SessionFilesystem.workspace(session.id))
       expect(roots).toContain(tmp.path)
       expect(roots).toContain(external.path)
       expect(await SessionFilesystem.processReadRoots(session.id)).toContain(external.path)
@@ -432,6 +441,7 @@ describe("session filesystem grants", () => {
       init: InstanceBootstrap,
       fn: async () => {
         const session = await executionSession()
+        const workspace = await SessionFilesystem.workspace(session.id)
         const job = await ComputeJobs.start(
           {
             sessionID: session.id,
@@ -439,9 +449,9 @@ describe("session filesystem grants", () => {
             command: "sleep 30",
             target: { kind: "local" },
           },
-          { root: roots.first, workspace: first.path },
+          { root: roots.first, workspace },
         )
-        return { session, job }
+        return { session, job, workspace }
       },
     })
     const two = await Instance.provide({
@@ -449,6 +459,7 @@ describe("session filesystem grants", () => {
       init: InstanceBootstrap,
       fn: async () => {
         const session = await executionSession()
+        const workspace = await SessionFilesystem.workspace(session.id)
         const job = await ComputeJobs.start(
           {
             sessionID: session.id,
@@ -456,9 +467,9 @@ describe("session filesystem grants", () => {
             command: "sleep 30",
             target: { kind: "local" },
           },
-          { root: roots.second, workspace: second.path },
+          { root: roots.second, workspace },
         )
-        return { session, job }
+        return { session, job, workspace }
       },
     })
 
@@ -473,8 +484,8 @@ describe("session filesystem grants", () => {
         }),
     })
     const stopped = await Promise.all([
-      ComputeJobs.wait(one.job.id, { root: roots.first, workspace: first.path, timeout: 5_000 }),
-      ComputeJobs.wait(two.job.id, { root: roots.second, workspace: second.path, timeout: 5_000 }),
+      ComputeJobs.wait(one.job.id, { root: roots.first, workspace: one.workspace, timeout: 5_000 }),
+      ComputeJobs.wait(two.job.id, { root: roots.second, workspace: two.workspace, timeout: 5_000 }),
     ])
     expect(stopped.map((job) => job.status)).toEqual(["cancelled", "cancelled"])
 

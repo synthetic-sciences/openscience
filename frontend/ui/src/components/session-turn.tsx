@@ -102,7 +102,7 @@ function isAttachment(part: PartType | undefined) {
   )
 }
 
-const promotedTools = new Set(["notebook", "rkernel", "modal", "compute_job"])
+const promotedTools = new Set(["python", "r", "notebook", "rkernel", "modal", "compute_job"])
 
 function isPromotedTool(part: PartType | undefined): part is ToolPart {
   if (part?.type !== "tool" || !promotedTools.has(part.tool)) return false
@@ -902,7 +902,7 @@ export function SessionTurn(
                             const label = () => {
                               if (state()?.state === "saving")
                                 return `Saving ${action.path.split("/").pop() ?? action.path}…`
-                              if (state()?.state === "saved") return `Saved as artifact · v${state()?.version ?? 1}`
+                              if (state()?.state === "saved") return `Saved as Result · v${state()?.version ?? 1}`
                               if (state()?.state === "error") return "Save failed · retry"
                               return action.label
                             }

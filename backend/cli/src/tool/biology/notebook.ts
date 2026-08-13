@@ -44,16 +44,20 @@ _out.flush()
 
 while True:
     lines = []
+    got_end = False
     try:
         for line in sys.stdin:
             if line.rstrip("\\n") == "__OPENSCIENCE_CODE_END__":
+                got_end = True
                 break
             lines.append(line)
     except EOFError:
         break
 
-    if not lines:
-        continue
+    # A dead parent closes stdin. Treat that as the lifecycle boundary instead
+    # of spinning forever on repeated EOF with an empty input buffer.
+    if not got_end:
+        break
 
     code = "".join(lines)
     stdout_buf = io.StringIO()
@@ -86,6 +90,12 @@ while True:
     _out.write("__OPENSCIENCE_RESULT_START__\\n" + r + "\\n__OPENSCIENCE_RESULT_END__\\n")
     _out.flush()
 `.trim()
+
+/** Exact worker source used by the lifecycle regression without duplicating
+ * the interpreter protocol in the test. */
+export function biologyKernelScriptForTests() {
+  return KERNEL_SCRIPT
+}
 
 interface Kernel {
   process: ChildProcess

@@ -158,8 +158,8 @@ describe("host strip", () => {
 
     expect(paths).toHaveLength(2)
     expect(paths).toContain("/settings/compute/jobs")
-    const asked = new URL(paths.find((path) => path.startsWith("/notebook/compute")) ?? "", "http://host")
-    expect(asked.pathname).toBe("/notebook/compute")
+    const asked = new URL(paths.find((path) => path.startsWith("/kernels/compute")) ?? "", "http://host")
+    expect(asked.pathname).toBe("/kernels/compute")
 
     // Both CPU figures the route serves are measured across the window since
     // the SAME client's previous poll, so a second tab sharing this identity
@@ -181,7 +181,7 @@ describe("host strip", () => {
     await Bun.sleep(20)
 
     expect(others).toHaveLength(2)
-    const other = others.find((path) => path.startsWith("/notebook/compute")) ?? ""
+    const other = others.find((path) => path.startsWith("/kernels/compute")) ?? ""
     expect(new URL(other, "http://host").searchParams.get("client")).not.toBe(client)
   })
 

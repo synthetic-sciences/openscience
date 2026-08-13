@@ -9,7 +9,6 @@ const COMPONENTS = [
   "General.tsx",
   "Network.tsx",
   "ProviderKeys.tsx",
-  "Specialists.tsx",
 ] as const
 
 const source = (name: (typeof COMPONENTS)[number]) =>

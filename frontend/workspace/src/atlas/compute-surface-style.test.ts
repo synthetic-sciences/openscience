@@ -6,15 +6,17 @@ const [css, strip, shell] = await Promise.all([
   Bun.file(new URL("../styles/atlas.css", import.meta.url)).text(),
 ])
 
-describe("compute surface styling", () => {
-  test("uses a quiet operational ledger instead of a card dashboard", () => {
-    expect(css).toContain(".compute-surface .kernel-card")
-    expect(css).toContain("border-radius: var(--compute-radius-card)")
-    expect(css).toContain("box-shadow: none")
+describe("activity surface styling", () => {
+  test("uses a quiet result ledger with progressive disclosure", () => {
+    expect(css).toContain(".compute-surface .activity-card")
+    expect(css).toContain(".compute-surface .activity-disclosure")
+    expect(css).toContain(".compute-surface .activity-card__facts")
+    expect(css).toContain("border-radius: 11px")
+    expect(css).toContain("border: 0")
     expect(css).not.toContain(".compute-surface__atlas")
     expect(css).toContain("gap: 4px")
-    expect(css).toContain("transition: background-color 140ms ease")
-    expect(css).toContain(".remote-job-card__actions button:focus-visible")
+    expect(css).toContain("background-color 140ms ease")
+    expect(css).toContain(".activity-disclosure > summary:focus-visible")
     expect(css).toContain("font-weight: var(--font-weight-medium)")
     expect(strip).toContain("height: 2px")
     expect(css).not.toContain(".compute-surface__tabs")
@@ -28,7 +30,7 @@ describe("compute surface styling", () => {
     expect(strip).not.toMatch(/#[0-9a-fA-F]{3,8}/)
   })
 
-  test("keeps compute styling component-owned instead of layering legacy shell overrides", () => {
+  test("keeps activity styling component-owned instead of layering legacy shell overrides", () => {
     expect(shell).not.toMatch(/\.(?:compute-surface|kernel-panel|kernel-card)(?:[\s_:{.[#]|$)/)
   })
 })

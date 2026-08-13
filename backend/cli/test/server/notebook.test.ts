@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { NotebookRoutes } from "../../src/server/routes/notebook"
+import { KernelRoutes, NotebookRoutes } from "../../src/server/routes/notebook"
 import { Instance } from "../../src/project/instance"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { Provenance } from "../../src/science/provenance/store"
@@ -9,6 +9,7 @@ import { Server } from "../../src/server/server"
 import { KernelRuntime } from "../../src/science/kernel/registry"
 import { KernelMetrics } from "../../src/science/kernel/metrics"
 import { Sandbox } from "../../src/sandbox/sandbox"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import fs from "node:fs/promises"
 import path from "node:path"
 
@@ -43,7 +44,7 @@ const waitForExit = async (pid: number, attempt = 0): Promise<void> => {
 }
 
 describe("/notebook routes", () => {
-  test("publishes every lifecycle route and required owner in the generated API contract", async () => {
+  test("publishes canonical and compatibility lifecycle routes in the generated API contract", async () => {
     const specs = await Server.openapi()
     const paths = specs.paths as Record<
       string,
@@ -68,6 +69,22 @@ describe("/notebook routes", () => {
     const required = (path: string) =>
       paths[path]?.post?.requestBody?.content?.["application/json"]?.schema?.required ?? []
 
+    expect(paths["/kernels"]?.get).toBeDefined()
+    expect(paths["/kernels/{kernelID}/restart"]?.post).toBeDefined()
+    expect(paths["/kernels/{kernelID}/stop"]?.post).toBeDefined()
+    expect(paths["/kernels/{kernelID}/interrupt"]?.post).toBeDefined()
+    expect(paths["/kernels/{kernelID}"]?.delete).toBeDefined()
+    expect(paths["/kernels/execute"]?.post).toBeDefined()
+    expect(paths["/kernels/compute"]?.get).toBeDefined()
+    expect(paths["/kernels/status"]?.get).toBeDefined()
+    expect(paths["/kernels/restart"]?.post).toBeDefined()
+    expect(paths["/kernels/stop"]?.post).toBeDefined()
+    expect(paths["/kernels/interrupt"]?.post).toBeDefined()
+    expect(required("/kernels/execute")).toContain("sessionID")
+    expect(required("/kernels/execute")).not.toContain("id")
+    expect(paths["/kernels/status"]?.get?.parameters).toContainEqual(
+      expect.objectContaining({ name: "sessionID", required: true }),
+    )
     expect(paths["/notebook/kernels"]?.get).toBeDefined()
     expect(paths["/notebook/kernels"]?.post).toBeUndefined()
     expect(paths["/notebook/kernels/{kernelID}/restart"]?.post).toBeDefined()
@@ -90,7 +107,98 @@ describe("/notebook routes", () => {
     expect(paths["/notebook/kernels/{kernelID}"]?.delete?.parameters).toContainEqual(
       expect.objectContaining({ name: "sessionID", required: true }),
     )
+
+    const canonical = Object.entries(paths).filter(([path]) => path.startsWith("/kernels"))
+    const copy = JSON.stringify(canonical)
+    expect(copy).not.toMatch(/notebook|cell|Jupyter|magic/i)
   })
+
+  test("uses the canonical root while retaining the compatibility inventory path", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await (await KernelRoutes().request("/")).json()).toEqual({ kernels: [] })
+        expect(await (await NotebookRoutes().request("/kernels")).json()).toEqual({ kernels: [] })
+        expect((await KernelRoutes().request("/kernels")).status).toBe(404)
+      },
+    })
+  })
+
+  test("canonical source labels cannot create extra runtimes while compatibility names stay isolated", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const kernels = KernelRoutes()
+        const notebook = NotebookRoutes()
+        const session = await Session.create({})
+        const body = { sessionID: session.id, language: "python" } as const
+        const first = await kernels.request("/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, source: "analysis-a.py", code: "shared_value = 40" }),
+        })
+        expect(first.status).toBe(200)
+
+        const second = await kernels.request("/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, source: "analysis-b.py", code: "shared_value + 2" }),
+        })
+        const result = (await second.json()) as {
+          execution_count: number
+          outputs: Array<{ data?: Record<string, string> }>
+        }
+        expect(result.execution_count).toBe(2)
+        expect(result.outputs.some((item) => item.data?.["text/plain"] === "42")).toBe(true)
+
+        const legacy = (await (
+          await notebook.request("/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...body,
+              id: "analysis.py",
+              code: "globals().get('shared_value', 'missing')",
+            }),
+          })
+        ).json()) as typeof result
+        expect(legacy.execution_count).toBe(1)
+        expect(legacy.outputs.some((item) => item.data?.["text/plain"] === "'missing'")).toBe(true)
+
+        const canonical = (await (
+          await kernels.request(`/status?sessionID=${encodeURIComponent(session.id)}&language=python`)
+        ).json()) as Record<string, unknown>
+        const compatible = (await (
+          await notebook.request(`/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.py&language=python`)
+        ).json()) as Record<string, unknown>
+        expect(canonical.execution_count).toBe(2)
+        expect(canonical.name).toBe("python")
+        expect(canonical.last_execution).toBeDefined()
+        expect(canonical.last_cell).toBeUndefined()
+        expect(compatible.execution_count).toBe(1)
+        expect(compatible.last_cell).toBeDefined()
+
+        const visible = (await (await kernels.request(`/?sessionID=${encodeURIComponent(session.id)}`)).json()) as {
+          kernels: Array<{ name: string }>
+        }
+        expect(visible.kernels.map((value) => value.name)).toEqual(["python"])
+
+        await kernels.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+        await notebook.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, id: "analysis.py" }),
+        })
+      },
+    })
+  }, 30_000)
 
   test("does not invent kernels for untouched sessions", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -155,7 +263,7 @@ describe("/notebook routes", () => {
         })
         expect(await Provenance.get(result.provenance_id)).toMatchObject({
           kind: "run",
-          tool: "notebook",
+          tool: "python",
           sessionID: session.id,
           status: "ok",
           inputs: {
@@ -196,7 +304,7 @@ describe("/notebook routes", () => {
           queue_depth: 0,
         })
         expect(state.environment).toMatchObject({
-          cwd: tmp.path,
+          cwd: await SessionFilesystem.workspace(session.id),
           atlas: {
             access: "host_broker",
             credentials: "withheld",

@@ -149,20 +149,24 @@ describe("managed project session scratch", () => {
     }
   })
 
-  test("keeps imported-folder sessions on their existing project workspace", async () => {
+  test("gives imported-folder sessions isolated scratch while keeping the project as working data", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
+        const workspace = await SessionFilesystem.workspace(session.id)
         try {
-          expect(await SessionFilesystem.workspace(session.id)).toBe(tmp.path)
+          expect(workspace).not.toBe(tmp.path)
+          expect(path.dirname(workspace)).toBe(await fs.realpath(SessionWorkspace.root()))
           expect(await SessionFilesystem.processWriteRoots(session.id)).toContain(tmp.path)
+          expect(await SessionFilesystem.processWriteRoots(session.id)).toContain(workspace)
           expect(await Bun.file(path.join(tmp.path, ".openscience", "sessions", session.id)).exists()).toBe(false)
         } finally {
           await Session.remove(session.id)
         }
         expect((await fs.stat(tmp.path)).isDirectory()).toBe(true)
+        expect(await Bun.file(workspace).exists()).toBe(false)
       },
     })
   })
@@ -187,6 +191,32 @@ describe("managed project session scratch", () => {
       })
       expect(await Bun.file(path.join(root, "recover.txt")).text()).toBe("recoverable")
       expect(await SessionWorkspace.restore(session.id)).toEqual(restored)
+    })
+  })
+
+  test("reusing a deleted session id starts with fresh scratch and retains the prior recovery copy", async () => {
+    await managed(async (root) => {
+      const session = await Session.create({ title: "original" })
+      const scratch = await SessionFilesystem.workspace(session.id)
+      const before = await SessionWorkspace.get(session.id)
+      await File.write("old-draft.txt", "recoverable", { sessionID: session.id })
+
+      await Session.remove(session.id)
+      const deleted = await SessionWorkspace.get(session.id)
+      expect(deleted).toMatchObject({ workspaceID: before.workspaceID, state: "trash" })
+
+      const replacement = await Session.createNext({ id: session.id, directory: root, title: "replacement" })
+      const active = await SessionWorkspace.get(replacement.id)
+      expect(active).toMatchObject({ sessionID: session.id, scratchRoot: scratch, state: "active" })
+      expect(active.workspaceID).not.toBe(before.workspaceID)
+      expect((await fs.stat(scratch)).isDirectory()).toBe(true)
+      expect(await Bun.file(path.join(scratch, "old-draft.txt")).exists()).toBe(false)
+
+      const recovery = await SessionWorkspace.listTrash(session.id)
+      expect(recovery).toContainEqual(expect.objectContaining({ workspaceID: before.workspaceID, state: "trash" }))
+      expect(await Bun.file(path.join(deleted.trashRoot!, "old-draft.txt")).text()).toBe("recoverable")
+
+      await Session.remove(replacement.id)
     })
   })
 

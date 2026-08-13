@@ -8,12 +8,14 @@ import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 // wrapper command line.
 
 export type Remote = {
+  kind: "ssh" | "modal"
   label: string
   host: string
   scheduler: "none" | "slurm" | "pbs"
 }
 
 export type Staged = {
+  purpose: string
   command: string
   cwd?: string
   remote?: Remote
@@ -28,9 +30,15 @@ export type Staged = {
   container?: string
 }
 
-export function dispatchReady(input: { name: string; command: string; reviewed: boolean; busy: boolean }) {
+export function dispatchReady(input: {
+  name: string
+  purpose: string
+  command: string
+  reviewed: boolean
+  busy: boolean
+}) {
   if (input.busy || !input.reviewed) return false
-  return !!input.name.trim() && !!input.command.trim()
+  return !!input.name.trim() && !!input.purpose.trim() && !!input.command.trim()
 }
 
 export function previewNotes(staged: Staged): string[] {
@@ -43,6 +51,12 @@ export function previewNotes(staged: Staged): string[] {
     return [
       "Runs on this computer in your login shell. The exit code and output are captured with the job.",
       ...skipped,
+    ]
+  }
+  if (remote.kind === "modal") {
+    return [
+      "Runs asynchronously outside the local sandbox in your Modal account. Your account may be billed until the run exits, is cancelled, or reaches its timeout.",
+      "Only reviewed inputs are uploaded and only declared outputs are harvested back into this project.",
     ]
   }
   const load = staged.modules?.length
@@ -75,6 +89,7 @@ export function previewNotes(staged: Staged): string[] {
 
 function scheduler(remote?: Remote) {
   if (!remote) return "None · direct shell"
+  if (remote.kind === "modal") return "Modal · managed sandbox"
   if (remote.scheduler === "slurm") return "Slurm · sbatch"
   if (remote.scheduler === "pbs") return "PBS · qsub"
   return "None · bash -lc over SSH"
@@ -100,6 +115,7 @@ export function DispatchPreview(props: { staged: Staged }): JSX.Element {
         label: "Target",
         value: staged.remote ? `${staged.remote.label} · ${staged.remote.host}` : "This computer",
       },
+      { label: "Purpose", value: staged.purpose },
       { label: "Scheduler", value: scheduler(staged.remote) },
       { label: "Working directory", value: staged.cwd || "Project directory" },
       ...(staged.resources ? [{ label: "Resources", value: resourceText(staged.resources) }] : []),

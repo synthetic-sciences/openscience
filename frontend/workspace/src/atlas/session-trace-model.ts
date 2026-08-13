@@ -20,6 +20,126 @@ export type TraceActivity = {
   status?: string
 }
 
+export type ObservableResearchActivity = {
+  id: string
+  at: number
+  kind: "agent" | "search" | "source" | "shell"
+  label: string
+  detail: string
+  status: "pending" | "running" | "completed" | "error"
+}
+
+const childLabel = (value: string) => {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "explore") return "Exploration task"
+  if (normalized === "execute") return "Execution task"
+  if (normalized === "review") return "Review task"
+  return "Research task"
+}
+
+const childDetail = (item: SessionTraceResponse["children"][number]) => {
+  const actions = item.toolCalls
+  const failed = item.failedToolCalls ?? 0
+  const result =
+    item.status === "completed"
+      ? actions === undefined
+        ? "Completed"
+        : `${actions} ${actions === 1 ? "action" : "actions"} completed`
+      : item.status === "error"
+        ? failed > 0
+          ? `${failed} ${failed === 1 ? "action needs" : "actions need"} attention`
+          : "Task stopped before completing"
+        : item.status === "running"
+          ? actions === undefined
+            ? "Working"
+            : `${actions} ${actions === 1 ? "action" : "actions"} so far`
+          : "Waiting to start"
+  return [result, formatDuration(item.durationMs)].filter((value) => value !== "—").join(" · ")
+}
+
+const searchLabel = (value: string) => {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "codesearch") return "Code search"
+  if (normalized === "science_search") return "Scientific search"
+  if (normalized.startsWith("query_")) return "Scientific database search"
+  if (normalized === "atlas") return "Research library search"
+  return "Web search"
+}
+
+const sourceLabelForTool = (value: string) => {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "science_fetch") return "Scientific source"
+  if (normalized === "atlas") return "Research library"
+  if (normalized.includes("browser") || normalized.startsWith("browse")) return "Browser"
+  return "Web source"
+}
+
+const browserTool = (value: string) => {
+  const normalized = value.trim().toLowerCase()
+  return normalized.includes("browser") || normalized.startsWith("browse")
+}
+
+/**
+ * A compact, user-readable projection for the Activity pane.
+ *
+ * Python/R executions, live shell commands, remote jobs, model calls, and
+ * generic tools have dedicated surfaces. This projection also retains
+ * completed shell commands after their live registry entry disappears, while
+ * staying narrow enough to avoid double-counting other work.
+ */
+export function recentObservableResearch(trace: SessionTraceResponse, limit = 10): ObservableResearchActivity[] {
+  const children: ObservableResearchActivity[] = trace.children.map((item) => ({
+    id: `child:${item.toolID}`,
+    at: item.startedAt ?? trace.session.updatedAt,
+    kind: "agent",
+    label: childLabel(item.agent),
+    detail: childDetail(item),
+    status: item.status,
+  }))
+
+  const searches: ObservableResearchActivity[] = trace.searches.map((item) => ({
+    id: `search:${item.toolID}`,
+    at: item.startedAt ?? trace.session.updatedAt,
+    kind: "search",
+    label: item.query?.trim() || searchLabel(item.tool),
+    detail: [
+      searchLabel(item.tool),
+      item.dedupeHit ? "Reused an existing result" : "New result",
+      formatDuration(item.durationMs),
+    ]
+      .filter((value) => value !== "—")
+      .join(" · "),
+    status: item.status,
+  }))
+
+  const searchIDs = new Set(trace.searches.map((item) => item.toolID))
+  const sources: ObservableResearchActivity[] = trace.tools
+    .filter((item) => !searchIDs.has(item.id) && (item.category === "external" || browserTool(item.name)))
+    .map((item) => ({
+      id: `source:${item.id}`,
+      at: item.startedAt ?? trace.session.updatedAt,
+      kind: "source",
+      label: item.title?.trim() || sourceLabelForTool(item.name),
+      detail: [sourceLabelForTool(item.name), formatDuration(item.durationMs)]
+        .filter((value) => value !== "—")
+        .join(" · "),
+      status: item.status,
+    }))
+
+  const shell: ObservableResearchActivity[] = trace.tools
+    .filter((item) => item.name === "bash")
+    .map((item) => ({
+      id: `shell:${item.id}`,
+      at: item.startedAt ?? trace.session.updatedAt,
+      kind: "shell",
+      label: item.title?.trim() || "Shell command",
+      detail: ["Local shell", formatDuration(item.durationMs)].filter((value) => value !== "—").join(" · "),
+      status: item.status,
+    }))
+
+  return [...children, ...searches, ...sources, ...shell].toSorted((a, b) => b.at - a.at).slice(0, Math.max(0, limit))
+}
+
 export function formatDuration(value?: number) {
   if (value === undefined) return "—"
   if (value < 1_000) return `${Math.round(value)}ms`
@@ -162,7 +282,7 @@ export function traceActivity(trace: SessionTraceResponse): TraceActivity[] {
     id: `artifact:${item.toolID}`,
     at: item.completedAt ?? trace.session.updatedAt,
     kind: "artifact" as const,
-    label: item.artifactID || "Saved artifact",
+    label: item.artifactID || "Saved Result",
     detail: `${item.action} · ${item.durable ? "durable" : "session only"}`,
     status: "completed",
   }))

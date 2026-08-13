@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionTraceResponse } from "@synsci/sdk/v2/client"
-import { formatCost, formatDuration, traceActivity, traceCounts, traceMetrics } from "./session-trace-model"
+import {
+  formatCost,
+  formatDuration,
+  recentObservableResearch,
+  traceActivity,
+  traceCounts,
+  traceMetrics,
+} from "./session-trace-model"
 
 const trace: SessionTraceResponse = {
   version: 1,
@@ -140,5 +147,141 @@ describe("session trace presentation", () => {
     expect(JSON.stringify(activity)).not.toContain("/data")
     expect(JSON.stringify(activity)).not.toContain("patterns")
     expect(JSON.stringify(activity)).not.toContain("output")
+  })
+
+  test("projects only recent delegated, search, browser, and external research activity", () => {
+    const activity = recentObservableResearch(
+      {
+        ...trace,
+        children: [
+          {
+            toolID: "part_child",
+            agent: "explore",
+            model: { providerID: "provider-internal", modelID: "model-internal" },
+            status: "completed",
+            startedAt: 6_000,
+            completedAt: 6_800,
+            durationMs: 800,
+            toolCalls: 4,
+            failedToolCalls: 0,
+          },
+        ],
+        tools: [
+          ...trace.tools,
+          {
+            id: "part_search",
+            callID: "call_search",
+            messageID: "msg_assistant",
+            name: "science_search",
+            category: "search",
+            status: "completed",
+            startedAt: 3_000,
+            completedAt: 3_001,
+            durationMs: 1,
+            inputHash: "search-hash",
+            inputKeys: ["query"],
+          },
+          {
+            id: "part_fetch",
+            callID: "call_fetch",
+            messageID: "msg_assistant",
+            name: "science_fetch",
+            category: "external",
+            status: "completed",
+            title: "Opened the benchmark paper",
+            startedAt: 5_000,
+            completedAt: 5_400,
+            durationMs: 400,
+            inputHash: "fetch-hash",
+            inputKeys: ["id"],
+          },
+          {
+            id: "part_browser",
+            callID: "call_browser",
+            messageID: "msg_assistant",
+            name: "browser_open",
+            category: "tool",
+            status: "running",
+            title: "Reading methods",
+            startedAt: 7_000,
+            durationMs: 2_000,
+            inputHash: "browser-hash",
+            inputKeys: ["url"],
+          },
+          {
+            id: "part_shell",
+            callID: "call_shell",
+            messageID: "msg_assistant",
+            name: "bash",
+            category: "tool",
+            status: "completed",
+            startedAt: 8_000,
+            completedAt: 8_500,
+            durationMs: 500,
+            inputHash: "shell-hash",
+            inputKeys: ["command"],
+          },
+        ],
+      },
+      4,
+    )
+
+    expect(activity.map((item) => item.id)).toEqual([
+      "shell:part_shell",
+      "source:part_browser",
+      "child:part_child",
+      "source:part_fetch",
+    ])
+    expect(activity.find((item) => item.kind === "agent")?.detail).toBe("4 actions completed · 800ms")
+    expect(activity.find((item) => item.kind === "shell")?.detail).toContain("Local shell")
+    expect(JSON.stringify(activity)).not.toContain("provider-internal")
+    expect(JSON.stringify(activity)).not.toContain("inputHash")
+  })
+
+  test("keeps completed shell commands observable after the live process exits", () => {
+    const activityTrace: SessionTraceResponse = {
+      ...trace,
+      tools: [
+        ...trace.tools,
+        {
+          id: "tool_shell_done",
+          callID: "call_shell_done",
+          messageID: "message_shell",
+          name: "bash",
+          category: "tool",
+          status: "completed",
+          title: "Checking model outputs",
+          startedAt: trace.session.updatedAt - 250,
+          completedAt: trace.session.updatedAt - 50,
+          durationMs: 200,
+          inputHash: "shell",
+          inputKeys: ["command"],
+        },
+      ],
+    }
+
+    expect(recentObservableResearch(activityTrace)).toContainEqual(
+      expect.objectContaining({
+        id: "shell:tool_shell_done",
+        kind: "shell",
+        label: "Checking model outputs",
+        status: "completed",
+      }),
+    )
+  })
+
+  test("caps the calm activity list after sorting newest first", () => {
+    const activity = recentObservableResearch(
+      {
+        ...trace,
+        children: [
+          { toolID: "older", agent: "review", status: "completed", startedAt: 2_000 },
+          { toolID: "newer", agent: "execute", status: "running", startedAt: 8_000 },
+        ],
+      },
+      2,
+    )
+
+    expect(activity.map((item) => item.id)).toEqual(["child:newer", "search:part_search"])
   })
 })

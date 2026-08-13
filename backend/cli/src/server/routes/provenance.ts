@@ -5,6 +5,7 @@ import { Instance } from "../../project/instance"
 import { Provenance, type Edge, type Node } from "../../science/provenance/store"
 import { Review } from "../../science/provenance/review"
 import { lazy } from "../../util/lazy"
+import { ExecutionHistory } from "../../science/execution/history"
 
 const Kind = z.enum(["artifact", "run", "source", "claim"])
 const Relation = z.enum(["produced", "consumed", "derived-from", "supports", "refutes"])
@@ -219,6 +220,18 @@ export const ProvenanceRoutes = lazy(() =>
           ...graph,
         })
       },
+    )
+    .get(
+      "/executions",
+      describeRoute({
+        summary: "List durable execution history",
+        description:
+          "Returns the ordered, project-scoped execution record used by Activity, including runtime identity, restarts, outputs, files, artifacts, and provenance.",
+        operationId: "provenance.executions",
+        responses: { 200: { description: "Ordered execution records" } },
+      }),
+      validator("query", z.object({ sessionID: z.string().optional() })),
+      async (c) => c.json(await ExecutionHistory.list(scope(), c.req.valid("query").sessionID)),
     )
     .get(
       "/:id",

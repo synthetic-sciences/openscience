@@ -33,7 +33,7 @@ const mount = (view: () => JSX.Element) => {
   return host
 }
 
-test("live shell commands share the compact compute ledger", () => {
+test("live shell commands share the compact activity ledger", () => {
   const host = mount(() =>
     subject.CommandCard({
       command: {
@@ -54,9 +54,13 @@ test("live shell commands share the compact compute ledger", () => {
   )
 
   expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Preparing Titanic dataset")
-  expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Shell · python prepare.py")
-  expect(host.querySelector(".kernel-card__uptime small")?.textContent).toBe("Runtime")
-  expect(host.querySelectorAll(".kernel-card__metric")[1]?.textContent).toBe("12 MBMemory")
-  expect(host.querySelectorAll(".kernel-card__metric")[2]?.textContent).toBe("0.8CPU cores")
+  expect(host.querySelector(".activity-card__kind")?.textContent).toBe("Shell")
+  expect(host.querySelector(".activity-card__status")?.textContent).toBe("Running")
+  expect(host.querySelectorAll<HTMLDetailsElement>("details").length).toBe(2)
+  expect(Array.from(host.querySelectorAll<HTMLDetailsElement>("details")).every((item) => !item.open)).toBe(true)
+  expect(host.querySelector("code")?.textContent).toBe("python prepare.py")
+  expect(host.textContent).toContain("12 MB")
+  expect(host.textContent).toContain("0.8 cores")
+  expect(host.textContent).toContain("42")
   expect(host.querySelector('button[aria-label="Stop Preparing Titanic dataset"]')).not.toBeNull()
 })

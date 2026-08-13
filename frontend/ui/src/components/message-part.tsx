@@ -51,7 +51,6 @@ import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { NotebookView, type NotebookCellProps } from "./notebook-cell"
 import { savedArtifact, scienceTaskLabel, sentenceCaseLabel, skillName, stripRedactedReasoning } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
 
@@ -98,6 +97,33 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 
 type PermissionReply = "once" | "session" | "project" | "always" | "reject"
 
+function modalMachine(plan: Record<string, any>) {
+  const resources = plan.resources ?? {}
+  return [
+    plan.gpu === "none" ? "CPU" : `${plan.gpu} GPU`,
+    resources.cpus ? `${resources.cpus} CPU` : undefined,
+    resources.memory_gb ? `${resources.memory_gb} GB memory` : undefined,
+    plan.image,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" · ")
+}
+
+function computeDetails(plan: Record<string, any>) {
+  if (plan.provider === "modal") {
+    return [
+      ["Machine", modalMachine(plan)],
+      ["Timeout", `${plan.timeout_minutes} min`],
+      ["Network", plan.network === "none" ? "Blocked" : "Unrestricted"],
+    ]
+  }
+  return [
+    ["Host", `${plan.label} · ${plan.host}`],
+    ["Scheduler", plan.scheduler === "none" ? "Direct SSH" : String(plan.scheduler).toUpperCase()],
+    ["Host key", plan.fingerprint],
+  ]
+}
+
 /** The approval card under a tool awaiting permission. States exactly what is
  *  being granted (access level and target) when the request carries scoped
  *  metadata; "Allow for…" swaps the row to the three standing scopes so every
@@ -106,6 +132,14 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
   const i18n = useI18n()
   const [scopes, setScopes] = createSignal(false)
   const compute = () => props.metadata?.compute
+  const mutation = () => props.metadata?.environment_mutation
+  const boundary = () => compute() ?? mutation()
+  const mutationOperation = () => {
+    const value = mutation()?.operation
+    if (value === "package_install") return "Install packages"
+    if (value === "package_remove") return "Remove packages"
+    return "Update environment"
+  }
   const summary = () => {
     const filesystem = props.metadata?.filesystem
     if (filesystem?.path) {
@@ -118,7 +152,10 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
   }
   return (
     <Show
-      when={compute()?.provider === "modal" && compute()}
+      when={Boolean(
+        ((compute()?.provider === "modal" || compute()?.provider === "ssh") && compute()) ||
+          (mutation()?.plan_digest && mutation()),
+      )}
       fallback={
         <div data-component="permission-prompt">
           <Show when={summary()}>
@@ -158,22 +195,73 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
         </div>
       }
     >
-      {(plan) => (
-        <div data-component="permission-prompt">
-          <div data-slot="permission-summary">
-            Dispatch “{plan().name}” to Modal using {plan().gpu === "none" ? "CPU" : plan().gpu}, image {plan().image},
-            and a {plan().timeout_minutes}-minute limit. This may incur charges.
+      <div data-component="permission-prompt" data-kind={mutation() ? "environment-mutation" : "remote-compute"}>
+        <div data-slot="permission-summary" data-kind={mutation() ? "environment-mutation" : "remote-compute"}>
+          <strong data-slot="permission-compute-title">
+            {mutation()
+              ? `Change ${String(mutation().language).toUpperCase()} environment`
+              : boundary().provider === "modal"
+                ? "Run outside the local sandbox"
+                : "Run on a saved SSH host"}
+          </strong>
+          <span data-slot="permission-compute-purpose">{mutation() ? mutationOperation() : boundary().purpose}</span>
+          <div
+            data-slot="permission-compute-details"
+            aria-label={mutation() ? "Environment change details" : "Remote job details"}
+          >
+            <For
+              each={
+                mutation()
+                  ? [
+                      ["Language", String(mutation().language).toUpperCase()],
+                      ["Environment", mutation().environment],
+                      ["Manager", mutation().manager],
+                    ]
+                  : computeDetails(boundary())
+              }
+            >
+              {(row) => (
+                <>
+                  <span>{row[0]}</span>
+                  <strong>{row[1]}</strong>
+                </>
+              )}
+            </For>
           </div>
-          <div data-slot="permission-actions">
-            <Button variant="ghost" size="small" onClick={() => props.respond("reject")}>
-              {i18n.t("ui.permission.deny")}
-            </Button>
-            <Button variant="primary" size="small" onClick={() => props.respond("once")}>
-              Dispatch
-            </Button>
-          </div>
+          <span data-slot="permission-compute-warning">
+            {mutation()
+              ? mutation().warning
+              : boundary().provider === "modal"
+                ? "Runs in your Modal account, outside OpenScience's local sandbox. It may incur Modal charges until the job exits, is cancelled, or reaches its timeout."
+                : boundary().warning}
+          </span>
+          <span data-slot="permission-compute-scope">
+            {mutation()
+              ? "Every scope applies only to this exact requested change. A successful change restarts this environment and clears its in-memory state; files and execution history remain."
+              : "Every scope is bound to this exact plan, including its command, machine, image, network, and input file hashes."}
+          </span>
         </div>
-      )}
+        <div
+          data-slot="permission-actions"
+          aria-label={mutation() ? "Environment change approval scope" : "Remote compute approval scope"}
+        >
+          <Button variant="ghost" size="small" onClick={() => props.respond("reject")}>
+            {i18n.t("ui.permission.deny")}
+          </Button>
+          <Button variant="primary" size="small" onClick={() => props.respond("once")}>
+            {i18n.t("ui.permission.scopeOnce")}
+          </Button>
+          <Button variant="secondary" size="small" onClick={() => props.respond("session")}>
+            {i18n.t("ui.permission.allowSession")}
+          </Button>
+          <Button variant="secondary" size="small" onClick={() => props.respond("project")}>
+            {i18n.t("ui.permission.allowProject")}
+          </Button>
+          <Button variant="secondary" size="small" onClick={() => props.respond("always")}>
+            {i18n.t("ui.permission.scopeGlobal")}
+          </Button>
+        </div>
+      </div>
     </Show>
   )
 }
@@ -837,7 +925,7 @@ function KernelTool(props: ToolProps & { language: "python" | "r"; label: "Pytho
   const count = () => (typeof props.metadata.executionCount === "number" ? props.metadata.executionCount : undefined)
   const failed = () => props.metadata.ok === false || props.status === "error"
   const subtitle = () =>
-    [props.label, `env ${kernel()}`, count() === undefined ? undefined : `cell ${count()}`, source()]
+    [props.label, `env ${kernel()}`, count() === undefined ? undefined : `run ${count()}`, source()]
       .filter(Boolean)
       .join(" · ")
   const images = () => {
@@ -873,26 +961,38 @@ function KernelTool(props: ToolProps & { language: "python" | "r"; label: "Pytho
           <strong>{props.label}</strong>
           <span>{subtitle()}</span>
         </header>
-        <pre data-slot="kernel-tool-source">
-          <code>{code()}</code>
-        </pre>
-        <Show when={props.output}>
-          <details data-slot="kernel-tool-output" open>
-            <summary>Show output</summary>
-            <pre>{stripAnsi(props.output ?? "")}</pre>
-          </details>
-        </Show>
         <Show when={images().length > 0}>
           <div data-slot="kernel-tool-images">
             <For each={images()}>
-              {(image) => <img src={image} alt={`${props.label} cell output`} loading="lazy" />}
+              {(image) => <img src={image} alt={`${props.label} execution result`} loading="lazy" />}
             </For>
           </div>
         </Show>
+        <Show when={props.output}>
+          <div data-slot="kernel-tool-result">
+            <pre>{stripAnsi(props.output ?? "")}</pre>
+          </div>
+        </Show>
+        <details data-slot="kernel-tool-source">
+          <summary>Code</summary>
+          <pre>
+            <code>{code()}</code>
+          </pre>
+        </details>
       </div>
     </BasicTool>
   )
 }
+
+ToolRegistry.register({
+  name: "python",
+  render: (props) => <KernelTool {...props} language="python" label="Python" />,
+})
+
+ToolRegistry.register({
+  name: "r",
+  render: (props) => <KernelTool {...props} language="r" label="R" />,
+})
 
 ToolRegistry.register({
   name: "notebook",
@@ -922,7 +1022,7 @@ function SavedArtifactTool(props: ToolProps) {
       {...props}
       icon="archive"
       trigger={{
-        title: saved() ? "Saved artifact" : props.title || "Artifact",
+        title: saved() ? "Saved Result" : props.title || "Result",
         subtitle: saved() ? `${saved()!.title} · v${saved()!.version}` : undefined,
       }}
     >
@@ -1512,33 +1612,7 @@ ToolRegistry.register({
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const filename = () => getFilename(props.input.filePath ?? "")
     const canOpen = () => !!(data.openFile && props.input.filePath)
-    const isNotebook = () => (props.input.filePath ?? "").endsWith(".ipynb")
     const bodyReady = () => !!props.input.content
-
-    const notebookCells = createMemo((): NotebookCellProps[] => {
-      if (!isNotebook() || !props.input.content) return []
-      try {
-        const nb = JSON.parse(props.input.content)
-        if (!nb.cells || !Array.isArray(nb.cells)) return []
-        return nb.cells.map((cell: any) => ({
-          cellType: cell.cell_type ?? "code",
-          source: Array.isArray(cell.source) ? cell.source.join("") : (cell.source ?? ""),
-          executionCount: cell.execution_count ?? null,
-          outputs: (cell.outputs ?? []).map((o: any) => {
-            if (o.output_type === "stream")
-              return { type: "stream", name: o.name, text: Array.isArray(o.text) ? o.text.join("") : o.text }
-            if (o.output_type === "execute_result")
-              return { type: "execute_result", data: o.data ?? {}, executionCount: o.execution_count }
-            if (o.output_type === "display_data") return { type: "display_data", data: o.data ?? {} }
-            if (o.output_type === "error")
-              return { type: "error", ename: o.ename, evalue: o.evalue, traceback: o.traceback ?? [] }
-            return { type: "stream", name: "stdout", text: "" }
-          }),
-        }))
-      } catch {
-        return []
-      }
-    })
 
     return (
       <Show
@@ -1547,7 +1621,7 @@ ToolRegistry.register({
       >
         <BasicTool
           {...props}
-          icon={isNotebook() ? "code" : "code-lines"}
+          icon="code-lines"
           trigger={
             <div data-component="write-trigger">
               <div data-slot="message-part-title-area">
@@ -1576,26 +1650,17 @@ ToolRegistry.register({
           }
         >
           <Show when={props.input.content}>
-            <Show
-              when={isNotebook() && notebookCells().length > 0}
-              fallback={
-                <div data-component="write-content">
-                  <Dynamic
-                    component={codeComponent}
-                    file={{
-                      name: props.input.filePath,
-                      contents: props.input.content,
-                      cacheKey: checksum(props.input.content),
-                    }}
-                    overflow="scroll"
-                  />
-                </div>
-              }
-            >
-              <div data-component="write-content">
-                <NotebookView cells={notebookCells()} title={filename()} />
-              </div>
-            </Show>
+            <div data-component="write-content">
+              <Dynamic
+                component={codeComponent}
+                file={{
+                  name: props.input.filePath,
+                  contents: props.input.content,
+                  cacheKey: checksum(props.input.content),
+                }}
+                overflow="scroll"
+              />
+            </div>
           </Show>
           <DiagnosticsDisplay diagnostics={diagnostics()} />
         </BasicTool>

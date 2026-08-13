@@ -1030,9 +1030,9 @@ export namespace OpenScience {
           }
         }
 
-        // Compatibility only: older releases stored learned skills and the
-        // third-party install ledger in Atlas. Import those records once after a
-        // successful login, then keep all skill state local forever.
+        // Compatibility only: older releases stored the third-party install
+        // ledger in Atlas. Import those records once after a successful login,
+        // then keep all skill state local forever.
         void import("../skill/migrate")
           .then((module) => module.SkillMigration.run())
           .catch((error) => log.warn("legacy skill migration failed", { error: String(error) }))
@@ -1607,65 +1607,6 @@ export namespace OpenScience {
       await fs.unlink(pendingQueuePath).catch(() => {})
     } catch (e) {
       log.warn("usage queue flush failed", { error: e instanceof Error ? e.message : String(e) })
-    }
-  }
-
-  // Legacy skill exports are read exactly once by SkillMigration after a
-  // successful Atlas login. Skills are otherwise entirely local.
-  export interface LegacyLearnedSkillEntry {
-    name: string
-    description: string
-    agent?: string
-    score?: number
-  }
-
-  export async function fetchLegacyLearnedSkills(): Promise<LegacyLearnedSkillEntry[] | null> {
-    const session = await getSession()
-    if (!session) return null
-
-    try {
-      const res = await atlasFetch(
-        `${API_BASE}/api/cli/learned-skills`,
-        { headers: { Authorization: `Bearer ${session.api_key}` } },
-        SKILL_FETCH_TIMEOUT_MS,
-      )
-
-      if (!res.ok) {
-        log.warn("failed to export legacy learned skills", { status: res.status })
-        return null
-      }
-
-      const data = await res.json()
-      // Atlas returns a bare array of LearnedSkillInfo; older shapes wrapped
-      // in { skills: [...] } — accept both.
-      return Array.isArray(data) ? data : (data.skills ?? [])
-    } catch (e) {
-      log.warn("legacy learned skills export error", { error: e instanceof Error ? e.message : String(e) })
-      return null
-    }
-  }
-
-  export async function fetchLegacyLearnedSkillContent(name: string): Promise<string | null> {
-    const session = await getSession()
-    if (!session) return null
-
-    try {
-      const res = await atlasFetch(
-        `${API_BASE}/api/cli/learned-skills/${encodeURIComponent(name)}`,
-        { headers: { Authorization: `Bearer ${session.api_key}` } },
-        SKILL_FETCH_TIMEOUT_MS,
-      )
-
-      if (!res.ok) {
-        log.warn("failed to export legacy learned skill", { name, status: res.status })
-        return null
-      }
-
-      const data = await res.json()
-      return data.content
-    } catch (e) {
-      log.warn("legacy learned skill export error", { name, error: e instanceof Error ? e.message : String(e) })
-      return null
     }
   }
 

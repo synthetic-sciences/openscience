@@ -37,8 +37,8 @@ const mount = (view: () => JSX.Element) => {
 const SOURCES = [
   {
     id: "artifacts",
-    group: "Saved" as const,
-    name: "Saved artifacts",
+    group: "Results" as const,
+    name: "Results",
     detail: "Durable, versioned deliverables",
     root: "",
     kind: "artifacts" as const,
@@ -75,7 +75,7 @@ describe("source menu", () => {
 
     expect(host.querySelector("[data-source-menu]")).not.toBeNull()
     expect([...host.querySelectorAll("[data-source-group]")].map((n) => n.textContent)).toEqual([
-      "Saved",
+      "Results",
       "Working files",
     ])
   })
@@ -101,6 +101,23 @@ describe("source menu", () => {
     expect(host.querySelector('[data-source-item="project"]')?.getAttribute("aria-checked")).toBe("true")
     expect(host.querySelector('[data-source-item="ro"]')?.getAttribute("aria-checked")).toBe("false")
     expect(host.querySelector('[data-source-item="ro"]')?.textContent).toContain("Read only")
+  })
+
+  test("describes a writable grant consistently with sandboxed runtime access", () => {
+    const writable = {
+      ...SOURCES[2]!,
+      id: "rw",
+      name: "analysis-output",
+      readonly: false,
+    }
+    const host = mount(() =>
+      subject.SourceMenu({ sources: [...SOURCES, writable], active: writable, onPick: () => {} }),
+    )
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    const item = host.querySelector<HTMLElement>('[data-source-item="rw"]')
+    expect(item?.textContent).toContain("Read & write")
+    expect(item?.querySelector(".files-menu__badge")?.getAttribute("title")).toContain("sandboxed runtimes")
   })
 
   test("explains saved artifacts without pretending they are a filesystem path", () => {

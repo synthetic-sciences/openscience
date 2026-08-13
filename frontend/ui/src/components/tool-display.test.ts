@@ -102,13 +102,13 @@ describe("writtenFiles", () => {
 
 describe("artifactActions", () => {
   test("offers a single bare action for one written file", () => {
-    expect(artifactActions(["results/report.md"])).toEqual([{ path: "results/report.md", label: "Save as artifact…" }])
+    expect(artifactActions(["results/report.md"])).toEqual([{ path: "results/report.md", label: "Save as Result…" }])
   })
 
   test("labels each action with its filename when several files were written", () => {
     expect(artifactActions(["results/report.md", "analysis.py"])).toEqual([
-      { path: "results/report.md", label: "Save as artifact… report.md" },
-      { path: "analysis.py", label: "Save as artifact… analysis.py" },
+      { path: "results/report.md", label: "Save as Result… report.md" },
+      { path: "analysis.py", label: "Save as Result… analysis.py" },
     ])
   })
 
@@ -141,7 +141,7 @@ describe("scienceTaskLabel", () => {
 
   test("never uses an import as the visible label", () => {
     expect(scienceTaskLabel({ code: "from pathlib import Path\nimport pandas as pd", language: "python" })).toBe(
-      "Python cell",
+      "Python execution",
     )
   })
 

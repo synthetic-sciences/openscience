@@ -1,7 +1,6 @@
 export type FileKind =
   | "markdown"
   | "html"
-  | "notebook"
   | "table"
   | "scientific-data"
   | "scientific-binary"
@@ -26,7 +25,7 @@ export interface FileDescription {
   download: boolean
 }
 
-const sources = new Set<FileKind>(["markdown", "html", "notebook", "table", "scientific-data", "science", "code"])
+const sources = new Set<FileKind>(["markdown", "html", "table", "scientific-data", "science", "code"])
 
 function format(value?: string) {
   return value?.trim().replace(/^\./, "").toLowerCase() ?? ""
@@ -36,7 +35,6 @@ function label(kind: FileKind, value?: string) {
   const type = format(value)
   if (kind === "markdown") return "Markdown"
   if (kind === "html") return "HTML document"
-  if (kind === "notebook") return "Jupyter notebook"
   if (kind === "pdf") return "PDF document"
   if (kind === "image") return type ? `${type.toUpperCase()} image` : "Image"
   if (kind === "table") {
@@ -116,7 +114,7 @@ export function artifactControl(input: {
   if (!input.session) return
   return {
     id: "artifact",
-    label: input.busy ? "Saving artifact…" : input.dirty ? "Save file first" : "Save as artifact",
+    label: input.busy ? "Saving result…" : input.dirty ? "Save file first" : "Save as Result",
     disabled: input.busy || input.dirty,
   }
 }

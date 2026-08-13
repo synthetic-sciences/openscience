@@ -152,7 +152,7 @@ export function SessionSidebarActions(props: {
         </Show>
         <SidebarAction
           label="Compute"
-          detail="Project kernels"
+          detail="Runtimes and jobs"
           ariaLabel="Open project compute"
           active={props.context === "kernels" && props.contextOpen}
           onClick={(_event?: Event) => props.onContext("kernels")}

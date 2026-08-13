@@ -18,6 +18,24 @@ import { Token } from "@/util/token"
 import { Inference } from "@/provider/inference"
 
 export namespace MessageV2 {
+  export const ResearchEffort = z.enum(["normal", "ultra"]).meta({
+    ref: "ResearchEffort",
+  })
+  export type ResearchEffort = z.infer<typeof ResearchEffort>
+  export const ResearchEffortLimits = {
+    normal: 2,
+    ultra: 4,
+  } as const satisfies Record<ResearchEffort, number>
+
+  /** Historical messages predate Research effort and therefore resolve to Normal. */
+  export function resolveResearchEffort(value: unknown): ResearchEffort {
+    return ResearchEffort.safeParse(value).data ?? "normal"
+  }
+
+  export function childAgentLimit(value: unknown) {
+    return ResearchEffortLimits[resolveResearchEffort(value)]
+  }
+
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const AuthError = NamedError.create(
@@ -332,6 +350,8 @@ export namespace MessageV2 {
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    effort: ResearchEffort.default("normal"),
+    /** @deprecated Research effort now controls bounded delegation. */
     delegation: z.boolean().optional(),
     variant: z.string().optional(),
     tier: z.string().optional(),

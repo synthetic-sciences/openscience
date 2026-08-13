@@ -109,7 +109,7 @@ export namespace SessionTrace {
   export const Job = z.object({
     id: z.string(),
     name: z.string(),
-    target: z.enum(["local", "ssh"]),
+    target: z.enum(["local", "ssh", "modal"]),
     targetLabel: z.string(),
     status: ComputeJobs.Status,
     createdAt: z.string(),
@@ -124,7 +124,7 @@ export namespace SessionTrace {
   export const Artifact = z.object({
     toolID: z.string(),
     messageID: z.string(),
-    action: z.enum(["register", "update"]),
+    action: z.literal("save_file"),
     artifactID: z.string().optional(),
     versionID: z.string().optional(),
     durable: z.boolean(),
@@ -272,9 +272,11 @@ export namespace SessionTrace {
     return part.state.metadata ?? {}
   }
 
+  const kernelTools = new Set(["python", "r", "notebook", "rkernel"])
+
   function category(part: MessageV2.ToolPart): z.infer<typeof Tool>["category"] {
     if (part.tool === "task") return "child"
-    if (part.tool === "notebook" || part.tool === "rkernel") return "kernel"
+    if (kernelTools.has(part.tool)) return "kernel"
     if (SearchDedupe.applies(part.tool, part.state.input)) return "search"
     if (part.tool === "artifact") return "artifact"
     if (part.tool === "provenance_review") return "review"
@@ -412,13 +414,13 @@ export namespace SessionTrace {
         }
       })
     const kernels = parts
-      .filter((part) => part.tool === "notebook" || part.tool === "rkernel")
+      .filter((part) => kernelTools.has(part.tool))
       .map((part) => {
         const meta = metadata(part)
         return {
           toolID: part.id,
           messageID: part.messageID,
-          language: part.tool === "notebook" ? ("python" as const) : ("r" as const),
+          language: part.tool === "python" || part.tool === "notebook" ? ("python" as const) : ("r" as const),
           kernel: string(part.state.input.kernel) ?? "agent",
           status: part.state.status,
           ...times(part, now),
@@ -452,19 +454,18 @@ export namespace SessionTrace {
     const artifacts = parts
       .filter(
         (part) =>
-          part.tool === "artifact" &&
-          part.state.status === "completed" &&
-          (part.state.input.action === "register" || part.state.input.action === "update"),
+          part.tool === "artifact" && part.state.status === "completed" && part.state.input.action === "save_file",
       )
       .map((part) => {
         const meta = metadata(part)
+        const saved = object(meta.savedArtifact)
         return {
           toolID: part.id,
           messageID: part.messageID,
-          action: part.state.input.action as "register" | "update",
-          artifactID: string(meta.id),
-          versionID: string(meta.versionID),
-          durable: part.state.input.durable === true,
+          action: "save_file" as const,
+          artifactID: string(saved?.id),
+          versionID: string(saved?.versionID),
+          durable: true,
           completedAt: times(part, now).completedAt,
         }
       })
@@ -597,7 +598,7 @@ export namespace SessionTrace {
         id: job.id,
         name: job.name,
         source: job.target,
-        external: job.target === "ssh",
+        external: job.target === "ssh" || job.target === "modal",
         startedAt: job.startedAt ? Date.parse(job.startedAt) : undefined,
         completedAt: job.completedAt ? Date.parse(job.completedAt) : undefined,
       })),

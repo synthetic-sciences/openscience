@@ -42,7 +42,7 @@ describe("artifact context", () => {
   })
 
   test("classifies scientific and publication formats without pretending unknown files are reports", () => {
-    expect(inferArtifactKind("analysis.ipynb")).toBe("notebook")
+    expect(inferArtifactKind("analysis.ipynb")).toBe("file")
     expect(inferArtifactKind("aligned.fasta", "msa")).toBe("sequence")
     expect(inferArtifactKind("variants.vcf")).toBe("genomics")
     expect(inferArtifactKind("sample.mzML")).toBe("spectrum")

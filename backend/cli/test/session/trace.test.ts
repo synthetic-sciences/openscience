@@ -17,6 +17,7 @@ test("builds one local observable harness trace without reasoning or copied outp
         id: "msg_trace_user",
         sessionID: session.id,
         role: "user",
+        effort: "ultra",
         time: { created: started },
         agent: "research",
         model: { providerID: "openai-codex", modelID: "gpt-5" },
@@ -84,12 +85,12 @@ test("builds one local observable harness trace without reasoning or copied outp
           messageID: assistant.id,
           type: "tool",
           callID: "call_kernel",
-          tool: "notebook",
+          tool: "python",
           state: {
             status: "completed",
             input: { code: "1 + 1" },
             output: "2",
-            title: "Python cell",
+            title: "Python execution",
             metadata: { executionCount: 1, provenanceID: "run_kernel" },
             time: { start: started + 120, end: started + 180 },
           },
@@ -129,10 +130,10 @@ test("builds one local observable harness trace without reasoning or copied outp
           tool: "artifact",
           state: {
             status: "completed",
-            input: { action: "register", durable: true, content: "result" },
+            input: { action: "save_file", path: "result.csv" },
             output: "saved",
             title: "Registered artifact",
-            metadata: { id: "artifact_1", versionID: "version_1" },
+            metadata: { savedArtifact: { id: "artifact_1", versionID: "version_1" } },
             time: { start: started + 290, end: started + 320 },
           },
         },
@@ -252,4 +253,18 @@ test("builds one local observable harness trace without reasoning or copied outp
       expect(await SessionTraceStore.read(session.id)).toEqual({ approvals: {}, retries: [] })
     },
   })
+})
+
+test("accepts Modal jobs as external compute activity", () => {
+  const parsed = SessionTrace.Job.parse({
+    id: "job_modal",
+    name: "GPU analysis",
+    target: "modal",
+    targetLabel: "Modal A100",
+    status: "running",
+    createdAt: new Date().toISOString(),
+    artifactCount: 0,
+  })
+
+  expect(parsed.target).toBe("modal")
 })

@@ -449,12 +449,12 @@ export const FileRoutes = lazy(() =>
     .get(
       "/file/artifact-store",
       describeRoute({
-        summary: "List saved artifacts",
+        summary: "List saved Results",
         description: "List active or recoverable trashed artifacts from this project's local artifact database.",
         operationId: "file.artifactStore.list",
         responses: {
           200: {
-            description: "Saved artifacts",
+            description: "Saved Results",
             content: { "application/json": { schema: resolver(ArtifactStore.Artifact.array()) } },
           },
         },
@@ -465,12 +465,12 @@ export const FileRoutes = lazy(() =>
     .get(
       "/file/artifact-store/:id",
       describeRoute({
-        summary: "Read one saved artifact record",
-        description: "Read immutable version metadata and the current execution record for a saved artifact.",
+        summary: "Read one saved Result record",
+        description: "Read immutable version metadata and the current execution record for a saved Result.",
         operationId: "file.artifactStore.get",
         responses: {
           200: {
-            description: "Saved artifact detail",
+            description: "Saved Result detail",
             content: { "application/json": { schema: resolver(ArtifactStore.Detail) } },
           },
           404: { description: "Artifact not found" },
@@ -486,7 +486,7 @@ export const FileRoutes = lazy(() =>
     .patch(
       "/file/artifact-store/:id",
       describeRoute({
-        summary: "Rename a saved artifact",
+        summary: "Rename a saved Result",
         description: "Rename the artifact record without changing any immutable version bytes.",
         operationId: "file.artifactStore.rename",
         responses: {
@@ -512,7 +512,7 @@ export const FileRoutes = lazy(() =>
     .delete(
       "/file/artifact-store/:id",
       describeRoute({
-        summary: "Move a saved artifact to trash",
+        summary: "Move a saved Result to trash",
         description: "Hide an artifact from active Files while retaining every version for 30 days.",
         operationId: "file.artifactStore.trash",
         responses: {

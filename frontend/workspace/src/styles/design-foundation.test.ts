@@ -161,7 +161,8 @@ describe("workspace design foundation", () => {
     expect(css).toContain("stroke-width: var(--icon-stroke-width)")
     expect(css).toMatch(/\[data-size="large"\]\s*\{[^}]*--icon-size:\s*24px/s)
 
-    expect(registry).toMatch(/id: "specialists",[\s\S]*?icon: "brain"/)
+    expect(registry).not.toMatch(/id: "specialists"/)
+    expect(registry).toMatch(/id: "skills",[\s\S]*?icon: "flask"/)
     expect(registry).toMatch(/id: "network",[\s\S]*?icon: "server"/)
     expect(registry).toMatch(/id: "permissions",[\s\S]*?icon: "shield"/)
     expect(agentIcon).toContain("<IconResearch")

@@ -82,7 +82,7 @@ const trashed = (id: string, title: string) => ({
   },
 })
 
-// The same record in its active state — what "Saved artifacts" is supposed to
+// The same record in its active state — what "Results" is supposed to
 // list. `size` and `sourcePath` differ from the trashed fixture so a row
 // proves it read the artifact, not some other row's fields.
 const saved = (id: string, title: string) => ({
@@ -131,7 +131,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Saved artifacts")
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Results")
     expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.placeholder).toBe("Search artifacts")
     expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
     expect(host.textContent).not.toContain("SHOULD_NOT_APPEAR.py")
@@ -197,7 +197,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Saved artifacts")
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Results")
     // The store is empty in this fixture, so the surface is the empty state
     // rather than a grid container.
     expect(host.querySelector(".artifact-surface")).not.toBeNull()
@@ -310,7 +310,7 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>("[data-source-button]")!.click()
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Saved artifacts")
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Results")
     // The store is empty in this fixture, so the surface is the empty state
     // rather than a grid container.
     expect(host.querySelector(".artifact-surface")).not.toBeNull()
@@ -630,7 +630,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-files-error]")?.textContent).toContain("Saved artifacts could not be loaded")
+    expect(host.querySelector("[data-files-error]")?.textContent).toContain("Results could not be loaded")
     expect(host.textContent).not.toContain("No artifacts saved yet.")
     host.querySelector<HTMLButtonElement>(".files-notice__retry")?.click()
     await settle()
@@ -675,7 +675,7 @@ describe("files pane", () => {
     expect(host.querySelector('[data-trash-row="art_1"]')).toBeNull()
   })
 
-  test("lists saved artifacts under Saved artifacts rather than reporting an empty folder", async () => {
+  test("lists saved Results under Results rather than reporting an empty folder", async () => {
     // The artifacts source short-circuited to [] and fell through to the file
     // table's "This folder is empty." — so a project with artifacts in it said
     // it had none. The active half of the snapshot was already being loaded
@@ -721,7 +721,7 @@ describe("files pane", () => {
     await settle()
 
     expect(host.querySelector(".files-table")).toBeNull()
-    expect(host.querySelector("[data-artifact-count]")?.textContent).toBe("1 artifact")
+    expect(host.querySelector("[data-artifact-count]")?.textContent).toBe("1 result")
   })
 
   test("says no artifacts are saved rather than calling the artifact store an empty folder", async () => {
@@ -739,7 +739,7 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
     await settle()
 
-    expect(host.textContent).toContain("No saved artifacts yet")
+    expect(host.textContent).toContain("No saved results yet")
     expect(host.textContent).not.toContain("This folder is empty.")
   })
 
@@ -919,7 +919,7 @@ describe("files pane", () => {
     access.dispatchEvent(new Event("change", { bubbles: true }))
 
     expect(host.querySelector("[data-connect-note]")?.textContent).toContain(
-      "code runtimes do not gain a writable mount",
+      "Approved tools and sandboxed runtimes can read and write files",
     )
 
     form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))

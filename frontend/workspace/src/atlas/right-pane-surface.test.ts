@@ -93,10 +93,11 @@ test("uses an inline desktop pane and a full-width narrow overlay, never a pane 
   expect(paneStyles).not.toContain("color-mix")
 })
 
-test("mounts the unified compute surface for the kernels context", () => {
+test("keeps the Compute tab while mounting the unified execution inventory", () => {
   const source = read("./RightPane.tsx")
 
   expect(source).toContain('import { ComputeSurface } from "@/atlas/ComputeSurface"')
+  expect(source).toContain('kernels: "Compute"')
   expect(source).toContain('when={context() === "kernels"}')
   expect(source).toContain("<ComputeSurface />")
   expect(source).not.toContain("<KernelPanel />")

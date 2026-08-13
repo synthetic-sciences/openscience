@@ -23,7 +23,6 @@ import { ScientificDataView } from "@/science/formats/ScientificDataView"
 import { detectBiologicalFormat } from "@/science/formats/biological"
 import { BinaryScienceView } from "@/science/formats/BinaryScienceView"
 import { detectBinaryScienceFormat } from "@/science/formats/binary"
-import { NotebookView } from "@/notebook/NotebookView"
 import { DataTableView } from "@/data/DataTableView"
 import type { TableFormat } from "@/data/table"
 import { ManuscriptWorkbench } from "@/manuscript/ManuscriptWorkbench"
@@ -190,7 +189,6 @@ export function FileView(props: {
     }
     if (x === "md" || x === "markdown" || x === "mdx") return "markdown"
     if (x === "html" || x === "htm") return "html"
-    if (x === "ipynb") return "notebook"
     if (tabular()) return "table"
     if (biological()) return "scientific-data"
     if (x === "pdf") return "pdf"
@@ -299,7 +297,7 @@ export function FileView(props: {
   const artifact = async () => {
     if (archiving()) return
     if (dirty()) {
-      toast.info("save file first", "Save your changes before creating an immutable artifact version.")
+      toast.info("save file first", "Save your changes before creating an immutable Result version.")
       return
     }
     const session = sessionID()
@@ -317,7 +315,7 @@ export function FileView(props: {
       if (!res.ok) throw new Error(`artifact save failed (${res.status})`)
       const ref = (await res.json()) as { current?: { version?: number } }
       window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
-      toast.success("saved as artifact", `${name()} · v${ref.current?.version ?? 1}`)
+      toast.success("saved as Result", `${name()} · v${ref.current?.version ?? 1}`)
     } catch (error) {
       toast.error("artifact save failed", error instanceof Error ? error.message : String(error))
     } finally {
@@ -474,24 +472,6 @@ export function FileView(props: {
                   </div>
                 </Match>
 
-                {/* notebook */}
-                <Match when={kind() === "notebook" && !view.source}>
-                  <NotebookView
-                    path={props.path}
-                    directory={directory()}
-                    text={view.draft}
-                    savedText={view.saved}
-                    dirty={dirty()}
-                    saving={view.saving}
-                    onChange={(draft) => {
-                      if (props.writable === false) return
-                      setView({ draft, saveError: undefined })
-                    }}
-                    onSave={() => void save()}
-                    onRaw={() => setView("source", true)}
-                  />
-                </Match>
-
                 {/* tabular data */}
                 <Match when={kind() === "table" && !view.source}>
                   <Show when={tabular()}>
@@ -569,7 +549,6 @@ export function FileView(props: {
                       kind() === "html" ||
                       kind() === "science" ||
                       kind() === "scientific-data" ||
-                      kind() === "notebook" ||
                       kind() === "table") &&
                     view.source
                   }

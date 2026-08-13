@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
 import { createServer } from "vite"
 import solid from "vite-plugin-solid"
-import type { KernelStatus } from "@/notebook/runtime"
+import type { KernelStatus } from "@/atlas/kernel-runtime"
 
 // KernelPanel itself is not mountable under this harness: unlike HostStrip it
 // has no injectable transport prop, and its useSDK()/useParams() dependencies
@@ -47,11 +47,9 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-// The card's timestamps ("5s ago") can incidentally contain the same digits
-// as a metric value, so freshness assertions read this one field instead of
-// the whole card's textContent.
+// Freshness assertions read one stable field instead of the whole card.
 const executions = (element: Element | null) =>
-  element?.querySelector('[data-slot="kernel-card-executions"]')?.textContent?.match(/· (\d+) cells?/)?.[1]
+  element?.querySelector('[data-slot="kernel-card-executions"]')?.textContent?.match(/· (\d+) runs?/)?.[1]
 
 const mount = (view: () => JSX.Element) => {
   const host = document.createElement("div")
@@ -65,7 +63,7 @@ const kernel = (value: Partial<KernelStatus> & { id: string }): KernelStatus => 
   state: "running",
   projectID: "project-1",
   sessionID: "ses_current",
-  name: "notebook:analysis.ipynb",
+  name: "agent",
   language: "python",
   target: { kind: "local" },
   incarnation: 1,
@@ -77,7 +75,7 @@ const kernel = (value: Partial<KernelStatus> & { id: string }): KernelStatus => 
   process_identity_verified: true,
   started_at: Date.now() - 10_000,
   last_activity_at: Date.now() - 5_000,
-  last_cell: null,
+  last_execution: null,
   ...value,
 })
 
@@ -94,13 +92,7 @@ const list = (source: () => KernelStatus[] | undefined) => {
         get kernel() {
           return kernel
         },
-        routeID: "ses_current",
         action: "",
-        // CPU is stated as a share of the machine, so a card with no host
-        // reading cannot state it at all. The surface supplies this in the
-        // app; supplying it here keeps the subject reconciliation, not
-        // degradation.
-        capacity: { memory: { total: 16_400_000_000, available: 12_000_000_000 }, cpu: { cores: 8 } },
         onControl: () => {},
       }),
   })
@@ -144,9 +136,9 @@ describe("kernel list reconciliation", () => {
     // this pins that reconcile's patch reaches them and the head re-renders,
     // rather than the card holding the first reading it was given.
     const metric = (element: Element | null, label: string) =>
-      [...(element?.querySelectorAll(".kernel-card__metric") ?? [])]
-        .find((item) => item.querySelector("small")?.textContent === label)
-        ?.querySelector("strong")?.textContent
+      [...(element?.querySelectorAll(".activity-card__facts > div") ?? [])]
+        .find((item) => item.querySelector("dt")?.textContent === label)
+        ?.querySelector("dd")?.textContent
     const [source, setSource] = core.createSignal<KernelStatus[] | undefined>([
       kernel({ id: "kernel-a", resources: { cpu_percent: 0, memory_bytes: 16_000_000 } }),
     ])
@@ -155,14 +147,14 @@ describe("kernel list reconciliation", () => {
 
     const card = host.querySelector('[data-kernel-id="kernel-a"]')
     expect(metric(card, "Memory")).toBe("16 MB")
-    expect(metric(card, "CPU cores")).toBe("0.0")
+    expect(metric(card, "CPU")).toBe("0.0 cores")
 
     setSource([kernel({ id: "kernel-a", resources: { cpu_percent: 187.5, memory_bytes: 2_400_000_000 } })])
     await Promise.resolve()
 
     expect(host.querySelector('[data-kernel-id="kernel-a"]')).toBe(card)
     expect(metric(card, "Memory")).toBe("2.4 GB")
-    expect(metric(card, "CPU cores")).toBe("1.9")
+    expect(metric(card, "CPU")).toBe("1.9 cores")
   })
 
   test("mounts a newly appeared kernel and unmounts one that disappeared", async () => {

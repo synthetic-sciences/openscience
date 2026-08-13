@@ -1,5 +1,6 @@
 export * from "./client.js"
 export * from "./server.js"
+export * from "./v2/runtime.js"
 
 import { createOpenScienceClient } from "./client.js"
 import { createOpenScienceServer } from "./server.js"

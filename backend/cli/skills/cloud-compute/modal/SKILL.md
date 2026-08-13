@@ -1,6 +1,6 @@
 ---
 name: modal-serverless-gpu
-description: Run governed Modal sandbox jobs with OpenScience's modal tool. Use for one-off CPU/GPU commands, explicit file uploads and captures, dependency provisioning, resource selection, approval, dispatch, and results. This skill does not install or invoke the Modal Python SDK or CLI.
+description: Run governed Modal sandbox jobs through OpenScience's compute_job JobBroker. Use for one-off CPU/GPU commands, explicit file uploads and captures, dependency provisioning, resource selection, approval, dispatch, and results. This skill does not install or invoke the Modal Python SDK or CLI.
 category: cloud-compute
 version: 4.0.0
 author: Synthetic Sciences
@@ -10,7 +10,7 @@ tags: [Infrastructure, Serverless, GPU, Cloud, Modal, Sandboxes, Compute]
 
 # Modal through OpenScience Compute
 
-OpenScience uses Modal as a trusted control-plane provider. The agent prepares ordinary project files and calls the `modal` tool. The tool presents an exact paid-dispatch approval card, resolves credentials only after approval, creates the sandbox through OpenScience's JavaScript adapter, and returns status and logs.
+OpenScience uses Modal as a trusted control-plane provider. The agent prepares ordinary project files and calls `compute_job` with target `{ kind: "modal" }`. The JobBroker presents an exact paid-dispatch approval card, resolves credentials only after approval, creates the sandbox through OpenScience's JavaScript adapter, and returns status and logs.
 
 This is different from developing a standalone Modal Python application. For the OpenScience path:
 
@@ -18,15 +18,15 @@ This is different from developing a standalone Modal Python application. For the
 - Do not install or import the Modal Python package.
 - Do not run or recommend `modal run`, `modal deploy`, `modal serve`, or `modal setup`.
 - Do not use `modal.App`, Modal decorators, functions, volumes, or Python SDK sandboxes.
-- Do not ask for approval in chat. A chat response such as `yes` is not dispatch authorization; the `modal` tool owns approval.
-- Do not send the user to recreate a job manually in Compute when the `modal` tool is available.
+- Do not ask for approval in chat. A chat response such as `yes` is not dispatch authorization; the `compute_job` plan card owns approval.
+- Do not send the user to recreate a job manually in Compute when `compute_job` is available.
 - Only claim dispatch, status, or completion reported by the tool or Compute job record.
 
 ## Availability
 
 Use the current `<compute-capability>` system section as the authority:
 
-- **Configured and enabled:** prepare files and call the `modal` tool.
+- **Configured and enabled:** prepare files and call `compute_job` with the Modal target.
 - **Configured but disabled:** explain that new jobs are blocked until the user enables Modal in **Settings → Compute**.
 - **Not configured:** direct the user to **Settings → Compute**. Never fall back to local credentials or CLI setup.
 
@@ -35,7 +35,7 @@ Use the current `<compute-capability>` system section as the authority:
 When the user asks to run work on Modal:
 
 1. Create or update ordinary project files when useful. Prefer self-contained scripts that work in the configured image and under its network policy.
-2. Call `modal` with the job name, ordinary command, explicit `uploads`, `outputs`, and `packages`, plus image/GPU/resources when needed.
+2. Call `compute_job` with `action: "start"`, target `{ kind: "modal" }`, the job name, purpose, ordinary command, explicit `uploads`, `artifacts`, and `packages`, plus image/GPU/resources when needed.
 3. The tool displays the exact app, image, packages, GPU, network, timeout, inputs, outputs, and paid-run warning. Wait for that approval; do not ask for a second confirmation in chat.
 4. Report the status and log returned by the tool. The same job is visible under **Compute → Jobs**.
 
@@ -81,13 +81,16 @@ For a CPU-only regression script already created at `linear_regression.py`:
 
 ```json
 {
+  "action": "start",
   "name": "Linear regression smoke test",
+  "purpose": "Fit the regression model and save its reviewed evaluation metrics.",
   "command": "python linear_regression.py",
+  "target": { "kind": "modal" },
   "uploads": ["linear_regression.py"],
-  "outputs": ["outputs/results.json"],
+  "artifacts": ["outputs/results.json"],
   "packages": ["numpy==2.3.2", "scikit-learn==1.7.1"],
   "gpu": "none",
-  "timeout_minutes": 10
+  "resources": { "time_minutes": 10 }
 }
 ```
 

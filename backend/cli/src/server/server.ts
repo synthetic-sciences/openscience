@@ -27,10 +27,11 @@ import { Command } from "../command"
 import { Global } from "../global"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
+import { RuntimeRoutes } from "./routes/runtime"
 import { PtyRoutes } from "./routes/pty"
 import { McpRoutes } from "./routes/mcp"
 import { FileRoutes } from "./routes/file"
-import { NotebookRoutes } from "./routes/notebook"
+import { KernelRoutes, NotebookRoutes } from "./routes/notebook"
 import { ProvenanceRoutes } from "./routes/provenance"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
@@ -44,7 +45,6 @@ import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
-import { ReviewSettingsRoutes } from "./routes/settings/review"
 import { SearchRoutes } from "./routes/search"
 import { GlobalRoutes } from "./routes/global"
 import { AccountRoutes } from "./routes/account"
@@ -210,7 +210,11 @@ export namespace Server {
         // barrier and avoid pinning long-lived streams/websocket upgrades.
         .use(async (c, next) => {
           const switching = c.req.path === "/settings/storage/location"
-          const streaming = c.req.path === "/event" || c.req.path === "/log" || c.req.header("upgrade") === "websocket"
+          const streaming =
+            c.req.path === "/event" ||
+            c.req.path === "/log" ||
+            c.req.path === "/runtime/events" ||
+            c.req.header("upgrade") === "websocket"
           if (switching || streaming) return next()
           await DataRootBarrier.during(Global.Path.data, next, 120_000)
         })
@@ -221,7 +225,6 @@ export namespace Server {
         .route("/settings/credentials", CredentialsRoutes())
         .route("/settings/storage", StorageRoutes())
         .route("/settings/compute", ComputeSettingsRoutes())
-        .route("/settings/review", ReviewSettingsRoutes())
         .route("/settings/preferences", SettingsPreferencesRoutes())
         .route("/settings/local", LocalModelsRoutes())
         .route("/settings/sandbox", SandboxSettingsRoutes())
@@ -345,11 +348,13 @@ export namespace Server {
         .route("/config", ConfigRoutes())
         .route("/experimental", ExperimentalRoutes())
         .route("/session", SessionRoutes())
+        .route("/runtime", RuntimeRoutes())
         .route("/search", SearchRoutes())
         .route("/permission", PermissionRoutes())
         .route("/question", QuestionRoutes())
         .route("/provider", ProviderRoutes())
         .route("/", FileRoutes())
+        .route("/kernels", KernelRoutes())
         .route("/notebook", NotebookRoutes())
         .route("/provenance", ProvenanceRoutes())
         .route("/mcp", McpRoutes())

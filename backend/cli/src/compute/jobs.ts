@@ -69,6 +69,12 @@ export namespace ComputeJobs {
     port: z.number().int().min(1).max(65_535).optional(),
     scheduler: Scheduler.default("none"),
     workdir: z.string().optional(),
+    notes: z
+      .string()
+      .trim()
+      .max(4_000)
+      .optional()
+      .describe("Operator notes about modules, partitions, scratch paths, and installation rules."),
     fingerprint: z.string().startsWith("SHA256:").optional(),
     host_key: z
       .string()
@@ -150,8 +156,29 @@ export namespace ComputeJobs {
   })
   export type Reproducibility = z.infer<typeof Reproducibility>
 
+  export const LocalPlan = z.object({
+    digest: z.string().length(64),
+    provider: z.literal("local"),
+    name: z.string(),
+    purpose: z.string(),
+    command: z.string(),
+    cwd: z.string(),
+    resources: Resources.optional(),
+    artifact_patterns: z.string().array(),
+    checkpoint: z.string().optional(),
+    warning: z.string(),
+  })
+  export type LocalPlan = z.infer<typeof LocalPlan>
+
   export const Input = z.object({
     name: z.string().trim().min(1).max(120),
+    purpose: z
+      .string()
+      .trim()
+      .min(1)
+      .max(500)
+      .optional()
+      .describe("Why this detached job is needed and what result it should produce."),
     command: z.string().trim().min(1).max(100_000),
     cwd: z.string().optional(),
     target: Target,
@@ -182,6 +209,7 @@ export namespace ComputeJobs {
   export const Job = z.object({
     id: z.string(),
     name: z.string(),
+    purpose: z.string().optional(),
     command: z.string(),
     cwd: z.string().optional(),
     target: Target,
@@ -258,7 +286,7 @@ export namespace ComputeJobs {
   })
   export type Job = z.infer<typeof Job>
 
-  export const Plan = z.union([ModalPlan.Schema, SshPlan.Schema])
+  export const Plan = z.union([LocalPlan, ModalPlan.Schema, SshPlan.Schema])
   export type Plan = z.infer<typeof Plan>
 
   export type ModalProvider = Pick<typeof ModalAdapter, "run" | "recover" | "find" | "close" | "release" | "volume">
@@ -266,6 +294,9 @@ export namespace ComputeJobs {
   export type Options = {
     data?: string
     root?: string
+    /** Canonical project directory used only to select the shared durable
+     * inventory when execution itself runs in an isolated session workspace. */
+    projectDirectory?: string
     workspace?: string
     hosts?: Host[]
     modal?: ModalAdapter.Config
@@ -347,7 +378,7 @@ export namespace ComputeJobs {
 
   async function currentAuthority(authority: ExecutionAuthority.Decision) {
     const current = await Instance.provide({
-      directory: authority.workspace,
+      directory: authority.directory ?? authority.workspace,
       fn: () =>
         ExecutionAuthority.require({
           projectID: authority.projectID,
@@ -361,6 +392,17 @@ export namespace ComputeJobs {
     return current
   }
 
+  async function bindScopeWorkspace(scope: Scope, authority: ExecutionAuthority.Decision): Promise<Scope> {
+    const workspace = await Filesystem.canonical(authority.workspace)
+    if (!workspace) throw new Error(`Compute session workspace does not exist: ${authority.workspace}`)
+    const directory = authority.directory ? await Filesystem.canonical(authority.directory) : undefined
+    if (scope.workspace !== workspace && scope.workspace !== directory) {
+      throw new Error("Compute project does not match the session workspace")
+    }
+    if (scope.workspace === workspace) return scope
+    return { ...scope, workspace, key: scopeKey(workspace) }
+  }
+
   function move(job: Job, event: ComputeLifecycle.Event, value: Partial<Job> = {}): Job {
     const lifecycle = ComputeLifecycle.transition(job.lifecycle ?? ComputeLifecycle.from(job.status), event)
     return Job.parse({ ...job, ...value, status: ComputeLifecycle.legacy(lifecycle), lifecycle })
@@ -372,7 +414,8 @@ export namespace ComputeJobs {
   // inference ambiguous. They remain recoverable on disk while all current
   // reads and writes use a canonical-workspace bucket below `projects/`.
   const rootOf = (workspace: string, options: Options) =>
-    options.root ?? path.join(options.data ?? Global.Path.data, "compute", "projects", scopeKey(workspace))
+    options.root ??
+    path.join(options.data ?? Global.Path.data, "compute", "projects", scopeKey(options.projectDirectory ?? workspace))
   const metaOf = (root: string) => path.join(root, "jobs.json")
   const modalAdmissionOf = (root: string) => path.join(root, "modal-admission.lock")
   const modalLeaseOf = (root: string, id: string) => path.join(root, "modal-leases", `${id}.lock`)
@@ -1355,8 +1398,10 @@ export namespace ComputeJobs {
     const patterns = [...(input.artifacts ?? []), ...(input.checkpoint ? [input.checkpoint] : [])]
     await outputs(cwd, input.artifacts ?? [], input.checkpoint)
     return ModalPlan.prepare({
+      purpose: input.purpose ?? input.name,
       command: input.command,
       cwd,
+      workspaceCwd: input.cwd,
       image: input.image ?? context.image,
       packages: input.packages ?? [],
       gpu: input.gpu,
@@ -1705,6 +1750,27 @@ export namespace ComputeJobs {
   async function startSsh(job: Job, scope: Scope, files: SshAdapter.Upload[]) {
     await stageSsh(job, scope, files)
     return submitSsh(job, scope)
+  }
+
+  async function failSshStart(job: Job, scope: Scope, error: unknown) {
+    const released = await releaseSsh(job, scope, false).then(
+      () => true,
+      () => false,
+    )
+    return change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0) throw new Error(`Compute job ${job.id} was not found`)
+      if (terminal.has(jobs[index]!.status)) return jobs[index]!
+      const message = error instanceof Error ? error.message : String(error)
+      const failed = move(
+        jobs[index]!,
+        { type: "finish", outcome: "failed", message },
+        { completed_at: new Date().toISOString(), exit_code: null, error: message },
+      )
+      const closed = released ? move(failed, { type: "close" }) : move(failed, { type: "lose" })
+      jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+      return jobs[index]!
+    })
   }
 
   async function sshLog(job: Job, scope: Scope) {
@@ -2636,20 +2702,48 @@ export namespace ComputeJobs {
 
   export async function plan(input: Request, options: Options = {}): Promise<Plan> {
     const parsed = Request.parse(input)
-    if (parsed.target.kind === "local") throw new Error("Local jobs do not require a remote approval plan")
-    const scope = await scoped(options)
+    let scope = await scoped(options)
     const authority = await ExecutionAuthority.require({
       projectID: Instance.project.id,
       sessionID: parsed.sessionID,
-      capability: "remote_job",
+      capability: parsed.target.kind === "local" ? "local_job" : "remote_job",
     })
-    const requested = authority.workspace
+    scope = await bindScopeWorkspace(scope, authority)
+    if (parsed.target.kind === "local") {
+      const requested = parsed.cwd ? path.resolve(authority.workspace, parsed.cwd) : authority.workspace
+      const cwd = await Filesystem.canonical(requested)
+      const info = cwd ? await fs.stat(cwd).catch(() => undefined) : undefined
+      if (!cwd || !info?.isDirectory() || !Filesystem.contains(authority.workspace, cwd)) {
+        throw new Error(
+          `Local compute working directory must be inside the session workspace: ${parsed.cwd ?? requested}`,
+        )
+      }
+      await outputs(cwd, parsed.artifacts ?? [], parsed.checkpoint)
+      const value = {
+        provider: "local" as const,
+        name: parsed.name,
+        purpose: parsed.purpose ?? parsed.name,
+        command: parsed.command,
+        cwd,
+        resources: parsed.resources,
+        artifact_patterns: parsed.artifacts ?? [],
+        checkpoint: parsed.checkpoint,
+        warning: "This detached job runs on this computer inside the active session sandbox.",
+      }
+      const digest = new Bun.CryptoHasher("sha256").update(JSON.stringify(value)).digest("hex")
+      return LocalPlan.parse({ digest, ...value })
+    }
+    const requested =
+      parsed.target.kind === "ssh"
+        ? authority.workspace
+        : parsed.cwd
+          ? path.resolve(authority.workspace, parsed.cwd)
+          : authority.workspace
     const cwd = await Filesystem.canonical(requested)
     const info = cwd ? await fs.stat(cwd).catch(() => undefined) : undefined
     if (!cwd || !info?.isDirectory() || !Filesystem.contains(authority.workspace, cwd)) {
       throw new Error(`Remote staging directory must be inside the session workspace: ${requested}`)
     }
-    if (scope.workspace !== authority.workspace) throw new Error("Compute project does not match the session workspace")
     if (parsed.target.kind === "modal") return (await modal(parsed, cwd, options.modal)).plan
     if (parsed.target.kind !== "ssh") throw new Error("Unsupported remote compute target")
     const hostID = parsed.target.host_id
@@ -2659,6 +2753,7 @@ export namespace ComputeJobs {
     return (
       await SshPlan.prepare({
         id: "approved-job",
+        purpose: parsed.purpose ?? parsed.name,
         command: parsed.command,
         resources: parsed.resources,
         modules: parsed.modules,
@@ -2674,7 +2769,7 @@ export namespace ComputeJobs {
 
   export async function start(input: Request, options: Options = {}): Promise<Job> {
     const parsed = Request.parse(input)
-    const scope = await scoped(options)
+    let scope = await scoped(options)
     const hostId = parsed.target.kind === "ssh" ? parsed.target.host_id : undefined
     const host = hostId ? options.hosts?.find((item) => item.id === hostId) : undefined
     if (parsed.target.kind === "ssh" && !host) throw new Error("The selected SSH compute profile was not found")
@@ -2683,7 +2778,7 @@ export namespace ComputeJobs {
       sessionID: parsed.sessionID,
       capability: host || parsed.target.kind === "modal" ? "remote_job" : "local_job",
     })
-    if (scope.workspace !== authority.workspace) throw new Error("Compute project does not match the session workspace")
+    scope = await bindScopeWorkspace(scope, authority)
     const requested = parsed.cwd ? path.resolve(authority.workspace, parsed.cwd) : authority.workspace
     const cwd = host ? authority.workspace : await Filesystem.canonical(requested)
     const info = !host && cwd ? await fs.stat(cwd).catch(() => undefined) : undefined
@@ -2697,6 +2792,7 @@ export namespace ComputeJobs {
     const remote = host
       ? await SshPlan.prepare({
           id,
+          purpose: parsed.purpose ?? parsed.name,
           command: parsed.command,
           resources: parsed.resources,
           modules: parsed.modules,
@@ -2725,6 +2821,7 @@ export namespace ComputeJobs {
     const draft = Job.parse({
       id,
       name: parsed.name,
+      purpose: parsed.purpose ?? parsed.name,
       command: parsed.command,
       cwd,
       target: parsed.target,
@@ -2847,38 +2944,41 @@ export namespace ComputeJobs {
         }
         jobs.push(job)
       })
-      await using lease = await FileLease.acquire(sshLeaseOf(scope.root, job.id))
+      const lease = await FileLease.acquire(sshLeaseOf(scope.root, job.id))
       const key = keyOf(scope.root, job.id)
-      await activate(key, {
-        detached: false,
-        authority,
-        root: scope.root,
-        workspace: scope.workspace,
-        id: job.id,
-        host,
-      })
+      let handedOff = false
       try {
-        return await startSsh(job, scope, remote.files)
+        await activate(key, {
+          detached: false,
+          authority,
+          root: scope.root,
+          workspace: scope.workspace,
+          id: job.id,
+          host,
+        })
+        const managed = startSsh(job, scope, remote.files)
+          .catch((error) => failSshStart(job, scope, error))
+          .finally(async () => {
+            await deactivate(key)
+            await releaseLease(lease)
+          })
+        handedOff = true
+        void managed.catch(() => undefined)
+        return job
       } catch (error) {
-        const released = await releaseSsh(job, scope, false).then(
-          () => true,
-          () => false,
-        )
         await change(scope.root, (jobs) => {
           const index = jobs.findIndex((item) => item.id === job.id)
           if (index < 0 || terminal.has(jobs[index]!.status)) return
-          const message = error instanceof Error ? error.message : String(error)
-          const failed = move(
-            jobs[index]!,
-            { type: "finish", outcome: "failed", message },
-            { completed_at: new Date().toISOString(), exit_code: null, error: message },
-          )
-          const closed = released ? move(failed, { type: "close" }) : move(failed, { type: "lose" })
+          const cancelled = move(jobs[index]!, { type: "cancel" }, { completed_at: new Date().toISOString() })
+          const closed = move(cancelled, { type: "close" })
           jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
-        })
+        }).catch(() => undefined)
         throw error
       } finally {
-        await deactivate(key)
+        if (!handedOff) {
+          await deactivate(key)
+          await releaseLease(lease)
+        }
       }
     }
     const reproducibility = host ? undefined : await reproduce(draft, authority)

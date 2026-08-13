@@ -21,8 +21,16 @@ export interface Host {
   port?: number
   scheduler: "none" | "slurm" | "pbs"
   workdir?: string
+  notes?: string
   fingerprint?: string
   concurrency: number
+}
+
+export interface ConfigHost {
+  alias: string
+  hostname?: string
+  user?: string
+  port?: number
 }
 
 export interface Resources {
@@ -54,6 +62,7 @@ export interface Reproducibility {
 export interface Job {
   id: string
   name: string
+  purpose?: string
   command: string
   cwd?: string
   target: Target
@@ -112,6 +121,7 @@ export interface Job {
 export interface JobInput {
   sessionID: string
   name: string
+  purpose?: string
   command: string
   cwd?: string
   target: Target
@@ -129,6 +139,7 @@ export interface JobInput {
 export interface ModalPlan {
   digest: string
   provider: "modal"
+  purpose: string
   app: string
   image: string
   gpu: string
@@ -142,13 +153,28 @@ export interface ModalPlan {
   warning: string
 }
 
+export interface LocalPlan {
+  digest: string
+  provider: "local"
+  name: string
+  purpose: string
+  command: string
+  cwd: string
+  resources?: Resources
+  artifact_patterns: string[]
+  checkpoint?: string
+  warning: string
+}
+
 export interface SshPlan {
   digest: string
   provider: "ssh"
+  purpose: string
   host_id: string
   host: string
   label: string
   scheduler: "none" | "slurm" | "pbs"
+  host_notes?: string
   fingerprint: string
   command: string
   local_cwd: string
@@ -160,7 +186,7 @@ export interface SshPlan {
   warning: string
 }
 
-export type Plan = ModalPlan | SshPlan
+export type Plan = LocalPlan | ModalPlan | SshPlan
 
 export function stableJobs(previous: Job[] | undefined, next: Job[]) {
   if (!previous) return next
@@ -214,7 +240,7 @@ export function createComputeJobsAPI(request: ProjectRequest) {
       request("/settings/compute", { cache: "no-store" }).then(async (response) => {
         if (!response.ok)
           throw new Error((await response.text().catch(() => "")) || `${response.status} ${response.statusText}`)
-        return response.json() as Promise<{ ssh_hosts: Host[] }>
+        return response.json() as Promise<{ ssh_hosts: Host[]; ssh_config_hosts: ConfigHost[] }>
       }),
     list: () => call<Job[]>("", { cache: "no-store" }),
     plan: (input: JobInput) => call<Plan>("/plan", { method: "POST", body: JSON.stringify(input) }),

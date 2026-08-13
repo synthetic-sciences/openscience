@@ -117,7 +117,7 @@ const ACCESS: Array<{ value: FilesystemAccess; label: string }> = [
 // says what each one actually authorises at the moment of choosing.
 const accessNote = (access: FilesystemAccess) => {
   if (access === "read") return "Files can be inspected but not changed."
-  return "OpenScience can publish or change files through brokered tools; code runtimes do not gain a writable mount."
+  return "Approved tools and sandboxed runtimes can read and write files in this folder."
 }
 
 async function grantAccess(transport: Transport, identity: FilesystemIdentity, input: ConnectInput) {
@@ -151,13 +151,13 @@ function RenameArtifact(props: {
       }}
     >
       <label class="files-connect__field">
-        <span>Artifact name</span>
+        <span>Result name</span>
         <input
           data-rename-input
           value={title()}
           autofocus
           maxlength={200}
-          aria-label="Artifact name"
+          aria-label="Result name"
           onInput={(event) => setTitle(event.currentTarget.value)}
         />
       </label>
@@ -420,7 +420,7 @@ export function FilesPane(
     const kind = current().kind
     if (kind === "artifacts") {
       const message = artifacts.latest?.errors.active
-      return message ? `Saved artifacts could not be loaded. ${message}` : ""
+      return message ? `Results could not be loaded. ${message}` : ""
     }
     if (kind === "trash") {
       const message = artifacts.latest?.errors.trash
@@ -498,8 +498,8 @@ export function FilesPane(
           }
         : {
             label: "Connected folder",
-            copy: "Approved file tools can write here; runtimes do not receive a writable mount.",
-            badge: "Tool write",
+            copy: "Approved tools and sandboxed runtimes can read and write files here.",
+            badge: "Read & write",
           }
     return {
       label: "Project files",

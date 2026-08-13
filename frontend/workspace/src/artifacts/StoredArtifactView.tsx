@@ -204,13 +204,13 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
       .then(async (response) => {
         if (!response.ok) throw new Error((await response.text()) || `Rename failed (${response.status})`)
         const updated = normalizeStoredArtifact(await response.json())
-        if (!updated) throw new Error("The renamed artifact record is malformed.")
+        if (!updated) throw new Error("The renamed Result record is malformed.")
         uiStore.updateSaved(updated)
         setName(updated.title)
         setAction()
         void detailActions.refetch()
         window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
-        toast.success("artifact renamed", updated.title)
+        toast.success("Result renamed", updated.title)
       })
       .catch((error) => toast.error("rename failed", error instanceof Error ? error.message : String(error)))
       .finally(() => setBusy(false))
@@ -224,7 +224,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
         if (!response.ok) throw new Error((await response.text()) || `Delete failed (${response.status})`)
         window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
         uiStore.closeWorkTab(`saved:${props.artifact.id}`)
-        toast.success("artifact moved to trash", "Recoverable from Files for 30 days.")
+        toast.success("Result moved to Trash", "Recoverable from Files for 30 days.")
       })
       .catch((error) => toast.error("delete failed", error instanceof Error ? error.message : String(error)))
       .finally(() => setBusy(false))
@@ -233,7 +233,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
   return (
     <div
       role="region"
-      aria-label={`Saved artifact ${props.artifact.title}`}
+      aria-label={`Saved Result ${props.artifact.title}`}
       style={{
         flex: 1,
         "min-height": 0,
@@ -264,7 +264,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
         </Show>
         <button
           type="button"
-          aria-label="Manage artifact"
+          aria-label="Manage Result"
           aria-expanded={action() !== undefined}
           onClick={() => setAction(action() ? undefined : "menu")}
           style={download()}
@@ -274,7 +274,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
         </button>
       </header>
 
-      <nav aria-label="Artifact record" style={tablist()}>
+      <nav aria-label="Result record" style={tablist()}>
         <For each={tabs}>
           {(item) => (
             <button
@@ -292,17 +292,12 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
 
       <Show when={action()}>
         {(current) => (
-          <section aria-label="Artifact actions" style={actionCard()}>
+          <section aria-label="Result actions" style={actionCard()}>
             <div style={actionHead()}>
               <strong style={heading()}>
-                {current() === "rename" ? "Rename artifact" : current() === "delete" ? "Move to trash" : "Manage"}
+                {current() === "rename" ? "Rename Result" : current() === "delete" ? "Move to Trash" : "Manage"}
               </strong>
-              <button
-                type="button"
-                aria-label="Close artifact actions"
-                onClick={() => setAction()}
-                style={iconButton()}
-              >
+              <button type="button" aria-label="Close Result actions" onClick={() => setAction()} style={iconButton()}>
                 <IconX size={14} strokeWidth={1.6} />
               </button>
             </div>
@@ -317,14 +312,14 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
                     Delete
                   </button>
                 </div>
-                <p style={copy()}>Delete moves this artifact and every version to recoverable Trash for 30 days.</p>
+                <p style={copy()}>Delete moves this Result and every version to recoverable Trash for 30 days.</p>
               </Match>
               <Match when={current() === "rename"}>
                 <form onSubmit={rename} style={actionForm()}>
                   <label style={field()}>
-                    <span>Artifact name</span>
+                    <span>Result name</span>
                     <input
-                      aria-label="Artifact name"
+                      aria-label="Result name"
                       value={name()}
                       onInput={(event) => setName(event.currentTarget.value)}
                       maxlength={240}
@@ -447,7 +442,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
                   </section>
                 </Match>
                 <Match when={tab() === "review"}>
-                  <section aria-label="Artifact review" style={section()}>
+                  <section aria-label="Result review" style={section()}>
                     <span style={reviewIcon()}>
                       <IconCheckCircle size={20} strokeWidth={1.5} />
                     </span>
@@ -529,7 +524,7 @@ function Preview(props: {
   }
   if (text(props.version) && props.version.size > 8 * 1024 * 1024) {
     return (
-      <p style={empty()}>This text artifact is larger than the 8 MB preview limit. Download preserves exact bytes.</p>
+      <p style={empty()}>This text Result is larger than the 8 MB preview limit. Download preserves exact bytes.</p>
     )
   }
   if (text(props.version)) {

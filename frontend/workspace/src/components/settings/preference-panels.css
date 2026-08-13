@@ -446,6 +446,34 @@
   gap: var(--settings-space-3);
 }
 
+.settings-compute-config-import {
+  display: grid;
+  gap: var(--settings-space-2);
+}
+
+.settings-compute-config-import__heading {
+  padding-inline: 2px;
+}
+
+.settings-compute-config-import__heading h4,
+.settings-compute-config-import__heading p {
+  margin: 0;
+}
+
+.settings-compute-config-import__heading h4 {
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-compute-config-import__heading p {
+  margin-top: 2px;
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
 .settings-compute-host-copy {
   min-width: 0;
   display: flex;
@@ -458,6 +486,36 @@
   flex: 0 0 auto;
   justify-content: flex-end;
   margin-left: auto;
+}
+
+.settings-compute-host-notes-copy {
+  max-width: 72ch;
+  margin-top: var(--settings-space-2);
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-line;
+  text-wrap: pretty;
+}
+
+.settings-compute-host-notes-editor {
+  display: grid;
+  gap: var(--settings-space-2);
+  padding: 0 var(--settings-space-4) var(--settings-space-4) 56px;
+}
+
+.settings-compute-host-notes-editor > p {
+  margin: 0;
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.settings-preferences-panel .settings-compute-notes-field {
+  min-height: 76px;
+  padding-block: 8px;
+  resize: vertical;
+  line-height: 1.45;
 }
 
 .settings-permission-defaults[data-expanded="false"] .settings-card > .settings-row:nth-child(n + 7) {
@@ -571,6 +629,10 @@
     justify-content: flex-start;
     margin-left: 0;
     padding-left: calc(32px + var(--settings-space-3));
+  }
+
+  .settings-compute-host-notes-editor {
+    padding-left: var(--settings-space-4);
   }
 
   .settings-compute-actions {

@@ -72,6 +72,9 @@ import type {
   FileReviewsResolveResponses,
   FileReviewsRunResponses,
   FileStatusResponses,
+  FileTrashListResponses,
+  FileTrashRestoreErrors,
+  FileTrashRestoreResponses,
   FileWriteResponses,
   FindFilesResponses,
   FindSymbolsResponses,
@@ -92,6 +95,20 @@ import type {
   GlobalProjectCreateResponses,
   GlobalSyncResponses,
   InstanceDisposeResponses,
+  KernelsCommandsResponses,
+  KernelsCommandStopErrors,
+  KernelsCommandStopResponses,
+  KernelsComputeResponses,
+  KernelsDeleteResponses,
+  KernelsExecuteResponses,
+  KernelsInterruptByIdResponses,
+  KernelsInterruptResponses,
+  KernelsListResponses,
+  KernelsRestartByIdResponses,
+  KernelsRestartResponses,
+  KernelsStatusResponses,
+  KernelsStopByIdResponses,
+  KernelsStopResponses,
   LspStatusResponses,
   McpAddErrors,
   McpAddResponses,
@@ -155,6 +172,7 @@ import type {
   ProjectTrustUpdateResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
+  ProvenanceExecutionsResponses,
   ProvenanceExportResponses,
   ProvenanceListResponses,
   ProvenanceRecordErrors,
@@ -190,6 +208,13 @@ import type {
   QuestionRejectResponses,
   QuestionReplyErrors,
   QuestionReplyResponses,
+  ResearchEffort,
+  RuntimePromptErrors,
+  RuntimePromptResponses,
+  RuntimeReplayErrors,
+  RuntimeReplayResponses,
+  RuntimeSubscribeErrors,
+  RuntimeSubscribeResponses,
   SearchQueryResponses,
   SessionAbortErrors,
   SessionAbortResponses,
@@ -255,6 +280,8 @@ import type {
   SettingsComputeJobsLogResponses,
   SettingsComputeJobsPlanErrors,
   SettingsComputeJobsPlanResponses,
+  SettingsComputeJobsReleaseErrors,
+  SettingsComputeJobsReleaseResponses,
   SettingsComputeJobsRetryErrors,
   SettingsComputeJobsRetryResponses,
   SettingsComputeJobsStartErrors,
@@ -281,6 +308,8 @@ import type {
   SettingsComputeSshRemoveResponses,
   SettingsComputeSshTestErrors,
   SettingsComputeSshTestResponses,
+  SettingsComputeSshUpdateErrors,
+  SettingsComputeSshUpdateResponses,
   SettingsCredentialsListResponses,
   SettingsCredentialsRemoveResponses,
   SettingsCredentialsSetResponses,
@@ -288,11 +317,11 @@ import type {
   SettingsNetworkSetResponses,
   SettingsPreferencesGetResponses,
   SettingsPreferencesUpdateResponses,
-  SettingsReviewGetResponses,
-  SettingsReviewSetResponses,
   SettingsSkillsInstallErrors,
   SettingsSkillsInstallResponses,
+  SettingsStorageRelocateErrors,
   SettingsStorageRelocateResponses,
+  SettingsStorageResetLocationErrors,
   SettingsStorageResetLocationResponses,
   SettingsStorageUsageResponses,
   SettingsUpdatesCheckResponses,
@@ -777,7 +806,7 @@ export class Storage extends HeyApiClient {
   /**
    * Get storage usage
    *
-   * Real on-disk sizes for the OpenScience data directory and its top-level entries.
+   * Real on-disk sizes for the active OpenScience data directory and its top-level entries.
    */
   public usage<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<SettingsStorageUsageResponses, unknown, ThrowOnError>({
@@ -789,19 +818,20 @@ export class Storage extends HeyApiClient {
   /**
    * Reset data location
    *
-   * Remove the data-location pointer so ~/.openscience is used on next launch.
+   * Reverse-migrate the active data into ~/.openscience, atomically switch every running process, and preserve the previous default as a timestamped backup.
    */
   public resetLocation<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).delete<SettingsStorageResetLocationResponses, unknown, ThrowOnError>({
-      url: "/settings/storage/location",
-      ...options,
-    })
+    return (options?.client ?? this.client).delete<
+      SettingsStorageResetLocationResponses,
+      SettingsStorageResetLocationErrors,
+      ThrowOnError
+    >({ url: "/settings/storage/location", ...options })
   }
 
   /**
    * Change data location
    *
-   * Copy the data directory to a new absolute path and record a pointer honoured on next launch. Requires restart.
+   * Take a verified snapshot, drain active writers, atomically switch every running OpenScience process, and retain the source as a safety copy.
    */
   public relocate<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -810,7 +840,11 @@ export class Storage extends HeyApiClient {
     options?: Options<never, ThrowOnError>,
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "path" }] }])
-    return (options?.client ?? this.client).post<SettingsStorageRelocateResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).post<
+      SettingsStorageRelocateResponses,
+      SettingsStorageRelocateErrors,
+      ThrowOnError
+    >({
       url: "/settings/storage/location",
       ...options,
       ...params,
@@ -1077,6 +1111,8 @@ export class Ssh extends HeyApiClient {
       port?: number
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
+      notes?: string
+      concurrency?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1091,6 +1127,8 @@ export class Ssh extends HeyApiClient {
             { in: "body", key: "port" },
             { in: "body", key: "scheduler" },
             { in: "body", key: "workdir" },
+            { in: "body", key: "notes" },
+            { in: "body", key: "concurrency" },
           ],
         },
       ],
@@ -1148,6 +1186,43 @@ export class Ssh extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Update SSH host notes
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      notes?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "notes" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      SettingsComputeSshUpdateResponses,
+      SettingsComputeSshUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/ssh/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
 }
 
 export class Jobs extends HeyApiClient {
@@ -1169,12 +1244,13 @@ export class Jobs extends HeyApiClient {
   }
 
   /**
-   * Start a local compute job
+   * Start a compute job
    */
   public start<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       name?: string
+      purpose?: string
       command?: string
       cwd?: string
       target?:
@@ -1215,6 +1291,7 @@ export class Jobs extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "name" },
+            { in: "body", key: "purpose" },
             { in: "body", key: "command" },
             { in: "body", key: "cwd" },
             { in: "body", key: "target" },
@@ -1250,12 +1327,13 @@ export class Jobs extends HeyApiClient {
   }
 
   /**
-   * Prepare an exact Modal run plan for approval
+   * Prepare an exact remote run plan for approval
    */
   public plan<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       name?: string
+      purpose?: string
       command?: string
       cwd?: string
       target?:
@@ -1296,6 +1374,7 @@ export class Jobs extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "name" },
+            { in: "body", key: "purpose" },
             { in: "body", key: "command" },
             { in: "body", key: "cwd" },
             { in: "body", key: "target" },
@@ -1412,7 +1491,7 @@ export class Jobs extends HeyApiClient {
   }
 
   /**
-   * Retry delivery from a retained Modal resource
+   * Retry output delivery from a retained remote resource
    */
   public retry<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1438,6 +1517,38 @@ export class Jobs extends HeyApiClient {
       ThrowOnError
     >({
       url: "/settings/compute/jobs/{id}/retry",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Release retained compute resources
+   */
+  public release<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SettingsComputeJobsReleaseResponses,
+      SettingsComputeJobsReleaseErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/jobs/{id}/release",
       ...options,
       ...params,
     })
@@ -1505,54 +1616,6 @@ export class Compute extends HeyApiClient {
   private _jobs?: Jobs
   get jobs(): Jobs {
     return (this._jobs ??= new Jobs({ client: this.client }))
-  }
-}
-
-export class Review extends HeyApiClient {
-  /**
-   * Get reviewer preferences
-   */
-  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<SettingsReviewGetResponses, unknown, ThrowOnError>({
-      url: "/settings/review",
-      ...options,
-    })
-  }
-
-  /**
-   * Update reviewer preferences
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters?: {
-      auto?: boolean
-      model?: {
-        providerID: string
-        modelID: string
-      } | null
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "body", key: "auto" },
-            { in: "body", key: "model" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<SettingsReviewSetResponses, unknown, ThrowOnError>({
-      url: "/settings/review",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
   }
 }
 
@@ -1816,11 +1879,6 @@ export class Settings extends HeyApiClient {
     return (this._compute ??= new Compute({ client: this.client }))
   }
 
-  private _review?: Review
-  get review(): Review {
-    return (this._review ??= new Review({ client: this.client }))
-  }
-
   private _preferences?: Preferences
   get preferences(): Preferences {
     return (this._preferences ??= new Preferences({ client: this.client }))
@@ -1917,7 +1975,7 @@ export class Trust extends HeyApiClient {
   /**
    * Inspect project trust
    *
-   * Inspect whether project-local code may execute. Project code is enabled by default and remains disabled only after an explicit revocation.
+   * Inspect whether project-local code may execute. New and relocated projects are untrusted until their canonical root is explicitly approved.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3313,6 +3371,7 @@ export class Session extends HeyApiClient {
       tools?: {
         [key: string]: boolean
       }
+      effort?: ResearchEffort
       delegation?: boolean
       system?: string
       variant?: string
@@ -3333,6 +3392,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
+            { in: "body", key: "effort" },
             { in: "body", key: "delegation" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
@@ -3405,6 +3465,7 @@ export class Session extends HeyApiClient {
       tools?: {
         [key: string]: boolean
       }
+      effort?: ResearchEffort
       delegation?: boolean
       system?: string
       variant?: string
@@ -3425,6 +3486,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
+            { in: "body", key: "effort" },
             { in: "body", key: "delegation" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
@@ -3853,6 +3915,111 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Runtime extends HeyApiClient {
+  /**
+   * Start a research run
+   *
+   * Accepts a prompt and returns immediately while the Research agent continues in the background.
+   */
+  public prompt<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      message?: string
+      effort?: "normal" | "ultra"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "message" },
+            { in: "body", key: "effort" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<RuntimePromptResponses, RuntimePromptErrors, ThrowOnError>({
+      url: "/runtime/prompt",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Replay research run events
+   *
+   * Returns retained events strictly after the supplied per-session sequence cursor.
+   */
+  public replay<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      sessionID: string
+      afterSequence?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+            { in: "query", key: "afterSequence" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<RuntimeReplayResponses, RuntimeReplayErrors, ThrowOnError>({
+      url: "/runtime/events/replay",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Subscribe to research run events
+   *
+   * Replays retained events after a cursor, then streams live events with SSE id fields equal to their sequence numbers.
+   */
+  public subscribe<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      sessionID: string
+      afterSequence?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+            { in: "query", key: "afterSequence" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).sse.get<RuntimeSubscribeResponses, RuntimeSubscribeErrors, ThrowOnError>({
+      url: "/runtime/events",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Search extends HeyApiClient {
   /**
    * Search sessions, messages, and artifacts
@@ -4202,6 +4369,64 @@ export class Find extends HeyApiClient {
   }
 }
 
+export class Trash extends HeyApiClient {
+  /**
+   * List recoverable source files
+   *
+   * List source and workspace files deleted by approved edit operations during the 30-day recovery window.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<FileTrashListResponses, unknown, ThrowOnError>({
+      url: "/file/trash",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Restore a deleted source file
+   *
+   * Restore a source or workspace file during its 30-day recovery window without overwriting an existing path.
+   */
+  public restore<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<FileTrashRestoreResponses, FileTrashRestoreErrors, ThrowOnError>({
+      url: "/file/trash/{id}/restore",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Artifact extends HeyApiClient {
   /**
    * Save a file as a versioned artifact
@@ -4247,7 +4472,7 @@ export class Artifact extends HeyApiClient {
 
 export class ArtifactStore extends HeyApiClient {
   /**
-   * List saved artifacts
+   * List saved Results
    *
    * List active or recoverable trashed artifacts from this project's local artifact database.
    */
@@ -4277,7 +4502,7 @@ export class ArtifactStore extends HeyApiClient {
   }
 
   /**
-   * Move a saved artifact to trash
+   * Move a saved Result to trash
    *
    * Hide an artifact from active Files while retaining every version for 30 days.
    */
@@ -4311,9 +4536,9 @@ export class ArtifactStore extends HeyApiClient {
   }
 
   /**
-   * Read one saved artifact record
+   * Read one saved Result record
    *
-   * Read immutable version metadata and the current execution record for a saved artifact.
+   * Read immutable version metadata and the current execution record for a saved Result.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
@@ -4345,7 +4570,7 @@ export class ArtifactStore extends HeyApiClient {
   }
 
   /**
-   * Rename a saved artifact
+   * Rename a saved Result
    *
    * Rename the artifact record without changing any immutable version bytes.
    */
@@ -5220,6 +5445,11 @@ export class File extends HeyApiClient {
     })
   }
 
+  private _trash?: Trash
+  get trash(): Trash {
+    return (this._trash ??= new Trash({ client: this.client }))
+  }
+
   private _artifact?: Artifact
   get artifact(): Artifact {
     return (this._artifact ??= new Artifact({ client: this.client }))
@@ -5242,6 +5472,448 @@ export class File extends HeyApiClient {
 }
 
 export class Command extends HeyApiClient {
+  /**
+   * Stop a live shell command
+   */
+  public stop<ThrowOnError extends boolean = false>(
+    parameters: {
+      commandID: string
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "commandID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KernelsCommandStopResponses, KernelsCommandStopErrors, ThrowOnError>({
+      url: "/kernels/commands/{commandID}/stop",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Kernels extends HeyApiClient {
+  /**
+   * Report live local runtime capacity
+   */
+  public compute<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<KernelsComputeResponses, unknown, ThrowOnError>({
+      url: "/kernels/compute",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List live project shell commands
+   */
+  public commands<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KernelsCommandsResponses, unknown, ThrowOnError>({
+      url: "/kernels/commands",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List session runtime records
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KernelsListResponses, unknown, ThrowOnError>({
+      url: "/kernels",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Restart in a fresh runtime
+   */
+  public restartById<ThrowOnError extends boolean = false>(
+    parameters: {
+      kernelID: string
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "kernelID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KernelsRestartByIdResponses, unknown, ThrowOnError>({
+      url: "/kernels/{kernelID}/restart",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Stop a runtime process
+   */
+  public stopById<ThrowOnError extends boolean = false>(
+    parameters: {
+      kernelID: string
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "kernelID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KernelsStopByIdResponses, unknown, ThrowOnError>({
+      url: "/kernels/{kernelID}/stop",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Interrupt a live runtime
+   */
+  public interruptById<ThrowOnError extends boolean = false>(
+    parameters: {
+      kernelID: string
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "kernelID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KernelsInterruptByIdResponses, unknown, ThrowOnError>({
+      url: "/kernels/{kernelID}/interrupt",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Forget an inactive runtime record
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      kernelID: string
+      directory?: string
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "kernelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<KernelsDeleteResponses, unknown, ThrowOnError>({
+      url: "/kernels/{kernelID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Run Python or R code
+   *
+   * Run code in a long-lived project-scoped Python or R process. State persists until restart, stop, or idle expiry.
+   */
+  public execute<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      language?: "python" | "r"
+      environment?: string
+      source?: string
+      code?: string
+      timeout?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "language" },
+            { in: "body", key: "environment" },
+            { in: "body", key: "source" },
+            { in: "body", key: "code" },
+            { in: "body", key: "timeout" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KernelsExecuteResponses, unknown, ThrowOnError>({
+      url: "/kernels/execute",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get runtime status
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      sessionID: string
+      language: "python" | "r"
+      environment?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+            { in: "query", key: "language" },
+            { in: "query", key: "environment" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KernelsStatusResponses, unknown, ThrowOnError>({
+      url: "/kernels/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Restart a runtime
+   */
+  public restart<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      language?: "python" | "r"
+      environment?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "language" },
+            { in: "body", key: "environment" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KernelsRestartResponses, unknown, ThrowOnError>({
+      url: "/kernels/restart",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Stop a runtime
+   */
+  public stop<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      language?: "python" | "r"
+      environment?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "language" },
+            { in: "body", key: "environment" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KernelsStopResponses, unknown, ThrowOnError>({
+      url: "/kernels/stop",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Interrupt a running execution
+   *
+   * Stop the running execution while preserving process state when the runtime supports interruption.
+   */
+  public interrupt<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      language?: "python" | "r"
+      environment?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "language" },
+            { in: "body", key: "environment" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KernelsInterruptResponses, unknown, ThrowOnError>({
+      url: "/kernels/interrupt",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _command?: Command
+  get command(): Command {
+    return (this._command ??= new Command({ client: this.client }))
+  }
+}
+
+export class Command2 extends HeyApiClient {
   /**
    * Stop a live shell command
    */
@@ -5500,8 +6172,9 @@ export class Notebook extends HeyApiClient {
     parameters?: {
       directory?: string
       sessionID?: string
-      id?: string
       language?: "python" | "r"
+      environment?: string
+      id?: string
       code?: string
       timeout?: number
     },
@@ -5514,8 +6187,9 @@ export class Notebook extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "sessionID" },
-            { in: "body", key: "id" },
             { in: "body", key: "language" },
+            { in: "body", key: "environment" },
+            { in: "body", key: "id" },
             { in: "body", key: "code" },
             { in: "body", key: "timeout" },
           ],
@@ -5541,8 +6215,9 @@ export class Notebook extends HeyApiClient {
     parameters: {
       directory?: string
       sessionID: string
-      id: string
       language: "python" | "r"
+      environment?: string
+      id: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5553,8 +6228,9 @@ export class Notebook extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "sessionID" },
-            { in: "query", key: "id" },
             { in: "query", key: "language" },
+            { in: "query", key: "environment" },
+            { in: "query", key: "id" },
           ],
         },
       ],
@@ -5573,8 +6249,9 @@ export class Notebook extends HeyApiClient {
     parameters?: {
       directory?: string
       sessionID?: string
-      id?: string
       language?: "python" | "r"
+      environment?: string
+      id?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5585,8 +6262,9 @@ export class Notebook extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "sessionID" },
-            { in: "body", key: "id" },
             { in: "body", key: "language" },
+            { in: "body", key: "environment" },
+            { in: "body", key: "id" },
           ],
         },
       ],
@@ -5610,8 +6288,9 @@ export class Notebook extends HeyApiClient {
     parameters?: {
       directory?: string
       sessionID?: string
-      id?: string
       language?: "python" | "r"
+      environment?: string
+      id?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5622,8 +6301,9 @@ export class Notebook extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "sessionID" },
-            { in: "body", key: "id" },
             { in: "body", key: "language" },
+            { in: "body", key: "environment" },
+            { in: "body", key: "id" },
           ],
         },
       ],
@@ -5649,8 +6329,9 @@ export class Notebook extends HeyApiClient {
     parameters?: {
       directory?: string
       sessionID?: string
-      id?: string
       language?: "python" | "r"
+      environment?: string
+      id?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5661,8 +6342,9 @@ export class Notebook extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "sessionID" },
-            { in: "body", key: "id" },
             { in: "body", key: "language" },
+            { in: "body", key: "environment" },
+            { in: "body", key: "id" },
           ],
         },
       ],
@@ -5679,9 +6361,9 @@ export class Notebook extends HeyApiClient {
     })
   }
 
-  private _command?: Command
-  get command(): Command {
-    return (this._command ??= new Command({ client: this.client }))
+  private _command?: Command2
+  get command(): Command2 {
+    return (this._command ??= new Command2({ client: this.client }))
   }
 
   private _kernel?: Kernel
@@ -5884,6 +6566,36 @@ export class Provenance extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
     return (options?.client ?? this.client).get<ProvenanceExportResponses, unknown, ThrowOnError>({
       url: "/provenance/export",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List durable execution history
+   *
+   * Returns the ordered, project-scoped execution record used by Activity, including runtime identity, restarts, outputs, files, artifacts, and provenance.
+   */
+  public executions<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProvenanceExecutionsResponses, unknown, ThrowOnError>({
+      url: "/provenance/executions",
       ...options,
       ...params,
     })
@@ -6344,7 +7056,7 @@ export class Vcs extends HeyApiClient {
   }
 }
 
-export class Command2 extends HeyApiClient {
+export class Command3 extends HeyApiClient {
   /**
    * List commands
    *
@@ -6779,6 +7491,11 @@ export class OpenScienceClient extends HeyApiClient {
     return (this._permission ??= new Permission({ client: this.client }))
   }
 
+  private _runtime?: Runtime
+  get runtime(): Runtime {
+    return (this._runtime ??= new Runtime({ client: this.client }))
+  }
+
   private _search?: Search
   get search(): Search {
     return (this._search ??= new Search({ client: this.client }))
@@ -6802,6 +7519,11 @@ export class OpenScienceClient extends HeyApiClient {
   private _file?: File
   get file(): File {
     return (this._file ??= new File({ client: this.client }))
+  }
+
+  private _kernels?: Kernels
+  get kernels(): Kernels {
+    return (this._kernels ??= new Kernels({ client: this.client }))
   }
 
   private _notebook?: Notebook
@@ -6834,9 +7556,9 @@ export class OpenScienceClient extends HeyApiClient {
     return (this._vcs ??= new Vcs({ client: this.client }))
   }
 
-  private _command?: Command2
-  get command(): Command2 {
-    return (this._command ??= new Command2({ client: this.client }))
+  private _command?: Command3
+  get command(): Command3 {
+    return (this._command ??= new Command3({ client: this.client }))
   }
 
   private _app?: App

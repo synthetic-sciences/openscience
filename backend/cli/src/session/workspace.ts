@@ -46,12 +46,20 @@ export namespace SessionWorkspace {
     return ["session_workspace", Instance.project.id, sessionID]
   }
 
+  function trashKey(info: Info) {
+    return ["session_workspace_trash", info.projectID, info.sessionID, info.workspaceID]
+  }
+
+  function trashPrefix(sessionID?: string) {
+    return ["session_workspace_trash", Instance.project.id, ...(sessionID ? [sessionID] : [])]
+  }
+
   export function root(projectID = Instance.project.id) {
     return path.join(Global.Path.data, "workspaces", segment(projectID))
   }
 
-  function trashRoot(projectID: string, sessionID: string) {
-    return path.join(Global.Path.data, "workspace-trash", segment(projectID), segment(sessionID))
+  function trashRoot(projectID: string, sessionID: string, workspaceID: string) {
+    return path.join(Global.Path.data, "workspace-trash", segment(projectID), segment(sessionID), segment(workspaceID))
   }
 
   async function size(root: string): Promise<number> {
@@ -94,7 +102,7 @@ export namespace SessionWorkspace {
       if (Storage.NotFoundError.isInstance(error)) return
       throw error
     })
-    if (existing) return owner(existing, input.sessionID)
+    if (existing && existing.state !== "trash") return owner(existing, input.sessionID)
     return create(input)
   }
 
@@ -110,7 +118,14 @@ export namespace SessionWorkspace {
       if (Storage.NotFoundError.isInstance(error)) return
       throw error
     })
-    if (existing) return owner(existing, input.sessionID)
+    if (existing && existing.state !== "trash") return owner(existing, input.sessionID)
+    if (existing) {
+      // An explicitly recreated historical session ID owns a new scratch
+      // incarnation. Archive the deleted incarnation by value before replacing
+      // the active pointer, so its recovery copy survives for the normal trash
+      // retention window without being mounted into the new session.
+      await Storage.write(trashKey(owner(existing, input.sessionID)), existing)
+    }
 
     const target =
       input.scratchRoot ?? (input.mode === "isolated" ? path.join(root(), segment(input.sessionID)) : input.directory)
@@ -169,7 +184,7 @@ export namespace SessionWorkspace {
     const info = await get(sessionID)
     if (info.state === "trash") return info
     const now = Date.now()
-    const destination = info.mode === "isolated" ? trashRoot(info.projectID, sessionID) : undefined
+    const destination = info.mode === "isolated" ? trashRoot(info.projectID, sessionID, info.workspaceID) : undefined
     if (destination) {
       await fs.mkdir(path.dirname(destination), { recursive: true })
       const source = await fs.stat(info.scratchRoot).then(
@@ -230,6 +245,27 @@ export namespace SessionWorkspace {
     await Storage.remove(key(sessionID))
   }
 
+  /** Recovery copies superseded by an explicit same-ID session recreation.
+   * These are never mounted implicitly into the replacement session. */
+  export async function listTrash(sessionID: string) {
+    const paths = await Storage.list(trashPrefix(sessionID))
+    const archived = await Promise.all(
+      paths.map((item) =>
+        Storage.read<unknown>(item)
+          .then((value) => Info.safeParse(value))
+          .then((result) => (result.success ? result.data : undefined))
+          .catch(() => undefined),
+      ),
+    )
+    const current = await read(sessionID).catch((error) => {
+      if (Storage.NotFoundError.isInstance(error)) return
+      throw error
+    })
+    return [...archived, current?.state === "trash" ? current : undefined]
+      .filter((info): info is Info => Boolean(info))
+      .toSorted((left, right) => (right.trashedAt ?? 0) - (left.trashedAt ?? 0))
+  }
+
   export async function sweep(now = Date.now()) {
     const keys = await Storage.list(["session_workspace", Instance.project.id]).catch(() => [])
     for (const item of keys) {
@@ -244,6 +280,18 @@ export namespace SessionWorkspace {
         throw error
       })
       if (!session) await trash(info.sessionID)
+    }
+
+    const archived = await Storage.list(trashPrefix()).catch(() => [])
+    for (const item of archived) {
+      const parsed = await Storage.read<unknown>(item)
+        .then((value) => Info.safeParse(value))
+        .catch(() => undefined)
+      if (!parsed?.success) continue
+      const info = parsed.data
+      if (info.state !== "trash" || !info.trashedAt || now - info.trashedAt < TRASH_AGE) continue
+      if (info.trashRoot) await fs.rm(info.trashRoot, { recursive: true, force: true })
+      await Storage.remove(item)
     }
 
     const entries = await fs.readdir(root(), { withFileTypes: true }).catch(() => [])

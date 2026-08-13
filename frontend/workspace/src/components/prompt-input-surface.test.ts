@@ -57,17 +57,16 @@ describe("floating prompt surface", () => {
     expect(source).toContain('role="group"')
     expect(source).toContain('aria-label="Composer tools"')
     expect(source).toContain('aria-label="Model and send"')
-    expect(source).toContain('<Icon name="flask" class="size-4" />')
-    expect(source).not.toContain('<Icon name="sliders" class="size-4" />')
-    expect(source).toContain('aria-label="Research capabilities"')
-    expect(source).toContain("aria-expanded={modeOpen()}")
-    expect(source).toContain('<Icon name="chevron-right" size="small" />')
-    expect(source).toContain('<Icon name="chevron-left" size="small" />')
-    expect(source).not.toContain(">›</span>")
-    expect(source).not.toContain('<span aria-hidden="true">‹</span>')
+    expect(source).toContain("aria-label={`Research effort: ${researchEffortLabel(effort())}")
+    expect(popover).toContain("aria-label={`Model: ${control().trigger}`}")
+    expect(source).not.toContain('aria-label="Research capabilities"')
+    expect(source).not.toContain("workspace-composer__overflow")
+    expect(source).not.toContain("Research tools")
+    expect(source).not.toContain('<Icon name="flask"')
   })
 
   test("keeps compact desktop controls and explicit coarse-pointer targets", () => {
+    expect(componentCss).toContain("min-height: 32px")
     expect(componentCss).toContain("width: 34px")
     expect(componentCss).toContain("height: 34px")
     expect(componentCss).toContain("@media (pointer: coarse)")
@@ -91,11 +90,32 @@ describe("composer control consolidation", () => {
     expect(source).toContain('const isNewSession = !params.id || params.id === "new"')
   })
 
-  test("shows the effort chip only when effort is non-default", () => {
-    expect(popover).toContain('if (!effort || effort.current.id === "standard") return undefined')
-    expect(popover).toContain("data-model-effort-chip")
-    expect(popover).toContain('props.trigger !== "icon" && chip()')
-    expect(source).not.toContain("data-model-effort-chip")
+  test("shows one persistent Normal or Ultra research-effort control", () => {
+    expect(source).toContain('Persist.workspace(sdk.scope, "research-effort", ["research-effort.v1"])')
+    expect(source).toContain("data-research-effort={effort()}")
+    expect(source).toContain('aria-pressed={effort() === "ultra"}')
+    expect(source).toContain("<span>Research effort:</span>")
+    expect(source).toContain("<strong>{researchEffortLabel(effort())}</strong>")
+    expect(source).not.toMatch(/workspace-composer__effort[\s\S]{0,500}<Icon/)
+    expect(componentCss).toContain('data-research-effort="ultra"')
+    expect(componentCss).toContain("var(--surface-interactive-weak)")
+  })
+
+  test("sends the selected research effort through the SDK prompt", () => {
+    expect(source).toContain("const researchEffort = effort()")
+    expect(source).toContain("effort: researchEffort")
+    expect(source).toContain("await client.session.prompt(request)")
+  })
+
+  test("keeps specialist, reviewer, delegation, domain, and compute controls out of the composer", () => {
+    expect(source).not.toContain("loadCapabilities")
+    expect(source).not.toContain("toggleDelegation")
+    expect(source).not.toContain("toggleReview")
+    expect(source).not.toContain("Reviewer model")
+    expect(source).not.toContain("delegation:")
+    expect(source).not.toContain("capabilitySpecialist")
+    expect(source).not.toContain("Compute providers")
+    expect(source).toContain("<ModelSettingsPopover />")
   })
 
   test("keeps billing source details out of the model trigger", () => {
@@ -114,7 +134,7 @@ describe("composer control consolidation", () => {
   })
 
   test("does not expose manual plan or act modes in the composer", () => {
-    expect(source).not.toContain("workspace-composer__mode")
+    expect(source).not.toContain('workspace-composer__mode"')
     expect(source).not.toContain('aria-label="Composer mode"')
     expect(source).not.toContain("local.plan")
   })

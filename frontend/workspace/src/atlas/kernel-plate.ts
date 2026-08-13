@@ -1,5 +1,5 @@
 import type { Capacity } from "./host-instruments"
-import { kernelMemoryLabel, type KernelStatus } from "@/notebook/runtime"
+import { kernelMemoryLabel, type KernelStatus } from "@/atlas/kernel-runtime"
 
 /**
  * The figures 3a keeps visible on a collapsed kernel plate.

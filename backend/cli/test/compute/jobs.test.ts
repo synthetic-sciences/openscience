@@ -3,9 +3,11 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { ComputeJobs, ComputeJobsCorruptError } from "../../src/compute/jobs"
+import { SshAdapter } from "../../src/compute/ssh/adapter"
 import { ModalAdapter } from "../../src/compute/modal/adapter"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import { OpenScience } from "../../src/openscience"
 import { Sandbox } from "../../src/sandbox/sandbox"
 import { ExecutionAuthority } from "../../src/project/execution"
@@ -38,12 +40,38 @@ function modalProvider(overrides: Partial<ComputeJobs.ModalProvider> = {}): Comp
 
 async function start(input: ComputeJobs.Input, options: StartOptions) {
   if (!options.workspace) throw new Error("Compute test start requires an explicit workspace")
+  const projectDirectory = options.workspace
   return Instance.provide({
-    directory: options.workspace,
+    directory: projectDirectory,
     fn: async () => {
       await trustProject()
       const session = await Session.create({})
-      return ComputeJobs.start({ ...input, sessionID: session.id }, options)
+      const workspace = await SessionFilesystem.workspace(session.id)
+      const grants = await SessionFilesystem.list(session.id)
+      for (const grant of grants) {
+        if (grant.source === "workspace" || grant.scope !== "session") continue
+        await SessionFilesystem.revoke(session.id, grant.id)
+      }
+      const excluded = [options.root, options.data]
+        .filter((value): value is string => !!value)
+        .map((value) => path.resolve(value))
+      await fs.cp(projectDirectory, workspace, {
+        recursive: true,
+        force: true,
+        filter: (source) => {
+          const resolved = path.resolve(source)
+          return !excluded.some((value) => resolved === value || resolved.startsWith(`${value}${path.sep}`))
+        },
+      })
+      const cwd = (() => {
+        if (!input.cwd || !path.isAbsolute(input.cwd)) return input.cwd
+        const relative = path.relative(projectDirectory, input.cwd)
+        if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
+          return path.join(workspace, relative)
+        }
+        return input.cwd
+      })()
+      return ComputeJobs.start({ ...input, cwd, sessionID: session.id }, { ...options, projectDirectory, workspace })
     },
   })
 }
@@ -112,12 +140,30 @@ describe("ComputeJobs command adapters", () => {
     expect(ComputeJobs.command(input, { ...host, scheduler: "none" }).argv.at(-1)).toContain("exec")
   })
 
+  test("uses an imported config hostname directly without loading user SSH config", () => {
+    const imported = ComputeJobs.Host.parse({
+      id: "lab",
+      label: "lab",
+      host: "login.cluster.example",
+      user: "researcher",
+      port: 2222,
+      scheduler: "none",
+      concurrency: 4,
+    })
+    const argv = SshAdapter.argv(imported, "/tmp/known-hosts", "true")
+
+    expect(argv).toContain("/dev/null")
+    expect(argv).toContain("researcher@login.cluster.example")
+    expect(argv).not.toContain("lab")
+  })
+
   test("binds SSH resources, modules, and container into the approved digest", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
     const pinned = ComputeJobs.Host.parse({
       ...host,
       scheduler: "none",
+      notes: "Use the research partition; installations belong under /scratch/team/envs.",
       fingerprint: `SHA256:${"a".repeat(43)}`,
       host_key: `hpc.example.org ssh-ed25519 ${Buffer.from("test-key").toString("base64")}`,
     })
@@ -126,6 +172,7 @@ describe("ComputeJobs command adapters", () => {
       fn: async () => {
         await trustProject()
         const session = await Session.create({})
+        const workspace = await SessionFilesystem.workspace(session.id)
         const request = {
           sessionID: session.id,
           name: "approved SSH contract",
@@ -135,7 +182,9 @@ describe("ComputeJobs command adapters", () => {
           modules: ["python/3.12"],
           container: "/images/research.sif",
         }
-        const approved = await ComputeJobs.plan(request, { root, workspace: tmp.path, hosts: [pinned] })
+        const approved = await ComputeJobs.plan(request, { root, workspace, hosts: [pinned] })
+        expect(approved.provider === "ssh" && approved.host_notes).toBe(pinned.notes)
+        expect(approved.warning).toContain("never executed automatically")
         for (const mutation of [
           { resources: { ...request.resources, gpus: 2 } },
           { modules: ["python/3.13"] },
@@ -144,7 +193,7 @@ describe("ComputeJobs command adapters", () => {
           await expect(
             ComputeJobs.start(
               { ...request, ...mutation, approval: approved.digest },
-              { root, workspace: tmp.path, hosts: [pinned] },
+              { root, workspace, hosts: [pinned] },
             ),
           ).rejects.toThrow("The SSH run must be approved using its current plan digest")
         }
@@ -152,17 +201,105 @@ describe("ComputeJobs command adapters", () => {
           { ...pinned, user: "other" },
           { ...pinned, port: 2200 },
           { ...pinned, workdir: "/different/base" },
+          { ...pinned, notes: "Use a different partition." },
         ]) {
           await expect(
-            ComputeJobs.start(
-              { ...request, approval: approved.digest },
-              { root, workspace: tmp.path, hosts: [changed] },
-            ),
+            ComputeJobs.start({ ...request, approval: approved.digest }, { root, workspace, hosts: [changed] }),
           ).rejects.toThrow("The SSH run must be approved using its current plan digest")
         }
-        expect(await ComputeJobs.list({ root, workspace: tmp.path })).toEqual([])
+        expect(await ComputeJobs.list({ root, workspace })).toEqual([])
       },
     })
+  })
+
+  test("returns the durable SSH handle before background staging finishes", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const bin = path.join(tmp.path, "bin")
+    const counter = path.join(tmp.path, "ssh-invocations")
+    const stageFinished = path.join(tmp.path, "ssh-stage-finished")
+    const fingerprint = "SHA256:Qhi22lbcPTt1frRtqU56iDRQ6YjdwJU8EDmi0QCdnbc"
+    const pinned = ComputeJobs.Host.parse({
+      ...host,
+      fingerprint,
+      host_key: "hpc.example.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAUsmADCYwCBoe8869NDLxsh3Vvnsd3raFGoMF1h8fXB",
+    })
+    await fs.mkdir(bin)
+    await Bun.write(
+      path.join(bin, "ssh"),
+      `#!/bin/sh
+counter=${JSON.stringify(counter)}
+count=0
+if [ -f "$counter" ]; then count=$(cat "$counter"); fi
+count=$((count + 1))
+printf '%s' "$count" > "$counter"
+if [ "$count" -eq 1 ]; then
+  sleep 1
+  printf 'yes' > ${JSON.stringify(stageFinished)}
+  printf '%s\\n' '{"staged":true,"files":0}'
+  exit 0
+fi
+if [ "$count" -eq 2 ]; then
+  printf '%s\\n' '{"remote_id":"slurm:durable-123","reattached":false}'
+  exit 0
+fi
+printf '%s\\n' '{"exists":true}'
+`,
+    )
+    await fs.chmod(path.join(bin, "ssh"), 0o700)
+
+    const previousPath = process.env.PATH
+    process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await trustProject()
+          const session = await Session.create({})
+          const workspace = await SessionFilesystem.workspace(session.id)
+          const request = {
+            sessionID: session.id,
+            name: "background SSH dispatch",
+            purpose: "prove durable handoff",
+            command: "python3 train.py",
+            target: { kind: "ssh" as const, host_id: pinned.id },
+            resources: { cpus: 2, time_minutes: 10 },
+          }
+          const options = { root, workspace, hosts: [pinned] }
+          const plan = await ComputeJobs.plan(request, options)
+          const startedAt = performance.now()
+          const job = await ComputeJobs.start({ ...request, approval: plan.digest }, options)
+          const elapsed = performance.now() - startedAt
+
+          expect(elapsed).toBeLessThan(750)
+          expect(job).toMatchObject({ status: "queued", remote_id: undefined })
+          expect(await Bun.file(stageFinished).exists()).toBe(false)
+
+          for (let attempt = 0; attempt < 500; attempt++) {
+            const current = await ComputeJobs.get(job.id, options)
+            const events = await ComputeJobs.events(job.id, options)
+            if (current?.remote_id === "slurm:durable-123" && events.includes("Submitted slurm:durable-123")) {
+              expect(current.status).toBe("running")
+              return
+            }
+            if (current?.status === "failed") {
+              throw new Error(`Background SSH submission failed: ${current.error ?? "unknown"}\n${events}`)
+            }
+            await Bun.sleep(20)
+          }
+          const current = await ComputeJobs.get(job.id, options)
+          const events = await ComputeJobs.events(job.id, options)
+          const count = await Bun.file(counter)
+            .text()
+            .catch(() => "missing")
+          throw new Error(
+            `Timed out waiting for the background SSH submission: ${JSON.stringify(current)}\ncount=${count}\n${events}`,
+          )
+        },
+      })
+    } finally {
+      process.env.PATH = previousPath
+    }
   })
 })
 
@@ -299,7 +436,7 @@ describe("ComputeJobs local lifecycle", () => {
       },
       input: {
         code: { status: "available", value: "printf 'alpha\\nbeta\\n'" },
-        cwd: { status: "available", value: tmp.path },
+        cwd: { status: "available", value: job.cwd },
         code_state: { status: "unavailable", reason: "not_captured" },
       },
       outputs: { status: "queued", items: [] },
@@ -441,7 +578,7 @@ describe("ComputeJobs local lifecycle", () => {
       path: { status: "available", value: "result.txt" },
       sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
     })
-    expect(await Bun.file(path.join(tmp.path, "result.txt")).exists()).toBe(true)
+    expect(await Bun.file(path.join(job.cwd!, "result.txt")).exists()).toBe(true)
   })
 
   test("redacts command and env-like job fields before durable persistence", async () => {
@@ -560,8 +697,8 @@ describe("ComputeJobs local lifecycle", () => {
   posixTest("reaps same-group background work before completing a local job", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
-    const marker = path.join(tmp.path, "compute-descendant.pid")
-    const release = path.join(tmp.path, "compute-release")
+    const marker = "compute-descendant.pid"
+    const release = "compute-release"
     let descendantPID = 0
     let descendantIdentity: string | undefined
     let job: ComputeJobs.Job | undefined
@@ -579,13 +716,15 @@ describe("ComputeJobs local lifecycle", () => {
         },
         { root, workspace: tmp.path },
       )
-      for (let attempt = 0; attempt < 200 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(10)
-      expect(await Bun.file(marker).exists()).toBe(true)
-      descendantPID = Number((await Bun.file(marker).text()).trim())
+      const ownedMarker = path.join(job.cwd!, marker)
+      const ownedRelease = path.join(job.cwd!, release)
+      for (let attempt = 0; attempt < 500 && !(await Bun.file(ownedMarker).exists()); attempt++) await Bun.sleep(10)
+      expect(await Bun.file(ownedMarker).exists()).toBe(true)
+      descendantPID = Number((await Bun.file(ownedMarker).text()).trim())
       descendantIdentity = await CredentialProcessLedger.identity(descendantPID)
       expect(descendantIdentity).toMatch(/^[a-f0-9]{64}$/)
 
-      await Bun.write(release, "release")
+      await Bun.write(ownedRelease, "release")
       const finished = await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })
 
       expect(finished.status).toBe("succeeded")
@@ -603,7 +742,7 @@ describe("ComputeJobs local lifecycle", () => {
     if (!python) return
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
-    const marker = path.join(tmp.path, "compute-setsid.pid")
+    const marker = "compute-setsid.pid"
     const script = [
       "import subprocess, sys, time",
       "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'], start_new_session=True)",
@@ -622,9 +761,10 @@ describe("ComputeJobs local lifecycle", () => {
         },
         { root, workspace: tmp.path },
       )
-      for (let attempt = 0; attempt < 200 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(10)
-      expect(await Bun.file(marker).exists()).toBe(true)
-      descendantPID = Number((await Bun.file(marker).text()).trim())
+      const ownedMarker = path.join(job.cwd!, marker)
+      for (let attempt = 0; attempt < 500 && !(await Bun.file(ownedMarker).exists()); attempt++) await Bun.sleep(10)
+      expect(await Bun.file(ownedMarker).exists()).toBe(true)
+      descendantPID = Number((await Bun.file(ownedMarker).text()).trim())
       descendantIdentity = await CredentialProcessLedger.identity(descendantPID)
       expect(descendantIdentity).toMatch(/^[a-f0-9]{64}$/)
 
@@ -1056,7 +1196,7 @@ describe("ComputeJobs Modal governance", () => {
     expect(recovered.status).toBe("succeeded")
     expect(recovered.lifecycle).toMatchObject({ delivery: "complete", resource: "closed", recoverable: false })
     expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path })).toBe("recovered output\n")
-    expect(await Bun.file(path.join(tmp.path, "result.txt")).text()).toBe("recovered")
+    expect(await Bun.file(path.join(job.cwd!, "result.txt")).text()).toBe("recovered")
     expect(calls).toEqual({ run: 1, recover: 1, release: 1 })
   })
 
@@ -1831,7 +1971,6 @@ describe("ComputeJobs project boundaries", () => {
     await using tmp = await tmpdir()
     const data = path.join(tmp.path, "data")
     const workspace = path.join(tmp.path, "project")
-    const inside = path.join(workspace, "inside.txt")
     const outside = path.join(os.homedir(), `.openscience-compute-escape-${process.pid}-${crypto.randomUUID()}`)
     await fs.mkdir(workspace)
     await fs.rm(outside, { force: true })
@@ -1839,7 +1978,7 @@ describe("ComputeJobs project boundaries", () => {
       start(
         {
           name: "sandbox",
-          command: `if printf escape > ${ComputeJobs.quote(outside)}; then exit 97; fi; printf safe > ${ComputeJobs.quote(inside)}`,
+          command: `if printf escape > ${ComputeJobs.quote(outside)}; then exit 97; fi; printf safe > inside.txt`,
           target: { kind: "local" },
         },
         { data, workspace },
@@ -1856,7 +1995,7 @@ describe("ComputeJobs project boundaries", () => {
       expect(job.sandbox).toMatchObject({ requested: true, enforced: true, backend: Sandbox.backend() })
       const finished = await ComputeJobs.wait(job.id, { data, workspace, timeout: 5_000 })
       expect(finished.status).toBe("succeeded")
-      expect(await Bun.file(inside).text()).toBe("safe")
+      expect(await Bun.file(path.join(job.cwd!, "inside.txt")).text()).toBe("safe")
       expect(await Bun.file(outside).exists()).toBe(false)
     } finally {
       await fs.rm(outside, { force: true })

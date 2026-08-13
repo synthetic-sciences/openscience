@@ -27,6 +27,7 @@ describe("revert + compact workflow", () => {
           id: Identifier.ascending("message"),
           role: "user",
           sessionID,
+          effort: "normal",
           agent: "default",
           model: {
             providerID: "openai",
@@ -88,6 +89,7 @@ describe("revert + compact workflow", () => {
           id: Identifier.ascending("message"),
           role: "user",
           sessionID,
+          effort: "normal",
           agent: "default",
           model: {
             providerID: "openai",
@@ -203,6 +205,7 @@ describe("revert + compact workflow", () => {
           id: Identifier.ascending("message"),
           role: "user",
           sessionID,
+          effort: "normal",
           agent: "default",
           model: {
             providerID: "openai",

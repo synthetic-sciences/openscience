@@ -13,7 +13,8 @@ import { Sandbox } from "@/sandbox/sandbox"
 import { KernelQueue } from "@/science/kernel/queue"
 import { KernelProcessIdentity } from "@/science/kernel/process"
 import { KernelRuntime } from "@/science/kernel/registry"
-import { KernelEnvironmentName, pythonEnvironment } from "@/science/kernel/interpreter"
+import { KernelEnvironmentName } from "@/science/kernel/interpreter"
+import { KernelEnvironmentMutation } from "@/science/kernel/environment-mutation"
 import { AtlasEnvironment } from "@/science/kernel/types"
 import type {
   Kernel,
@@ -27,16 +28,17 @@ import type {
   KernelProcess,
 } from "@/science/kernel/types"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
+import { ExecutionAuthority } from "@/project/execution"
 
 /**
- * General, non-domain-gated persistent Python kernel.
+ * General, non-domain-gated persistent Python runtime.
  *
  * Generalizes the biology-gated kernel in `tool/biology/notebook.ts` to the
  * shared `Kernel` / `KernelManager` contract in `science/kernel/types.ts`:
  * one long-lived `python3` process per sessionID whose namespace, imports, and
- * state persist across `execute` calls, returning Jupyter-style MIME-bundle
- * outputs — including `image/png` captured from any matplotlib figures the cell
- * leaves open.
+ * state persist across `execute` calls, returning structured text and image
+ * outputs, including `image/png` captured from any matplotlib figures the
+ * execution leaves open.
  *
  * Host requirement: `python3` (or `python`) on PATH. matplotlib is optional —
  * figures are only captured when it is importable; everything else degrades to
@@ -49,7 +51,7 @@ import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 // JSON-encoded (json.dumps escapes real newlines, so the end marker can never
 // appear inside a payload string).
 const KERNEL_SCRIPT = `
-import sys, json, io, base64, traceback, re
+import sys, json, io, base64, traceback, re, signal
 
 _real_out = sys.stdout
 _real_err = sys.stderr
@@ -58,7 +60,7 @@ ns = {"__name__": "__main__", "__builtins__": __builtins__}
 
 # Preserve the documented pre-imported aliases without making every fresh
 # kernel pay the several-second scientific stack import cost. A referenced
-# alias is loaded immediately before that cell executes and then persists.
+# alias is loaded immediately before that execution and then persists.
 def _load(pkg, alias):
     if alias in ns:
         return
@@ -91,6 +93,22 @@ def _load_science(code):
             _plt = None
 
 _exec_count = 0
+_executing = False
+_interrupting = False
+
+# A persistent interpreter must treat SIGINT as an execution-scoped cancel,
+# not a process-scoped exit. A wrapper or OS process tree can deliver a second
+# SIGINT after the first KeyboardInterrupt has already been caught; ignore that
+# trailing signal (and any signal while waiting for input) so the warm process
+# reliably returns to idle with its namespace intact.
+def _handle_sigint(_signum, _frame):
+    global _interrupting
+    if not _executing or _interrupting:
+        return
+    _interrupting = True
+    raise KeyboardInterrupt()
+
+signal.signal(signal.SIGINT, _handle_sigint)
 
 _real_out.write("__OPENSCIENCE_KERNEL_READY__" + json.dumps({"version": "Python " + sys.version.split()[0]}) + "\\n")
 _real_out.flush()
@@ -119,12 +137,16 @@ while True:
     result_html = None
     error = None
     images = []
+    _executing = True
+    _interrupting = False
+    _real_out.write("__OPENSCIENCE_EXECUTION_READY__\\n")
+    _real_out.flush()
 
     try:
         _load_science(code)
-        # Try eval first for Jupyter-style auto-display of the final expression.
+        # Try eval first so a final expression can be returned without print().
         try:
-            compiled = compile(code, "<cell>", "eval")
+            compiled = compile(code, "<python>", "eval")
             value = eval(compiled, ns)
             if value is not None:
                 try:
@@ -140,7 +162,7 @@ while True:
                     except Exception:
                         pass
         except SyntaxError:
-            exec(compile(code, "<cell>", "exec"), ns)
+            exec(compile(code, "<python>", "exec"), ns)
     except SystemExit:
         stderr_buf.write("SystemExit caught (kernel stays alive)\\n")
         ok = False
@@ -182,9 +204,12 @@ while True:
     r = json.dumps(payload)
     _real_out.write("__OPENSCIENCE_RESULT_START__\\n" + r + "\\n__OPENSCIENCE_RESULT_END__\\n")
     _real_out.flush()
+    _executing = False
+    _interrupting = False
 `.trim()
 
 const READY = "__OPENSCIENCE_KERNEL_READY__"
+const EXECUTION_READY = "__OPENSCIENCE_EXECUTION_READY__\n"
 const START = "__OPENSCIENCE_RESULT_START__\n"
 const END = "\n__OPENSCIENCE_RESULT_END__"
 const IDLE_MS = 30 * 60 * 1000 // reap kernels idle for 30 min
@@ -214,7 +239,7 @@ async function findPython(override?: string): Promise<{ binary: string; version?
       return { binary }
     } catch {}
   }
-  throw new Error("Python not found. Install Python 3.10+ (python3) to use the notebook tool.")
+  throw new Error("Python not found. Install Python 3.10+ (python3) to use the python tool.")
 }
 
 function payloadToResult(p: RawPayload): ExecuteResult {
@@ -253,6 +278,9 @@ class PythonKernel implements Kernel {
   private stderrTail = ""
   private queue = new KernelQueue()
   private intentional = false
+  private executionArmed = false
+  private interruptPending = false
+  private interruptSent = false
   environment?: KernelEnvironment
   process?: KernelProcess
 
@@ -298,7 +326,7 @@ class PythonKernel implements Kernel {
       ? await SessionFilesystem.processReadRoots(opts.sessionID)
       : [Instance.directory, Instance.worktree]
     // Confine the kernel to the workspace when the execution sandbox is on: the
-    // notebook runs arbitrary agent-authored code — the same threat model as the
+    // runtime runs arbitrary agent-authored code — the same threat model as the
     // bash tool — so it must not be able to escape the boundary bash respects.
     const policy = await Config.trustedSandbox()
     const sandboxed = Sandbox.wrapArgv({
@@ -306,9 +334,9 @@ class PythonKernel implements Kernel {
       args: ["-u", scriptPath],
       workspace,
       readable,
-      extraWritable: [scriptPath, configPath, cachePath],
+      extraWritable: [scriptPath, configPath, cachePath, ...(opts?.extraWritable ?? [])],
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: policy,
+      options: { ...policy, ...(opts?.sandboxNetwork ? { network: opts.sandboxNetwork } : {}) },
     })
     const cwd = opts?.cwd ?? (opts?.sessionID ? await SessionFilesystem.workspace(opts.sessionID) : Instance.directory)
     this.environment = {
@@ -324,7 +352,7 @@ class PythonKernel implements Kernel {
         requested: policy?.enabled === true,
         enforced: sandboxed.sandboxed,
         backend: sandboxed.backend,
-        network: policy?.network ?? "allow",
+        network: opts?.sandboxNetwork ?? policy?.network ?? "allow",
         warning: sandboxed.warning,
       },
     }
@@ -433,12 +461,20 @@ class PythonKernel implements Kernel {
 
   private async run(code: string, opts?: ExecuteOptions): Promise<ExecuteResult> {
     if (!this.ready) throw new Error("Python kernel is not running")
-    opts?.onStart?.()
+    // onStart persists the durable running record and may yield before code is
+    // submitted. Remember an interrupt received in that window; the worker's
+    // EXECUTION_READY frame below dispatches it only after SIGINT is armed.
+    this.executionArmed = false
+    this.interruptPending = false
+    this.interruptSent = false
+    await opts?.onStart?.()
+    if (opts?.signal?.aborted) throw new Error("Execution aborted before starting")
     const proc = this.proc!
     this.lastUsed = Date.now()
     const timeout = Math.min(Math.max(opts?.timeout ?? 120_000, 5_000), 600_000)
 
     const payload = await new Promise<RawPayload>((resolve, reject) => {
+      const kernel = this
       const timer = setTimeout(() => {
         cleanup()
         void this.terminate(proc)
@@ -454,6 +490,11 @@ class PythonKernel implements Kernel {
       let buffer = ""
       const onData = (d: Buffer) => {
         buffer += d.toString()
+        if (!kernel.executionArmed && buffer.includes(EXECUTION_READY)) {
+          kernel.executionArmed = true
+          buffer = buffer.replace(EXECUTION_READY, "")
+          if (kernel.interruptPending) kernel.signalInterrupt()
+        }
         const s = buffer.indexOf(START)
         const e = buffer.indexOf(END)
         if (s !== -1 && e !== -1 && e > s) {
@@ -484,6 +525,9 @@ class PythonKernel implements Kernel {
         proc.stdout?.off("data", onData)
         proc.off("exit", onExit)
         opts?.signal?.removeEventListener("abort", onAbort)
+        kernel.executionArmed = false
+        kernel.interruptPending = false
+        kernel.interruptSent = false
       }
 
       opts?.signal?.addEventListener("abort", onAbort, { once: true })
@@ -497,10 +541,24 @@ class PythonKernel implements Kernel {
 
   async interrupt() {
     if (!this.proc || !this.busy || !KernelProcessIdentity.matches(this.proc, this.process)) return false
+    this.interruptPending = true
+    if (!this.executionArmed) return true
+    return this.signalInterrupt()
+  }
+
+  private signalInterrupt() {
+    if (this.interruptSent) return true
+    let sent: boolean
     if (this.environment?.sandbox.backend === "bubblewrap") {
-      return Shell.interruptDescendants(this.proc, { exclude: ["bwrap"] })
+      sent = Shell.interruptDescendants(this.proc!, { exclude: ["bwrap"] })
+    } else {
+      sent = Shell.interruptTree(this.proc!, { detached: process.platform !== "win32" })
     }
-    return Shell.interruptTree(this.proc, { detached: process.platform !== "win32" })
+    if (sent) {
+      this.interruptSent = true
+      this.interruptPending = false
+    }
+    return sent
   }
 
   async shutdown(): Promise<void> {
@@ -635,107 +693,130 @@ function clip(s: string, max = 30_000): string {
   return s.length > max ? s.slice(0, max) + "\n\n... (truncated)" : s
 }
 
-export const NotebookTool = Tool.define("notebook", {
-  description: [
-    "Execute Python code in a persistent, managed kernel. Variables, imports, and state persist across calls that use the same kernel name and environment.",
-    "Choose `environment` to address a project interpreter under .venv/<name>; the default python environment also discovers a conventional .venv.",
-    "For multiple independent analyses, issue multiple notebook calls in the same response with distinct `kernel` names. Those kernels execute concurrently and appear separately in Compute.",
-    "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
-    "Set `source` when the cell belongs to a script or .ipynb file so Compute can identify that source.",
-    "Never use shell subprocesses to imitate multiple kernels; use this tool's `kernel` parameter instead.",
-    "After a named analysis is fully saved and verified, call this tool with `action: stop` and the same kernel and environment so completed workers do not idle.",
-    "Use instead of `bash python` for analysis — no need to re-import or re-load data between cells.",
-    "numpy (np), pandas (pd), scipy, and matplotlib (plt) are pre-imported. Expression results auto-display like Jupyter.",
-    "matplotlib figures are captured as inline PNG images. Not gated to any agent.",
-  ].join("\n"),
-  parameters: z
-    .object({
-      action: z.enum(["execute", "stop"]).optional().describe("Execute a cell (default) or stop this named kernel"),
-      code: z.string().optional().describe("Python code to execute; required when action is execute"),
-      title: z
-        .string()
-        .trim()
-        .min(1)
-        .max(100)
-        .optional()
-        .describe("Short action label for this cell, for example 'Benchmarking survival classifiers'"),
-      source: z
-        .string()
-        .trim()
-        .min(1)
-        .max(1024)
-        .optional()
-        .describe("Script or notebook path this cell belongs to, when applicable"),
-      kernel: z
-        .string()
-        .trim()
-        .min(1)
-        .max(64)
-        .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
-        .optional()
-        .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
-      environment: KernelEnvironmentName.optional().describe(
-        "Project Python environment: .venv/<name>, with .venv itself also used for the default python environment.",
-      ),
-      timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
-    })
-    .strict()
-    .superRefine((params, issue) => {
-      if (params.action !== "stop" && !params.code) {
-        issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })
-      }
-    }),
-  async execute(params, ctx) {
-    const name = params.kernel ?? "agent"
-    const environment = params.environment ?? "python"
-    const identity = {
-      projectID: Instance.project.id,
-      sessionID: ctx.sessionID,
-      name,
-      language: "python" as const,
-      environmentName: environment === "python" ? undefined : environment,
+const PythonFields = {
+  action: z.enum(["execute", "stop"]).optional().describe("Run code (default) or stop this environment's runtime"),
+  code: z.string().optional().describe("Python code to execute; required when action is execute"),
+  title: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe("Short action label for this execution, for example 'Benchmarking survival classifiers'"),
+  source: z
+    .string()
+    .trim()
+    .min(1)
+    .max(1024)
+    .optional()
+    .describe("Script path associated with this execution, when applicable"),
+  environment: KernelEnvironmentName.optional().describe(
+    "Project Python environment: .venv/<name>, with .venv itself also used for the default python environment.",
+  ),
+  timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
+}
+
+const PythonParameters = z
+  .object(PythonFields)
+  .strict()
+  .superRefine((params, issue) => {
+    if (params.action !== "stop" && !params.code) {
+      issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })
     }
-    if (params.action === "stop") {
-      ctx.metadata({
-        title: `Stopped Python · ${name}`,
-        metadata: { kernel: name, environment, language: "python", stopped: true },
-      })
-      await KernelRuntime.release(identity)
-      return {
-        title: `Stopped Python · ${name}`,
-        output: `Managed kernel ${name} stopped. Its in-memory state was cleared.`,
-        metadata: {
-          kernel: name,
-          environment,
-          language: "python",
-          stopped: true,
-          ok: true,
-          output: `Managed kernel ${name} stopped.`,
-        },
-      }
+  })
+
+const CompatibilityKernelName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+  .optional()
+  .describe("Deprecated compatibility name for an isolated runtime")
+
+const NotebookParameters = z
+  .object({ ...PythonFields, kernel: CompatibilityKernelName })
+  .strict()
+  .superRefine((params, issue) => {
+    if (params.action !== "stop" && !params.code) {
+      issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })
     }
-    const title = params.title ?? "Python cell"
+  })
+
+type PythonInput = z.infer<typeof NotebookParameters>
+
+async function executePython(params: PythonInput, ctx: Tool.Context, compatibilityNamed: boolean) {
+  const name = compatibilityNamed ? (params.kernel ?? "agent") : "python"
+  const environment = params.environment ?? "python"
+  const identity = {
+    projectID: Instance.project.id,
+    sessionID: ctx.sessionID,
+    name,
+    language: "python" as const,
+    environmentName: environment === "python" ? undefined : environment,
+  }
+  if (params.action === "stop") {
     ctx.metadata({
-      title,
+      title: compatibilityNamed ? `Stopped Python · ${name}` : "Stopped Python",
+      metadata: { kernel: name, environment, language: "python", stopped: true },
+    })
+    await KernelRuntime.release(identity)
+    return {
+      title: compatibilityNamed ? `Stopped Python · ${name}` : "Stopped Python",
+      output: `Managed Python runtime for ${environment} stopped. Its in-memory state was cleared.`,
       metadata: {
         kernel: name,
         environment,
         language: "python",
-        task: title,
-        ...(params.source ? { source: params.source } : {}),
+        stopped: true,
+        ok: true,
+        output: `Managed Python runtime for ${environment} stopped.`,
       },
-    })
+    }
+  }
+  const title = params.title ?? "Python execution"
+  const mutation = KernelEnvironmentMutation.detect({
+    language: "python",
+    environment,
+    code: params.code!,
+  })
+  ctx.metadata({
+    title,
+    metadata: {
+      kernel: name,
+      environment,
+      language: "python",
+      task: title,
+      ...(mutation ? { environmentMutation: mutation } : {}),
+      ...(params.source ? { source: params.source } : {}),
+    },
+  })
 
+  if (mutation) {
+    await ctx.ask(KernelEnvironmentMutation.permission(mutation))
+    await ExecutionAuthority.require({
+      projectID: Instance.project.id,
+      sessionID: ctx.sessionID,
+      capability: "package_install",
+    })
+    // A mutation never inherits the current warm process. Start a clean,
+    // narrowly-writable incarnation, then replace it with an ordinary process
+    // so elevated environment writes cannot leak into later analysis code.
+    await KernelRuntime.release(identity)
+  } else {
     // Executes arbitrary code — same permission gate as bash.
     await ctx.ask({
       permission: "bash",
-      patterns: ["python (notebook)"],
+      patterns: ["python"],
       always: ["python*"],
       metadata: {},
     })
+  }
 
-    const runtime = await pythonEnvironment(Instance.directory, environment)
-    const result = await KernelRuntime.execute(
+  const runtime = await KernelEnvironmentMutation.pythonRuntime(environment, !!mutation)
+  let result: ExecuteResult
+  try {
+    result = await KernelRuntime.execute(
       identity,
       params.code!,
       {
@@ -745,55 +826,102 @@ export const NotebookTool = Tool.define("notebook", {
       },
       runtime,
     )
+  } catch (error) {
+    if (mutation) await KernelRuntime.release(identity).catch(() => undefined)
+    throw error
+  }
 
-    const images = result.outputs.filter((o) => o.type === "display" && o.data?.["image/png"])
-    const dataUrls = images.map((o) => `data:image/png;base64,${o.data!["image/png"]}`)
-
-    const parts: string[] = []
-    if (result.stdout) parts.push(result.stdout)
-    if (result.stderr) parts.push(result.ok ? `[stderr]\n${result.stderr}` : `[stderr]\n${result.stderr}`)
-    const resultOut = result.outputs.find((o) => o.type === "result")
-    if (resultOut?.data?.["text/plain"]) parts.push(resultOut.data["text/plain"])
-    const errOut = result.outputs.find((o) => o.type === "error")
-    if (errOut?.error) {
-      const tb = errOut.error.traceback?.join("\n") ?? `${errOut.error.name}: ${errOut.error.message}`
-      parts.push(`[ERROR]\n${tb}`)
+  let restarted = false
+  if (mutation) {
+    if (result.ok) {
+      await KernelRuntime.restart(identity, await KernelEnvironmentMutation.pythonRuntime(environment))
+      restarted = true
+    } else {
+      await KernelRuntime.release(identity)
     }
-    if (images.length) parts.push(`[figure] captured ${images.length} inline image(s)`)
-    if (!parts.length) parts.push("(no output)")
-    const output = clip(parts.join("\n"))
+  }
 
-    ctx.metadata({
-      title,
-      metadata: {
-        output,
-        ok: result.ok,
-        provenanceID: result.provenanceID,
-        kernel: name,
-        environment,
-        language: "python",
-        task: title,
-        ...(params.source ? { source: params.source } : {}),
-      },
-    })
+  const images = result.outputs.filter((o) => o.type === "display" && o.data?.["image/png"])
+  const dataUrls = images.map((o) => `data:image/png;base64,${o.data!["image/png"]}`)
 
-    return {
-      title: result.ok ? title : `${title} (error)`,
+  const parts: string[] = []
+  if (result.stdout) parts.push(result.stdout)
+  if (result.stderr) parts.push(result.ok ? `[stderr]\n${result.stderr}` : `[stderr]\n${result.stderr}`)
+  const resultOut = result.outputs.find((o) => o.type === "result")
+  if (resultOut?.data?.["text/plain"]) parts.push(resultOut.data["text/plain"])
+  const errOut = result.outputs.find((o) => o.type === "error")
+  if (errOut?.error) {
+    const tb = errOut.error.traceback?.join("\n") ?? `${errOut.error.name}: ${errOut.error.message}`
+    parts.push(`[ERROR]\n${tb}`)
+  }
+  if (images.length) parts.push(`[figure] captured ${images.length} inline image(s)`)
+  if (restarted) parts.push(`[environment] ${environment} updated; Python restarted with cleared in-memory state`)
+  if (!parts.length) parts.push("(no output)")
+  const output = clip(parts.join("\n"))
+
+  ctx.metadata({
+    title,
+    metadata: {
       output,
-      metadata: {
-        stopped: false,
-        ok: result.ok,
-        output,
-        kernel: name,
-        environment,
-        language: "python",
-        task: title,
-        ...(params.source ? { source: params.source } : {}),
-        provenanceID: result.provenanceID,
-        executionCount: result.executionCount,
-        hasImages: images.length,
-        ...(images.length ? { artifact: { kind: "image", data: { images: dataUrls } } } : {}),
-      },
-    }
-  },
-})
+      ok: result.ok,
+      provenanceID: result.provenanceID,
+      kernel: name,
+      environment,
+      language: "python",
+      task: title,
+      restarted,
+      ...(mutation ? { environmentMutation: mutation } : {}),
+      ...(params.source ? { source: params.source } : {}),
+    },
+  })
+
+  return {
+    title: result.ok ? title : `${title} (error)`,
+    output,
+    metadata: {
+      stopped: false,
+      ok: result.ok,
+      output,
+      kernel: name,
+      environment,
+      language: "python",
+      task: title,
+      restarted,
+      ...(mutation ? { environmentMutation: mutation } : {}),
+      ...(params.source ? { source: params.source } : {}),
+      provenanceID: result.provenanceID,
+      executionCount: result.executionCount,
+      hasImages: images.length,
+      ...(images.length ? { artifact: { kind: "image", data: { images: dataUrls } } } : {}),
+    },
+  }
+}
+
+const PythonDefinition: Awaited<ReturnType<Tool.Info<typeof PythonParameters>["init"]>> = {
+  description: [
+    "Run Python code in one long-lived managed process per conversation and selected environment. Variables, imports, and state persist across calls in that environment; child conversations and other environments are isolated.",
+    "Choose `environment` to address a project interpreter under .venv/<name>; the default python environment also discovers a conventional .venv.",
+    "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
+    "Set `source` when the execution belongs to a script so Activity can identify that source.",
+    "Use `action: stop` with the same environment when its in-memory state should be cleared.",
+    "Use instead of `bash python` for analysis — no need to re-import or re-load data between executions.",
+    "Submit pip changes as a separate Python execution using sys.executable and subprocess (for example, `subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'package'])`). Package/environment changes require explicit approval and automatically restart this environment after success.",
+    "numpy (np), pandas (pd), scipy, and matplotlib (plt) are loaded on first use. Final expression results are returned automatically.",
+    "matplotlib figures are captured as inline PNG images. Not gated to any agent.",
+  ].join("\n"),
+  parameters: PythonParameters,
+  execute: (params, ctx) => executePython(params, ctx, false),
+}
+
+const NotebookDefinition: Awaited<ReturnType<Tool.Info<typeof NotebookParameters>["init"]>> = {
+  ...PythonDefinition,
+  description: `${PythonDefinition.description}\nDeprecated compatibility alias: an existing call may still supply a runtime name.`,
+  parameters: NotebookParameters,
+  execute: (params, ctx) => executePython(params, ctx, true),
+}
+
+/** Canonical model-facing Python tool. */
+export const PythonTool = Tool.define("python", async () => ({ ...PythonDefinition }))
+
+/** @deprecated Compatibility alias. Keep out of the advertised tool registry. */
+export const NotebookTool = Tool.define("notebook", async () => ({ ...NotebookDefinition }))

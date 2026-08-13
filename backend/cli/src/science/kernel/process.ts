@@ -86,6 +86,16 @@ export namespace KernelProcessIdentity {
     }
   }
 
+  /** Exact identity of the current backend process for durable journals that
+   * must distinguish a live peer from a crashed process after PID reuse. */
+  export function current(): KernelProcess {
+    return {
+      pid: process.pid,
+      startedAt: Date.now() - process.uptime() * 1_000,
+      token: token(process.pid),
+    }
+  }
+
   /** Register a newly spawned kernel before its ready handshake. Persisting the
    * returned ownership ID lets a different OpenScience server reap surviving
    * process-group children even after the recorded leader has exited. */

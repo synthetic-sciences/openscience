@@ -5,6 +5,7 @@ import path from "node:path"
 import { ArtifactStore } from "../../src/artifact/store"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import { FileRoutes } from "../../src/server/routes/file"
 import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
@@ -42,15 +43,20 @@ function save(body: Record<string, unknown>) {
   })
 }
 
+async function createSession() {
+  const info = await Session.create({})
+  sessions.add(info.id)
+  return { info, workspace: await SessionFilesystem.workspace(info.id) }
+}
+
 describe("/file/artifact", () => {
   test("registers a text file as a durable immutable artifact version", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
-        await Bun.write(path.join(tmp.path, "results", "summary.md"), "# Findings\n\nSignal detected.\n")
+        const { info, workspace } = await createSession()
+        await Bun.write(path.join(workspace, "results", "summary.md"), "# Findings\n\nSignal detected.\n")
 
         const response = await save({ path: "results/summary.md", sessionID: info.id })
         expect(response.status).toBe(200)
@@ -115,10 +121,9 @@ describe("/file/artifact", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
+        const { info, workspace } = await createSession()
         const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0x01])
-        await Bun.write(path.join(tmp.path, "figures", "plot.png"), bytes)
+        await Bun.write(path.join(workspace, "figures", "plot.png"), bytes)
 
         const response = await save({ path: "figures/plot.png", sessionID: info.id, summary: "Final plot" })
         expect(response.status).toBe(200)
@@ -145,8 +150,7 @@ describe("/file/artifact", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
+        const { info } = await createSession()
         const response = await save({ path: outside, sessionID: info.id })
         expect(response.status).toBe(403)
       },
@@ -159,9 +163,8 @@ describe("/file/artifact", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
-        await Bun.write(path.join(tmp.path, "data.csv"), Buffer.alloc(6 * 1024 * 1024, 97))
+        const { info, workspace } = await createSession()
+        await Bun.write(path.join(workspace, "data.csv"), Buffer.alloc(6 * 1024 * 1024, 97))
         const response = await save({ path: "data.csv", sessionID: info.id })
         expect(response.status).toBe(200)
         const saved = (await response.json()) as Saved
@@ -175,10 +178,9 @@ describe("/file/artifact", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
-        await fs.writeFile(path.join(tmp.path, "oversized.bin"), "")
-        await fs.truncate(path.join(tmp.path, "oversized.bin"), ArtifactStore.MAX_VERSION_BYTES + 1)
+        const { info, workspace } = await createSession()
+        await fs.writeFile(path.join(workspace, "oversized.bin"), "")
+        await fs.truncate(path.join(workspace, "oversized.bin"), ArtifactStore.MAX_VERSION_BYTES + 1)
         const response = await save({ path: "oversized.bin", sessionID: info.id })
         expect(response.status).toBe(413)
       },
@@ -190,9 +192,8 @@ describe("/file/artifact", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
-        const source = path.join(tmp.path, "result.csv")
+        const { info, workspace } = await createSession()
+        const source = path.join(workspace, "result.csv")
         await Bun.write(source, "group,value\nA,1\n")
 
         const first = (await (await save({ path: "result.csv", sessionID: info.id })).json()) as Saved
@@ -218,9 +219,8 @@ describe("/file/artifact", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
-        await Bun.write(path.join(tmp.path, "parallel.txt"), "same immutable bytes")
+        const { info, workspace } = await createSession()
+        await Bun.write(path.join(workspace, "parallel.txt"), "same immutable bytes")
 
         const responses = await Promise.all([
           save({ path: "parallel.txt", sessionID: info.id }),
@@ -243,10 +243,9 @@ describe("/file/artifact", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
+        const { info, workspace } = await createSession()
         const content = "immutable research bytes"
-        await Bun.write(path.join(tmp.path, "integrity.txt"), content)
+        await Bun.write(path.join(workspace, "integrity.txt"), content)
         const saved = (await (await save({ path: "integrity.txt", sessionID: info.id })).json()) as Saved
         const sha = saved.current.sha256
         const blob = path.join(Global.Path.data, "artifact-store", "blobs", sha.slice(0, 2), sha.slice(2, 4), sha)
@@ -270,9 +269,8 @@ describe("/file/artifact", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
-        await Bun.write(path.join(tmp.path, "review.md"), "immutable review bytes")
+        const { info, workspace } = await createSession()
+        await Bun.write(path.join(workspace, "review.md"), "immutable review bytes")
         const saved = (await (await save({ path: "review.md", sessionID: info.id })).json()) as Saved
 
         const renamed = await FileRoutes().request(`/file/artifact-store/${saved.id}`, {
@@ -318,8 +316,7 @@ describe("/file/artifact", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const info = await Session.create({})
-        sessions.add(info.id)
+        const { info } = await createSession()
         const response = await save({ path: "missing/nothing.md", sessionID: info.id })
         expect(response.status).toBe(404)
       },

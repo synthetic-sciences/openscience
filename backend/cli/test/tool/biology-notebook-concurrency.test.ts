@@ -1,8 +1,17 @@
 import { expect, test } from "bun:test"
+import { spawn } from "node:child_process"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { Instance } from "../../src/project/instance"
 import { AuthorityProcessLedger } from "../../src/project/authority-process"
 import { Session } from "../../src/session"
-import { NotebookTool, releaseBiologySession, shutdownBiologyKernels } from "../../src/tool/biology/notebook"
+import {
+  NotebookTool,
+  biologyKernelScriptForTests,
+  releaseBiologySession,
+  shutdownBiologyKernels,
+} from "../../src/tool/biology/notebook"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
 const context = (sessionID: string) => ({
@@ -31,6 +40,37 @@ async function entries(sessionID: string) {
       () => [],
     )
 }
+
+test("legacy biology worker exits cleanly when its parent closes stdin", async () => {
+  const python = Bun.which("python3") ?? Bun.which("python")
+  if (!python) return
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-biology-eof-"))
+  const script = path.join(directory, "worker.py")
+  await Bun.write(script, biologyKernelScriptForTests())
+  const proc = spawn(python, ["-u", script], { stdio: ["pipe", "pipe", "pipe"] })
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("biology worker did not become ready")), 5_000)
+      const onData = (chunk: Buffer) => {
+        if (!chunk.toString().includes("__OPENSCIENCE_KERNEL_READY__")) return
+        clearTimeout(timeout)
+        proc.stdout.off("data", onData)
+        resolve()
+      }
+      proc.stdout.on("data", onData)
+      proc.once("error", reject)
+    })
+    proc.stdin.end()
+    const code = await Promise.race([
+      new Promise<number | null>((resolve) => proc.once("exit", resolve)),
+      Bun.sleep(2_000).then(() => "timeout" as const),
+    ])
+    expect(code).toBe(0)
+  } finally {
+    if (proc.exitCode === null) proc.kill("SIGKILL")
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
 
 test("legacy biology serializes first-kernel creation and cell results per session", async () => {
   if (process.platform === "win32") return

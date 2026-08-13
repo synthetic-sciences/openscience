@@ -3,17 +3,18 @@ import fs from "fs/promises"
 import path from "path"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { ArtifactTool } from "../../src/tool/artifact"
 import { AtlasTool } from "../../src/tool/atlas"
 import { AtlasRecordTool } from "../../src/tool/atlas-record"
 import { BashTool } from "../../src/tool/bash"
 import { BatchTool } from "../../src/tool/batch"
-import { NotebookTool } from "../../src/tool/notebook"
+import { PythonTool } from "../../src/tool/notebook"
 import { PlanExitTool } from "../../src/tool/plan"
 import { PlanMode } from "../../src/tool/plan-mode"
 import { PlanWriteTool } from "../../src/tool/planwrite"
-import { RKernelTool } from "../../src/tool/rkernel"
+import { RTool } from "../../src/tool/rkernel"
 import { ReadTool } from "../../src/tool/read"
 import { TaskTool } from "../../src/tool/task"
 import { TodoReadTool, TodoWriteTool } from "../../src/tool/todo"
@@ -79,12 +80,12 @@ describe("tool.plan-mode", () => {
           async () => (await WriteTool.init()).execute({ filePath: marker, content: "write" }, context("plan")),
           async () => (await ApplyPatchTool.init()).execute({ patchText: patch }, context("plan")),
           async () =>
-            (await NotebookTool.init()).execute(
+            (await PythonTool.init()).execute(
               { code: `open(${JSON.stringify(marker)}, "w").write("python")`, timeout: 120_000 },
               context("plan"),
             ),
           async () =>
-            (await RKernelTool.init()).execute(
+            (await RTool.init()).execute(
               { code: `write("r", ${JSON.stringify(marker)})`, timeout: 120_000 },
               context("plan"),
             ),
@@ -105,7 +106,7 @@ describe("tool.plan-mode", () => {
               {
                 description: "Bypass plan gate",
                 prompt: "Write the marker file.",
-                subagent_type: "research",
+                subagent_type: "execute",
               },
               context("plan"),
             ),
@@ -120,10 +121,7 @@ describe("tool.plan-mode", () => {
               context("plan"),
             ),
           async () =>
-            (await ArtifactTool.init()).execute(
-              { action: "register", type: "text", content: "must not persist" },
-              context("plan"),
-            ),
+            (await ArtifactTool.init()).execute({ action: "save_file", path: "must-not-persist.txt" }, context("plan")),
           async () => (await PlanExitTool.init()).execute({}, context("plan")),
         ]
 
@@ -134,8 +132,8 @@ describe("tool.plan-mode", () => {
           "bash",
           "write",
           "apply_patch",
-          "notebook",
-          "rkernel",
+          "python",
+          "r",
           "batch",
           "task",
           "atlas",
@@ -230,7 +228,8 @@ describe("tool.plan-mode", () => {
       directory: tmp.path,
       fn: async () => {
         const session = await executionSession()
-        const marker = path.join(tmp.path, "acted")
+        const workspace = await SessionFilesystem.workspace(session.id)
+        const marker = path.join(workspace, "acted")
         const result = await (
           await BashTool.init()
         ).execute(

@@ -175,12 +175,10 @@ test("settings keep disabled controls visibly distinct from active actions", () 
 
 test("settings search and filter controls expose contextual accessible names", () => {
   const shared = readFileSync(fileURLToPath(new URL("./settings/_shared.tsx", import.meta.url)), "utf8")
-  const specialists = readFileSync(fileURLToPath(new URL("./settings/Specialists.tsx", import.meta.url)), "utf8")
   const skills = readFileSync(fileURLToPath(new URL("../atlas/SkillsPage.tsx", import.meta.url)), "utf8")
 
   expect(shared).toContain('aria-label={props.ariaLabel ?? props.placeholder ?? "Search"}')
   expect(shared).toContain("aria-label={props.ariaLabel}")
-  expect(specialists).toContain('ariaLabel="Filter specialists by mode"')
   expect(skills).toContain('ariaLabel="Filter skills by source"')
   expect(skills).toContain('ariaLabel="Filter skills by category"')
 })

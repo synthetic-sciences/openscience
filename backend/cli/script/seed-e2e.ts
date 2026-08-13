@@ -25,6 +25,7 @@ const seed = async () => {
         id: messageID,
         sessionID: session.id,
         role: "user" as const,
+        effort: "normal" as const,
         time: { created: now },
         agent: "build",
         model: {

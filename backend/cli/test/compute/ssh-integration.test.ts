@@ -16,6 +16,20 @@ async function run(argv: string[], env: Record<string, string | undefined> = pro
   return stdout
 }
 
+async function waitForRemoteID(root: string, id: string, timeout: number) {
+  const file = path.join(root, "jobs.json")
+  const deadline = Date.now() + timeout
+  let snapshot = "missing"
+  while (Date.now() < deadline) {
+    snapshot = await fs.readFile(file, "utf8").catch(() => "missing")
+    const jobs = snapshot === "missing" ? [] : (JSON.parse(snapshot) as { id: string; remote_id?: string }[])
+    const job = jobs.find((item) => item.id === id)
+    if (job?.remote_id) return job.remote_id
+    await Bun.sleep(50)
+  }
+  throw new Error(`SSH job ${id} did not publish a durable remote id within ${timeout}ms\nJOBS:\n${snapshot}`)
+}
+
 async function port() {
   return new Promise<number>((resolve, reject) => {
     const server = net.createServer()
@@ -213,13 +227,21 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
       expect(commands(await fs.readFile(daemonLog, "utf8"))).toBe(before)
     }
     const first = await run([process.execPath, fixture, "start", workspace, state, hostFile, sessionFile, jobFile], env)
-    const started = JSON.parse(first.trim()) as { id: string; remote_id: string; fingerprint: string }
-    expect(started.remote_id).toMatch(/^pid:[0-9]+$/)
+    const started = JSON.parse(first.trim()) as {
+      id: string
+      remote_id?: string
+      fingerprint: string
+      session_workspace: string
+    }
+    expect(started.remote_id).toBeUndefined()
     expect(started.fingerprint).toBe(pinned.fingerprint!)
     expect(await fs.readFile(path.join(state, "jobs.json"), "utf8")).not.toContain('"owner"')
+    const recovery = run([process.execPath, fixture, "recover", workspace, state, hostFile, sessionFile, jobFile], env)
+    const attachedRemoteID = await waitForRemoteID(state, started.id, 60_000)
+    expect(attachedRemoteID).toMatch(/^pid:[0-9]+$/)
     const second = await Promise.race([
-      run([process.execPath, fixture, "recover", workspace, state, hostFile, sessionFile, jobFile], env),
-      Bun.sleep(22_000).then(async () => {
+      recovery,
+      Bun.sleep(70_000).then(async () => {
         throw new Error(
           `SSH recovery timed out\nJOBS:\n${await fs.readFile(path.join(state, "jobs.json"), "utf8").catch(() => "missing")}\nSSHD:\n${await fs.readFile(daemonLog, "utf8")}`,
         )
@@ -237,21 +259,29 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
     expect(recovered).toMatchObject({
       id: started.id,
       status: "succeeded",
-      remote_id: started.remote_id,
       lifecycle: { delivery: "complete", resource: "closed" },
     })
+    expect(recovered.remote_id).toMatch(/^pid:[0-9]+$/)
+    expect(recovered.remote_id).toBe(attachedRemoteID)
     expect(recovered.log).toContain("remote:payload")
-    expect(recovered.events).toContain(`Submitted ${started.remote_id}`)
+    expect(recovered.events).toContain(`Submitted ${recovered.remote_id}`)
     expect(recovered.artifacts.map((item) => item.path)).toEqual(["outputs/result.txt"])
-    expect(await fs.readFile(path.join(workspace, "outputs/result.txt"), "utf8")).toBe("verified:payload\n")
+    expect(await fs.readFile(path.join(started.session_workspace, "outputs/result.txt"), "utf8")).toBe(
+      "verified:payload\n",
+    )
     expect(await Bun.file(path.join(remote, ".openscience", "jobs", started.id)).exists()).toBe(false)
 
     const long = JSON.parse(
       (
         await run([process.execPath, fixture, "start-cancel", workspace, state, hostFile, sessionFile, jobFile], env)
       ).trim(),
+    ) as { id: string; remote_id?: string }
+    expect(long.remote_id).toBeUndefined()
+    const longAttached = JSON.parse(
+      (await run([process.execPath, fixture, "attach", workspace, state, hostFile, sessionFile, jobFile], env)).trim(),
     ) as { id: string; remote_id: string }
-    expect(long.remote_id).toMatch(/^pid:[0-9]+$/)
+    const longRemoteID = longAttached.remote_id
+    expect(longRemoteID).toMatch(/^pid:[0-9]+$/)
     const remoteRuntime = JSON.parse(
       await fs.readFile(path.join(remote, ".openscience", "jobs", long.id, "runtime.json"), "utf8"),
     ) as { containment?: string; subreaper?: boolean; responsibility?: number }
@@ -277,7 +307,7 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
     expect(cancelled).toMatchObject({
       id: long.id,
       status: "cancelled",
-      remote_id: long.remote_id,
+      remote_id: longRemoteID,
       lifecycle: { execution: "cancelled", resource: "closed" },
     })
     expect(cancelled.events).toContain("Released remote workspace")
@@ -290,9 +320,14 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
           env,
         )
       ).trim(),
+    ) as { id: string; remote_id?: string }
+    expect(stubborn.remote_id).toBeUndefined()
+    const stubbornAttached = JSON.parse(
+      (await run([process.execPath, fixture, "attach", workspace, state, hostFile, sessionFile, jobFile], env)).trim(),
     ) as { id: string; remote_id: string }
-    expect(stubborn.remote_id).toMatch(/^pid:[0-9]+$/)
-    const stubbornPID = Number(stubborn.remote_id.slice(4))
+    const stubbornRemoteID = stubbornAttached.remote_id
+    expect(stubbornRemoteID).toMatch(/^pid:[0-9]+$/)
+    const stubbornPID = Number(stubbornRemoteID.slice(4))
     const stubbornCancelled = JSON.parse(
       (await run([process.execPath, fixture, "cancel", workspace, state, hostFile, sessionFile, jobFile], env)).trim(),
     ) as { status: string; lifecycle: { resource: string }; events: string }
@@ -325,13 +360,15 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
           env,
         )
       ).trim(),
-    ) as { id: string; remote_id: string }
+    ) as { id: string; remote_id: string; session_workspace: string }
     const forkedFinished = JSON.parse(
       (await run([process.execPath, fixture, "recover", workspace, state, hostFile, sessionFile, jobFile], env)).trim(),
     ) as { status: string; lifecycle: { resource: string }; log: string }
     expect(forkedFinished).toMatchObject({ status: "succeeded", lifecycle: { resource: "closed" } })
     expect(forkedFinished.log).toContain("leader-done")
-    expect(await fs.readFile(path.join(workspace, "outputs/double-fork.txt"), "utf8")).toBe("contained\n")
+    expect(await fs.readFile(path.join(forked.session_workspace, "outputs/double-fork.txt"), "utf8")).toBe(
+      "contained\n",
+    )
     expect(await Bun.file(path.join(remote, ".openscience", "jobs", forked.id)).exists()).toBe(false)
 
     const forkCancel = JSON.parse(
@@ -341,7 +378,12 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
           env,
         )
       ).trim(),
+    ) as { id: string; remote_id?: string }
+    expect(forkCancel.remote_id).toBeUndefined()
+    const forkCancelAttached = JSON.parse(
+      (await run([process.execPath, fixture, "attach", workspace, state, hostFile, sessionFile, jobFile], env)).trim(),
     ) as { id: string; remote_id: string }
+    expect(forkCancelAttached.remote_id).toMatch(/^pid:[0-9]+$/)
     const pidFile = path.join(remote, ".openscience", "jobs", forkCancel.id, "work", "double-fork.pid")
     const forkDeadline = Date.now() + 3_000
     while (!(await Bun.file(pidFile).exists()) && Date.now() < forkDeadline) await Bun.sleep(20)
@@ -414,4 +456,4 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
     if (agentPid) process.kill(agentPid, "SIGTERM")
     await fs.rm(root, { recursive: true, force: true })
   }
-}, 180_000)
+}, 360_000)

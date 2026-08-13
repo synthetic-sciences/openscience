@@ -39,6 +39,7 @@ test("a queued summary update cannot recreate a removed user message", async () 
         id: messageID,
         role: "user",
         sessionID: session.id,
+        effort: "normal",
         agent: "default",
         model: { providerID: "openai", modelID: "gpt-4" },
         time: { created: Date.now() },

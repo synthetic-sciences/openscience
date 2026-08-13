@@ -5,6 +5,7 @@ import { ComputeJobs } from "../../src/compute/jobs"
 import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
 import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
 
 const [mode, workspace, root, hostFile, sessionFile, jobFile] = process.argv.slice(2)
 if (!mode || !workspace || !root || !hostFile || !sessionFile || !jobFile)
@@ -26,6 +27,8 @@ await Instance.provide({
       mode === "start-double-fork-cancel"
     ) {
       const session = await Session.create({})
+      const sessionWorkspace = await SessionFilesystem.workspace(session.id)
+      await fs.copyFile(path.join(workspace, "input.txt"), path.join(sessionWorkspace, "input.txt"))
       const request = {
         sessionID: session.id,
         name: "OpenSSH durable dispatch",
@@ -61,10 +64,35 @@ await Instance.provide({
         throw error
       })
       await Promise.all([fs.writeFile(sessionFile, session.id), fs.writeFile(jobFile, job.id)])
-      console.log(JSON.stringify({ id: job.id, remote_id: job.remote_id, fingerprint: job.ssh?.fingerprint }))
+      if (mode === "start-killpoint") {
+        await Bun.sleep(90_000)
+        throw new Error("SSH after-accept killpoint did not terminate the fixture process")
+      }
+      console.log(
+        JSON.stringify({
+          id: job.id,
+          remote_id: job.remote_id,
+          fingerprint: job.ssh?.fingerprint,
+          session_workspace: sessionWorkspace,
+        }),
+      )
       process.exit(0)
     }
     const id = (await fs.readFile(jobFile, "utf8")).trim()
+    if (mode === "attach") {
+      const deadline = Date.now() + 60_000
+      let latest = await ComputeJobs.list({ root, workspace, hosts: [host] })
+      for (;;) {
+        const job = latest.find((item) => item.id === id)
+        if (job?.remote_id) {
+          console.log(JSON.stringify({ id: job.id, remote_id: job.remote_id }))
+          process.exit(0)
+        }
+        if (Date.now() >= deadline) throw new Error(`Timed out attaching SSH job ${id}`)
+        await Bun.sleep(50)
+        latest = await ComputeJobs.list({ root, workspace, hosts: [host] })
+      }
+    }
     if (mode === "cancel") {
       const cancelled = await ComputeJobs.cancel(id, { root, workspace, hosts: [host] })
       console.log(

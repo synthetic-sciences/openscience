@@ -35,20 +35,17 @@ import { ReadTool } from "../tool/read"
 import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
-import { RSITrajectory } from "./rsi/trajectory"
-import { RLMArtifacts } from "./rlm/artifacts"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { Config } from "../config/config"
-import { computeBillingMode } from "./billing-gate"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@synsci/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
-import { TaskTool } from "@/tool/task"
+import { DELEGATION_PROFILES, TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
@@ -75,12 +72,8 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENSCIENCE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
-  // physics is a compute agent (see COMPUTE_AGENTS) that also produces artifacts
-  // (PDE solutions, fitted params, plots), so it participates in artifact-context
-  // re-injection + RSI trajectory capture like its peer compute agents.
-  const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"]
+  // Scientific agents can still consume session-scoped artifact references.
   // Science agents that dispatch GPU/compute work and should honor billing.compute.
-  const COMPUTE_AGENTS = new Set(["research", "biology", "physics", "ml"])
   const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
 
   const state = Instance.state(
@@ -142,6 +135,8 @@ export namespace SessionPrompt {
       .describe(
         "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
       ),
+    effort: MessageV2.ResearchEffort.optional(),
+    /** @deprecated Research effort now controls bounded delegation. */
     delegation: z.boolean().optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
@@ -415,7 +410,14 @@ export namespace SessionPrompt {
         })
       }
       const compact = (trigger: "proactive" | "overflow" = "proactive") =>
-        SessionCompaction.create({ sessionID, agent: user.agent, model: user.model, auto: true, trigger })
+        SessionCompaction.create({
+          sessionID,
+          agent: user.agent,
+          model: user.model,
+          effort: MessageV2.resolveResearchEffort(user.effort),
+          auto: true,
+          trigger,
+        })
       // Latched compaction: fire once, then not again until context drops back under
       // the threshold (re-arm happens in the reactive branch). Returns whether it fired.
       const armedCompact = async () => {
@@ -439,10 +441,6 @@ export namespace SessionPrompt {
       const continuing = MessageV2.isContinuingTurn(lastAssistant?.finish, lastAssistantHasTool)
       if (lastAssistant?.finish && (!continuing || bareMode) && lastUser.id < lastAssistant.id) {
         log.info("exiting loop", { sessionID, bareMode })
-        // RSI: capture trajectory from ultra agent sessions (async, non-blocking)
-        if (lastUser.agent && RSITrajectory.ARTIFACT_AGENTS.includes(lastUser.agent as any)) {
-          RSITrajectory.pipeline(sessionID).catch(() => {})
-        }
         break
       }
 
@@ -512,6 +510,12 @@ export namespace SessionPrompt {
       // pending subtask
       // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
+        // Older saved command definitions may still name a domain-specific
+        // subagent. Keep those records runnable while funnelling all new work
+        // through the three bounded internal Research profiles.
+        const taskProfile = DELEGATION_PROFILES.includes(task.agent as (typeof DELEGATION_PROFILES)[number])
+          ? (task.agent as (typeof DELEGATION_PROFILES)[number])
+          : "execute"
         const taskTool = await TaskTool.init()
         const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
         const assistantMessage = (await Session.updateMessage({
@@ -519,8 +523,8 @@ export namespace SessionPrompt {
           role: "assistant",
           parentID: lastUser.id,
           sessionID,
-          mode: task.agent,
-          agent: task.agent,
+          mode: taskProfile,
+          agent: taskProfile,
           path: {
             cwd: Instance.directory,
             root: Instance.worktree,
@@ -550,7 +554,7 @@ export namespace SessionPrompt {
             input: {
               prompt: task.prompt,
               description: task.description,
-              subagent_type: task.agent,
+              subagent_type: taskProfile,
               command: task.command,
             },
             time: {
@@ -561,7 +565,7 @@ export namespace SessionPrompt {
         const taskArgs = {
           prompt: task.prompt,
           description: task.description,
-          subagent_type: task.agent,
+          subagent_type: taskProfile,
           command: task.command,
         }
         await Plugin.trigger(
@@ -574,14 +578,17 @@ export namespace SessionPrompt {
           { args: taskArgs },
         )
         let executionError: Error | undefined
-        const taskAgent = await Agent.get(task.agent)
+        const taskAgent = await Agent.get(taskProfile)
         const taskCtx: Tool.Context = {
-          agent: task.agent,
+          agent: taskProfile,
           messageID: assistantMessage.id,
           sessionID: sessionID,
           abort,
           callID: part.callID,
-          extra: { bypassAgentCheck: true },
+          extra: {
+            bypassAgentCheck: true,
+            effort: MessageV2.resolveResearchEffort(lastUser.effort),
+          },
           messages: msgs,
           async metadata(input) {
             await Session.updatePart({
@@ -603,7 +610,7 @@ export namespace SessionPrompt {
         }
         const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
           executionError = error
-          log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+          log.error("subtask execution failed", { error, agent: taskProfile, description: task.description })
           return undefined
         })
         await Plugin.trigger(
@@ -664,6 +671,7 @@ export namespace SessionPrompt {
             },
             agent: lastUser.agent,
             model: lastUser.model,
+            effort: MessageV2.resolveResearchEffort(lastUser.effort),
           }
           await Session.updateMessage(summaryUserMsg)
           await Session.updatePart({
@@ -811,7 +819,7 @@ export namespace SessionPrompt {
         session,
         model,
         tools: lastUser.tools,
-        delegation: lastUser.delegation,
+        effort: MessageV2.resolveResearchEffort(lastUser.effort),
         processor,
         bypassAgentCheck,
         messages: msgs,
@@ -847,29 +855,11 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
-      // Inject artifact context for ultra agents
-      const artifactContext: string[] = []
-      if (lastUser.agent && ARTIFACT_AGENTS.includes(lastUser.agent)) {
-        const artifacts = await RLMArtifacts.list(sessionID)
-        if (artifacts.length > 0) {
-          artifactContext.push(
-            [
-              "<rlm_context>",
-              "<artifacts>",
-              ...artifacts.map((a) => `- ${a.id}: ${a.summary} (${a.type})`),
-              "</artifacts>",
-              "</rlm_context>",
-            ].join("\n"),
-          )
-        }
-      }
-
       const system = [
         ...(await SystemPrompt.environment(model)),
         ...(await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
         ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
-        ...artifactContext,
       ]
 
       // P0.1 telemetry: record what the working context is made of, by content type,
@@ -961,12 +951,20 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
+  async function lastResearchEffort(sessionID: string) {
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role !== "user") continue
+      return MessageV2.resolveResearchEffort(item.info.effort)
+    }
+    return "normal" as const
+  }
+
   async function resolveTools(input: {
     agent: Agent.Info
     model: Provider.Model
     session: Session.Info
     tools?: Record<string, boolean>
-    delegation?: boolean
+    effort: MessageV2.ResearchEffort
     processor: SessionProcessor.Info
     bypassAgentCheck: boolean
     messages: MessageV2.WithParts[]
@@ -979,7 +977,11 @@ export namespace SessionPrompt {
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
       callID: options.toolCallId,
-      extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
+      extra: {
+        model: input.model,
+        bypassAgentCheck: input.bypassAgentCheck,
+        effort: input.effort,
+      },
       agent: input.agent.name,
       messages: input.messages,
       metadata: async (val: { title?: string; metadata?: any }) => {
@@ -1148,12 +1150,27 @@ export namespace SessionPrompt {
       tools[key] = item
     }
 
-    if (!allowsDelegation(input.delegation, input.bypassAgentCheck)) delete tools.task
     return tools
   }
 
-  export function allowsDelegation(enabled: boolean | undefined, explicit: boolean) {
-    return enabled !== false || explicit
+  /** @deprecated Both Research effort levels may delegate when it is useful. */
+  export function allowsDelegation(_enabled: boolean | undefined, _explicit: boolean) {
+    return true
+  }
+
+  export function researchEffortReminder(value: unknown) {
+    const effort = MessageV2.resolveResearchEffort(value)
+    const limit = MessageV2.childAgentLimit(effort)
+    const posture =
+      effort === "ultra"
+        ? "Investigate additional independent branches when they can materially change the result."
+        : "Stay focused; delegate only when one or two independent branches will materially help."
+    return [
+      "<system-reminder>",
+      `Research effort: ${effort.toUpperCase()}. ${posture}`,
+      `Delegation is optional, shallow, and limited to ${limit} concurrent child tasks.`,
+      "</system-reminder>",
+    ].join("\n")
   }
 
   async function createUserMessage(input: PromptInput) {
@@ -1180,6 +1197,7 @@ export namespace SessionPrompt {
         created: Date.now(),
       },
       tools: input.tools,
+      effort: input.effort ?? "normal",
       delegation: input.delegation,
       agent: agent.name,
       model,
@@ -1568,23 +1586,7 @@ export namespace SessionPrompt {
   async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
-
-    // Compute spend preference — make the user's explicit managed/BYOK choice
-    // authoritative for GPU work. Only injected when the toggle is explicitly set
-    // (unset = the agent's own atlas-doctor-driven default, unchanged).
-    if (COMPUTE_AGENTS.has(input.agent.name) && (await Config.get()).billing?.compute) {
-      const managed = (await computeBillingMode()) === "managed"
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: managed
-          ? "<system-reminder>Compute spend is set to MANAGED. Run GPU/training work through the bundled `atlas compute` CLI (e.g. `atlas compute:up`), which bills Credits. Do not fall back to the user's own GPU providers unless `atlas doctor` reports managed compute unavailable.</system-reminder>"
-          : "<system-reminder>Compute spend is set to BYOK. Run GPU/training work on the user's own connected providers (Modal, Tinker, TensorPool, …) via the cloud-compute skills — do not launch managed `atlas compute` leases that bill Credits.</system-reminder>",
-        synthetic: true,
-      })
-    }
+    const effort = userMessage.info.role === "user" ? userMessage.info.effort : undefined
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE) {
@@ -1624,7 +1626,7 @@ export namespace SessionPrompt {
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
           type: "text",
-          text: PROMPT_RESEARCH,
+          text: [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n"),
           synthetic: true,
         })
       }
@@ -1689,7 +1691,7 @@ export namespace SessionPrompt {
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: PROMPT_RESEARCH,
+        text: [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n"),
         synthetic: true,
       })
     }
@@ -1808,6 +1810,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       },
       role: "user",
       agent: input.agent,
+      effort: await lastResearchEffort(input.sessionID),
       model: {
         providerID: model.providerID,
         modelID: model.modelID,
@@ -2110,10 +2113,12 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
       const focus = input.arguments.trim()
+      const effort = await lastResearchEffort(input.sessionID)
       await SessionCompaction.create({
         sessionID: input.sessionID,
         agent: agentName,
         model: { providerID: model.providerID, modelID: model.modelID },
+        effort,
         auto: false,
         focus: focus || undefined,
         trigger: "manual",
@@ -2136,10 +2141,12 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     if (input.command === Command.Default.HANDOFF && !userDefinedHandoff) {
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
+      const effort = await lastResearchEffort(input.sessionID)
       await SessionCompaction.create({
         sessionID: input.sessionID,
         agent: agentName,
         model: { providerID: model.providerID, modelID: model.modelID },
+        effort,
         auto: false,
         handoffFile: input.arguments.trim() || undefined,
         trigger: "manual",

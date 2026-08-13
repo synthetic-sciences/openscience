@@ -1067,7 +1067,7 @@ function AnnotationThread(props: {
     if (value.kind === "text") return `Lines ${value.startLine}–${value.endLine}`
     if (value.kind === "molecule") return value.selection ?? "Molecular selection"
     if (value.kind === "genome") return `${value.chromosome}:${value.start}–${value.end}`
-    if (value.kind === "notebook") return `Cell ${value.cellId}`
+    if (value.kind === "notebook") return value.label ?? "Saved selection"
     return value.label ?? "Whole file"
   }
   return (

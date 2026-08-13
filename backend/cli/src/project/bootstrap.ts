@@ -12,8 +12,6 @@ import { Vcs } from "./vcs"
 import { Log } from "@/util/log"
 import { Snapshot } from "../snapshot"
 import { Truncate } from "../tool/truncation"
-import { RSILifecycle } from "../session/rsi/lifecycle"
-import { RLMArtifacts } from "../session/rlm/artifacts"
 import { Session } from "../session"
 import { SessionCompaction } from "../session/compaction"
 import { SessionFilesystem } from "../session/filesystem"
@@ -189,11 +187,7 @@ export async function InstanceBootstrap() {
   filesystemSync()
   await authoritySync()
 
-  // RSI lifecycle: archive unused learned skills, log high performers
-  RSILifecycle.startupCheck().catch(() => {})
-  // RLM artifacts: remove 7-day old artifacts
-  RLMArtifacts.cleanup().catch(() => {})
-  // Scratch workspaces: remove orphans whose session record is gone
+  // Scratch workspaces: remove orphans whose session record is gone.
   SessionFilesystem.sweep().catch(() => {})
 
   Bus.subscribe(Command.Event.Executed, async (payload) => {

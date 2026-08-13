@@ -5,7 +5,6 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
-import PROMPT_LEARN from "./template/learn.txt"
 import { MCP } from "../mcp"
 import { State } from "../project/state"
 
@@ -59,7 +58,6 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
-    LEARN: "learn",
     COMPACT: "compact",
     HANDOFF: "handoff",
   } as const
@@ -87,14 +85,6 @@ export namespace Command {
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
-      },
-      [Default.LEARN]: {
-        name: Default.LEARN,
-        description: "distill conversation into a reusable learned skill",
-        get template() {
-          return PROMPT_LEARN
-        },
-        hints: hints(PROMPT_LEARN),
       },
       // Action command, not a prompt template — SessionPrompt.command intercepts
       // it and runs SessionCompaction directly. The empty template is never used.

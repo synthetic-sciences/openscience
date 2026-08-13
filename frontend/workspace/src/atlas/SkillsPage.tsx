@@ -79,13 +79,12 @@ function loadSkillCatalog(load: () => Promise<Skill[]>) {
 }
 
 type View = "list" | "scratch" | "github"
-type Source = "default" | "learned" | "installed" | "user" | "project"
+type Source = "default" | "installed" | "user" | "project"
 type SourceView = "all" | Source
 
 function sourceOf(skill: Skill): Source {
   if (skill.origin) return skill.origin
   const location = skill.location.toLowerCase()
-  if (location.includes("learned-skills")) return "learned"
   if (location.includes("installed-skills") || location.includes(".claude/skills")) return "installed"
   if (location.includes("user-skills")) return "user"
   if (location.includes(".openscience/")) return "project"
@@ -153,7 +152,6 @@ function displayLabel(value: string) {
 
 const SOURCE_LABEL: Record<Source, string> = {
   default: "Default",
-  learned: "Learned",
   installed: "Installed",
   user: "Personal",
   project: "Project",
@@ -252,7 +250,6 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
       { id: "all", label: "All sources", count: all().length },
       { id: "default", label: "Default", count: count("default") },
       { id: "installed", label: "Installed", count: count("installed") },
-      { id: "learned", label: "Learned", count: count("learned") },
       { id: "user", label: "Personal", count: count("user") },
       { id: "project", label: "Project", count: count("project") },
     ]

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { KernelStatus } from "@/notebook/runtime"
+import type { KernelStatus } from "@/atlas/kernel-runtime"
 import { plateEyebrow, plateUsage } from "./kernel-plate"
 
 const kernel = (value: Partial<KernelStatus> = {}): KernelStatus => ({

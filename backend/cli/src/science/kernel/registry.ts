@@ -10,6 +10,9 @@ import { KernelProcessIdentity } from "./process"
 import { Global } from "@/global"
 import { FileLease } from "@/util/file-lease"
 import { AuthoritySignal } from "@/project/authority-signal"
+import { KernelMetrics } from "./metrics"
+import * as ExecutionFiles from "@/science/execution/files"
+import { ExecutionHistory } from "@/science/execution/history"
 import type {
   ExecuteOptions,
   ExecuteResult,
@@ -445,6 +448,10 @@ async function provenance(
   origin?: ExecuteOptions["origin"],
   result?: ExecuteResult,
   cause?: unknown,
+  resources?: KernelMetrics.Sample,
+  terminalStatus?: ProvenanceEnvelope.Schema["outputs"]["status"],
+  files: ProvenanceEnvelope.Output[] = [],
+  executionSequence?: number,
 ) {
   const notebook = identity.name.startsWith("notebook:")
   const target = notebook ? identity.name.slice("notebook:".length) : identity.name
@@ -453,8 +460,9 @@ async function provenance(
   const error =
     fault?.traceback?.join("\n") ??
     (fault ? `${fault.name}: ${fault.message}` : cause instanceof Error ? cause.message : cause ? String(cause) : "")
-  const outputs =
-    result?.outputs.map((item, index) =>
+  const outcome = terminalStatus ?? (result?.ok ? "succeeded" : "failed")
+  const outputs = [
+    ...(result?.outputs.map((item, index) =>
       ProvenanceEnvelope.output({
         kind: item.type,
         label: item.name ?? item.error?.name ?? (Object.keys(item.data ?? {}).join(", ") || `output ${index + 1}`),
@@ -462,16 +470,18 @@ async function provenance(
         createdAt: completedAt,
       }),
     ) ??
-    (error
-      ? [
-          ProvenanceEnvelope.output({
-            kind: "error",
-            label: cause instanceof Error ? cause.name : "Execution error",
-            content: error,
-            createdAt: completedAt,
-          }),
-        ]
-      : [])
+      (error
+        ? [
+            ProvenanceEnvelope.output({
+              kind: "error",
+              label: cause instanceof Error ? cause.name : "Execution error",
+              content: error,
+              createdAt: completedAt,
+            }),
+          ]
+        : [])),
+    ...files,
+  ]
   const process = value.kernel?.process
   const envelope = ProvenanceEnvelope.create({
     kind: "kernel",
@@ -498,7 +508,7 @@ async function provenance(
       processID: process?.pid,
       processStartedAt: process?.startedAt,
     },
-    status: result?.ok ? "succeeded" : "failed",
+    status: outcome,
     outputs,
     createdAt: startedAt,
     startedAt,
@@ -511,15 +521,15 @@ async function provenance(
     },
     {
       kind: "run",
-      label: `${identity.language} cell · ${target}`.slice(0, 140),
-      tool: identity.language === "r" ? "rkernel" : "notebook",
+      label: `${identity.language} execution · ${target}`.slice(0, 140),
+      tool: identity.language === "r" ? "r" : "python",
       sessionID: identity.sessionID,
       inputs: {
         ...(notebook ? { path: target } : { kernel: target }),
         language: identity.language,
         code,
       },
-      status: result?.ok ? "ok" : "error",
+      status: outcome === "succeeded" ? "ok" : "error",
       provenance: envelope,
       meta: {
         directory: Instance.directory,
@@ -532,7 +542,12 @@ async function provenance(
         interpreter: value.environment?.interpreter,
         kernelIncarnation: value.incarnation,
         executionCount: result?.executionCount ?? value.executionCount,
+        ...(executionSequence !== undefined ? { executionSequence } : {}),
         outputTypes: result?.outputs.map((item) => item.type) ?? [],
+        durationMs: Math.max(0, completedAt - startedAt),
+        ...(resources && Object.keys(resources).length ? { resources } : {}),
+        ...(outcome === "cancelled" ? { cancelled: true } : {}),
+        ...(outcome === "interrupted" ? { interrupted: true } : {}),
         stdout: clip(result?.stdout ?? ""),
         stderr: clip(result?.stderr ?? ""),
         result: clip(output),
@@ -698,6 +713,7 @@ export namespace KernelRuntime {
   }
 
   export async function restoreSession(projectID: string, sessionID?: string) {
+    await ExecutionHistory.recover(projectID, sessionID)
     const prefix = ["kernel_registry", projectID, ...(sessionID ? [sessionID] : [])]
     const paths = await Storage.list(prefix)
     await Promise.all(
@@ -738,29 +754,86 @@ export namespace KernelRuntime {
       promise?: Promise<ExecuteResult>
       startedAt?: number
       codeState?: ReturnType<typeof ProvenanceEnvelope.code>
+      metricScope?: string
+      metricStart?: Promise<unknown>
+      fileRoot?: string
+      fileStart?: Promise<ExecutionFiles.Snapshot>
+      sequence?: number
+      journal?: Awaited<ReturnType<typeof ExecutionHistory.submit>>
     } = {}
-    const value = await entry(identity, start, (current, kernel) => {
-      running.startedAt = Date.now()
-      current.lastActivityAt = running.startedAt
-      // KernelQueue increments synchronously, so status cannot expose an idle
-      // process between the startup handoff and this request joining the queue.
-      running.promise = kernel.execute(code, {
-        ...options,
-        onStart: () => {
-          running.cell = cell(current)
-          current.lastCell = running.cell
-          current.lastActivityAt = Date.now()
-          options?.onStart?.()
-        },
-      })
-      // Capture after reserving the queue but before its promise continuation
-      // can run. Best-effort git inspection therefore remains pre-execution.
-      running.codeState = ProvenanceEnvelope.code(current.environment?.cwd ?? Instance.directory)
+    // Persist the exact submitted code before interpreter startup or queue
+    // entry, so a backend crash cannot leave only a skipped ordinal.
+    running.journal = await ExecutionHistory.submit({
+      sessionID: identity.sessionID,
+      language: identity.language,
+      environmentName: identity.environmentName ?? identity.language,
+      kernelName: identity.name,
+      code,
+      messageID: options?.origin?.messageID,
+      callID: options?.origin?.callID,
     })
+    running.sequence = running.journal.sequence
+    let value: Entry
+    try {
+      value = await entry(identity, start, (current, kernel) => {
+        // Reserve immediately so the registry can publish a queued execution;
+        // onStart below replaces this with the actual queue-start boundary.
+        running.startedAt = Date.now()
+        current.lastActivityAt = running.startedAt
+        running.fileRoot = current.environment?.cwd
+        // KernelQueue increments synchronously, so status cannot expose an idle
+        // process between the startup handoff and this request joining the queue.
+        running.promise = kernel.execute(code, {
+          ...options,
+          onStart: async () => {
+            running.startedAt = Date.now()
+            current.lastActivityAt = running.startedAt
+            await ExecutionHistory.start(running.journal!, {
+              startedAt: running.startedAt,
+              kernelID: current.key,
+              incarnation: current.incarnation,
+              environment: current.environment ?? kernel.environment ?? null,
+            })
+            // Baseline observation must finish after this cell reaches the head
+            // of the persistent-kernel queue and before its code is sent. Taking
+            // it at enqueue time lets adjacent cells claim each other's files.
+            if (running.fileRoot) {
+              const before = await ExecutionFiles.snapshot(running.fileRoot)
+              running.fileStart = Promise.resolve(before)
+            }
+            const pid = kernel.process?.pid
+            if (pid) {
+              running.metricScope = `execution:${current.key}:${crypto.randomUUID()}`
+              running.metricStart = KernelMetrics.sampleAll(running.metricScope, [pid]).catch(() => undefined)
+            }
+            running.cell = cell(current)
+            current.lastCell = running.cell
+            current.lastActivityAt = Date.now()
+            await options?.onStart?.()
+          },
+        })
+        // Capture after reserving the queue but before its promise continuation
+        // can run. Best-effort git inspection therefore remains pre-execution.
+        // Interpreter cwd may be the session's isolated scratch workspace. Git
+        // state belongs to the owning project, not that transient directory.
+        running.codeState = ProvenanceEnvelope.code(Instance.directory)
+      })
+    } catch (error) {
+      await ExecutionHistory.complete(running.journal, {
+        status: options?.signal?.aborted || error instanceof KernelStartupCancelled ? "cancelled" : "failed",
+        completedAt: Date.now(),
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
     const kernel = value.kernel
     const execution = running.promise
-    const startedAt = running.startedAt
-    if (!kernel || !execution || startedAt === undefined) {
+    if (!kernel || !execution || running.startedAt === undefined) {
+      await ExecutionHistory.complete(running.journal, {
+        status: "failed",
+        completedAt: Date.now(),
+        error: "Kernel startup completed without a queued execution",
+      })
       throw new Error("Kernel startup completed without a queued execution")
     }
     return execution.then(
@@ -772,6 +845,7 @@ export namespace KernelRuntime {
         const count = result.executionCount ?? value.executionCount + 1
         value.executionCount = count
         const completedAt = Date.now()
+        const startedAt = running.startedAt ?? completedAt
         value.lastActivityAt = completedAt
         const completeCell: KernelCell = {
           ...(running.cell ?? cell(value)),
@@ -781,6 +855,32 @@ export namespace KernelRuntime {
         if (!value.lastCell || value.lastCell === running.cell) value.lastCell = completeCell
         await persist(value)
         const complete = { ...result, executionCount: count }
+        await running.metricStart
+        const resources =
+          running.metricScope && kernel.process?.pid
+            ? await KernelMetrics.sampleAll(running.metricScope, [kernel.process.pid])
+                .then((samples) => samples.get(kernel.process!.pid))
+                .catch(() => undefined)
+            : undefined
+        const files =
+          running.fileRoot && running.fileStart
+            ? await running.fileStart
+                .then((before) => ExecutionFiles.changed(running.fileRoot!, before, completedAt))
+                .catch(() => [])
+            : []
+        const summary = complete.outputs.find((item) => item.type === "result")?.data?.["text/plain"] ?? ""
+        const fault = complete.outputs.find((item) => item.type === "error")?.error
+        await ExecutionHistory.complete(running.journal!, {
+          status: complete.ok ? "succeeded" : "failed",
+          completedAt,
+          summary,
+          stdout: complete.stdout,
+          stderr: complete.stderr,
+          error: fault?.traceback?.join("\n") ?? (fault ? `${fault.name}: ${fault.message}` : ""),
+          outputCount: complete.outputs.length,
+          resources,
+          files,
+        })
         const node = await provenance(
           identity,
           value,
@@ -790,16 +890,44 @@ export namespace KernelRuntime {
           running.codeState,
           options?.origin,
           complete,
+          undefined,
+          resources,
+          complete.ok ? "succeeded" : "failed",
+          files,
+          running.sequence,
         )
+        await ExecutionHistory.link(running.journal!, node.id)
         return { ...complete, provenanceID: node.id }
       },
       async (error) => {
         const completedAt = Date.now()
+        const startedAt = running.startedAt ?? completedAt
         value.lastActivityAt = completedAt
         const failedCell: KernelCell = { ...(running.cell ?? cell(value)), status: "failed" }
         if (!value.lastCell || value.lastCell === running.cell) value.lastCell = failedCell
         if (kernel.crashed) value.state = "crashed"
         await persist(value)
+        await running.metricStart
+        const resources =
+          running.metricScope && kernel.process?.pid
+            ? await KernelMetrics.sampleAll(running.metricScope, [kernel.process.pid])
+                .then((samples) => samples.get(kernel.process!.pid))
+                .catch(() => undefined)
+            : undefined
+        const files =
+          running.fileRoot && running.fileStart
+            ? await running.fileStart
+                .then((before) => ExecutionFiles.changed(running.fileRoot!, before, completedAt))
+                .catch(() => [])
+            : []
+        const status = options?.signal?.aborted ? "cancelled" : kernel.crashed ? "interrupted" : "failed"
+        await ExecutionHistory.complete(running.journal!, {
+          status,
+          completedAt,
+          error: error instanceof Error ? error.message : String(error),
+          resources,
+          files,
+        })
         const node = await provenance(
           identity,
           value,
@@ -810,7 +938,12 @@ export namespace KernelRuntime {
           options?.origin,
           undefined,
           error,
+          resources,
+          status,
+          files,
+          running.sequence,
         )
+        await ExecutionHistory.link(running.journal!, node.id)
         throw new KernelExecutionError(error, node.id)
       },
     )

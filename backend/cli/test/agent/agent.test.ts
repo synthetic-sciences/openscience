@@ -50,6 +50,41 @@ test("domain agents are delegated specialists instead of competing primary modes
       expect((await Agent.get("biology"))?.mode).toBe("subagent")
       expect((await Agent.get("physics"))?.mode).toBe("subagent")
       expect((await Agent.get("ml"))?.mode).toBe("subagent")
+      expect((await Agent.get("biology"))?.hidden).toBe(true)
+      expect((await Agent.get("physics"))?.hidden).toBe(true)
+      expect((await Agent.get("ml"))?.hidden).toBe(true)
+    },
+  })
+})
+
+test("Research is the only built-in user-facing primary", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const visiblePrimary = (await Agent.list())
+        .filter((agent) => agent.native && agent.mode !== "subagent" && agent.hidden !== true)
+        .map((agent) => agent.name)
+      expect(visiblePrimary).toEqual(["research"])
+      expect((await Agent.get("plan"))?.hidden).toBe(true)
+    },
+  })
+})
+
+test("built-in delegation uses only Explore, Execute, and Review profiles", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const profiles = (await Promise.all([Agent.get("execute"), Agent.get("explore"), Agent.get("review")])).map(
+        (agent) => agent?.name,
+      )
+      expect(profiles).toEqual(["execute", "explore", "review"])
+      expect((await Agent.get("execute"))?.hidden).toBe(true)
+      expect((await Agent.get("explore"))?.hidden).toBe(true)
+      expect((await Agent.get("review"))?.hidden).toBe(true)
+      expect(evalPerm(await Agent.get("execute"), "edit")).toBe("allow")
+      expect(evalPerm(await Agent.get("review"), "edit")).toBe("deny")
     },
   })
 })
@@ -93,7 +128,7 @@ test("task agent denies todo tools", async () => {
       const task = await Agent.get("task")
       expect(task).toBeDefined()
       expect(task?.mode).toBe("subagent")
-      expect(task?.hidden).toBeUndefined()
+      expect(task?.hidden).toBe(true)
       expect(evalPerm(task, "todoread")).toBe("deny")
       expect(evalPerm(task, "todowrite")).toBe("deny")
     },
@@ -138,7 +173,7 @@ test("untrusted project agent configuration stays inert", async () => {
       expect(await Agent.get("repo-agent")).toBeUndefined()
       const research = await Agent.get("research")
       expect(research?.prompt).toBeUndefined()
-      expect(research?.color).toBe("#06b6d4")
+      expect(research?.color).toBe("#d48765")
       expect(evalPerm(research, "bash")).toBe("allow")
       expect(await Agent.defaultAgent()).toBe("research")
     },

@@ -36,7 +36,7 @@ describe("kernel panel poll", () => {
   test("resolves to no inventory when the server cannot be reached", async () => {
     const reported: string[] = []
 
-    const value = await subject.inventory(Bun.fetch(`${unreachable}/notebook/kernels`), (error) => reported.push(error))
+    const value = await subject.inventory(Bun.fetch(`${unreachable}/kernels`), (error) => reported.push(error))
 
     // Resolved, not rejected: an errored resource re-throws where the render
     // path reads it, and the only ErrorBoundary in the app wraps the whole

@@ -93,12 +93,12 @@ describe("composer and state behavior", () => {
     expect(composerCss).toContain("box-shadow: var(--atlas-shadow-xs)")
     expect(composerCss).toContain("@container conversation (max-width: 540px)")
     expect(composerCss).toContain("@container conversation (max-width: 390px)")
-    expect(composerCss).toContain("38cqi")
+    expect(composerCss).toContain(".workspace-composer__effort > span")
   })
 
   test("preserves attachments, model selection, send, and stop controls", () => {
     expect(source).toContain('class="workspace-composer__attachments"')
-    expect(source).toContain("<ModelSettingsPopover")
+    expect(source).toContain("<ModelSettingsPopover />")
     expect(source).toContain('icon={working() ? "stop" : "arrow-up"}')
     expect(source).toContain('data-composer-action={working() ? "stop" : prompt.dirty() ? "send" : "idle"}')
     expect(source).toContain('aria-label="Model and send"')

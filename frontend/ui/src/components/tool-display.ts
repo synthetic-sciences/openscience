@@ -97,7 +97,7 @@ export function generatedArtifacts(
 const filename = (value: string) => value.replaceAll("\\", "/").split("/").pop() || value
 
 /**
- * A stable receipt label for an executed scientific cell. Models can provide a
+ * A stable receipt label for a scientific execution. Models can provide a
  * concrete action title; older calls fall back to conservative code-shape
  * labels instead of leaking an arbitrary first line such as an import.
  */
@@ -131,14 +131,14 @@ export function scienceTaskLabel(input: { title?: unknown; code?: unknown; langu
   if (/\b(?:groupby|describe\s*\(|crosstab|summary\s*\(|aggregate\s*\()/i.test(code)) return "Summarizing dataset"
   if (read) return `Loading ${filename(read[1])}`
   if (write) return `Saving ${filename(write[1])}`
-  return `${input.language === "r" ? "R" : "Python"} cell`
+  return `${input.language === "r" ? "R" : "Python"} execution`
 }
 
 /**
  * Files a turn actually wrote, from its completed tool parts. write/edit/
  * multiedit carry the target in input.filePath; apply_patch lists every
  * changed file (with moves resolved and deletes skipped) in its completed
- * metadata. The notebook tool takes only code — kernel-side writes carry no
+ * metadata. Python and R tools take only code — kernel-side writes carry no
  * path in the part — so it is deliberately not guessed at here.
  */
 export function writtenFiles(
@@ -177,10 +177,10 @@ export function writtenFiles(
  * bare action, several written files get one labeled action per path.
  */
 export function artifactActions(files: readonly string[]): Array<{ path: string; label: string }> {
-  if (files.length === 1) return [{ path: files[0], label: "Save as artifact…" }]
+  if (files.length === 1) return [{ path: files[0], label: "Save as Result…" }]
   return files.map((file) => ({
     path: file,
-    label: `Save as artifact… ${file.split("/").pop() || file}`,
+    label: `Save as Result… ${file.split("/").pop() || file}`,
   }))
 }
 

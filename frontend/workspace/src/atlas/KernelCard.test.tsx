@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
 import { createServer } from "vite"
 import solid from "vite-plugin-solid"
-import type { KernelStatus } from "@/notebook/runtime"
+import type { KernelStatus } from "@/atlas/kernel-runtime"
 
 const server = await createServer({
   root: fileURLToPath(new URL("../..", import.meta.url)),
@@ -33,7 +33,7 @@ const kernel = (value: Partial<KernelStatus> = {}): KernelStatus => ({
   state: "running",
   projectID: "project-1",
   sessionID: "ses_current",
-  name: "notebook:analysis.ipynb",
+  name: "agent",
   language: "python",
   target: { kind: "local" },
   incarnation: 4,
@@ -45,7 +45,7 @@ const kernel = (value: Partial<KernelStatus> = {}): KernelStatus => ({
   process_identity_verified: true,
   started_at: Date.now() - 4_000,
   last_activity_at: Date.now() - 1_000,
-  last_cell: null,
+  last_execution: null,
   resources: { cpu_percent: 180, memory_bytes: 412_000_000 },
   ...value,
 })
@@ -61,33 +61,36 @@ describe("kernel status row", () => {
   test("shows the live runtime in one compact row", () => {
     const host = mount(() => subject.KernelCard({ kernel: kernel(), action: "", onControl: () => {} }))
 
-    expect(host.querySelector(".kernel-card__language [data-component=icon]")).not.toBeNull()
-    expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("analysis.ipynb")
-    expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Running · 7 cells")
+    expect(host.querySelector(".activity-card__kind")?.textContent).toBe("Python")
+    expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Python analysis")
+    expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Running · 7 runs")
     expect(host.querySelector(".kernel-card__copy > span")?.getAttribute("title")).toBe("Executing now.")
-    expect(host.querySelector(".kernel-card__uptime strong")?.textContent).toMatch(/^\d+s$/)
-    expect(host.querySelector(".kernel-card__uptime small")?.textContent).toBe("Runtime")
-    expect(host.querySelectorAll(".kernel-card__metric")[1]?.textContent).toBe("412 MBMemory")
-    expect(host.querySelectorAll(".kernel-card__metric")[2]?.textContent).toBe("1.8CPU cores")
+    expect(host.querySelector(".activity-card__status")?.textContent).toBe("Running")
+    expect(host.querySelector<HTMLDetailsElement>('.activity-disclosure[data-quiet="true"]')?.open).toBe(false)
+    expect(host.textContent).toContain("412 MB")
+    expect(host.textContent).toContain("1.8 cores")
   })
 
   test("keeps queued work visible without filling the row with recovery prose", () => {
-    expect(subject.kernelActivity(kernel({ queue_depth: 2 }))).toBe("Running · 7 cells · 2 queued")
-    expect(subject.kernelActivity(kernel({ state: "idle", execution_count: 1 }))).toBe("Ready · 1 cell")
+    expect(subject.kernelActivity(kernel({ queue_depth: 2 }))).toBe("Running · 7 runs · 2 queued")
+    expect(subject.kernelActivity(kernel({ state: "idle", execution_count: 1 }))).toBe("Ready · 1 run")
   })
 
-  test("only exposes stop, never manual start, restart, interrupt, or forget", () => {
+  test("keeps restart and stop available without exposing creation, interrupt, or forget", () => {
     const calls: string[] = []
     const host = mount(() =>
       subject.KernelCard({ kernel: kernel(), action: "", onControl: (action) => calls.push(action) }),
     )
-    const stop = host.querySelector<HTMLButtonElement>('button[aria-label="Stop analysis.ipynb"]')
+    const restart = host.querySelector<HTMLButtonElement>('button[aria-label="Restart Python analysis"]')
+    const stop = host.querySelector<HTMLButtonElement>('button[aria-label="Stop Python analysis"]')
 
-    expect(host.querySelectorAll("button").length).toBe(1)
+    expect(host.querySelectorAll("button").length).toBe(2)
+    expect(restart?.disabled).toBe(false)
     expect(stop?.disabled).toBe(false)
     expect(stop?.title).toContain("clear its in-memory state")
+    restart?.click()
     stop?.click()
-    expect(calls).toEqual(["stop"])
+    expect(calls).toEqual(["restart", "stop"])
   })
 
   test("never presents an inactive record as startable", () => {
@@ -99,29 +102,29 @@ describe("kernel status row", () => {
       }),
     )
 
-    expect(host.querySelectorAll("button").length).toBe(1)
-    expect(host.querySelector<HTMLButtonElement>("button")?.disabled).toBe(true)
-    expect(host.querySelector(".kernel-card__uptime strong")?.textContent).toBe("—")
+    expect(host.querySelectorAll("button").length).toBe(2)
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>("button")).every((button) => button.disabled)).toBe(true)
+    expect(host.textContent).toContain("Not running")
     expect(host.textContent).not.toContain("Start")
-    expect(host.textContent).not.toContain("Restart")
   })
 
   test("counts uptime while a process stays mounted", async () => {
     const host = mount(() =>
       subject.KernelCard({ kernel: kernel({ started_at: Date.now() - 2_000 }), action: "", onControl: () => {} }),
     )
-    const first = host.querySelector(".kernel-card__uptime")?.textContent
+    const details = () => host.querySelector(".activity-card__facts > div:first-child dd")?.textContent
+    const first = details()
     await Bun.sleep(1_200)
-    expect(host.querySelector(".kernel-card__uptime")?.textContent).not.toBe(first)
+    expect(details()).not.toBe(first)
   })
 
-  test("keeps the latest executed cell compact and inspectable", () => {
+  test("keeps the latest execution compact and inspectable", () => {
     const host = mount(() =>
       subject.KernelCard({
         kernel: kernel({
-          last_cell: {
+          last_execution: {
             title: "Benchmarking survival classifiers",
-            source: "analysis/titanic.ipynb",
+            source: "analysis/titanic.py",
             code: "model.fit(X, y)",
             status: "running",
             execution_count: 7,
@@ -133,12 +136,14 @@ describe("kernel status row", () => {
         onControl: () => {},
       }),
     )
-    const cell = host.querySelector<HTMLDetailsElement>(".kernel-card__cell")
+    const execution = host.querySelector<HTMLDetailsElement>(".kernel-card__cell")
 
-    expect(cell?.open).toBe(false)
-    expect(cell?.querySelector("summary")?.textContent).toContain("Cell 7 · Running")
-    expect(cell?.querySelector("summary")?.textContent).toContain("Benchmarking survival classifiers")
-    expect(cell?.querySelector("summary")?.textContent).toContain("analysis/titanic.ipynb")
-    expect(cell?.querySelector("code")?.textContent).toBe("model.fit(X, y)")
+    expect(execution?.open).toBe(false)
+    expect(execution?.querySelector("summary")?.textContent).toContain("Run 7")
+    expect(execution?.querySelector(".activity-disclosure__caption")?.textContent).toContain(
+      "Benchmarking survival classifiers",
+    )
+    expect(execution?.querySelector(".activity-disclosure__caption")?.textContent).toContain("analysis/titanic.py")
+    expect(execution?.querySelector("code")?.textContent).toBe("model.fit(X, y)")
   })
 })

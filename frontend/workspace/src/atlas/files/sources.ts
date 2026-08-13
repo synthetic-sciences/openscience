@@ -5,7 +5,7 @@ import { fileSourceName, normalizeFilePath, type FilesystemGrant } from "@/atlas
  * A saved deliverable, a working folder, and a recovery location have
  * materially different lifetimes, so they do not share one ambiguous bucket.
  */
-export type SourceGroup = "Saved" | "Working files" | "Remote" | "Recovery"
+export type SourceGroup = "Results" | "Working files" | "Remote" | "Recovery"
 
 export interface PaneSource {
   id: string
@@ -20,7 +20,7 @@ export interface PaneSource {
   live?: boolean
 }
 
-const ORDER: SourceGroup[] = ["Saved", "Working files", "Remote", "Recovery"]
+const ORDER: SourceGroup[] = ["Results", "Working files", "Remote", "Recovery"]
 
 export function buildSources(input: {
   projectRoot: string
@@ -33,9 +33,9 @@ export function buildSources(input: {
   const list: PaneSource[] = [
     {
       id: "artifacts",
-      group: "Saved",
-      name: "Saved artifacts",
-      detail: "Durable, versioned deliverables",
+      group: "Results",
+      name: "Results",
+      detail: "Durable deliverables with immutable versions",
       root: "",
       kind: "artifacts",
     },

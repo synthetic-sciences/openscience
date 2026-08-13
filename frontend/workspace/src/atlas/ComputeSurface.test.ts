@@ -42,7 +42,7 @@ const child = (name: string, calls: string[]) => () => {
 }
 
 describe("compute surface", () => {
-  test("renders one project-wide live compute inventory", () => {
+  test("renders one project-wide execution inventory with capacity collapsed", () => {
     const calls: string[] = []
     const host = mount(() => subject.ComputeSurface({ strip: child("strip", calls), kernels: child("kernels", calls) }))
 
@@ -50,8 +50,12 @@ describe("compute surface", () => {
     expect(host.querySelector('[aria-label="Compute"]')).not.toBeNull()
     expect(host.querySelector('[data-compute-child="strip"]')).not.toBeNull()
     expect(host.querySelector('[data-compute-child="kernels"]')).not.toBeNull()
-    expect(host.querySelector('[aria-label="Atlas Compute preview"]')).toBeNull()
+    expect(host.querySelector<HTMLDetailsElement>(".activity-surface__capacity")?.open).toBe(false)
     expect(host.querySelector('[role="tablist"]')).toBeNull()
+  })
+
+  test("keeps the former export as a compatibility alias", () => {
+    expect(subject.ActivitySurface).toBe(subject.ComputeSurface)
   })
 
   test("contains no manual launcher or separate jobs mode", () => {
@@ -64,7 +68,7 @@ describe("compute surface", () => {
     expect(source).not.toContain("href=")
     expect(source).not.toContain("Coming soon")
     expect(source).not.toContain("Atlas Compute preview")
-    expect(source).toContain("Compute only reflects what is live")
+    expect(source).toContain("Compute reflects what happened and what is live")
     expect(source).toContain("governed remote GPU jobs")
     expect(source).toContain("Completed remote results stay")
   })
@@ -76,13 +80,18 @@ describe("compute surface", () => {
     expect(css).toContain("container: compute / inline-size")
     expect(css).toContain("@container compute (max-width: 470px)")
     expect(css).toContain("@container compute (max-width: 350px)")
-    expect(css).toContain(".compute-surface .kernel-card__metrics")
+    expect(css).toContain(".compute-surface .activity-card")
     expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto")
-    expect(css).toContain(".compute-surface .remote-job-card__summary")
+    expect(css).toContain('.activity-boundary[data-location="research"]')
+    expect(css).toContain('.activity-boundary[data-location="local"]')
+    expect(css).toContain('.activity-boundary[data-location="remote"]')
     expect(host).toContain("@container compute (max-width: 500px)")
-    expect(css).toContain("--compute-divider: var(--border-weak-base)")
-    expect(css).toContain("--compute-radius-card: 12px")
+    expect(css).toContain("--activity-local:")
+    expect(css).toContain("--activity-research:")
+    expect(css).toContain("--activity-remote:")
+    expect(css).toContain("height: 32px")
     expect(css).toContain("@media (pointer: coarse)")
+    expect(css).toContain("min-height: 44px")
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/)
     expect(host).not.toMatch(/#[0-9a-fA-F]{3,8}/)
   })

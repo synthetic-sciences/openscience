@@ -3,7 +3,7 @@ import { Tool } from "./tool"
 import { spawn, type ChildProcess } from "child_process"
 import path from "path"
 import os from "os"
-import { accessSync, constants, statSync, unlinkSync } from "fs"
+import { accessSync, constants, mkdirSync, statSync, unlinkSync } from "fs"
 import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
@@ -13,6 +13,7 @@ import { Sandbox } from "@/sandbox/sandbox"
 import { KernelQueue } from "@/science/kernel/queue"
 import { KernelProcessIdentity } from "@/science/kernel/process"
 import { KernelRuntime } from "@/science/kernel/registry"
+import { KernelEnvironmentMutation } from "@/science/kernel/environment-mutation"
 import { AtlasEnvironment } from "@/science/kernel/types"
 import type {
   Kernel,
@@ -26,12 +27,13 @@ import type {
   KernelProcess,
 } from "@/science/kernel/types"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
+import { ExecutionAuthority } from "@/project/execution"
 
 /**
- * Persistent R kernel, following the same pattern as the Python kernel in
+ * Persistent R runtime, following the same pattern as the Python runtime in
  * `tool/notebook.ts` and the biology kernel it generalizes.
  *
- * One long-lived `Rscript` process per sessionID evaluates cells into the global
+ * One long-lived `Rscript` process per sessionID evaluates code in the global
  * environment, so objects/attached packages persist across `execute` calls.
  * stdout (print output) is captured; warnings/messages/errors are surfaced; and
  * base-graphics or ggplot2 plots left on the device are captured as `image/png`
@@ -49,7 +51,7 @@ import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 // warnings/messages/error section. The PNG is passed back by file path and read +
 // base64-encoded on the TS side, avoiding any base64 package requirement.
 const KERNEL_SCRIPT = `
-run_cell <- function(code) {
+run_code <- function(code) {
   imgfile <- tempfile(fileext = ".png")
   dev_ok <- tryCatch({
     grDevices::png(filename = imgfile, width = 900, height = 650, res = 110, type = "cairo")
@@ -128,7 +130,7 @@ repeat {
   }
   if (!isTRUE(got_end)) break
   code <- paste(lines, collapse = "\\n")
-  tryCatch(run_cell(code), error = function(e) {
+  tryCatch(run_code(code), error = function(e) {
     cat("__OPENSCIENCE_R_RESULT_START__\\nOK:0\\nIMG:\\n__OPENSCIENCE_R_OUT__\\n\\n__OPENSCIENCE_R_MSG__\\nError: ", conditionMessage(e), "\\n__OPENSCIENCE_R_END__\\n", sep = "")
     flush(stdout())
   })
@@ -272,9 +274,9 @@ class RKernel implements Kernel {
       args: ["--vanilla", scriptPath],
       workspace,
       readable,
-      extraWritable: [scriptPath, configPath],
+      extraWritable: [scriptPath, configPath, ...(opts?.extraWritable ?? [])],
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: policy,
+      options: { ...policy, ...(opts?.sandboxNetwork ? { network: opts.sandboxNetwork } : {}) },
     })
     const cwd = opts?.cwd ?? (opts?.sessionID ? await SessionFilesystem.workspace(opts.sessionID) : Instance.directory)
     this.environment = {
@@ -290,7 +292,7 @@ class RKernel implements Kernel {
         requested: policy?.enabled === true,
         enforced: sandboxed.sandboxed,
         backend: sandboxed.backend,
-        network: policy?.network ?? "allow",
+        network: opts?.sandboxNetwork ?? policy?.network ?? "allow",
         warning: sandboxed.warning,
       },
     }
@@ -386,7 +388,8 @@ class RKernel implements Kernel {
 
   private async run(code: string, opts?: ExecuteOptions): Promise<ExecuteResult> {
     if (!this.ready) throw new Error("R kernel is not running")
-    opts?.onStart?.()
+    await opts?.onStart?.()
+    if (opts?.signal?.aborted) throw new Error("Execution aborted before starting")
     const proc = this.proc!
     this.lastUsed = Date.now()
     const timeout = Math.min(Math.max(opts?.timeout ?? 120_000, 5_000), 600_000)
@@ -569,148 +572,223 @@ function clip(s: string, max = 30_000): string {
   return s.length > max ? s.slice(0, max) + "\n\n... (truncated)" : s
 }
 
-export const RKernelTool = Tool.define("rkernel", {
-  description: [
-    "Execute R code in a persistent, managed kernel. Objects, attached packages, and state persist across calls that use the same kernel name.",
-    "For multiple independent analyses, issue multiple kernel calls in the same response with distinct `kernel` names. Those kernels execute concurrently and appear separately in Compute.",
-    "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
-    "Set `source` when the cell belongs to a script or .ipynb file so Compute can identify that source.",
-    "Never use shell subprocesses to imitate multiple kernels; use this tool's `kernel` parameter instead.",
-    "After a named analysis is fully saved and verified, call this tool with `action: stop` and the same kernel name so completed workers do not idle.",
-    "Use instead of `bash Rscript` for analysis — no need to re-source data or reload packages between cells.",
-    "Print output is captured; base-graphics and ggplot2 plots are captured as inline PNG images where the platform supports it.",
-    "Requires Rscript on PATH; if R is not installed the tool reports a clear install hint.",
-  ].join("\n"),
-  parameters: z
-    .object({
-      action: z.enum(["execute", "stop"]).optional().describe("Execute a cell (default) or stop this named kernel"),
-      code: z.string().optional().describe("R code to execute; required when action is execute"),
-      title: z
-        .string()
-        .trim()
-        .min(1)
-        .max(100)
-        .optional()
-        .describe("Short action label for this cell, for example 'Comparing survival curves'"),
-      source: z
-        .string()
-        .trim()
-        .min(1)
-        .max(1024)
-        .optional()
-        .describe("Script or notebook path this cell belongs to, when applicable"),
-      kernel: z
-        .string()
-        .trim()
-        .min(1)
-        .max(64)
-        .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
-        .optional()
-        .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
-      timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
+const RFields = {
+  action: z.enum(["execute", "stop"]).optional().describe("Run code (default) or stop this conversation's R runtime"),
+  code: z.string().optional().describe("R code to execute; required when action is execute"),
+  title: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe("Short action label for this execution, for example 'Comparing survival curves'"),
+  source: z
+    .string()
+    .trim()
+    .min(1)
+    .max(1024)
+    .optional()
+    .describe("Script path associated with this execution, when applicable"),
+  timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
+}
+
+const RParameters = z
+  .object(RFields)
+  .strict()
+  .superRefine((params, issue) => {
+    if (params.action !== "stop" && !params.code) {
+      issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })
+    }
+  })
+
+const CompatibilityKernelName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+  .optional()
+  .describe("Deprecated compatibility name for an isolated runtime")
+
+const RKernelParameters = z
+  .object({ ...RFields, kernel: CompatibilityKernelName })
+  .strict()
+  .superRefine((params, issue) => {
+    if (params.action !== "stop" && !params.code) {
+      issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })
+    }
+  })
+
+type RInput = z.infer<typeof RKernelParameters>
+
+async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: boolean) {
+  const name = compatibilityNamed ? (params.kernel ?? "agent") : "r"
+  const identity = {
+    projectID: Instance.project.id,
+    sessionID: ctx.sessionID,
+    name,
+    language: "r" as const,
+  }
+  if (params.action === "stop") {
+    ctx.metadata({
+      title: compatibilityNamed ? `Stopped R · ${name}` : "Stopped R",
+      metadata: { kernel: name, language: "r", stopped: true },
     })
-    .strict()
-    .superRefine((params, issue) => {
-      if (params.action !== "stop" && !params.code) {
-        issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })
-      }
-    }),
-  async execute(params, ctx) {
-    const name = params.kernel ?? "agent"
-    const identity = {
+    await KernelRuntime.release(identity)
+    return {
+      title: compatibilityNamed ? `Stopped R · ${name}` : "Stopped R",
+      output: "Managed R runtime stopped. Its in-memory state was cleared.",
+      metadata: {
+        kernel: name,
+        language: "r",
+        stopped: true,
+        ok: true,
+        available: true,
+        output: "Managed R runtime stopped.",
+      },
+    }
+  }
+  const title = params.title ?? "R execution"
+  const mutation = KernelEnvironmentMutation.detect({ language: "r", environment: "r", code: params.code! })
+  ctx.metadata({
+    title,
+    metadata: {
+      kernel: name,
+      language: "r",
+      task: title,
+      ...(mutation ? { environmentMutation: mutation } : {}),
+      ...(params.source ? { source: params.source } : {}),
+    },
+  })
+
+  // Discovery is metadata-only, so avoid asking for a change that cannot run.
+  const bin = await findRscript()
+  if (!bin) {
+    const msg =
+      "Rscript not found. Install R from https://www.r-project.org (or `brew install r`) so `Rscript` is on PATH."
+    ctx.metadata({ metadata: { output: msg, ok: false } })
+    return {
+      title: "R runtime unavailable",
+      output: msg,
+      metadata: { kernel: name, language: "r", stopped: false, ok: false, available: false, output: msg },
+    }
+  }
+
+  if (mutation) {
+    await ctx.ask(KernelEnvironmentMutation.permission(mutation))
+    await ExecutionAuthority.require({
       projectID: Instance.project.id,
       sessionID: ctx.sessionID,
-      name,
-      language: "r" as const,
-    }
-    if (params.action === "stop") {
-      ctx.metadata({ title: `Stopped R · ${name}`, metadata: { kernel: name, language: "r", stopped: true } })
-      await KernelRuntime.release(identity)
-      return {
-        title: `Stopped R · ${name}`,
-        output: `Managed kernel ${name} stopped. Its in-memory state was cleared.`,
-        metadata: {
-          kernel: name,
-          language: "r",
-          stopped: true,
-          ok: true,
-          available: true,
-          output: `Managed kernel ${name} stopped.`,
-        },
-      }
-    }
-    const title = params.title ?? "R cell"
-    ctx.metadata({
-      title,
-      metadata: { kernel: name, language: "r", task: title, ...(params.source ? { source: params.source } : {}) },
+      capability: "package_install",
     })
-
-    // Executes arbitrary code — same permission gate as bash.
+    await KernelRuntime.release(identity)
+  } else {
     await ctx.ask({
       permission: "bash",
-      patterns: ["R (rkernel)"],
+      patterns: ["R"],
       always: ["Rscript*"],
       metadata: {},
     })
+  }
 
-    // Degrade gracefully when R is not installed.
-    const bin = await findRscript()
-    if (!bin) {
-      const msg =
-        "Rscript not found. Install R from https://www.r-project.org (or `brew install r`) so `Rscript` is on PATH."
-      ctx.metadata({ metadata: { output: msg, ok: false } })
-      return {
-        title: "R kernel unavailable",
-        output: msg,
-        metadata: { kernel: name, language: "r", stopped: false, ok: false, available: false, output: msg },
-      }
-    }
-
-    const result = await KernelRuntime.execute(identity, params.code!, {
-      timeout: params.timeout,
-      signal: ctx.abort,
-      origin: { messageID: ctx.messageID, callID: ctx.callID, title, source: params.source },
-    })
-
-    const images = result.outputs.filter((o) => o.type === "display" && o.data?.["image/png"])
-    const dataUrls = images.map((o) => `data:image/png;base64,${o.data!["image/png"]}`)
-
-    const parts: string[] = []
-    if (result.stdout) parts.push(result.stdout)
-    if (result.stderr) parts.push(`${result.ok ? "[messages]" : "[ERROR]"}\n${result.stderr}`)
-    if (images.length) parts.push(`[figure] captured ${images.length} inline image(s)`)
-    if (!parts.length) parts.push("(no output)")
-    const output = clip(parts.join("\n"))
-
-    ctx.metadata({
-      title,
-      metadata: {
-        output,
-        ok: result.ok,
-        provenanceID: result.provenanceID,
-        kernel: name,
-        language: "r",
-        task: title,
-        ...(params.source ? { source: params.source } : {}),
+  let result: ExecuteResult
+  try {
+    result = await KernelRuntime.execute(
+      identity,
+      params.code!,
+      {
+        timeout: params.timeout,
+        signal: ctx.abort,
+        origin: { messageID: ctx.messageID, callID: ctx.callID, title, source: params.source },
       },
-    })
+      KernelEnvironmentMutation.rRuntime(!!mutation),
+    )
+  } catch (error) {
+    if (mutation) await KernelRuntime.release(identity).catch(() => undefined)
+    throw error
+  }
 
-    return {
-      title: result.ok ? title : `${title} (error)`,
+  let restarted = false
+  if (mutation) {
+    if (result.ok) {
+      await KernelRuntime.restart(identity, KernelEnvironmentMutation.rRuntime())
+      restarted = true
+    } else {
+      await KernelRuntime.release(identity)
+    }
+  }
+
+  const images = result.outputs.filter((o) => o.type === "display" && o.data?.["image/png"])
+  const dataUrls = images.map((o) => `data:image/png;base64,${o.data!["image/png"]}`)
+
+  const parts: string[] = []
+  if (result.stdout) parts.push(result.stdout)
+  if (result.stderr) parts.push(`${result.ok ? "[messages]" : "[ERROR]"}\n${result.stderr}`)
+  if (images.length) parts.push(`[figure] captured ${images.length} inline image(s)`)
+  if (restarted) parts.push("[environment] R packages updated; R restarted with cleared in-memory state")
+  if (!parts.length) parts.push("(no output)")
+  const output = clip(parts.join("\n"))
+
+  ctx.metadata({
+    title,
+    metadata: {
       output,
-      metadata: {
-        stopped: false,
-        ok: result.ok,
-        available: true,
-        output,
-        kernel: name,
-        language: "r",
-        task: title,
-        ...(params.source ? { source: params.source } : {}),
-        provenanceID: result.provenanceID,
-        hasImages: images.length,
-        ...(images.length ? { artifact: { kind: "image", data: { images: dataUrls } } } : {}),
-      },
-    }
-  },
-})
+      ok: result.ok,
+      provenanceID: result.provenanceID,
+      kernel: name,
+      language: "r",
+      task: title,
+      restarted,
+      ...(mutation ? { environmentMutation: mutation } : {}),
+      ...(params.source ? { source: params.source } : {}),
+    },
+  })
+
+  return {
+    title: result.ok ? title : `${title} (error)`,
+    output,
+    metadata: {
+      stopped: false,
+      ok: result.ok,
+      available: true,
+      output,
+      kernel: name,
+      language: "r",
+      task: title,
+      restarted,
+      ...(mutation ? { environmentMutation: mutation } : {}),
+      ...(params.source ? { source: params.source } : {}),
+      provenanceID: result.provenanceID,
+      hasImages: images.length,
+      ...(images.length ? { artifact: { kind: "image", data: { images: dataUrls } } } : {}),
+    },
+  }
+}
+
+const RDefinition: Awaited<ReturnType<Tool.Info<typeof RParameters>["init"]>> = {
+  description: [
+    "Run R code in one long-lived managed process per conversation. Objects, attached packages, and state persist across calls; child conversations are isolated.",
+    "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
+    "Set `source` when the execution belongs to a script so Activity can identify that source.",
+    "Use `action: stop` when its in-memory state should be cleared.",
+    "Use instead of `bash Rscript` for analysis — no need to re-source data or reload packages between executions.",
+    "Submit install.packages, renv, pak, BiocManager, removals, and updates as a separate execution. Package/environment changes require explicit approval and automatically restart R after success.",
+    "Print output is captured; base-graphics and ggplot2 plots are captured as inline PNG images where the platform supports it.",
+    "Requires Rscript on PATH; if R is not installed the tool reports a clear install hint.",
+  ].join("\n"),
+  parameters: RParameters,
+  execute: (params, ctx) => executeR(params, ctx, false),
+}
+
+const RKernelDefinition: Awaited<ReturnType<Tool.Info<typeof RKernelParameters>["init"]>> = {
+  ...RDefinition,
+  description: `${RDefinition.description}\nDeprecated compatibility alias: an existing call may still supply a runtime name.`,
+  parameters: RKernelParameters,
+  execute: (params, ctx) => executeR(params, ctx, true),
+}
+
+/** Canonical model-facing R tool. */
+export const RTool = Tool.define("r", async () => ({ ...RDefinition }))
+
+/** @deprecated Compatibility alias. Keep out of the advertised tool registry. */
+export const RKernelTool = Tool.define("rkernel", async () => ({ ...RKernelDefinition }))

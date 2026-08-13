@@ -242,7 +242,7 @@ describe("artifact grid inside the app's boundaries", () => {
       await settle()
 
       expect(host.textContent).not.toContain("BOUNDARY-CAUGHT")
-      expect(host.textContent).toContain("No saved artifacts yet")
+      expect(host.textContent).toContain("No saved results yet")
     } finally {
       if (original) Object.defineProperty(globalThis, "localStorage", original)
     }

@@ -33,19 +33,21 @@ describe("model control surface", () => {
     expect(tooltip).toContain("props.model.name")
   })
 
-  test("exposes a consolidated trigger and one ordered row-based model menu", () => {
+  test("exposes one compact model trigger with independently selectable thinking effort", () => {
     const composer = source("./prompt-input.tsx")
     expect(existsSync(path("./model-settings-popover.tsx"))).toBe(true)
     const settings = source("./model-settings-popover.tsx")
     const styles = source("./model-settings-popover.css")
 
-    expect(composer).toContain("<ModelSettingsPopover")
+    expect(composer).toContain("<ModelSettingsPopover />")
     expect(composer).not.toContain('data-action="model-variant-cycle"')
     expect(composer).not.toContain('data-action="model-tier-cycle"')
     expect(composer).not.toContain("Thinking ·")
     expect(settings).toContain("aria-label={`Model: ${control().trigger}`}")
     expect(settings).toContain("control().trigger")
     expect(settings).toContain("local.model.variant.list()")
+    expect(settings).toContain('data-model-menu-row="effort"')
+    expect(settings).toContain("data-model-effort-chip")
     expect(settings).toContain("local.model.tier.list()")
     expect(settings).toContain('role="radiogroup"')
     expect(settings).toContain('role="radio"')

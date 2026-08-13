@@ -182,9 +182,9 @@ export function SourceMenu(props: {
                             <Show when={source.kind === "connected" && !source.readonly}>
                               <span
                                 class="files-menu__badge"
-                                title="Approved file tools may write here; runtimes do not receive a writable mount."
+                                title="Approved tools and sandboxed runtimes may read and write here."
                               >
-                                Tool write
+                                Read & write
                               </span>
                             </Show>
                             <Show when={source.live}>

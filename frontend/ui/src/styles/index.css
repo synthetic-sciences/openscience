@@ -33,7 +33,6 @@
 @import "../components/logo.css" layer(components);
 @import "../components/markdown.css" layer(components);
 @import "../components/message-part.css" layer(components);
-@import "../components/notebook-cell.css" layer(components);
 @import "../components/popover.css" layer(components);
 @import "../components/progress-circle.css" layer(components);
 @import "../components/radio-group.css" layer(components);

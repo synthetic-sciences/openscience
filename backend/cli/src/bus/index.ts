@@ -3,6 +3,7 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
+import { RuntimeEvents } from "../runtime/events"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
@@ -49,6 +50,9 @@ export namespace Bus {
     log.info("publishing", {
       type: def.type,
     })
+    // Public runtime streams are journaled before delivery, so a reconnect
+    // cursor never observes a live event that was not durably replayable.
+    await RuntimeEvents.capture(payload)
     const pending = []
     for (const key of [def.type, "*"]) {
       const match = state().subscriptions.get(key)

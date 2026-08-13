@@ -28,4 +28,26 @@ describe("Compute Settings interaction contract", () => {
     expect(component).toContain('class="settings-compute-actions"')
     expect(component).toContain('import "./preference-panels.css"')
   })
+
+  test("keeps SSH operational notes editable and explicitly advisory", async () => {
+    const component = await source
+
+    expect(component).toContain('method: "PATCH"')
+    expect(component).toContain('class="settings-compute-host-notes-copy"')
+    expect(component).toContain('class="settings-compute-host-notes-editor"')
+    expect(component).toContain("Advisory only. Notes are shown during review and never run as commands.")
+    expect(component).toContain('placeholder="Modules, partitions, scratch paths, or installation rules"')
+  })
+
+  test("offers explicit import for literal ~/.ssh/config hosts", async () => {
+    const component = await source
+
+    expect(component).toContain("From ~/.ssh/config")
+    expect(component).toContain("Literal host entries only")
+    expect(component).toContain("const importHost = async")
+    expect(component).toContain("host: item.hostname ?? item.alias")
+    expect(component).toContain("identity files")
+    expect(component).toContain("proxy commands")
+    expect(component).toContain('method: "POST"')
+  })
 })

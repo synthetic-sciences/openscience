@@ -1,6 +1,6 @@
 import { createEffect, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import type { KernelStatus } from "@/notebook/runtime"
+import type { KernelStatus } from "@/atlas/kernel-runtime"
 
 // Every poll parses a brand new response body, so feeding the resource
 // straight into <For> would tear down and remount every kernel card on each

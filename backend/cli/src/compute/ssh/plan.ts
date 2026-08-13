@@ -13,12 +13,14 @@ export namespace SshPlan {
   export const Schema = z.object({
     digest: z.string().length(64),
     provider: z.literal("ssh"),
+    purpose: z.string(),
     host_id: z.string(),
     host: z.string(),
     user: z.string().optional(),
     port: z.number().int().positive().max(65_535).optional(),
     label: z.string(),
     scheduler: z.enum(["none", "slurm", "pbs"]),
+    host_notes: z.string().optional(),
     fingerprint: z.string().startsWith("SHA256:"),
     command: z.string(),
     resources: z
@@ -51,12 +53,14 @@ export namespace SshPlan {
     port?: number
     scheduler: "none" | "slurm" | "pbs"
     workdir?: string
+    notes?: string
     fingerprint?: string
     host_key?: string
   }
 
   export type Input = {
     id: string
+    purpose?: string
     command: string
     resources?: {
       cpus?: number
@@ -99,12 +103,14 @@ export namespace SshPlan {
     const upload = await ModalPlan.files(input.cwd, input.uploads, "SSH")
     const value = {
       provider: "ssh" as const,
+      purpose: input.purpose?.trim() || "Research computation",
       host_id: input.host.id,
       host: input.host.host,
       user: input.host.user,
       port: input.host.port,
       label: input.host.label,
       scheduler: input.host.scheduler,
+      host_notes: input.host.notes?.trim() || undefined,
       fingerprint: input.host.fingerprint,
       command: input.command,
       resources: input.resources,
@@ -117,13 +123,13 @@ export namespace SshPlan {
       uploads: upload.files.map((file) => ({ path: file.path, size: file.size, sha256: file.sha256 })),
       upload_bytes: upload.bytes,
       outputs: input.outputs.toSorted(),
-      warning: `This command will run on ${input.host.label} through your SSH agent. OpenScience pins ${input.host.fingerprint}, stages only the reviewed inputs, and downloads only declared outputs.`,
+      warning: `This command will run on ${input.host.label} through your SSH agent. OpenScience pins ${input.host.fingerprint}, stages only the reviewed inputs, and downloads only declared outputs. Saved host notes are advisory and are never executed automatically.`,
     }
-    // The durable job id (and therefore its isolated remote folder) is minted
-    // only after approval. The reviewed security/workload contract is stable
-    // across that minting step; the server-generated folder is not user input.
+    // The durable job id/remote folder and absolute local scratch root are
+    // minted per conversation. The reviewed security/workload contract binds
+    // the stable remote cwd plus input paths/hashes, not those volatile paths.
     const digest = new Bun.CryptoHasher("sha256")
-      .update(JSON.stringify({ ...value, remote_root: undefined }))
+      .update(JSON.stringify({ ...value, local_cwd: undefined, remote_root: undefined }))
       .digest("hex")
     return { plan: Schema.parse({ digest, ...value }), files: upload.files }
   }

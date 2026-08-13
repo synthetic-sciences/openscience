@@ -1,11 +1,34 @@
 import z from "zod"
-import { ComputeJobs } from "@/compute/jobs"
+import { JobBroker } from "@/compute/job-broker"
+import { Instance } from "@/project/instance"
+import { SessionFilesystem } from "@/session/filesystem"
 import { Tool } from "./tool"
 
+const ComputeTarget = JobBroker.Target
+const ComputeWorkload = z.object({
+  name: z.string().trim().min(1).max(120),
+  purpose: z.string().trim().min(1).max(500),
+  command: z.string().trim().min(1).max(100_000),
+  cwd: z.string().trim().min(1).max(2_000).optional(),
+  target: ComputeTarget,
+  resources: JobBroker.Resources.optional(),
+  modules: z.array(z.string().trim().min(1).max(240)).max(64).optional(),
+  container: z.string().trim().min(1).max(2_000).optional(),
+  artifacts: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
+  checkpoint: z.string().trim().min(1).max(2_000).optional(),
+  uploads: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
+  packages: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
+  image: z.string().trim().min(1).max(2_000).optional(),
+  gpu: z.string().trim().min(1).max(120).optional(),
+})
+
 export const ComputeJobParameters = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("targets") }),
+  ComputeWorkload.extend({ action: z.literal("plan") }),
+  ComputeWorkload.extend({ action: z.literal("start") }),
   z.object({
     action: z.literal("list"),
-    status: ComputeJobs.Status.optional(),
+    status: JobBroker.Status.optional(),
     limit: z.number().int().min(1).max(100).default(20),
   }),
   z.object({ action: z.literal("status"), job_id: z.string().trim().min(1) }),
@@ -25,13 +48,17 @@ type Metadata = {
   compute_job: {
     action: Input["action"]
     count?: number
-    job?: ComputeJobs.Job
+    job?: JobBroker.Job
+    plan?: JobBroker.Plan
   }
+  compute?: JobBroker.Plan & { name: string }
+  job?: JobBroker.Job
 }
 
-const summary = (job: ComputeJobs.Job) => ({
+const summary = (job: JobBroker.Job) => ({
   id: job.id,
   name: job.name,
+  purpose: job.purpose,
   target: job.target_label,
   status: job.status,
   execution: job.lifecycle?.execution,
@@ -53,28 +80,56 @@ const summary = (job: ComputeJobs.Job) => ({
 
 const json = (value: unknown) => JSON.stringify(value, null, 2)
 
-async function options(base?: ComputeJobs.Options): Promise<ComputeJobs.Options> {
-  if (base) return base
+async function options(sessionID: string, base?: JobBroker.Options): Promise<JobBroker.Options> {
+  const workspace = await SessionFilesystem.workspace(sessionID)
+  if (base) return { ...base, projectDirectory: base.projectDirectory ?? Instance.directory, workspace }
   const module = await import("@/server/routes/settings/compute")
   const settings = await module.ComputeSettings.get()
   const modal = settings.providers.find((item) => item.id === "modal")
   const resolveCredentials = modal?.enabled ? module.ComputeSettings.modalResolver() : undefined
-  return { hosts: settings.ssh_hosts, resolveCredentials }
+  const config = modal?.enabled ? await module.ComputeSettings.modalConfig() : undefined
+  return {
+    projectDirectory: Instance.directory,
+    workspace,
+    hosts: settings.ssh_hosts,
+    modal: config,
+    resolveCredentials,
+  }
 }
 
-async function jobs(base?: ComputeJobs.Options) {
-  const resolved = await options(base)
-  return { resolved, jobs: await ComputeJobs.list(resolved) }
+function request(input: Extract<Input, { action: "plan" | "start" }>, sessionID: string): JobBroker.Request {
+  return {
+    sessionID,
+    name: input.name,
+    purpose: input.purpose,
+    command: input.command,
+    cwd: input.cwd,
+    target: input.target,
+    resources: input.resources,
+    modules: input.modules,
+    container: input.container,
+    artifacts: input.artifacts,
+    checkpoint: input.checkpoint,
+    uploads: input.uploads,
+    packages: input.packages,
+    image: input.image,
+    gpu: input.target.kind === "modal" ? (input.gpu ?? "none") : input.gpu,
+  }
 }
 
-async function selected(id: string, base?: ComputeJobs.Options) {
-  const state = await jobs(base)
+async function jobs(sessionID: string, base?: JobBroker.Options) {
+  const resolved = await options(sessionID, base)
+  return { resolved, jobs: await JobBroker.list(resolved) }
+}
+
+async function selected(id: string, sessionID: string, base?: JobBroker.Options) {
+  const state = await jobs(sessionID, base)
   const job = state.jobs.find((item) => item.id === id)
   if (!job) throw new Error(`Compute job ${id} was not found in this project`)
   return { ...state, job }
 }
 
-function artifacts(job: ComputeJobs.Job) {
+function artifacts(job: JobBroker.Job) {
   const files = [...(job.artifacts ?? []), ...(job.checkpoint ? [job.checkpoint] : [])]
   return {
     job: summary(job),
@@ -84,18 +139,75 @@ function artifacts(job: ComputeJobs.Job) {
   }
 }
 
-export function createComputeJobTool(base?: ComputeJobs.Options) {
+export function createComputeJobTool(base?: JobBroker.Options) {
   return Tool.define<typeof ComputeJobParameters, Metadata>("compute_job", {
     description: [
-      "Inspect and control project-scoped compute jobs through OpenScience's broker.",
+      "Plan, start, inspect, and control project-scoped compute jobs through OpenScience's single JobBroker.",
+      "Use targets to discover this computer, saved SSH/Slurm/PBS hosts, and whether Modal is configured.",
+      "Use plan for a no-dispatch preview. Use start for detached local, SSH/Slurm/PBS, or Modal work; remote starts show the exact immutable plan and scoped approval before dispatch.",
+      "Prefer the Python and R tools for interactive local analysis. Use start for durable background jobs and remote schedulers.",
       "Use list, status, logs, and artifacts for read-only checks; these never dispatch compute and never require paid-run approval.",
       "Use cancel to stop a live job, retry_delivery to harvest a retained Modal volume without rerunning the command, and release only when the user wants to discard retained remote resources.",
       "Never use a new modal dispatch to check an existing job. Never invoke the Modal SDK or CLI directly.",
     ].join("\n"),
     parameters: ComputeJobParameters,
     async execute(input: Input, ctx) {
+      if (input.action === "targets") {
+        const resolved = await options(ctx.sessionID, base)
+        const output = {
+          local: { kind: "local", label: "This computer", interactive: false },
+          ssh: (resolved.hosts ?? []).map((host) => ({
+            kind: "ssh",
+            host_id: host.id,
+            label: host.label,
+            host: host.host,
+            scheduler: host.scheduler,
+            notes: host.notes,
+            verified: Boolean(host.fingerprint && host.host_key),
+          })),
+          modal: { kind: "modal", configured: Boolean(resolved.modal && resolved.resolveCredentials) },
+        }
+        return {
+          title: "Compute targets",
+          metadata: { compute_job: { action: input.action, count: 1 + output.ssh.length + 1 } },
+          output: json(output),
+        }
+      }
+
+      if (input.action === "plan" || input.action === "start") {
+        const resolved = await options(ctx.sessionID, base)
+        const value = request(input, ctx.sessionID)
+        const plan = await JobBroker.plan(value, resolved)
+        const metadata: Metadata = {
+          compute_job: { action: input.action, plan },
+          compute: { ...plan, name: input.name },
+        }
+        if (input.action === "plan") {
+          return { title: `Compute plan: ${input.name}`, metadata, output: json(plan) }
+        }
+
+        ctx.metadata({ title: `Review ${plan.provider} job: ${input.name}`, metadata })
+        await ctx.ask({
+          permission: plan.provider === "modal" ? "modal" : plan.provider === "ssh" ? "remote_compute" : "compute_job",
+          patterns: [plan.digest],
+          always: plan.provider === "local" ? [] : [plan.digest],
+          metadata,
+        })
+        const job = await JobBroker.start(
+          { ...value, approval: plan.provider === "local" ? undefined : plan.digest },
+          resolved,
+        )
+        const complete: Metadata = { ...metadata, compute_job: { action: input.action, plan, job }, job }
+        ctx.metadata({ title: `Compute job: ${input.name}`, metadata: complete })
+        return {
+          title: `Compute job: ${input.name}`,
+          metadata: complete,
+          output: `Dispatched ${plan.provider} job ${job.id}. Status: ${job.status}. Use compute_job status, logs, artifacts, or cancel with this job id.`,
+        }
+      }
+
       if (input.action === "list") {
-        const state = await jobs(base)
+        const state = await jobs(ctx.sessionID, base)
         const filtered = input.status ? state.jobs.filter((job) => job.status === input.status) : state.jobs
         const output = filtered.slice(0, input.limit).map(summary)
         return {
@@ -105,7 +217,7 @@ export function createComputeJobTool(base?: ComputeJobs.Options) {
         }
       }
 
-      const state = await selected(input.job_id, base)
+      const state = await selected(input.job_id, ctx.sessionID, base)
       if (input.action === "status") {
         return {
           title: `Compute job: ${state.job.name}`,
@@ -115,8 +227,8 @@ export function createComputeJobTool(base?: ComputeJobs.Options) {
       }
       if (input.action === "logs") {
         const [events, output] = await Promise.all([
-          ComputeJobs.events(state.job.id, { ...state.resolved, bytes: input.bytes }),
-          ComputeJobs.log(state.job.id, { ...state.resolved, bytes: input.bytes }),
+          JobBroker.events(state.job.id, { ...state.resolved, bytes: input.bytes }),
+          JobBroker.log(state.job.id, { ...state.resolved, bytes: input.bytes }),
         ])
         return {
           title: `Compute logs: ${state.job.name}`,
@@ -152,13 +264,13 @@ export function createComputeJobTool(base?: ComputeJobs.Options) {
         },
       })
 
-      const resolved = await options(base)
+      const resolved = await options(ctx.sessionID, base)
       const job =
         input.action === "cancel"
-          ? await ComputeJobs.cancel(state.job.id, resolved)
+          ? await JobBroker.cancel(state.job.id, resolved)
           : input.action === "retry_delivery"
-            ? await ComputeJobs.retry(state.job.id, resolved)
-            : await ComputeJobs.release(state.job.id, resolved)
+            ? await JobBroker.retry(state.job.id, resolved)
+            : await JobBroker.release(state.job.id, resolved)
       return {
         title: `Compute job: ${job.name}`,
         metadata: { compute_job: { action: input.action, job } },
