@@ -200,6 +200,77 @@ describe("/notebook routes", () => {
     })
   }, 30_000)
 
+  test("keeps canonical state warm, then autonomously reaps the idle process", async () => {
+    const previous = process.env.OPENSCIENCE_KERNEL_IDLE_MS
+    process.env.OPENSCIENCE_KERNEL_IDLE_MS = "1000"
+    try {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await trustProject()
+          const app = KernelRoutes()
+          const session = await Session.create({})
+          const body = { sessionID: session.id, language: "python" } as const
+          const execute = (code: string) =>
+            app.request("/execute", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...body, code }),
+            })
+          const status = async () => {
+            const response = await app.request(`/status?sessionID=${encodeURIComponent(session.id)}&language=python`)
+            return response.json() as Promise<{
+              active: boolean
+              state: string
+              process_id: number | null
+              execution_count: number
+            }>
+          }
+
+          expect((await execute("warm_value = 41")).status).toBe(200)
+          const warm = (await (await execute("warm_value + 1")).json()) as {
+            execution_count: number
+            outputs: Array<{ data?: Record<string, string> }>
+          }
+          expect(warm.execution_count).toBe(2)
+          expect(warm.outputs.some((item) => item.data?.["text/plain"] === "42")).toBe(true)
+
+          const live = await status()
+          expect(live).toMatchObject({ active: true, state: "idle", execution_count: 2 })
+          if (live.process_id === null) throw new Error("live runtime did not expose its process")
+
+          const inactive = async (attempt = 0): Promise<Awaited<ReturnType<typeof status>>> => {
+            const value = await status()
+            if (!value.active) return value
+            if (attempt >= 150) throw new Error("idle runtime was not reaped")
+            await Bun.sleep(20)
+            return inactive(attempt + 1)
+          }
+          expect(await inactive()).toMatchObject({ active: false, state: "stopped", process_id: null })
+          await waitForExit(live.process_id)
+
+          const capacity = (await (await app.request("/compute?client=idle-expiry-test")).json()) as {
+            kernels: { live: number; running: number }
+          }
+          expect(capacity.kernels).toEqual({ live: 0, running: 0 })
+
+          const fresh = (await (await execute("globals().get('warm_value', 'missing')")).json()) as typeof warm
+          expect(fresh.execution_count).toBe(1)
+          expect(fresh.outputs.some((item) => item.data?.["text/plain"] === "'missing'")).toBe(true)
+          await app.request("/stop", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        },
+      })
+    } finally {
+      if (previous === undefined) delete process.env.OPENSCIENCE_KERNEL_IDLE_MS
+      else process.env.OPENSCIENCE_KERNEL_IDLE_MS = previous
+    }
+  }, 30_000)
+
   test("does not invent kernels for untouched sessions", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

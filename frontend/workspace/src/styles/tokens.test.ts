@@ -53,8 +53,8 @@ describe("workbench visual scale", () => {
     expect(shell).not.toContain("--workspace-composer-radius")
     expect(shell).not.toContain("\n.workspace-composer {")
     expect(conversation).toContain("width: min(100%, 740px)")
-    expect(composer).toMatch(/form\.workspace-composer\s*\{[^}]*min-height: 92px/s)
-    expect(composer).toContain("border-radius: var(--radius-xl)")
+    expect(composer).toMatch(/form\.workspace-composer\s*\{[^}]*min-height: 88px/s)
+    expect(composer).toContain("border-radius: var(--radius-lg)")
   })
 })
 

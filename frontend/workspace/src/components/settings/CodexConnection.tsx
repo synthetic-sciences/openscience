@@ -67,10 +67,10 @@ export const CodexConnection: Component<{
   }
 
   return (
-    <div class="settings-card settings-connection-card models-connection-card">
+    <div class="models-connection-card">
       <div class="settings-row models-compact-row models-connection-row">
         <div class="models-connection-identity">
-          <ProviderLogo id="openai-codex" label="OpenAI" connected={connected()} />
+          <ProviderLogo id="openai-codex" label="OpenAI" />
           <div class="flex min-w-0 flex-col gap-0.5">
             <span class="text-13-medium text-text-strong">Sign in with ChatGPT</span>
             <span class="text-12-regular text-text-weak">

@@ -10,7 +10,7 @@ const [source, action, tabs, css, workspaceCss] = await Promise.all([
 
 test("keeps the research rail readable with one stylesheet owner", () => {
   expect(source).not.toContain('class="session-sidebar__group-label"')
-  expect(action).not.toContain('class="session-sidebar__group-label"')
+  expect(action).toContain('class="session-sidebar__group-label"')
   expect(action).not.toContain('"font-size":')
   expect(css).toContain(".session-sidebar__action-copy strong")
   expect(css).toContain("font-size: 12.5px")
@@ -19,7 +19,7 @@ test("keeps the research rail readable with one stylesheet owner", () => {
   expect(css).toContain(".session-sidebar__session-dot")
   expect(css).toContain('.session-sidebar__session[data-active="true"]')
   expect(css).toContain("grid-template-columns: minmax(0, 1fr)")
-  expect(css).toContain("border-right: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent)")
+  expect(css).toContain("border-right: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent)")
   expect(css).toMatch(/\.session-sidebar\[data-collapsed="true"\] \.session-sidebar__list\s*\{\s*display: none;/s)
   expect(css).toMatch(
     /\.session-sidebar\[data-collapsed="true"\][^{]*\.session-sidebar__primary-actions[^{]*\.session-sidebar__action[^{]*\.session-sidebar__action-copy,?[\s\S]*?\{\s*display: none;/,

@@ -3,6 +3,7 @@ import { Session } from "."
 import { MessageV2 } from "./message-v2"
 import { SearchDedupe } from "./search-dedupe"
 import { SessionStatus } from "./status"
+import { observableToolFailure, observableToolStatus } from "./tool-outcome"
 import { SessionTraceStore } from "./trace-store"
 import z from "zod"
 
@@ -30,7 +31,7 @@ export namespace SessionTrace {
     messageID: z.string(),
     name: z.string(),
     category: z.enum(["tool", "search", "kernel", "child", "artifact", "review", "external"]),
-    status: z.enum(["pending", "running", "completed", "error"]),
+    status: z.enum(["pending", "running", "completed", "partial", "error"]),
     title: z.string().optional(),
     startedAt: z.number().optional(),
     completedAt: z.number().optional(),
@@ -65,7 +66,7 @@ export namespace SessionTrace {
         modelID: z.string(),
       })
       .optional(),
-    status: z.enum(["pending", "running", "completed", "error"]),
+    status: z.enum(["pending", "running", "completed", "partial", "error"]),
     startedAt: z.number().optional(),
     completedAt: z.number().optional(),
     durationMs: z.number().optional(),
@@ -342,7 +343,7 @@ export namespace SessionTrace {
       messageID: part.messageID,
       name: part.tool,
       category: category(part),
-      status: part.state.status,
+      status: observableToolStatus(part),
       title: part.state.status === "completed" ? part.state.title : undefined,
       ...times(part, now),
       inputHash: SearchDedupe.signature(part.state.input),
@@ -357,7 +358,11 @@ export namespace SessionTrace {
         agent: message.info.agent,
         model: message.info.modelID,
         provider: message.info.providerID,
-        effort: route?.effort ?? (parent?.info.role === "user" ? parent.info.variant : undefined) ?? "unknown",
+        effort:
+          message.info.reasoningEffort ??
+          route?.effort ??
+          (parent?.info.role === "user" ? parent.info.variant : undefined) ??
+          "unknown",
         source: route?.source ?? ("unknown" as const),
         tier: parent?.info.role === "user" ? parent.info.tier : undefined,
         startedAt: message.info.time.created,
@@ -381,7 +386,7 @@ export namespace SessionTrace {
             string(model?.providerID) && string(model?.modelID)
               ? { providerID: string(model?.providerID)!, modelID: string(model?.modelID)! }
               : undefined,
-          status: part.state.status,
+          status: observableToolStatus(part),
           ...times(part, now),
           durationMs: number(meta.durationMs) ?? times(part, now).durationMs,
           toolCalls: number(meta.toolCalls),
@@ -400,7 +405,7 @@ export namespace SessionTrace {
           tool: part.tool,
           query: query(part.state.input),
           signature: SearchDedupe.signature(part.state.input),
-          status: part.state.status,
+          status: observableToolStatus(part),
           dedupeHit: meta.dedupeHit === true,
           dedupeOf:
             string(dedupe?.messageID) && string(dedupe?.partID) && string(dedupe?.callID)
@@ -422,7 +427,7 @@ export namespace SessionTrace {
           messageID: part.messageID,
           language: part.tool === "python" || part.tool === "notebook" ? ("python" as const) : ("r" as const),
           kernel: string(part.state.input.kernel) ?? "agent",
-          status: part.state.status,
+          status: observableToolStatus(part),
           ...times(part, now),
           executionCount: number(meta.executionCount),
           provenanceID: string(meta.provenanceID),
@@ -504,14 +509,13 @@ export namespace SessionTrace {
           createdAt: message.info.time.completed ?? message.info.time.created,
         })),
       ...parts
-        .filter(
-          (part): part is MessageV2.ToolPart & { state: MessageV2.ToolStateError } => part.state.status === "error",
-        )
+        .map((part) => ({ part, message: observableToolFailure(part) }))
+        .filter((item): item is typeof item & { message: string } => item.message !== undefined)
         .map((part) => ({
           kind: "tool" as const,
-          id: part.id,
-          message: part.state.error,
-          createdAt: part.state.time.end,
+          id: part.part.id,
+          message: part.message,
+          createdAt: times(part.part, now).completedAt ?? now,
         })),
       ...Object.values(stored.approvals)
         .filter((approval) => approval.reply === "reject")

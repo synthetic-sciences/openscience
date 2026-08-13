@@ -7,7 +7,10 @@
 Usage notes:
   - IMPORTANT: if another tool is present that offers better web fetching capabilities, is more targeted to the task, or has fewer restrictions, prefer using that tool instead of this one.
   - The URL must be a fully-formed valid URL
-  - HTTP URLs will be automatically upgraded to HTTPS
+  - HTTP and HTTPS URLs are supported
   - Format options: "markdown" (default), "text", or "html"
-  - This tool is read-only and does not modify any files
-  - Results may be summarized if the content is very large
+  - Text mode is read-only. Download mode writes only the new `output_path` filename at the root of this session's authorized workspace and refuses to overwrite existing files.
+  - Text responses are limited to 5 MiB. Longer results within that limit may be shown as a preview while the full text is retained in managed tool-output storage.
+  - Use text mode for bounded pages and API responses. Set `output_path` to a simple workspace-root filename without directories for archives, compressed datasets, binary files, or larger text; the response streams through the authorized network broker and never enters model context. If metadata gives an exact size, set `max_bytes` once just above it. If size is unknown, omit `max_bytes` to use the bounded 256 MiB default. Never probe one URL by repeatedly increasing the cap. Downloads can never exceed 2 GiB and preserve a host-disk safety reserve.
+  - Downloads refuse to overwrite an existing file and return the destination filename, byte count, SHA-256 digest, and content type.
+  - For large JSON APIs that support it, prefer a small page and follow pagination metadata. Do not retry a 404 or 405 with the same URL.

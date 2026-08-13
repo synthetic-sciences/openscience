@@ -10,7 +10,7 @@
   --sidebar-space-1: 4px;
   --sidebar-space-2: 8px;
   --sidebar-space-3: 12px;
-  --sidebar-control-size: 36px;
+  --sidebar-control-size: 34px;
 
   position: relative;
   width: var(--session-sidebar-width, 232px);
@@ -22,9 +22,9 @@
   overflow: visible;
   overscroll-behavior: contain;
   border: 0;
-  border-right: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
   border-radius: 0;
-  background: color-mix(in srgb, var(--color-bg-subtle) 92%, var(--color-bg));
+  background: color-mix(in srgb, var(--color-bg-subtle) 88%, var(--color-bg));
   color: var(--color-text-muted);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
@@ -33,13 +33,13 @@
 
 .session-sidebar__top {
   box-sizing: border-box;
-  min-height: 48px;
-  height: 48px;
+  min-height: 50px;
+  height: 50px;
   display: flex;
-  flex: 0 0 48px;
+  flex: 0 0 50px;
   align-items: center;
   gap: var(--sidebar-space-1);
-  padding: 6px var(--sidebar-space-2);
+  padding: var(--sidebar-space-2);
   border: 0;
 }
 
@@ -74,7 +74,7 @@
   font-size: 13px;
   font-weight: var(--font-weight-medium);
   line-height: 1.3;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -105,8 +105,8 @@
 .session-sidebar__actions {
   flex: 0 0 auto;
   display: grid;
-  gap: var(--sidebar-space-2);
-  padding: var(--sidebar-space-2) var(--sidebar-space-2) 6px;
+  gap: 10px;
+  padding: 5px var(--sidebar-space-2) 4px;
 }
 
 .session-sidebar__action-list,
@@ -118,8 +118,24 @@
 }
 
 .session-sidebar__context-actions {
-  padding-top: var(--sidebar-space-2);
+  display: grid;
+  gap: var(--sidebar-space-1);
+  padding-top: 2px;
   border: 0;
+}
+
+.session-sidebar__group-label,
+.session-sidebar__label {
+  color: var(--color-text-faint);
+  font-family: var(--font-family-sans);
+  font-size: 10.5px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+}
+
+.session-sidebar__group-label {
+  padding: 0 var(--sidebar-space-2) 1px;
 }
 
 .session-sidebar__action,
@@ -166,8 +182,17 @@
 }
 
 .session-sidebar__action[data-selected="true"] {
-  background: var(--surface-base-active);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
   color: var(--color-text);
+}
+
+.session-sidebar__new {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+  color: var(--color-text);
+}
+
+.session-sidebar__new:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
 }
 
 .session-sidebar__action-icon,
@@ -176,12 +201,12 @@
   height: 20px;
   display: grid;
   place-items: center;
-  color: var(--color-text-faint);
+  color: color-mix(in srgb, currentColor 76%, transparent);
 }
 
 .session-sidebar__action:hover:not(:disabled) .session-sidebar__action-icon,
 .session-sidebar__action[data-selected="true"] .session-sidebar__action-icon {
-  color: var(--color-text-muted);
+  color: currentColor;
 }
 
 .session-sidebar__action-copy,
@@ -212,14 +237,8 @@
 
 .session-sidebar__label {
   flex: 0 0 auto;
-  padding: var(--sidebar-space-3) 16px var(--sidebar-space-1);
+  padding: 14px 16px 5px;
   border: 0;
-  color: var(--color-text-faint);
-  font-family: var(--font-family-sans);
-  font-size: 11.5px;
-  font-weight: var(--font-weight-medium);
-  line-height: 1.35;
-  letter-spacing: 0.01em;
 }
 
 .session-sidebar__list {
@@ -251,7 +270,7 @@
   align-items: center;
   gap: 4px;
   padding: 0 36px 0 8px;
-  border-radius: var(--atlas-radius-xs);
+  border-radius: calc(var(--atlas-radius-xs) - 1px);
   color: var(--color-text-muted);
   transition:
     background-color 140ms var(--agent-ease),
@@ -266,8 +285,12 @@
 }
 
 .session-sidebar__session[data-active="true"] {
-  background: var(--surface-base-active);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
   color: var(--color-text);
+}
+
+.session-sidebar__session[data-active="true"] .session-sidebar__session-title {
+  font-weight: var(--font-weight-medium);
 }
 
 .session-sidebar__session:active:not([data-editing="true"]) {
@@ -427,8 +450,8 @@
 @media (min-width: 720px) {
   .session-sidebar {
     transition:
-      width 200ms cubic-bezier(0.4, 0, 0.2, 1),
-      min-width 200ms cubic-bezier(0.4, 0, 0.2, 1);
+      width 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      min-width 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .session-sidebar[data-collapsed="true"] {
@@ -479,6 +502,7 @@
     .session-sidebar__action
     .session-sidebar__action-copy,
   .session-sidebar[data-collapsed="true"] .session-sidebar__action-copy,
+  .session-sidebar[data-collapsed="true"] .session-sidebar__group-label,
   .session-sidebar[data-collapsed="true"] .session-sidebar__label,
   .session-sidebar[data-collapsed="true"] .session-sidebar__session-title,
   .session-sidebar[data-collapsed="true"] .session-sidebar__empty {
@@ -496,7 +520,7 @@
   }
 
   .session-sidebar[data-collapsed="true"] .session-sidebar__context-actions {
-    padding-top: var(--sidebar-space-2);
+    padding-top: 6px;
   }
 
   .session-sidebar[data-collapsed="true"] .session-sidebar__list {
@@ -567,16 +591,16 @@
     position: absolute !important;
     inset: max(8px, env(safe-area-inset-top)) auto max(8px, env(safe-area-inset-bottom)) 8px;
     z-index: 80;
-    width: min(360px, calc(100vw - 24px)) !important;
-    min-width: min(360px, calc(100vw - 24px)) !important;
+    width: min(336px, calc(100vw - 24px)) !important;
+    min-width: min(336px, calc(100vw - 24px)) !important;
     height: auto;
     margin: 0;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--color-border-strong) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-border-strong) 62%, transparent);
     border-radius: var(--atlas-radius-sm);
     background: var(--color-surface-solid);
     transform: translateX(calc(-100% - 16px));
-    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
     box-shadow: var(--atlas-shadow-md);
   }
 

@@ -1,11 +1,11 @@
 import z from "zod"
-import fs from "fs/promises"
 import path from "path"
 import { Tool } from "./tool"
 import { registry } from "../science/connectors"
 import type { ConnectorHit } from "../science/connectors"
-import { Instance } from "../project/instance"
-import { outcomeFor, formatBytes, classifyError } from "../science/connectors/fetch-outcome"
+import { SessionFilesystem } from "../session/filesystem"
+import { SafeFileIO } from "../file/safe-io"
+import { outcomeFor, formatBytes, classifyError, safeSegment } from "../science/connectors/fetch-outcome"
 
 /**
  * Small, database-agnostic surface over the scientific connector registry.
@@ -249,28 +249,24 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
         } as Record<string, unknown>,
       }
 
-    const target = path.join(Instance.directory, outcome.filename)
-    await fs.mkdir(path.dirname(target), { recursive: true })
-    // Self-ignoring dir so per-fetch spill files never show up in `git status`
-    // (mirrors src/session/compaction.ts's handoff directory). Failure-tolerant:
-    // a read-only checkout must not break a fetch.
-    await Bun.write(path.join(path.dirname(target), ".gitignore"), "*\n").catch(() => {})
-
-    await ctx.ask({
-      permission: "edit",
-      patterns: [path.relative(Instance.worktree, target)],
-      always: ["*"],
-      metadata: { path: outcome.filename },
-    })
-
-    await Bun.write(target, outcome.body)
+    const workspace = await SessionFilesystem.workspace(ctx.sessionID)
+    const relative = `science-${safeSegment(connector.id)}-${path.basename(outcome.filename)}`
+    const requested = path.join(workspace, relative)
+    const target = (await SessionFilesystem.authorize({ sessionID: ctx.sessionID, path: requested, access: "write" }))
+      .path
+    const existing = await SafeFileIO.optional(target)
+    const bytes = Buffer.from(outcome.body)
+    if (existing && !existing.bytes.equals(bytes)) {
+      throw new Error(`Refusing to replace the existing session file ${relative}; read or rename it first`)
+    }
+    if (!existing) await SafeFileIO.write(target, bytes)
 
     return {
       title: `${connector.name}: ${params.id} → ${outcome.filename}`,
       output: [
         `${connector.name} record "${params.id}" is ${formatBytes(outcome.bytes)} — written to disk rather than inlined.`,
         ``,
-        `**path**: ${outcome.filename}`,
+        `**path**: ${relative}`,
         `**summary**: ${outcome.summary}`,
         ``,
         `Read that path for the full content.`,
@@ -280,7 +276,7 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
         count: 1,
         bytes: outcome.bytes,
         disposition: "spill",
-        path: outcome.filename,
+        path: relative,
         truncated: false,
       } as Record<string, unknown>,
     }

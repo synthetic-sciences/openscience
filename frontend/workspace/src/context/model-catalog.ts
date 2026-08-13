@@ -35,7 +35,6 @@ const ANTHROPIC_DASHED_VERSION = /^(claude-(?:opus|sonnet|haiku)-\d+)-(\d+)(?:-\
 // canonicalKey() so a BYOK-native id and its managed OpenRouter vendor/model
 // slug collapse to one entry.
 export const FRONTIER_MODELS = new Set([
-  "openai/gpt-5-6", // GPT-5.6 / Sol alias
   "openai/gpt-5-6-sol",
   "openai/gpt-5-6-sol-pro",
   "openai/gpt-5-6-terra",
@@ -89,6 +88,30 @@ export function displayProviderForModel(provider: ModelProviderDisplay, modelID:
   return OPENROUTER_VENDOR_DISPLAY[vendor?.toLowerCase() ?? ""] ?? provider
 }
 
+export type InferenceSource = "managed" | "byok" | "chatgpt"
+
+/** Factual access route for a connected provider; ambiguous routes stay unlabeled. */
+export function inferenceSource(input: {
+  providerID: string
+  credential: "env" | "config" | "custom" | "api" | "managed"
+  billing?: "managed" | "byok" | null
+}): InferenceSource | undefined {
+  if (input.providerID.startsWith("synsci")) return "managed"
+  if (input.providerID === "openai-codex") return "chatgpt"
+  if (input.credential === "managed") return "managed"
+  if (input.credential === "api") return "byok"
+  if (input.providerID === "openrouter") return input.billing === "byok" ? "byok" : undefined
+  if (input.credential === "env" || input.credential === "config") return "byok"
+  return undefined
+}
+
+export function inferenceSourceLabel(source: InferenceSource | undefined, fallback = "Provider") {
+  if (source === "managed") return "Managed"
+  if (source === "byok") return "API key"
+  if (source === "chatgpt") return "ChatGPT"
+  return fallback
+}
+
 export function modelContext(limit: number): string {
   if (limit >= 1_000_000) {
     const value = limit / 1_000_000
@@ -120,7 +143,29 @@ export function canonicalKey(providerID: string, modelID: string): string {
   return `${vendor}/${base}`
 }
 
-type CatalogModel = {
+/**
+ * Stable identity for a model in selection surfaces. Authentication remains a
+ * route concern: the public OpenAI API and a ChatGPT/Codex subscription can
+ * expose the same logical model without becoming duplicate model choices.
+ */
+export function logicalModelKey(providerID: string, modelID: string): string {
+  let key = canonicalKey(providerID, modelID)
+  if (key === "openai/gpt-5-6") key = "openai/gpt-5-6-sol"
+  if (providerID === "openai-codex") key = key.replace(/^openai-codex\//, "openai/")
+  return key
+}
+
+export const isFrontier = (model: ModelKey) =>
+  FRONTIER_MODELS.has(canonicalKey(model.providerID, model.modelID)) ||
+  FRONTIER_MODELS.has(logicalModelKey(model.providerID, model.modelID))
+
+/** Display name for catalog aliases; exact provider/model ids are untouched. */
+export function modelDisplayName(name: string, providerID: string, modelID: string): string {
+  if (logicalModelKey(providerID, modelID) === "openai/gpt-5-6-sol" && !/\bsol\b/i.test(name)) return "GPT-5.6 Sol"
+  return name
+}
+
+export type CatalogModel = {
   id: string
   provider: { id: string }
   modes?: Record<string, unknown>
@@ -132,6 +177,103 @@ type CatalogModel = {
       video?: boolean
     }
   }
+}
+
+export type ModelRouteGroup<T extends CatalogModel> = {
+  key: string
+  model: T
+  routes: T[]
+}
+
+const exactRouteKey = (model: ModelKey) => `${model.providerID}/${model.modelID}`
+
+export function modelRouteValue(model: ModelKey): string {
+  return exactRouteKey(model)
+}
+
+export function parseModelRoute(value: string | undefined): ModelKey | undefined {
+  if (!value) return undefined
+  const separator = value.indexOf("/")
+  if (separator <= 0 || separator === value.length - 1) return undefined
+  return { providerID: value.slice(0, separator), modelID: value.slice(separator + 1) }
+}
+
+/**
+ * Resolve a logical-model selection without changing authentication routes.
+ * Exact choice wins, then the current provider route, then an unambiguous lone
+ * route. Multiple unmatched routes deliberately return undefined so the UI can
+ * ask which access route to use.
+ */
+export function preservedModelRoute<T extends CatalogModel>(routes: readonly T[], current?: ModelKey): T | undefined {
+  if (current) {
+    const exact = routes.find((route) => route.provider.id === current.providerID && route.id === current.modelID)
+    if (exact) return exact
+    const sameProvider = routes.find((route) => route.provider.id === current.providerID)
+    if (sameProvider) return sameProvider
+  }
+  return routes.length === 1 ? routes[0] : undefined
+}
+
+/**
+ * Collapse equivalent models for presentation while preserving every exact
+ * provider/model route. The active route wins, then the most-recent exact
+ * route, followed by a deterministic provider/id order. This keeps a user's
+ * API-key or ChatGPT choice stable without showing two identical model rows.
+ */
+export function groupModelRoutes<T extends CatalogModel>(input: {
+  models: readonly T[]
+  current?: ModelKey
+  recent?: readonly ModelKey[]
+}): ModelRouteGroup<T>[] {
+  const preference = new Map<string, number>()
+  const ordered = [input.current, ...(input.recent ?? [])].filter((item): item is ModelKey => Boolean(item))
+  for (const [index, item] of ordered.entries()) {
+    const key = exactRouteKey(item)
+    if (!preference.has(key)) preference.set(key, index)
+  }
+
+  const grouped = new Map<string, T[]>()
+  for (const model of input.models) {
+    const key = logicalModelKey(model.provider.id, model.id)
+    grouped.set(key, [...(grouped.get(key) ?? []), model])
+  }
+
+  const rank = (model: T) => preference.get(exactRouteKey({ providerID: model.provider.id, modelID: model.id }))
+  const fallback = (model: T) => {
+    if (model.provider.id === "openai") return 0
+    if (model.provider.id === "openai-codex") return 1
+    return 2
+  }
+  const aliasFallback = (model: T) =>
+    model.provider.id === "openai" && canonicalKey(model.provider.id, model.id) === "openai/gpt-5-6" ? 1 : 0
+
+  return [...grouped.entries()].map(([key, routes]) => {
+    routes.sort((left, right) => {
+      const leftRank = rank(left)
+      const rightRank = rank(right)
+      if (leftRank !== undefined || rightRank !== undefined) {
+        if (leftRank === undefined) return 1
+        if (rightRank === undefined) return -1
+        if (leftRank !== rightRank) return leftRank - rightRank
+      }
+      return (
+        fallback(left) - fallback(right) ||
+        left.provider.id.localeCompare(right.provider.id) ||
+        aliasFallback(left) - aliasFallback(right) ||
+        left.id.localeCompare(right.id)
+      )
+    })
+    // The generic OpenAI GPT-5.6 id and its explicit Sol id are two exact API
+    // ids for the same access path. Keep a current/recent generic route intact,
+    // but never ask the user to choose between duplicate "OpenAI · API key"
+    // rows. Different providers/authentication routes remain separate.
+    const access = new Map<string, T>()
+    for (const route of routes) {
+      if (!access.has(route.provider.id)) access.set(route.provider.id, route)
+    }
+    const distinct = [...access.values()]
+    return { key, model: distinct[0]!, routes: distinct }
+  })
 }
 
 export function isChatModel(model: CatalogModel): boolean {
@@ -222,5 +364,3 @@ export function preferredModel<T extends CatalogModel>(models: T[], key: ModelKe
   const canonical = canonicalKey(key.providerID, key.modelID)
   return models.find((model) => canonicalKey(model.provider.id, model.id) === canonical)
 }
-
-export const isFrontier = (model: ModelKey) => FRONTIER_MODELS.has(canonicalKey(model.providerID, model.modelID))

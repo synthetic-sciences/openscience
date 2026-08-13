@@ -70,6 +70,13 @@ describe("inference source classification", () => {
       "managed",
     )
   })
+
+  test("labels model access without changing provider routing ids", () => {
+    expect(subject.inferenceSourceLabel("chatgpt")).toBe("ChatGPT")
+    expect(subject.inferenceSourceLabel("byok")).toBe("API key")
+    expect(subject.inferenceSourceLabel("managed")).toBe("Managed")
+    expect(subject.inferenceSourceLabel(undefined, "Local runtime")).toBe("Local runtime")
+  })
 })
 
 describe("compact model descriptions", () => {
@@ -96,6 +103,59 @@ describe("progressive model catalog", () => {
       ["Frontier", [3, 4]],
     ])
     expect(subject.takeCatalogGroups(groups, 0)).toEqual([])
+  })
+
+  test("keeps one tab stop, preferring focused then selected then first", () => {
+    expect(subject.modelRadioTabKey(["sol", "luna", "terra"], "luna", "terra")).toBe("terra")
+    expect(subject.modelRadioTabKey(["sol", "luna", "terra"], "luna", "missing")).toBe("luna")
+    expect(subject.modelRadioTabKey(["sol", "luna", "terra"], "missing", "missing")).toBe("sol")
+    expect(subject.modelRadioTabKey([], "luna", "terra")).toBeUndefined()
+  })
+})
+
+describe("model catalog keyboard navigation", () => {
+  test("moves through sectioned radios with Arrow, Home, and End without entering nested groups", async () => {
+    const scope = document.createElement("div")
+    scope.setAttribute("role", "radiogroup")
+    const firstSection = document.createElement("section")
+    const secondSection = document.createElement("section")
+    const nested = document.createElement("div")
+    nested.setAttribute("role", "radiogroup")
+    const ids = ["sol", "luna", "terra"]
+    const radios = ids.map((id) => {
+      const button = document.createElement("button")
+      button.type = "button"
+      button.setAttribute("role", "radio")
+      button.dataset.modelChoice = id
+      button.tabIndex = id === "sol" ? 0 : -1
+      button.addEventListener("focus", () => {
+        for (const radio of radios) radio.tabIndex = radio === button ? 0 : -1
+      })
+      return button
+    })
+    const nestedRadio = document.createElement("button")
+    nestedRadio.setAttribute("role", "radio")
+    nested.append(nestedRadio)
+    firstSection.append(radios[0]!, radios[1]!)
+    secondSection.append(radios[2]!, nested)
+    scope.append(firstSection, secondSection)
+    document.body.append(scope)
+    scope.addEventListener("keydown", subject.focusModelRadio)
+
+    radios[0]!.focus()
+    await press(radios[0]!, "ArrowDown")
+    expect(document.activeElement).toBe(radios[1])
+    expect(radios.map((radio) => radio.tabIndex)).toEqual([-1, 0, -1])
+
+    await press(radios[1]!, "End")
+    expect(document.activeElement).toBe(radios[2])
+    expect(document.activeElement).not.toBe(nestedRadio)
+
+    await press(radios[2]!, "Home")
+    expect(document.activeElement).toBe(radios[0])
+
+    await press(radios[0]!, "ArrowUp")
+    expect(document.activeElement).toBe(radios[2])
   })
 })
 
@@ -147,5 +207,49 @@ describe("model option keyboard navigation", () => {
     expect(radios[2]?.getAttribute("aria-checked")).toBe("true")
     expect(document.activeElement).toBe(radios[2])
     expect(document.activeElement).not.toBe(back)
+  })
+
+  test("keeps the direct model-effort control visible at Standard", async () => {
+    let opened = 0
+    const host = mount(() =>
+      web.createComponent(subject.ModelEffortTrigger, {
+        value: "Standard",
+        expanded: false,
+        onOpen: () => opened++,
+      }),
+    )
+    const trigger = host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")
+
+    expect(trigger?.textContent).toBe("Standard")
+    expect(trigger?.getAttribute("aria-label")).toBe("Thinking effort: Standard")
+    expect(trigger?.querySelector('[data-component="icon"]')).not.toBeNull()
+    trigger?.click()
+    expect(opened).toBe(1)
+  })
+
+  test("selects an exact access route from one logical model row", () => {
+    const selected = { value: "openai/gpt-5.6-sol" }
+    let done = 0
+    const host = mount(() =>
+      web.createComponent(subject.ModelOptionList, {
+        id: "model-route-options-test",
+        kind: "route",
+        title: "GPT-5.6 Sol access",
+        current: selected.value,
+        options: [
+          { id: "openai/gpt-5.6-sol", label: "OpenAI · API key" },
+          { id: "openai-codex/gpt-5.6-sol", label: "OpenAI · ChatGPT" },
+        ],
+        onSelect: (value) => (selected.value = value),
+        onBack: () => undefined,
+        onDone: () => done++,
+      }),
+    )
+    const routes = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-model-option="route"]'))
+
+    expect(routes).toHaveLength(2)
+    routes[1]?.click()
+    expect(selected.value).toBe("openai-codex/gpt-5.6-sol")
+    expect(done).toBe(1)
   })
 })

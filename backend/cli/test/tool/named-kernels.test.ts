@@ -91,6 +91,94 @@ test("same conversation and environment reuses one Python process while child co
   })
 }, 60_000)
 
+test("a timed-out Python cell fully retires its process before the next call starts clean", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await executionSession()
+      const tool = await PythonTool.init()
+      const identity: KernelIdentity = {
+        projectID: Instance.project.id,
+        sessionID: session.id,
+        name: "python",
+        language: "python",
+      }
+
+      try {
+        const timedOut = tool.execute(
+          { code: "import time\ntime.sleep(30)", timeout: 5_000 },
+          context(session.id, "call_timeout"),
+        )
+        await expect(timedOut).rejects.toThrow("Cell execution timed out after 5s")
+        expect(KernelRuntime.status(identity)).toMatchObject({ active: false, state: "stopped", process_id: null })
+
+        const recovered = await tool.execute(
+          { code: "print('fresh-after-timeout')", timeout: 30_000 },
+          context(session.id, "call_after_timeout"),
+        )
+        expect(recovered.output.trim()).toBe("fresh-after-timeout")
+        expect(KernelRuntime.status(identity)).toMatchObject({
+          active: true,
+          state: "idle",
+          execution_count: 1,
+          incarnation: 2,
+        })
+      } finally {
+        await KernelRuntime.release(identity)
+      }
+    },
+  })
+}, 60_000)
+
+test.skipIf(!Bun.which("Rscript"))(
+  "a timed-out R cell fully retires its process before the next call starts clean",
+  async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const tool = await RTool.init()
+        const identity: KernelIdentity = {
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          name: "r",
+          language: "r",
+        }
+
+        try {
+          const timedOut = tool.execute(
+            { code: "Sys.sleep(30)", timeout: 5_000 },
+            context(session.id, "call_r_timeout"),
+          )
+          await expect(timedOut).rejects.toThrow("Cell execution timed out after 5s")
+          expect(KernelRuntime.status(identity)).toMatchObject({
+            active: false,
+            state: "stopped",
+            process_id: null,
+          })
+
+          const recovered = await tool.execute(
+            { code: "cat('fresh-after-timeout')", timeout: 30_000 },
+            context(session.id, "call_r_after_timeout"),
+          )
+          expect(recovered.output.trim()).toBe("fresh-after-timeout")
+          expect(KernelRuntime.status(identity)).toMatchObject({
+            active: true,
+            state: "idle",
+            execution_count: 1,
+            incarnation: 2,
+          })
+        } finally {
+          await KernelRuntime.release(identity)
+        }
+      },
+    })
+  },
+  60_000,
+)
+
 test("an interrupt requested during durable start waits for Python to arm SIGINT and preserves state", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({

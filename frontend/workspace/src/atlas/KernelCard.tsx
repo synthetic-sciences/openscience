@@ -26,7 +26,8 @@ const cores = (value?: number) => {
 export const kernelActivity = (kernel: KernelStatus) => {
   const executions = `${kernel.execution_count} ${kernel.execution_count === 1 ? "run" : "runs"}`
   const queued = kernel.queue_depth > 0 ? ` · ${kernel.queue_depth} queued` : ""
-  return `${kernelStateLabel(kernel.state)} · ${executions}${queued}`
+  const state = kernelStateLabel(kernel.state)
+  return state === "Ready" ? `Warm for follow-up · ${executions}${queued}` : `${state} · ${executions}${queued}`
 }
 
 export function KernelCard(props: {

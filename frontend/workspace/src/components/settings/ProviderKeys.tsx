@@ -132,9 +132,9 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
   }
 
   return (
-    <div class="models-provider-keys">
+    <div class="settings-card models-provider-keys">
       <form
-        class="settings-card settings-provider-key-form models-provider-key-form"
+        class="settings-provider-key-form models-provider-key-form"
         onSubmit={(event) => {
           event.preventDefault()
           void save()
@@ -202,12 +202,12 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
       </form>
 
       <Show when={connected().length > 0}>
-        <div class="settings-card models-connected-providers">
+        <div class="models-connected-providers">
           <For each={connected()}>
             {(item) => (
               <div class="settings-row models-compact-row models-provider-row">
                 <div class="models-provider-identity min-w-0 flex-1 basis-[220px]">
-                  <ProviderLogo id={item.id} label={MODEL_PROVIDER_LABELS[item.id] ?? item.id} connected />
+                  <ProviderLogo id={item.id} label={MODEL_PROVIDER_LABELS[item.id] ?? item.id} />
                   <div class="models-provider-copy">
                     <span class="truncate text-13-medium text-text-strong">
                       {MODEL_PROVIDER_LABELS[item.id] ?? item.id}
@@ -247,6 +247,11 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
             )}
           </For>
         </div>
+      </Show>
+      <Show when={connected().length === 0}>
+        <p class="models-provider-empty" role="status">
+          No provider API keys are connected yet.
+        </p>
       </Show>
     </div>
   )

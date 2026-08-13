@@ -140,8 +140,6 @@ repeat {
 const READY = "__OPENSCIENCE_KERNEL_READY__"
 const START = "__OPENSCIENCE_R_RESULT_START__\n"
 const END = "\n__OPENSCIENCE_R_END__"
-const IDLE_MS = 30 * 60 * 1000
-
 async function findRscript(override?: string): Promise<{ binary: string; version?: string } | null> {
   const candidates = override ? [override] : ["Rscript"]
   for (const bin of candidates) {
@@ -214,7 +212,6 @@ class RKernel implements Kernel {
   proc?: ChildProcess
   scriptPath?: string
   configPath?: string
-  lastUsed = Date.now()
   private stderrTail = ""
   private queue = new KernelQueue()
   private intentional = false
@@ -391,20 +388,28 @@ class RKernel implements Kernel {
     await opts?.onStart?.()
     if (opts?.signal?.aborted) throw new Error("Execution aborted before starting")
     const proc = this.proc!
-    this.lastUsed = Date.now()
     const timeout = Math.min(Math.max(opts?.timeout ?? 120_000, 5_000), 600_000)
 
     const raw = await new Promise<RawResult>((resolve, reject) => {
-      const timer = setTimeout(() => {
+      let stopping = false
+      const stop = (error: Error) => {
+        if (stopping) return
+        stopping = true
         cleanup()
-        void this.terminate(proc)
-        reject(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`))
+        // Do not free the queue while an expired interpreter may still be
+        // running user code. Retire the process first so the following call is
+        // forced onto a clean R incarnation.
+        void this.shutdown().then(
+          () => reject(error),
+          () => reject(error),
+        )
+      }
+      const timer = setTimeout(() => {
+        stop(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`))
       }, timeout)
 
       const onAbort = () => {
-        cleanup()
-        void this.terminate(proc)
-        reject(new Error("Execution aborted"))
+        stop(new Error("Execution aborted"))
       }
 
       let buffer = ""
@@ -484,22 +489,9 @@ class RKernelManager implements KernelManager {
   private kernels = new Map<string, RKernel>()
   private starts = new Map<string, { kernel: RKernel; promise: Promise<RKernel> }>()
 
-  private async reapIdle() {
-    const now = Date.now()
-    for (const [id, kernel] of this.kernels) {
-      if (now - kernel.lastUsed <= IDLE_MS) continue
-      await kernel.shutdown()
-      this.kernels.delete(id)
-    }
-  }
-
   async get(sessionID: string, opts?: KernelStartOptions): Promise<RKernel> {
-    await this.reapIdle()
     const existing = this.kernels.get(sessionID)
-    if (existing && existing.ready) {
-      existing.lastUsed = Date.now()
-      return existing
-    }
+    if (existing && existing.ready) return existing
     if (existing) {
       await existing.shutdown()
       this.kernels.delete(sessionID)
@@ -768,6 +760,7 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
 const RDefinition: Awaited<ReturnType<Tool.Info<typeof RParameters>["init"]>> = {
   description: [
     "Run R code in one long-lived managed process per conversation. Objects, attached packages, and state persist across calls; child conversations are isolated.",
+    "Treat persistent state as working memory, not reproducibility. For a material result, save the source, declared inputs, parameters, and outputs and clean-rerun when practical.",
     "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
     "Set `source` when the execution belongs to a script so Activity can identify that source.",
     "Use `action: stop` when its in-memory state should be cleared.",

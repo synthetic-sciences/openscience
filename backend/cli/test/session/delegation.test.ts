@@ -11,8 +11,9 @@ describe("Research delegation compatibility", () => {
 
   test("effort reminders expose bounded Normal and Ultra behavior", () => {
     expect(SessionPrompt.researchEffortReminder(undefined)).toContain("Research effort: NORMAL")
-    expect(SessionPrompt.researchEffortReminder("normal")).toContain("limited to 2")
+    expect(SessionPrompt.researchEffortReminder("normal")).toContain("at most 2 Task calls total")
+    expect(SessionPrompt.researchEffortReminder("normal")).toContain("including continuations")
     expect(SessionPrompt.researchEffortReminder("ultra")).toContain("Research effort: ULTRA")
-    expect(SessionPrompt.researchEffortReminder("ultra")).toContain("limited to 4")
+    expect(SessionPrompt.researchEffortReminder("ultra")).toContain("at most 4 Task calls total")
   })
 })

@@ -242,34 +242,7 @@
 
 .connectors-panel [data-component="switch"] {
   min-width: 40px;
-  min-height: 32px;
   justify-content: center;
-}
-
-.connectors-panel [data-component="switch"] [data-slot="switch-control"] {
-  width: 28px;
-  height: 16px;
-  border: 1px solid var(--border-weak-base);
-  background: var(--surface-raised-base);
-}
-
-.connectors-panel [data-component="switch"] [data-slot="switch-thumb"] {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  transform: translateX(-1px);
-}
-
-.connectors-panel [data-component="switch"][data-checked] [data-slot="switch-control"],
-.connectors-panel
-  [data-component="switch"][data-checked]:hover:not([data-disabled], [data-readonly])
-  [data-slot="switch-control"] {
-  border-color: var(--settings-toggle-active);
-  background: var(--settings-toggle-active);
-}
-
-.connectors-panel [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
-  transform: translateX(12px);
 }
 
 .connectors-details {
@@ -542,6 +515,7 @@
 
 @media (pointer: coarse) {
   .connectors-panel [data-component="icon-button"],
+  .connectors-panel [data-component="switch"],
   .connectors-action,
   .connectors-refresh,
   .connectors-detail-action {

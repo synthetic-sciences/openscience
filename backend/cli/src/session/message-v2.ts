@@ -399,6 +399,8 @@ export namespace MessageV2 {
     parentID: z.string(),
     modelID: z.string(),
     providerID: z.string(),
+    /** Named reasoning level resolved from the final provider options for this request. */
+    reasoningEffort: z.string().optional(),
     /**
      * @deprecated
      */

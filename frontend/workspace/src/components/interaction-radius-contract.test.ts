@@ -21,13 +21,14 @@ describe("live interaction radius contract", () => {
     }
   })
 
-  test("keeps pills and asymmetric message or sheet shapes explicit", () => {
+  test("keeps pills, message surfaces, and sheet shapes explicit", () => {
     expect(files.composer).toContain("--composer-radius-pill: 999px")
     expect(files.composer).toContain("border-radius: var(--composer-radius-pill)")
     expect(files.servers).toContain("--server-radius-pill: 999px")
     expect(files.servers).toContain("border-radius: var(--server-radius-pill)")
-    expect(files.chat).toContain("--user-message-radius: var(--radius-lg)")
-    expect(files.chat).toContain("--user-message-tail-radius: var(--radius-xs)")
+    expect(files.chat).toContain("--user-message-radius: var(--radius-sm)")
+    expect(files.chat).toContain("border-radius: var(--user-message-radius)")
+    expect(files.chat).not.toContain("--user-message-tail-radius")
     expect(files.settings).toContain("border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important")
     expect(files.models).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0")
   })
@@ -58,7 +59,8 @@ describe("live interaction radius contract", () => {
     expect(files.chat).toContain("box-shadow: none")
     expect(files.servers).toContain("border: 1px solid var(--border-base)")
     expect(files.servers).toContain("border-top: 1px solid var(--border-weak-base)")
-    expect(files.settings).toContain("box-shadow: var(--atlas-shadow-float)")
+    expect(files.settings).toContain("--model-control-shadow: var(--atlas-shadow-md)")
+    expect(files.settings).toContain("box-shadow: var(--model-control-shadow)")
     expect(files.models).toContain("box-shadow: var(--atlas-shadow-float)")
     expect(Object.values(files).join("\n")).not.toContain("#000")
   })

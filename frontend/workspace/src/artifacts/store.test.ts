@@ -4,6 +4,7 @@ import {
   normalizeStoredArtifactDetail,
   normalizeStoredArtifacts,
   normalizeStoredArtifactVersion,
+  savedResultLabel,
   storedArtifactReviewTargetID,
   type StoredArtifact,
   type StoredArtifactVersion,
@@ -46,6 +47,19 @@ describe("stored artifact records", () => {
       ...artifact,
       versions: [version],
     })
+  })
+
+  test("formats a compact save confirmation without exposing the source path", () => {
+    const saved = {
+      current: {
+        ...version,
+        filename: "/Users/researcher/private/project/analysis.csv",
+        version: 4,
+        sourcePath: "/Users/researcher/private/project/analysis.csv",
+      },
+    }
+    expect(savedResultLabel(saved)).toBe("analysis.csv · Version 4")
+    expect(savedResultLabel(saved)).not.toContain("/Users/researcher")
   })
 
   test("drops malformed records instead of inventing artifact metadata", () => {

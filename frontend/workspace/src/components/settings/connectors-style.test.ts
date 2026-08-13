@@ -7,8 +7,8 @@ describe("Connectors settings visual contract", () => {
   test("uses the compact neutral workspace control language", () => {
     expect(css).toContain("--connectors-control-height: 32px")
     expect(css).toContain("background: var(--settings-primary)")
-    expect(css).toContain("background: var(--settings-toggle-active)")
     expect(css).toContain("border: 1px solid var(--border-weak-base)")
+    expect(css).not.toContain('[data-slot="switch-control"]')
     expect(css).not.toMatch(/#(?:007aff|0a84ff|0066d6|409cff)/i)
   })
 
@@ -30,6 +30,7 @@ describe("Connectors settings visual contract", () => {
 
   test("expands hit areas for touch without enlarging desktop controls", () => {
     expect(css).toContain("@media (pointer: coarse)")
+    expect(css).toMatch(/@media \(pointer: coarse\)[\s\S]*\.connectors-panel \[data-component="switch"\]/)
     expect(css).toContain("min-width: 44px")
     expect(css).toContain("min-height: 44px")
     expect(css).toContain("min-width: 32px")

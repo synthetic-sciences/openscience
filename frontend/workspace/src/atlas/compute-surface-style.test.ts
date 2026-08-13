@@ -33,4 +33,13 @@ describe("activity surface styling", () => {
   test("keeps activity styling component-owned instead of layering legacy shell overrides", () => {
     expect(shell).not.toMatch(/\.(?:compute-surface|kernel-panel|kernel-card)(?:[\s_:{.[#]|$)/)
   })
+
+  test("keeps capacity telemetry legible at the narrowest supported pane width", () => {
+    expect(css).toContain(".activity-surface__capacity-title-prefix")
+    expect(css).toContain(".activity-surface__capacity-reading small")
+    expect(css).toContain("font-size: 11px")
+    expect(css).not.toMatch(
+      /\.activity-surface__capacity-reading small,\s*\.activity-surface__capacity-reading strong\s*\{\s*font-size:\s*10px/,
+    )
+  })
 })

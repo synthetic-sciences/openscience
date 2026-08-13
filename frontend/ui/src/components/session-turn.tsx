@@ -44,6 +44,19 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
+const DIFF_PREVIEW_LINE_THRESHOLD = 18
+
+function contentLineCount(value: string | undefined) {
+  if (!value) return 0
+  const lines = value.split(/\r?\n/)
+  return lines.at(-1) === "" ? lines.length - 1 : lines.length
+}
+
+/** Long transcript diffs stay bounded until the reader explicitly expands them. */
+export function isLongDiffPreview(diff: Pick<FileDiff, "before" | "after">) {
+  return Math.max(contentLineCount(diff.before), contentLineCount(diff.after)) > DIFF_PREVIEW_LINE_THRESHOLD
+}
+
 function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
   if (!part) return undefined
 
@@ -412,8 +425,8 @@ export function SessionTurn(
 
   // Files this turn wrote (completed write/edit/multiedit/apply_patch parts).
   // Feeds the end-of-response "Save as artifact…" affordance on the last
-  // completed turn, which promotes a scratch file into a durable versioned
-  // artifact through the data context's saveArtifact callback.
+  // completed turn, which promotes a scratch file into a durable Result
+  // through the data context's saveArtifact callback.
   const emptyWritten: string[] = []
   const written = createMemo(
     () => {
@@ -502,8 +515,9 @@ export function SessionTurn(
   const [store, setStore] = createStore({
     retrySeconds: 0,
     diffsOpen: [] as string[],
+    diffPreviewsExpanded: [] as string[],
     diffLimit: diffInit,
-    artifacts: {} as Record<string, { state: "saving" | "saved" | "error"; version?: number; error?: string }>,
+    artifacts: {} as Record<string, { state: "saving" | "saved" | "error"; error?: string }>,
     status: rawStatus(),
     duration: duration(),
   })
@@ -513,6 +527,7 @@ export function SessionTurn(
       () => message()?.id,
       () => {
         setStore("diffsOpen", [])
+        setStore("diffPreviewsExpanded", [])
         setStore("diffLimit", diffInit)
         setStore("artifacts", {})
       },
@@ -525,7 +540,7 @@ export function SessionTurn(
     if (!save || store.artifacts[path]?.state === "saving") return
     setStore("artifacts", path, { state: "saving" })
     void save(path).then(
-      (result) => setStore("artifacts", path, { state: "saved", version: result.version }),
+      () => setStore("artifacts", path, { state: "saved" }),
       (error: unknown) =>
         setStore("artifacts", path, {
           state: "error",
@@ -754,7 +769,10 @@ export function SessionTurn(
                               cacheKey={responsePartId()}
                             />
                             <Show when={response()}>
-                              <div data-slot="session-turn-response-copy-wrapper">
+                              <div
+                                data-slot="session-turn-response-copy-wrapper"
+                                data-copied={copied() ? "true" : undefined}
+                              >
                                 <Tooltip
                                   value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
                                   placement="top"
@@ -762,7 +780,7 @@ export function SessionTurn(
                                 >
                                   <IconButton
                                     icon={copied() ? "check" : "copy"}
-                                    variant="secondary"
+                                    variant="ghost"
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={(event) => {
                                       event.stopPropagation()
@@ -785,49 +803,99 @@ export function SessionTurn(
                           }}
                         >
                           <For each={messageDiffs().slice(0, store.diffLimit)}>
-                            {(diff) => (
-                              <Accordion.Item value={diff.file}>
-                                <StickyAccordionHeader>
-                                  <Accordion.Trigger>
-                                    <div data-slot="session-turn-accordion-trigger-content">
-                                      <div data-slot="session-turn-file-info">
-                                        <FileIcon
-                                          node={{ path: diff.file, type: "file" }}
-                                          data-slot="session-turn-file-icon"
-                                        />
-                                        <div data-slot="session-turn-file-path">
-                                          <Show when={diff.file.includes("/")}>
-                                            <span data-slot="session-turn-directory">
-                                              {`\u202A${getDirectory(diff.file)}\u202C`}
-                                            </span>
-                                          </Show>
-                                          <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>
+                            {(diff, index) => {
+                              const previewID = () => `${props.messageID}-diff-preview-${index()}`
+                              const expanded = () => store.diffPreviewsExpanded.includes(diff.file!)
+                              const long = () => isLongDiffPreview(diff)
+                              const setExpanded = (value: boolean) => {
+                                setStore("diffPreviewsExpanded", (current) => {
+                                  if (value) return current.includes(diff.file!) ? current : [...current, diff.file!]
+                                  return current.filter((file) => file !== diff.file)
+                                })
+                              }
+
+                              return (
+                                <Accordion.Item value={diff.file}>
+                                  <StickyAccordionHeader>
+                                    <Accordion.Trigger>
+                                      <div data-slot="session-turn-accordion-trigger-content">
+                                        <div data-slot="session-turn-file-info">
+                                          <FileIcon
+                                            node={{ path: diff.file, type: "file" }}
+                                            data-slot="session-turn-file-icon"
+                                          />
+                                          <div data-slot="session-turn-file-path">
+                                            <Show when={diff.file.includes("/")}>
+                                              <span data-slot="session-turn-directory">
+                                                {`\u202A${getDirectory(diff.file)}\u202C`}
+                                              </span>
+                                            </Show>
+                                            <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>
+                                          </div>
+                                        </div>
+                                        <div data-slot="session-turn-accordion-actions">
+                                          <DiffChanges changes={diff} />
+                                          <Icon name="chevron-grabber-vertical" size="small" />
                                         </div>
                                       </div>
-                                      <div data-slot="session-turn-accordion-actions">
-                                        <DiffChanges changes={diff} />
-                                        <Icon name="chevron-grabber-vertical" size="small" />
+                                    </Accordion.Trigger>
+                                  </StickyAccordionHeader>
+                                  <Accordion.Content>
+                                    <div data-slot="session-turn-diff-content">
+                                      <div
+                                        id={previewID()}
+                                        data-slot="session-turn-diff-preview"
+                                        data-expanded={expanded() ? "true" : undefined}
+                                      >
+                                        <Show when={store.diffsOpen.includes(diff.file!)}>
+                                          <Dynamic
+                                            component={diffComponent}
+                                            before={{
+                                              name: diff.file!,
+                                              contents: diff.before!,
+                                            }}
+                                            after={{
+                                              name: diff.file!,
+                                              contents: diff.after!,
+                                            }}
+                                          />
+                                        </Show>
                                       </div>
+                                      <Show when={long() || data.openFile}>
+                                        <div
+                                          data-slot="session-turn-diff-actions"
+                                          role="group"
+                                          aria-label={`Preview actions for ${diff.file}`}
+                                        >
+                                          <Show when={data.openFile}>
+                                            <Button
+                                              variant="ghost"
+                                              size="small"
+                                              icon="file"
+                                              onClick={() => data.openFile?.(diff.file!)}
+                                            >
+                                              Open file
+                                            </Button>
+                                          </Show>
+                                          <Show when={long()}>
+                                            <Button
+                                              variant="ghost"
+                                              size="small"
+                                              icon={expanded() ? "collapse" : "expand"}
+                                              aria-expanded={expanded()}
+                                              aria-controls={previewID()}
+                                              onClick={() => setExpanded(!expanded())}
+                                            >
+                                              {expanded() ? "Compact preview" : "Expand preview"}
+                                            </Button>
+                                          </Show>
+                                        </div>
+                                      </Show>
                                     </div>
-                                  </Accordion.Trigger>
-                                </StickyAccordionHeader>
-                                <Accordion.Content data-slot="session-turn-accordion-content">
-                                  <Show when={store.diffsOpen.includes(diff.file!)}>
-                                    <Dynamic
-                                      component={diffComponent}
-                                      before={{
-                                        name: diff.file!,
-                                        contents: diff.before!,
-                                      }}
-                                      after={{
-                                        name: diff.file!,
-                                        contents: diff.after!,
-                                      }}
-                                    />
-                                  </Show>
-                                </Accordion.Content>
-                              </Accordion.Item>
-                            )}
+                                  </Accordion.Content>
+                                </Accordion.Item>
+                              )
+                            }}
                           </For>
                         </Accordion>
                         <Show when={messageDiffs().length > store.diffLimit}>
@@ -893,7 +961,7 @@ export function SessionTurn(
                         </div>
                       </section>
                     </Show>
-                    {/* Explicit save: offer the written files as durable versioned artifacts */}
+                    {/* Explicit save: offer the written files as durable Results */}
                     <Show when={isLastUserMessage() && !working() && !!data.saveArtifact && written().length > 0}>
                       <div data-slot="session-turn-artifact-save">
                         <For each={artifactActions(written())}>
@@ -902,7 +970,7 @@ export function SessionTurn(
                             const label = () => {
                               if (state()?.state === "saving")
                                 return `Saving ${action.path.split("/").pop() ?? action.path}…`
-                              if (state()?.state === "saved") return `Saved as Result · v${state()?.version ?? 1}`
+                              if (state()?.state === "saved") return "Saved to Results"
                               if (state()?.state === "error") return "Save failed · retry"
                               return action.label
                             }

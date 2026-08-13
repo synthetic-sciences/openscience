@@ -14,6 +14,22 @@
   container-type: inline-size;
 }
 
+/* Chat typography has three jobs, and therefore three stable levels:
+   - 14/21 for model-authored prose
+   - 13/20 for operational labels (tools, todos, errors)
+   - 12/18 for supporting metadata (paths, arguments, counts, status)
+
+   Keep these local to the transcript. Shared UI components intentionally use
+   their own compact defaults in settings, menus, and other dense surfaces. */
+.session-scroller {
+  --chat-prose-font-size: var(--font-size-base);
+  --chat-prose-line-height: var(--line-height-large);
+  --chat-operation-font-size: 13px;
+  --chat-operation-line-height: 20px;
+  --chat-meta-font-size: var(--font-size-small);
+  --chat-meta-line-height: var(--line-height-large);
+}
+
 .session-prompt-dock {
   padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
 }
@@ -21,6 +37,13 @@
 .session-prompt-dock__inner {
   width: min(100%, 740px);
   padding: 0;
+}
+
+/* Keep the scroll viewport itself above the absolute composer. The jump rail
+   then participates in this frame's flex layout instead of floating over the
+   transcript, so code, line numbers, and selection remain unobstructed. */
+.session-conversation-scroll-frame {
+  padding-bottom: var(--workspace-composer-height);
 }
 
 /* SessionTurn defaults to a full-height standalone view. In the transcript it
@@ -74,35 +97,40 @@
 }
 
 .session-scroller [data-component="user-message"] {
-  --user-message-surface: var(--color-accent-subtle, var(--surface-base-hover));
-  --user-message-radius: var(--radius-lg);
-  --user-message-tail-radius: var(--radius-xs);
+  --user-message-surface: var(--surface-weak);
+  --user-message-radius: var(--radius-sm);
 }
 
 .session-scroller [data-slot="user-message-row"] {
   align-items: flex-start;
 }
 
-.session-scroller [data-component="user-message"] [data-slot="user-message-text"] {
+.session-scroller [data-component="user-message"] [data-slot="user-message-content"] {
   width: fit-content;
-  max-width: min(76%, 580px);
+  max-width: min(72%, 620px);
   margin-left: 0;
+}
+
+.session-scroller [data-component="user-message"] [data-slot="user-message-text"] {
+  width: 100%;
   padding: 9px 12px;
   border: 0;
-  border-radius: var(--user-message-radius) var(--user-message-radius) var(--user-message-tail-radius)
-    var(--user-message-radius);
+  border-radius: var(--user-message-radius);
   background: var(--user-message-surface);
   box-shadow: none;
   color: var(--color-text);
   font-family: var(--font-family-sans);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-regular);
-  line-height: 1.5;
+  line-height: var(--line-height-large);
+  font-optical-sizing: auto;
+  font-synthesis: none;
+  text-wrap: pretty;
+  -webkit-font-smoothing: antialiased;
 }
 
 .session-scroller [data-slot="user-message-copy-wrapper"] {
   margin-top: 1px;
-  color: var(--color-text-faint, var(--text-weaker));
 }
 
 .session-scroller [data-slot="user-message-copy-wrapper"] [data-component="icon-button"] {
@@ -113,35 +141,41 @@
   border-radius: var(--radius-xs);
 }
 
-.session-scroller [data-slot="user-message-copy-wrapper"] [data-slot="icon-svg"] {
-  color: currentColor;
-}
-
-.session-scroller [data-slot="user-message-copy-wrapper"]:hover,
-.session-scroller [data-slot="user-message-copy-wrapper"]:focus-within {
-  color: var(--color-text-muted, var(--text-weak));
+.session-scroller [data-slot="session-turn-response-copy-wrapper"] [data-component="icon-button"] {
+  border-radius: var(--radius-xs);
 }
 
 .session-scroller [data-component="assistant-message"] {
   gap: 8px;
+  font-family: var(--font-family-sans);
   font-weight: var(--font-weight-regular);
+  font-optical-sizing: auto;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 .session-scroller [data-slot="session-turn-markdown"],
 .session-scroller [data-slot="session-turn-markdown"] [data-component="markdown"] {
-  font-size: 14px;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-regular);
-  line-height: 1.58;
+  line-height: var(--line-height-large);
   font-optical-sizing: auto;
   font-synthesis: none;
   text-wrap: pretty;
+}
+
+.session-scroller [data-slot="session-turn-markdown"] :is(p, li, blockquote) {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 /* A completed turn with file diffs used to jump to the shared 15px treatment,
    making otherwise identical assistant replies look larger. Keep one stable
    reading size regardless of whether a turn happened to edit files. */
 .session-scroller [data-component="session-turn"] [data-slot="session-turn-markdown"][data-diffs="true"] {
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 
 /* Compact document rhythm for long research answers. Hierarchy comes from
@@ -264,6 +298,20 @@
   margin-top: 6px;
 }
 
+/* The shared turn header gives every descendant paragraph an extra-loose
+   180% leading. Reasoning/text parts live inside that header, so explicitly
+   restore the same 14/21 reading rhythm as the final assistant response. */
+.session-scroller :is([data-component="text-part"], [data-component="reasoning-part"]) [data-component="markdown"],
+.session-scroller
+  :is([data-component="text-part"], [data-component="reasoning-part"])
+  [data-component="markdown"]
+  :is(p, li, blockquote) {
+  font-family: var(--font-family-sans);
+  font-size: var(--chat-prose-font-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--chat-prose-line-height);
+}
+
 .session-scroller [data-component="collapsible"] {
   border-radius: var(--radius-xs);
   background: transparent;
@@ -279,17 +327,44 @@
   gap: 7px;
 }
 
-.session-scroller [data-slot="basic-tool-tool-title"],
+.session-scroller [data-slot="basic-tool-tool-title"] {
+  font-size: var(--chat-operation-font-size);
+  line-height: var(--chat-operation-line-height);
+}
+
 .session-scroller [data-slot="basic-tool-tool-subtitle"],
 .session-scroller [data-slot="basic-tool-tool-arg"] {
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--chat-meta-font-size);
+  line-height: var(--chat-meta-line-height);
 }
 
 .session-scroller [data-component="tool-output"] {
   padding: 2px 8px 7px;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--chat-meta-font-size);
+  line-height: var(--chat-meta-line-height);
+}
+
+.session-scroller [data-component="todos"] [data-slot="checkbox-checkbox-label"],
+.session-scroller [data-component="task-tools"] [data-slot="task-tool-title"] {
+  font-size: var(--chat-operation-font-size);
+  line-height: var(--chat-operation-line-height);
+}
+
+/* A tool error previously combined a 12/18 card, a 14/21 title, and an
+   inherited 12/18 message. Treat the failure itself as an operational row;
+   retain the weaker detail/path as metadata when a distinct title exists. */
+.session-scroller [data-component="card"][data-variant="error"],
+.session-scroller .error-card,
+.session-scroller [data-component="tool-error"] > [data-slot="message-part-tool-error-message"],
+.session-scroller [data-slot="message-part-tool-error-title"] {
+  font-family: var(--font-family-sans);
+  font-size: var(--chat-operation-font-size);
+  line-height: var(--chat-operation-line-height);
+}
+
+.session-scroller [data-slot="message-part-tool-error-content"] [data-slot="message-part-tool-error-message"] {
+  font-size: var(--chat-meta-font-size);
+  line-height: var(--chat-meta-line-height);
 }
 
 .session-scroller [data-slot="session-turn-summary-section"] {
@@ -322,12 +397,40 @@
   min-height: 32px;
 }
 
+.session-jump-latest-rail {
+  flex: 0 0 auto;
+  min-height: max(32px, var(--workspace-composer-clearance));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
 .session-jump-latest {
   min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface-solid);
+  box-shadow: var(--atlas-shadow-sm);
+  color: var(--color-text);
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  pointer-events: auto;
   transition:
     border-color 150ms ease,
     background-color 150ms ease,
     color 150ms ease;
+}
+
+.session-jump-latest:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 /* Streaming text may opt into a shared stagger animation. Within chat, keep
@@ -356,7 +459,7 @@
     max-width: 100%;
   }
 
-  .session-scroller [data-component="user-message"] [data-slot="user-message-text"] {
+  .session-scroller [data-component="user-message"] [data-slot="user-message-content"] {
     max-width: min(86%, 580px);
   }
 
@@ -387,7 +490,7 @@
     max-width: 100%;
   }
 
-  .session-scroller [data-component="user-message"] [data-slot="user-message-text"] {
+  .session-scroller [data-component="user-message"] [data-slot="user-message-content"] {
     max-width: min(86%, 580px);
   }
 
@@ -397,6 +500,10 @@
 }
 
 @media (pointer: coarse) {
+  .session-jump-latest-rail {
+    min-height: 44px;
+  }
+
   .session-scroller :where(button, [role="button"]),
   .session-jump-latest {
     min-height: 44px;

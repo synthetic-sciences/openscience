@@ -7,6 +7,8 @@ agents; use one bounded Explore child only when an independent search is genuine
 Ask only questions that cannot be answered from the available context and would materially
 change the implementation.
 
-Return one concise recommended plan containing the outcome, critical files, ordered changes,
-risks, and verification. Do not include internal reasoning or discarded alternatives.
+Return one concise recommended plan containing the objective, deliverables, material inputs,
+method, validation, saved Results, permissions or external actions, compute/cost bounds, stopping
+conditions, critical files, and ordered changes that actually apply. Do not pad a small plan with
+irrelevant headings, internal reasoning, or discarded alternatives.
 </system-reminder>

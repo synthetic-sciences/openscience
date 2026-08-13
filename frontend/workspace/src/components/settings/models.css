@@ -6,12 +6,12 @@
   --models-gap-4: 16px;
 }
 
-/* Models uses the same restrained surface stack as Compute. The panel should
-   read as one Settings system, not a nested set of independently bordered
-   widgets. */
+/* Models follows Compute's flat hierarchy: one quiet surface per semantic
+   group, compact rows inside it, and no nested borders or raised islands. */
 .settings-dialog .settings-models-panel .settings-card {
   gap: 2px;
   padding: var(--models-gap-1);
+  border: 0;
   border-radius: var(--settings-radius-card);
   background: var(--settings-surface);
   box-shadow: none;
@@ -21,15 +21,23 @@
   min-height: 56px;
   gap: var(--models-gap-3);
   padding: 10px var(--models-gap-3);
+  border: 0;
   border-radius: var(--settings-radius-control);
 }
 
+.models-access-card,
 .models-inference,
-.models-provider-keys {
+.models-provider-keys,
+.models-connected-providers {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--models-gap-2);
+}
+
+.models-access-card,
+.models-inference,
+.models-provider-keys {
+  gap: 2px;
 }
 
 .models-account-summary__identity,
@@ -41,19 +49,6 @@
   flex: 1 1 220px;
   align-items: center;
   gap: var(--models-gap-3);
-}
-
-.settings-dialog .settings-models-panel .settings-row-icon {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--settings-radius-control);
-  background: var(--settings-surface-muted);
-  color: var(--icon-strong-base);
-  box-shadow: none;
 }
 
 .models-row-action {
@@ -68,6 +63,7 @@
   min-height: var(--models-control-height);
   height: var(--models-control-height);
   padding: 0 var(--models-gap-2);
+  border: 0;
   border-radius: var(--settings-radius-control);
   font-size: 12px;
   box-shadow: none;
@@ -75,11 +71,8 @@
 }
 
 .settings-dialog .settings-models-panel [data-component="button"].models-primary-action[data-variant="primary"] {
-  border-color: transparent;
   background: var(--settings-primary);
   color: var(--settings-on-primary);
-  box-shadow: none;
-  text-shadow: none;
 }
 
 .settings-dialog
@@ -88,12 +81,10 @@
 .settings-dialog
   .settings-models-panel
   [data-component="button"].models-primary-action[data-variant="primary"]:focus:not(:disabled) {
-  border-color: transparent;
   background: var(--settings-primary-hover);
 }
 
 .settings-dialog .settings-models-panel [data-component="button"].models-secondary-action[data-variant="secondary"] {
-  border-color: transparent;
   background: transparent;
   color: var(--text-base);
 }
@@ -112,11 +103,18 @@
   outline-color: var(--border-focus);
 }
 
+/* Routing sits inside the access surface instead of becoming a second card.
+   On wide panels its explanation remains beside the instant segmented choice. */
 .models-routing {
   min-width: 0;
-  padding: var(--models-gap-1);
-  border-radius: var(--settings-radius-card);
-  background: var(--settings-surface);
+  display: grid;
+  grid-template-columns: minmax(330px, 0.9fr) minmax(220px, 1.1fr);
+  align-items: center;
+  gap: var(--models-gap-3);
+  padding: 6px var(--models-gap-3) 8px;
+  border: 0;
+  border-radius: var(--settings-radius-control);
+  background: transparent;
   box-shadow: none;
 }
 
@@ -175,17 +173,21 @@
 }
 
 .models-routing__description {
-  min-height: 28px;
+  min-width: 0;
   margin: 0;
-  padding: 6px var(--models-gap-2) 2px;
   color: var(--text-weak);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 11px;
+  line-height: 16px;
   text-wrap: pretty;
 }
 
 .models-routing__sync {
   color: var(--text-weaker);
+}
+
+.models-inference > .settings-inline-note {
+  margin: 0;
+  padding: 0 var(--models-gap-3) 8px;
 }
 
 .models-connection-row,
@@ -210,12 +212,16 @@
   font-weight: var(--font-weight-regular);
 }
 
+/* Provider credentials are one group: the add form and connected rows share
+   an outer surface, while the controls retain their own quiet input fill. */
 .models-provider-key-form {
   display: grid !important;
-  grid-template-columns: minmax(160px, 0.65fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(170px, 0.65fr) minmax(220px, 1fr) auto;
   align-items: end;
   gap: var(--models-gap-2) !important;
-  padding: var(--models-gap-3) !important;
+  padding: 10px var(--models-gap-3) !important;
+  border: 0;
+  background: transparent;
 }
 
 .models-key-field {
@@ -240,7 +246,8 @@
   transform: translateY(-50%);
 }
 
-.settings-dialog .settings-models-panel .models-provider-select [data-slot="select-select-trigger"] {
+.settings-dialog .settings-models-panel .models-provider-select [data-slot="select-select-trigger"],
+.settings-dialog .settings-models-panel .models-key-input {
   width: 100%;
   min-width: 0;
   min-height: var(--models-control-height);
@@ -252,29 +259,23 @@
   box-shadow: none;
 }
 
+.settings-dialog .settings-models-panel .models-key-input {
+  padding-inline: 10px;
+}
+
 .settings-dialog
   .settings-models-panel
   .models-provider-select
   [data-slot="select-select-trigger"]:hover:not(:disabled),
-.settings-dialog .settings-models-panel .models-provider-select [data-slot="select-select-trigger"][data-expanded] {
-  border-color: var(--border-base);
-  background: var(--settings-surface-muted);
-  box-shadow: none;
-}
-
-.settings-dialog .settings-models-panel .models-key-input {
-  min-height: var(--models-control-height);
-  height: var(--models-control-height);
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: var(--settings-radius-control);
-  background: var(--settings-surface-muted);
-  box-shadow: none;
-}
-
+.settings-dialog .settings-models-panel .models-provider-select [data-slot="select-select-trigger"][data-expanded],
 .settings-dialog .settings-models-panel .models-key-input:focus {
+  border-color: transparent;
+  background: var(--settings-surface-hover);
+  box-shadow: none;
+}
+
+.settings-dialog .settings-models-panel .models-key-input:focus-visible {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 2px var(--surface-focus);
 }
 
 .settings-dialog .settings-models-panel .models-save-key {
@@ -309,13 +310,25 @@
 }
 
 .models-provider-note {
-  max-width: min(100%, 260px);
+  max-width: min(100%, 280px);
   margin-left: auto;
   overflow-wrap: anywhere;
   text-align: right;
 }
 
+.models-provider-empty,
+.models-catalog-empty {
+  margin: 0;
+  padding: 14px var(--models-gap-3);
+  color: var(--text-weak);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  text-wrap: pretty;
+}
+
 .settings-dialog .settings-models-panel .settings-provider-logo {
+  border: 0;
   border-radius: var(--settings-radius-control);
   background: var(--settings-surface-muted);
   color: var(--text-strong);
@@ -326,12 +339,27 @@
   border-radius: calc(var(--settings-radius-control) - 2px);
 }
 
+.models-default-controls {
+  display: grid;
+  width: min(440px, 100%);
+  min-width: 0;
+  grid-template-columns: minmax(190px, 1fr) minmax(120px, 0.58fr);
+  gap: var(--models-gap-1);
+}
+
+.models-default-controls > [data-component="select"]:only-child {
+  grid-column: 1 / -1;
+}
+
 .settings-dialog .settings-models-panel .settings-defaults-card [data-slot="select-select-trigger"] {
-  min-width: 180px;
+  width: 100%;
+  min-width: 0;
   min-height: var(--models-control-height);
   height: var(--models-control-height);
+  border: 0;
   border-radius: var(--settings-radius-control);
   background: transparent;
+  box-shadow: none;
 }
 
 .settings-dialog
@@ -347,7 +375,7 @@
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: var(--models-gap-2, 8px);
+  gap: var(--models-gap-2);
 }
 
 .models-default-option__provider {
@@ -359,16 +387,88 @@
   white-space: nowrap;
 }
 
-.settings-dialog .settings-models-panel .settings-list-header {
-  min-height: 32px;
-  padding: 0 var(--models-gap-3);
+.models-default-route-select[data-component="select-content"] {
+  min-width: 220px;
+}
+
+/* Catalog controls share one line when space allows, cutting visual height
+   without shrinking any hit target. */
+.models-catalog-summary,
+.models-catalog-toolbar,
+.models-filter-group {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.models-catalog-summary {
+  justify-content: space-between;
+  gap: var(--models-gap-3);
+}
+
+.models-pin-count {
+  min-height: 24px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 0 var(--models-gap-2);
+  border: 0;
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-surface-muted);
+  color: var(--text-weak);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.models-catalog-toolbar {
+  flex-wrap: wrap;
+  gap: var(--models-gap-2);
+}
+
+.settings-dialog .settings-models-panel .models-catalog-toolbar .settings-control--search {
+  min-width: min(300px, 100%);
+  flex: 1 1 300px;
+  border: 0;
+  background: var(--settings-surface-muted);
+}
+
+.models-filter-group {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
   border-radius: var(--settings-radius-control);
   background: var(--settings-surface-muted);
 }
 
+.settings-dialog .settings-models-panel .settings-filter-pill {
+  min-height: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--settings-radius-control) - 2px);
+  background: transparent;
+}
+
+.settings-dialog .settings-models-panel .settings-filter-pill:hover,
+.settings-dialog .settings-models-panel .settings-filter-pill[aria-pressed="true"] {
+  background: var(--settings-surface-hover);
+}
+
+.settings-dialog .settings-models-panel .settings-list-header {
+  min-height: 30px;
+  padding: 0 var(--models-gap-3);
+  border: 0;
+  border-radius: var(--settings-radius-control);
+  background: transparent;
+}
+
 .settings-dialog .settings-models-panel .settings-model-row {
-  min-height: 52px;
+  min-height: 50px;
   padding-block: 6px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 50px;
 }
 
 .settings-dialog .settings-models-panel .settings-icon-action {
@@ -376,64 +476,17 @@
   min-width: var(--models-control-height);
   height: var(--models-control-height);
   padding: 0;
-  border-radius: var(--settings-radius-control);
-}
-
-.settings-dialog .settings-models-panel .settings-filter-pill {
-  min-height: var(--models-control-height);
-  height: var(--models-control-height);
-  padding: 0 9px;
-  border-radius: var(--settings-radius-control);
-}
-
-.settings-dialog .settings-models-panel .settings-filter-pill[aria-pressed="true"] {
-  background: var(--settings-surface-hover);
-}
-
-.settings-dialog .settings-models-panel [data-component="switch"] {
-  min-height: var(--models-control-height);
-}
-
-.settings-dialog .settings-models-panel [data-component="switch"] [data-slot="switch-control"] {
-  box-sizing: border-box;
-  width: 30px;
-  height: 18px;
-  padding: 1px;
-  border: 1px solid var(--border-weak-base);
-  border-radius: 999px;
-  background: var(--settings-surface-muted);
-}
-
-.settings-dialog .settings-models-panel [data-component="switch"] [data-slot="switch-thumb"] {
-  box-sizing: border-box;
-  width: 14px;
-  height: 14px;
-  margin: 0;
   border: 0;
-  border-radius: 50%;
-  background: var(--icon-invert-base);
-  transform: translateX(0);
-}
-
-.settings-dialog .settings-models-panel [data-component="switch"][data-checked] [data-slot="switch-control"],
-.settings-dialog
-  .settings-models-panel
-  [data-component="switch"][data-checked]:hover:not([data-disabled], [data-readonly])
-  [data-slot="switch-control"] {
-  border-color: var(--settings-toggle-active);
-  background: var(--settings-toggle-active);
-}
-
-.settings-dialog .settings-models-panel [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
-  border: 0;
-  transform: translateX(12px);
+  border-radius: var(--settings-radius-control);
 }
 
 .models-provider-options[data-component="select-content"] {
   min-width: 240px;
+  border: 1px solid var(--border-weak-base);
   border-radius: var(--radius-md);
   background: var(--surface-raised-stronger-non-alpha);
-  box-shadow: var(--shadow-lg);
+  background-clip: padding-box;
+  box-shadow: var(--shadow-md);
 }
 
 .models-provider-options[data-component="select-content"] [data-slot="select-select-content-list"] {
@@ -464,11 +517,6 @@
   box-shadow: none;
 }
 
-.settings-dialog .settings-models-panel .settings-model-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 56px;
-}
-
 .models-catalog-progress {
   min-height: 36px;
   margin: 0;
@@ -479,9 +527,14 @@
   text-align: center;
 }
 
-@container settings-main (max-width: 680px) {
+@container settings-main (max-width: 700px) {
+  .models-routing {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
   .models-provider-key-form {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
   }
 
   .settings-dialog .settings-models-panel .models-save-key {
@@ -490,45 +543,74 @@
   }
 }
 
-@container settings-main (max-width: 500px) {
-  .models-routing__options,
+@container settings-main (max-width: 520px) {
   .models-provider-key-form {
     grid-template-columns: 1fr;
   }
 
-  .settings-dialog .settings-models-panel .models-routing__option {
-    justify-content: flex-start;
-  }
-
-  .models-routing__option-label {
-    justify-content: start;
-  }
-
   .models-connection-row,
-  .models-provider-row {
+  .models-provider-row,
+  .settings-defaults-card > .settings-row {
     align-items: flex-start;
   }
 
   .models-connection-actions,
   .models-row-action,
-  .models-provider-note {
-    margin-left: 40px;
+  .models-provider-note,
+  .settings-defaults-card > .settings-row > :last-child {
+    width: 100%;
+    margin-left: 0;
+    padding-left: 0;
+    text-align: left;
   }
 
   .models-provider-note {
-    max-width: calc(100% - 40px);
-    text-align: left;
+    max-width: 100%;
   }
 
   .settings-dialog .settings-models-panel .models-save-key {
     grid-column: auto;
     justify-self: stretch;
   }
+
+  .settings-dialog .settings-models-panel .settings-defaults-card [data-slot="select-select-trigger"] {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .models-default-controls {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .models-catalog-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-dialog .settings-models-panel .models-catalog-toolbar .settings-control--search {
+    min-width: 0;
+    flex-basis: auto;
+  }
+
+  .models-filter-group {
+    width: 100%;
+  }
+
+  .settings-dialog .settings-models-panel .settings-filter-pill {
+    flex: 1 1 auto;
+  }
 }
 
 @media (pointer: coarse) {
-  .settings-dialog .settings-models-panel :where(button, [role="button"], [data-component="switch"]),
+  .settings-dialog .settings-models-panel :where(button, [role="button"]),
   .settings-dialog .settings-models-panel :where(input, [data-slot="select-select-trigger"]) {
     min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-dialog .settings-models-panel .models-routing__option {
+    transition: none;
   }
 }

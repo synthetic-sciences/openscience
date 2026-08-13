@@ -73,7 +73,17 @@ describe("kernel status row", () => {
 
   test("keeps queued work visible without filling the row with recovery prose", () => {
     expect(subject.kernelActivity(kernel({ queue_depth: 2 }))).toBe("Running · 7 runs · 2 queued")
-    expect(subject.kernelActivity(kernel({ state: "idle", execution_count: 1 }))).toBe("Ready · 1 run")
+    expect(subject.kernelActivity(kernel({ state: "idle", execution_count: 1 }))).toBe("Warm for follow-up · 1 run")
+
+    const host = mount(() =>
+      subject.KernelCard({
+        kernel: kernel({ state: "idle", execution_count: 1 }),
+        action: "",
+        onControl: () => {},
+      }),
+    )
+    expect(host.querySelector(".activity-card__status")?.textContent).toBe("Ready")
+    expect(host.querySelector(".kernel-card__copy > span")?.textContent).toBe("Warm for follow-up · 1 run")
   })
 
   test("keeps restart and stop available without exposing creation, interrupt, or forget", () => {

@@ -32,7 +32,7 @@ const selected = (options: Array<{ id: string; label: string }>, value?: string)
 export function effortOption(id: string) {
   return {
     id,
-    label: id === "standard" ? "Auto" : label(id),
+    label: id === "standard" ? "Standard" : label(id),
   }
 }
 

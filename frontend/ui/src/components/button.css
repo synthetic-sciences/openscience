@@ -23,7 +23,7 @@
 
   &[data-variant="primary"] {
     background-color: var(--button-primary-base);
-    border-color: var(--border-weak-base);
+    border-color: transparent;
     color: var(--icon-invert-base);
 
     [data-slot="icon-svg"] {
@@ -35,6 +35,9 @@
     }
     &:focus:not(:disabled) {
       background-color: var(--icon-strong-focus);
+    }
+    &:focus-visible:not(:active) {
+      box-shadow: var(--shadow-xs-border-focus);
     }
     &:active:not(:disabled) {
       background-color: var(--icon-strong-active);
@@ -62,6 +65,7 @@
     }
     &:focus-visible:not(:disabled) {
       background-color: var(--surface-raised-base-hover);
+      box-shadow: var(--shadow-xs-border-focus);
     }
     &:active:not(:disabled) {
       background-color: var(--surface-raised-base-active);
@@ -86,7 +90,7 @@
     border: transparent;
     background-color: var(--button-secondary-base);
     color: var(--text-strong);
-    box-shadow: var(--shadow-xs-border);
+    box-shadow: none;
 
     &:hover:not(:disabled) {
       background-color: var(--button-secondary-hover);

@@ -110,11 +110,12 @@ export namespace SessionRetry {
   // Flatten any provider error — HTTP responseBody or in-stream error chunk —
   // into one canonical { statusCode, code, message } so a single classifier
   // runs over every provider's differing JSON shape.
-  function normalizeOverflow(error: ReturnType<NamedError["toObject"]>) {
+  function normalizeProviderError(error: ReturnType<NamedError["toObject"]>) {
     const isApi = MessageV2.APIError.isInstance(error)
-    const statusCode = isApi ? error.data.statusCode : undefined
+    let statusCode = isApi ? error.data.statusCode : undefined
     const raw = asString(error.data?.message)
     let code = ""
+    let type = ""
     let message = raw
     for (const source of [isApi ? error.data.responseBody : undefined, raw]) {
       if (!source) continue
@@ -127,23 +128,26 @@ export namespace SessionRetry {
       })
       if (!json || typeof json !== "object") continue
       const err = json.error && typeof json.error === "object" ? json.error : json
-      code = asString(err.code) || asString(err.type) || asString(json.code) || asString(json.type) || code
+      const nestedStatus = Number(err.statusCode ?? err.status_code ?? json.statusCode ?? json.status_code)
+      if (!statusCode && Number.isFinite(nestedStatus)) statusCode = nestedStatus
+      code = asString(err.code) || asString(json.code) || code
+      type = asString(err.type) || asString(json.type) || type
       message = asString(err.message) || asString(json.message) || message
       break
     }
-    return { statusCode, code, message }
+    return { statusCode, code, type, message }
   }
 
   // True when an error means the request exceeded the model's context window.
   // Deterministic: retrying the same input can only fail again, so the caller
   // should compact + resume rather than retry.
   export function isContextOverflow(error: ReturnType<NamedError["toObject"]>): boolean {
-    const { statusCode, code, message } = normalizeOverflow(error)
+    const { statusCode, code, type, message } = normalizeProviderError(error)
     // A context-window rejection is always a client error (400/413). A 5xx is a
     // genuine server fault, and 429 is a rate limit — both retryable, not overflow.
     if (statusCode && statusCode >= 500) return false
     if (statusCode === 429) return false
-    if (OVERFLOW_CODES.has(code)) return true
+    if (OVERFLOW_CODES.has(code) || OVERFLOW_CODES.has(type)) return true
     const lower = message.toLowerCase()
     // Catches transient failures with no statusCode (streamed error chunks) whose
     // text would otherwise match an overflow pattern — keep them retryable.
@@ -157,40 +161,35 @@ export namespace SessionRetry {
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
     }
 
-    const json = iife(() => {
-      try {
-        if (typeof error.data?.message === "string") {
-          const parsed = JSON.parse(error.data.message)
-          return parsed
-        }
+    const { statusCode, code, type, message } = normalizeProviderError(error)
+    const signal = `${code} ${type} ${message}`.toLowerCase()
 
-        return JSON.parse(error.data.message)
-      } catch {
-        return undefined
-      }
-    })
-    try {
-      if (!json || typeof json !== "object") return undefined
-      const code = typeof json.code === "string" ? json.code : ""
-
-      if (json.type === "error" && json.error?.type === "too_many_requests") {
-        return "Too Many Requests"
-      }
-      if (code.includes("exhausted") || code.includes("unavailable")) {
-        return "Provider is overloaded"
-      }
-      if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
-        return "Rate Limited"
-      }
-      if (
-        json.error?.message?.includes("no_kv_space") ||
-        (json.type === "error" && json.error?.type === "server_error") ||
-        !!json.error
-      ) {
-        return "Provider Server Error"
-      }
-    } catch {
-      return undefined
+    // Status-less provider stream errors arrive wrapped as UnknownError. Retry
+    // only positive transient signals: the mere presence of an `error` object
+    // is not evidence of a server failure. Deterministic policy, auth, missing
+    // model and invalid-parameter errors must terminate on their first attempt.
+    if (statusCode === 429 || type === "too_many_requests" || signal.includes("too many requests")) {
+      return "Too Many Requests"
     }
+    if (signal.includes("rate_limit") || signal.includes("rate limit")) return "Rate Limited"
+    if (
+      signal.includes("resource_exhausted") ||
+      signal.includes("resource exhausted") ||
+      signal.includes("unavailable") ||
+      signal.includes("overloaded")
+    ) {
+      return "Provider is overloaded"
+    }
+    if (
+      (statusCode !== undefined && statusCode >= 500) ||
+      type === "server_error" ||
+      type === "internal_error" ||
+      code === "server_error" ||
+      code === "internal_error" ||
+      signal.includes("no_kv_space")
+    ) {
+      return "Provider Server Error"
+    }
+    return undefined
   }
 }

@@ -121,13 +121,24 @@ export const RuntimeRoutes = lazy(() =>
           parts: [{ type: "text", text: input.message }],
         })
           .then((message) =>
-            RuntimeEvents.finish({
-              sessionID: input.sessionID,
-              runID,
-              messageID: message.info.id,
-            }),
+            message.info.role === "assistant" && message.info.error
+              ? RuntimeEvents.fail({
+                  sessionID: input.sessionID,
+                  runID,
+                  messageID: message.info.id,
+                  error: message.info.error,
+                })
+              : RuntimeEvents.finish({
+                  sessionID: input.sessionID,
+                  runID,
+                  messageID: message.info.id,
+                }),
           )
           .catch(async (error) => {
+            // A source-provenanced POST /abort writes runtime.cancelled first.
+            // The prompt then settles with MessageAbortedError; do not replace
+            // that authoritative cancellation with a generic runtime failure.
+            if (error instanceof RuntimeEvents.ActiveRunError) return
             await RuntimeEvents.fail({ sessionID: input.sessionID, runID, error }).catch((journalError) => {
               log.error("failed to record terminal runtime event", { sessionID: input.sessionID, runID, journalError })
             })

@@ -48,13 +48,17 @@ describe("reviewer workflow truth pass", () => {
     expect(model).toContain('"open" | "addressed" | "confirmed"')
   })
 
-  test("review stays an on-demand Research capability, not a separate settings mode", () => {
+  test("stored Result previews defer review and provenance controls", () => {
     const registry = read("components/settings/registry.ts")
     const stored = read("artifacts/StoredArtifactView.tsx")
 
     expect(registry).not.toContain('title: "Specialists"')
     expect(registry).not.toContain('title: "Reviewer"')
-    expect(stored).toContain("Run independent review")
+    expect(stored).not.toContain("Run independent review")
+    expect(stored).not.toContain("/review/artifact")
+    expect(stored).not.toContain("Versions")
+    expect(stored).not.toContain("How made")
+    expect(stored).not.toContain("Review")
     expect(stored).not.toContain("Automatically review")
     expect(stored).not.toContain("Reviewer model")
   })

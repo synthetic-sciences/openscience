@@ -38,7 +38,8 @@
   box-shadow: var(--atlas-shadow-float);
 }
 
-.session-right-pane[data-expanded="true"] {
+.session-right-pane[data-expanded="true"],
+.session-right-pane[data-overlay="true"][data-mobile="true"] {
   border-left: 0;
 }
 

@@ -1096,14 +1096,31 @@ export namespace Config {
                 .number()
                 .int()
                 .positive()
+                .max(2_147_483_647)
                 .describe(
-                  "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+                  "Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default; active long-running generations are allowed to finish.",
                 ),
-              z.literal(false).describe("Disable timeout for this provider entirely."),
+              z.literal(false).describe("Explicitly disable the optional total wall-clock timeout."),
             ])
             .optional()
             .describe(
-              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+              "Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. Use idleTimeout to bound silent connections without cutting off active generations.",
+            ),
+          idleTimeout: z
+            .union([
+              z
+                .number()
+                .int()
+                .positive()
+                .max(2_147_483_647)
+                .describe(
+                  "Maximum provider inactivity in milliseconds while connecting or waiting for the next response-body chunk. Defaults to 300000 (5 minutes) and resets on every body chunk.",
+                ),
+              z.literal(false).describe("Disable the provider inactivity watchdog."),
+            ])
+            .optional()
+            .describe(
+              "Maximum provider inactivity in milliseconds while connecting or waiting for the next response-body chunk. Defaults to 300000 (5 minutes), resets on each body chunk, and does not cap total generation time.",
             ),
         })
         .catchall(z.any())

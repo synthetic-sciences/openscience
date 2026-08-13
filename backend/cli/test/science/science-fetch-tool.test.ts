@@ -4,10 +4,12 @@ import os from "os"
 import path from "path"
 import { ScienceFetchTool, ScienceListDbsTool } from "../../src/tool/science"
 import { Instance } from "../../src/project/instance"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import { clearCache, resetRateLimits } from "../../src/science/connectors/http"
+import { executionSession } from "../fixture/fixture"
 
-const ctx = {
-  sessionID: "test",
+const ctx = (sessionID: string) => ({
+  sessionID,
   messageID: "",
   callID: "",
   agent: "research",
@@ -15,10 +17,11 @@ const ctx = {
   messages: [],
   metadata: () => {},
   ask: async () => {},
-}
+})
 
 const realFetch = globalThis.fetch
 let dir = ""
+let workspace = ""
 
 function stub(body: string, status = 200, headers?: Record<string, string>) {
   globalThis.fetch = (async () => new Response(body, { status, headers })) as unknown as typeof fetch
@@ -39,8 +42,10 @@ async function run(args: { db: string; id: string; format?: string }) {
   return Instance.provide({
     directory: dir,
     fn: async () => {
+      const session = await executionSession()
+      workspace = await SessionFilesystem.workspace(session.id)
       const tool = await ScienceFetchTool.init()
-      return tool.execute(args, ctx)
+      return tool.execute(args, ctx(session.id))
     },
   })
 }
@@ -51,17 +56,18 @@ describe("science_fetch record path", () => {
     const out = await run({ db: "chembl", id: "CHEMBL25" })
     expect(out.output).toContain("ASPIRIN")
     expect(out.metadata.disposition).toBe("inline")
-    await expect(fs.stat(path.join(dir, ".openscience/fetch"))).rejects.toThrow()
+    await expect(fs.stat(path.join(workspace, ".openscience/fetch"))).rejects.toThrow()
   })
 
   test("a record over the cap spills to disk and reports the path", async () => {
     stub(JSON.stringify({ blob: "x".repeat(80_000) }))
     const out = await run({ db: "chembl", id: "CHEMBL25" })
     expect(out.metadata.disposition).toBe("spill")
-    expect(out.metadata.path).toBe(".openscience/fetch/chembl/CHEMBL25.json")
-    const written = await fs.readFile(path.join(dir, ".openscience/fetch/chembl/CHEMBL25.json"), "utf8")
+    expect(out.metadata.path).toBe("science-chembl-CHEMBL25.json")
+    const written = await fs.readFile(path.join(workspace, "science-chembl-CHEMBL25.json"), "utf8")
     expect(written.length).toBeGreaterThan(80_000)
-    expect(out.output).toContain(".openscience/fetch/chembl/CHEMBL25.json")
+    expect(out.output).toContain("science-chembl-CHEMBL25.json")
+    await expect(fs.stat(path.join(dir, ".openscience/fetch"))).rejects.toThrow()
   })
 
   test("output is never double-truncated", async () => {
@@ -108,8 +114,8 @@ describe("science_fetch format path", () => {
     stub("data_6LU7\nloop_\n")
     const out = await run({ db: "rcsb-pdb", id: "6LU7", format: "cif" })
     expect(out.metadata.disposition).toBe("spill")
-    expect(out.metadata.path).toBe(".openscience/fetch/rcsb-pdb/6LU7.cif")
-    const written = await fs.readFile(path.join(dir, ".openscience/fetch/rcsb-pdb/6LU7.cif"), "utf8")
+    expect(out.metadata.path).toBe("science-rcsb-pdb-6LU7.cif")
+    const written = await fs.readFile(path.join(workspace, "science-rcsb-pdb-6LU7.cif"), "utf8")
     expect(written).toBe("data_6LU7\nloop_\n")
   })
 })
@@ -118,7 +124,7 @@ describe("science_list_dbs reports formats", () => {
   test("a records-only connector shows no formats suffix", async () => {
     const out = await Instance.provide({
       directory: dir,
-      fn: async () => (await ScienceListDbsTool.init()).execute({ domain: "chemistry" }, ctx),
+      fn: async () => (await ScienceListDbsTool.init()).execute({ domain: "chemistry" }, ctx("test")),
     })
     const row = out.output.split("\n").find((l) => l.includes("chembl"))
     expect(row).toBeDefined()

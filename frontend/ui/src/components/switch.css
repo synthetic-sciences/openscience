@@ -1,6 +1,9 @@
 [data-component="switch"] {
+  --switch-active-color: var(--icon-strong-base);
+
   position: relative;
   display: flex;
+  min-width: 32px;
   min-height: 32px;
   align-items: center;
   gap: 8px;
@@ -21,36 +24,31 @@
   [data-slot="switch-control"] {
     display: inline-flex;
     align-items: center;
-    width: 28px;
-    height: 16px;
+    box-sizing: border-box;
+    width: 30px;
+    height: 18px;
+    padding: 1px;
     flex-shrink: 0;
-    border-radius: var(--radius-xs);
     border: 1px solid var(--border-weak-base);
+    border-radius: 50%;
     background: var(--surface-base);
     transition:
-      background-color 150ms,
-      border-color 150ms;
+      background-color 150ms ease,
+      border-color 150ms ease;
   }
 
   [data-slot="switch-thumb"] {
+    box-sizing: border-box;
     width: 14px;
     height: 14px;
-    box-sizing: content-box;
-
-    border-radius: var(--radius-xs);
-    border: 1px solid var(--border-base);
+    border: 0;
+    border-radius: 50%;
     background: var(--icon-invert-base);
-
-    /* shadows/shadow-xs */
-    box-shadow:
-      0 1px 2px -1px rgba(19, 16, 16, 0.04),
-      0 1px 2px 0 rgba(19, 16, 16, 0.06),
-      0 1px 3px 0 rgba(19, 16, 16, 0.08);
-
-    transform: translateX(-1px);
+    box-shadow: var(--shadow-xs);
+    transform: translateX(0);
     transition:
-      transform 150ms,
-      background-color 150ms;
+      transform 150ms ease,
+      background-color 150ms ease;
   }
 
   [data-slot="switch-label"] {
@@ -93,20 +91,18 @@
   }
 
   &[data-checked] [data-slot="switch-control"] {
-    box-sizing: border-box;
-    border-color: var(--icon-strong-base);
-    background-color: var(--icon-strong-base);
+    border-color: var(--switch-active-color);
+    background-color: var(--switch-active-color);
   }
 
   &[data-checked] [data-slot="switch-thumb"] {
-    border: none;
     transform: translateX(12px);
     background-color: var(--icon-invert-base);
   }
 
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    border-color: var(--border-hover);
-    background-color: var(--surface-hover);
+    border-color: var(--switch-active-color);
+    background-color: var(--switch-active-color);
   }
 
   &[data-disabled] {

@@ -10,17 +10,22 @@ test("keeps text preview loading state reactive", () => {
 test("refreshes an open artifact record after a new immutable version is saved", () => {
   expect(source).toContain('window.addEventListener("openscience:artifacts-changed", refresh)')
   expect(source).toContain("void detailActions.refetch()")
-  expect(source).toContain("setVersionID(detail.latest.currentVersionID)")
+  expect(source).toContain("const selected = createMemo(() => detail.latest?.current)")
 })
 
-test("does not overclaim immutable artifact review or provenance", () => {
-  expect(source).toContain("No reviewer verdict is recorded")
-  expect(source).toContain("Starting a review is not a pass")
-  expect(source).toContain("`/session/${encodeURIComponent(session)}/review/artifact`")
-  expect(source).toContain("body: JSON.stringify({ artifactID: props.artifact.id, versionID: version.id })")
-  expect(source).toContain("result?.target?.id !== storedArtifactReviewTargetID(version)")
-  expect(source).toContain("finding.target === target")
-  expect(source).toContain("OpenScience does not claim the originating command, model, or environment")
+test("keeps the saved artifact surface focused on preview while provenance UI is deferred", () => {
+  expect(source).toContain("<Preview")
+  expect(source).toContain("versionID: version.id")
+  expect(source).toContain("raw(version(), true)")
+  expect(source).not.toContain("Versions")
+  expect(source).not.toContain("How made")
+  expect(source).not.toContain("Review")
+  expect(source).not.toContain('aria-label="Result record"')
+  expect(source).not.toContain('aria-label="Immutable versions"')
+  expect(source).not.toContain('aria-label="Artifact provenance"')
+  expect(source).not.toContain('aria-label="Result review"')
+  expect(source).not.toContain('sdk.request("/provenance/reviews")')
+  expect(source).not.toContain("/review/artifact")
 })
 
 test("keeps rename and recoverable deletion in the stored artifact lifecycle", () => {
@@ -29,4 +34,19 @@ test("keeps rename and recoverable deletion in the stored artifact lifecycle", (
   expect(source).toContain("Recoverable from Files for 30 days")
   expect(source).toContain("uiStore.updateSaved(updated)")
   expect(source).toContain("uiStore.closeWorkTab(`saved:${props.artifact.id}`)")
+})
+
+test("uses the shared quiet boundary and control language", () => {
+  expect(source).toContain('import { Button } from "@synsci/ui/button"')
+  expect(source).toContain('import { IconButton } from "@synsci/ui/icon-button"')
+  expect(source).toContain('import { TextField } from "@synsci/ui/text-field"')
+  expect(source).toContain('data-variant="secondary"')
+  expect(source).toContain('"border-bottom": "1px solid var(--border-weak-base)"')
+  expect(source).toContain('background: "var(--surface-raised-base)"')
+  expect(source).toContain('"border-radius": "var(--radius-md)"')
+  expect(source).toContain('"border-radius": "var(--radius-sm)"')
+  expect(source).not.toContain("--color-border-subtle")
+  expect(source).not.toMatch(/"border-radius": "\d+px"/)
+  expect(source).not.toContain("const actionCard")
+  expect(source).not.toContain("const download")
 })

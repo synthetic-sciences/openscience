@@ -78,15 +78,36 @@ export function recentExecutions(runs: readonly ExecutionRecord[], limit = 12) {
     .slice(0, limit)
 }
 
+function isLegacyHistoryMiss(response: Response, detail: string) {
+  if (response.status !== 404) return false
+  try {
+    const body = JSON.parse(detail) as { error?: unknown }
+    return body.error === "Provenance node not found"
+  } catch {
+    return false
+  }
+}
+
 export function createExecutionHistoryAPI(request: RequestTransport) {
+  let available: boolean | undefined
   return {
     async list(sessionID: string) {
+      if (available === false) return []
       const query = new URLSearchParams({ sessionID })
       const response = await request(`/provenance/executions?${query.toString()}`, { cache: "no-store" })
       if (!response.ok) {
         const detail = await response.text().catch(() => "")
+        // Servers from before durable execution history route this literal
+        // path through `/provenance/:id`. Missing node `executions` means the
+        // optional history source does not exist in that server generation;
+        // live kernels and commands remain authoritative and usable.
+        if (isLegacyHistoryMiss(response, detail)) {
+          available = false
+          return []
+        }
         throw new Error(detail || `${response.status} ${response.statusText}`)
       }
+      available = true
       return response.json() as Promise<ExecutionRecord[]>
     },
   }

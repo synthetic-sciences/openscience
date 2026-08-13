@@ -47,11 +47,66 @@ describe("research activity card", () => {
     const host = mount(() => subject.ResearchActivityCard({ activity }))
     const card = host.querySelector<HTMLElement>(".research-activity-card")!
 
-    expect(card.querySelector(".activity-card__kind")?.textContent).toBe("Agent")
     expect(card.querySelector(".activity-card__identity strong")?.textContent).toBe("Exploration task")
-    expect(card.querySelector(".activity-card__status")?.textContent).toBe("Completed")
-    expect(card.querySelector(".activity-card__summary")?.textContent).toBe("4 actions completed · 800ms")
+    expect(card.querySelector(".activity-card__status")).toBeNull()
+    expect(card.querySelector(".activity-card__summary")?.textContent).toBe("Agent · 4 actions completed · 800ms")
     expect(card.querySelector("details")).toBeNull()
     expect(card.textContent).not.toContain("child:one")
+  })
+
+  test("turns a request URL into a readable endpoint without exposing its query payload", () => {
+    const url = "https://api.gdc.cancer.gov/files?filters=%7B%22op%22%3A%22and%22%7D"
+    const activity: ObservableResearchActivity = {
+      id: "source:one",
+      at: 1,
+      kind: "source",
+      label: url,
+      detail: "Web source · 1.3s",
+      status: "completed",
+    }
+    const host = mount(() => subject.ResearchActivityCard({ activity }))
+    const label = host.querySelector<HTMLElement>(".activity-card__identity strong")!
+
+    expect(label.textContent).toBe("api.gdc.cancer.gov / files")
+    expect(label.title).toBe(url)
+    expect(label.getAttribute("aria-label")).toBe("api.gdc.cancer.gov / files")
+    expect(label.getAttribute("aria-label")).not.toContain("filters")
+    expect(label.textContent).not.toContain("filters")
+    expect(subject.researchLabel("Scientific database search")).toBe("Scientific database search")
+  })
+
+  test("names a terminal error truthfully and keeps provided failure detail inspectable", () => {
+    const activity: ObservableResearchActivity = {
+      id: "search:failed",
+      at: 1,
+      kind: "search",
+      label: "Scientific database search",
+      detail: "Scientific search · request timed out · 2.1s",
+      status: "error",
+    }
+    const host = mount(() => subject.ResearchActivityCard({ activity }))
+    const disclosure = host.querySelector<HTMLDetailsElement>(".research-activity-card__failure")
+
+    expect(host.querySelector(".activity-card__status")?.textContent).toBe("Failed")
+    expect(host.textContent).not.toContain("Needs attention")
+    expect(host.querySelector(".activity-card__summary")?.textContent).toBe("Search")
+    expect(disclosure?.open).toBe(false)
+    expect(disclosure?.querySelector("summary")?.textContent).toBe("Failure details")
+    expect(disclosure?.querySelector(".activity-disclosure__note")?.textContent).toBe(activity.detail)
+  })
+
+  test("shows bounded child work as partial rather than complete", () => {
+    const activity: ObservableResearchActivity = {
+      id: "child:partial",
+      at: 1,
+      kind: "agent",
+      label: "Execution task",
+      detail: "16 actions before the limit · 3m",
+      status: "partial",
+    }
+    const host = mount(() => subject.ResearchActivityCard({ activity }))
+
+    expect(host.querySelector(".activity-card__status")?.textContent).toBe("Partial")
+    expect(host.querySelector(".activity-card__summary")?.textContent).toBe("Agent · 16 actions before the limit · 3m")
   })
 })

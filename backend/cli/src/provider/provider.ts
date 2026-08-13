@@ -18,6 +18,7 @@ import { OpenScience } from "../openscience"
 import { isAtlasProxyURL, managedOpenRouterBaseURL } from "../openscience/synced-env-policy"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ProviderTokenCommand } from "./token-command"
+import { AsyncLocalStorage } from "node:async_hooks"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -45,6 +46,325 @@ import { ProviderTransform } from "./transform"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+  const MAX_TIMER_MS = 2_147_483_647
+  export const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60_000
+
+  export type RequestContext = {
+    sessionID: string
+    messageID: string
+    attempt: number
+  }
+
+  export type RequestTiming = RequestContext & {
+    requestID: string
+    providerID: string
+    modelID: string
+    idleTimeoutMs: number | false
+    startedAt: number
+    responseStartedAt?: number
+    firstBodyChunkAt?: number
+    lastBodyChunkAt?: number
+    completedAt: number
+    outcome: "completed" | "idle_timeout" | "timeout" | "aborted" | "cancelled" | "error"
+    timeoutPhase?: "connect" | "first_event" | "stream"
+    errorName?: string
+  }
+
+  export class IdleTimeoutError extends Error {
+    readonly phase: "connect" | "first_event" | "stream"
+    readonly idleTimeoutMs: number
+
+    constructor(phase: "connect" | "first_event" | "stream", idleTimeoutMs: number) {
+      const label =
+        phase === "connect"
+          ? "a response"
+          : phase === "first_event"
+            ? "the first response-body chunk"
+            : "the next response-body chunk"
+      super(
+        `Provider produced no activity for ${Math.ceil(idleTimeoutMs / 1000)} seconds while waiting for ${label}. ` +
+          "The request was cancelled; retry it or check the provider/network connection.",
+      )
+      this.name = "ProviderIdleTimeoutError"
+      this.phase = phase
+      this.idleTimeoutMs = idleTimeoutMs
+    }
+  }
+
+  const requestContext = new AsyncLocalStorage<RequestContext>()
+
+  export function withRequestContext<T>(context: RequestContext, run: () => T): T {
+    return requestContext.run(context, run)
+  }
+
+  /** Keep the request context active for every lazy `next()` call. AI SDK
+   * multi-step streams can start a later provider fetch only after a local
+   * tool result, long after `LLM.stream()` itself returned. */
+  export async function* withRequestContextIterable<T>(context: RequestContext, iterable: AsyncIterable<T>) {
+    const iterator = iterable[Symbol.asyncIterator]()
+    let completed = false
+    try {
+      while (true) {
+        const next = await requestContext.run(context, () => iterator.next())
+        if (next.done) {
+          completed = true
+          return
+        }
+        yield next.value
+      }
+    } finally {
+      if (!completed && iterator.return) {
+        await requestContext.run(context, () => iterator.return!())
+      }
+    }
+  }
+
+  export function resolveIdleTimeout(value: unknown): number | false {
+    if (value === false) return false
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      return Math.min(Math.floor(value), MAX_TIMER_MS)
+    }
+    return DEFAULT_IDLE_TIMEOUT_MS
+  }
+
+  export function isIdleTimeoutError(error: unknown): error is IdleTimeoutError {
+    const seen = new Set<unknown>()
+    const pending = [error]
+    while (pending.length) {
+      const current = pending.shift()
+      if (!current || seen.has(current)) continue
+      if (
+        current instanceof IdleTimeoutError ||
+        (typeof current === "object" &&
+          (current as { name?: unknown }).name === "ProviderIdleTimeoutError" &&
+          ["connect", "first_event", "stream"].includes(String((current as { phase?: unknown }).phase)) &&
+          typeof (current as { idleTimeoutMs?: unknown }).idleTimeoutMs === "number")
+      ) {
+        return true
+      }
+      seen.add(current)
+      if (typeof current !== "object") continue
+      pending.push((current as { cause?: unknown }).cause)
+      if (current instanceof AggregateError) pending.push(...current.errors)
+    }
+    return false
+  }
+
+  type FetchWithWatchdogOptions = {
+    providerID: string
+    modelID: string
+    idleTimeout?: unknown
+    totalTimeout?: unknown
+    onTiming?: (timing: RequestTiming) => void
+  }
+
+  function abortReason(signal: AbortSignal) {
+    return signal.reason ?? new DOMException("The request was aborted", "AbortError")
+  }
+
+  async function waitForActivity<T>(input: {
+    run: () => Promise<T>
+    phase: "connect" | "first_event" | "stream"
+    idleTimeoutMs: number | false
+    idleController: AbortController
+    signal: AbortSignal
+  }): Promise<T> {
+    if (input.signal.aborted) throw abortReason(input.signal)
+    const execution = Promise.resolve()
+      .then(input.run)
+      .then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      )
+    const interrupted = Promise.withResolvers<{ ok: false; error: unknown }>()
+    const onAbort = () => interrupted.resolve({ ok: false, error: abortReason(input.signal) })
+    input.signal.addEventListener("abort", onAbort, { once: true })
+    const timer =
+      input.idleTimeoutMs === false
+        ? undefined
+        : setTimeout(() => {
+            const error = new IdleTimeoutError(input.phase, input.idleTimeoutMs as number)
+            input.idleController.abort(error)
+            interrupted.resolve({ ok: false, error })
+          }, input.idleTimeoutMs)
+    try {
+      const result = await Promise.race([execution, interrupted.promise])
+      if (!result.ok) throw result.error
+      return result.value
+    } finally {
+      if (timer) clearTimeout(timer)
+      input.signal.removeEventListener("abort", onAbort)
+    }
+  }
+
+  function timingOutcome(error: unknown, signal: AbortSignal): RequestTiming["outcome"] {
+    if (isIdleTimeoutError(error)) return "idle_timeout"
+    if (signal.aborted) {
+      const reason = abortReason(signal)
+      if (reason instanceof DOMException && reason.name === "TimeoutError") return "timeout"
+      return "aborted"
+    }
+    return "error"
+  }
+
+  function copyResponse(response: Response, body: ReadableStream<Uint8Array>) {
+    const monitored = new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    })
+    for (const property of ["url", "redirected", "type"] as const) {
+      Object.defineProperty(monitored, property, { configurable: true, value: response[property] })
+    }
+    return monitored
+  }
+
+  /** Apply a hard inactivity limit to connection and response-body reads. The
+   * timer resets on every network chunk, so a long active generation is never
+   * cut off. Explicit provider `timeout` remains a separate total-request cap. */
+  export async function fetchWithIdleWatchdog(
+    fetchFn: (input: any, init?: BunFetchRequestInit) => Promise<Response>,
+    fetchInput: any,
+    init: BunFetchRequestInit | undefined,
+    options: FetchWithWatchdogOptions,
+  ): Promise<Response> {
+    const context = requestContext.getStore() ?? { sessionID: "unknown", messageID: "unknown", attempt: 0 }
+    const idleTimeoutMs = resolveIdleTimeout(options.idleTimeout)
+    const idleController = new AbortController()
+    const signals = [init?.signal, idleController.signal].filter(Boolean) as AbortSignal[]
+    if (typeof options.totalTimeout === "number" && Number.isFinite(options.totalTimeout) && options.totalTimeout > 0) {
+      signals.push(AbortSignal.timeout(Math.min(Math.floor(options.totalTimeout), MAX_TIMER_MS)))
+    }
+    const signal = signals.length === 1 ? signals[0]! : AbortSignal.any(signals)
+    const timing: Omit<RequestTiming, "completedAt" | "outcome"> = {
+      ...context,
+      requestID: crypto.randomUUID(),
+      providerID: options.providerID,
+      modelID: options.modelID,
+      idleTimeoutMs,
+      startedAt: Date.now(),
+    }
+    let emitted = false
+    const emit = (outcome: RequestTiming["outcome"], error?: unknown, phase?: RequestTiming["timeoutPhase"]) => {
+      if (emitted) return
+      emitted = true
+      const completedAt = Date.now()
+      const item: RequestTiming = {
+        ...timing,
+        completedAt,
+        outcome,
+        ...(phase && { timeoutPhase: phase }),
+        ...(error instanceof Error && { errorName: error.name }),
+      }
+      log.info("request timing", {
+        ...item,
+        responseStartMs: item.responseStartedAt === undefined ? undefined : item.responseStartedAt - item.startedAt,
+        firstBodyChunkMs: item.firstBodyChunkAt === undefined ? undefined : item.firstBodyChunkAt - item.startedAt,
+        activeBodyMs:
+          item.firstBodyChunkAt === undefined || item.lastBodyChunkAt === undefined
+            ? undefined
+            : item.lastBodyChunkAt - item.firstBodyChunkAt,
+        totalMs: item.completedAt - item.startedAt,
+      })
+      try {
+        options.onTiming?.(item)
+      } catch (error) {
+        log.debug("request timing callback failed", { error: `${error}` })
+      }
+    }
+
+    let response: Response
+    try {
+      response = await waitForActivity({
+        run: () => {
+          const fetchInit = { ...(init ?? {}), signal }
+          // Bun's native fetch accepts this runtime option even though its
+          // current BunFetchRequestInit declaration omits it.
+          ;(fetchInit as BunFetchRequestInit & { timeout: false }).timeout = false
+          return fetchFn(fetchInput, fetchInit)
+        },
+        phase: "connect",
+        idleTimeoutMs,
+        idleController,
+        signal,
+      })
+      timing.responseStartedAt = Date.now()
+    } catch (error) {
+      emit(timingOutcome(error, signal), error, isIdleTimeoutError(error) ? error.phase : undefined)
+      throw error
+    }
+
+    // Response.error()/opaque responses use status 0, which the Response
+    // constructor forbids. They do not expose a consumable network body, so
+    // preserve the original object rather than attempting to wrap it.
+    if (!response.body || response.status === 0) {
+      emit("completed")
+      return response
+    }
+
+    const reader = response.body.getReader()
+    let closed = false
+    const release = () => {
+      if (closed) return
+      try {
+        reader.releaseLock()
+        closed = true
+      } catch {
+        // A read may still be pending when an abort-ignoring source is
+        // cancelled. Cleanup must never replace the real timeout/abort or
+        // create an unhandled rejection.
+      }
+    }
+    let cancelled = false
+    let readerCancelRequested = false
+    const cancelReader = (reason: unknown) => {
+      if (readerCancelRequested) return
+      readerCancelRequested = true
+      void reader
+        .cancel(reason)
+        .catch(() => {})
+        .finally(release)
+        .catch(() => {})
+      release()
+    }
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const phase = timing.firstBodyChunkAt === undefined ? "first_event" : "stream"
+        try {
+          const next = await waitForActivity({
+            run: () => reader.read(),
+            phase,
+            idleTimeoutMs,
+            idleController,
+            signal,
+          })
+          if (next.done) {
+            release()
+            emit("completed")
+            controller.close()
+            return
+          }
+          const now = Date.now()
+          timing.firstBodyChunkAt ??= now
+          timing.lastBodyChunkAt = now
+          controller.enqueue(next.value)
+        } catch (error) {
+          if (!cancelled) {
+            emit(timingOutcome(error, signal), error, isIdleTimeoutError(error) ? error.phase : undefined)
+            controller.error(error)
+          }
+          cancelReader(error)
+        }
+      },
+      cancel(reason) {
+        cancelled = true
+        emit("cancelled", reason)
+        idleController.abort(reason ?? new DOMException("The response body was cancelled", "AbortError"))
+        cancelReader(reason)
+      },
+    })
+    return copyResponse(response, body)
+  }
 
   // Models exposed by the ChatGPT / Codex OAuth transport. Keep the dot and
   // dash spellings because older models.dev snapshots normalized version dots
@@ -1854,21 +2174,14 @@ export namespace Provider {
 
       const customFetch = options["fetch"]
       const tokenCommand = options["tokenCommand"] as string | undefined
+      const idleTimeout = options["idleTimeout"]
+      delete options["idleTimeout"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-        // Preserve custom fetch if it exists, wrap it with timeout logic
+        // Preserve custom fetch if it exists, then add an activity watchdog.
+        // A configured `timeout` is still an opt-in total wall-clock cap.
         const fetchFn = customFetch ?? fetch
-        const opts = init ?? {}
-
-        if (options["timeout"] !== undefined && options["timeout"] !== null) {
-          const signals: AbortSignal[] = []
-          if (opts.signal) signals.push(opts.signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
-
-          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
-
-          opts.signal = combined
-        }
+        const opts = { ...(init ?? {}) }
 
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
@@ -1903,10 +2216,11 @@ export namespace Provider {
           opts.headers = headers
         }
 
-        return fetchFn(input, {
-          ...opts,
-          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-          timeout: false,
+        return fetchWithIdleWatchdog(fetchFn, input, opts, {
+          providerID: model.providerID,
+          modelID: model.id,
+          idleTimeout,
+          totalTimeout: options["timeout"],
         })
       }
 

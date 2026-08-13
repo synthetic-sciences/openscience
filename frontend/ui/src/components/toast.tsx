@@ -138,6 +138,7 @@ export function showToast(options: ToastOptions | string) {
           <Toast.Actions>
             {opts.actions!.map((action) => (
               <button
+                type="button"
                 data-slot="toast-action"
                 onClick={() => {
                   if (typeof action.onClick === "function") {

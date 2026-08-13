@@ -26,6 +26,15 @@ export type ObservableResearchActivity = {
   kind: "agent" | "search" | "source" | "shell"
   label: string
   detail: string
+  status: "pending" | "running" | "completed" | "partial" | "error"
+}
+
+export type ObservableKernelActivity = {
+  id: string
+  at: number
+  language: "Python" | "R"
+  label: string
+  detail: string
   status: "pending" | "running" | "completed" | "error"
 }
 
@@ -40,20 +49,27 @@ const childLabel = (value: string) => {
 const childDetail = (item: SessionTraceResponse["children"][number]) => {
   const actions = item.toolCalls
   const failed = item.failedToolCalls ?? 0
+  // The backend can report bounded child work as `partial`. Keep this
+  // compatibility cast until the generated SDK is refreshed from OpenAPI.
+  const status = item.status as ObservableResearchActivity["status"]
   const result =
-    item.status === "completed"
+    status === "completed"
       ? actions === undefined
         ? "Completed"
         : `${actions} ${actions === 1 ? "action" : "actions"} completed`
-      : item.status === "error"
-        ? failed > 0
-          ? `${failed} ${failed === 1 ? "action needs" : "actions need"} attention`
-          : "Task stopped before completing"
-        : item.status === "running"
-          ? actions === undefined
-            ? "Working"
-            : `${actions} ${actions === 1 ? "action" : "actions"} so far`
-          : "Waiting to start"
+      : status === "partial"
+        ? actions === undefined
+          ? "Partial result"
+          : `${actions} ${actions === 1 ? "action" : "actions"} before the limit`
+        : status === "error"
+          ? failed > 0
+            ? `${failed} ${failed === 1 ? "action needs" : "actions need"} attention`
+            : "Task stopped before completing"
+          : status === "running"
+            ? actions === undefined
+              ? "Working"
+              : `${actions} ${actions === 1 ? "action" : "actions"} so far`
+            : "Waiting to start"
   return [result, formatDuration(item.durationMs)].filter((value) => value !== "—").join(" · ")
 }
 
@@ -94,7 +110,7 @@ export function recentObservableResearch(trace: SessionTraceResponse, limit = 10
     kind: "agent",
     label: childLabel(item.agent),
     detail: childDetail(item),
-    status: item.status,
+    status: item.status as ObservableResearchActivity["status"],
   }))
 
   const searches: ObservableResearchActivity[] = trace.searches.map((item) => ({
@@ -127,7 +143,9 @@ export function recentObservableResearch(trace: SessionTraceResponse, limit = 10
     }))
 
   const shell: ObservableResearchActivity[] = trace.tools
-    .filter((item) => item.name === "bash")
+    // Live shell work is already represented by the authoritative command registry.
+    // Retain only finished trace activity here so the same process cannot appear twice.
+    .filter((item) => item.name === "bash" && (item.status === "completed" || item.status === "error"))
     .map((item) => ({
       id: `shell:${item.id}`,
       at: item.startedAt ?? trace.session.updatedAt,
@@ -138,6 +156,47 @@ export function recentObservableResearch(trace: SessionTraceResponse, limit = 10
     }))
 
   return [...children, ...searches, ...sources, ...shell].toSorted((a, b) => b.at - a.at).slice(0, Math.max(0, limit))
+}
+
+/**
+ * Display-only compatibility history for backends without durable execution
+ * records. It is deliberately sourced from the trace's canonical kernel
+ * collection, never generic tools, so this cannot invent provenance, files,
+ * or arbitrary activity. Any real execution history wins completely.
+ */
+export function fallbackObservableKernels(
+  trace: SessionTraceResponse,
+  durableExecutionCount: number,
+  limit = 12,
+): ObservableKernelActivity[] {
+  if (durableExecutionCount > 0) return []
+
+  const tools = new Map(trace.tools.map((item) => [item.id, item]))
+  return trace.kernels
+    .flatMap((item) => {
+      const normalized = item.language.trim().toLowerCase()
+      const language = normalized === "python" ? "Python" : normalized === "r" ? "R" : undefined
+      if (!language) return []
+      const tool = tools.get(item.toolID)
+      const action = tool?.title?.trim()
+      if (/^stopped\s/i.test(action ?? "")) return []
+      const status =
+        item.status === "pending" || item.status === "running" || item.status === "completed" || item.status === "error"
+          ? item.status
+          : "error"
+      return [
+        {
+          id: `trace-kernel:${item.toolID}`,
+          at: item.startedAt ?? trace.session.updatedAt,
+          language,
+          label: action || `${language} execution`,
+          detail: [`${language} runtime`, formatDuration(item.durationMs)].filter((value) => value !== "—").join(" · "),
+          status,
+        } satisfies ObservableKernelActivity,
+      ]
+    })
+    .toSorted((a, b) => b.at - a.at)
+    .slice(0, Math.max(0, limit))
 }
 
 export function formatDuration(value?: number) {

@@ -36,12 +36,20 @@ describe("pinned models", () => {
     })
   })
 
-  test("keeps the quick selector capped at three models", () => {
+  test("treats API and ChatGPT access as one pinned logical model", () => {
+    expect(togglePinned([model("gpt-5.6-sol", "openai")], model("gpt-5.6-sol", "openai-codex"))).toEqual({
+      models: [],
+      pinned: false,
+      limited: false,
+    })
+  })
+
+  test("deduplicates logical routes before applying the three-model cap", () => {
     const current = [model("claude-opus-4-8"), model("gpt-5-5", "openai"), model("gpt-5-5", "openai-codex")]
     expect(togglePinned(current, model("gemini-3-6-flash", "google"))).toEqual({
-      models: current,
-      pinned: false,
-      limited: true,
+      models: [model("claude-opus-4-8"), model("gpt-5-5", "openai"), model("gemini-3-6-flash", "google")],
+      pinned: true,
+      limited: false,
     })
   })
 })

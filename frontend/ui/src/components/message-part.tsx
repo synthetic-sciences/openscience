@@ -651,19 +651,27 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               />
             </Tooltip>
           </div>
-          <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
-            <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
-            <button
-              data-slot="user-message-expand"
-              type="button"
-              aria-label={expanded() ? i18n.t("ui.message.collapse") : i18n.t("ui.message.expand")}
-              onClick={(event) => {
-                event.stopPropagation()
-                toggleExpanded()
-              }}
+          <div data-slot="user-message-content">
+            <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
+              <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+            </div>
+            <Tooltip
+              value={expanded() ? i18n.t("ui.message.collapse") : i18n.t("ui.message.expand")}
+              placement="top"
+              gutter={8}
             >
-              <Icon name="chevron-down" size="small" />
-            </button>
+              <button
+                data-slot="user-message-expand"
+                type="button"
+                aria-label={expanded() ? i18n.t("ui.message.collapse") : i18n.t("ui.message.expand")}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  toggleExpanded()
+                }}
+              >
+                <Icon name="chevron-down" size="small" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </Show>
@@ -1022,8 +1030,8 @@ function SavedArtifactTool(props: ToolProps) {
       {...props}
       icon="archive"
       trigger={{
-        title: saved() ? "Saved Result" : props.title || "Result",
-        subtitle: saved() ? `${saved()!.title} · v${saved()!.version}` : undefined,
+        title: saved() ? "Saved to Results" : props.title || "Result",
+        subtitle: saved() ? getFilename(saved()!.path) : undefined,
       }}
     >
       <Show
@@ -1039,12 +1047,9 @@ function SavedArtifactTool(props: ToolProps) {
         {(artifact) => (
           <div data-component="saved-artifact-tool">
             <header>
-              <strong>{artifact().title}</strong>
-              <span>
-                {artifact().kind} · v{artifact().version}
-              </span>
+              <strong>{getFilename(artifact().path)}</strong>
+              <span>{artifact().kind}</span>
             </header>
-            <code>{artifact().path}</code>
             <Show when={artifact().preview?.kind === "image" ? artifact().preview?.data : undefined}>
               {(image) => (
                 <img data-slot="saved-artifact-preview" src={image()} alt={artifact().title} loading="lazy" />
@@ -1061,17 +1066,9 @@ function SavedArtifactTool(props: ToolProps) {
             </Show>
             <footer>
               <button type="button" onClick={open}>
-                Open beside chat
+                Open Result
               </button>
-              <span>{artifact().size.toLocaleString()} bytes</span>
-              <span>sha256 {artifact().sha256.slice(0, 12)}</span>
             </footer>
-            <Show when={props.output}>
-              <details>
-                <summary>Show save receipt</summary>
-                <pre>{stripAnsi(props.output ?? "")}</pre>
-              </details>
-            </Show>
           </div>
         )}
       </Show>

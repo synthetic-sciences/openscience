@@ -13,6 +13,7 @@ export type Reading = {
   cores: string
   cpuFill: number
   live: string
+  running: string
   kernels: string
 }
 
@@ -75,6 +76,7 @@ export function hostReading(capacity?: Partial<Capacity>): Reading {
     cores: cores === undefined ? "—" : `~${Number(load.toFixed(1))} of ${cores}`,
     cpuFill: cores === undefined ? 0 : ratio(load, cores),
     live: live === undefined ? "—" : String(live),
+    running: running === undefined ? "—" : String(running),
     kernels:
       live === undefined
         ? "kernel count unavailable"

@@ -9,7 +9,7 @@ import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
@@ -18,6 +18,7 @@ import { Question } from "@/question"
 import { OpenScience, InsufficientCreditsError } from "@/openscience"
 import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource, llmBillingMode } from "./billing-gate"
 import { SessionTraceStore } from "./trace-store"
+import type { NamedError } from "@synsci/util/error"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -70,8 +71,209 @@ export namespace SessionProcessor {
     return sharedPrefixLen(last[0], last[1]) >= prefix && sharedPrefixLen(last[1], last[2]) >= prefix
   }
 
+  /** Provider inactivity is already bounded and actionable. Retrying it at the
+   * same deadline would turn one five-minute failure into the original
+   * fifty-minute cascade. */
+  export function retryableProviderError(error: unknown, normalized: ReturnType<NamedError["toObject"]>) {
+    return Provider.isIdleTimeoutError(error) ? undefined : SessionRetry.retryable(normalized)
+  }
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
+
+  type ToolExecutionOutput = {
+    title: string
+    output: string
+    metadata?: Record<string, unknown>
+    attachments?: MessageV2.FilePart[]
+  }
+
+  type ToolMetadataUpdate = {
+    title?: string
+    metadata?: Record<string, unknown>
+  }
+
+  /**
+   * Correlate the AI SDK's stream events with the actual execute promise.
+   *
+   * A provider may omit `tool-result`, and a fast execute promise may settle
+   * before its `tool-call` stream event is observed. Keeping these two channels
+   * in one small coordinator makes either ordering durable and lets the
+   * processor drain work that has started before it finalizes the turn.
+   */
+  export function createToolOutcomeCoordinator(input: {
+    abort: AbortSignal
+    updatePart: (part: MessageV2.ToolPart) => Promise<unknown>
+    onRejected?: (error: unknown) => void
+  }) {
+    const toolcalls: Record<string, MessageV2.ToolPart> = {}
+    const outcomes = new Map<
+      string,
+      | { status: "completed"; input: unknown; output: ToolExecutionOutput; endedAt: number }
+      | { status: "error"; input: unknown; error: unknown; endedAt: number }
+    >()
+    const active = new Map<string, Promise<void>>()
+    const metadataWrites = new Map<string, Promise<void>>()
+    const terminalParts = new Map<string, MessageV2.ToolPart>()
+    const applying = new Set<string>()
+    const settled = new Set<string>()
+
+    async function apply(callID: string) {
+      const outcome = outcomes.get(callID)
+      if (!outcome || settled.has(callID) || applying.has(callID)) {
+        return false
+      }
+      const initial = toolcalls[callID]
+      if (!initial || initial.state.status !== "running") return false
+      applying.add(callID)
+      try {
+        // Tool.Context.metadata() is intentionally fire-and-forget for tool
+        // authors. Serialize those writes before the terminal result so a slow
+        // progress update can never restore an already-completed part to
+        // `running` after execute() returns.
+        await metadataWrites.get(callID)
+        const match = toolcalls[callID]
+        if (!match || match.state.status !== "running" || settled.has(callID)) return false
+        let terminal: MessageV2.ToolPart
+        if (outcome.status === "completed") {
+          terminal = {
+            ...match,
+            state: {
+              status: "completed",
+              input: outcome.input ?? match.state.input,
+              output: outcome.output.output,
+              metadata: outcome.output.metadata ?? {},
+              title: outcome.output.title,
+              time: { start: match.state.time.start, end: outcome.endedAt },
+              attachments: outcome.output.attachments,
+            },
+          }
+        } else {
+          terminal = {
+            ...match,
+            state: {
+              status: "error",
+              input: outcome.input ?? match.state.input,
+              error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
+              time: { start: match.state.time.start, end: outcome.endedAt },
+            },
+          }
+        }
+        await input.updatePart(terminal)
+        terminalParts.set(callID, terminal)
+        if (outcome.status === "error") {
+          input.onRejected?.(outcome.error)
+        }
+        settled.add(callID)
+        delete toolcalls[callID]
+        outcomes.delete(callID)
+        return true
+      } finally {
+        applying.delete(callID)
+      }
+    }
+
+    const coordinator = {
+      part(callID: string) {
+        return toolcalls[callID]
+      },
+      pending(part: MessageV2.ToolPart) {
+        toolcalls[part.callID] = part
+      },
+      async running(part: MessageV2.ToolPart) {
+        toolcalls[part.callID] = part
+        await apply(part.callID)
+      },
+      metadata(callID: string, args: unknown, value: ToolMetadataUpdate) {
+        const previous = metadataWrites.get(callID) ?? Promise.resolve()
+        const write = previous
+          .catch(() => undefined)
+          .then(async () => {
+            if (settled.has(callID)) return
+            const match = toolcalls[callID]
+            if (!match || match.state.status !== "running") return
+            const updated: MessageV2.ToolPart = {
+              ...match,
+              state: {
+                ...match.state,
+                title: value.title,
+                metadata: value.metadata ?? {},
+                input: (args ?? match.state.input) as Record<string, any>,
+                time: {
+                  start: match.state.time.start,
+                },
+              },
+            }
+            toolcalls[callID] = updated
+            await input.updatePart(updated)
+          })
+          .catch((error) => {
+            input.onRejected?.(error)
+          })
+        metadataWrites.set(callID, write)
+        void write.finally(() => {
+          if (metadataWrites.get(callID) === write && settled.has(callID)) metadataWrites.delete(callID)
+        })
+      },
+      async result(callID: string, args: unknown, output: ToolExecutionOutput) {
+        if (settled.has(callID)) return
+        outcomes.set(callID, { status: "completed", input: args, output, endedAt: Date.now() })
+        await apply(callID)
+      },
+      async error(callID: string, args: unknown, error: unknown) {
+        if (settled.has(callID)) return
+        outcomes.set(callID, { status: "error", input: args, error, endedAt: Date.now() })
+        await apply(callID)
+      },
+      execute<T extends ToolExecutionOutput>(callID: string, args: unknown, run: () => Promise<T>) {
+        const execution = (async () => {
+          try {
+            const output = await run()
+            await coordinator.result(callID, args, output)
+            return output
+          } catch (error) {
+            await coordinator.error(callID, args, error)
+            throw error
+          }
+        })()
+        const drained = execution.then(
+          () => undefined,
+          () => undefined,
+        )
+        active.set(callID, drained)
+        void drained.finally(() => {
+          if (active.get(callID) === drained) active.delete(callID)
+        })
+        return execution
+      },
+      async drain() {
+        const pending = [...active.values()]
+        if (!pending.length || input.abort.aborted) return
+        const aborted = Promise.withResolvers<void>()
+        const onAbort = () => aborted.resolve()
+        input.abort.addEventListener("abort", onAbort, { once: true })
+        try {
+          await Promise.race([Promise.all(pending), aborted.promise])
+        } finally {
+          input.abort.removeEventListener("abort", onAbort)
+        }
+      },
+      async reconcile(part: MessageV2.ToolPart) {
+        const terminal = terminalParts.get(part.callID)
+        if (terminal) {
+          await input.updatePart(terminal)
+          return true
+        }
+        return apply(part.callID)
+      },
+      abandon(callID: string) {
+        settled.add(callID)
+        delete toolcalls[callID]
+        outcomes.delete(callID)
+      },
+    }
+    return coordinator
+  }
 
   export function create(input: {
     assistantMessage: MessageV2.Assistant
@@ -82,25 +284,48 @@ export namespace SessionProcessor {
     // "compacting" so the UI can show a distinct loader.
     busyStatus?: "busy" | "compacting"
   }) {
-    const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
     let blocked = false
+    let shouldBreakOnDeny = true
     let attempt = 0
     let needsCompaction = false
     let overflow = false
+
+    const toolOutcomes = createToolOutcomeCoordinator({
+      abort: input.abort,
+      updatePart: Session.updatePart,
+      onRejected(error) {
+        if (error instanceof PermissionNext.RejectedError || error instanceof Question.RejectedError) {
+          blocked = shouldBreakOnDeny
+        }
+      },
+    })
 
     const result = {
       get message() {
         return input.assistantMessage
       },
       partFromToolCall(toolCallID: string) {
-        return toolcalls[toolCallID]
+        return toolOutcomes.part(toolCallID)
+      },
+      executeTool<T extends ToolExecutionOutput>(toolCallID: string, args: unknown, run: () => Promise<T>) {
+        return toolOutcomes.execute(toolCallID, args, run)
+      },
+      async toolResult(toolCallID: string, args: unknown, output: ToolExecutionOutput) {
+        await toolOutcomes.result(toolCallID, args, output)
+      },
+      async toolError(toolCallID: string, args: unknown, error: unknown) {
+        await toolOutcomes.error(toolCallID, args, error)
+      },
+      toolMetadata(toolCallID: string, args: unknown, value: ToolMetadataUpdate) {
+        toolOutcomes.metadata(toolCallID, args, value)
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
         needsCompaction = false
         overflow = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
+        shouldBreakOnDeny = shouldBreak
         while (true) {
           try {
             // Check for dashboard-side BYOK/managed changes before each user message.
@@ -142,11 +367,25 @@ export namespace SessionProcessor {
               }
             }
 
+            const requestContext = {
+              sessionID: input.sessionID,
+              messageID: input.assistantMessage.id,
+              attempt: attempt + 1,
+            }
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-            const stream = await LLM.stream(streamInput)
+            const stream = await Provider.withRequestContext(requestContext, () =>
+              LLM.stream({
+                ...streamInput,
+                onReasoningEffortResolved: async (effort) => {
+                  if (input.assistantMessage.reasoningEffort === effort) return
+                  input.assistantMessage.reasoningEffort = effort
+                  await Session.updateMessage(input.assistantMessage)
+                },
+              }),
+            )
 
-            for await (const value of stream.fullStream) {
+            for await (const value of Provider.withRequestContextIterable(requestContext, stream.fullStream)) {
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
@@ -196,7 +435,7 @@ export namespace SessionProcessor {
 
                 case "tool-input-start":
                   const part = await Session.updatePart({
-                    id: toolcalls[value.id]?.id ?? Identifier.ascending("part"),
+                    id: toolOutcomes.part(value.id)?.id ?? Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "tool",
@@ -208,7 +447,7 @@ export namespace SessionProcessor {
                       raw: "",
                     },
                   })
-                  toolcalls[value.id] = part as MessageV2.ToolPart
+                  toolOutcomes.pending(part as MessageV2.ToolPart)
                   break
 
                 case "tool-input-delta":
@@ -218,7 +457,7 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-call": {
-                  const match = toolcalls[value.toolCallId]
+                  const match = toolOutcomes.part(value.toolCallId)
                   if (match) {
                     const part = await Session.updatePart({
                       ...match,
@@ -232,7 +471,11 @@ export namespace SessionProcessor {
                       },
                       metadata: value.providerMetadata,
                     })
-                    toolcalls[value.toolCallId] = part as MessageV2.ToolPart
+                    // Some providers omit the terminal tool-result event even
+                    // though the execute promise has already settled. The
+                    // execute wrapper records that authoritative outcome, so
+                    // reconcile it as soon as the call part exists.
+                    await toolOutcomes.running(part as MessageV2.ToolPart)
 
                     const parts = await MessageV2.parts(input.assistantMessage.id)
 
@@ -254,53 +497,12 @@ export namespace SessionProcessor {
                   break
                 }
                 case "tool-result": {
-                  const match = toolcalls[value.toolCallId]
-                  if (match && match.state.status === "running") {
-                    await Session.updatePart({
-                      ...match,
-                      state: {
-                        status: "completed",
-                        input: value.input ?? match.state.input,
-                        output: value.output.output,
-                        metadata: value.output.metadata,
-                        title: value.output.title,
-                        time: {
-                          start: match.state.time.start,
-                          end: Date.now(),
-                        },
-                        attachments: value.output.attachments,
-                      },
-                    })
-
-                    delete toolcalls[value.toolCallId]
-                  }
+                  await result.toolResult(value.toolCallId, value.input, value.output)
                   break
                 }
 
                 case "tool-error": {
-                  const match = toolcalls[value.toolCallId]
-                  if (match && match.state.status === "running") {
-                    await Session.updatePart({
-                      ...match,
-                      state: {
-                        status: "error",
-                        input: value.input ?? match.state.input,
-                        error: (value.error as any).toString(),
-                        time: {
-                          start: match.state.time.start,
-                          end: Date.now(),
-                        },
-                      },
-                    })
-
-                    if (
-                      value.error instanceof PermissionNext.RejectedError ||
-                      value.error instanceof Question.RejectedError
-                    ) {
-                      blocked = shouldBreak
-                    }
-                    delete toolcalls[value.toolCallId]
-                  }
+                  await result.toolError(value.toolCallId, value.input, value.error)
                   break
                 }
                 case "error":
@@ -503,7 +705,11 @@ export namespace SessionProcessor {
               input.assistantMessage.finish = "compact"
             }
             if (!overflow) {
-              const retry = SessionRetry.retryable(error)
+              // A silent provider retrying ten times at the same idle deadline
+              // recreates the original 50-minute failure. Idle expiry is a
+              // terminal, actionable outcome; other transient failures retain
+              // the existing retry policy.
+              const retry = retryableProviderError(e, error)
               if (retry !== undefined && attempt < MAX_RETRY_ATTEMPTS) {
                 attempt++
                 const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
@@ -534,6 +740,10 @@ export namespace SessionProcessor {
               }
             }
           }
+          // `fullStream` can close without a terminal tool-result even though
+          // the SDK already started execute(). Do not publish a completed
+          // assistant turn until those authoritative execute promises settle.
+          await toolOutcomes.drain()
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)
             if (patch.files.length) {
@@ -551,6 +761,7 @@ export namespace SessionProcessor {
           const p = await MessageV2.parts(input.assistantMessage.id)
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
+              if (await toolOutcomes.reconcile(part)) continue
               await Session.updatePart({
                 ...part,
                 state: {
@@ -565,6 +776,7 @@ export namespace SessionProcessor {
                   },
                 },
               })
+              toolOutcomes.abandon(part.callID)
             }
           }
           input.assistantMessage.time.completed = Date.now()

@@ -75,7 +75,7 @@ test("completed Modal GPU work leads with the result and keeps logs, files, and 
 
   expect(host.querySelector(".activity-card__kind")?.textContent).toBe("Remote GPU")
   expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Exit 0 · 1 file")
-  expect(host.textContent).toContain("Succeeded")
+  expect(host.querySelector(".activity-card__status")).toBeNull()
   expect(host.textContent).toContain("A100 · 4 CPU · 16 GB memory")
   expect(host.textContent).not.toContain("Cancel")
   const logs = Array.from(host.querySelectorAll<HTMLDetailsElement>("details")).find(
@@ -132,4 +132,21 @@ test("keeps live work and a bounded newest-first set of completed results", () =
   }
 
   expect(subject.visibleJobs([older, running, newer], 1).map((item) => item.id)).toEqual(["job_running", "job_newer"])
+})
+
+test("never hides an older failed job behind newer successful history", () => {
+  const failed = {
+    ...job,
+    id: "job_failed",
+    status: "failed" as const,
+    completed_at: "2026-08-08T08:01:01.000Z",
+  }
+  const successes = Array.from({ length: 8 }, (_, index) => ({
+    ...job,
+    id: `job_success_${index}`,
+    completed_at: `2026-08-08T${String(10 + index).padStart(2, "0")}:01:01.000Z`,
+  }))
+
+  expect(subject.visibleJobs([failed, ...successes], 2).map((item) => item.id)).toContain("job_failed")
+  expect(subject.visibleJobs([failed, ...successes], 2)).toHaveLength(3)
 })

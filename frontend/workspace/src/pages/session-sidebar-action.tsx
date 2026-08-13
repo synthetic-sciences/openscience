@@ -118,6 +118,9 @@ export function SessionSidebarActions(props: {
 }): JSX.Element {
   return (
     <div class="session-sidebar__context-actions">
+      <div class="session-sidebar__group-label" aria-hidden="true">
+        Workspace
+      </div>
       <div class="session-sidebar__action-list">
         <SidebarAction
           label="Files"

@@ -85,6 +85,9 @@ test("built-in delegation uses only Explore, Execute, and Review profiles", asyn
       expect((await Agent.get("review"))?.hidden).toBe(true)
       expect(evalPerm(await Agent.get("execute"), "edit")).toBe("allow")
       expect(evalPerm(await Agent.get("review"), "edit")).toBe("deny")
+      expect((await Agent.get("explore"))?.steps).toBe(12)
+      expect((await Agent.get("execute"))?.steps).toBe(16)
+      expect((await Agent.get("review"))?.steps).toBe(12)
     },
   })
 })

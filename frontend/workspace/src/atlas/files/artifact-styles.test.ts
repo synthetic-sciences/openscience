@@ -33,7 +33,7 @@ describe("artifact grid styles", () => {
       "--atlas-radius-sm",
       "--atlas-radius-md",
       "--atlas-shadow-xs",
-      "--atlas-shadow-float",
+      "--atlas-shadow-md",
     ])
     const unknown = [...new Set(used)].filter((name) => !defined.has(name))
 

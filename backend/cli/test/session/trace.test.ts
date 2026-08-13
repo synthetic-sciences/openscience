@@ -4,6 +4,7 @@ import { Session } from "../../src/session"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionTrace } from "../../src/session/trace"
 import { SessionTraceStore } from "../../src/session/trace-store"
+import { LLM } from "../../src/session/llm"
 import { tmpdir } from "../fixture/fixture"
 
 test("builds one local observable harness trace without reasoning or copied outputs", async () => {
@@ -21,8 +22,7 @@ test("builds one local observable harness trace without reasoning or copied outp
         time: { created: started },
         agent: "research",
         model: { providerID: "openai-codex", modelID: "gpt-5" },
-        variant: "high",
-        inference: { source: "chatgpt", effort: "high" },
+        inference: { source: "chatgpt", effort: "default" },
       }
       const assistant: MessageV2.Assistant = {
         id: "msg_trace_assistant",
@@ -32,6 +32,7 @@ test("builds one local observable harness trace without reasoning or copied outp
         parentID: user.id,
         modelID: "gpt-5",
         providerID: "openai-codex",
+        reasoningEffort: "high",
         mode: "research",
         agent: "research",
         path: { cwd: tmp.path, root: tmp.path },
@@ -113,6 +114,8 @@ test("builds one local observable harness trace without reasoning or copied outp
               durationMs: 90,
               toolCalls: 2,
               failedToolCalls: 0,
+              outcome: "partial",
+              stopReason: "max_steps",
               usage: {
                 cost: 0.1,
                 tokens: { input: 10, output: 5, cache: { read: 0, write: 0 } },
@@ -176,6 +179,38 @@ test("builds one local observable harness trace without reasoning or copied outp
             time: { start: started + 370, end: started + 380 },
           },
         },
+        {
+          id: "part_shell_exit",
+          sessionID: session.id,
+          messageID: assistant.id,
+          type: "tool",
+          callID: "call_shell_exit",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { command: "curl https://example.invalid" },
+            output: "curl: could not resolve host",
+            title: "Fetch release manifest",
+            metadata: { exit: 6 },
+            time: { start: started + 381, end: started + 385 },
+          },
+        },
+        {
+          id: "part_kernel_error",
+          sessionID: session.id,
+          messageID: assistant.id,
+          type: "tool",
+          callID: "call_kernel_error",
+          tool: "notebook",
+          state: {
+            status: "completed",
+            input: { code: "raise ValueError('bad input')" },
+            output: "[ERROR]\nValueError: bad input",
+            title: "Parse release manifest (error)",
+            metadata: { ok: false, executionCount: 2 },
+            time: { start: started + 386, end: started + 389 },
+          },
+        },
       ]
       await Session.updateMessage(user)
       await Session.updateMessage(assistant)
@@ -210,14 +245,14 @@ test("builds one local observable harness trace without reasoning or copied outp
       const trace = await SessionTrace.build(session.id)
       expect(trace.summary).toMatchObject({
         cost: 0.42,
-        toolCalls: 7,
+        toolCalls: 9,
         childCount: 1,
         searchCount: 2,
         dedupeHits: 1,
         approvalCount: 1,
         artifactSaves: 1,
         reviewerFindings: 1,
-        failureCount: 1,
+        failureCount: 3,
         retryCount: 1,
       })
       expect(trace.inference[0]).toMatchObject({
@@ -229,11 +264,24 @@ test("builds one local observable harness trace without reasoning or copied outp
       expect(trace.children[0]).toMatchObject({
         agent: "biology",
         sessionID: "ses_child",
+        status: "partial",
         durationMs: 90,
         toolCalls: 2,
       })
+      expect(trace.tools.find((tool) => tool.id === "part_child")?.status).toBe("partial")
       expect(trace.searches.find((search) => search.dedupeHit)).toMatchObject({ dedupeHit: true })
       expect(trace.kernels[0]).toMatchObject({ language: "python", executionCount: 1 })
+      expect(trace.kernels[1]).toMatchObject({ language: "python", status: "error", executionCount: 2 })
+      expect(trace.tools.find((tool) => tool.id === "part_shell_exit")?.status).toBe("error")
+      expect(trace.failures).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "part_shell_exit", message: "Fetch release manifest exited with code 6" }),
+          expect.objectContaining({
+            id: "part_kernel_error",
+            message: "Parse release manifest reported failure",
+          }),
+        ]),
+      )
       expect(trace.artifacts[0]).toMatchObject({ artifactID: "artifact_1", versionID: "version_1" })
       expect(trace.reviewerFindings[0]).toMatchObject({
         claim: "accuracy is 99%",
@@ -248,6 +296,7 @@ test("builds one local observable harness trace without reasoning or copied outp
       })
       expect(JSON.stringify(trace)).not.toContain("search output that the trace must not copy")
       expect(trace.turns[0].timeToFirstUsefulOutputMs).toBe(100)
+      expect(SessionTrace.Info.parse(trace)).toEqual(trace)
 
       await Session.remove(session.id)
       expect(await SessionTraceStore.read(session.id)).toEqual({ approvals: {}, retries: [] })
@@ -267,4 +316,19 @@ test("accepts Modal jobs as external compute activity", () => {
   })
 
   expect(parsed.target).toBe("modal")
+})
+
+test("reads only named reasoning controls from final provider options", () => {
+  const cases: [Record<string, unknown>, string][] = [
+    [{ reasoningEffort: "high" }, "high"],
+    [{ effort: "max" }, "max"],
+    [{ reasoning: { effort: "medium" } }, "medium"],
+    [{ reasoningConfig: { maxReasoningEffort: "low" } }, "low"],
+    [{ thinkingConfig: { thinkingLevel: "xhigh" } }, "xhigh"],
+  ]
+
+  for (const [options, expected] of cases) {
+    expect(LLM.resolvedReasoningEffort(options)).toBe(expected)
+  }
+  expect(LLM.resolvedReasoningEffort({ thinking: { type: "enabled", budgetTokens: 16_000 } })).toBeUndefined()
 })

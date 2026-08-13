@@ -48,8 +48,8 @@ export type QuestionRejectFn = (input: { requestID: string }) => void
 
 export type NavigateToSessionFn = (sessionID: string) => void
 
-/** Explicit save: register a written file as a durable, versioned artifact. */
-export type SaveArtifactFn = (path: string) => Promise<{ version: number }>
+/** Explicit save: register a written file as a durable Result. */
+export type SaveArtifactFn = (path: string) => Promise<void>
 
 /** Open a durable saved artifact version in the contextual Files surface. */
 export type OpenArtifactFn = (id: string) => void

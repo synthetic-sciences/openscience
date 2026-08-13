@@ -24,10 +24,10 @@ describe("live workbench edge geometry", () => {
     expect(trace).toContain("background: var(--color-bg-subtle)")
     expect(trace).toContain("@media (prefers-reduced-motion: reduce)")
     expect(sidebar).toMatch(
-      /\.session-sidebar\s*\{[^}]*border: 0;[^}]*border-right: 1px solid color-mix\(in srgb, var\(--color-border\) 72%, transparent\);[^}]*border-radius: 0;[^}]*background: color-mix\(in srgb, var\(--color-bg-subtle\) 92%, var\(--color-bg\)\);/s,
+      /\.session-sidebar\s*\{[^}]*border: 0;[^}]*border-right: 1px solid color-mix\(in srgb, var\(--color-border\) 60%, transparent\);[^}]*border-radius: 0;[^}]*background: color-mix\(in srgb, var\(--color-bg-subtle\) 88%, var\(--color-bg\)\);/s,
     )
     expect(sidebar).toMatch(
-      /@media \(max-width: 719px\)[\s\S]*\.session-sidebar\s*\{[^}]*border: 1px solid color-mix\(in srgb, var\(--color-border-strong\) 78%, transparent\);[^}]*border-radius: var\(--atlas-radius-sm\);/,
+      /@media \(max-width: 719px\)[\s\S]*\.session-sidebar\s*\{[^}]*border: 1px solid color-mix\(in srgb, var\(--color-border-strong\) 62%, transparent\);[^}]*border-radius: var\(--atlas-radius-sm\);/,
     )
     expect(sidebar).toMatch(
       /\.session-sidebar-backdrop\s*\{[^}]*background: color-mix\(in srgb, var\(--color-bg\) 68%, transparent\);/s,

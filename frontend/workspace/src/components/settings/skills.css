@@ -221,31 +221,6 @@
   background: var(--settings-surface-muted);
 }
 
-.settings-skills .skills-workspace [data-component="switch"][data-checked] [data-slot="switch-control"],
-.settings-skills
-  .skills-workspace
-  [data-component="switch"][data-checked]:hover:not([data-disabled], [data-readonly])
-  [data-slot="switch-control"] {
-  border-color: var(--settings-toggle-active);
-  background: var(--settings-toggle-active);
-}
-
-.settings-skills .skills-workspace [data-component="switch"] [data-slot="switch-control"] {
-  width: 32px;
-  height: 18px;
-}
-
-.settings-skills .skills-workspace [data-component="switch"] [data-slot="switch-thumb"] {
-  width: 14px;
-  height: 14px;
-  margin-inline: 1px;
-  border-width: 0;
-}
-
-.settings-skills .skills-workspace [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
-  transform: translateX(14px);
-}
-
 .settings-skills .skills-workspace__form-actions .settings-button {
   min-height: 32px;
   padding-inline: 12px;

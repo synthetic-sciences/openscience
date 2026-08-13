@@ -58,23 +58,26 @@ export function ExecutionCard(props: { run: ExecutionRecord }): JSX.Element {
       <header class="activity-card__header">
         <div class="activity-card__identity">
           <span class="activity-card__kind">{language(props.run.language)}</span>
-          <strong>{result(props.run)}</strong>
+          <div class="kernel-card__copy">
+            <strong>{result(props.run)}</strong>
+            <span>
+              Run {props.run.sequence} · {duration(props.run)}
+              <Show when={props.run.result.output_count > 0}>
+                {` · ${props.run.result.output_count} ${props.run.result.output_count === 1 ? "output" : "outputs"}`}
+              </Show>
+              <Show when={fileCount(props.run) > 0}>
+                {` · ${fileCount(props.run)} ${fileCount(props.run) === 1 ? "file" : "files"}`}
+              </Show>
+              <Show when={props.run.environment.restart_boundary}> · Fresh runtime</Show>
+            </span>
+          </div>
         </div>
-        <span class="activity-card__status" data-tone={props.run.status}>
-          {statusLabel(props.run.status)}
-        </span>
+        <Show when={props.run.status !== "succeeded"}>
+          <span class="activity-card__status" data-tone={props.run.status}>
+            {statusLabel(props.run.status)}
+          </span>
+        </Show>
       </header>
-
-      <p class="activity-card__summary">
-        Run {props.run.sequence} · {duration(props.run)}
-        <Show when={props.run.result.output_count > 0}>
-          {` · ${props.run.result.output_count} ${props.run.result.output_count === 1 ? "output" : "outputs"}`}
-        </Show>
-        <Show when={fileCount(props.run) > 0}>
-          {` · ${fileCount(props.run)} ${fileCount(props.run) === 1 ? "file" : "files"}`}
-        </Show>
-        <Show when={props.run.environment.restart_boundary}> · Fresh runtime</Show>
-      </p>
 
       <div class="activity-card__disclosures">
         <Show when={code()}>

@@ -134,7 +134,7 @@ describe("SessionSidebarActions", () => {
     expect(action.querySelector("kbd")?.textContent).toBe("⌘N")
     expect(button(action, "New research")?.dataset.tooltip).toBe("New research")
     expect(button(action, "New research")?.hasAttribute("title")).toBe(false)
-    expect(actions.querySelector(".session-sidebar__group-label")).toBeNull()
+    expect(actions.querySelector(".session-sidebar__group-label")?.textContent?.trim()).toBe("Workspace")
   })
 
   test("opens contextual surfaces without toggling the active surface closed", async () => {

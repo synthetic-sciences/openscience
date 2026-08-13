@@ -21,7 +21,7 @@ describe("model control presentation", () => {
         value: "Extra high",
         current: { id: "xhigh", label: "Extra high" },
         options: [
-          { id: "standard", label: "Auto" },
+          { id: "standard", label: "Standard" },
           { id: "high", label: "High" },
           { id: "xhigh", label: "Extra high" },
         ],
@@ -42,8 +42,8 @@ describe("model control presentation", () => {
     expect(JSON.stringify(control)).not.toContain("provider")
   })
 
-  test("makes automatic effort explicit without changing the provider-native value", () => {
-    expect(effortOption("standard")).toEqual({ id: "standard", label: "Auto" })
+  test("makes standard effort explicit without changing the provider-native value", () => {
+    expect(effortOption("standard")).toEqual({ id: "standard", label: "Standard" })
     expect(effortOption("xhigh")).toEqual({ id: "xhigh", label: "Extra high" })
   })
 
@@ -64,10 +64,10 @@ describe("model control presentation", () => {
       }),
     ).toMatchObject({
       effort: {
-        value: "Auto",
-        current: { id: "standard", label: "Auto" },
+        value: "Standard",
+        current: { id: "standard", label: "Standard" },
         options: [
-          { id: "standard", label: "Auto" },
+          { id: "standard", label: "Standard" },
           { id: "high", label: "High" },
         ],
       },

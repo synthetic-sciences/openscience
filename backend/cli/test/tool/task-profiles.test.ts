@@ -1,9 +1,18 @@
 import { expect, test } from "bun:test"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
-import { childPermissionRules, TaskTool } from "../../src/tool/task"
+import {
+  childPermissionRules,
+  classifyTaskOutcome,
+  summarizeTurn,
+  taskDispatchBudget,
+  TASK_WALL_CLOCK_MS,
+  TaskTool,
+  withTaskDeadline,
+} from "../../src/tool/task"
 import { PermissionNext } from "../../src/permission/next"
 import { tmpdir } from "../fixture/fixture"
+import type { MessageV2 } from "../../src/session/message-v2"
 
 test("Task advertises only generic internal profiles while legacy agents remain retrievable", async () => {
   await using tmp = await tmpdir()
@@ -33,4 +42,269 @@ test("child sessions deny recursive delegation even when a profile allows Task",
 
   expect(PermissionNext.evaluate("task", "explore", configuredProfile, child).action).toBe("deny")
   expect(PermissionNext.disabled(["task"], child)).toContain("task")
+})
+
+test("continued Tasks report only the current child turn", () => {
+  const message = (input: { id: string; parent: string; tool: string; tokens: number }): MessageV2.WithParts => ({
+    info: {
+      id: input.id,
+      sessionID: "ses_child",
+      role: "assistant",
+      time: { created: 1, completed: 2 },
+      parentID: input.parent,
+      modelID: "model",
+      providerID: "provider",
+      mode: "execute",
+      agent: "execute",
+      path: { cwd: "/tmp", root: "/tmp" },
+      cost: input.tokens / 100,
+      tokens: {
+        input: input.tokens,
+        output: input.tokens + 1,
+        reasoning: 0,
+        cache: { read: input.tokens + 2, write: input.tokens + 3 },
+      },
+    },
+    parts: [
+      {
+        id: `prt_${input.id}`,
+        sessionID: "ses_child",
+        messageID: input.id,
+        type: "tool",
+        callID: `call_${input.id}`,
+        tool: input.tool,
+        state: {
+          status: "completed",
+          input: {},
+          output: `${input.tool} result`,
+          title: input.tool,
+          metadata: {},
+          time: { start: 1, end: 2 },
+        },
+      },
+    ],
+  })
+  const historical = message({ id: "msg_old_assistant", parent: "msg_old_user", tool: "webfetch", tokens: 100 })
+  const current = message({ id: "msg_new_assistant", parent: "msg_new_user", tool: "read", tokens: 10 })
+  const result = summarizeTurn([historical, current], new Set([historical.info.id]))
+
+  expect(result.summary.map((part) => part.tool)).toEqual(["read"])
+  expect(result.usage).toEqual({
+    cost: 0.1,
+    tokens: { input: 10, output: 11, cache: { read: 12, write: 13 } },
+  })
+})
+
+test("Task summaries expose command and runtime failures carried in completed metadata", () => {
+  const tool = (input: {
+    id: string
+    tool: string
+    title: string
+    metadata: Record<string, unknown>
+  }): MessageV2.WithParts => ({
+    info: {
+      id: input.id,
+      sessionID: "ses_child",
+      role: "assistant",
+      time: { created: 1, completed: 2 },
+      parentID: "msg_user",
+      modelID: "model",
+      providerID: "provider",
+      mode: "execute",
+      agent: "execute",
+      path: { cwd: "/tmp", root: "/tmp" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    },
+    parts: [
+      {
+        id: `prt_${input.id}`,
+        sessionID: "ses_child",
+        messageID: input.id,
+        type: "tool",
+        callID: `call_${input.id}`,
+        tool: input.tool,
+        state: {
+          status: "completed",
+          input: {},
+          output: "retained output",
+          title: input.title,
+          metadata: input.metadata,
+          time: { start: 1, end: 2 },
+        },
+      },
+    ],
+  })
+
+  const result = summarizeTurn(
+    [
+      tool({ id: "msg_bash", tool: "bash", title: "Fetch manifest", metadata: { exit: 6 } }),
+      tool({ id: "msg_python", tool: "python", title: "Parse data (error)", metadata: { ok: false } }),
+    ],
+    new Set(),
+  )
+
+  expect(result.summary.map((part) => ({ tool: part.tool, status: part.state.status }))).toEqual([
+    { tool: "bash", status: "error" },
+    { tool: "python", status: "error" },
+  ])
+})
+
+test("Task dispatch budget counts continuations across one parent user turn", () => {
+  const message = (input: {
+    id: string
+    parent: string
+    created: number
+    calls: Array<{ id: string; callID: string; sessionID?: string }>
+  }): MessageV2.WithParts => ({
+    info: {
+      id: input.id,
+      sessionID: "ses_parent",
+      role: "assistant",
+      time: { created: input.created, completed: input.created + 1 },
+      parentID: input.parent,
+      modelID: "model",
+      providerID: "provider",
+      mode: "research",
+      agent: "research",
+      path: { cwd: "/tmp", root: "/tmp" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    },
+    parts: input.calls.map((call) => ({
+      id: call.id,
+      sessionID: "ses_parent",
+      messageID: input.id,
+      type: "tool" as const,
+      callID: call.callID,
+      tool: "task",
+      state: {
+        status: "running" as const,
+        input: call.sessionID ? { session_id: call.sessionID } : {},
+        time: { start: input.created },
+      },
+    })),
+  })
+  const user = (input: { id: string; created: number; carrier?: boolean }): MessageV2.WithParts => ({
+    info: {
+      id: input.id,
+      sessionID: "ses_parent",
+      role: "user",
+      time: { created: input.created },
+      agent: "research",
+      model: { providerID: "provider", modelID: "model" },
+      effort: "normal",
+    },
+    parts: input.carrier
+      ? [
+          {
+            id: `prt_${input.id}`,
+            sessionID: "ses_parent",
+            messageID: input.id,
+            type: "compaction",
+            auto: true,
+          },
+        ]
+      : [
+          {
+            id: `prt_${input.id}`,
+            sessionID: "ses_parent",
+            messageID: input.id,
+            type: "text",
+            text: "real user request",
+          },
+        ],
+  })
+  const messages = [
+    user({ id: "msg_user", created: 0 }),
+    message({
+      id: "msg_first",
+      parent: "msg_user",
+      created: 1,
+      calls: [
+        { id: "prt_001", callID: "call_1" },
+        { id: "prt_002", callID: "call_2", sessionID: "ses_child" },
+      ],
+    }),
+    user({ id: "msg_compaction", created: 2, carrier: true }),
+    message({
+      id: "msg_second",
+      parent: "msg_compaction",
+      created: 3,
+      calls: [
+        { id: "prt_003", callID: "call_3" },
+        { id: "prt_004", callID: "call_4" },
+        { id: "prt_005", callID: "call_5" },
+      ],
+    }),
+    user({ id: "msg_other_user", created: 4 }),
+    message({
+      id: "msg_other_turn",
+      parent: "msg_other_user",
+      created: 5,
+      calls: [{ id: "prt_006", callID: "call_other" }],
+    }),
+  ]
+
+  expect(taskDispatchBudget(messages, "msg_user", "call_1", "normal")).toEqual({ dispatch: 1, limit: 2 })
+  expect(taskDispatchBudget(messages, "msg_user", "call_2", "normal")).toEqual({ dispatch: 2, limit: 2 })
+  expect(() => taskDispatchBudget(messages, "msg_compaction", "call_3", "normal")).toThrow("continuations count")
+  expect(taskDispatchBudget(messages, "msg_compaction", "call_4", "ultra")).toEqual({ dispatch: 4, limit: 4 })
+  expect(() => taskDispatchBudget(messages, "msg_compaction", "call_5", "ultra")).toThrow("Task call 5")
+  expect(taskDispatchBudget(messages, "msg_other_user", "call_other", "normal")).toEqual({ dispatch: 1, limit: 2 })
+})
+
+test("Task deadlines preserve work that settles before the cutoff", async () => {
+  expect(TASK_WALL_CLOCK_MS).toEqual({ normal: 600_000, ultra: 1_200_000 })
+  const result = await withTaskDeadline(
+    () => Promise.resolve("completed findings"),
+    () => {},
+    100,
+  )
+
+  expect(result).toEqual({ result: "completed findings", error: undefined, timedOut: false })
+})
+
+test("Task deadlines return even when stalled work ignores cancellation", async () => {
+  const pending = Promise.withResolvers<string>()
+  let cancelled = false
+  const started = Date.now()
+  const result = await withTaskDeadline(
+    () => pending.promise,
+    () => {
+      cancelled = true
+    },
+    5,
+  )
+
+  expect(result).toEqual({ result: undefined, error: undefined, timedOut: true })
+  expect(cancelled).toBe(true)
+  expect(Date.now() - started).toBeLessThan(250)
+})
+
+test("Task outcomes distinguish bounded partial work from completion and failure", () => {
+  expect(classifyTaskOutcome({ timedOut: false, finish: "stop" })).toEqual({
+    outcome: "completed",
+    stopReason: "completed",
+  })
+  expect(classifyTaskOutcome({ timedOut: false, finish: "max-steps" })).toEqual({
+    outcome: "partial",
+    stopReason: "max_steps",
+  })
+  expect(classifyTaskOutcome({ timedOut: true, finish: "stop" })).toEqual({
+    outcome: "timed_out",
+    stopReason: "wall_clock",
+  })
+  expect(classifyTaskOutcome({ timedOut: false, error: { name: "UnknownError" } })).toEqual({
+    outcome: "error",
+    stopReason: "provider_error",
+  })
+  expect(classifyTaskOutcome({ timedOut: false, finish: "stop", toolCalls: 5, failedToolCalls: 5 })).toEqual({
+    outcome: "partial",
+    stopReason: "tool_failures",
+  })
+  expect(classifyTaskOutcome({ timedOut: false, finish: "stop", toolCalls: 5, failedToolCalls: 4 })).toEqual({
+    outcome: "completed",
+    stopReason: "completed",
+  })
 })

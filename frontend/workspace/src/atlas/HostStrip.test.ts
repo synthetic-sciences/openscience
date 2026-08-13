@@ -131,7 +131,7 @@ describe("host strip", () => {
     const source = readFileSync(fileURLToPath(new URL("./HostStrip.tsx", import.meta.url)), "utf8")
 
     expect(source).toContain('<span class="host-strip__label">Memory</span>')
-    expect(source).toContain('<span class="host-strip__label">Active</span>')
+    expect(source).toContain('<span class="host-strip__label">Running</span>')
     expect(source).toContain('aria-label="Machine resources"')
   })
 
@@ -143,8 +143,13 @@ describe("host strip", () => {
     expect(host.querySelector("[data-boundary]")).toBeNull()
     expect(values(host)).toEqual(["412.0 MB", "~0.4 of 8"])
     expect(host.textContent).toContain("of 16.0 GB")
-    expect(host.textContent).toContain("2processes")
+    expect(host.textContent).toContain("1process")
     expect(host.querySelector('[data-host-tile="kernels"] p')?.getAttribute("title")).toContain("2 kernels · 1 running")
+    expect(host.querySelector<HTMLDetailsElement>(".activity-surface__capacity")?.open).toBe(false)
+    expect(host.querySelector(".activity-surface__capacity-reading")?.textContent).toContain("412.0 MB")
+    expect(host.querySelector(".activity-surface__capacity-reading")?.textContent).toContain("~0.4/8")
+    expect(host.querySelector(".activity-surface__capacity-reading")?.textContent).toContain("Running1")
+    expect(host.querySelector(".activity-surface__capacity-title")?.textContent).toContain("Live")
   })
 
   test("asks the route the compute strip is served from, naming itself to the server", async () => {
@@ -156,8 +161,8 @@ describe("host strip", () => {
     guard(() => subject.HostStrip({ request: track }))
     await Bun.sleep(20)
 
-    expect(paths).toHaveLength(2)
-    expect(paths).toContain("/settings/compute/jobs")
+    expect(paths).toHaveLength(1)
+    expect(paths).not.toContain("/settings/compute/jobs")
     const asked = new URL(paths.find((path) => path.startsWith("/kernels/compute")) ?? "", "http://host")
     expect(asked.pathname).toBe("/kernels/compute")
 
@@ -180,7 +185,7 @@ describe("host strip", () => {
     )
     await Bun.sleep(20)
 
-    expect(others).toHaveLength(2)
+    expect(others).toHaveLength(1)
     const other = others.find((path) => path.startsWith("/kernels/compute")) ?? ""
     expect(new URL(other, "http://host").searchParams.get("client")).not.toBe(client)
   })
@@ -308,13 +313,13 @@ describe("host strip", () => {
     document.dispatchEvent(new Event("visibilitychange"))
     await settle(calls)
 
-    expect(calls.length).toBe(polled + 2)
+    expect(calls.length).toBe(polled + 1)
 
     cleanups.splice(0).forEach((cleanup) => cleanup())
     document.dispatchEvent(new Event("visibilitychange"))
     // Longer than the 2.5s poll, so a surviving interval would show up here.
     await Bun.sleep(2_700)
 
-    expect(calls.length).toBe(polled + 2)
+    expect(calls.length).toBe(polled + 1)
   })
 })

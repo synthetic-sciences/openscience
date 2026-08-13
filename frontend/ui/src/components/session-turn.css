@@ -110,65 +110,56 @@
     max-height: none;
   }
 
-  [data-component="user-message"][data-can-expand="true"] [data-slot="user-message-text"] {
-    padding-right: 36px;
-    padding-bottom: 28px;
-  }
-
   [data-component="user-message"][data-can-expand="true"]:not([data-expanded="true"])
     [data-slot="user-message-text"]::after {
     content: "";
     position: absolute;
     left: 0;
     right: 0;
-    height: 8px;
-    bottom: 0px;
-    background:
-      linear-gradient(to bottom, transparent, var(--user-message-surface, var(--surface-weak))),
-      linear-gradient(to bottom, transparent, var(--user-message-surface, var(--surface-weak)));
+    height: 18px;
+    bottom: 0;
+    background: linear-gradient(to bottom, transparent, var(--user-message-surface, var(--surface-weak)) 88%);
     pointer-events: none;
   }
 
-  [data-component="user-message"] [data-slot="user-message-text"] [data-slot="user-message-expand"] {
+  [data-component="user-message"] [data-slot="user-message-expand"] {
     display: none;
-    position: absolute;
-    bottom: 6px;
-    right: 6px;
-    padding: 0;
   }
 
-  [data-component="user-message"][data-can-expand="true"]
-    [data-slot="user-message-text"]
-    [data-slot="user-message-expand"],
-  [data-component="user-message"][data-expanded="true"]
-    [data-slot="user-message-text"]
-    [data-slot="user-message-expand"] {
+  [data-component="user-message"][data-can-expand="true"] [data-slot="user-message-expand"],
+  [data-component="user-message"][data-expanded="true"] [data-slot="user-message-expand"] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 22px;
-    width: 22px;
+    width: 32px;
+    min-height: 32px;
+    padding: 0;
     border: none;
     border-radius: var(--radius-xs);
     background: transparent;
     cursor: pointer;
     color: var(--text-weak);
+    transition:
+      background-color var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard);
 
     [data-slot="icon-svg"] {
       transition: transform var(--duration-fast) var(--ease-standard);
     }
   }
 
-  [data-component="user-message"][data-expanded="true"]
-    [data-slot="user-message-text"]
-    [data-slot="user-message-expand"]
-    [data-slot="icon-svg"] {
+  [data-component="user-message"][data-expanded="true"] [data-slot="user-message-expand"] [data-slot="icon-svg"] {
     transform: rotate(180deg);
   }
 
-  [data-component="user-message"] [data-slot="user-message-text"] [data-slot="user-message-expand"]:hover {
+  [data-component="user-message"] [data-slot="user-message-expand"]:hover {
     background: var(--surface-raised-base);
     color: var(--text-base);
+  }
+
+  [data-component="user-message"] [data-slot="user-message-expand"]:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 1px;
   }
 
   [data-slot="session-turn-user-badges"] {
@@ -235,7 +226,9 @@
       z-index: 1;
     }
 
-    [data-slot="session-turn-response"]:hover [data-slot="session-turn-response-copy-wrapper"] {
+    [data-slot="session-turn-response"]:hover [data-slot="session-turn-response-copy-wrapper"],
+    [data-slot="session-turn-response"]:focus-within [data-slot="session-turn-response-copy-wrapper"],
+    [data-slot="session-turn-response-copy-wrapper"][data-copied="true"] {
       opacity: 1;
     }
 
@@ -471,15 +464,49 @@
     justify-content: flex-end;
   }
 
-  [data-slot="session-turn-accordion-content"] {
-    max-height: 240px;
-    /* max-h-60 */
-    overflow-y: auto;
-    scrollbar-width: none;
+  /* Accordion.Content owns its generic data-slot, so the transcript-specific
+     viewport lives on this real child instead of relying on an overwritten
+     attribute. The compact state keeps a long generated file from becoming
+     the conversation viewport; expansion remains bounded and independently
+     scrollable. */
+  [data-slot="session-turn-diff-content"] {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
   }
 
-  [data-slot="session-turn-accordion-content"]::-webkit-scrollbar {
-    display: none;
+  [data-slot="session-turn-diff-preview"] {
+    max-height: 240px;
+    overflow-y: auto;
+    overflow-x: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  [data-slot="session-turn-diff-preview"][data-expanded="true"] {
+    max-height: min(70dvh, 720px);
+  }
+
+  [data-slot="session-turn-diff-actions"] {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    padding: 4px 6px;
+    border-top: 1px solid var(--border-weaker-base);
+    background: var(--surface-inset-base);
+  }
+
+  @media (max-width: 480px) {
+    [data-slot="session-turn-diff-actions"] {
+      justify-content: space-between;
+    }
+
+    [data-slot="session-turn-diff-actions"] [data-component="button"] {
+      flex: 1;
+      min-width: 0;
+    }
   }
 
   [data-slot="session-turn-response-section"] {
@@ -724,5 +751,11 @@
     [data-slot="session-turn-artifact-action"][data-state="error"] {
       color: var(--text-critical-base);
     }
+  }
+}
+
+@media (pointer: coarse) {
+  [data-slot="session-turn-response-copy-wrapper"] {
+    opacity: 1;
   }
 }

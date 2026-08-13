@@ -99,12 +99,16 @@ test("settings enforce one sentence-case typography system", () => {
 
 test("settings follow the userinterface interaction and spacing rules", () => {
   const dialog = source()
+  const switchCss = readFileSync(
+    fileURLToPath(new URL("../../../ui/src/components/switch.css", import.meta.url)),
+    "utf8",
+  )
 
   expect(dialog).toContain("--settings-space-1: 4px")
   expect(dialog).toContain("--settings-space-7: 48px")
   expect(dialog).toContain("background 140ms ease")
   expect(dialog).toContain("transform 120ms ease")
-  expect(dialog).toContain("transition: transform 150ms ease")
+  expect(switchCss).toContain("transform 150ms ease")
   expect(dialog).toMatch(
     /\.settings-dialog :where\(button, input, select, textarea\):focus-visible\s*\{[^}]*transition-duration: 0ms/s,
   )
@@ -171,6 +175,8 @@ test("settings keep disabled controls visibly distinct from active actions", () 
   expect(dialog).toMatch(
     /\[data-component="switch"\]:is\(\[data-disabled\], \[aria-disabled="true"\]\)\s*\{[^}]*cursor: not-allowed;[^}]*opacity: 0\.48/s,
   )
+  expect(dialog).toContain("--switch-active-color: var(--settings-toggle-active)")
+  expect(dialog).not.toMatch(/\[data-slot="switch-control"\]\s*\{[^}]*width:/s)
 })
 
 test("settings search and filter controls expose contextual accessible names", () => {
@@ -191,6 +197,7 @@ test("settings reuse workspace surfaces and adaptive boundaries without a parall
   expect(dialog).toContain("--settings-surface: var(--surface-raised-stronger-non-alpha)")
   expect(dialog).toContain("--settings-border: var(--border-base)")
   expect(dialog).toContain("--settings-accent: var(--border-selected)")
+  expect(dialog).toContain("--settings-shadow-card: none")
   expect(dialog).not.toMatch(/#(?:007aff|0a84ff|0066d6|409cff)/i)
   expect(dialog).toMatch(/\[data-slot="dialog-container"\]\s*\{[^}]*border: 1px solid var\(--settings-border\)/s)
   expect(dialog).toMatch(/\.settings-nav\s*\{[^}]*border-right: 1px solid var\(--settings-border\)/s)

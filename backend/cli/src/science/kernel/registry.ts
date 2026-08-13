@@ -75,6 +75,8 @@ type Entry = {
   process: KernelProcess | null
   lease?: AsyncDisposable
   claiming?: Promise<void>
+  idle?: ReturnType<typeof setTimeout>
+  expiring?: Promise<void>
 }
 
 type Pending = {
@@ -164,6 +166,14 @@ export const KernelStatus = z.object({
 export type KernelStatus = z.infer<typeof KernelStatus>
 
 const managers = new Map<KernelLanguage, KernelManager>()
+const DEFAULT_IDLE_MS = 30 * 60 * 1000
+
+const idleMs = () => {
+  const configured = Number(process.env.OPENSCIENCE_KERNEL_IDLE_MS)
+  if (!Number.isFinite(configured) || configured < 1_000) return DEFAULT_IDLE_MS
+  return configured
+}
+
 const records = Instance.state(
   () => ({
     entries: new Map<string, Entry>(),
@@ -171,6 +181,7 @@ const records = Instance.state(
   }),
   async (value) => {
     for (const pending of value.starts.values()) pending.ticket.cancelled = true
+    for (const entry of value.entries.values()) clearTimeout(entry.idle)
     const stopped = await Promise.allSettled([...value.entries.values()].map(releaseEntry))
     value.entries.clear()
     value.starts.clear()
@@ -375,7 +386,9 @@ async function claim(value: Entry, ticket?: StartTicket) {
   })
 }
 
-async function releaseEntry(value: Entry) {
+async function reclaimEntry(value: Entry) {
+  clearTimeout(value.idle)
+  value.idle = undefined
   const pending = records().starts.get(value.key)
   if (pending) pending.ticket.cancelled = true
   // A start with no kernel claim is queued behind the authority mutation that
@@ -425,6 +438,42 @@ async function releaseEntry(value: Entry) {
     throw error
   })
   await releaseLease(value)
+}
+
+function releaseEntry(value: Entry) {
+  if (value.expiring) return value.expiring
+  const pending = reclaimEntry(value)
+  value.expiring = pending
+  void pending.then(
+    () => {
+      if (value.expiring === pending) value.expiring = undefined
+    },
+    () => {
+      if (value.expiring === pending) value.expiring = undefined
+      scheduleIdle(value)
+    },
+  )
+  return pending
+}
+
+function scheduleIdle(value: Entry) {
+  clearTimeout(value.idle)
+  value.idle = undefined
+  const kernel = value.kernel
+  if (!kernel?.ready || kernel.busy || value.expiring) return
+  const activity = value.lastActivityAt ?? Date.now()
+  const delay = Math.max(0, activity + idleMs() - Date.now())
+  const timer = setTimeout(() => {
+    if (value.idle !== timer) return
+    value.idle = undefined
+    if (value.kernel !== kernel || !kernel.ready || kernel.busy || value.lastActivityAt !== activity) {
+      scheduleIdle(value)
+      return
+    }
+    void releaseEntry(value).catch(() => undefined)
+  }, delay)
+  timer.unref?.()
+  value.idle = timer
 }
 
 async function releaseEntries(entries: Entry[]) {
@@ -566,8 +615,15 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
     capability: "kernel",
   })
   const value = await hydrate(identity)
+  if (value.expiring) {
+    await value.expiring
+    return entry(identity, options, handoff)
+  }
   if (value.kernel?.ready && value.authority?.generation === authority.generation) {
+    clearTimeout(value.idle)
+    value.idle = undefined
     handoff?.(value, value.kernel)
+    scheduleIdle(value)
     return value
   }
   if (value.kernel?.ready) {
@@ -673,6 +729,7 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
         handoff?.(value, kernel)
         drop()
         value.kernel = kernel
+        scheduleIdle(value)
         return value
       },
       async (error) => {
@@ -854,6 +911,7 @@ export namespace KernelRuntime {
         }
         if (!value.lastCell || value.lastCell === running.cell) value.lastCell = completeCell
         await persist(value)
+        scheduleIdle(value)
         const complete = { ...result, executionCount: count }
         await running.metricStart
         const resources =
@@ -907,6 +965,7 @@ export namespace KernelRuntime {
         if (!value.lastCell || value.lastCell === running.cell) value.lastCell = failedCell
         if (kernel.crashed) value.state = "crashed"
         await persist(value)
+        scheduleIdle(value)
         await running.metricStart
         const resources =
           running.metricScope && kernel.process?.pid
@@ -956,15 +1015,26 @@ export namespace KernelRuntime {
   export function status(identity: KernelIdentity): KernelStatus {
     const value = record(identity)
     const starting = records().starts.get(value.key)?.ticket.cancelled === false
-    const active = value.kernel?.ready ?? false
-    if (!starting && value.kernel && !active) {
+    const expiring = value.expiring !== undefined
+    const active = !expiring && (value.kernel?.ready ?? false)
+    if (!starting && !expiring && value.kernel && !active) {
+      clearTimeout(value.idle)
+      value.idle = undefined
       value.state = value.kernel.crashed ? "crashed" : "stopped"
     }
     const process = active ? value.kernel?.process : undefined
     return {
       id: value.key,
       active,
-      state: starting ? "starting" : active ? (value.kernel?.busy ? "running" : "idle") : value.state,
+      state: starting
+        ? "starting"
+        : expiring
+          ? "stopped"
+          : active
+            ? value.kernel?.busy
+              ? "running"
+              : "idle"
+            : value.state,
       projectID: identity.projectID,
       sessionID: identity.sessionID,
       name: identity.name,

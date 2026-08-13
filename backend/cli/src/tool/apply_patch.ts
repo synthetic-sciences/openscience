@@ -9,7 +9,7 @@ import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
@@ -168,8 +168,9 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
 
     let totalDiff = ""
 
+    const directory = await sessionToolDirectory(ctx)
     for (const hunk of hunks) {
-      const requested = path.resolve(Instance.directory, hunk.path)
+      const requested = path.resolve(directory, hunk.path)
       const filePath = (await assertExternalDirectory(ctx, requested, { access: "write" }))?.path ?? requested
 
       switch (hunk.type) {
@@ -225,7 +226,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             if (change.removed) deletions += change.count || 0
           }
 
-          const requestedMove = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
+          const requestedMove = hunk.move_path ? path.resolve(directory, hunk.move_path) : undefined
           const movePath = requestedMove
             ? ((await assertExternalDirectory(ctx, requestedMove, { access: "write" }))?.path ?? requestedMove)
             : undefined

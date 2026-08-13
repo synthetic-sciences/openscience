@@ -195,7 +195,7 @@ export function kernelRecoveryLabel(kernel: KernelStatus) {
   if (kernel.state === "crashed") return "The process exited. Restart to replace it; in-memory variables were lost."
   if (kernel.state === "stopped") return "Run code to start a fresh runtime."
   if (kernel.execution_count === 0) return "Ready for the first execution."
-  return "Ready. In-memory state persists for the next execution."
+  return "Ready for follow-up. In-memory state is temporary and the process stops automatically after its idle window."
 }
 
 export function kernelTargetLabel(kernel?: KernelStatus) {

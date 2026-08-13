@@ -79,7 +79,7 @@
       &[data-slot="select-select-trigger"][data-expanded],
       &[data-slot="select-select-trigger"][data-expanded]:hover:not(:disabled) {
         background-color: var(--input-base);
-        box-shadow: var(--shadow-xs-border-base);
+        box-shadow: none;
       }
 
       &:not([data-expanded]):focus {
@@ -94,10 +94,12 @@
   min-width: 104px;
   max-width: 23rem;
   overflow: hidden;
+  border: 1px solid var(--border-weak-base);
   border-radius: var(--radius-md);
   background-color: var(--surface-raised-stronger-non-alpha);
+  background-clip: padding-box;
   padding: 4px;
-  box-shadow: var(--shadow-xs-border);
+  box-shadow: var(--shadow-md);
   z-index: 60;
 
   &[data-closed] {

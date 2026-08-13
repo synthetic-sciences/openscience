@@ -77,6 +77,7 @@ test("embedded skills catalog uses a useful sentence-case heading and live actio
   expect(styles).toMatch(
     /\.settings-skills \.skills-workspace__rows\s*\{[^}]*padding: 4px;[^}]*border: 0;[^}]*background: var\(--settings-surface\)/s,
   )
+  expect(styles).toContain("box-shadow: var(--settings-shadow-card)")
   expect(styles).toMatch(
     /\.settings-skills \.skills-workspace__row\s*\{[^}]*border: 0;[^}]*border-radius: var\(--settings-radius-control\);[^}]*background: transparent/s,
   )
@@ -92,7 +93,7 @@ test("embedded skills catalog uses a useful sentence-case heading and live actio
     /\.settings-skills \.skills-workspace__toolbar-controls\s*\{[^}]*display: grid;[^}]*minmax\(148px, max-content\)[^}]*minmax\(168px, max-content\)/s,
   )
   expect(styles).toMatch(/\.settings-skills \.skills-workspace \.settings-control\s*\{[^}]*height: 32px/s)
-  expect(styles).toContain("background: var(--settings-toggle-active)")
+  expect(styles).not.toContain('[data-slot="switch-control"]')
   expect(catalog).toContain("INITIAL_SKILL_ROWS = 56")
   expect(catalog).toContain("visibleShelves")
   expect(catalog).toContain("permissionWrites = permissionWrites.then")

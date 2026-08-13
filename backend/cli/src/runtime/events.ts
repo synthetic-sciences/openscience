@@ -222,24 +222,49 @@ export namespace RuntimeEvents {
     }
   }
 
-  export async function fail(input: { sessionID: string; runID: string; error: unknown }) {
-    const message = input.error instanceof Error ? input.error.message : String(input.error)
+  export async function fail(input: { sessionID: string; runID: string; error: unknown; messageID?: string }) {
+    const detail = input.error && typeof input.error === "object" ? (input.error as Record<string, unknown>) : undefined
+    const data = detail?.data && typeof detail.data === "object" ? (detail.data as Record<string, unknown>) : undefined
+    const message =
+      input.error instanceof Error
+        ? input.error.message
+        : typeof input.error === "string"
+          ? input.error
+          : typeof data?.message === "string"
+            ? data.message
+            : JSON.stringify(input.error)
     try {
       return await terminal({
         sessionID: input.sessionID,
         runID: input.runID,
         type: "runtime.failed",
-        properties: { message },
+        properties: { message, ...(input.messageID ? { messageID: input.messageID } : {}) },
       })
     } finally {
       if (state().active.get(input.sessionID) === input.runID) state().active.delete(input.sessionID)
     }
   }
 
+  export async function cancel(input: { sessionID: string; source: "user" | "runner_timeout" }) {
+    const active = state().active
+    const runID = active.get(input.sessionID) ?? (await read(input.sessionID)).activeRunID
+    if (!runID) return
+    try {
+      return await terminal({
+        sessionID: input.sessionID,
+        runID,
+        type: "runtime.cancelled",
+        properties: { source: input.source },
+      })
+    } finally {
+      if (active.get(input.sessionID) === runID) active.delete(input.sessionID)
+    }
+  }
+
   async function terminal(input: {
     sessionID: string
     runID: string
-    type: "runtime.completed" | "runtime.failed"
+    type: "runtime.completed" | "runtime.failed" | "runtime.cancelled"
     properties: Record<string, unknown>
   }) {
     let event: Event | undefined

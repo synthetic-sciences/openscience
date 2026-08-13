@@ -3,11 +3,11 @@
   min-height: 44px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 8px 6px 12px;
-  border: 1px solid var(--border-weak-base);
-  border-radius: var(--radius-xs);
-  background: var(--surface-raised-stronger-non-alpha);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised-strong);
   color: var(--text-strong);
 }
 
@@ -37,7 +37,7 @@
   min-height: 32px;
   flex: 0 0 auto;
   padding-inline: 10px;
-  border: 1px solid var(--border-weak-base);
+  border: 0;
   border-radius: var(--radius-xs);
   background: var(--surface-base);
   color: var(--text-strong);
@@ -53,23 +53,21 @@
 
 .workspace-composer__context {
   gap: 6px;
-  padding: 8px 8px 0;
+  padding: 7px 8px 0;
 }
 
 .workspace-composer__context-item {
-  height: 46px;
+  height: 42px;
   gap: 2px;
-  padding: 5px 6px 5px 8px;
-  border: 1px solid var(--border-weak-base);
+  padding: 4px 5px 4px 7px;
+  border: 0;
   border-radius: var(--radius-xs);
-  background: var(--surface-raised-strong);
-  transition:
-    border-color var(--duration-fast) var(--ease-standard),
-    background-color var(--duration-fast) var(--ease-standard);
+  background: var(--surface-weak);
+  transition: background-color 150ms var(--ease-standard);
 }
 
 .workspace-composer__context-item:hover {
-  border-color: var(--border-base);
+  background: var(--surface-raised-base-hover);
 }
 
 .workspace-composer__context-heading {
@@ -82,8 +80,8 @@
 }
 
 .workspace-composer__context-remove {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   margin-right: -2px;
   opacity: 0.58;
 }
@@ -106,7 +104,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 10px 10px 0;
+  padding: 8px 8px 0;
 }
 
 .workspace-composer__dropzone {
@@ -144,15 +142,15 @@
 .workspace-composer__attachment {
   min-width: 0;
   max-width: min(260px, 100%);
-  height: 48px;
+  height: 44px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
+  grid-template-columns: minmax(0, 1fr) 32px;
   align-items: center;
   gap: 7px;
   padding: 5px 5px 5px 6px;
-  border: 1px solid var(--border-weak-base);
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--surface-raised-strong);
+  background: var(--surface-weak);
 }
 
 .workspace-composer__attachment-open {
@@ -223,8 +221,9 @@
 }
 
 .workspace-composer__attachment-remove {
-  width: 24px;
-  height: 24px;
+  position: relative;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -265,6 +264,41 @@
   }
 }
 
+.workspace-composer__suggestions {
+  z-index: 40;
+  gap: 2px;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
+  background-clip: padding-box;
+  box-shadow: var(--atlas-shadow-md);
+  font-family: var(--font-family-sans);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.workspace-composer__suggestion {
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-composer__suggestion:hover,
+.workspace-composer__suggestion:focus-visible {
+  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+}
+
+.workspace-composer__suggestion:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: -2px;
+}
+
 /* Composer surface
    ----------------
    This file is the sole owner of the input surface, editor baseline, utility
@@ -280,24 +314,22 @@ form.workspace-composer {
   --composer-editor-font-size: var(--font-size-base);
   --composer-editor-font-weight: var(--font-weight-regular);
   --composer-editor-line-height: 20px;
-  --composer-editor-padding-block-start: 13px;
-  --composer-editor-padding-block-end: 8px;
-  --composer-editor-padding-inline: 15px;
-  min-height: 92px;
+  --composer-editor-padding-block-start: 12px;
+  --composer-editor-padding-block-end: 5px;
+  --composer-editor-padding-inline: 14px;
+  min-height: 88px;
   border: 1px solid var(--border-weak-base);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
-  box-shadow: var(--atlas-shadow-xs);
+  box-shadow: none;
   transition:
-    border-color var(--duration-fast) var(--ease-standard),
-    box-shadow var(--duration-fast) var(--ease-standard);
+    border-color 150ms var(--ease-standard),
+    box-shadow 150ms var(--ease-standard);
 }
 
 form.workspace-composer:focus-within {
-  border-color: var(--focus-lit-ring);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--focus-lit-ring) 13%, transparent),
-    var(--atlas-shadow-xs);
+  border-color: var(--border-base);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-strong) 5%, transparent);
 }
 
 .workspace-composer__editor {
@@ -320,7 +352,7 @@ form.workspace-composer:focus-within {
 form.workspace-composer :is([data-component="prompt-input"], .workspace-composer__placeholder) {
   box-sizing: border-box;
   width: 100%;
-  min-height: 49px;
+  min-height: 46px;
   padding: var(--composer-editor-padding-block-start) var(--composer-editor-padding-inline)
     var(--composer-editor-padding-block-end);
   font-family: var(--composer-editor-font-family);
@@ -360,14 +392,14 @@ form.workspace-composer .workspace-composer__footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
-  padding: 4px 8px 8px;
+  gap: var(--space-3);
+  padding: 2px 6px 6px;
 }
 
 form.workspace-composer .workspace-composer__controls,
 form.workspace-composer .workspace-composer__actions {
   min-width: 0;
-  gap: 4px;
+  gap: 2px;
 }
 
 form.workspace-composer .workspace-composer__controls {
@@ -376,6 +408,7 @@ form.workspace-composer .workspace-composer__controls {
 
 form.workspace-composer .workspace-composer__actions {
   justify-content: flex-end;
+  gap: 4px;
 }
 
 form.workspace-composer .workspace-composer__attach {
@@ -387,6 +420,10 @@ form.workspace-composer .workspace-composer__attach {
   border-radius: var(--radius-xs);
   color: var(--text-weak);
   font-weight: var(--font-weight-regular);
+  transition:
+    background-color 150ms var(--ease-standard),
+    color 150ms var(--ease-standard),
+    transform 120ms var(--ease-standard);
 }
 
 form.workspace-composer .workspace-composer__attach:hover:not(:disabled),
@@ -395,52 +432,259 @@ form.workspace-composer .workspace-composer__attach:focus-visible {
   color: var(--text-strong);
 }
 
-form.workspace-composer .workspace-composer__effort {
+form.workspace-composer .workspace-composer__attach:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+form.workspace-composer .workspace-composer__research-tools {
+  position: relative;
+  flex: 0 0 auto;
+  height: 32px;
+}
+
+form.workspace-composer .workspace-composer__research-tools > summary {
   height: 32px;
   min-height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 3px;
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  color: var(--text-weak);
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-weight: var(--font-weight-regular);
+  line-height: 1;
+  list-style: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms var(--ease-standard),
+    color 150ms var(--ease-standard),
+    transform 120ms var(--ease-standard);
+}
+
+form.workspace-composer .workspace-composer__research-tools > summary::-webkit-details-marker {
+  display: none;
+}
+
+form.workspace-composer .workspace-composer__research-tools > summary:hover,
+form.workspace-composer .workspace-composer__research-tools > summary:focus-visible,
+form.workspace-composer .workspace-composer__research-tools[open] > summary {
+  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+  color: var(--text-strong);
+}
+
+form.workspace-composer .workspace-composer__research-tools > summary:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: -2px;
+}
+
+form.workspace-composer .workspace-composer__research-tools > summary:active {
+  transform: scale(0.98);
+}
+
+form.workspace-composer .workspace-composer__research-tools > summary [data-component="icon"] {
+  transition: transform 150ms var(--ease-standard);
+}
+
+form.workspace-composer .workspace-composer__research-tools > summary strong {
+  color: var(--text-strong);
+  font-weight: var(--font-weight-medium);
+}
+
+form.workspace-composer .workspace-composer__research-tools-separator {
+  color: var(--text-weaker);
+}
+
+form.workspace-composer .workspace-composer__research-tools[open] > summary [data-component="icon"] {
+  transform: rotate(180deg);
+}
+
+form.workspace-composer .workspace-composer__research-tools-menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 40;
+  width: min(292px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
+  background-clip: padding-box;
+  box-shadow: var(--atlas-shadow-md);
+}
+
+form.workspace-composer .workspace-composer__research-tools-heading {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+form.workspace-composer .workspace-composer__research-tools-heading strong,
+form.workspace-composer .workspace-composer__research-tools-heading span {
+  font-size: 11px;
+  line-height: 16px;
+}
+
+form.workspace-composer .workspace-composer__research-tools-heading strong {
+  color: var(--text-strong);
+  font-weight: var(--font-weight-medium);
+}
+
+form.workspace-composer .workspace-composer__research-tools-heading span {
+  color: var(--text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+form.workspace-composer .workspace-composer__research-effort {
+  padding: 7px;
+}
+
+form.workspace-composer .workspace-composer__research-effort p {
+  margin: 4px 0 0;
+  color: var(--text-weak);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+  line-height: 15px;
+  text-wrap: pretty;
+}
+
+form.workspace-composer .workspace-composer__research-effort-options {
+  height: 32px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  margin-top: 5px;
+  padding: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-subtle, var(--surface-raised-base));
+}
+
+form.workspace-composer .workspace-composer__research-effort-options > button {
+  min-width: 0;
+  min-height: 28px;
   padding: 0 8px;
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-weak);
   font-family: var(--font-family-sans);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: var(--font-weight-regular);
   line-height: 1;
-  white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color 150ms var(--ease-standard),
+    color 150ms var(--ease-standard),
+    transform 120ms var(--ease-standard);
 }
 
-form.workspace-composer .workspace-composer__effort:hover,
-form.workspace-composer .workspace-composer__effort:focus-visible {
-  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
-  color: var(--text-strong);
-}
-
-form.workspace-composer .workspace-composer__effort strong {
+form.workspace-composer .workspace-composer__research-effort-options > button[aria-checked="true"] {
+  background: var(--surface-base-active);
   color: var(--text-strong);
   font-weight: var(--font-weight-medium);
 }
 
-form.workspace-composer .workspace-composer__effort[data-research-effort="ultra"] {
-  background: var(--surface-interactive-weak);
+form.workspace-composer .workspace-composer__research-effort-options > button:hover,
+form.workspace-composer .workspace-composer__research-effort-options > button:focus-visible {
   color: var(--text-strong);
 }
 
-form.workspace-composer .workspace-composer__effort[data-research-effort="ultra"]:hover,
-form.workspace-composer .workspace-composer__effort[data-research-effort="ultra"]:focus-visible {
-  background: var(--surface-interactive-weak-hover);
+form.workspace-composer .workspace-composer__research-effort-options > button:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: -2px;
+}
+
+form.workspace-composer .workspace-composer__research-effort-options > button:active {
+  transform: scale(0.98);
+}
+
+form.workspace-composer .workspace-composer__research-tools-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+form.workspace-composer .workspace-composer__research-tools-actions > button {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-base);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 150ms var(--ease-standard),
+    transform 120ms var(--ease-standard);
+}
+
+form.workspace-composer .workspace-composer__research-tools-actions > button:hover,
+form.workspace-composer .workspace-composer__research-tools-actions > button:focus-visible {
+  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+}
+
+form.workspace-composer .workspace-composer__research-tools-actions > button:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: -2px;
+}
+
+form.workspace-composer .workspace-composer__research-tools-actions > button:active {
+  transform: scale(0.985);
+}
+
+form.workspace-composer .workspace-composer__research-tools-actions > button > [data-component="icon"] {
+  color: var(--text-weaker);
+}
+
+form.workspace-composer .workspace-composer__research-tools-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+form.workspace-composer .workspace-composer__research-tools-copy strong,
+form.workspace-composer .workspace-composer__research-tools-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+form.workspace-composer .workspace-composer__research-tools-copy strong {
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+}
+
+form.workspace-composer .workspace-composer__research-tools-copy small {
+  color: var(--text-weak);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+  line-height: 15px;
 }
 
 form.workspace-composer .workspace-composer__send {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  min-height: 34px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   border-radius: var(--composer-radius-pill);
   box-shadow: none;
 }
@@ -466,6 +710,10 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
   color: var(--icon-invert-base);
 }
 
+form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [data-component="icon"] {
+  --icon-size: 12px;
+}
+
 /* The conversation column can narrow independently of the viewport when the
    research pane is resized. Mirror the small-screen control geometry against
    that actual available width instead of waiting for a window breakpoint. */
@@ -475,14 +723,8 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
   }
 
   form.workspace-composer .workspace-composer__footer {
-    gap: 5px;
-    padding: 5px 6px 6px;
-  }
-}
-
-@container conversation (max-width: 390px) {
-  form.workspace-composer .workspace-composer__effort > span {
-    display: none;
+    gap: 8px;
+    padding: 2px 5px 5px;
   }
 }
 
@@ -491,33 +733,60 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
     --composer-editor-font-size: 16px;
     --composer-editor-line-height: 24px;
     --composer-editor-padding-inline: 12px;
-    min-height: 96px;
-    border-radius: var(--radius-xl);
+    min-height: 94px;
+    border-radius: var(--radius-lg);
   }
 
   form.workspace-composer .workspace-composer__footer {
-    gap: 5px;
-    padding: 5px 6px 6px;
-  }
-}
-
-@media (max-width: 390px) {
-  form.workspace-composer .workspace-composer__effort > span {
-    display: none;
+    gap: 8px;
+    padding: 2px 5px 5px;
   }
 }
 
 @media (pointer: coarse) {
+  form.workspace-composer .workspace-composer__research-tools {
+    height: 44px;
+  }
+
   form.workspace-composer .workspace-composer__attach,
-  form.workspace-composer .workspace-composer__effort,
+  form.workspace-composer .workspace-composer__research-tools > summary,
   form.workspace-composer .workspace-composer__send {
     min-width: 44px;
     min-height: 44px;
+  }
+
+  form.workspace-composer .workspace-composer__research-effort-options {
+    height: 44px;
+  }
+
+  form.workspace-composer .workspace-composer__research-effort-options > button,
+  form.workspace-composer .workspace-composer__research-tools-actions > button {
+    min-height: 44px;
+  }
+
+  .workspace-composer__context-remove,
+  .workspace-composer__attachment-remove {
+    position: relative;
+  }
+
+  .workspace-composer__context-remove::after,
+  .workspace-composer__attachment-remove::after {
+    position: absolute;
+    inset: -6px;
+    content: "";
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   form.workspace-composer {
+    transition: none;
+  }
+
+  form.workspace-composer .workspace-composer__research-tools > summary,
+  form.workspace-composer .workspace-composer__research-tools > summary [data-component="icon"],
+  form.workspace-composer .workspace-composer__research-effort-options > button,
+  form.workspace-composer .workspace-composer__research-tools-actions > button,
+  form.workspace-composer .workspace-composer__attach {
     transition: none;
   }
 }

@@ -75,8 +75,8 @@ describe("execution activity card", () => {
     const disclosures = Array.from(card.querySelectorAll<HTMLDetailsElement>("details"))
 
     expect(card.querySelector(".activity-card__identity")?.textContent).toContain("Dataset summary generated")
-    expect(card.querySelector(".activity-card__status")?.textContent).toBe("Succeeded")
-    expect(card.querySelector(".activity-card__summary")?.textContent).toContain("Run 7 · 1.2 s")
+    expect(card.querySelector(".activity-card__status")).toBeNull()
+    expect(card.querySelector(".kernel-card__copy")?.textContent).toContain("Run 7 · 1.2 s")
     expect(disclosures.map((item) => item.querySelector("summary")?.textContent)).toEqual([
       "Code",
       "Logs",

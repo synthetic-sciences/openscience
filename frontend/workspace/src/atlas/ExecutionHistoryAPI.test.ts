@@ -45,6 +45,34 @@ describe("execution history API", () => {
     expect(calls[0]?.init?.cache).toBe("no-store")
   })
 
+  test("treats the pre-history provenance route shadow as an empty optional history", async () => {
+    let requests = 0
+    const api = createExecutionHistoryAPI(async () => {
+      requests += 1
+      return Response.json({ error: "Provenance node not found" }, { status: 404 })
+    })
+
+    expect(await api.list("ses_legacy")).toEqual([])
+    expect(await api.list("ses_legacy")).toEqual([])
+    expect(requests).toBe(1)
+  })
+
+  test("keeps real history failures visible", async () => {
+    const unavailable = createExecutionHistoryAPI(async () =>
+      Response.json({ error: "History store unavailable" }, { status: 503 }),
+    )
+    const unrelatedMiss = createExecutionHistoryAPI(async () =>
+      Response.json({ error: "Project not found" }, { status: 404 }),
+    )
+    const offline = createExecutionHistoryAPI(async () => {
+      throw new Error("connection reset")
+    })
+
+    expect(unavailable.list("ses_current")).rejects.toThrow('{"error":"History store unavailable"}')
+    expect(unrelatedMiss.list("ses_current")).rejects.toThrow('{"error":"Project not found"}')
+    expect(offline.list("ses_current")).rejects.toThrow("connection reset")
+  })
+
   test("keeps a bounded newest-first result list", () => {
     const oldest = execution("old", 1, "2026-08-12T09:00:00.000Z")
     const newest = execution("new", 3, "2026-08-12T11:00:00.000Z")

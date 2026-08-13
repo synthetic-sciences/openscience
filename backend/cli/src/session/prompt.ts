@@ -290,11 +290,12 @@ export namespace SessionPrompt {
     return controller.signal
   }
 
-  export function cancel(sessionID: string) {
+  export function cancel(sessionID: string, owner?: AbortSignal) {
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
     if (!match) return
+    if (owner && match.abort.signal !== owner) return
     match.abort.abort()
     for (const item of match.callbacks) {
       item.reject()
@@ -319,7 +320,7 @@ export namespace SessionPrompt {
       })
     }
 
-    using _ = defer(() => cancel(sessionID))
+    using _ = defer(() => cancel(sessionID, abort))
 
     let step = 0
     // Consecutive context-overflow compactions for the current unanswered turn.
@@ -330,6 +331,7 @@ export namespace SessionPrompt {
     // threshold. Prevents an infinite compaction loop when fixed system+tool+
     // summary overhead alone already exceeds the 0.75 threshold.
     let compactionArmed = true
+    const workspace = await SessionFilesystem.workspace(sessionID)
     // Text doom-loop guard (#176): weak/local models sometimes emit a near-identical
     // "continuity summary" turn over and over instead of converging on an answer.
     // The processor's doom-loop guard can't catch it — the TOOL calls vary (or are
@@ -400,7 +402,7 @@ export namespace SessionPrompt {
           sessionID,
           mode: realUser.agent,
           agent: realUser.agent,
-          path: { cwd: Instance.directory, root: Instance.worktree },
+          path: { cwd: workspace, root: Instance.worktree },
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           modelID: realUser.model.modelID,
@@ -485,7 +487,7 @@ export namespace SessionPrompt {
           mode: lastUser.agent,
           agent: lastUser.agent,
           path: {
-            cwd: Instance.directory,
+            cwd: workspace,
             root: Instance.worktree,
           },
           cost: 0,
@@ -526,7 +528,7 @@ export namespace SessionPrompt {
           mode: taskProfile,
           agent: taskProfile,
           path: {
-            cwd: Instance.directory,
+            cwd: workspace,
             root: Instance.worktree,
           },
           cost: 0,
@@ -787,7 +789,7 @@ export namespace SessionPrompt {
           mode: agent.name,
           agent: agent.name,
           path: {
-            cwd: Instance.directory,
+            cwd: workspace,
             root: Instance.worktree,
           },
           cost: 0,
@@ -856,7 +858,7 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
       const system = [
-        ...(await SystemPrompt.environment(model)),
+        ...(await SystemPrompt.environment(model, sessionID)),
         ...(await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
         ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
@@ -891,6 +893,13 @@ export namespace SessionPrompt {
         tools,
         model,
       })
+      // The final budgeted child turn is a structured partial outcome, not a
+      // normal completion. Persist that fact instead of relying on the model
+      // to repeat the MAX_STEPS prose correctly.
+      if (isLastStep && result === "continue" && !processor.message.error) {
+        processor.message.finish = "max-steps"
+        await Session.updateMessage(processor.message)
+      }
       if (result === "stop") break
       if (result === "overflow") {
         // Honor an explicit opt-out: if the user disabled auto-compaction, a hard
@@ -984,22 +993,8 @@ export namespace SessionPrompt {
       },
       agent: input.agent.name,
       messages: input.messages,
-      metadata: async (val: { title?: string; metadata?: any }) => {
-        const match = input.processor.partFromToolCall(options.toolCallId)
-        if (match && match.state.status === "running") {
-          await Session.updatePart({
-            ...match,
-            state: {
-              title: val.title,
-              metadata: val.metadata,
-              status: "running",
-              input: args,
-              time: {
-                start: Date.now(),
-              },
-            },
-          })
-        }
+      metadata: (val: { title?: string; metadata?: any }) => {
+        input.processor.toolMetadata(options.toolCallId, args, val)
       },
       async ask(req) {
         await PermissionNext.ask({
@@ -1022,29 +1017,31 @@ export namespace SessionPrompt {
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           const ctx = context(args, options)
-          return PlanMode.run(item.id, ctx.agent, async () => {
-            await Plugin.trigger(
-              "tool.execute.before",
-              {
-                tool: item.id,
-                sessionID: ctx.sessionID,
-                callID: ctx.callID,
-              },
-              {
-                args,
-              },
-            )
-            const result = await item.execute(args, ctx)
-            await Plugin.trigger(
-              "tool.execute.after",
-              {
-                tool: item.id,
-                sessionID: ctx.sessionID,
-                callID: ctx.callID,
-              },
-              result,
-            )
-            return result
+          return input.processor.executeTool(options.toolCallId, args, async () => {
+            return PlanMode.run(item.id, ctx.agent, async () => {
+              await Plugin.trigger(
+                "tool.execute.before",
+                {
+                  tool: item.id,
+                  sessionID: ctx.sessionID,
+                  callID: ctx.callID,
+                },
+                {
+                  args,
+                },
+              )
+              const result = await item.execute(args, ctx)
+              await Plugin.trigger(
+                "tool.execute.after",
+                {
+                  tool: item.id,
+                  sessionID: ctx.sessionID,
+                  callID: ctx.callID,
+                },
+                result,
+              )
+              return result
+            })
           })
         },
       })
@@ -1057,94 +1054,96 @@ export namespace SessionPrompt {
       // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
         const ctx = context(args, opts)
-        return PlanMode.run(key, ctx.agent, async () => {
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: key,
-              sessionID: ctx.sessionID,
-              callID: opts.toolCallId,
-            },
-            {
-              args,
-            },
-          )
+        return input.processor.executeTool(opts.toolCallId, args, async () => {
+          return PlanMode.run(key, ctx.agent, async () => {
+            await Plugin.trigger(
+              "tool.execute.before",
+              {
+                tool: key,
+                sessionID: ctx.sessionID,
+                callID: opts.toolCallId,
+              },
+              {
+                args,
+              },
+            )
 
-          await ctx.ask({
-            permission: "mcp",
-            metadata: {},
-            patterns: [key],
-            always: [key],
-          })
+            await ctx.ask({
+              permission: "mcp",
+              metadata: {},
+              patterns: [key],
+              always: [key],
+            })
 
-          const result = await execute(args, opts)
+            const result = await execute(args, opts)
 
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: key,
-              sessionID: ctx.sessionID,
-              callID: opts.toolCallId,
-            },
-            result,
-          )
+            await Plugin.trigger(
+              "tool.execute.after",
+              {
+                tool: key,
+                sessionID: ctx.sessionID,
+                callID: opts.toolCallId,
+              },
+              result,
+            )
 
-          const textParts: string[] = []
-          const attachments: MessageV2.FilePart[] = []
+            const textParts: string[] = []
+            const attachments: MessageV2.FilePart[] = []
 
-          for (const contentItem of result.content) {
-            if (contentItem.type === "text") {
-              textParts.push(contentItem.text)
-            } else if (contentItem.type === "image") {
-              const detectedMime = correctImageMime(
-                contentItem.mimeType,
-                Buffer.from(contentItem.data.slice(0, 24), "base64"),
-              )
-              attachments.push({
-                id: Identifier.ascending("part"),
-                sessionID: input.session.id,
-                messageID: input.processor.message.id,
-                type: "file",
-                mime: detectedMime,
-                url: `data:${detectedMime};base64,${contentItem.data}`,
-              })
-            } else if (contentItem.type === "resource") {
-              const { resource } = contentItem
-              if (resource.text) {
-                textParts.push(resource.text)
-              }
-              if (resource.blob) {
-                const blobMime = correctImageMime(
-                  resource.mimeType ?? "application/octet-stream",
-                  Buffer.from(resource.blob.slice(0, 24), "base64"),
+            for (const contentItem of result.content) {
+              if (contentItem.type === "text") {
+                textParts.push(contentItem.text)
+              } else if (contentItem.type === "image") {
+                const detectedMime = correctImageMime(
+                  contentItem.mimeType,
+                  Buffer.from(contentItem.data.slice(0, 24), "base64"),
                 )
                 attachments.push({
                   id: Identifier.ascending("part"),
                   sessionID: input.session.id,
                   messageID: input.processor.message.id,
                   type: "file",
-                  mime: blobMime,
-                  url: `data:${blobMime};base64,${resource.blob}`,
-                  filename: resource.uri,
+                  mime: detectedMime,
+                  url: `data:${detectedMime};base64,${contentItem.data}`,
                 })
+              } else if (contentItem.type === "resource") {
+                const { resource } = contentItem
+                if (resource.text) {
+                  textParts.push(resource.text)
+                }
+                if (resource.blob) {
+                  const blobMime = correctImageMime(
+                    resource.mimeType ?? "application/octet-stream",
+                    Buffer.from(resource.blob.slice(0, 24), "base64"),
+                  )
+                  attachments.push({
+                    id: Identifier.ascending("part"),
+                    sessionID: input.session.id,
+                    messageID: input.processor.message.id,
+                    type: "file",
+                    mime: blobMime,
+                    url: `data:${blobMime};base64,${resource.blob}`,
+                    filename: resource.uri,
+                  })
+                }
               }
             }
-          }
 
-          const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
-          const metadata = {
-            ...(result.metadata ?? {}),
-            truncated: truncated.truncated,
-            ...(truncated.truncated && { outputPath: truncated.outputPath }),
-          }
+            const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+            const metadata = {
+              ...(result.metadata ?? {}),
+              truncated: truncated.truncated,
+              ...(truncated.truncated && { outputPath: truncated.outputPath }),
+            }
 
-          return {
-            title: "",
-            metadata,
-            output: truncated.content,
-            attachments,
-            content: result.content, // directly return content to preserve ordering when outputting to model
-          }
+            return {
+              title: "",
+              metadata,
+              output: truncated.content,
+              attachments,
+              content: result.content, // directly return content to preserve ordering when outputting to model
+            }
+          })
         })
       }
       tools[key] = item
@@ -1168,7 +1167,7 @@ export namespace SessionPrompt {
     return [
       "<system-reminder>",
       `Research effort: ${effort.toUpperCase()}. ${posture}`,
-      `Delegation is optional, shallow, and limited to ${limit} concurrent child tasks.`,
+      `Delegation is optional and shallow: at most ${limit} Task calls total this user turn, including continuations.`,
       "</system-reminder>",
     ].join("\n")
   }
@@ -1795,7 +1794,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     if (!abort) {
       throw new Session.BusyError(input.sessionID)
     }
-    using _ = defer(() => cancel(input.sessionID))
+    using _ = defer(() => cancel(input.sessionID, abort))
 
     if (session.revert) {
       await SessionRevert.cleanup(session)

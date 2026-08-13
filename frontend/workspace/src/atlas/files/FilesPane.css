@@ -77,10 +77,11 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: 6px;
-  border: 1px solid var(--color-border-base);
+  border: 1px solid var(--color-border);
   border-radius: var(--atlas-radius-md);
   background: var(--color-surface-solid);
-  box-shadow: var(--atlas-shadow-float);
+  background-clip: padding-box;
+  box-shadow: var(--atlas-shadow-md);
 }
 .files-menu__group {
   padding: 10px 10px 5px;
@@ -1144,10 +1145,11 @@
   flex-direction: column;
   min-width: 168px;
   padding: 4px;
-  border: 1px solid var(--color-border-base);
+  border: 1px solid var(--color-border);
   border-radius: var(--atlas-radius-sm);
   background: var(--color-surface-solid);
-  box-shadow: 0 12px 30px -12px rgb(8 10 14 / 0.38);
+  background-clip: padding-box;
+  box-shadow: var(--atlas-shadow-md);
 }
 /* The toolbar spans the pane, so anchoring this one to its right edge keeps it
    inside without measurement. */

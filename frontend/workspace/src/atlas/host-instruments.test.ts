@@ -24,6 +24,7 @@ describe("host reading", () => {
     expect(reading.cores).toBe("~0.7 of 8")
     expect(reading.cpuFill).toBeCloseTo(0.7 / 8, 5)
     expect(reading.live).toBe("4")
+    expect(reading.running).toBe("3")
     expect(reading.kernels).toBe("2 kernels · 1 command · 1 job · 3 running")
   })
 
@@ -34,6 +35,7 @@ describe("host reading", () => {
     expect(reading.memory).toBe("memory unavailable")
     expect(reading.memoryFill).toBe(0)
     expect(reading.cpuFill).toBe(0)
+    expect(reading.running).toBe("0")
   })
 
   test("degrades only the figure a partial body left out, and never throws", () => {

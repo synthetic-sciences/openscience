@@ -120,7 +120,9 @@ describe("kernel runtime presentation", () => {
     expect(kernelOwnershipLabel(kernel(), "ses_123456789")).toBe("This session")
     expect(kernelOwnershipLabel(kernel(), "new")).toBe("Project session")
     expect(kernelOwnershipLabel(kernel(), "ses_other")).toBe("Project session")
-    expect(kernelRecoveryLabel(kernel())).toBe("Ready. In-memory state persists for the next execution.")
+    expect(kernelRecoveryLabel(kernel())).toBe(
+      "Ready for follow-up. In-memory state is temporary and the process stops automatically after its idle window.",
+    )
     expect(kernelRecoveryLabel(kernel({ execution_count: 0 }))).toBe("Ready for the first execution.")
     expect(kernelRecoveryLabel(kernel({ state: "starting", active: false }))).toBe(
       "Starting the interpreter and applying its environment.",

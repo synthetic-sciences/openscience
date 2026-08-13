@@ -4,7 +4,7 @@ import * as path from "path"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -42,8 +42,9 @@ export const ListTool = Tool.define("list", {
     ignore: z.array(z.string()).describe("List of glob patterns to ignore").optional(),
   }),
   async execute(params, ctx) {
-    const searchPath = path.resolve(Instance.directory, params.path || ".")
-    await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
+    let searchPath = path.resolve(await sessionToolDirectory(ctx), params.path || ".")
+    const authorized = await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
+    searchPath = authorized?.path ?? searchPath
 
     await ctx.ask({
       permission: "list",

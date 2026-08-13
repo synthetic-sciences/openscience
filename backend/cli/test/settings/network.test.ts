@@ -3,6 +3,7 @@ import { Network } from "../../src/settings/network"
 import { NetworkSettingsRoutes } from "../../src/server/routes/settings/network"
 import { Global } from "../../src/global"
 import path from "node:path"
+import fs from "node:fs/promises"
 
 afterEach(async () => {
   await Network.set({ allowlistEnabled: false, enabled: ["package-management"], custom: [] })
@@ -15,7 +16,10 @@ test("domainAllowed accepts exact domains and subdomains only", () => {
 })
 
 test("new installs enforce every curated package and science group", async () => {
+  const file = path.join(Global.Path.data, "settings", "network.json")
+  await fs.rm(file, { force: true })
   const state = Network.defaults()
+  expect(await Network.get()).toEqual(state)
   expect(state.allowlistEnabled).toBe(true)
   expect(state.enabled).toEqual(Network.CATALOG.map((group) => group.id))
   await Network.set(state)
@@ -33,6 +37,49 @@ test("migrates only the legacy unenforced seed and preserves an explicit v2 disa
 
   await Network.set({ allowlistEnabled: false, enabled: ["package-management"], custom: [] })
   expect(await Network.get()).toEqual({ allowlistEnabled: false, enabled: ["package-management"], custom: [] })
+})
+
+test("migrates legacy clinical policy without broadening and is serialized and idempotent", async () => {
+  const file = path.join(Global.Path.data, "settings", "network.json")
+  await Bun.write(
+    file,
+    JSON.stringify({
+      allowlistEnabled: true,
+      enabled: ["ncbi-nih", "proteomics", "clinical-pharma", "literature-citations"],
+      custom: ["Example.org"],
+    }),
+  )
+
+  const expected = {
+    allowlistEnabled: true,
+    enabled: ["ncbi-nih", "proteomics", "clinical-regulatory", "literature-citations"],
+    custom: ["example.org", "go.drugbank.com"],
+  }
+  const states = await Promise.all(Array.from({ length: 8 }, () => Network.get()))
+  expect(states).toEqual(Array.from({ length: 8 }, () => expected))
+  expect(await Network.blocked("https://go.drugbank.com/releases/latest")).toBeUndefined()
+  expect(await Network.blocked("https://api.fda.gov/drug/event.json")).toBeUndefined()
+  expect(await Network.blocked("https://bindingdb.org/rwd/bind/index.jsp")).toBe("bindingdb.org")
+
+  const persisted = await Bun.file(file).json()
+  expect(persisted).toEqual({ version: 2, ...expected })
+  const before = await Bun.file(file).text()
+  expect(await Network.get()).toEqual(expected)
+  expect(await Bun.file(file).text()).toBe(before)
+})
+
+test("invalid or unsupported persisted policy denies all instead of restoring install defaults", async () => {
+  const file = path.join(Global.Path.data, "settings", "network.json")
+  for (const value of [
+    "{",
+    JSON.stringify({ version: 3, allowlistEnabled: true, enabled: [], custom: [] }),
+    JSON.stringify({ version: 2, allowlistEnabled: true, enabled: ["unknown-group"], custom: [] }),
+  ]) {
+    await Bun.write(file, value)
+    expect(await Network.get()).toEqual({ allowlistEnabled: true, enabled: [], custom: [] })
+    expect(await Network.blocked("https://pypi.org/project/example")).toBe("pypi.org")
+    expect(await Bun.file(file).text()).toBe(value)
+  }
 })
 
 test("custom domains canonicalize and invalid policy input fails closed", async () => {
@@ -164,6 +211,42 @@ test("policy-aware fetch pins the validated address instead of resolving twice",
   expect(await response.text()).toBe("pinned")
   expect(resolutions).toBe(1)
   expect(connected).toEqual(["8.8.8.8"])
+})
+
+test("policy-aware fetch rejects a declared oversized response before exposing its body", async () => {
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  let cancelled = false
+  const body = new ReadableStream({
+    cancel() {
+      cancelled = true
+    },
+  })
+
+  await expect(
+    Network.fetch(
+      "https://public.example/large",
+      {},
+      {
+        maxResponseBytes: 5,
+        resolveAddresses: async () => ["8.8.8.8"],
+        transport: async () =>
+          new Response(body, {
+            headers: {
+              "content-length": "6",
+              "content-type": "application/json",
+              "content-disposition": 'attachment; filename="large.json"',
+            },
+          }),
+      },
+    ),
+  ).rejects.toMatchObject({
+    name: "ResponseTooLargeError",
+    limitBytes: 5,
+    declaredBytes: 6,
+    contentType: "application/json",
+    contentDisposition: 'attachment; filename="large.json"',
+  })
+  expect(cancelled).toBe(true)
 })
 
 test("assertAllowed is advisory when the allow-list is disabled", async () => {

@@ -24,13 +24,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
 
   return (
     <section class="activity-surface compute-surface" aria-label="Compute">
-      <details class="activity-surface__capacity">
-        <summary>
-          <span>Local capacity</span>
-          <small>Memory, CPU, and live process readings</small>
-        </summary>
-        <Dynamic component={strip} />
-      </details>
+      <Dynamic component={strip} />
       <div class="compute-surface__panel" data-compute-child="kernels">
         <Dynamic component={kernels} />
       </div>

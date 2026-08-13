@@ -276,6 +276,20 @@ export namespace Sandbox {
     return [...result]
   }
 
+  /** Read-only system MIME databases consulted by Python's stdlib
+   * `mimetypes.init()` and, transitively, common scientific packages such as
+   * openpyxl. Keep this an exact file allowlist: exposing `/etc` would reveal
+   * unrelated host configuration and credentials. */
+  function runtimeMimeTypeFiles(): string[] {
+    return [
+      "/etc/mime.types",
+      "/etc/httpd/mime.types",
+      "/etc/httpd/conf/mime.types",
+      "/etc/apache/mime.types",
+      "/etc/apache2/mime.types",
+    ].filter((value) => fs.existsSync(value))
+  }
+
   /** Read-only roots needed to launch common local research runtimes. These
    * are installation/code roots, never the user's home directory as a whole. */
   function runtimeReadRoots(entrypoints: string[]): string[] {
@@ -331,6 +345,7 @@ export namespace Sandbox {
       "/Library/Developer/CommandLineTools",
       "/Library/Frameworks",
       "/private/etc/ssl",
+      ...runtimeMimeTypeFiles(),
     ]) {
       if (fs.existsSync(value)) add(value)
     }
@@ -529,6 +544,7 @@ export namespace Sandbox {
       "/etc/pki/ca-trust",
       "/etc/ca-certificates",
       "/etc/fonts",
+      ...runtimeMimeTypeFiles(),
     ].filter((value) => fs.existsSync(value))
   }
 

@@ -1,0 +1,3 @@
+campaigns/*
+!campaigns/.gitkeep
+.runtime/

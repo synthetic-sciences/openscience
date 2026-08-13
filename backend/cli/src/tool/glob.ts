@@ -4,7 +4,7 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -28,9 +28,11 @@ export const GlobTool = Tool.define("glob", {
       },
     })
 
-    let search = params.path ?? Instance.directory
-    search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
-    await assertExternalDirectory(ctx, search, { kind: "directory" })
+    const directory = await sessionToolDirectory(ctx)
+    let search = params.path ?? directory
+    search = path.isAbsolute(search) ? search : path.resolve(directory, search)
+    const authorized = await assertExternalDirectory(ctx, search, { kind: "directory" })
+    search = authorized?.path ?? search
 
     const limit = 100
     const files = []

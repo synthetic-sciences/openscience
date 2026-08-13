@@ -112,6 +112,26 @@ describe("session.retry.retryable", () => {
     const error = wrap("not-json")
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
+
+  test.each([
+    ["bio policy", { type: "error", error: { type: "invalid_request_error", code: "bio_policy" } }],
+    ["bad parameter", { type: "error", error: { type: "invalid_request_error", code: "invalid_value" } }],
+    ["missing model", { type: "error", error: { type: "not_found_error", code: "model_not_found" } }],
+    ["authentication", { type: "error", error: { type: "authentication_error" } }],
+    ["permission", { type: "error", error: { type: "permission_error" } }],
+    ["oversized field", { type: "error", error: { code: "string_above_max_length" } }],
+  ])("does not retry deterministic streamed %s errors", (_label, body) => {
+    expect(SessionRetry.retryable(wrap(JSON.stringify(body)))).toBeUndefined()
+  })
+
+  test.each([
+    ["nested rate limit", { type: "error", error: { code: "rate_limit_exceeded" } }, "Rate Limited"],
+    ["server error", { type: "error", error: { type: "server_error" } }, "Provider Server Error"],
+    ["internal error", { error: { code: "internal_error" } }, "Provider Server Error"],
+    ["unavailable", { error: { code: "service_unavailable" } }, "Provider is overloaded"],
+  ])("retries positive transient %s signals", (_label, body, expected) => {
+    expect(SessionRetry.retryable(wrap(JSON.stringify(body)))).toBe(expected)
+  })
 })
 
 describe("session.message-v2.fromError", () => {

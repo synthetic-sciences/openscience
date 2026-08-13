@@ -104,6 +104,10 @@ test("settings skills bound hidden DOM and make toggle feedback immediate", () =
 
 test("skill tags remain whole and switches keep compact geometry", () => {
   const css = styles()
+  const switchCss = readFileSync(
+    fileURLToPath(new URL("../../../ui/src/components/switch.css", import.meta.url)),
+    "utf8",
+  )
 
   expect(css).toMatch(
     /\.skills-workspace__details\s*\{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) max-content/s,
@@ -112,10 +116,9 @@ test("skill tags remain whole and switches keep compact geometry", () => {
   expect(css).toMatch(
     /@container skills-workspace \(max-width: 640px\)[\s\S]*?\.skills-workspace__tags\s*\{[^}]*display: none/s,
   )
-  expect(css).toMatch(
-    /\.skills-workspace \[data-component="switch"\] \[data-slot="switch-control"\]\s*\{[^}]*width: 32px;[^}]*height: 18px/s,
-  )
-  expect(css).toMatch(/\.skills-workspace \[data-component="switch"\]\s*\{[^}]*min-width: 32px;[^}]*min-height: 32px/s)
+  expect(switchCss).toMatch(/\[data-slot="switch-control"\]\s*\{[^}]*width: 30px;[^}]*height: 18px/s)
+  expect(switchCss).toMatch(/\[data-component="switch"\]\s*\{[^}]*min-width: 32px;[^}]*min-height: 32px/s)
+  expect(css).not.toMatch(/\.skills-workspace \[data-component="switch"\] \[data-slot="switch-(?:control|thumb)"\]/)
 })
 
 test("skill icons use subject metadata with a stable fallback", () => {

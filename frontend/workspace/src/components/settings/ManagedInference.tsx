@@ -145,11 +145,11 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
 
   return (
     <div class="models-inference">
-      <div class="settings-card settings-account-summary models-account-summary">
-        <div class="settings-row models-compact-row">
-          <div class="models-account-summary__identity">
-            <div class="flex min-w-0 flex-col gap-0.5">
-              <span class="text-12-regular text-text-weak">OpenScience credits</span>
+      <div class="settings-row models-compact-row models-account-summary">
+        <div class="models-account-summary__identity">
+          <div class="flex min-w-0 flex-col gap-0.5">
+            <span class="text-12-regular text-text-weak">OpenScience credits</span>
+            <span aria-live="polite">
               <Show when={wallet()} fallback={<span class="text-13-medium text-text-weak">Checking account…</span>}>
                 <span class="text-13-medium text-text-strong">
                   {wallet()!.signedIn
@@ -159,19 +159,19 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
                     : "Not signed in"}
                 </span>
               </Show>
-            </div>
+            </span>
           </div>
-          <span class="models-row-action">
-            <Button
-              class="settings-panel-action models-secondary-action"
-              size="small"
-              variant="secondary"
-              onClick={() => platform.openLink(URLS.dashboardBilling)}
-            >
-              Add funds
-            </Button>
-          </span>
         </div>
+        <span class="models-row-action">
+          <Button
+            class="settings-panel-action models-secondary-action"
+            size="small"
+            variant="secondary"
+            onClick={() => platform.openLink(URLS.dashboardBilling)}
+          >
+            Add funds
+          </Button>
+        </span>
       </div>
 
       <div class="models-routing" aria-label="Inference routing">

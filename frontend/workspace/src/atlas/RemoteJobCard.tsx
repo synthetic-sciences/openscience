@@ -15,13 +15,16 @@ const jobTime = (job: Job) => Date.parse(job.completed_at ?? job.started_at ?? j
 
 export function visibleJobs(jobs: Job[], completedLimit = RECENT_COMPLETED_LIMIT) {
   const active: Job[] = []
+  const attention: Job[] = []
   const completed: Job[] = []
   for (const job of jobs) {
     if (jobLive(job)) active.push(job)
-    else completed.push(job)
+    else if (job.status === "succeeded") completed.push(job)
+    else attention.push(job)
   }
+  attention.sort((a, b) => jobTime(b) - jobTime(a))
   completed.sort((a, b) => jobTime(b) - jobTime(a))
-  return [...active, ...completed.slice(0, completedLimit)]
+  return [...active, ...attention, ...completed.slice(0, completedLimit)]
 }
 
 const elapsed = (job: Job, now: number) => {
@@ -103,9 +106,11 @@ export function RemoteJobCard(props: {
             <span>{result(props.job)}</span>
           </div>
         </div>
-        <span class="activity-card__status" data-tone={tone(props.job)}>
-          {jobStatusLabel(props.job.status)}
-        </span>
+        <Show when={props.job.status !== "succeeded"}>
+          <span class="activity-card__status" data-tone={tone(props.job)}>
+            {jobStatusLabel(props.job.status)}
+          </span>
+        </Show>
       </header>
 
       <p class="activity-card__summary">

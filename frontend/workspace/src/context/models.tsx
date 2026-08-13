@@ -4,7 +4,14 @@ import { uniqueBy } from "remeda"
 import { createSimpleContext } from "@synsci/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
-import { canonicalKey, isChatModel, isFrontier, preferredModel, preferredModels, type ModelKey } from "./model-catalog"
+import {
+  isChatModel,
+  isFrontier,
+  logicalModelKey,
+  preferredModel,
+  preferredModels,
+  type ModelKey,
+} from "./model-catalog"
 
 export { canonicalKey, FRONTIER_MODELS, type ModelKey } from "./model-catalog"
 
@@ -27,12 +34,12 @@ type Store = {
 }
 
 export const togglePinned = (current: ModelKey[], model: ModelKey) => {
-  const models = current.slice(0, 3)
-  const key = canonicalKey(model.providerID, model.modelID)
-  const pinned = models.some((item) => canonicalKey(item.providerID, item.modelID) === key)
+  const models = uniqueBy(current, (item) => logicalModelKey(item.providerID, item.modelID)).slice(0, 3)
+  const key = logicalModelKey(model.providerID, model.modelID)
+  const pinned = models.some((item) => logicalModelKey(item.providerID, item.modelID) === key)
   if (pinned) {
     return {
-      models: models.filter((item) => canonicalKey(item.providerID, item.modelID) !== key),
+      models: models.filter((item) => logicalModelKey(item.providerID, item.modelID) !== key),
       pinned: false,
       limited: false,
     }
@@ -147,10 +154,12 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
 
     // New installations start unpinned. The composer derives its suggested set
     // from available models, so pinning is always an explicit user choice.
-    const pinned = createMemo(() => (store.pinned ?? []).slice(0, 3))
+    const pinned = createMemo(() =>
+      uniqueBy(store.pinned ?? [], (item) => logicalModelKey(item.providerID, item.modelID)).slice(0, 3),
+    )
     const isPinned = (model: ModelKey) => {
-      const key = canonicalKey(model.providerID, model.modelID)
-      return pinned().some((item) => canonicalKey(item.providerID, item.modelID) === key)
+      const key = logicalModelKey(model.providerID, model.modelID)
+      return pinned().some((item) => logicalModelKey(item.providerID, item.modelID) === key)
     }
     const togglePin = (model: ModelKey) => {
       const result = togglePinned(pinned(), model)

@@ -1,4 +1,4 @@
-import { canonicalKey, displayProviderForModel } from "@/context/model-catalog"
+import { displayProviderForModel, logicalModelKey } from "@/context/model-catalog"
 
 type QuickModel = {
   id: string
@@ -29,8 +29,8 @@ export function curateQuickModels<T extends QuickModel>(input: QuickModelInput<T
   const selected: T[] = []
   const keys = new Set<string>()
   const labs = new Set<string>()
-  const recency = new Map(input.recent.map((model, index) => [canonicalKey(model.provider.id, model.id), index]))
-  const key = (model: T) => canonicalKey(model.provider.id, model.id)
+  const recency = new Map(input.recent.map((model, index) => [logicalModelKey(model.provider.id, model.id), index]))
+  const key = (model: T) => logicalModelKey(model.provider.id, model.id)
   const lab = (model: T) => displayProviderForModel(model.provider, model.id).id
   const add = (model: T) => {
     const id = key(model)

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { SystemPrompt } from "../../src/session/system"
-import { DELEGATION_PROFILES, MAX_CHILD_AGENTS, NORMAL_CHILD_AGENTS } from "../../src/tool/task"
+import { DELEGATION_PROFILES, MAX_CHILD_AGENTS, NORMAL_CHILD_AGENTS, TASK_WALL_CLOCK_MS } from "../../src/tool/task"
 
 const root = new URL("../../src/", import.meta.url)
 const read = (path: string) => Bun.file(new URL(path, root)).text()
@@ -13,6 +13,10 @@ test("every provider receives one compact product operating contract", () => {
   expect(instructions).toContain("Atlas is optional")
   expect(instructions).toContain("default to zero children")
   expect(instructions).toContain("Explore, Execute, or Review")
+  expect(instructions).toContain("large or binary scientific data")
+  expect(instructions).toContain("output_path")
+  expect(instructions).not.toContain("data once with Shell")
+  expect(instructions).toContain("immutable release")
   expect(instructions).not.toContain("shared keys")
   expect(instructions).not.toContain("project init")
 })
@@ -35,6 +39,10 @@ test("the primary and domain prompts stay adaptive instead of procedural", async
   expect(research).toContain("Default to zero children")
   expect(research).toContain("Atlas is optional")
   expect(research).toContain("lazy skills")
+  expect(research).toContain("bounded pages")
+  expect(research).toContain("output_path")
+  expect(research).not.toContain("data once to the workspace with Shell")
+  expect(research).toContain("immutable data release")
   expect(ml).toContain("simplest method")
   expect(biology).toContain("multiple testing")
   expect(physics).toContain("dimensional consistency")
@@ -45,14 +53,21 @@ test("delegation is rare, bounded, and observable", async () => {
   expect(DELEGATION_PROFILES).toEqual(["explore", "execute", "review"])
   expect(NORMAL_CHILD_AGENTS).toBe(2)
   expect(MAX_CHILD_AGENTS).toBe(4)
+  expect(TASK_WALL_CLOCK_MS).toEqual({ normal: 600_000, ultra: 1_200_000 })
   expect(prompt).toContain("default to zero children")
   expect(prompt).toContain("at most two")
   expect(prompt).toContain("at most four")
+  expect(prompt).toContain("Task calls total per user turn")
+  expect(prompt).toContain("large or binary scientific data")
+  expect(prompt).toContain("output_path")
+  expect(prompt).not.toContain("data once to the workspace with Shell")
+  expect(prompt).toContain("immutable release")
   expect(prompt).toContain("failed child")
   expect(prompt).not.toContain("trusted")
   expect(source).toContain("durationMs")
   expect(source).toContain("failedToolCalls")
   expect(source).toContain("usage")
+  expect(source).toContain("taskDispatchBudget")
   expect(source).not.toContain("<task_result>")
 })
 

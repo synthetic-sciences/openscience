@@ -5,30 +5,20 @@ import { identify } from "@/atlas/poll-identity"
 import { KernelCard, type KernelAction } from "@/atlas/KernelCard"
 import { CommandCard } from "@/atlas/CommandCard"
 import type { Job } from "@/atlas/ComputeJobsAPI"
-import { RemoteJobCard, visibleJobs } from "@/atlas/RemoteJobCard"
-import { ExecutionCard } from "@/atlas/ExecutionCard"
-import { ResearchActivityCard } from "@/atlas/ResearchActivityCard"
-import {
-  createExecutionHistoryAPI,
-  executionTime,
-  recentExecutions,
-  type ExecutionRecord,
-} from "@/atlas/ExecutionHistoryAPI"
-import { recentObservableResearch, type ObservableResearchActivity } from "@/atlas/session-trace-model"
+import { RemoteJobCard, jobLive } from "@/atlas/RemoteJobCard"
 import { useKernelList } from "@/atlas/use-kernel-list"
+import { useStableList } from "@/atlas/use-stable-list"
+import { createKernelRouteRequester, kernelAPI, type KernelRoute } from "@/atlas/kernel-api"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { kernelMemoryLabel, type CommandStatus, type KernelStatus } from "@/atlas/kernel-runtime"
-import type { SessionTraceResponse } from "@synsci/sdk/v2/client"
 
 type KernelsPayload = { kernels: KernelStatus[] }
 type CommandsPayload = { commands: CommandStatus[] }
 type Group = {
   kernels: KernelStatus[]
   commands: CommandStatus[]
-  executions: ExecutionRecord[]
   jobs: Job[]
-  research: ObservableResearchActivity[]
 }
 const projectJobs = "__project_jobs__"
 
@@ -54,15 +44,9 @@ export const usage = (group: Group) => {
   const memory = entries.reduce((total, entry) => total + (entry.resources?.memory_bytes ?? 0), 0)
   const cpu = entries.reduce((total, entry) => total + (entry.resources?.cpu_percent ?? 0), 0) / 100
   const kinds = [
-    group.kernels.length ? `${group.kernels.length} ${group.kernels.length === 1 ? "kernel" : "kernels"}` : undefined,
+    group.kernels.length ? `${group.kernels.length} ${group.kernels.length === 1 ? "runtime" : "runtimes"}` : undefined,
     group.commands.length
       ? `${group.commands.length} ${group.commands.length === 1 ? "command" : "commands"}`
-      : undefined,
-    group.executions.length
-      ? `${group.executions.length} ${group.executions.length === 1 ? "run" : "runs"}`
-      : undefined,
-    group.research.length
-      ? `${group.research.length} research ${group.research.length === 1 ? "action" : "actions"}`
       : undefined,
     group.jobs.length ? `${group.jobs.length} ${group.jobs.length === 1 ? "job" : "jobs"}` : undefined,
   ]
@@ -77,22 +61,24 @@ export const usage = (group: Group) => {
   return { kinds, memory: ram, cpu: cores }
 }
 
+const plural = (value: number, one: string, many = `${one}s`) => `${value} ${value === 1 ? one : many}`
+
+export const actionableJobs = (items: Job[]) => items.filter((item) => jobLive(item) || item.status !== "succeeded")
+
 export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   const transport = props.request ?? useSDK().request
+  const routeRequest = createKernelRouteRequester(transport)
   const sync = useSync()
   const params = useParams()
   const client = identify()
   const [view, setView] = createStore({
     error: "",
-    history: "",
-    research: "",
     remote: "",
     problem: "",
     notice: "",
     action: "",
   })
-  const request = async <T,>(path: string, init?: RequestInit, query?: Record<string, string>) => {
-    const response = await transport(path, init, query)
+  const read = async <T,>(response: Response) => {
     if (response.ok) {
       const body = await response.text()
       if (!body) return undefined as T
@@ -101,6 +87,10 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
     const detail = await response.text().catch(() => "")
     throw new Error(detail || `${response.status} ${response.statusText}`)
   }
+  const request = <T,>(path: string, init?: RequestInit, query?: Record<string, string>) =>
+    transport(path, init, query).then(read<T>)
+  const kernelRequest = <T,>(route: KernelRoute, init?: RequestInit, query?: Record<string, string>) =>
+    routeRequest(route, init, query).then(read<T>)
   const jobApi = {
     list: () => request<Job[]>("/settings/compute/jobs", { cache: "no-store" }),
     log: (id: string) =>
@@ -110,103 +100,59 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
     release: (id: string) =>
       request<Job>(`/settings/compute/jobs/${encodeURIComponent(id)}/release`, { method: "POST" }),
   }
-  const historyApi = createExecutionHistoryAPI(transport)
   const route = () => (params.id && params.id !== "new" ? params.id : undefined)
-  const history = () => {
-    const sessionID = route()
-    if (!sessionID) {
-      setView("history", "")
-      return Promise.resolve<ExecutionRecord[]>([])
-    }
-    return historyApi.list(sessionID).then(
-      (executions) => {
-        setView("history", "")
-        return executions
-      },
-      (error) => {
-        setView("history", error instanceof Error ? error.message : String(error))
-        return []
-      },
-    )
-  }
-  const research = () => {
-    const sessionID = route()
-    if (!sessionID) {
-      setView("research", "")
-      return Promise.resolve<ObservableResearchActivity[]>([])
-    }
-    return request<SessionTraceResponse>(`/session/${encodeURIComponent(sessionID)}/trace`, {
-      cache: "no-store",
-    }).then(
-      (trace) => {
-        setView("research", "")
-        return recentObservableResearch(trace)
-      },
-      (error) => {
-        setView("research", error instanceof Error ? error.message : String(error))
-        return []
-      },
-    )
-  }
   const load = () =>
     inventory(
       Promise.all([
-        request<KernelsPayload>("/kernels", undefined, { client }),
-        request<CommandsPayload>("/kernels/commands", undefined, { client }),
-        history(),
-        research(),
-        jobApi.list().then(
-          (jobs) => {
-            setView("remote", "")
-            return jobs
-          },
-          (error) => {
-            setView("remote", error instanceof Error ? error.message : String(error))
-            return []
-          },
-        ),
-      ]).then(([kernels, commands, executions, research, jobs]) => ({
+        kernelRequest<KernelsPayload>(kernelAPI.inventory, undefined, { client }),
+        kernelRequest<CommandsPayload>(kernelAPI.commands, undefined, { client }),
+      ]).then(([kernels, commands]) => ({
         kernels: kernels.kernels,
         commands: commands.commands,
-        executions,
-        research,
-        jobs,
       })),
       (error) => setView("error", error),
     )
   // Re-read the selected conversation immediately; the interval is only for
   // background freshness, never navigation latency.
-  const [data, api] = createResource(() => route() ?? projectJobs, load)
-  const kernels = useKernelList(() => data.latest?.kernels)
-  const commands = () => data.latest?.commands ?? []
-  const executions = () => data.latest?.executions ?? []
-  const researchActivity = () => data.latest?.research ?? []
-  const jobs = () => data.latest?.jobs ?? []
-  const live = createMemo(() => kernels.filter((kernel) => kernel.active || kernel.state === "starting"))
+  const [runtime, runtimeApi] = createResource(() => route() ?? projectJobs, load)
+  const [remote, remoteApi] = createResource<Job[]>(() =>
+    jobApi.list().then(
+      (jobs) => {
+        setView("remote", "")
+        return jobs
+      },
+      (error) => {
+        setView("remote", error instanceof Error ? error.message : String(error))
+        return [] as Job[]
+      },
+    ),
+  )
+  const kernels = useKernelList(() => runtime.latest?.kernels)
+  const commands = useStableList(() => runtime.latest?.commands)
+  const jobs = useStableList(() => remote.latest)
+  // Keep other sessions out of sight once their work is merely warm. The
+  // current session's idle Python/R runtime remains available for an immediate
+  // follow-up, while genuinely running/starting work stays project-visible.
+  const live = createMemo(() =>
+    kernels.filter(
+      (kernel) =>
+        kernel.state === "running" || kernel.state === "starting" || (kernel.sessionID === route() && kernel.active),
+    ),
+  )
   const title = (sessionID: string) =>
     sessionID === projectJobs ? "Project jobs" : sync.session.get(sessionID)?.title?.trim() || "Untitled session"
   const grouped = createMemo(() => {
     const groups = new Map<string, Group>()
-    const group = (sessionID: string) =>
-      groups.get(sessionID) ?? { kernels: [], commands: [], executions: [], jobs: [], research: [] }
+    const group = (sessionID: string) => groups.get(sessionID) ?? { kernels: [], commands: [], jobs: [] }
     for (const kernel of live()) {
       const value = group(kernel.sessionID)
       groups.set(kernel.sessionID, { ...value, kernels: [...value.kernels, kernel] })
     }
-    for (const command of commands()) {
+    for (const command of commands) {
       const value = group(command.sessionID)
       groups.set(command.sessionID, { ...value, commands: [...value.commands, command] })
     }
-    for (const execution of executions()) {
-      const value = group(execution.session_id)
-      groups.set(execution.session_id, { ...value, executions: [...value.executions, execution] })
-    }
-    const current = route()
-    if (current && researchActivity().length > 0) {
-      const value = group(current)
-      groups.set(current, { ...value, research: researchActivity() })
-    }
-    for (const job of visibleJobs(jobs())) {
+    for (const job of actionableJobs(jobs)) {
       const sessionID = job.session_id ?? projectJobs
       const value = group(sessionID)
       groups.set(sessionID, { ...value, jobs: [...value.jobs, job] })
@@ -225,10 +171,6 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
           ...(grouped()
             .get(sessionID)
             ?.commands.map((command) => command.started_at) ?? []),
-          ...(grouped().get(sessionID)?.executions.map(executionTime) ?? []),
-          ...(grouped()
-            .get(sessionID)
-            ?.research.map((item) => item.at) ?? []),
           ...(grouped()
             .get(sessionID)
             ?.jobs.map((job) => Date.parse(job.started_at ?? job.created_at)) ?? []),
@@ -240,7 +182,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   const control = (kernel: KernelStatus, action: KernelAction) => {
     const key = `${kernel.id}:${action}`
     setView({ action: key, problem: "", notice: "" })
-    return request<KernelStatus>(`/kernels/${encodeURIComponent(kernel.id)}/${action}`, {
+    return kernelRequest<KernelStatus>(kernelAPI.control(kernel.id, action), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionID: kernel.sessionID }),
@@ -252,7 +194,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
             ? "Runtime restarted. In-memory state and queued work were cleared."
             : "Runtime stopped. In-memory state was cleared; the next agent run will start fresh.",
         )
-        return api.refetch()
+        return runtimeApi.refetch()
       })
       .catch((error) => setView("problem", error instanceof Error ? error.message : String(error)))
       .finally(() => setView("action", ""))
@@ -261,14 +203,14 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   const stop = (command: CommandStatus) => {
     const key = `${command.id}:stop`
     setView({ action: key, problem: "", notice: "" })
-    return request<{ stopped: boolean }>(`/kernels/commands/${encodeURIComponent(command.id)}/stop`, {
+    return kernelRequest<{ stopped: boolean }>(kernelAPI.stopCommand(command.id), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionID: command.sessionID }),
     })
       .then(() => {
         setView("notice", "Command stopped. Its child processes were terminated.")
-        return api.refetch()
+        return runtimeApi.refetch()
       })
       .catch((error) => setView("problem", error instanceof Error ? error.message : String(error)))
       .finally(() => setView("action", ""))
@@ -281,7 +223,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
       .cancel(job.id)
       .then(() => {
         setView("notice", "Remote job cancelled. OpenScience requested provider cleanup and will surface any warning.")
-        return api.refetch()
+        return remoteApi.refetch()
       })
       .catch((error) => setView("problem", error instanceof Error ? error.message : String(error)))
       .finally(() => setView("action", ""))
@@ -298,7 +240,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
             ? "Output recovery restarted. New delivery status will appear here."
             : "Remote cleanup retried. Resource status will update here.",
         )
-        return api.refetch()
+        return remoteApi.refetch()
       })
       .catch((error) => setView("problem", error instanceof Error ? error.message : String(error)))
       .finally(() => setView("action", ""))
@@ -306,7 +248,8 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
 
   const refresh = () => {
     if (document.hidden) return
-    void api.refetch()
+    if (!runtime.loading) void runtimeApi.refetch()
+    if (!remote.loading) void remoteApi.refetch()
   }
   const timer = setInterval(refresh, 2_500)
   document.addEventListener("visibilitychange", refresh)
@@ -318,17 +261,13 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   return (
     <section aria-label="Project compute" data-testid="kernel-panel" class="kernel-panel activity-panel">
       <div class="atlas-scroll kernel-panel__body">
-        <Show when={view.error || view.history || view.research || view.remote || view.problem}>
+        <Show when={view.error || view.remote || view.problem}>
           <div role="alert" class="kernel-panel__message kernel-panel__message--error">
             {view.problem
               ? `Compute control failed. ${view.problem}`
               : view.error
                 ? `Live activity unavailable. ${view.error}`
-                : view.history
-                  ? `Execution history unavailable. ${view.history}`
-                  : view.research
-                    ? `Research activity unavailable. ${view.research}`
-                    : `Remote jobs unavailable. ${view.remote}`}
+                : `Remote jobs unavailable. ${view.remote}`}
           </div>
         </Show>
         <Show when={view.notice}>
@@ -341,11 +280,11 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
           when={groups().length > 0}
           fallback={
             <div class="kernel-panel__empty">
-              <strong>{view.error ? "Compute unavailable" : "Work appears here automatically"}</strong>
+              <strong>{view.error ? "Compute unavailable" : "No compute activity yet"}</strong>
               <p>
                 {view.error
                   ? "The last poll could not read this project's live runtimes and jobs, so this is not a count of what is running."
-                  : "Delegated research, source activity, Python and R results, live local work, and governed remote jobs appear here automatically."}
+                  : "Nothing is running. Python, R, shell, and governed remote jobs will appear here when they are active."}
               </p>
             </div>
           }
@@ -354,9 +293,20 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
             <For each={groups()}>
               {(sessionID) => {
                 const group = () =>
-                  grouped().get(sessionID) ?? { kernels: [], commands: [], executions: [], jobs: [], research: [] }
+                  grouped().get(sessionID) ?? {
+                    kernels: [],
+                    commands: [],
+                    jobs: [],
+                  }
                 const summary = () => usage(group())
-                const localCount = () => group().kernels.length + group().commands.length + group().executions.length
+                const localCount = () => group().kernels.length + group().commands.length
+                const localSummary = () =>
+                  [
+                    group().kernels.length ? plural(group().kernels.length, "runtime") : undefined,
+                    group().commands.length ? plural(group().commands.length, "command") : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
                 return (
                   <section
                     class="kernel-session"
@@ -374,24 +324,14 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
                         <span>{summary().kinds}</span>
                       </div>
                     </header>
-                    <Show when={group().research.length > 0}>
-                      <section class="activity-boundary" data-location="research" aria-label="Research activity">
-                        <header class="activity-boundary__header">
-                          <strong>Research</strong>
-                          <span>Delegated tasks and external sources</span>
-                        </header>
-                        <div class="kernel-panel__list">
-                          <For each={group().research}>
-                            {(activity) => <ResearchActivityCard activity={activity} />}
-                          </For>
-                        </div>
-                      </section>
-                    </Show>
                     <Show when={localCount() > 0}>
                       <section class="activity-boundary" data-location="local" aria-label="Local activity">
                         <header class="activity-boundary__header">
-                          <strong>Local</strong>
-                          <span>This computer</span>
+                          <span class="activity-boundary__title">
+                            <strong>Local</strong>
+                            <span>This computer</span>
+                          </span>
+                          <span class="activity-boundary__count">{localSummary()}</span>
                         </header>
                         <div class="kernel-panel__list">
                           <For each={group().kernels}>
@@ -412,17 +352,17 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
                               />
                             )}
                           </For>
-                          <For each={recentExecutions(group().executions)}>
-                            {(execution) => <ExecutionCard run={execution} />}
-                          </For>
                         </div>
                       </section>
                     </Show>
                     <Show when={group().jobs.length > 0}>
                       <section class="activity-boundary" data-location="remote" aria-label="Remote activity">
                         <header class="activity-boundary__header">
-                          <strong>Remote</strong>
-                          <span>SSH, schedulers, and managed compute</span>
+                          <span class="activity-boundary__title">
+                            <strong>Remote</strong>
+                            <span>SSH, schedulers, and managed compute</span>
+                          </span>
+                          <span class="activity-boundary__count">{plural(group().jobs.length, "job")}</span>
                         </header>
                         <div class="kernel-panel__list">
                           <For each={group().jobs}>

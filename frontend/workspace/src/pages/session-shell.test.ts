@@ -240,7 +240,7 @@ describe("focused workspace shell", () => {
     expect(styles).toContain('.session-sidebar__session[data-active="true"]')
     expect(styles).not.toContain('.session-sidebar__session[data-active="true"]::before')
     expect(styles).toContain("grid-template-columns: minmax(0, 1fr)")
-    expect(styles).toContain("border-right: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent)")
+    expect(styles).toContain("border-right: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent)")
     expect(styles).toContain("border-radius: 0")
   })
 

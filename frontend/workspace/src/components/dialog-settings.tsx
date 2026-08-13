@@ -51,7 +51,7 @@ const SETTINGS_STYLES = `
   --settings-on-primary: var(--text-interactive-base);
   --settings-toggle-active: var(--surface-brand-base);
   --settings-shadow-modal: var(--atlas-shadow-md, var(--shadow-lg));
-  --settings-shadow-card: var(--shadow-xs-border);
+  --settings-shadow-card: none;
   --settings-type-title: 18px;
   --settings-type-heading: 13px;
   --settings-type-body: 13px;
@@ -99,37 +99,8 @@ const SETTINGS_STYLES = `
   letter-spacing: 0;
   line-height: 16px;
 }
-.settings-dialog [data-component="switch"] [data-slot="switch-control"] {
-  width: 28px;
-  height: 16px;
-  border: 1px solid var(--border-weak-base);
-  border-radius: var(--settings-radius-control);
-  background: var(--surface-base);
-  padding: 0;
-}
 .settings-dialog [data-component="switch"] {
-  min-height: 32px;
-}
-.settings-dialog [data-component="switch"] [data-slot="switch-thumb"] {
-  box-sizing: content-box;
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--border-base);
-  border-radius: var(--settings-radius-control);
-  background: var(--icon-invert-base);
-  box-shadow: var(--shadow-xs);
-  margin: 0;
-  transform: translateX(-1px);
-  transition: transform 150ms ease;
-}
-.settings-dialog [data-component="switch"][data-checked] [data-slot="switch-control"],
-.settings-dialog [data-component="switch"][data-checked]:hover:not([data-disabled],[data-readonly]) [data-slot="switch-control"] {
-  background-color: var(--settings-toggle-active);
-  border-color: var(--settings-toggle-active);
-}
-.settings-dialog [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
-  border: 0;
-  transform: translateX(12px);
+  --switch-active-color: var(--settings-toggle-active);
 }
 .settings-dialog [data-slot="select-select-trigger"] {
   min-height: 32px;
@@ -1234,7 +1205,7 @@ const SETTINGS_STYLES = `
   transition-duration: 0ms;
 }
 @media (pointer: coarse) {
-  .settings-dialog :where(button, [role="button"], [data-component="switch"], [data-slot="select-select-trigger"]),
+  .settings-dialog :where(button, [role="button"], [data-slot="select-select-trigger"]),
   .settings-dialog :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
     min-height: 44px;
   }

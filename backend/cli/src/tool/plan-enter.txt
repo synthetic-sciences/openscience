@@ -1,14 +1,15 @@
-Use this tool to suggest switching to plan agent when the user's request would benefit from planning before implementation.
+Use this tool to suggest switching to plan agent only when agreeing on the approach before execution materially reduces risk or waste.
 
 If they explicitly mention wanting to create a plan ALWAYS call this tool first.
 
 This tool will ask the user if they want to switch to plan agent.
 
 Call this tool when:
-- The user's request is complex and would benefit from planning first
-- You want to research and design before making changes
-- The task involves multiple files or significant architectural decisions
+- The user explicitly asks for a plan before execution
+- Work will use paid or remote compute, new credentials, sensitive data, or an external submission
+- Several scientifically valid methods would materially change interpretation
+- A long or expensive multi-stage pipeline, important cross-cutting edits, preregistration, or controlled analysis should be approved before execution
 
 Do NOT call this tool:
-- For simple, straightforward tasks
+- For conceptual answers, read-only lookups, narrow file inspection, or an obvious reversible local analysis
 - When the user explicitly wants immediate implementation

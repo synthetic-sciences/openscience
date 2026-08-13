@@ -4,6 +4,7 @@ import { BlockList, isIP } from "net"
 import { lookup } from "node:dns/promises"
 import { request as httpRequest } from "node:http"
 import { request as httpsRequest } from "node:https"
+import { Readable } from "node:stream"
 import { domainToASCII } from "url"
 import z from "zod"
 import { Global } from "../global"
@@ -13,10 +14,45 @@ import { DataRootBarrier } from "@/global/data-root-barrier"
 
 // Outbound domain allow-list. A catalog of curated science/package domain
 // sets (each toggleable as a group) plus a validated list of custom domains.
-// The store is an enforcement input, not a presentation preference: malformed
-// state fails closed to the curated defaults.
+// The store is an enforcement input, not a presentation preference: missing
+// state gets install defaults, while malformed persisted state denies all.
 export namespace Network {
   const log = Log.create({ service: "settings.network" })
+  const fetchedURL = new WeakMap<Response, string>()
+
+  /** Final authorized URL after redirects. Response.url is empty for the
+   * address-pinned transport, so callers use this for auditable metadata. */
+  export function finalURL(response: Response) {
+    return fetchedURL.get(response) ?? response.url
+  }
+
+  /** Raised before an HTTP response can be buffered past a caller-declared
+   * limit. Callers such as Web fetch use the response metadata to explain
+   * whether the model should paginate an API or download a file instead. */
+  export class ResponseTooLargeError extends Error {
+    readonly limitBytes: number
+    readonly declaredBytes?: number
+    readonly receivedBytes?: number
+    readonly contentType?: string
+    readonly contentDisposition?: string
+
+    constructor(input: {
+      limitBytes: number
+      declaredBytes?: number
+      receivedBytes?: number
+      contentType?: string
+      contentDisposition?: string
+    }) {
+      const observed = input.declaredBytes ?? input.receivedBytes
+      super(`Response too large (${observed ?? "unknown"} bytes exceeds ${input.limitBytes} byte limit)`)
+      this.name = "ResponseTooLargeError"
+      this.limitBytes = input.limitBytes
+      this.declaredBytes = input.declaredBytes
+      this.receivedBytes = input.receivedBytes
+      this.contentType = input.contentType
+      this.contentDisposition = input.contentDisposition
+    }
+  }
 
   export const Group = z.object({
     id: z.string(),
@@ -172,11 +208,37 @@ export namespace Network {
 
   const file = path.join(Global.Path.data, "settings", "network.json")
   const lock = "settings:network"
+  const version = 2
+  const legacyClinicalGroup = "clinical-pharma"
+  const legacyClinicalCustom = "go.drugbank.com"
+
+  const UnversionedState = z
+    .object({
+      allowlistEnabled: z.boolean(),
+      enabled: z.array(z.string()),
+      custom: z.array(Domain),
+    })
+    .strict()
+
+  type StoredState =
+    | { kind: "current"; state: State }
+    | { kind: "migrate"; state: State }
+    | { kind: "invalid"; reason: unknown }
+
+  type StoredFile = { kind: "missing" } | { kind: "found"; text: string } | { kind: "unreadable"; error: unknown }
 
   export function defaults(): State {
     return {
       allowlistEnabled: true,
       enabled: CATALOG.map((group) => group.id),
+      custom: [],
+    }
+  }
+
+  function denied(): State {
+    return {
+      allowlistEnabled: true,
+      enabled: [],
       custom: [],
     }
   }
@@ -207,45 +269,98 @@ export namespace Network {
     })
   }
 
-  export async function get(): Promise<State> {
-    const text = await Bun.file(file)
-      .text()
-      .catch(() => undefined)
-    if (!text) return defaults()
+  async function readStoredFile(): Promise<StoredFile> {
     try {
-      const raw = JSON.parse(text) as Record<string, unknown>
-      // v1 shipped with enforcement off and only the package group selected.
-      // That exact unversioned seed was a product default, not an informed
-      // grant; migrate it to the fail-closed curated v2 default. Explicit v2
-      // disable choices remain respected.
-      if (
-        raw.version === undefined &&
-        raw.allowlistEnabled === false &&
-        Array.isArray(raw.enabled) &&
-        raw.enabled.length === 1 &&
-        raw.enabled[0] === "package-management" &&
-        Array.isArray(raw.custom) &&
-        raw.custom.length === 0
-      ) {
-        const migrated = defaults()
-        await persist(migrated)
-        return migrated
-      }
-      const candidate = raw.version === 2 ? { ...raw, version: undefined } : raw
-      delete candidate.version
-      const parsed = State.safeParse(candidate)
-      if (parsed.success) return parsed.data
-      log.error("invalid network state; using enforced curated defaults", { issues: parsed.error.issues })
+      return { kind: "found", text: await fs.readFile(file, "utf8") }
     } catch (error) {
-      log.error("failed to parse network state; using enforced curated defaults", { error })
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "missing" }
+      return { kind: "unreadable", error }
     }
-    return defaults()
+  }
+
+  function decodeStoredState(text: string): StoredState {
+    let raw: unknown
+    try {
+      raw = JSON.parse(text)
+    } catch (error) {
+      return { kind: "invalid", reason: error }
+    }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return { kind: "invalid", reason: "Network state must be an object" }
+    }
+
+    const record = raw as Record<string, unknown>
+    if (record.version === version) {
+      const { version: _, ...candidate } = record
+      const parsed = State.safeParse(candidate)
+      return parsed.success ? { kind: "current", state: parsed.data } : { kind: "invalid", reason: parsed.error.issues }
+    }
+    if (record.version !== undefined) {
+      return { kind: "invalid", reason: `Unsupported network state version: ${String(record.version)}` }
+    }
+
+    // The original unversioned install seed was a product default rather than
+    // an informed grant. Preserve its existing v2 migration to curated defaults.
+    if (
+      record.allowlistEnabled === false &&
+      Array.isArray(record.enabled) &&
+      record.enabled.length === 1 &&
+      record.enabled[0] === "package-management" &&
+      Array.isArray(record.custom) &&
+      record.custom.length === 0
+    ) {
+      return { kind: "migrate", state: defaults() }
+    }
+
+    const legacy = UnversionedState.safeParse(record)
+    if (!legacy.success) return { kind: "invalid", reason: legacy.error.issues }
+    const unknown = legacy.data.enabled.filter((id) => id !== legacyClinicalGroup && !groupIDs.has(id))
+    if (unknown.length) return { kind: "invalid", reason: `Unknown network groups: ${unknown.join(", ")}` }
+
+    const hadLegacyClinical = legacy.data.enabled.includes(legacyClinicalGroup)
+    const migrated = State.safeParse({
+      allowlistEnabled: legacy.data.allowlistEnabled,
+      enabled: legacy.data.enabled.map((id) => (id === legacyClinicalGroup ? "clinical-regulatory" : id)),
+      // The new clinical-regulatory group preserves every legacy clinical
+      // domain except DrugBank. Add only that hostname instead of enabling the
+      // much broader chemistry-pharma group.
+      custom: hadLegacyClinical ? [...legacy.data.custom, legacyClinicalCustom] : legacy.data.custom,
+    })
+    return migrated.success
+      ? { kind: "migrate", state: migrated.data }
+      : { kind: "invalid", reason: migrated.error.issues }
+  }
+
+  function invalidState(reason: unknown): State {
+    log.error("invalid persisted network state; denying all outbound domains", { reason })
+    return denied()
+  }
+
+  export async function get(): Promise<State> {
+    const stored = await readStoredFile()
+    if (stored.kind === "missing") return defaults()
+    if (stored.kind === "unreadable") return invalidState(stored.error)
+
+    const decoded = decodeStoredState(stored.text)
+    if (decoded.kind === "current") return decoded.state
+    if (decoded.kind === "invalid") return invalidState(decoded.reason)
+
+    // Migrations are serialized and re-read under the same lock used by set(),
+    // so concurrent readers cannot overwrite a newer explicit policy.
+    using _ = await Lock.write(lock)
+    const latest = await readStoredFile()
+    if (latest.kind === "missing") return defaults()
+    if (latest.kind === "unreadable") return invalidState(latest.error)
+    const current = decodeStoredState(latest.text)
+    if (current.kind === "current") return current.state
+    if (current.kind === "invalid") return invalidState(current.reason)
+    return persist(current.state)
   }
 
   async function persist(state: State): Promise<State> {
     await using operation = await DataRootBarrier.enter(file)
     await fs.mkdir(path.dirname(file), { recursive: true })
-    await Bun.write(file, JSON.stringify({ version: 2, ...state }, null, 2))
+    await Bun.write(file, JSON.stringify({ version, ...state }, null, 2))
     return state
   }
 
@@ -319,6 +434,14 @@ export namespace Network {
     /** Test transport seam. Production omits this and uses the pinned socket
      * transport below. */
     transport?: (target: URL, init: RequestInit, address: string) => Promise<Response>
+    /** Stop reading the response once this many bytes have been received.
+     * The production pinned transport enforces the limit while streaming so a
+     * large attachment is never buffered in full. */
+    maxResponseBytes?: number
+    /** Return a streaming body after headers arrive. Used by brokered file
+     * downloads so large responses never occupy process memory. Redirects are
+     * still handled and re-authorized by this function before it returns. */
+    streamResponse?: boolean
   }
 
   const nonPublic = new BlockList()
@@ -386,7 +509,13 @@ export namespace Network {
 
   const originalFetch = globalThis.fetch
 
-  async function pinnedFetch(target: URL, init: RequestInit, address: string): Promise<Response> {
+  async function pinnedFetch(
+    target: URL,
+    init: RequestInit,
+    address: string,
+    maxResponseBytes?: number,
+    streamResponse = false,
+  ): Promise<Response> {
     const request = new Request(target, init)
     const body = request.body ? Buffer.from(await request.arrayBuffer()) : undefined
     const headers = Object.fromEntries(request.headers.entries())
@@ -414,18 +543,70 @@ export namespace Network {
           }) as never,
         },
         (incoming) => {
+          const contentType = Array.isArray(incoming.headers["content-type"])
+            ? incoming.headers["content-type"][0]
+            : incoming.headers["content-type"]
+          const contentDisposition = Array.isArray(incoming.headers["content-disposition"])
+            ? incoming.headers["content-disposition"][0]
+            : incoming.headers["content-disposition"]
+          const declared = Number.parseInt(String(incoming.headers["content-length"] ?? ""), 10)
+          if (maxResponseBytes !== undefined && Number.isFinite(declared) && declared > maxResponseBytes) {
+            const error = new ResponseTooLargeError({
+              limitBytes: maxResponseBytes,
+              declaredBytes: declared,
+              contentType,
+              contentDisposition,
+            })
+            incoming.destroy()
+            req.destroy()
+            reject(error)
+            return
+          }
+
+          const responseHeaders = new Headers()
+          for (const [name, value] of Object.entries(incoming.headers)) {
+            if (value === undefined) continue
+            if (Array.isArray(value)) for (const item of value) responseHeaders.append(name, item)
+            else responseHeaders.set(name, String(value))
+          }
+          const status = incoming.statusCode ?? 500
+          const empty = status === 101 || status === 204 || status === 205 || status === 304
+          if (streamResponse) {
+            resolve(
+              new Response(empty ? null : (Readable.toWeb(incoming) as unknown as ReadableStream<Uint8Array>), {
+                status,
+                statusText: incoming.statusMessage,
+                headers: responseHeaders,
+              }),
+            )
+            return
+          }
+
           const chunks: Buffer[] = []
-          incoming.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+          let received = 0
+          let rejected = false
+          incoming.on("data", (chunk) => {
+            if (rejected) return
+            const buffer = Buffer.from(chunk)
+            received += buffer.byteLength
+            if (maxResponseBytes !== undefined && received > maxResponseBytes) {
+              rejected = true
+              const error = new ResponseTooLargeError({
+                limitBytes: maxResponseBytes,
+                receivedBytes: received,
+                contentType,
+                contentDisposition,
+              })
+              incoming.destroy()
+              req.destroy()
+              reject(error)
+              return
+            }
+            chunks.push(buffer)
+          })
           incoming.once("error", reject)
           incoming.once("end", () => {
-            const responseHeaders = new Headers()
-            for (const [name, value] of Object.entries(incoming.headers)) {
-              if (value === undefined) continue
-              if (Array.isArray(value)) for (const item of value) responseHeaders.append(name, item)
-              else responseHeaders.set(name, String(value))
-            }
-            const status = incoming.statusCode ?? 500
-            const empty = status === 101 || status === 204 || status === 205 || status === 304
+            if (rejected) return
             resolve(
               new Response(empty ? null : Buffer.concat(chunks), {
                 status,
@@ -477,10 +658,26 @@ export namespace Network {
         policy.transport ??
         (globalThis.fetch !== originalFetch
           ? (url: URL, options: RequestInit) => globalThis.fetch(url, options)
-          : pinnedFetch)
+          : (url: URL, options: RequestInit, address: string) =>
+              pinnedFetch(url, options, address, policy.maxResponseBytes, policy.streamResponse))
       const response = await transport(target, requestInit, addresses[0]!)
+      if (policy.maxResponseBytes !== undefined) {
+        const declared = Number.parseInt(response.headers.get("content-length") ?? "", 10)
+        if (Number.isFinite(declared) && declared > policy.maxResponseBytes) {
+          await response.body?.cancel().catch(() => {})
+          throw new ResponseTooLargeError({
+            limitBytes: policy.maxResponseBytes,
+            declaredBytes: declared,
+            contentType: response.headers.get("content-type") ?? undefined,
+            contentDisposition: response.headers.get("content-disposition") ?? undefined,
+          })
+        }
+      }
       const location = response.headers.get("location")
-      if (!redirected(response.status) || !location) return response
+      if (!redirected(response.status) || !location) {
+        fetchedURL.set(response, target.href)
+        return response
+      }
       if (redirects >= maxRedirects) {
         await response.body?.cancel().catch(() => {})
         throw new Error(`Too many redirects (maximum ${maxRedirects})`)

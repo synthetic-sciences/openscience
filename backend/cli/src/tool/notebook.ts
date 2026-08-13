@@ -212,8 +212,6 @@ const READY = "__OPENSCIENCE_KERNEL_READY__"
 const EXECUTION_READY = "__OPENSCIENCE_EXECUTION_READY__\n"
 const START = "__OPENSCIENCE_RESULT_START__\n"
 const END = "\n__OPENSCIENCE_RESULT_END__"
-const IDLE_MS = 30 * 60 * 1000 // reap kernels idle for 30 min
-
 interface RawPayload {
   ok: boolean
   stdout: string
@@ -274,7 +272,6 @@ class PythonKernel implements Kernel {
   scriptPath?: string
   configPath?: string
   cachePath?: string
-  lastUsed = Date.now()
   private stderrTail = ""
   private queue = new KernelQueue()
   private intentional = false
@@ -470,21 +467,30 @@ class PythonKernel implements Kernel {
     await opts?.onStart?.()
     if (opts?.signal?.aborted) throw new Error("Execution aborted before starting")
     const proc = this.proc!
-    this.lastUsed = Date.now()
     const timeout = Math.min(Math.max(opts?.timeout ?? 120_000, 5_000), 600_000)
 
     const payload = await new Promise<RawPayload>((resolve, reject) => {
       const kernel = this
-      const timer = setTimeout(() => {
+      let stopping = false
+      const stop = (error: Error) => {
+        if (stopping) return
+        stopping = true
         cleanup()
-        void this.terminate(proc)
-        reject(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`))
+        // A timed-out or aborted interpreter may still be executing user code.
+        // Keep this queue slot occupied until the process group is gone and the
+        // kernel has been marked unusable; otherwise the next cell can enter the
+        // same poisoned process while termination is still in flight.
+        void this.shutdown().then(
+          () => reject(error),
+          () => reject(error),
+        )
+      }
+      const timer = setTimeout(() => {
+        stop(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`))
       }, timeout)
 
       const onAbort = () => {
-        cleanup()
-        void this.terminate(proc)
-        reject(new Error("Execution aborted"))
+        stop(new Error("Execution aborted"))
       }
 
       let buffer = ""
@@ -605,22 +611,9 @@ class PythonKernelManager implements KernelManager {
   private kernels = new Map<string, PythonKernel>()
   private starts = new Map<string, { kernel: PythonKernel; promise: Promise<PythonKernel> }>()
 
-  private async reapIdle() {
-    const now = Date.now()
-    for (const [id, kernel] of this.kernels) {
-      if (now - kernel.lastUsed <= IDLE_MS) continue
-      await kernel.shutdown()
-      this.kernels.delete(id)
-    }
-  }
-
   async get(sessionID: string, opts?: KernelStartOptions): Promise<PythonKernel> {
-    await this.reapIdle()
     const existing = this.kernels.get(sessionID)
-    if (existing && existing.ready) {
-      existing.lastUsed = Date.now()
-      return existing
-    }
+    if (existing && existing.ready) return existing
     if (existing) {
       await existing.shutdown()
       this.kernels.delete(sessionID)
@@ -900,6 +893,7 @@ async function executePython(params: PythonInput, ctx: Tool.Context, compatibili
 const PythonDefinition: Awaited<ReturnType<Tool.Info<typeof PythonParameters>["init"]>> = {
   description: [
     "Run Python code in one long-lived managed process per conversation and selected environment. Variables, imports, and state persist across calls in that environment; child conversations and other environments are isolated.",
+    "Treat persistent state as working memory, not reproducibility. For a material result, save the source, declared inputs, parameters, and outputs and clean-rerun when practical.",
     "Choose `environment` to address a project interpreter under .venv/<name>; the default python environment also discovers a conventional .venv.",
     "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
     "Set `source` when the execution belongs to a script so Activity can identify that source.",

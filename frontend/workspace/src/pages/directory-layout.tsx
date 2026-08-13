@@ -25,7 +25,7 @@ import { showToast } from "@synsci/ui/toast"
 import { useLanguage } from "@/context/language"
 import { uiStore } from "@/atlas/store/ui"
 import { artifactContext } from "@/artifacts/context"
-import { normalizeStoredArtifact } from "@/artifacts/store"
+import { normalizeStoredArtifact, savedResultLabel } from "@/artifacts/store"
 import { ProjectWorkspaceFrame } from "@/atlas/ProjectWorkspaceFrame"
 import { useGlobalSync } from "@/context/global-sync"
 import { decode64, setCurrentDirectory } from "@/utils/base64"
@@ -166,9 +166,8 @@ export default function Layout(props: ParentProps) {
                 })
             }
 
-            // "Save as artifact…" at the end of an assistant turn promotes a
-            // written scratch file into a durable, immutable artifact version
-            // via the explicit-save route.
+            // "Save as Result…" at the end of an assistant turn promotes a
+            // written scratch file into a durable Result via the explicit-save route.
             const saveArtifact = (path: string) => {
               const session = params.id && params.id !== "new" ? params.id : undefined
               if (!session) {
@@ -184,14 +183,22 @@ export default function Layout(props: ParentProps) {
                 })
                 .then(async (response) => {
                   if (!response.ok) throw new Error(`artifact save failed (${response.status})`)
-                  const ref = (await response.json()) as { current?: { version?: number } }
+                  const name = path.split("/").filter(Boolean).at(-1) || "Result"
+                  const saved = normalizeStoredArtifact(await response.json().catch(() => undefined))
                   window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
                   showToast({
                     variant: "success",
-                    title: "saved as Result",
-                    description: `${path} · v${ref.current?.version ?? 1}`,
+                    title: "Saved to Results",
+                    description: saved ? savedResultLabel(saved) : name,
+                    actions: saved
+                      ? [
+                          {
+                            label: "Open",
+                            onClick: () => uiStore.openSaved(saved),
+                          },
+                        ]
+                      : undefined,
                   })
-                  return { version: ref.current?.version ?? 1 }
                 })
                 .catch((error: unknown) => {
                   showToast({

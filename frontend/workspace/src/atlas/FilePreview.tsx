@@ -28,10 +28,13 @@ import type { TableFormat } from "@/data/table"
 import { ManuscriptWorkbench } from "@/manuscript/ManuscriptWorkbench"
 import { parseManuscript } from "@/manuscript/model"
 import { artifactContext, createArtifactContext } from "@/artifacts/context"
+import { normalizeStoredArtifact, savedResultLabel } from "@/artifacts/store"
 import type { ArtifactInspection } from "@/science/renderers"
 import { toast } from "@/atlas/Toast"
+import { showToast } from "@synsci/ui/toast"
 import { IconFile } from "@/atlas/shared/Icon"
 import { FileToolbar } from "@/atlas/FileToolbar"
+import { uiStore } from "@/atlas/store/ui"
 import { describeFile, readFile, reconcileSavedDraft, type FileData, type FileKind } from "@/atlas/file-viewer"
 import { LANG, extension as ext } from "@/atlas/files/artifact-thumb"
 import { assetUrl } from "@/utils/markdown-assets"
@@ -313,9 +316,21 @@ export function FileView(props: {
         body: JSON.stringify({ path: props.path, sessionID: session }),
       })
       if (!res.ok) throw new Error(`artifact save failed (${res.status})`)
-      const ref = (await res.json()) as { current?: { version?: number } }
+      const saved = normalizeStoredArtifact(await res.json().catch(() => undefined))
       window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
-      toast.success("saved as Result", `${name()} · v${ref.current?.version ?? 1}`)
+      showToast({
+        variant: "success",
+        title: "Saved to Results",
+        description: saved ? savedResultLabel(saved) : name(),
+        actions: saved
+          ? [
+              {
+                label: "Open",
+                onClick: () => uiStore.openSaved(saved),
+              },
+            ]
+          : undefined,
+      })
     } catch (error) {
       toast.error("artifact save failed", error instanceof Error ? error.message : String(error))
     } finally {

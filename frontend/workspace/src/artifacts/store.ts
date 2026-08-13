@@ -56,6 +56,12 @@ export interface StoredArtifactDetail extends StoredArtifact {
   execution?: StoredArtifactExecution
 }
 
+/** Compact, path-safe copy for save confirmations. */
+export function savedResultLabel(artifact: Pick<StoredArtifact, "current">) {
+  const filename = artifact.current.filename.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) || "Result"
+  return `${filename} · Version ${artifact.current.version}`
+}
+
 function record(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return
   return value as Record<string, unknown>

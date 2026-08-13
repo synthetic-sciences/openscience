@@ -36,7 +36,8 @@ const mount = (view: () => JSX.Element) => {
 
 const child = (name: string, calls: string[]) => () => {
   calls.push(name)
-  const node = document.createElement("section")
+  const node = document.createElement(name === "strip" ? "details" : "section")
+  if (name === "strip") node.className = "activity-surface__capacity"
   node.dataset.computeChild = name
   return node
 }
@@ -82,13 +83,9 @@ describe("compute surface", () => {
     expect(css).toContain("@container compute (max-width: 350px)")
     expect(css).toContain(".compute-surface .activity-card")
     expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto")
-    expect(css).toContain('.activity-boundary[data-location="research"]')
-    expect(css).toContain('.activity-boundary[data-location="local"]')
-    expect(css).toContain('.activity-boundary[data-location="remote"]')
+    expect(css).not.toContain('.activity-boundary[data-location="research"]')
     expect(host).toContain("@container compute (max-width: 500px)")
-    expect(css).toContain("--activity-local:")
-    expect(css).toContain("--activity-research:")
-    expect(css).toContain("--activity-remote:")
+    expect(css).not.toContain("--activity-research:")
     expect(css).toContain("height: 32px")
     expect(css).toContain("@media (pointer: coarse)")
     expect(css).toContain("min-height: 44px")

@@ -5,10 +5,12 @@ import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
 import { RuntimeEvents } from "../../src/runtime/events"
 import { Session } from "../../src/session"
+import { SessionPrompt } from "../../src/session/prompt"
 import { handoffRuntimeEvents, RuntimeRoutes } from "../../src/server/routes/runtime"
+import { SessionRoutes } from "../../src/server/routes/session"
 import { Server } from "../../src/server/server"
 import { Storage } from "../../src/storage/storage"
-import { tmpdir } from "../fixture/fixture"
+import { tmpdir, trustProject } from "../fixture/fixture"
 
 const Tick = BusEvent.define(
   "test.runtime.tick",
@@ -17,6 +19,15 @@ const Tick = BusEvent.define(
     value: z.number(),
   }),
 )
+
+async function waitUntil(check: () => boolean, timeout = 5_000) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if (check()) return
+    await Bun.sleep(5)
+  }
+  throw new Error("Condition did not become true")
+}
 
 describe("public runtime event journal", () => {
   test("durably sequences a run, associates bus events, and replays after a cursor", async () => {
@@ -49,6 +60,137 @@ describe("public runtime event journal", () => {
             { sequence: 2, runID: "run_stable", type: "test.runtime.tick", properties: { value: 7 } },
             { sequence: 3, runID: "run_stable", type: "runtime.completed" },
           ],
+        })
+      },
+    })
+  })
+
+  test("preserves the failed assistant message id and structured error text", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_policy",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+        await RuntimeEvents.fail({
+          sessionID: session.id,
+          runID: "run_policy",
+          messageID: "msg_policy",
+          error: { data: { message: "bio policy" } },
+        })
+
+        expect((await RuntimeEvents.replay(session.id)).events.at(-1)).toMatchObject({
+          type: "runtime.failed",
+          properties: { messageID: "msg_policy", message: "bio policy" },
+        })
+      },
+    })
+  })
+
+  test("records an explicit user cancellation from the abort endpoint", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_cancelled",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+
+        const response = await SessionRoutes().request(`/${session.id}/abort`, { method: "POST" })
+
+        expect(response.status).toBe(200)
+        expect((await RuntimeEvents.replay(session.id)).events.at(-1)).toMatchObject({
+          runID: "run_cancelled",
+          type: "runtime.cancelled",
+          properties: { source: "user" },
+        })
+      },
+    })
+  })
+
+  test("stops the active controller even when cancellation event delivery fails", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({
+          permission: [{ permission: "bash", pattern: "*", action: "allow" }],
+        })
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_cancel_delivery_failure",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+        const command = `${JSON.stringify(process.execPath)} -e ${JSON.stringify("setInterval(() => {}, 1000)")}`
+        const running = SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "research",
+          model: { providerID: "test", modelID: "test" },
+          command,
+        })
+        await waitUntil(() => {
+          try {
+            SessionPrompt.assertNotBusy(session.id)
+            return false
+          } catch (error) {
+            expect(error).toBeInstanceOf(Session.BusyError)
+            return true
+          }
+        })
+        const unsubscribe = RuntimeEvents.subscribe(session.id, () => {
+          throw new Error("subscriber delivery failed")
+        })
+
+        const response = await SessionRoutes().request(`/${session.id}/abort`, { method: "POST" })
+        unsubscribe()
+
+        expect(response.status).toBe(200)
+        expect(() => SessionPrompt.assertNotBusy(session.id)).not.toThrow()
+        expect((await RuntimeEvents.replay(session.id)).events.at(-1)).toMatchObject({
+          runID: "run_cancel_delivery_failure",
+          type: "runtime.cancelled",
+          properties: { source: "user" },
+        })
+        await running
+        await Session.remove(session.id)
+      },
+    })
+  }, 15_000)
+
+  test("preserves runner timeout provenance on programmatic abort", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_timeout",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+
+        const response = await SessionRoutes().request(`/${session.id}/abort`, {
+          method: "POST",
+          headers: { "x-openscience-abort-source": "runner_timeout" },
+        })
+
+        expect(response.status).toBe(200)
+        expect((await RuntimeEvents.replay(session.id)).events.at(-1)).toMatchObject({
+          runID: "run_timeout",
+          type: "runtime.cancelled",
+          properties: { source: "runner_timeout" },
         })
       },
     })

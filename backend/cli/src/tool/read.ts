@@ -7,7 +7,7 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
 import { readImageDimensions } from "../util/image"
 import { SafeFileIO } from "@/file/safe-io"
@@ -31,9 +31,8 @@ export const ReadTool = Tool.define("read", {
     limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
   }),
   async execute(params, ctx) {
-    const requested = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.resolve(Instance.directory, params.filePath)
+    const directory = await sessionToolDirectory(ctx)
+    const requested = path.isAbsolute(params.filePath) ? params.filePath : path.resolve(directory, params.filePath)
     const authorized = await assertExternalDirectory(ctx, requested, {
       bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
       access: "read",

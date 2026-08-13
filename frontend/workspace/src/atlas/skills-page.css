@@ -375,27 +375,7 @@
 }
 
 .skills-workspace [data-component="switch"] {
-  min-width: 32px;
-  min-height: 32px;
   justify-content: flex-end;
-}
-
-.skills-workspace [data-component="switch"] [data-slot="switch-control"] {
-  width: 32px;
-  height: 18px;
-  border-radius: var(--settings-radius-pill, 999px);
-}
-
-.skills-workspace [data-component="switch"] [data-slot="switch-thumb"] {
-  width: 14px;
-  height: 14px;
-  margin-inline: 1px;
-  border-width: 0;
-  border-radius: 50%;
-}
-
-.skills-workspace [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
-  transform: translateX(14px);
 }
 
 .skills-workspace__row[data-enabled="false"] .skills-workspace__identity,
@@ -688,7 +668,6 @@
 
 @media (pointer: coarse) {
   .skills-workspace .settings-control,
-  .skills-workspace [data-component="switch"],
   .skills-workspace__state > button,
   .skills-workspace__form-actions button {
     min-height: 44px;

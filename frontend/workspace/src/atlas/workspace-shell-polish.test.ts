@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test"
 const read = (path: string) => Bun.file(new URL(path, import.meta.url)).text()
 
 describe("seamless workspace shell", () => {
-  test("aligns workspace chrome while giving the navigation rail a stable 48px grip", async () => {
+  test("aligns workspace chrome while giving the navigation rail a stable project grip", async () => {
     const [header, tabs, pane, sidebar] = await Promise.all([
       read("../pages/session-header.css"),
       read("../pages/session-tabs.css"),
@@ -14,7 +14,7 @@ describe("seamless workspace shell", () => {
     expect(header).toMatch(/\.workspace-header\.g-strip\s*\{[^}]*height: 44px;[^}]*flex: 0 0 44px;/s)
     expect(tabs).toMatch(/\.workspace-session-tabs\s*\{[^}]*height: 44px;/s)
     expect(pane).toMatch(/\.research-inspector__header\s*\{[^}]*height: 44px;[^}]*flex: 0 0 44px;/s)
-    expect(sidebar).toMatch(/\.session-sidebar__top\s*\{[^}]*height: 48px;[^}]*flex: 0 0 48px;/s)
+    expect(sidebar).toMatch(/\.session-sidebar__top\s*\{[^}]*height: 50px;[^}]*flex: 0 0 50px;/s)
   })
 
   test("uses only structural pane separators and quiet pill tabs", async () => {
@@ -25,7 +25,7 @@ describe("seamless workspace shell", () => {
     ])
 
     expect(sidebar).toMatch(
-      /\.session-sidebar\s*\{[^}]*border-right: 1px solid color-mix\(in srgb, var\(--color-border\) 72%, transparent\);/s,
+      /\.session-sidebar\s*\{[^}]*border-right: 1px solid color-mix\(in srgb, var\(--color-border\) 60%, transparent\);/s,
     )
     expect(pane).toMatch(/\.session-right-pane\s*\{[^}]*border-left: 1px solid var\(--color-border\);/s)
     expect(sidebar).toMatch(/\.session-sidebar__context-actions\s*\{[^}]*border: 0;/s)

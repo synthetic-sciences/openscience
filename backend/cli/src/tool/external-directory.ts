@@ -12,6 +12,12 @@ type Options = {
   access?: SessionFilesystem.Access
 }
 
+/** The agent-facing cwd is the isolated workspace owned by this session. */
+export async function sessionToolDirectory(ctx: Pick<Tool.Context, "sessionID">) {
+  if (!ctx.sessionID.startsWith("ses_")) return Instance.directory
+  return SessionFilesystem.workspace(ctx.sessionID)
+}
+
 export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
   if (!target) return
 
@@ -19,7 +25,11 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
   if (!canonical) throw new SessionFilesystem.InvalidPathError({ path: path.resolve(target) })
   if (options?.bypass) return { path: canonical }
 
-  const internal = await Instance.containsCanonicalPath(canonical)
+  const workspace = ctx.sessionID.startsWith("ses_") ? await SessionFilesystem.workspace(ctx.sessionID) : undefined
+  const canonicalWorkspace = workspace ? await Filesystem.canonical(workspace) : undefined
+  const internal =
+    (canonicalWorkspace ? Filesystem.contains(canonicalWorkspace, canonical) : false) ||
+    (await Instance.containsCanonicalPath(canonical))
   const access = options?.access ?? "read"
 
   if (!internal) {

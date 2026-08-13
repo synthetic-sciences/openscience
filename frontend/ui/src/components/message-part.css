@@ -38,6 +38,15 @@
     gap: 6px;
   }
 
+  [data-slot="user-message-content"] {
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+  }
+
   [data-slot="user-message-attachment"] {
     width: min(240px, 100%);
     min-width: 156px;
@@ -122,11 +131,12 @@
   [data-slot="user-message-text"] {
     position: relative;
     min-width: 0;
+    max-width: 100%;
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
     background: var(--surface-weak);
-    border: 1px solid var(--border-weak-base);
+    border: 0;
     padding: 8px 12px;
     border-radius: var(--radius-xs);
 
@@ -153,10 +163,6 @@
   [data-slot="user-message-row"]:focus-within [data-slot="user-message-copy-wrapper"],
   [data-slot="user-message-copy-wrapper"][data-copied="true"] {
     opacity: 1;
-  }
-
-  [data-slot="user-message-copy-wrapper"][data-copied="true"] [data-slot="icon-svg"] {
-    color: var(--icon-success-base, var(--text-strong));
   }
 
   .text-text-strong {
@@ -766,14 +772,6 @@
   font-size: 11px;
 }
 
-[data-component="saved-artifact-tool"] > code {
-  overflow: hidden;
-  color: var(--text-base);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 [data-slot="saved-artifact-preview"] {
   display: block;
   width: 100%;
@@ -806,27 +804,6 @@
   color: var(--text-interactive-base, var(--text-base));
   font: inherit;
   cursor: pointer;
-}
-
-[data-component="saved-artifact-tool"] details {
-  border-top: 1px solid var(--border-weak-base);
-  padding-top: 8px;
-}
-
-[data-component="saved-artifact-tool"] summary {
-  color: var(--text-weak);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-[data-component="saved-artifact-tool"] details pre {
-  margin-top: 8px;
-  max-height: 220px;
-  overflow: auto;
-  color: var(--text-base);
-  font-family: var(--font-family-mono);
-  font-size: 11px;
-  white-space: pre-wrap;
 }
 
 @property --border-angle {

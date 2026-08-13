@@ -39,6 +39,7 @@ export namespace LLM {
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
+    onReasoningEffortResolved?: (effort: string | undefined) => void | Promise<void>
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -156,6 +157,8 @@ export namespace LLM {
         headers: {},
       },
     )
+
+    await input.onReasoningEffortResolved?.(resolvedReasoningEffort(params.options))
 
     const maxOutputTokens = isCodex
       ? undefined
@@ -290,6 +293,27 @@ export namespace LLM {
   export async function modelTools(input: Pick<StreamInput, "tools" | "agent" | "model" | "user">) {
     if (!input.model.capabilities.toolcall) return {}
     return resolveTools(input)
+  }
+
+  /** Read only named controls from the final provider options. Numeric token
+   * budgets deliberately stay unlabeled: inferring low/high from a budget
+   * would make telemetry provider- and model-dependent rather than truthful. */
+  export function resolvedReasoningEffort(options: Record<string, any>): string | undefined {
+    const value = (input: unknown) => (typeof input === "string" && input.length > 0 ? input : undefined)
+    const object = (input: unknown) =>
+      input !== null && typeof input === "object" && !Array.isArray(input)
+        ? (input as Record<string, unknown>)
+        : undefined
+    const reasoning = object(options.reasoning)
+    const reasoningConfig = object(options.reasoningConfig)
+    const thinkingConfig = object(options.thinkingConfig)
+    return (
+      value(options.reasoningEffort) ??
+      value(options.effort) ??
+      value(reasoning?.effort) ??
+      value(reasoningConfig?.maxReasoningEffort) ??
+      value(thinkingConfig?.thinkingLevel)
+    )
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {

@@ -322,6 +322,26 @@ describe("Sandbox.plan", () => {
     }
   })
 
+  test("sandboxed Python can initialize the standard MIME database", async () => {
+    if (!Sandbox.available()) return
+    await using tmp = await tmpdir()
+    const python = Bun.which("python3")
+    if (!python) return
+    const p = Sandbox.plan({
+      command: `${JSON.stringify(python)} -c ${JSON.stringify(
+        "import mimetypes; mimetypes.init(); print(mimetypes.guess_type('table.xlsx')[0])",
+      )}`,
+      shell,
+      cwd: tmp.path,
+      workspace: [tmp.path],
+      options: { enabled: true },
+    })
+    const result = await execute(p, tmp.path)
+    expect(result.exit).toBe(0)
+    expect(result.stderr).toBe("")
+    expect(result.stdout.trim()).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+  })
+
   test("onUnavailable:error throws when no backend is available", () => {
     if (Sandbox.available()) return // only meaningful without a backend
     expect(() => Sandbox.plan({ ...base, options: { enabled: true, onUnavailable: "error" } })).toThrow()

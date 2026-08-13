@@ -79,6 +79,9 @@ describe("shared Iconoir system", () => {
   test("gives icon controls a Fitts-safe target independent of glyph size", () => {
     const styles = read("./icon-button.css")
 
+    expect(styles).toContain("appearance: none")
+    expect(styles).toContain("border: 0")
+    expect(styles).toContain("background: transparent")
     expect(styles).toContain("width: 32px")
     expect(styles).toContain("height: 32px")
     expect(styles).toContain("min-width: 44px")

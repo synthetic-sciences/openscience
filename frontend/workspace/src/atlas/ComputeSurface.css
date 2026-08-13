@@ -2,9 +2,6 @@
   container: compute / inline-size;
   --activity-surface: color-mix(in srgb, var(--color-bg-subtle) 68%, var(--color-bg));
   --activity-surface-raised: color-mix(in srgb, var(--color-bg-subtle) 88%, var(--color-bg));
-  --activity-research: color-mix(in srgb, var(--color-bg-subtle) 54%, var(--color-bg));
-  --activity-local: color-mix(in srgb, var(--color-success) 3%, var(--color-bg));
-  --activity-remote: color-mix(in srgb, var(--color-warning) 3%, var(--color-bg));
   --activity-divider: color-mix(in srgb, var(--color-border) 68%, transparent);
   display: flex;
   min-width: 0;
@@ -31,12 +28,12 @@
 
 .activity-surface__capacity > summary {
   display: flex;
-  min-height: 32px;
+  min-height: 38px;
   box-sizing: border-box;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 7px 10px;
+  gap: 10px;
+  padding: 5px 30px 5px 10px;
   border-radius: inherit;
   cursor: pointer;
   list-style: none;
@@ -49,6 +46,8 @@
 
 .activity-surface__capacity > summary::after {
   content: "+";
+  position: absolute;
+  right: 10px;
   flex: none;
   color: var(--color-text-faint);
   font-size: 15px;
@@ -65,22 +64,73 @@
 }
 
 .activity-surface__capacity > summary:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
+  outline: 0;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-focus) 72%, transparent);
 }
 
-.activity-surface__capacity > summary span {
+.activity-surface__capacity > summary {
+  position: relative;
+}
+
+.activity-surface__capacity-title {
+  display: flex;
+  min-width: 76px;
+  flex: none;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.activity-surface__capacity-title strong {
   color: var(--color-text);
   font-size: 12px;
   font-weight: var(--font-weight-medium);
 }
 
-.activity-surface__capacity > summary small {
-  min-width: 0;
-  overflow: hidden;
+.activity-surface__capacity-title small {
   color: var(--color-text-muted);
   font-size: 11px;
   font-weight: var(--font-weight-regular);
+}
+
+.activity-surface__capacity-reading {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.activity-surface__capacity-reading > span {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.activity-surface__capacity-reading small {
+  color: var(--color-text-faint);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+}
+
+.activity-surface__capacity-reading strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+.activity-surface__capacity-state {
+  overflow: hidden;
+  flex: 1;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -91,6 +141,16 @@
   border-top: 1px solid var(--activity-divider);
   border-radius: 0 0 11px 11px;
   background: transparent;
+}
+
+@container compute (max-width: 410px) {
+  .activity-surface__capacity-reading {
+    gap: 7px;
+  }
+
+  .activity-surface__capacity-reading > span {
+    gap: 2px;
+  }
 }
 
 .compute-surface__panel,
@@ -159,8 +219,8 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 22px;
-  padding: 16px 10px 24px;
+  gap: 16px;
+  padding: 12px 10px 24px;
 }
 
 .compute-surface .kernel-session {
@@ -185,6 +245,8 @@
   min-width: 0;
   align-items: center;
   gap: 6px;
+  max-width: 100%;
+  flex: 1 1 auto;
 }
 
 .compute-surface .kernel-session__identity strong {
@@ -194,13 +256,13 @@
   font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
 
 .compute-surface .kernel-session__identity em {
   flex: none;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--activity-surface);
+  padding: 0;
   color: var(--color-text-muted);
   font-size: 10px;
   font-style: normal;
@@ -215,28 +277,18 @@
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 50%;
+  flex: 0 1 auto;
 }
 
 .compute-surface .activity-boundary {
   min-width: 0;
-  padding: 5px;
-  border-radius: 14px;
+  padding: 0;
+  border-radius: 0;
 }
 
 .compute-surface .activity-boundary + .activity-boundary {
-  margin-top: 10px;
-}
-
-.compute-surface .activity-boundary[data-location="local"] {
-  background: var(--activity-local);
-}
-
-.compute-surface .activity-boundary[data-location="research"] {
-  background: var(--activity-research);
-}
-
-.compute-surface .activity-boundary[data-location="remote"] {
-  background: var(--activity-remote);
+  margin-top: 14px;
 }
 
 .compute-surface .activity-boundary__header {
@@ -244,7 +296,15 @@
   min-height: 28px;
   align-items: baseline;
   gap: 7px;
-  padding: 4px 7px 7px;
+  padding: 2px 4px 6px;
+  justify-content: space-between;
+}
+
+.compute-surface .activity-boundary__title {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
 }
 
 .compute-surface .activity-boundary__header strong {
@@ -258,9 +318,14 @@
   min-width: 0;
   overflow: hidden;
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.compute-surface .activity-boundary__count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .compute-surface .kernel-panel__list {
@@ -270,6 +335,68 @@
   gap: 4px;
 }
 
+.compute-surface .activity-collection {
+  min-width: 0;
+  margin: 2px 0 0;
+  border: 0;
+}
+
+.compute-surface .activity-collection > summary {
+  display: flex;
+  min-height: 32px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.compute-surface .activity-collection > summary::-webkit-details-marker {
+  display: none;
+}
+
+.compute-surface .activity-collection > summary::after {
+  content: "+";
+  color: var(--color-text-faint);
+}
+
+.compute-surface .activity-collection[open] > summary::after {
+  content: "−";
+}
+
+.compute-surface .activity-collection > summary:hover {
+  color: var(--color-text);
+}
+
+.compute-surface .activity-collection > summary:active {
+  transform: scale(0.99);
+}
+
+.compute-surface .activity-collection > summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+.compute-surface .activity-collection__open {
+  display: none;
+}
+
+.compute-surface .activity-collection[open] .activity-collection__closed {
+  display: none;
+}
+
+.compute-surface .activity-collection[open] .activity-collection__open {
+  display: inline;
+}
+
+.compute-surface .activity-collection > .kernel-panel__list {
+  margin-top: 2px;
+}
+
 .compute-surface .activity-card {
   display: grid;
   min-width: 0;
@@ -277,18 +404,23 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 6px 10px;
-  padding: 10px 11px;
+  padding: 9px 10px;
   border: 0;
-  border-radius: 11px;
+  border-radius: 9px;
   background: color-mix(in srgb, var(--color-bg) 94%, var(--color-bg-subtle));
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent);
-  transition:
-    background-color 140ms ease,
-    transform 140ms ease;
+  box-shadow: none;
 }
 
-.compute-surface .activity-card:hover {
-  background: color-mix(in srgb, var(--color-bg-subtle) 58%, var(--color-bg));
+.compute-surface .execution-card,
+.compute-surface .trace-kernel-card {
+  padding-block: 8px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--activity-divider) 58%, transparent);
+}
+
+.compute-surface .kernel-panel__list > :last-child {
+  box-shadow: none;
 }
 
 .compute-surface .activity-card__header {
@@ -326,7 +458,7 @@
   border-radius: 7px;
   background: var(--activity-surface);
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -366,7 +498,7 @@
   border-radius: 999px;
   background: var(--activity-surface);
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: var(--font-weight-medium);
   line-height: 1.45;
 }
@@ -549,7 +681,7 @@
 .compute-surface .activity-card__facts dt {
   margin: 0 0 1px;
   color: var(--color-text-faint);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* Compatibility styling for extensions still rendering the former metric row. */
@@ -623,10 +755,6 @@
 }
 
 @container compute (max-width: 470px) {
-  .activity-surface__capacity > summary small {
-    display: none;
-  }
-
   .compute-surface .kernel-panel__sessions {
     padding-inline: 8px;
   }
@@ -635,6 +763,12 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 2px;
+  }
+
+  .compute-surface .kernel-session__identity,
+  .compute-surface .kernel-session__summary {
+    width: 100%;
+    max-width: 100%;
   }
 
   .compute-surface .activity-card {
@@ -657,12 +791,43 @@
 }
 
 @container compute (max-width: 350px) {
+  .activity-surface__capacity {
+    margin-inline: 6px;
+  }
+
+  .activity-surface__capacity > summary {
+    padding-inline: 8px 25px;
+  }
+
+  .activity-surface__capacity-title {
+    min-width: 50px;
+  }
+
+  .activity-surface__capacity-title small {
+    display: none;
+  }
+
+  .activity-surface__capacity-title-prefix {
+    display: none;
+  }
+
+  .activity-surface__capacity-reading {
+    justify-content: space-between;
+    gap: 5px;
+  }
+
+  .activity-surface__capacity-reading > span {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
   .compute-surface .kernel-panel__sessions {
     padding-inline: 6px;
   }
 
   .compute-surface .activity-boundary {
-    padding: 4px;
+    padding: 0;
   }
 
   .compute-surface .activity-card {
@@ -679,6 +844,10 @@
 
   .compute-surface .activity-card__status {
     padding-inline: 5px;
+  }
+
+  .compute-surface .activity-boundary__title > span {
+    display: none;
   }
 
   .compute-surface .activity-disclosure__body {

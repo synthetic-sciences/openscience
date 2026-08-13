@@ -946,6 +946,7 @@ export default function Page(): JSX.Element {
                       below) so the jump-to-latest pill's position:absolute resolves
                       against this box instead of the whole chat column. */}
                   <div
+                    class="session-conversation-scroll-frame"
                     style={{
                       position: "relative",
                       flex: 1,
@@ -1010,7 +1011,6 @@ export default function Page(): JSX.Element {
                           observer?.observe(element)
                         }}
                         class="session-transcript w-full flex flex-col items-start justify-start"
-                        style={{ "padding-bottom": "var(--workspace-composer-reserve)" }}
                       >
                         <For each={turnMessages()}>
                           {(message, index) => (
@@ -1083,39 +1083,19 @@ export default function Page(): JSX.Element {
                       </div>
                     </div>
 
-                    <Show when={chatScroll.userScrolled()}>
-                      <button
-                        type="button"
-                        class="session-jump-latest"
-                        onClick={() => chatScroll.forceScrollToBottom()}
-                        title="Jump to Latest"
-                        style={{
-                          position: "absolute",
-                          // Share the dock reserve with the transcript so composer
-                          // geometry can change without hiding the final turn.
-                          bottom: "calc(var(--workspace-composer-reserve) + 16px)",
-                          left: "50%",
-                          transform: "translateX(-50%)",
-                          display: "inline-flex",
-                          "align-items": "center",
-                          gap: "6px",
-                          padding: "6px 12px",
-                          "border-radius": "999px",
-                          border: "1px solid var(--color-border-strong)",
-                          background: "var(--color-surface-solid)",
-                          "box-shadow": "var(--atlas-shadow-sm)",
-                          "font-family": FONT_SANS,
-                          "font-size": "12px",
-                          "font-weight": "var(--font-weight-medium)",
-                          color: "var(--color-text)",
-                          cursor: "pointer",
-                          "z-index": 6,
-                        }}
-                      >
-                        <IconChevronDown size={13} strokeWidth={1.6} />
-                        Jump to Latest
-                      </button>
-                    </Show>
+                    <div class="session-jump-latest-rail" aria-live="polite">
+                      <Show when={chatScroll.userScrolled()}>
+                        <button
+                          type="button"
+                          class="session-jump-latest"
+                          onClick={() => chatScroll.forceScrollToBottom()}
+                          title="Jump to Latest"
+                        >
+                          <IconChevronDown size={13} strokeWidth={1.6} />
+                          Jump to Latest
+                        </button>
+                      </Show>
+                    </div>
                   </div>
                 </Match>
                 <Match when={true}>

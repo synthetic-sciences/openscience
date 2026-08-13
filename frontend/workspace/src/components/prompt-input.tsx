@@ -67,6 +67,7 @@ import {
   researchEffortLabel,
   type ResearchEffort,
 } from "./prompt-capabilities"
+import { canRestoreFailedSubmission } from "./prompt-submission"
 
 type PendingPrompt = {
   abort: AbortController
@@ -112,6 +113,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+  let researchToolsRef: HTMLDetailsElement | undefined
   const [efforts, setEfforts] = persisted(
     {
       ...Persist.workspace(sdk.scope, "research-effort", ["research-effort.v1"]),
@@ -138,7 +140,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setEfforts("workspace", value)
     if (sessionID) setEfforts("sessions", sessionID, value)
   }
-  const toggleEffort = () => setEffort(effort() === "normal" ? "ultra" : "normal")
 
   const mirror = { input: false }
 
@@ -177,6 +178,61 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const attach = () => {
     queueMicrotask(() => fileInputRef.click())
+  }
+
+  const closeResearchTools = () => {
+    if (researchToolsRef) researchToolsRef.open = false
+  }
+
+  const openCompute = () => {
+    closeResearchTools()
+    uiStore.openContext("kernels")
+    queueMicrotask(() => researchToolsRef?.querySelector("summary")?.focus())
+  }
+
+  const manageSkills = () => {
+    closeResearchTools()
+    queueMicrotask(() => dialog.show(() => <DialogSettings initial="skills" />))
+  }
+
+  const manageConnectors = () => {
+    closeResearchTools()
+    queueMicrotask(() => dialog.show(() => <DialogSettings initial="connectors" />))
+  }
+
+  const selectResearchEffort = (value: ResearchEffort, target: HTMLButtonElement) => {
+    setEffort(value)
+    target.focus()
+  }
+
+  const navigateResearchEffort = (event: KeyboardEvent) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
+    const target = event.target
+    const scope = event.currentTarget
+    if (!(target instanceof HTMLButtonElement) || target.getAttribute("role") !== "radio") return
+    if (!(scope instanceof HTMLElement)) return
+    const choices = Array.from(scope.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
+    const index = choices.indexOf(target)
+    if (index < 0 || choices.length === 0) return
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? choices.length - 1
+          : event.key === "ArrowRight" || event.key === "ArrowDown"
+            ? (index + 1) % choices.length
+            : (index <= 0 ? choices.length : index) - 1
+    const choice = choices[next]
+    const value = choice?.dataset.researchEffort
+    if (!choice || (value !== "normal" && value !== "ultra")) return
+    event.preventDefault()
+    selectResearchEffort(value, choice)
+  }
+
+  const dismissResearchTools = (event: PointerEvent) => {
+    if (!researchToolsRef?.open) return
+    if (event.target instanceof Node && researchToolsRef.contains(event.target)) return
+    closeResearchTools()
   }
 
   const commentInReview = (path: string) => {
@@ -255,7 +311,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     applyingHistory: false,
   })
 
+  const [submitting, setSubmitting] = createSignal(false)
+
   const placeholder = createMemo(() => {
+    if (submitting()) return "Sending…"
     if (store.mode === "shell") return language.t("prompt.placeholder.shell")
     if (commentCount() > 1) return language.t("prompt.placeholder.summarizeComments")
     if (commentCount() === 1) return language.t("prompt.placeholder.summarizeComment")
@@ -453,12 +512,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     document.addEventListener("dragover", handleGlobalDragOver)
     document.addEventListener("dragleave", handleGlobalDragLeave)
     document.addEventListener("drop", handleGlobalDrop)
+    document.addEventListener("pointerdown", dismissResearchTools)
     if (!params.id || params.id === "new") queueMicrotask(() => editorRef.focus())
   })
   onCleanup(() => {
     document.removeEventListener("dragover", handleGlobalDragOver)
     document.removeEventListener("dragleave", handleGlobalDragLeave)
     document.removeEventListener("drop", handleGlobalDrop)
+    document.removeEventListener("pointerdown", dismissResearchTools)
   })
 
   createEffect(() => {
@@ -680,7 +741,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     requestAnimationFrame(() => {
       const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
-      element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+      element?.scrollIntoView({ block: "nearest", behavior: "auto" })
     })
   })
 
@@ -1181,15 +1242,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
 
+    // A first prompt may need to create its session (and sometimes a
+    // worktree) before it has a real session ID. Keep that bootstrap single-
+    // flight while the composer is showing its immediate acknowledgement.
+    if (submitting()) return
+
+    // While a response is active this control is Stop, regardless of whether
+    // the user has started drafting the next message. Preserve that draft and
+    // terminate the active response instead of accidentally submitting it.
+    if (working()) {
+      abort()
+      return
+    }
+
     const currentPrompt = prompt.current()
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = imageAttachments().slice()
     const mode = store.mode
 
-    if (text.trim().length === 0 && images.length === 0) {
-      if (working()) abort()
-      return
-    }
+    if (text.trim().length === 0 && images.length === 0) return
 
     const currentModel = local.model.current()
     const currentAgent = local.agent.current()
@@ -1219,7 +1290,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return language.t("common.requestFailed")
     }
 
-    addToHistory(currentPrompt, mode)
+    const clearInput = () => {
+      prompt.reset()
+      setStore("mode", "normal")
+      setStore("popover", null)
+    }
+
+    const restoreInput = () => {
+      prompt.set(currentPrompt, promptLength(currentPrompt))
+      setStore("mode", mode)
+      setStore("popover", null)
+      requestAnimationFrame(() => {
+        editorRef.focus()
+        setCursorPosition(editorRef, promptLength(currentPrompt))
+        queueScroll()
+      })
+    }
+
+    const restoreInputAfterFailure = () => {
+      if (!canRestoreFailedSubmission(prompt.current(), store.mode)) return false
+      restoreInput()
+      return true
+    }
+
+    const restoreBootstrap = () => {
+      setSubmitting(false)
+      restoreInput()
+    }
+
+    // Acknowledge Enter before the first network boundary. Persisting up to
+    // 100 history entries can synchronously serialize several megabytes, so
+    // keep that work off the input event's critical path.
+    setSubmitting(true)
+    clearInput()
+    window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
 
@@ -1248,6 +1352,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             title: language.t("prompt.toast.worktreeCreateFailed.title"),
             description: language.t("common.requestFailed"),
           })
+          restoreBootstrap()
           return
         }
         WorktreeState.pending(createdWorktree.directory)
@@ -1292,30 +1397,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         navigate(href)
       }
     }
-    if (!session) return
+    if (!session) {
+      restoreBootstrap()
+      return
+    }
     setEffort(researchEffort, session.id)
 
     props.onSubmit?.()
 
-    const clearInput = () => {
-      prompt.reset()
-      setStore("mode", "normal")
-      setStore("popover", null)
-    }
-
-    const restoreInput = () => {
-      prompt.set(currentPrompt, promptLength(currentPrompt))
-      setStore("mode", mode)
-      setStore("popover", null)
-      requestAnimationFrame(() => {
-        editorRef.focus()
-        setCursorPosition(editorRef, promptLength(currentPrompt))
-        queueScroll()
-      })
-    }
-
     if (mode === "shell") {
-      clearInput()
       client.session
         .shell({
           sessionID: session.id,
@@ -1328,8 +1418,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             title: language.t("prompt.toast.shellSendFailed.title"),
             description: errorMessage(err),
           })
-          restoreInput()
+          restoreInputAfterFailure()
         })
+      setSubmitting(false)
       return
     }
 
@@ -1338,7 +1429,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
-        clearInput()
         client.session
           .command({
             sessionID: session.id,
@@ -1361,8 +1451,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               title: language.t("prompt.toast.commandSendFailed.title"),
               description: errorMessage(err),
             })
-            restoreInput()
+            restoreInputAfterFailure()
           })
+        setSubmitting(false)
         return
       }
     }
@@ -1579,8 +1670,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       prompt.context.remove(item.key)
     }
 
-    clearInput()
     addOptimisticMessage()
+    setSubmitting(false)
 
     const waitForWorktree = async () => {
       const worktree = WorktreeState.get(sessionDirectory)
@@ -1608,7 +1699,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             preview: item.preview,
           })
         }
-        restoreInput()
+        restoreInputAfterFailure()
       }
 
       pending.set(session.id, { abort: controller, cleanup })
@@ -1682,7 +1773,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           preview: item.preview,
         })
       }
-      restoreInput()
+      restoreInputAfterFailure()
     })
   }
 
@@ -1709,9 +1800,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           ref={(el) => {
             if (store.popover === "slash") slashPopoverRef = el
           }}
-          class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-80 min-h-10
-                 overflow-auto no-scrollbar flex flex-col p-2 rounded-lg
-                 border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
+          class="workspace-composer__suggestions absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left
+                 max-h-80 min-h-10 overflow-auto no-scrollbar flex flex-col"
           onMouseDown={(e) => e.preventDefault()}
         >
           <Switch>
@@ -1724,7 +1814,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   {(item) => (
                     <button
                       classList={{
-                        "w-full flex items-center gap-x-2 rounded-md px-2 py-0.5": true,
+                        "workspace-composer__suggestion w-full flex items-center gap-x-2": true,
                         "bg-surface-raised-base-hover": atActive() === atKey(item),
                       }}
                       onClick={() => handleAtSelect(item)}
@@ -1774,7 +1864,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <button
                       data-slash-id={cmd.id}
                       classList={{
-                        "w-full flex items-center justify-between gap-4 rounded-md px-2 py-1": true,
+                        "workspace-composer__suggestion w-full flex items-center justify-between gap-4": true,
                         "bg-surface-raised-base-hover": slashActive() === cmd.id,
                       }}
                       onClick={() => handleSlashSelect(cmd)}
@@ -1964,8 +2054,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             role="textbox"
             aria-multiline="true"
             aria-label={placeholder()}
+            aria-busy={submitting()}
             dir="auto"
-            contenteditable="true"
+            contenteditable={submitting() ? "false" : "true"}
             onInput={handleInput}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
@@ -2023,20 +2114,84 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Icon name="paperclip" class="size-4" />
                   </Button>
                 </Tooltip>
-                <button
-                  type="button"
-                  class="workspace-composer__effort"
-                  data-research-effort={effort()}
-                  aria-pressed={effort() === "ultra"}
-                  aria-label={`Research effort: ${researchEffortLabel(effort())}. Activate to use ${
-                    effort() === "normal" ? "Ultra" : "Normal"
-                  }.`}
-                  title={effort() === "normal" ? "Use Ultra research effort" : "Use Normal research effort"}
-                  onClick={toggleEffort}
+                <details
+                  ref={(element) => (researchToolsRef = element)}
+                  class="workspace-composer__research-tools"
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape") return
+                    event.preventDefault()
+                    closeResearchTools()
+                    researchToolsRef?.querySelector("summary")?.focus()
+                  }}
                 >
-                  <span>Research effort:</span>
-                  <strong>{researchEffortLabel(effort())}</strong>
-                </button>
+                  <summary aria-label={`Research tools, ${researchEffortLabel(effort())} effort`}>
+                    <span class="workspace-composer__research-tools-label">Research</span>
+                    <span class="workspace-composer__research-tools-separator" aria-hidden="true">
+                      ·
+                    </span>
+                    <strong>{researchEffortLabel(effort())}</strong>
+                    <Icon name="chevron-down" size="small" />
+                  </summary>
+                  <div class="workspace-composer__research-tools-menu" role="group" aria-label="Research tools">
+                    <section class="workspace-composer__research-effort" aria-label="Research effort">
+                      <div class="workspace-composer__research-tools-heading">
+                        <strong>Research effort</strong>
+                        <span>{researchEffortLabel(effort())}</span>
+                      </div>
+                      <div
+                        class="workspace-composer__research-effort-options"
+                        role="radiogroup"
+                        aria-label="Research effort"
+                        onKeyDown={navigateResearchEffort}
+                      >
+                        <button
+                          type="button"
+                          role="radio"
+                          data-research-effort="normal"
+                          aria-checked={effort() === "normal"}
+                          tabindex={effort() === "normal" ? 0 : -1}
+                          onClick={(event) => selectResearchEffort("normal", event.currentTarget)}
+                        >
+                          Normal
+                        </button>
+                        <button
+                          type="button"
+                          role="radio"
+                          data-research-effort="ultra"
+                          aria-checked={effort() === "ultra"}
+                          tabindex={effort() === "ultra" ? 0 : -1}
+                          onClick={(event) => selectResearchEffort("ultra", event.currentTarget)}
+                        >
+                          Ultra
+                        </button>
+                      </div>
+                      <p>Ultra uses more parallel research when it is useful.</p>
+                    </section>
+                    <div class="workspace-composer__research-tools-actions">
+                      <button type="button" onClick={openCompute}>
+                        <span class="workspace-composer__research-tools-copy">
+                          <strong>Compute activity</strong>
+                          <small>Python, R, local and remote jobs</small>
+                        </span>
+                        <Icon name="chevron-right" size="small" />
+                      </button>
+                      <button type="button" onClick={manageSkills}>
+                        <span class="workspace-composer__research-tools-copy">
+                          <strong>Manage skills</strong>
+                          <small>Installed scientific workflows</small>
+                        </span>
+                        <Icon name="chevron-right" size="small" />
+                      </button>
+                      <button type="button" onClick={manageConnectors}>
+                        <span class="workspace-composer__research-tools-copy">
+                          <strong>Manage connectors</strong>
+                          <small>External research services</small>
+                        </span>
+                        <Icon name="chevron-right" size="small" />
+                      </button>
+                    </div>
+                  </div>
+                </details>
               </Match>
             </Switch>
           </div>

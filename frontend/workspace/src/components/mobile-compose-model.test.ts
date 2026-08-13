@@ -3,17 +3,22 @@ import { describe, expect, test } from "bun:test"
 const read = (name: string) => Bun.file(new URL(name, import.meta.url)).text()
 
 describe("mobile compose and model sheets", () => {
-  test("keeps only the four required research actions visible", async () => {
+  test("keeps the compact research actions visible without restoring legacy capability toggles", async () => {
     const [prompt, css] = await Promise.all([read("./prompt-input.tsx"), read("./prompt-input.css")])
 
     expect(prompt).not.toContain("data-mobile-compose-sheet")
     expect(prompt).not.toContain("data-mobile-compose-row")
     expect(prompt).toContain("onClick={attach}")
-    expect(prompt).toContain("onClick={toggleEffort}")
+    expect(prompt).toContain('onClick={(event) => selectResearchEffort("normal", event.currentTarget)}')
+    expect(prompt).toContain('onClick={(event) => selectResearchEffort("ultra", event.currentTarget)}')
     expect(prompt).toContain("<ModelSettingsPopover />")
     expect(prompt).not.toContain('aria-label="Composer mode"')
     expect(prompt).toContain('class="workspace-composer__send')
-    expect(prompt).toContain('class="workspace-composer__effort"')
+    expect(prompt).not.toContain('class="workspace-composer__effort"')
+    expect(prompt).toContain('class="workspace-composer__research-tools"')
+    expect(prompt).toContain('uiStore.openContext("kernels")')
+    expect(prompt).toContain('<DialogSettings initial="skills" />')
+    expect(prompt).toContain('<DialogSettings initial="connectors" />')
     expect(prompt).not.toContain('class="workspace-composer__overflow"')
     expect(prompt).not.toContain('aria-label="Research capabilities"')
     expect(prompt).not.toContain("toggleDelegation")
@@ -27,7 +32,6 @@ describe("mobile compose and model sheets", () => {
     expect(prompt).not.toContain("agent.model")
     expect(prompt).not.toContain("<span>Memory</span>")
     expect(prompt).not.toContain("<span>Specialist</span>")
-    expect(prompt).not.toContain("<span>Compute</span>")
     expect(prompt).not.toContain('class="workspace-composer__compute-menu"')
     expect(prompt).not.toContain('"/settings/compute/provider/modal/enabled"')
     expect(prompt).not.toContain('"/settings/memory?scope=global"')
@@ -39,7 +43,7 @@ describe("mobile compose and model sheets", () => {
     expect(prompt).not.toContain("Open Terminal")
     expect(prompt).not.toContain("Composer preferences")
     expect(prompt).not.toContain("Prompt history")
-    expect(prompt.indexOf('class="workspace-composer__effort"')).toBeLessThan(
+    expect(prompt.indexOf('class="workspace-composer__research-tools"')).toBeLessThan(
       prompt.indexOf('class="workspace-composer__actions'),
     )
     expect(prompt.indexOf("<ModelSettingsPopover />")).toBeGreaterThan(
@@ -49,10 +53,13 @@ describe("mobile compose and model sheets", () => {
     expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto")
     expect(css).toContain("overflow: visible")
     expect(css).not.toContain("overflow-x: auto")
-    expect(css).toContain(".workspace-composer__effort")
+    expect(css).toContain(".workspace-composer__research-effort-options")
+    expect(css).not.toContain(".workspace-composer__effort")
+    expect(css).toContain(".workspace-composer__research-tools")
+    expect(css).toContain(".workspace-composer__research-tools-menu")
     expect(css).not.toContain(".workspace-composer__overflow")
     expect(css).not.toContain(".workspace-composer__compute-menu")
-    expect(css).not.toContain("grid-template-columns: repeat(2")
+    expect(css).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))")
     expect(css).not.toContain("mobile-compose-sheet")
   })
 
@@ -69,6 +76,9 @@ describe("mobile compose and model sheets", () => {
     expect(settings).toContain('aria-label="Close model options"')
     expect(settings).toContain("local.model.variant.set")
     expect(settings).toContain("local.model.tier.set")
+    expect(settings).toContain("aria-label={`Thinking effort: ${props.value}`}")
+    expect(settings).not.toContain("<span>Model effort</span>")
+    expect(settings).toContain("groupModelRoutes")
     expect(css).toContain("[data-popper-positioner]:has(> [data-model-settings-popover])")
     expect(css).toContain("width: 100% !important")
     expect(css).toContain("transform: none !important")
