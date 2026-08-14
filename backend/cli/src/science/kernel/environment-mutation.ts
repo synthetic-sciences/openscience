@@ -26,6 +26,20 @@ export namespace KernelEnvironmentMutation {
       .toLowerCase()
   }
 
+  function pipOperation(code: string): "install" | "remove" | undefined {
+    const tokens = code.split(" ")
+    const entrypoints = new Set(["pip", "pip._internal", "pip._internal.main"])
+    for (let index = 0; index < tokens.length; index++) {
+      if (!entrypoints.has(tokens[index] ?? "")) continue
+      let cursor = index + 1
+      while (cursor < tokens.length && /^--?[a-z0-9_.=+-]+$/.test(tokens[cursor] ?? "")) cursor++
+      const operation = tokens[cursor]
+      if (operation === "install" || operation === "download") return "install"
+      if (operation === "uninstall") return "remove"
+      index = cursor - 1
+    }
+  }
+
   /**
    * Conservatively recognize package and environment mutation submitted to a
    * plain interpreter. The normalized form also catches safe argv-based calls
@@ -38,10 +52,11 @@ export namespace KernelEnvironmentMutation {
     let manager: string | undefined
 
     if (input.language === "python") {
-      if (/\bpip(?:\._internal(?:\.main)?)?\s+(?:--?[a-z0-9_.-]+\s+)*(?:install|download)\b/.test(code)) {
+      const pip = pipOperation(code)
+      if (pip === "install") {
         operation = "package_install"
         manager = "pip"
-      } else if (/\bpip(?:\._internal(?:\.main)?)?\s+(?:--?[a-z0-9_.-]+\s+)*uninstall\b/.test(code)) {
+      } else if (pip === "remove") {
         operation = "package_remove"
         manager = "pip"
       } else if (/\b(?:uv\s+pip|conda|mamba)\s+(?:install|add)\b|\bpoetry\s+add\b/.test(code)) {

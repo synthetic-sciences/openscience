@@ -21,6 +21,8 @@ import { WindowsJobLauncher } from "../process/windows-job-launcher"
 interface LaunchContext {
   root: string
   options: Sandbox.Options
+  /** Built-in, app-owned support roots required beside an executable. */
+  readable?: string[]
   /** Built-in server definitions may name trusted support files in argv. A
    * configured server's argv is project/user input and must never widen read
    * access merely by naming an arbitrary host path. */
@@ -61,6 +63,7 @@ async function spawn(command: string, argsOrOptions?: any, maybeOptions?: any) {
       workspace: [Instance.directory, Instance.worktree],
       readable: [
         context.root,
+        ...(context.readable ?? []),
         ...(context.allowArgumentReadDirectories
           ? args.flatMap((value) => {
               if (!path.isAbsolute(value)) return []
@@ -129,6 +132,39 @@ async function spawn(command: string, argsOrOptions?: any, maybeOptions?: any) {
 
 export const spawnLSPChild = spawn
 
+type ClangdRelease = {
+  tag_name?: string
+  assets?: { name?: string; browser_download_url?: string }[]
+}
+
+export function selectClangdReleaseAsset(
+  release: ClangdRelease,
+  platform: string,
+): { tag: string; name: string; downloadURL: string; format: "zip" | "tar" } | undefined {
+  const tag = release.tag_name
+  if (!tag || !/^[0-9]{1,4}(?:\.[0-9]{1,4}){1,3}$/.test(tag)) return
+
+  const token = { darwin: "mac", linux: "linux", win32: "windows" }[platform]
+  if (!token) return
+  const expected = [
+    { name: `clangd-${token}-${tag}.zip`, format: "zip" as const },
+    { name: `clangd-${token}-${tag}.tar.xz`, format: "tar" as const },
+  ]
+  for (const candidate of expected) {
+    const asset = (release.assets ?? []).find((item) => item.name === candidate.name)
+    if (!asset?.browser_download_url) continue
+    let url: URL
+    try {
+      url = new URL(asset.browser_download_url)
+    } catch {
+      continue
+    }
+    if (url.origin !== "https://github.com" || url.username || url.password || url.search || url.hash) continue
+    if (url.pathname !== `/clangd/clangd/releases/download/${tag}/${candidate.name}`) continue
+    return { tag, name: candidate.name, downloadURL: url.href, format: candidate.format }
+  }
+}
+
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
 
@@ -193,6 +229,8 @@ export namespace LSPServer {
     global?: boolean
     /** True when command/argv came from global or project configuration. */
     configured?: boolean
+    /** Built-in, app-owned support roots required beside an executable. */
+    readable?: string[]
     root: RootFunction
     spawn(root: string): Promise<Handle | undefined>
   }
@@ -1082,6 +1120,7 @@ export namespace LSPServer {
 
   export const Clangd: Info = {
     id: "clangd",
+    readable: [path.join(Global.Path.bin, "clangd-current")],
     root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd", "CMakeLists.txt", "Makefile"]),
     extensions: [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
     async spawn(root) {
@@ -1098,6 +1137,18 @@ export namespace LSPServer {
       }
 
       const ext = process.platform === "win32" ? ".exe" : ""
+      const managedRoot = path.join(Global.Path.bin, "clangd-current")
+      const managed = path.join(managedRoot, "bin", "clangd" + ext)
+      if (await Bun.file(managed).exists()) {
+        const project = await projectBinary(managed)
+        return {
+          process: await spawn(managed, args, {
+            cwd: root,
+          }),
+          project,
+        }
+      }
+
       const direct = path.join(Global.Path.bin, "clangd" + ext)
       if (await Bun.file(direct).exists()) {
         const project = await projectBinary(direct)
@@ -1134,47 +1185,24 @@ export namespace LSPServer {
         return
       }
 
-      const release: {
-        tag_name?: string
-        assets?: { name?: string; browser_download_url?: string }[]
-      } = await releaseResponse.json()
-
-      const tag = release.tag_name
-      if (!tag) {
-        log.error("clangd release did not include a tag name")
-        return
-      }
+      const release: ClangdRelease = await releaseResponse.json()
       const platform = process.platform
-      const tokens: Record<string, string> = {
-        darwin: "mac",
-        linux: "linux",
-        win32: "windows",
-      }
-      const token = tokens[platform]
-      if (!token) {
+      if (!(["darwin", "linux", "win32"] as string[]).includes(platform)) {
         log.error(`Platform ${platform} is not supported by clangd auto-download`)
         return
       }
 
-      const assets = release.assets ?? []
-      const valid = (item: { name?: string; browser_download_url?: string }) => {
-        if (!item.name) return false
-        if (!item.browser_download_url) return false
-        if (!item.name.includes(token)) return false
-        return item.name.includes(tag)
-      }
-
-      const asset =
-        assets.find((item) => valid(item) && item.name?.endsWith(".zip")) ??
-        assets.find((item) => valid(item) && item.name?.endsWith(".tar.xz")) ??
-        assets.find((item) => valid(item))
-      if (!asset?.name || !asset.browser_download_url) {
-        log.error("clangd could not match release asset", { tag, platform })
+      const asset = selectClangdReleaseAsset(release, platform)
+      if (!asset) {
+        log.error("clangd release metadata did not contain a trusted platform asset", {
+          tag: release.tag_name,
+          platform,
+        })
         return
       }
 
-      const name = asset.name
-      const downloadResponse = await fetch(asset.browser_download_url)
+      const { tag, name } = asset
+      const downloadResponse = await fetch(asset.downloadURL)
       if (!downloadResponse.ok) {
         log.error("Failed to download clangd")
         return
@@ -1188,14 +1216,7 @@ export namespace LSPServer {
       }
       await Bun.write(archive, buf)
 
-      const zip = name.endsWith(".zip")
-      const tar = name.endsWith(".tar.xz")
-      if (!zip && !tar) {
-        log.error("clangd encountered unsupported asset", { asset: name })
-        return
-      }
-
-      if (zip) {
+      if (asset.format === "zip") {
         const ok = await Archive.extractZip(archive, Global.Path.bin)
           .then(() => true)
           .catch((error) => {
@@ -1204,29 +1225,34 @@ export namespace LSPServer {
           })
         if (!ok) return
       }
-      if (tar) {
+      if (asset.format === "tar") {
         await $`tar -xf ${archive}`.cwd(Global.Path.bin).quiet().nothrow()
       }
       await fs.rm(archive, { force: true })
 
       const bin = path.join(Global.Path.bin, "clangd_" + tag, "bin", "clangd" + ext)
-      if (!(await Bun.file(bin).exists())) {
+      const installed = await fs.lstat(bin).catch(() => undefined)
+      if (!installed?.isFile()) {
         log.error("Failed to extract clangd binary")
         return
       }
 
-      if (platform !== "win32") {
-        await $`chmod +x ${bin}`.quiet().nothrow()
+      // Launch through a fixed app-owned path. Release metadata can choose only
+      // a validated official asset and never becomes an executable argv value.
+      await fs.rm(managedRoot, { recursive: true, force: true })
+      await fs.rename(path.dirname(path.dirname(bin)), managedRoot)
+      const managedFile = await fs.lstat(managed).catch(() => undefined)
+      if (!managedFile?.isFile()) {
+        log.error("Failed to install clangd at its managed path")
+        return
       }
+      if (platform !== "win32") await fs.chmod(managed, 0o755)
 
-      await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => {})
-      await fs.symlink(bin, path.join(Global.Path.bin, "clangd")).catch(() => {})
+      log.info(`installed clangd`, { bin: managed, version: tag })
 
-      log.info(`installed clangd`, { bin })
-
-      const project = await projectBinary(bin)
+      const project = await projectBinary(managed)
       return {
-        process: await spawn(bin, args, {
+        process: await spawn(managed, args, {
           cwd: root,
         }),
         project,

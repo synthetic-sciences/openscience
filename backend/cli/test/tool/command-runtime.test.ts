@@ -105,16 +105,18 @@ posixTest("command completion reaps a same-group background descendant", async (
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-command-descendant-"))
   const marker = path.join(root, "descendant.pid")
   const release = path.join(root, "release")
-  const wrapped = WindowsJobLauncher.wrap({
-    file: "/bin/sh",
-    args: [
-      "-c",
-      'sleep 600 & printf "%s" "$!" > "$1"; while [ ! -f "$2" ]; do sleep 0.02; done; exit 0',
-      "command-runtime",
-      marker,
-      release,
-    ],
-  })
+  const script = [
+    'const { spawn } = require("node:child_process")',
+    'const fs = require("node:fs")',
+    'const child = spawn("sleep", ["600"], { stdio: "ignore" })',
+    "fs.writeFileSync(process.argv[1], String(child.pid))",
+    "const timer = setInterval(() => {",
+    "  if (!fs.existsSync(process.argv[2])) return",
+    "  clearInterval(timer)",
+    "  process.exit(0)",
+    "}, 20)",
+  ].join("\n")
+  const wrapped = WindowsJobLauncher.wrap({ file: process.execPath, args: ["-e", script, marker, release] })
   const child = spawn(wrapped.file, wrapped.args, { detached: true, stdio: "ignore" })
   let descendantPID = 0
   let descendantIdentity: string | undefined

@@ -301,6 +301,75 @@ printf '%s\\n' '{"exists":true}'
       process.env.PATH = previousPath
     }
   })
+
+  test("rejects an SSH launch that fails before its first durable transport handoff", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const bin = path.join(tmp.path, "bin")
+    const invoked = path.join(tmp.path, "ssh-invoked")
+    const pinned = ComputeJobs.Host.parse({
+      ...host,
+      scheduler: "none",
+      fingerprint: "SHA256:Qhi22lbcPTt1frRtqU56iDRQ6YjdwJU8EDmi0QCdnbc",
+      host_key: "hpc.example.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAUsmADCYwCBoe8869NDLxsh3Vvnsd3raFGoMF1h8fXB",
+    })
+    await fs.mkdir(bin)
+    await Bun.write(
+      path.join(bin, "ssh"),
+      `#!/bin/sh
+printf invoked > ${JSON.stringify(invoked)}
+sleep 30
+`,
+    )
+    await fs.chmod(path.join(bin, "ssh"), 0o700)
+
+    const previousPath = process.env.PATH
+    const previousFailure = process.env.OPENSCIENCE_SSH_TEST_REGISTRATION_FAILURE
+    process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`
+    process.env.OPENSCIENCE_SSH_TEST_REGISTRATION_FAILURE = "1"
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await trustProject()
+          const session = await Session.create({})
+          const workspace = await SessionFilesystem.workspace(session.id)
+          const request = {
+            sessionID: session.id,
+            name: "failed SSH handoff",
+            purpose: "prove pre-registration failures are synchronous",
+            command: "python3 train.py",
+            target: { kind: "ssh" as const, host_id: pinned.id },
+          }
+          const options = { root, workspace, hosts: [pinned] }
+          const plan = await ComputeJobs.plan(request, options)
+
+          await expect(ComputeJobs.start({ ...request, approval: plan.digest }, options)).rejects.toThrow(
+            "Injected SSH control registration failure",
+          )
+
+          let failed: ComputeJobs.Job | undefined
+          for (let attempt = 0; attempt < 250; attempt++) {
+            failed = (await ComputeJobs.list(options)).at(0)
+            if (failed?.status === "failed") break
+            await Bun.sleep(20)
+          }
+          expect(failed).toMatchObject({
+            status: "failed",
+            error: "Injected SSH control registration failure",
+          })
+          // Every supported desktop launcher holds the actual SSH executable
+          // behind its ownership gate until registration has succeeded.
+          expect(await Bun.file(invoked).exists()).toBe(false)
+          await Bun.sleep(50)
+        },
+      })
+    } finally {
+      process.env.PATH = previousPath
+      if (previousFailure === undefined) delete process.env.OPENSCIENCE_SSH_TEST_REGISTRATION_FAILURE
+      else process.env.OPENSCIENCE_SSH_TEST_REGISTRATION_FAILURE = previousFailure
+    }
+  })
 })
 
 describe("ComputeJobs persistence", () => {

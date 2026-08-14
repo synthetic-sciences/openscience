@@ -135,7 +135,7 @@ test("webfetch asks for every blocked redirect target before following it", asyn
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
     calls.push(url)
-    if (url.startsWith("https://example.com")) {
+    if (url === "https://example.com/start") {
       return new Response(null, { status: 302, headers: { Location: "https://example.org/result" } })
     }
     return new Response("result", { headers: { "content-type": "text/plain" } })
@@ -377,7 +377,7 @@ test("webfetch streams a brokered binary download through a reauthorized redirec
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
     calls.push(url)
-    if (url.startsWith("https://example.com")) {
+    if (url === "https://example.com/start") {
       return new Response(null, { status: 302, headers: { location: "https://example.org/archive" } })
     }
     return new Response(

@@ -115,7 +115,7 @@ test("policy-aware fetch reauthorizes redirects and strips cross-origin credenti
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const current = String(input)
     calls.push({ url: current, headers: new Headers(init?.headers) })
-    if (current.startsWith("https://first.test")) {
+    if (current === "https://first.test/start") {
       return new Response(null, { status: 302, headers: { Location: "https://second.test/final" } })
     }
     return new Response("ok")

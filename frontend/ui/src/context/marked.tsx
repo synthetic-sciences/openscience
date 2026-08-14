@@ -471,12 +471,7 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   let result = html
   for (const match of matches) {
     const [fullMatch, lang, escapedCode] = match
-    const code = escapedCode
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
+    const code = decodeCodeBlockEntities(escapedCode)
 
     let language = lang || "text"
     if (!(language in bundledLanguages)) {
@@ -495,6 +490,24 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   }
 
   return result
+}
+
+const codeBlockEntities = {
+  "&lt;": "<",
+  "&gt;": ">",
+  "&amp;": "&",
+  "&quot;": '"',
+  "&#39;": "'",
+} as const
+
+/** Decode exactly one HTML-entity layer from Marked's escaped code. A single
+ * replacement pass keeps input such as `&amp;lt;` literal instead of turning it
+ * into `<` through a second, unsafe decode. */
+export function decodeCodeBlockEntities(input: string) {
+  return input.replace(
+    /&(lt|gt|amp|quot|#39);/g,
+    (entity) => codeBlockEntities[entity as keyof typeof codeBlockEntities],
+  )
 }
 
 /**

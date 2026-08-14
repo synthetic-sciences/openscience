@@ -41,6 +41,31 @@ test("recognizes Python and R package/environment mutations as exact immutable p
   expect(python?.digest).not.toBe(r?.digest)
 })
 
+test("recognizes pip flags without backtracking on adversarial separators", () => {
+  expect(
+    KernelEnvironmentMutation.detect({
+      language: "python",
+      environment: "python",
+      code: `subprocess.check_call([sys.executable, "-m", "pip", "--quiet", "--no-cache-dir", "install", "numpy"])`,
+    }),
+  ).toMatchObject({ operation: "package_install", manager: "pip" })
+  expect(
+    KernelEnvironmentMutation.detect({
+      language: "python",
+      environment: "python",
+      code: `subprocess.check_call([sys.executable, "-m", "pip", "--yes", "uninstall", "numpy"])`,
+    }),
+  ).toMatchObject({ operation: "package_remove", manager: "pip" })
+
+  expect(
+    KernelEnvironmentMutation.detect({
+      language: "python",
+      environment: "python",
+      code: `pip ${"--pip ".repeat(50_000)}ordinary_code`,
+    }),
+  ).toBeUndefined()
+})
+
 test("an approved Python environment change restarts only the affected warm process", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({

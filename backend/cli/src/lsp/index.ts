@@ -264,6 +264,7 @@ export namespace LSP {
             {
               root,
               options: policy,
+              readable: server.readable,
               allowArgumentReadDirectories: server.configured !== true,
               async register(process, windowsRelease) {
                 if (!process.pid) throw new Error("Language server started without a process id")

@@ -658,7 +658,15 @@ export namespace ComputeJobs {
     host: Host,
     authority: ExecutionAuthority.Decision,
     script: string,
-    options: { stdin?: string; stdout?: string; timeout?: number; authorize?: boolean } = {},
+    options: {
+      stdin?: string
+      stdout?: string
+      timeout?: number
+      authorize?: boolean
+      /** Resolves the caller's launch handoff once this control process is
+       * durably registered and its pre-exec ownership gate has opened. */
+      ready?: () => void
+    } = {},
   ) {
     if (options.authorize !== false) await currentAuthority(authority)
     const known = await SshAdapter.known(host, scope.root)
@@ -763,6 +771,7 @@ export namespace ComputeJobs {
             if (process.platform === "linux" && wrapped.release) {
               await WindowsJobLauncher.release(wrapped.release, proc.pid)
             }
+            options.ready?.()
           } catch (error) {
             const failures: unknown[] = []
             await CredentialProcessLedger.revoke({ id: ledger, kind: "compute" }).catch((failure) =>
@@ -1682,7 +1691,7 @@ export namespace ComputeJobs {
     }
   }
 
-  async function stageSsh(job: Job, scope: Scope, files?: SshAdapter.Upload[]) {
+  async function stageSsh(job: Job, scope: Scope, files?: SshAdapter.Upload[], ready?: () => void) {
     if (!job.ssh || !job.authority) throw new Error(`SSH job ${job.id} has no staging authority`)
     await fs.mkdir(logsOf(scope.root), { recursive: true })
     const spec = await sshSpec(job, scope, files)
@@ -1696,6 +1705,7 @@ export namespace ComputeJobs {
       await sshRun(scope, job, job.ssh.host, job.authority, SshAdapter.receive(spec), {
         stdin: archive,
         timeout: 120_000,
+        ready,
       })
     } finally {
       await fs.rm(archive, { force: true })
@@ -1747,8 +1757,8 @@ export namespace ComputeJobs {
     return current
   }
 
-  async function startSsh(job: Job, scope: Scope, files: SshAdapter.Upload[]) {
-    await stageSsh(job, scope, files)
+  async function startSsh(job: Job, scope: Scope, files: SshAdapter.Upload[], ready?: () => void) {
+    await stageSsh(job, scope, files, ready)
     return submitSsh(job, scope)
   }
 
@@ -2956,23 +2966,39 @@ export namespace ComputeJobs {
           id: job.id,
           host,
         })
-        const managed = startSsh(job, scope, remote.files)
-          .catch((error) => failSshStart(job, scope, error))
+        const ready = Promise.withResolvers<void>()
+        const managed = startSsh(job, scope, remote.files, ready.resolve)
+          .catch((error) => {
+            // A caller must never receive a successful handoff for a control
+            // process that failed before durable registration. Persist the
+            // terminal job in the background, but reject the launch now.
+            ready.reject(error)
+            return failSshStart(job, scope, error)
+          })
           .finally(async () => {
             await deactivate(key)
             await releaseLease(lease)
           })
         handedOff = true
         void managed.catch(() => undefined)
+        // Do not wait for network transfer or remote submission. This mirrors
+        // local launch semantics: return as soon as the first credential-
+        // bearing child is durably owned, while surfacing pre-registration
+        // failures synchronously.
+        await Promise.race([ready.promise, managed.then(() => undefined)])
         return job
       } catch (error) {
-        await change(scope.root, (jobs) => {
-          const index = jobs.findIndex((item) => item.id === job.id)
-          if (index < 0 || terminal.has(jobs[index]!.status)) return
-          const cancelled = move(jobs[index]!, { type: "cancel" }, { completed_at: new Date().toISOString() })
-          const closed = move(cancelled, { type: "close" })
-          jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
-        }).catch(() => undefined)
+        // Before handoff, this scope owns rollback. After handoff, the managed
+        // task owns failure persistence and lease/process cleanup.
+        if (!handedOff) {
+          await change(scope.root, (jobs) => {
+            const index = jobs.findIndex((item) => item.id === job.id)
+            if (index < 0 || terminal.has(jobs[index]!.status)) return
+            const cancelled = move(jobs[index]!, { type: "cancel" }, { completed_at: new Date().toISOString() })
+            const closed = move(cancelled, { type: "close" })
+            jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+          }).catch(() => undefined)
+        }
         throw error
       } finally {
         if (!handedOff) {

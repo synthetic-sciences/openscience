@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFile } from "node:fs/promises"
-import { highlightSnippet, registerOpenScienceDiffTheme, retryable } from "./marked"
+import { decodeCodeBlockEntities, highlightSnippet, registerOpenScienceDiffTheme, retryable } from "./marked"
 import { markdownFallback } from "../components/markdown"
 
 const source = await readFile(new URL("./marked.tsx", import.meta.url), "utf8")
@@ -49,5 +49,11 @@ describe("markdown runtime loading", () => {
     expect(markdownFallback("Result <unsafe>\nTry 'again'")).toBe(
       '<p data-markdown-fallback="true">Result &lt;unsafe&gt;<br>Try &#39;again&#39;</p>',
     )
+  })
+
+  test("decodes one code-entity layer without double-unescaping nested input", () => {
+    expect(decodeCodeBlockEntities("&lt;tag&gt; &amp; &quot;text&quot; &#39;value&#39;")).toBe(`<tag> & "text" 'value'`)
+    expect(decodeCodeBlockEntities("&amp;lt;script&amp;gt;")).toBe("&lt;script&gt;")
+    expect(decodeCodeBlockEntities("&amp;quot; &amp;#39; &amp;amp;")).toBe("&quot; &#39; &amp;")
   })
 })
