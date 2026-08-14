@@ -1,91 +1,118 @@
 ---
-title: "Execution sandbox"
-description: "Confine the agent's shell commands to the workspace with a real OS sandbox — macOS Seatbelt, Linux bubblewrap. Opt-in, off by default."
+title: "Sandbox and project trust"
+description: "How OpenScience lets agents work autonomously inside enforced local boundaries."
 icon: "lock"
 ---
 
-The permission system decides **whether** the agent runs a command; it does not decide **what that command can reach** once it runs. An approved (or auto-approved) command executes with your full user authority — it can touch `~/.ssh`, rewrite `~/.bashrc`, or delete another project. The permission prompt keeps you *aware*; it is not an isolation boundary.
+OpenScience separates three controls that solve different problems:
 
-The execution sandbox adds the missing boundary. When enabled, everything the agent executes — shell commands via the `bash` tool, and code run by the Python and R notebook kernels — is wrapped in a real OS sandbox that **confines writes to the workspace** and can optionally **deny network egress**. It is **off by default** — turn it on when you want the agent's blast radius contained.
+- **Tool permissions** decide whether an agent may take an action.
+- **The execution sandbox** limits what a spawned terminal, shell command, Python/R kernel, or local compute job can reach.
+- **Project trust** controls project-owned executable code such as plugins, MCP servers, formatters, language servers, provider commands, and startup hooks. It also gates execution with full host authority.
 
-## Quick start
+This separation keeps routine work moving without treating every newly opened project as trusted code. By default, terminals, kernels, shell commands, and local jobs may run immediately **only when OpenScience can enforce the OS sandbox**. Project extensions and unsandboxed execution remain blocked until you explicitly trust that project.
 
-```bash
-openscience sandbox enable          # turn it on (global)
-openscience sandbox test            # prove it actually confines writes + network
-openscience sandbox                 # show status: backend + current policy
-```
+## Default behavior
 
-`sandbox test` runs real sandboxed commands — it writes inside a scratch workspace (must succeed), writes outside it (must be blocked), and checks that network-deny mode blocks egress — then prints a pass/fail for each. If it doesn't say **Containment verified**, don't rely on the sandbox.
-
-## What it does
-
-- **Writes** are denied everywhere except the workspace (your working directory and its worktree), the system temp dirs, and any extra paths you allow. Everything else on disk is read-only to the agent.
-- **Reads** stay open. The threat model is *tampering and exfiltration*, not hiding your files from a tool that needs to read them.
-- **Network** is allowed by default; set it to deny to stop sandboxed commands from reaching the network at all.
-
-## Backends
-
-| Platform | Backend | Requirement |
-| --- | --- | --- |
-| macOS | Seatbelt (`sandbox-exec`) | Built in. |
-| Linux | bubblewrap (`bwrap`) | Install `bubblewrap`; unprivileged user namespaces must be enabled. |
-| Windows | — | No backend; commands run per `onUnavailable` (see below). |
-
-Check what's available on your machine with `openscience sandbox` or `openscience doctor`.
-
-## The `sandbox` command
-
-```bash
-openscience sandbox                 # status (backend + config)
-openscience sandbox enable          # turn on
-openscience sandbox enable --network deny          # also block network egress
-openscience sandbox enable --allow /data/shared    # extra writable path (repeatable)
-openscience sandbox enable --on-unavailable error  # refuse to run where no backend exists
-openscience sandbox disable         # turn off
-openscience sandbox test            # empirical containment self-test
-```
-
-The sandbox is a machine-wide safety setting, so it is always written to your **global** config.
-
-| Flag | Meaning |
-| --- | --- |
-| `--network` | `allow` (default) or `deny` network egress from sandboxed commands. |
-| `--allow` | An absolute path, beyond the workspace and temp dirs, the sandbox may write to. Repeatable. |
-| `--on-unavailable` | Behaviour where no backend exists: `warn` (default, runs unsandboxed with a notice), `error` (refuses to run), `allow` (runs unsandboxed silently). |
-
-## From the workspace GUI
-
-Open **Settings → Sandbox**. The panel shows whether a backend is available on this machine, an on/off toggle, the network and fallback policies, an editor for extra writable paths, and a **run self-test** button that shows the same containment checks the CLI does.
-
-## By hand (config)
-
-The sandbox is a `sandbox` block in your **global** `openscience.json` (or an enterprise **managed** config). `openscience sandbox enable` writes it for you. The policy is read **only** from global and managed config — never from a project's `openscience.json` — so opening an untrusted repo cannot weaken or disable your sandbox:
+The global defaults are:
 
 ```jsonc
 {
   "sandbox": {
     "enabled": true,
     "network": "deny",
-    "allowWrite": ["/data/shared"],
-    "onUnavailable": "error"
+    "allowWrite": [],
+    "onUnavailable": "error",
+    "requireProjectTrust": false
   }
 }
 ```
 
-- `enabled` — master switch. Off by default.
-- `network` — `allow` (default) or `deny`.
-- `allowWrite` — extra absolute paths the sandbox may write to.
-- `onUnavailable` — `warn` (default) · `error` · `allow`, for machines with no backend.
+With a working native backend, routine commands can read and write only the active session workspace and explicitly granted paths. Network access is denied, including loopback, LAN, link-local, and metadata endpoints. When no backend is available, the default `onUnavailable: "error"` refuses to run rather than silently falling back to the host.
 
-## Limitations
+Set `requireProjectTrust: true` if you prefer the stricter posture where every new project must be trusted before it starts any local process, even inside a verified sandbox.
 
-This is deliberately a **write-containment** sandbox, not a deny-by-default syscall jail. Research workflows run arbitrary compilers, package managers, and interpreters, and a strict jail would break far more than it protects. Concretely:
+## Permissions and sandboxing
 
-- **Reads are not restricted.** A sandboxed command can still read files it has permission to read.
-- **Local IPC is not blocked.** Network-deny stops IP egress, but a command can still reach host UNIX-domain sockets (e.g. a Docker daemon socket). Treat access to such a socket as equivalent to the privileges it exposes.
-- **It is not a security boundary against a determined local attacker** the way a container or VM is. For hostile code, run OpenScience inside a container or VM as well.
-- **Linux needs bubblewrap** and unprivileged user namespaces; where they're unavailable the sandbox can't engage (`onUnavailable` decides what happens).
-- **Windows has no backend** yet.
+Permissions and sandboxing work together. A permission allows a particular tool action; it does not widen the filesystem or network boundary of the spawned process. Conversely, the sandbox does not approve a tool call that your permission rules deny or require you to review.
 
-What it *does* reliably stop: an agent command writing outside your workspace, and — in deny mode — a command phoning home. Verify it on your machine with `openscience sandbox test`.
+This means ordinary approved work can continue autonomously inside a boundary you already chose. Crossing that boundary requires a separate policy change or grant rather than repeated command-by-command workarounds.
+
+## Project trust
+
+A new project starts with project-owned executable code disabled. You can still use sandboxed terminals, Python/R kernels, shell commands, and local compute unless **Require project trust** is enabled.
+
+Trust a project only after reviewing its local configuration and code. Trust enables project plugins, MCP processes, formatters, LSP commands, provider token commands/modules, publication exporters, repository/startup commands, and other project-defined executable hooks. It also allows routine execution when you intentionally turn the sandbox off or configure an unsandboxed fallback.
+
+Open **Settings → Permissions → Project code** to trust or revoke the current project. Revoking trust stops existing project processes and disables project-owned extensions. Sandboxed routine work remains available unless your Sandbox policy requires trust for all execution.
+
+## Native backends
+
+| Platform | Backend | Requirement |
+| --- | --- | --- |
+| macOS | Seatbelt (`sandbox-exec`) | Built in. |
+| Linux | bubblewrap (`bwrap`) | Install `bubblewrap`; unprivileged user namespaces must work. |
+| Windows | unavailable | Commands follow `onUnavailable`; the default is to refuse. |
+
+On Ubuntu/Debian:
+
+```bash
+sudo apt install bubblewrap
+```
+
+OpenScience probes the backend before claiming it is available. Use the self-test below to verify the effective boundary on the current machine.
+
+## CLI
+
+```bash
+openscience sandbox                 # show backend and effective global policy
+openscience sandbox enable          # enable fail-closed containment
+openscience sandbox enable --network deny
+openscience sandbox enable --allow /data/shared
+openscience sandbox enable --on-unavailable error
+openscience sandbox enable --require-project-trust
+openscience sandbox enable --no-require-project-trust
+openscience sandbox disable         # host execution still requires project trust
+openscience sandbox test            # run real read/write/network containment probes
+```
+
+`sandbox test` runs actual sandboxed commands. It requires an allowed workspace write to succeed, outside writes and ungranted reads to fail, and effective network isolation to match the backend claim. If it does not report **Containment verified**, do not rely on that backend.
+
+## Workspace settings
+
+Open **Settings → Sandbox** to:
+
+- enable or disable native containment;
+- require explicit project trust for all execution;
+- inspect the detected backend and enforced capabilities;
+- choose fail-closed behavior when containment is unavailable;
+- add narrowly scoped writable roots outside the workspace; and
+- run the empirical self-test.
+
+Extra writable roots extend the sandbox; they do not trust project extensions. Prefer a narrow data or output directory over a home directory or other broad ancestor.
+
+## Global and managed configuration
+
+Sandbox policy is read only from global and managed configuration. A project's `openscience.json` cannot weaken it. Managed configuration overrides the user's global values.
+
+| Key | Meaning | Default |
+| --- | --- | --- |
+| `enabled` | Request the native sandbox for local execution. | `true` |
+| `network` | Requested network policy. Current native backends enforce deny-all. | `"deny"` |
+| `allowWrite` | Extra absolute writable roots beyond session grants. | `[]` |
+| `onUnavailable` | `"error"`, `"warn"`, or `"allow"` when no backend can run. | `"error"` |
+| `requireProjectTrust` | Block all execution until the project is explicitly trusted. | `false` |
+
+`warn` and `allow` may run a trusted project without OS containment. An untrusted project never receives host execution merely because fallback is permissive.
+
+## Boundary and limitations
+
+The sandbox applies to spawned commands, including shell utilities, compilers, package managers, notebook kernels, and local detached jobs. It is a real OS boundary, but it is not a VM:
+
+- Only explicitly granted filesystem roots are mounted or allowed. Files already readable inside those roots remain readable to the command.
+- Current macOS and Linux backends deny IP networking rather than trying to distinguish safe public destinations from loopback or private services.
+- Host-brokered tools such as WebFetch apply their own URL, size, and destination controls outside the command sandbox.
+- Linux requires a working bubblewrap/user-namespace setup. Windows currently has no filesystem sandbox backend.
+- For actively hostile code or stronger kernel isolation, run OpenScience itself inside a container or VM as an additional boundary.
+
+The safe low-friction preset is the default: sandbox enabled, unavailable backend refused, project trust not required for routine contained work. Full host access is an explicit combination: disable containment (or allow fallback) **and** trust the current project.

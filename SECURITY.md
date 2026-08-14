@@ -6,9 +6,9 @@ OpenScience is an AI agent that runs locally on your machine. The agent can run 
 
 ### Execution sandbox
 
-The permission system prompts you before the agent runs a command or writes a file, so you stay aware of what it is doing. A permission prompt is not an isolation boundary by itself, and the execution sandbox is off by default.
+The permission system decides whether the agent may take an action. A permission prompt is not an isolation boundary by itself. OpenScience enables its execution sandbox by default and refuses to run when a native backend is unavailable unless you explicitly choose a fallback policy.
 
-When enabled, OpenScience wraps shell commands and Python/R kernel code in an OS sandbox: macOS Seatbelt or Linux bubblewrap. It confines writes to the workspace and approved paths and can deny network egress. Run `openscience sandbox enable`, then `openscience sandbox test`; if the test does not report **Containment verified**, do not rely on it. Reads and local IPC remain available, Windows has no sandbox backend, and the boundary is not a full jail. Use a container or VM for hostile code.
+OpenScience wraps terminal and shell commands, Python/R kernels, and local compute jobs in macOS Seatbelt or Linux bubblewrap. It confines reads and writes to the session workspace and explicitly granted paths and denies network egress. Routine work can run immediately inside that verified boundary; project-owned extensions and host execution still require explicit project trust. Run `openscience sandbox test`; if it does not report **Containment verified**, do not rely on that backend. Windows has no sandbox backend, and the boundary is not a full VM. Use a container or VM for hostile code.
 
 ### Server mode
 
@@ -19,7 +19,7 @@ Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforc
 | Category                    | Why                                                                  |
 | --------------------------- | -------------------------------------------------------------------- |
 | Server access when opted in | If you enable server mode, API access is expected behavior.          |
-| Full read isolation         | The sandbox confines writes; it does not hide readable local files.  |
+| Granted-root contents       | A command may read files inside roots explicitly granted to it.      |
 | Windows sandboxing          | Windows has no execution-sandbox backend yet.                        |
 | LLM provider data handling  | Data you send to a provider is governed by that provider's policies. |
 | MCP server behavior         | External MCP servers you configure are outside the trust boundary.   |
