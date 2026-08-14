@@ -120,14 +120,19 @@ async function scenario(kind: "pty" | "biology", action: "trust" | "filesystem" 
 
     owner.kill("SIGKILL")
     await owner.exited
-    // Both fixtures ignore terminal hangup so the independently sandboxed
-    // leader and its escaped descendant genuinely outlive the killed server.
-    await Bun.sleep(100)
-    const survivedOwner = await AuthorityProcessLedger.owns(entry.pid, entry.identity)
-    // macOS responsibility supervision and Linux bubblewrap's parent-death PID
-    // namespace both tear down immediately. The durable ledger remains so a
-    // fresh server can verify the dead tree and clear ownership atomically.
-    expect(survivedOwner).toBe(process.platform !== "darwin" && !(process.platform === "linux" && entry.sandboxed))
+    // Both fixtures ignore terminal hangup, so any death below must come from
+    // the platform containment rather than directly from the killed server.
+    const contained = process.platform === "darwin" || (process.platform === "linux" && entry.sandboxed)
+    if (contained) {
+      // The macOS responsibility supervisor and Linux bubblewrap namespace
+      // observe owner death asynchronously. Prove their causal teardown to a
+      // bounded deadline instead of treating 100 ms as a lifecycle contract.
+      expect(await gone(entry)).toBe(true)
+      expect(await gone(entry.descendant)).toBe(true)
+    } else {
+      await Bun.sleep(100)
+      expect(await AuthorityProcessLedger.owns(entry.pid, entry.identity)).toBe(true)
+    }
 
     await run(
       root,
