@@ -20,12 +20,23 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   sent-message surfaces, and Compute into a quieter results-first workspace.
 - Unified logical model names while keeping API-key and ChatGPT access routes
   explicit in both the composer and Settings.
+- Let untrusted projects run routine terminal, kernel, shell, and local-compute
+  work immediately inside the enforced native sandbox, while keeping project
+  extensions, remote compute, package installation, and host execution behind
+  explicit trust or stricter managed policy.
 
 ### Fixed
 
 - Hardened research runs against repeated terminal URLs, guessed download-size
   escalation, substantially identical timed-out kernel work, stale tool
   outcomes, cross-process cancellation races, and orphaned kernel lifecycles.
+- Made compute-job actions self-describing and recover harmless legacy aliases
+  and stringified targets without weakening canonical validation.
+- Made brokered downloads derive their safe size from available workspace disk
+  instead of agent-guessed byte caps, with copy-ready root-download and
+  sandboxed move guidance for folder destinations.
+- Removed the fixed Modal Volume browser-download ceiling and stream verified
+  files directly with cancellation-safe cleanup instead of buffering them.
 - Preserved exact session and tool-output filesystem capabilities across local
   work and delegated handoffs without broadening external-directory access.
 - Restored the v2 Review settings API, truthful runtime progress capture, and
