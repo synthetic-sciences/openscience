@@ -24,7 +24,7 @@ export namespace DataRootBarrier {
   }
 
   interface PhysicalOperation extends AsyncDisposable {
-    reassign(owner: Owner): Promise<void>
+    reassign(owner: Owner, windows: boolean): Promise<void>
   }
 
   interface Record {
@@ -56,6 +56,9 @@ export namespace DataRootBarrier {
 
   const pause = 20
   const wait = 30_000
+  const replaceWait = 2_000
+  const replacePause = 10
+  const replaceMaxPause = 100
 
   export function configure(value: Configuration) {
     configuration = value
@@ -172,6 +175,24 @@ export namespace DataRootBarrier {
       .catch(() => undefined)
   }
 
+  function replaceable(error: NodeJS.ErrnoException, windows: boolean) {
+    return windows && (error.code === "EPERM" || error.code === "EACCES" || error.code === "EBUSY")
+  }
+
+  async function replace(
+    source: string,
+    destination: string,
+    windows: boolean,
+    deadline = Date.now() + replaceWait,
+    delay = replacePause,
+  ): Promise<void> {
+    return fs.rename(source, destination).catch(async (error: NodeJS.ErrnoException) => {
+      if (!replaceable(error, windows) || Date.now() >= deadline) throw error
+      await Bun.sleep(Math.min(delay, Math.max(0, deadline - Date.now())))
+      return replace(source, destination, windows, deadline, Math.min(delay * 2, replaceMaxPause))
+    })
+  }
+
   async function exactOwner(value?: Owner): Promise<Owner> {
     if (value) {
       if (!Number.isSafeInteger(value.pid) || value.pid <= 0 || !/^[a-f0-9]{64}$/.test(value.identity)) {
@@ -264,7 +285,7 @@ export namespace DataRootBarrier {
           return result
         }
         return {
-          reassign(value: Owner) {
+          reassign(value: Owner, windows: boolean) {
             if (disposed) return Promise.reject(new Error("Cannot reassign a closed data-root operation"))
             return enqueue(async () => {
               const nextOwner = await exactOwner(value)
@@ -274,7 +295,10 @@ export namespace DataRootBarrier {
                 await replacement.writeFile(JSON.stringify({ ...nextOwner, token, created: Date.now() }))
                 await replacement.sync()
                 await replacement.close()
-                await fs.rename(temporary, marker)
+                // Windows can reject replacement while a scanner holds a
+                // conflicting destination handle. Retrying the same atomic
+                // update keeps the old complete marker authoritative.
+                await replace(temporary, marker, windows)
               } catch (error) {
                 await replacement.close().catch(() => undefined)
                 await fs.rm(temporary, { force: true }).catch(() => undefined)
@@ -318,6 +342,7 @@ export namespace DataRootBarrier {
         if (inside(anchor)) {
           return Promise.reject(new Error("Cannot reassign a data-root operation from inside its structured scope"))
         }
+        const windows = process.platform === "win32"
         reassignments++
         // Reject new structured uses immediately. Existing callbacks retain
         // admission until they settle, so they cannot strand this marker
@@ -327,7 +352,7 @@ export namespace DataRootBarrier {
           try {
             await finishUses(anchor)
             await drain(anchor)
-            await operation.reassign(owner)
+            await operation.reassign(owner, windows)
             // A foreign owner can exit while this process remains alive, so
             // this marker can no longer admit same-process descendants.
             anchor.state = "detached"

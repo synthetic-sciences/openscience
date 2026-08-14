@@ -31,6 +31,21 @@ async function operationMarkers(config: string) {
   return fs.readdir(path.join(config, "data-root-operations")).catch(() => [] as string[])
 }
 
+function platform<T>(value: NodeJS.Platform, action: () => T) {
+  const original = process.platform
+  if (original === value) return action()
+  Object.defineProperty(process, "platform", { value })
+  try {
+    return action()
+  } finally {
+    Object.defineProperty(process, "platform", { value: original })
+  }
+}
+
+function windows<T>(action: () => T) {
+  return platform("win32", action)
+}
+
 describe("managed data root", () => {
   test("Windows junction reparse buffer carries a mount-point tag and two UTF-16 paths", () => {
     const target = "C:\\OpenScience Data"
@@ -513,6 +528,174 @@ describe("managed data root", () => {
     }
   })
 
+  test("retries transient Windows marker locks without dropping physical coverage", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const identity = await ProcessIdentity.capture(process.pid)
+    if (!identity) throw new Error("Current process identity is unavailable")
+    const operation = await DataRootBarrier.enter(managed.path, 2_000)
+    const [name] = await operationMarkers(config)
+    const marker = path.join(config, "data-root-operations", name!)
+    const original = JSON.parse(await fs.readFile(marker, "utf8")) as { token: string }
+    const renameOriginal = fs.rename.bind(fs)
+    const codes = ["EPERM", "EACCES", "EBUSY"]
+    const coverage: number[] = []
+    let attempts = 0
+    let exclusive = false
+    let switching: Promise<AsyncDisposable> | undefined
+    const rename = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+      if (!path.basename(String(source)).endsWith(".next")) return renameOriginal(source, destination)
+      attempts++
+      coverage.push((await operationMarkers(config)).length)
+      expect(exclusive).toBe(false)
+      expect(
+        await fs.lstat(destination).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(true)
+      const code = codes[attempts - 1]
+      if (code) throw Object.assign(new Error(`mock ${code}`), { code })
+      return renameOriginal(source, destination)
+    })
+
+    try {
+      switching = DataRootBarrier.exclusive(5_000).then((lease) => {
+        exclusive = true
+        return lease
+      })
+      await waitForFile(path.join(config, "data-root-switch.intent"))
+      await windows(() => operation.reassign({ pid: process.pid, identity }))
+      const [currentName] = await operationMarkers(config)
+      const current = JSON.parse(
+        await fs.readFile(path.join(config, "data-root-operations", currentName!), "utf8"),
+      ) as { token: string }
+      expect(attempts).toBeGreaterThanOrEqual(4)
+      expect(coverage.every((count) => count === 1)).toBe(true)
+      expect(exclusive).toBe(false)
+      expect(currentName).toBe(name)
+      expect(current.token).toBe(original.token)
+      rename.mockRestore()
+      await operation[Symbol.asyncDispose]()
+      const lease = await switching
+      await lease[Symbol.asyncDispose]()
+    } finally {
+      rename.mockRestore()
+      await Promise.resolve(operation[Symbol.asyncDispose]()).catch(() => undefined)
+      const lease = await switching?.catch(() => undefined)
+      await lease?.[Symbol.asyncDispose]()
+    }
+  })
+
+  test("bounds persistent Windows marker locks and cleans the unpublished replacement", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const identity = await ProcessIdentity.capture(process.pid)
+    if (!identity) throw new Error("Current process identity is unavailable")
+    const operation = await DataRootBarrier.enter(managed.path, 2_000)
+    const [name] = await operationMarkers(config)
+    const marker = path.join(config, "data-root-operations", name!)
+    const original = await fs.readFile(marker, "utf8")
+    const renameOriginal = fs.rename.bind(fs)
+    const coverage: number[] = []
+    let attempts = 0
+    let exclusive = false
+    let switching: Promise<AsyncDisposable> | undefined
+    const rename = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+      if (!path.basename(String(source)).endsWith(".next")) return renameOriginal(source, destination)
+      attempts++
+      coverage.push((await operationMarkers(config)).length)
+      expect(exclusive).toBe(false)
+      expect(
+        await fs.lstat(destination).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(true)
+      throw Object.assign(new Error("mock persistent EPERM"), { code: "EPERM" })
+    })
+
+    try {
+      switching = DataRootBarrier.exclusive(5_000).then((lease) => {
+        exclusive = true
+        return lease
+      })
+      await waitForFile(path.join(config, "data-root-switch.intent"))
+      const started = performance.now()
+      const reassigning = windows(() => operation.reassign({ pid: process.pid, identity }))
+      await expect(reassigning).rejects.toMatchObject({ code: "EPERM" })
+      const elapsed = performance.now() - started
+      expect(elapsed).toBeGreaterThanOrEqual(1_900)
+      expect(elapsed).toBeLessThan(6_000)
+      expect(attempts).toBeGreaterThan(3)
+      expect(coverage.every((count) => count === 1)).toBe(true)
+      expect(exclusive).toBe(false)
+      expect(await fs.readFile(marker, "utf8")).toBe(original)
+      expect((await fs.readdir(config)).filter((entry) => entry.endsWith(".next"))).toEqual([])
+      rename.mockRestore()
+      await operation[Symbol.asyncDispose]()
+      const lease = await switching
+      await lease[Symbol.asyncDispose]()
+    } finally {
+      rename.mockRestore()
+      await Promise.resolve(operation[Symbol.asyncDispose]()).catch(() => undefined)
+      const lease = await switching?.catch(() => undefined)
+      await lease?.[Symbol.asyncDispose]()
+    }
+  }, 10_000)
+
+  test("does not retry lock-shaped rename errors outside Windows", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const identity = await ProcessIdentity.capture(process.pid)
+    if (!identity) throw new Error("Current process identity is unavailable")
+    const operation = await DataRootBarrier.enter(managed.path, 2_000)
+    const [name] = await operationMarkers(config)
+    const marker = path.join(config, "data-root-operations", name!)
+    const original = await fs.readFile(marker, "utf8")
+    const renameOriginal = fs.rename.bind(fs)
+    const codes = ["EPERM", "EACCES", "EBUSY"]
+    let code = codes[0]!
+    let attempts = 0
+    const rename = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+      if (!path.basename(String(source)).endsWith(".next")) return renameOriginal(source, destination)
+      attempts++
+      expect(
+        await fs.lstat(destination).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(true)
+      throw Object.assign(new Error(`mock ${code}`), { code })
+    })
+
+    try {
+      for (const current of codes) {
+        code = current
+        const before = attempts
+        const started = performance.now()
+        const reassigning = platform("darwin", () => operation.reassign({ pid: process.pid, identity }))
+        await expect(reassigning).rejects.toMatchObject({ code: current })
+        expect(performance.now() - started).toBeLessThan(500)
+        expect(attempts).toBe(before + 1)
+        expect(await fs.readFile(marker, "utf8")).toBe(original)
+        expect((await fs.readdir(config)).filter((entry) => entry.endsWith(".next"))).toEqual([])
+      }
+    } finally {
+      rename.mockRestore()
+      await operation[Symbol.asyncDispose]()
+    }
+  })
+
   test("failed reassignment restores self-owned admission when no later transition is queued", async () => {
     const base = await root()
     const config = path.join(base, "config")
@@ -524,10 +707,20 @@ describe("managed data root", () => {
     const startNested = Promise.withResolvers<void>()
     const nestedDone = Promise.withResolvers<void>()
     const renameOriginal = fs.rename.bind(fs)
+    const coverage: number[] = []
+    let attempts = 0
     let restoreRename = () => {}
     const outer = await DataRootBarrier.enter(managed.path, 2_000)
     const rename = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
-      if (path.basename(String(source)).startsWith(".data-root-operation-")) {
+      if (path.basename(String(source)).endsWith(".next")) {
+        attempts++
+        coverage.push((await operationMarkers(config)).length)
+        expect(
+          await fs.lstat(destination).then(
+            () => true,
+            () => false,
+          ),
+        ).toBe(true)
         throw Object.assign(new Error("mock reassign failure"), { code: "EIO" })
       }
       return renameOriginal(source, destination)
@@ -536,7 +729,12 @@ describe("managed data root", () => {
     let command: Promise<void> | undefined
     let switching: Promise<AsyncDisposable> | undefined
     try {
+      const started = performance.now()
       await expect(outer.reassign({ pid: process.pid, identity })).rejects.toThrow("mock reassign failure")
+      expect(performance.now() - started).toBeLessThan(500)
+      expect(attempts).toBe(1)
+      expect(coverage).toEqual([1])
+      expect((await fs.readdir(config)).filter((entry) => entry.endsWith(".next"))).toEqual([])
       restoreRename()
       command = outer.during(async () => {
         await startNested.promise
