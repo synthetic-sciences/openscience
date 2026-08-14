@@ -2,7 +2,7 @@
   "name": "@synsci/docs",
   "private": true,
   "type": "module",
-  "version": "2.0.25",
+  "version": "2.0.26",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
