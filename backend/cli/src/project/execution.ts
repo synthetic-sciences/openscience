@@ -35,6 +35,7 @@ export namespace ExecutionAuthority {
   export const Decision = z.object({
     allowed: z.boolean(),
     reason: z.enum(["allowed", "project_untrusted", "sandbox_unavailable"]),
+    message: z.string().optional(),
     capability: Capability,
     mode: z.enum(["read_only", "sandboxed", "host"]),
     projectID: z.string(),
@@ -53,6 +54,7 @@ export namespace ExecutionAuthority {
       network: z.enum(["allow", "deny"]),
       allowWrite: z.array(z.string()),
       onUnavailable: z.enum(["warn", "error", "allow"]),
+      requireProjectTrust: z.boolean().default(false),
       backend: z.enum(["seatbelt", "bubblewrap", "none"]),
       available: z.boolean(),
       enforced: z.boolean(),
@@ -61,7 +63,43 @@ export namespace ExecutionAuthority {
   })
   export type Decision = z.infer<typeof Decision>
 
-  export const DeniedError = NamedError.create("ExecutionAuthorityDeniedError", Decision)
+  const BaseDeniedError = NamedError.create("ExecutionAuthorityDeniedError", Decision)
+
+  export class DeniedError extends BaseDeniedError {
+    constructor(data: z.input<typeof Decision>, options?: ErrorOptions) {
+      super(data, options)
+      if (data.message) this.message = data.message
+    }
+  }
+
+  const routine = new Set<Capability>(["terminal", "kernel", "shell", "local_job"])
+
+  function action(capability: Capability) {
+    switch (capability) {
+      case "terminal":
+        return "start a terminal"
+      case "kernel":
+        return "start a kernel"
+      case "shell":
+        return "run a shell command"
+      case "local_job":
+        return "dispatch a local compute job"
+      case "remote_job":
+        return "dispatch a remote compute job"
+      case "package_install":
+        return "install packages"
+      case "project_plugin":
+        return "start a project plugin"
+      case "project_mcp":
+        return "start a project MCP server"
+      case "project_formatter":
+        return "start a project formatter"
+      case "project_lsp":
+        return "start a project language server"
+      case "provider_token_command":
+        return "run a provider token command"
+    }
+  }
 
   export async function decide(input: {
     projectID?: string
@@ -86,14 +124,26 @@ export namespace ExecutionAuthority {
       network: policy.network ?? "deny",
       allowWrite: policy.allowWrite ?? [],
       onUnavailable: policy.onUnavailable ?? "error",
+      requireProjectTrust: policy.requireProjectTrust ?? false,
       backend: backend.backend,
       available: backend.available,
       enforced: (policy.enabled ?? true) && backend.available,
     }
-    const untrusted = !trust.canExecuteProjectCode
     const unavailable = sandbox.enabled && !sandbox.available && sandbox.onUnavailable === "error"
-    const reason = untrusted ? "project_untrusted" : unavailable ? "sandbox_unavailable" : "allowed"
-    const mode = untrusted || unavailable ? "read_only" : sandbox.enabled ? "sandboxed" : "host"
+    const untrusted = !trust.canExecuteProjectCode
+    const needsTrust = sandbox.requireProjectTrust || !routine.has(input.capability) || !sandbox.enforced
+    const reason = unavailable ? "sandbox_unavailable" : untrusted && needsTrust ? "project_untrusted" : "allowed"
+    const mode = reason !== "allowed" ? "read_only" : sandbox.enforced ? "sandboxed" : "host"
+    const message =
+      reason === "sandbox_unavailable"
+        ? `A verified OS sandbox is required to ${action(input.capability)}, but OpenScience could not enforce one (${backend.reason}). Install the platform sandbox backend or update the global Sandbox settings.`
+        : reason === "project_untrusted"
+          ? sandbox.requireProjectTrust
+            ? `Trust this project to ${action(input.capability)} because the global Sandbox policy requires explicit trust for all execution.`
+            : !routine.has(input.capability)
+              ? `Trust this project to ${action(input.capability)}. This operation is not eligible for trust-free sandboxed execution.`
+              : `Trust this project to ${action(input.capability)} without an enforced OS sandbox, or enable a working sandbox backend first.`
+          : undefined
     const [readable, writable, workspace] = await Promise.all([
       SessionFilesystem.processReadRoots(input.sessionID),
       SessionFilesystem.processWriteRoots(input.sessionID),
@@ -115,6 +165,7 @@ export namespace ExecutionAuthority {
     return {
       allowed: reason === "allowed",
       reason,
+      message,
       capability: input.capability,
       mode,
       projectID: Instance.project.id,
@@ -127,7 +178,7 @@ export namespace ExecutionAuthority {
       readable,
       writable,
       sandbox,
-      remediation: trust.remediation,
+      remediation: reason === "project_untrusted" ? trust.remediation : undefined,
     }
   }
 

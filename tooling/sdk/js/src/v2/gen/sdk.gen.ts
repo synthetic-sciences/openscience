@@ -7453,6 +7453,7 @@ export class OpenScienceClient extends HeyApiClient {
       network?: "allow" | "deny"
       allowWrite?: Array<string>
       onUnavailable?: "warn" | "error" | "allow"
+      requireProjectTrust?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7465,6 +7466,7 @@ export class OpenScienceClient extends HeyApiClient {
             { in: "body", key: "network" },
             { in: "body", key: "allowWrite" },
             { in: "body", key: "onUnavailable" },
+            { in: "body", key: "requireProjectTrust" },
           ],
         },
       ],

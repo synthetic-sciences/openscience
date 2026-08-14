@@ -4,44 +4,179 @@ import { Instance } from "@/project/instance"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Tool } from "./tool"
 
-const ComputeTarget = JobBroker.Target
-const ComputeWorkload = z.object({
-  name: z.string().trim().min(1).max(120),
-  purpose: z.string().trim().min(1).max(500),
-  command: z.string().trim().min(1).max(100_000),
-  cwd: z.string().trim().min(1).max(2_000).optional(),
-  target: ComputeTarget,
-  resources: JobBroker.Resources.optional(),
-  modules: z.array(z.string().trim().min(1).max(240)).max(64).optional(),
-  container: z.string().trim().min(1).max(2_000).optional(),
-  artifacts: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
-  checkpoint: z.string().trim().min(1).max(2_000).optional(),
-  uploads: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
-  packages: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
-  image: z.string().trim().min(1).max(2_000).optional(),
-  gpu: z.string().trim().min(1).max(120).optional(),
-})
+const COMPUTE_ACTIONS = [
+  "targets",
+  "plan",
+  "start",
+  "list",
+  "status",
+  "logs",
+  "artifacts",
+  "cancel",
+  "retry_delivery",
+  "release",
+] as const
+type ComputeAction = (typeof COMPUTE_ACTIONS)[number]
 
-export const ComputeJobParameters = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("targets") }),
-  ComputeWorkload.extend({ action: z.literal("plan") }),
-  ComputeWorkload.extend({ action: z.literal("start") }),
-  z.object({
-    action: z.literal("list"),
-    status: JobBroker.Status.optional(),
-    limit: z.number().int().min(1).max(100).default(20),
-  }),
-  z.object({ action: z.literal("status"), job_id: z.string().trim().min(1) }),
-  z.object({
-    action: z.literal("logs"),
-    job_id: z.string().trim().min(1),
-    bytes: z.number().int().min(1).max(256_000).default(64_000),
-  }),
-  z.object({ action: z.literal("artifacts"), job_id: z.string().trim().min(1) }),
-  z.object({ action: z.literal("cancel"), job_id: z.string().trim().min(1) }),
-  z.object({ action: z.literal("retry_delivery"), job_id: z.string().trim().min(1) }),
-  z.object({ action: z.literal("release"), job_id: z.string().trim().min(1) }),
-])
+const ACTION_DESCRIPTIONS = {
+  targets: "Discover available local, saved SSH/scheduler, and Modal targets.",
+  plan: "Preview an immutable compute plan without dispatching it.",
+  start: "Create and dispatch a detached compute job after any required approval.",
+  list: "List project-scoped compute jobs, optionally filtered by status.",
+  status: "Inspect the latest state of one existing job.",
+  logs: "Read lifecycle events and bounded command output for one existing job.",
+  artifacts: "Inspect expected and delivered outputs for one existing job.",
+  cancel: "Stop one live job after dedicated approval.",
+  retry_delivery: "Retry delivery from retained Modal output without rerunning the command.",
+  release: "Discard retained remote resources after dedicated approval.",
+} satisfies Record<ComputeAction, string>
+
+const ACTION_EXAMPLES = {
+  targets: '{"action":"targets"}',
+  plan: '{"action":"plan","name":"Environment probe","purpose":"Check the local runtime before starting work.","command":"python --version","target":{"kind":"local"}}',
+  start:
+    '{"action":"start","name":"Run analysis","purpose":"Produce the requested analysis output.","command":"python analysis.py","target":{"kind":"local"}}',
+  list: '{"action":"list","limit":20}',
+  status: '{"action":"status","job_id":"job_..."}',
+  logs: '{"action":"logs","job_id":"job_...","bytes":64000}',
+  artifacts: '{"action":"artifacts","job_id":"job_..."}',
+  cancel: '{"action":"cancel","job_id":"job_..."}',
+  retry_delivery: '{"action":"retry_delivery","job_id":"job_..."}',
+  release: '{"action":"release","job_id":"job_..."}',
+} satisfies Record<ComputeAction, string>
+
+const ACTION_HELP = COMPUTE_ACTIONS.map(
+  (value) => `- ${value}: ${ACTION_DESCRIPTIONS[value]} Example: ${ACTION_EXAMPLES[value]}`,
+).join("\n")
+
+function action<const Value extends ComputeAction>(value: Value) {
+  return z.literal(value).describe(`${ACTION_DESCRIPTIONS[value]} Exact input: ${ACTION_EXAMPLES[value]}`)
+}
+
+const ComputeTarget = JobBroker.Target.describe(
+  'Pass a JSON object, never a quoted JSON string: {"kind":"local"}, {"kind":"modal"}, or {"kind":"ssh","host_id":"saved-host-id"}.',
+)
+const ComputeWorkload = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    purpose: z.string().trim().min(1).max(500),
+    command: z.string().trim().min(1).max(100_000),
+    cwd: z.string().trim().min(1).max(2_000).optional(),
+    target: ComputeTarget,
+    resources: JobBroker.Resources.optional(),
+    modules: z.array(z.string().trim().min(1).max(240)).max(64).optional(),
+    container: z.string().trim().min(1).max(2_000).optional(),
+    artifacts: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
+    checkpoint: z.string().trim().min(1).max(2_000).optional(),
+    uploads: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
+    packages: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
+    image: z.string().trim().min(1).max(2_000).optional(),
+    gpu: z.string().trim().min(1).max(120).optional(),
+  })
+  .strict()
+
+export const ComputeJobParameters = z
+  .discriminatedUnion("action", [
+    z
+      .object({ action: action("targets") })
+      .strict()
+      .describe(ACTION_EXAMPLES.targets),
+    ComputeWorkload.extend({ action: action("plan") }).describe(ACTION_EXAMPLES.plan),
+    ComputeWorkload.extend({ action: action("start") }).describe(ACTION_EXAMPLES.start),
+    z
+      .object({
+        action: action("list"),
+        status: JobBroker.Status.optional(),
+        limit: z.number().int().min(1).max(100).default(20),
+      })
+      .strict()
+      .describe(ACTION_EXAMPLES.list),
+    z
+      .object({ action: action("status"), job_id: z.string().trim().min(1) })
+      .strict()
+      .describe(ACTION_EXAMPLES.status),
+    z
+      .object({
+        action: action("logs"),
+        job_id: z.string().trim().min(1),
+        bytes: z.number().int().min(1).max(256_000).default(64_000),
+      })
+      .strict()
+      .describe(ACTION_EXAMPLES.logs),
+    z
+      .object({ action: action("artifacts"), job_id: z.string().trim().min(1) })
+      .strict()
+      .describe(ACTION_EXAMPLES.artifacts),
+    z
+      .object({ action: action("cancel"), job_id: z.string().trim().min(1) })
+      .strict()
+      .describe(ACTION_EXAMPLES.cancel),
+    z
+      .object({ action: action("retry_delivery"), job_id: z.string().trim().min(1) })
+      .strict()
+      .describe(ACTION_EXAMPLES.retry_delivery),
+    z
+      .object({ action: action("release"), job_id: z.string().trim().min(1) })
+      .strict()
+      .describe(ACTION_EXAMPLES.release),
+  ])
+  .describe(`Select one action with the required action discriminator.\n${ACTION_HELP}`)
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function knownAction(value: unknown): value is ComputeAction {
+  return typeof value === "string" && (COMPUTE_ACTIONS as readonly string[]).includes(value)
+}
+
+function normalizeInput(input: unknown): unknown {
+  if (!record(input)) return input
+  let output = input
+  let changed = false
+  const copy = () => {
+    if (!changed) output = { ...input }
+    changed = true
+    return output
+  }
+
+  const operation = input.operation
+  const selected = input.action
+  if (knownAction(operation) && (selected === undefined || selected === operation)) {
+    const normalized = copy()
+    normalized.action = operation
+    delete normalized.operation
+  }
+
+  const effective = changed ? output.action : selected
+  if ((effective === "plan" || effective === "start") && typeof output.target === "string") {
+    try {
+      const target = ComputeTarget.safeParse(JSON.parse(output.target))
+      if (target.success) copy().target = target.data
+    } catch {
+      // Keep invalid strings unchanged so canonical validation can explain the error.
+    }
+  }
+  return output
+}
+
+function formatValidationError(error: z.ZodError, input: unknown) {
+  const details = error.issues
+    .map((issue) => `- ${issue.path.length ? issue.path.join(".") : "input"}: ${issue.message}`)
+    .join("\n")
+  const selected = record(input) && knownAction(input.action) ? input.action : undefined
+  const examples = selected
+    ? `Copy-ready ${selected} shape (replace placeholder values only):\n${ACTION_EXAMPLES[selected]}`
+    : `Valid action values: ${COMPUTE_ACTIONS.join(", ")}\nCopy-ready action shapes:\n${ACTION_HELP}`
+
+  return [
+    "Invalid arguments for compute_job.",
+    details,
+    examples,
+    'Use the field "action", not "operation". For plan/start, target must be a JSON object, not a quoted JSON string.',
+    'Allowed targets: {"kind":"local"}, {"kind":"modal"}, or {"kind":"ssh","host_id":"saved-host-id"}.',
+  ].join("\n\n")
+}
 
 type Input = z.infer<typeof ComputeJobParameters>
 type Metadata = {
@@ -149,8 +284,12 @@ export function createComputeJobTool(base?: JobBroker.Options) {
       "Use list, status, logs, and artifacts for read-only checks; these never dispatch compute and never require paid-run approval.",
       "Use cancel to stop a live job, retry_delivery to harvest a retained Modal volume without rerunning the command, and release only when the user wants to discard retained remote resources.",
       "Never use a new modal dispatch to check an existing job. Never invoke the Modal SDK or CLI directly.",
+      'Every call must use the "action" field (never "operation"). For plan/start, target is a nested object, never a JSON-encoded string.',
+      `Copy-ready action inputs:\n${ACTION_HELP}`,
     ].join("\n"),
     parameters: ComputeJobParameters,
+    normalizeInput,
+    formatValidationError,
     async execute(input: Input, ctx) {
       if (input.action === "targets") {
         const resolved = await options(ctx.sessionID, base)

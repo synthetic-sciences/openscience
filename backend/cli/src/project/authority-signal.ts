@@ -62,7 +62,7 @@ export namespace AuthoritySignal {
     await using lease = await FileLease.acquire(lock(), spawnOwnerWait)
     // Await inside this lexical scope so `await using` cannot dispose the
     // interprocess lease before the spawn/mutation callback has settled.
-    return await action()
+    return await lease.during(action)
   }
 
   async function current() {

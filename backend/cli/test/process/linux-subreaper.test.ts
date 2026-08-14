@@ -69,6 +69,60 @@ linuxTest("a forged launcher argv marker cannot opt a raw process out of ordinar
 })
 
 linuxTest(
+  "the supervisor's real SIGTERM watcher survives replacement of inherited server handlers",
+  async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-subreaper-signal-"))
+    const marker = path.join(root, "payload.pid")
+    const source = [
+      `await Bun.write(${JSON.stringify(marker)}, String(process.pid))`,
+      'process.on("SIGTERM", () => {})',
+      "await new Promise(() => {})",
+    ].join(";")
+    const wrapped = WindowsJobLauncher.wrap({
+      file: process.execPath,
+      args: ["-e", source],
+      linuxOwner: await owner(),
+    })
+    if (!wrapped.release) throw new Error("Linux subreaper launch did not create a registration gate")
+    const child = spawn(wrapped.file, wrapped.args, {
+      cwd: path.resolve(import.meta.dir, "../.."),
+      stdio: ["ignore", "ignore", "pipe"],
+    })
+    let stderr = ""
+    child.stderr?.setEncoding("utf8")
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk
+    })
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      child.once("exit", (code, signal) => resolve({ code, signal }))
+    })
+    let payloadPID = 0
+    let payloadIdentity: string | undefined
+    try {
+      await WindowsJobLauncher.release(wrapped.release, child.pid!)
+      payloadPID = Number(await waitText(marker))
+      payloadIdentity = await ProcessIdentity.capture(payloadPID)
+      expect(payloadIdentity).toMatch(/^[a-f0-9]{64}$/)
+      process.kill(child.pid!, "SIGTERM")
+      const outcome = await exited
+      // Bun 1.3.9 used to report `signal === SIGTERM` here: adding the
+      // replacement listener before removing inherited handlers silently
+      // detached the native signal watcher despite listenerCount() being one.
+      expect(outcome.signal, stderr).toBeNull()
+      expect(outcome.code, stderr).toBe(143)
+      expect(await waitGone(payloadPID, payloadIdentity!)).toBe(true)
+    } finally {
+      child.kill("SIGKILL")
+      if (payloadPID && payloadIdentity && (await ProcessIdentity.owns(payloadPID, payloadIdentity))) {
+        process.kill(payloadPID, "SIGKILL")
+      }
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+  20_000,
+)
+
+linuxTest(
   "normal payload completion drains an adopted setsid double-fork before the launcher exits",
   async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-subreaper-complete-"))

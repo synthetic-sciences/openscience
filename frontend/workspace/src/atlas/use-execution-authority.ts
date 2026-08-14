@@ -33,8 +33,13 @@ export function useExecutionAuthority(capability: ExecutionCapability | Accessor
     if (event.properties.sessionID !== params.id) return
     refresh()
   })
+  // Global/managed sandbox policy writes dispose the project instance so the
+  // next request observes the new immutable policy. Refresh immediately rather
+  // than leaving controls on the previous decision until a page reload.
+  const instance = sdk.event.on("server.instance.disposed", refresh)
   onCleanup(trust)
   onCleanup(grant)
+  onCleanup(instance)
 
   const message = createMemo(() => {
     if (!params.id || params.id === "new") return "Save this session before starting a process."

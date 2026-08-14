@@ -1,4 +1,4 @@
-import { test, expect, afterAll } from "bun:test"
+import { test, expect, afterAll, spyOn } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Project } from "../../src/project/project"
@@ -12,6 +12,7 @@ import { ComputeSettings, ComputeSettingsRoutes } from "../../src/server/routes/
 import { Sandbox } from "../../src/sandbox/sandbox"
 import { Log } from "../../src/util/log"
 import { Global } from "../../src/global"
+import { ModalVolume } from "../../src/compute/modal/volume"
 import { executionSession, tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
@@ -59,6 +60,14 @@ async function settle(url: string, id: string, headers: Record<string, string> =
     await Bun.sleep(20)
   }
   throw new Error("Timed out waiting for route compute job")
+}
+
+async function waitForRemoval(target: string) {
+  for (const _ of Array.from({ length: 100 })) {
+    if (!(await fs.stat(target).catch(() => undefined))) return
+    await Bun.sleep(10)
+  }
+  throw new Error(`Timed out waiting for ${target} to be removed`)
 }
 
 async function session(directory: string, trusted = true) {
@@ -287,6 +296,210 @@ test("Modal config discovery defers inactive profile resolution until an enabled
   })
   await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("invalid credentials")
   await ComputeSettings.disconnectProvider("modal")
+})
+
+test("Modal Volume browser downloads stream past the retired cap and clean up on cancel or abort", async () => {
+  const size = 256 * 1024 * 1024 + 1
+  const staging: string[] = []
+  const context = spyOn(ComputeSettings, "modalContext").mockResolvedValue({
+    app: "openscience-test",
+    image: "python:3.12-slim",
+    network: "none",
+    timeoutMinutes: 10,
+    concurrency: 1,
+    tokenId: "ak-test",
+    tokenSecret: "as-test",
+  })
+  const list = spyOn(ModalVolume, "list").mockResolvedValue([{ path: "large.bin", type: "file", size }])
+  const download = spyOn(ModalVolume, "download").mockImplementation(async (_context, _volume, _paths, target) => {
+    staging.push(target)
+    const file = path.join(target, "large.bin")
+    const handle = await fs.open(file, "w")
+    await handle.truncate(size)
+    await handle.close()
+    return [{ path: "large.bin", staging: file, size, sha256: "0".repeat(64) }]
+  })
+  try {
+    const cancelled = await ComputeSettingsRoutes().request("/modal/volumes/weights/file?path=/large.bin")
+    expect(cancelled.status).toBe(200)
+    expect(cancelled.headers.get("content-length")).toBe(String(size))
+    expect(cancelled.headers.get("content-disposition")).toContain('filename="large.bin"')
+    const cancelledReader = cancelled.body!.getReader()
+    const first = await cancelledReader.read()
+    expect(first.done).toBe(false)
+    expect(first.value?.byteLength).toBeGreaterThan(0)
+    await cancelledReader.cancel()
+    await waitForRemoval(staging[0]!)
+
+    const controller = new AbortController()
+    const aborted = await ComputeSettingsRoutes().request("/modal/volumes/weights/file?path=/large.bin", {
+      signal: controller.signal,
+    })
+    const abortedReader = aborted.body!.getReader()
+    expect((await abortedReader.read()).done).toBe(false)
+    controller.abort()
+    await waitForRemoval(staging[1]!)
+    await abortedReader.cancel().catch(() => undefined)
+  } finally {
+    download.mockRestore()
+    list.mockRestore()
+    context.mockRestore()
+    await Promise.all(staging.map((target) => fs.rm(target, { recursive: true, force: true })))
+  }
+})
+
+test("Modal Volume browser downloads abort blocked staging and await helper teardown before cleanup", async () => {
+  let staging: string | undefined
+  let stopped = false
+  const started = Promise.withResolvers<void>()
+  const revoking = Promise.withResolvers<void>()
+  const teardown = Promise.withResolvers<void>()
+  const context = spyOn(ComputeSettings, "modalContext").mockResolvedValue({
+    app: "openscience-test",
+    image: "python:3.12-slim",
+    network: "none",
+    timeoutMinutes: 10,
+    concurrency: 1,
+    tokenId: "ak-test",
+    tokenSecret: "as-test",
+  })
+  const list = spyOn(ModalVolume, "list").mockResolvedValue([{ path: "blocked.bin", type: "file", size: 1 }])
+  const download = spyOn(ModalVolume, "download").mockImplementation(
+    async (_context, _volume, _paths, target, signal) => {
+      if (!signal) throw new Error("The Modal Volume route did not forward its request signal")
+      staging = target
+      await fs.writeFile(path.join(target, "partial"), "staged")
+      const interrupted = Promise.withResolvers<never>()
+      const abort = () => {
+        revoking.resolve()
+        void teardown.promise.then(() => {
+          stopped = true
+          interrupted.reject(signal.reason)
+        })
+      }
+      if (signal.aborted) abort()
+      else signal.addEventListener("abort", abort, { once: true })
+      started.resolve()
+      try {
+        return await interrupted.promise
+      } finally {
+        signal.removeEventListener("abort", abort)
+      }
+    },
+  )
+  const errors = spyOn(console, "error").mockImplementation(() => {})
+  const controller = new AbortController()
+  const reason = new DOMException("browser disconnected", "AbortError")
+
+  try {
+    const pending = ComputeSettingsRoutes().request("/modal/volumes/weights/file?path=/blocked.bin", {
+      signal: controller.signal,
+    })
+    await started.promise
+    controller.abort(reason)
+    await revoking.promise
+    expect(stopped).toBe(false)
+    expect(await fs.stat(staging!).then((value) => value.isDirectory())).toBe(true)
+    teardown.resolve()
+    const response = await pending
+    expect(response.status).toBe(500)
+    expect(stopped).toBe(true)
+    await waitForRemoval(staging!)
+  } finally {
+    teardown.resolve()
+    controller.abort(reason)
+    errors.mockRestore()
+    download.mockRestore()
+    list.mockRestore()
+    context.mockRestore()
+    if (staging) await fs.rm(staging, { recursive: true, force: true })
+  }
+})
+
+test("Modal Volume browser downloads sanitize hostile filenames and remove staging after completion", async () => {
+  let staging: string | undefined
+  const payload = Buffer.from("streamed bytes")
+  const remote = 'report"\r\nX-Injected: yes.csv'
+  const context = spyOn(ComputeSettings, "modalContext").mockResolvedValue({
+    app: "openscience-test",
+    image: "python:3.12-slim",
+    network: "none",
+    timeoutMinutes: 10,
+    concurrency: 1,
+    tokenId: "ak-test",
+    tokenSecret: "as-test",
+  })
+  const list = spyOn(ModalVolume, "list").mockResolvedValue([{ path: remote, type: "file", size: payload.byteLength }])
+  const download = spyOn(ModalVolume, "download").mockImplementation(async (_context, _volume, _paths, target) => {
+    staging = target
+    const file = path.join(target, "result.bin")
+    await fs.writeFile(file, payload)
+    return [{ path: remote, staging: file, size: payload.byteLength, sha256: "0".repeat(64) }]
+  })
+
+  try {
+    const response = await ComputeSettingsRoutes().request(
+      `/modal/volumes/weights/file?path=${encodeURIComponent(`/${remote}`)}`,
+    )
+    expect(response.status).toBe(200)
+    const disposition = response.headers.get("content-disposition")!
+    expect(disposition).toContain('filename="report___X-Injected: yes.csv"')
+    expect(disposition).toContain("filename*=UTF-8''report%22__X-Injected%3A%20yes.csv")
+    expect(disposition).not.toContain("\r")
+    expect(disposition).not.toContain("\n")
+    expect(response.headers.get("x-injected")).toBeNull()
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(payload)
+    await waitForRemoval(staging!)
+  } finally {
+    download.mockRestore()
+    list.mockRestore()
+    context.mockRestore()
+    if (staging) await fs.rm(staging, { recursive: true, force: true })
+  }
+})
+
+test("Modal Volume browser downloads remove staging when response handoff fails", async () => {
+  let staging: string | undefined
+  const payload = Buffer.from("staged")
+  const context = spyOn(ComputeSettings, "modalContext").mockResolvedValue({
+    app: "openscience-test",
+    image: "python:3.12-slim",
+    network: "none",
+    timeoutMinutes: 10,
+    concurrency: 1,
+    tokenId: "ak-test",
+    tokenSecret: "as-test",
+  })
+  const list = spyOn(ModalVolume, "list").mockResolvedValue([
+    { path: "result.bin", type: "file", size: payload.byteLength },
+  ])
+  const download = spyOn(ModalVolume, "download").mockImplementation(async (_context, _volume, _paths, target) => {
+    staging = target
+    const file = path.join(target, "result.bin")
+    await fs.writeFile(file, payload)
+    return [{ path: "result.bin", staging: file, size: payload.byteLength, sha256: "0".repeat(64) }]
+  })
+  const set = Headers.prototype.set
+  const headers = spyOn(Headers.prototype, "set").mockImplementation(function (this: Headers, name, value) {
+    if (name.toLowerCase() === "content-disposition" && value.startsWith("attachment;")) {
+      throw new TypeError("injected Content-Disposition failure")
+    }
+    return set.call(this, name, value)
+  })
+  const errors = spyOn(console, "error").mockImplementation(() => {})
+
+  try {
+    const response = await ComputeSettingsRoutes().request("/modal/volumes/weights/file?path=/result.bin")
+    expect(response.status).toBe(500)
+    await waitForRemoval(staging!)
+  } finally {
+    errors.mockRestore()
+    headers.mockRestore()
+    download.mockRestore()
+    list.mockRestore()
+    context.mockRestore()
+    if (staging) await fs.rm(staging, { recursive: true, force: true })
+  }
 })
 
 test("connecting a provider does not overwrite an explicit shell export", async () => {
@@ -661,7 +874,7 @@ test(
   nativeLifecycleTimeout,
 )
 
-test("read-only projects cannot start compute jobs or create side effects", async () => {
+test("untrusted projects start local compute only when the OS sandbox is enforced", async () => {
   await using tmp = await tmpdir()
   const created = await Project.fromDirectory(tmp.path)
   const current = await session(tmp.path, false)
@@ -681,19 +894,35 @@ test("read-only projects cannot start compute jobs or create side effects", asyn
     }),
   })
 
-  expect(response.status).toBe(403)
-  expect(await response.json()).toMatchObject({
-    name: "ExecutionAuthorityDeniedError",
-    data: {
-      allowed: false,
-      reason: "project_untrusted",
-      capability: "local_job",
-      projectID: created.project.id,
-      sessionID: current.id,
-    },
+  if (!Sandbox.available()) {
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({
+      name: "ExecutionAuthorityDeniedError",
+      data: {
+        allowed: false,
+        reason: "sandbox_unavailable",
+        capability: "local_job",
+        projectID: created.project.id,
+        sessionID: current.id,
+      },
+    })
+    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await (await fetch(jobs, { headers })).json()).toEqual([])
+    return
+  }
+
+  expect(response.status).toBe(200)
+  const job = (await response.json()) as {
+    id: string
+    sandbox: { enforced: boolean }
+    authority: { allowed: boolean; mode: string }
+  }
+  expect(job).toMatchObject({
+    sandbox: { enforced: true },
+    authority: { allowed: true, mode: "sandboxed" },
   })
-  expect(await Bun.file(marker).exists()).toBe(false)
-  expect(await (await fetch(jobs, { headers })).json()).toEqual([])
+  expect((await settle(jobs, job.id, headers)).status).toBe("succeeded")
+  expect(await Bun.file(marker).text()).toBe("started")
 })
 
 test(

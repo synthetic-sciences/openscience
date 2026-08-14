@@ -3,6 +3,7 @@ import fs from "node:fs"
 import type { ChildProcess } from "node:child_process"
 import { dlopen, FFIType, ptr } from "bun:ffi"
 import { WindowsJob } from "@/process/windows-job"
+import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 import { AuthorityProcessLedger } from "@/project/authority-process"
 import type { KernelProcess } from "./types"
 
@@ -24,6 +25,11 @@ function rawToken(pid: number) {
     try {
       const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8")
       const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ")
+      // A zombie retains its start tick until the parent consumes SIGCHLD, but
+      // it cannot execute or own a surviving containment tree. Treat it as
+      // stopped so durable teardown does not fall through while Bun is still
+      // delivering the managed ChildProcess exit event.
+      if (fields[0] === "Z") return
       const start = fields[19]
       return start ? `linux:${start}` : undefined
     } catch {
@@ -64,6 +70,7 @@ export namespace KernelProcessIdentity {
     sessionID: string
     authorityGeneration: string
     windowsRelease?: string
+    linuxOwner?: { pid: number; identity: string }
   }
 
   export function onExit(fn: () => void) {
@@ -102,6 +109,12 @@ export namespace KernelProcessIdentity {
   export async function register(proc: ChildProcess, ownership?: Ownership): Promise<KernelProcess | undefined> {
     const identity = capture(proc)
     if (!identity || !ownership) return identity
+    if (
+      process.platform === "linux" &&
+      (!ownership.windowsRelease || !ownership.linuxOwner || !WindowsJobLauncher.isLinuxSubreaper(proc))
+    ) {
+      throw new Error("Linux kernel manager did not use the durable owner-gated subreaper launcher")
+    }
     if (!identity.token) {
       throw new Error(`Could not establish a safe process identity for kernel child ${identity.pid}`)
     }
@@ -110,8 +123,28 @@ export namespace KernelProcessIdentity {
       kind: "kernel",
       pid: identity.pid,
       expectedIdentity: identity.token,
+      containment:
+        process.platform === "linux"
+          ? "linux_subreaper_v1"
+          : process.platform === "darwin"
+            ? "darwin_responsibility_v1"
+            : "windows_job_v1",
     })
     if (!registered) return
+    if (process.platform === "linux" && ownership.windowsRelease) {
+      try {
+        await WindowsJobLauncher.release(ownership.windowsRelease, identity.pid)
+      } catch (error) {
+        const failures: unknown[] = []
+        await AuthorityProcessLedger.revoke({ id: ownership.id, kind: "kernel" }).catch((failure) =>
+          failures.push(failure),
+        )
+        if (failures.length) {
+          throw new AggregateError([error, ...failures], "Kernel launch ownership cleanup failed")
+        }
+        throw error
+      }
+    }
     return { ...identity, ownershipID: ownership.id }
   }
 
@@ -119,18 +152,7 @@ export namespace KernelProcessIdentity {
    * not perform the standard immediate post-spawn registration themselves. */
   export async function ensureRegistered(identity: KernelProcess | undefined, ownership: Ownership) {
     if (!identity || identity.ownershipID === ownership.id) return identity
-    if (!identity.token || !matchesRecorded(identity)) {
-      throw new Error("Kernel process exited or changed identity before durable registration")
-    }
-    const registered = await AuthorityProcessLedger.register({
-      ...ownership,
-      kind: "kernel",
-      pid: identity.pid,
-      expectedIdentity: identity.token,
-    })
-    if (!registered) throw new Error("Kernel process exited before durable registration")
-    identity.ownershipID = ownership.id
-    return identity
+    throw new Error("Kernel manager returned a process without trusted durable containment registration")
   }
 
   export function matches(proc: ChildProcess, identity?: KernelProcess) {
@@ -155,15 +177,47 @@ export namespace KernelProcessIdentity {
     return matchesToken(identity.pid, identity.token)
   }
 
-  export async function terminate(identity?: KernelProcess) {
-    if (!identity) return false
-    if (identity.ownershipID) {
+  /** Synchronous process-exit handoff. A registered POSIX containment
+   * supervisor must remain alive to drain its tree, so exit hooks request its
+   * cooperative TERM path and never group-SIGKILL the anchor. On Windows this
+   * is a handoff, not synchronous proof: server handle closure atomically
+   * enforces the registered Job's KILL_ON_JOB_CLOSE policy. */
+  export function terminateSync(identity?: KernelProcess): boolean {
+    if (!identity?.ownershipID) return false
+    if (process.platform === "win32") return true
+    if (!matchesRecorded(identity)) return true
+    try {
+      process.kill(identity.pid, "SIGTERM")
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return true
+      return false
+    }
+  }
+
+  export async function complete(identity?: KernelProcess): Promise<boolean> {
+    if (!identity?.ownershipID) return false
+    return AuthorityProcessLedger.complete(identity.ownershipID)
+  }
+
+  export async function terminate(identity?: KernelProcess, pendingOwnershipID?: string) {
+    const ownershipID = identity?.ownershipID ?? pendingOwnershipID
+    if (ownershipID) {
       // An ownership ID is only returned after the durable record is synced.
       // If another revoker already removed that record, its removal itself is
       // proof that the exact group was successfully torn down.
-      await AuthorityProcessLedger.revoke({ id: identity.ownershipID, kind: "kernel" })
-      if (!matchesRecorded(identity)) return true
+      const revoked = await AuthorityProcessLedger.revoke({ id: ownershipID, kind: "kernel" })
+      if (!identity || !matchesRecorded(identity)) return true
+      // A returned durable identity, or a matched live ledger entry, is a
+      // verified containment anchor. Never fall through to a raw process-group
+      // kill while it remains alive: that can kill the supervisor before it
+      // drains a setsid worker. A lexical ID with no ledger match is the sole
+      // pre-registration case and may use the ordinary group fallback below.
+      if (identity.ownershipID || revoked > 0) {
+        throw new Error(`Registered kernel containment ${identity.pid} remained live after durable revocation`)
+      }
     }
+    if (!identity) return false
     if (!matchesRecorded(identity)) return false
     const signal = (value: NodeJS.Signals) => {
       try {

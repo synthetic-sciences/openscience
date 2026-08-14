@@ -14,6 +14,8 @@ import { PythonTool } from "../../../src/tool/notebook"
 import { ExecutionAuthority } from "../../../src/project/execution"
 import { KernelRuntime, type KernelIdentity } from "../../../src/science/kernel/registry"
 import { AuthorityProcessLedger } from "../../../src/project/authority-process"
+import { Sandbox } from "../../../src/sandbox/sandbox"
+import { Global } from "../../../src/global"
 import "../../../src/tool/rkernel"
 
 test("Python environment names cannot escape the project virtual-environment directory", () => {
@@ -44,7 +46,7 @@ test("a named Python environment resolves only its fixed project-local interpret
   expect(result.env?.PATH?.split(path.delimiter)[0]).toBe(bin)
 })
 
-test("an untrusted project .venv interpreter cannot execute during discovery", async () => {
+test("project .venv discovery is side-effect free before sandboxed execution", async () => {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
@@ -68,6 +70,9 @@ test("an untrusted project .venv interpreter cannot execute during discovery", a
     directory: tmp.path,
     fn: async () => {
       await ProjectTrust.update(Instance.project, { trusted: false })
+      expect(await pythonEnvironment(tmp.path)).toMatchObject({ binary: expect.stringContaining(".venv") })
+      expect(await Bun.file(tmp.extra.marker).exists()).toBe(false)
+
       const session = await Session.create({})
       const tool = await PythonTool.init()
       const run = tool.execute(
@@ -84,8 +89,20 @@ test("an untrusted project .venv interpreter cannot execute during discovery", a
         },
       )
 
-      await expect(run).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)
-      expect(await Bun.file(tmp.extra.marker).exists()).toBe(false)
+      const error = await run.then(
+        () => undefined,
+        (cause) => cause,
+      )
+      expect(error).toBeInstanceOf(Error)
+      if (Sandbox.describe().available) {
+        expect(error).not.toBeInstanceOf(ExecutionAuthority.DeniedError)
+        // Explicit execution may modify the granted project workspace; the
+        // authority-policy regression separately proves it cannot reach HOME.
+        expect(await Bun.file(tmp.extra.marker).text()).toBe("pwned")
+      } else {
+        expect(error).toBeInstanceOf(ExecutionAuthority.DeniedError)
+        expect(await Bun.file(tmp.extra.marker).exists()).toBe(false)
+      }
     },
   })
 })
@@ -130,16 +147,6 @@ done
           name: "r-discovery-boundary",
           language: "r",
         }
-        await expect(
-          KernelRuntime.execute(identity, "1 + 1", undefined, {
-            binary: tmp.extra.binary,
-            environmentName: "project-r",
-          }),
-        ).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)
-        expect(await Bun.file(tmp.extra.marker).exists()).toBe(false)
-
-        const trust = await ProjectTrust.status(Instance.project)
-        await ProjectTrust.update(Instance.project, { trusted: true, root: trust.root })
         try {
           const result = await KernelRuntime.execute(identity, "1 + 1", undefined, {
             binary: tmp.extra.binary,
@@ -165,6 +172,64 @@ done
           await KernelRuntime.release(identity)
         }
         expect(await Bun.file(tmp.extra.marker).exists()).toBe(false)
+      },
+    })
+  },
+  30_000,
+)
+
+test.skipIf(process.platform === "win32")(
+  "spontaneous built-in launcher exits complete durable ownership without accumulation",
+  async () => {
+    if (!Bun.which("python3")) return
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
+        const session = await Session.create({})
+        const identity: KernelIdentity = {
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          name: "python-spontaneous-exit",
+          language: "python",
+        }
+        const cleared = async (
+          target: { pid: number; token?: string; ownershipID?: string },
+          attempt = 0,
+        ): Promise<boolean> => {
+          const ledger = (await Bun.file(AuthorityProcessLedger.pathForTests())
+            .json()
+            .catch(() => [])) as Array<{
+            id?: string
+          }>
+          const files = await fs.readdir(path.join(Global.Path.config, "data-root-operations")).catch(() => [])
+          const markers = await Promise.all(
+            files.map((name) => Bun.file(path.join(Global.Path.config, "data-root-operations", name)).json()),
+          )
+          const owned = ledger.some((entry) => entry.id === target.ownershipID)
+          const marked = markers.some((marker) => marker.pid === target.pid && marker.identity === target.token)
+          if (!owned && !marked) return true
+          if (attempt >= 500) return false
+          await Bun.sleep(10)
+          return cleared(target, attempt + 1)
+        }
+
+        try {
+          const ownership = new Set<string>()
+          for (let cycle = 0; cycle < 3; cycle++) {
+            const kernel = await KernelRuntime.get(identity)
+            const processIdentity = kernel.process
+            expect(processIdentity?.ownershipID).toStartWith("kernel-")
+            expect(ownership.has(processIdentity!.ownershipID!)).toBe(false)
+            ownership.add(processIdentity!.ownershipID!)
+            await expect(KernelRuntime.execute(identity, "import os\nos._exit(0)")).rejects.toBeInstanceOf(Error)
+            expect(await cleared(processIdentity!)).toBe(true)
+          }
+          expect(ownership.size).toBe(3)
+        } finally {
+          await KernelRuntime.release(identity)
+        }
       },
     })
   },

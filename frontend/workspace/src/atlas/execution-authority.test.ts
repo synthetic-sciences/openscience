@@ -26,6 +26,7 @@ const decision = (value: Partial<ExecutionDecision> = {}): ExecutionDecision => 
     network: "deny",
     allowWrite: [],
     onUnavailable: "error",
+    requireProjectTrust: false,
     backend: "seatbelt",
     available: true,
     enforced: true,
@@ -91,6 +92,15 @@ describe("frontend execution authority", () => {
     expect(executionAuthorityError(new Error("503 Service Unavailable"))).toBe(
       "Execution access could not be verified. 503 Service Unavailable",
     )
+    expect(
+      executionAuthorityMessage(
+        decision({
+          allowed: false,
+          reason: "project_untrusted",
+          message: "Trust is required by the stricter global policy.",
+        }),
+      ),
+    ).toBe("Trust is required by the stricter global policy.")
   })
 
   test("submits only the canonical trust remediation returned by the server", async () => {
@@ -139,5 +149,7 @@ describe("frontend execution authority", () => {
     expect(hook).toContain("value.capability === expected.capability")
     expect(hook).toContain("await api.trust(value)")
     expect(hook).toContain("await controls.refetch()")
+    expect(hook).toContain('sdk.event.on("server.instance.disposed", refresh)')
+    expect(hook).toContain("onCleanup(instance)")
   })
 })

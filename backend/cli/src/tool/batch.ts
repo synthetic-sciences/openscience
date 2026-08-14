@@ -5,20 +5,22 @@ import DESCRIPTION from "./batch.txt"
 const DISALLOWED = new Set(["batch"])
 const FILTERED_FROM_SUGGESTIONS = new Set(["invalid", "patch", ...DISALLOWED])
 
-export const BatchTool = Tool.define("batch", async () => {
+const BatchParameters = z.object({
+  tool_calls: z
+    .array(
+      z.object({
+        tool: z.string().describe("The name of the tool to execute"),
+        parameters: z.object({}).loose().describe("Parameters for the tool"),
+      }),
+    )
+    .min(1, "Provide at least one tool call")
+    .describe("Array of tool calls to execute in parallel"),
+})
+
+export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unknown>>("batch", async (initCtx) => {
   return {
     description: DESCRIPTION,
-    parameters: z.object({
-      tool_calls: z
-        .array(
-          z.object({
-            tool: z.string().describe("The name of the tool to execute"),
-            parameters: z.object({}).loose().describe("Parameters for the tool"),
-          }),
-        )
-        .min(1, "Provide at least one tool call")
-        .describe("Array of tool calls to execute in parallel"),
-    }),
+    parameters: BatchParameters,
     formatValidationError(error) {
       const formattedErrors = error.issues
         .map((issue) => {
@@ -37,7 +39,7 @@ export const BatchTool = Tool.define("batch", async () => {
       const discardedCalls = params.tool_calls.slice(25)
 
       const { ToolRegistry } = await import("./registry")
-      const availableTools = await ToolRegistry.tools({ modelID: "", providerID: "" })
+      const availableTools = await ToolRegistry.tools({ modelID: "", providerID: "" }, initCtx?.agent)
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
       const aliases = new Set(["notebook", "rkernel"])
 
@@ -53,15 +55,14 @@ export const BatchTool = Tool.define("batch", async () => {
           }
 
           const tool =
-            toolMap.get(call.tool) ?? (aliases.has(call.tool) ? await ToolRegistry.resolve(call.tool) : undefined)
+            toolMap.get(call.tool) ??
+            (aliases.has(call.tool) ? await ToolRegistry.resolve(call.tool, undefined, initCtx?.agent) : undefined)
           if (!tool) {
             const availableToolsList = Array.from(toolMap.keys()).filter((name) => !FILTERED_FROM_SUGGESTIONS.has(name))
             throw new Error(
               `Tool '${call.tool}' not in registry. External tools (MCP, environment) cannot be batched - call them directly. Available tools: ${availableToolsList.join(", ")}`,
             )
           }
-          const validatedParams = tool.parameters.parse(call.parameters)
-
           await Session.updatePart({
             id: partID,
             messageID: ctx.messageID,
@@ -78,7 +79,10 @@ export const BatchTool = Tool.define("batch", async () => {
             },
           })
 
-          const result = await tool.execute(validatedParams, { ...ctx, callID: partID })
+          // Tool.define owns normalization, canonical validation, defaults,
+          // dedupe, and tool-specific repair errors. Pre-parsing here bypasses
+          // that contract for batched calls (notably compute_job recovery).
+          const result = await tool.execute(call.parameters, { ...ctx, callID: partID })
 
           await Session.updatePart({
             id: partID,

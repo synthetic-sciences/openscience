@@ -1,17 +1,14 @@
 import { afterEach, expect, spyOn, test } from "bun:test"
 import { Network } from "../../src/settings/network"
-import {
-  DEFAULT_DOWNLOAD_MAX_BYTES,
-  MAX_DOWNLOAD_MAX_BYTES,
-  MAX_RESPONSE_SIZE,
-  WebFetchTool,
-} from "../../src/tool/webfetch"
+import { DOWNLOAD_DISK_RESERVE_BYTES, MAX_RESPONSE_SIZE, WebFetchTool } from "../../src/tool/webfetch"
 import type { Tool } from "../../src/tool/tool"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import crypto from "node:crypto"
+import type { StatsFs } from "node:fs"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import z from "zod"
 
 const realFetch = globalThis.fetch
 
@@ -65,35 +62,71 @@ function failedToolHistory(input: Record<string, unknown>, error: string, callID
   ] as unknown as Tool.Context["messages"]
 }
 
-function completedToolHistory(input: Record<string, unknown>, output: string, callID: string) {
-  return [
-    {
-      info: { id: "message_evidence", sessionID: "session_test", role: "assistant" },
-      parts: [
-        {
-          id: "part_evidence",
-          sessionID: "session_test",
-          messageID: "message_evidence",
-          type: "tool",
-          tool: "webfetch",
-          callID,
-          state: {
-            status: "completed",
-            input,
-            output,
-            title: "Metadata",
-            metadata: {},
-            time: { start: 3, end: 4 },
-          },
-        },
-      ],
-    },
-  ] as unknown as Tool.Context["messages"]
-}
-
 afterEach(async () => {
   globalThis.fetch = realFetch
   await Network.set({ allowlistEnabled: false, enabled: ["package-management"], custom: [] })
+})
+
+test("webfetch schema teaches the root-download then sandboxed-move sequence", async () => {
+  const webfetch = await WebFetchTool.init()
+  const schema = z.toJSONSchema(webfetch.parameters) as {
+    properties?: Record<string, { description?: string }>
+  }
+  const description = schema.properties?.output_path?.description
+  expect(description).toContain('output_path:"foo.pdf"')
+  expect(description).toContain("only after success")
+  expect(description).toContain(
+    "mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'",
+  )
+  expect(schema.properties?.max_bytes).toBeUndefined()
+  expect(schema.properties?.declared_size_bytes).toBeUndefined()
+  expect(schema.properties?.declared_size_evidence_call_id).toBeUndefined()
+})
+
+test("webfetch rejects empty or whitespace-padded download paths before permission or network access", async () => {
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  let fetches = 0
+  let asks = 0
+  globalThis.fetch = (async () => {
+    fetches++
+    return new Response("must not fetch")
+  }) as unknown as typeof fetch
+
+  const webfetch = await WebFetchTool.init()
+  for (const output_path of ["", " ", " data.csv", "data.csv "]) {
+    await expect(
+      webfetch.execute(
+        { url: "https://example.com/data", format: "text", output_path },
+        context(async () => {
+          asks++
+        }),
+      ),
+    ).rejects.toThrow("invalid arguments")
+  }
+  expect(asks).toBe(0)
+  expect(fetches).toBe(0)
+})
+
+test("webfetch rejects an output_path typo before permission or network access", async () => {
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  let fetches = 0
+  let asks = 0
+  globalThis.fetch = (async () => {
+    fetches++
+    return new Response("must not fetch")
+  }) as unknown as typeof fetch
+
+  const webfetch = await WebFetchTool.init()
+  await expect(
+    webfetch.execute(
+      { url: "https://example.com/data", format: "text", outputPath: "data.csv" } as never,
+      context(async () => {
+        asks++
+      }),
+    ),
+  ).rejects.toThrow("invalid arguments")
+  expect(asks).toBe(0)
+  expect(fetches).toBe(0)
 })
 
 test("webfetch asks before reaching a blocked host and fails closed on deny", async () => {
@@ -173,8 +206,8 @@ test("webfetch rejects declared oversized text with terminal pagination and down
     ),
   ).rejects.toThrow(
     "Response is too large for Web fetch (5.0 MiB, application/json); the text-response limit is 5.0 MiB. " +
-      "Do not repeat the same text-mode request. For a data file, call Web fetch again with output_path set to a simple " +
-      "workspace-root filename without directories",
+      "Do not repeat the same text-mode request. For a data file, call Web fetch again with a root-only filename such as " +
+      'output_path:"foo.pdf"',
   )
 })
 
@@ -450,7 +483,7 @@ test("webfetch streams a brokered binary download through a reauthorized redirec
   }
 })
 
-test("webfetch download rejects directories, traversal, and existing destinations before fetching", async () => {
+test("webfetch download gives a copy-ready root-first fallback for a folder destination", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-contained-"))
   await fs.writeFile(path.join(root, "existing.bin"), "keep")
   const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
@@ -467,9 +500,20 @@ test("webfetch download rejects directories, traversal, and existing destination
     await expect(
       webfetch.execute({ url: "https://example.com/data", format: "text", output_path: "../outside.bin" }, ctx),
     ).rejects.toThrow("must be a filename at the root of this session's workspace, without directories")
+    const nested = await captureError(
+      webfetch.execute({ url: "https://example.com/data", format: "text", output_path: "papers/foo.pdf" }, ctx),
+    )
+    expect(nested.message).toBe(
+      "output_path is root-only by design: brokered downloads must not traverse mutable intermediate directories. " +
+        'Retry with output_path:"foo.pdf". Only after that download succeeds, run sandboxed Bash from the workspace: ' +
+        "mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'",
+    )
     await expect(
-      webfetch.execute({ url: "https://example.com/data", format: "text", output_path: "nested/file.bin" }, ctx),
-    ).rejects.toThrow("must be a filename at the root of this session's workspace, without directories")
+      webfetch.execute(
+        { url: "https://example.com/data", format: "text", output_path: path.join(root, "absolute.bin") },
+        ctx,
+      ),
+    ).rejects.toThrow("must be a workspace-root filename, not an absolute path")
     await expect(
       webfetch.execute({ url: "https://example.com/data", format: "text", output_path: "existing.bin" }, ctx),
     ).rejects.toThrow("Refusing to overwrite")
@@ -545,9 +589,14 @@ test("webfetch download rejects a direct final-component symlink escape before f
   }
 })
 
-test("webfetch download stops guessed cap escalation and permits one server-declared retry", async () => {
+test("webfetch uses live disk capacity and blocks a same-turn unchanged retry", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-declared-limit-"))
   const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
+  let safeCapacity = 8
+  const statfs = spyOn(fs, "statfs").mockImplementation(
+    (async () =>
+      ({ bavail: DOWNLOAD_DISK_RESERVE_BYTES + safeCapacity, bsize: 1 }) as StatsFs) as unknown as typeof fs.statfs,
+  )
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
   let cancelled = false
   let fetches = 0
@@ -579,7 +628,6 @@ test("webfetch download stops guessed cap escalation and permits one server-decl
       url: "https://example.com/too-large",
       format: "text" as const,
       output_path: "declared.bin",
-      max_bytes: 8,
     }
     const first = await captureError(
       webfetch.execute(
@@ -588,47 +636,69 @@ test("webfetch download stops guessed cap escalation and permits one server-decl
       ),
     )
     expect(first.message).toContain(
-      "Download exceeds max_bytes (9 bytes > 8 bytes). No destination file was created. Choose a smaller source or explicitly set max_bytes once from the declared size",
+      "Download exceeds the current safe workspace capacity of 8 bytes (8 bytes); response size 9 bytes (9 bytes)",
     )
+    expect(first.message).toContain("computed from live free disk minus the 512.0 MiB (536870912 bytes) host reserve")
     expect(cancelled).toBe(true)
     expect(await fs.readdir(root)).toEqual([])
 
     const history = failedToolHistory(input, first.message, "call_declared_oversize")
-    const guessed = await captureError(
+    const repeated = await captureError(
       webfetch.execute(
-        { ...input, output_path: "guessed.bin", max_bytes: 16 },
+        input,
         context(async () => {}, history),
       ),
     )
-    expect(guessed.message).toContain("another guessed max_bytes escalation was stopped before network access")
-    expect(guessed.message).toContain("The server previously declared exactly 9 bytes")
-    expect(guessed.message).toContain('output_path: "guessed.bin", declared_size_bytes: 9, and max_bytes: 9')
-    await expect(
-      webfetch.execute(
-        { ...input, output_path: "invented.bin", max_bytes: 10, declared_size_bytes: 10 },
-        context(async () => {}, history),
-      ),
-    ).rejects.toThrow("must exactly match the server Content-Length already recorded for this URL (9 bytes)")
+    expect(repeated.message).toContain("already exceeded the live safe workspace capacity of 8 bytes")
+    expect(repeated.message).toContain("stopped before permission or network access")
     expect(fetches).toBe(1)
 
+    safeCapacity = 16
+    const userTurn = {
+      info: {
+        id: "message_user_after_capacity",
+        sessionID: "session_test",
+        role: "user",
+        time: { created: Date.now() + 1_000 },
+        agent: "research",
+        model: { providerID: "test", modelID: "test" },
+      },
+      parts: [
+        {
+          id: "part_user_after_capacity",
+          sessionID: "session_test",
+          messageID: "message_user_after_capacity",
+          type: "text",
+          text: "I freed disk; retry the same download.",
+        },
+      ],
+    } as unknown as Tool.Context["messages"][number]
     const result = await webfetch.execute(
-      { ...input, output_path: "declared.bin", max_bytes: 9, declared_size_bytes: 9 },
-      context(async () => {}, history),
+      // Retired fields from an older caller are accepted as unknown input but
+      // stripped by schema normalization and cannot affect the disk policy.
+      { ...input, max_bytes: 9, declared_size_bytes: 9 } as never,
+      context(async () => {}, [...history, userTurn]),
     )
     expect(result.metadata).toMatchObject({ download: { bytes: 9 } })
     expect(await fs.readFile(path.join(root, "declared.bin"))).toEqual(Buffer.from(payload))
     expect(fetches).toBe(2)
   } finally {
+    statfs.mockRestore()
     workspace.mockRestore()
     await fs.rm(root, { recursive: true, force: true })
   }
 })
 
-test("webfetch download aborts a chunked body at max_bytes and removes the partial temp file", async () => {
+test("webfetch bounds unknown or understated streamed bytes by live safe disk capacity", async () => {
   const base = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-chunk-limit-"))
   const root = path.join(base, "workspace")
   await fs.mkdir(root)
   const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
+  let safeCapacity = 6
+  const statfs = spyOn(fs, "statfs").mockImplementation(
+    (async () =>
+      ({ bavail: DOWNLOAD_DISK_RESERVE_BYTES + safeCapacity, bsize: 1 }) as StatsFs) as unknown as typeof fs.statfs,
+  )
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
   let cancelled = false
   let fetches = 0
@@ -650,7 +720,7 @@ test("webfetch download aborts a chunked body at max_bytes and removes the parti
           cancelled = true
         },
       }),
-      { headers: { "content-type": "application/octet-stream" } },
+      { headers: { "content-type": "application/octet-stream", "content-length": "4" } },
     )
   }) as unknown as typeof fetch
 
@@ -660,7 +730,6 @@ test("webfetch download aborts a chunked body at max_bytes and removes the parti
       url: "https://example.com/chunked-large",
       format: "text" as const,
       output_path: "chunked.bin",
-      max_bytes: 6,
     }
     const first = await captureError(
       webfetch.execute(
@@ -668,79 +737,243 @@ test("webfetch download aborts a chunked body at max_bytes and removes the parti
         context(async () => {}),
       ),
     )
-    expect(first.message).toContain(
-      "Download exceeds max_bytes (6 bytes). Partial data was discarded; use a metadata/listing endpoint to obtain the exact byte size for one evidence-backed retry, choose a smaller or paginated source, or use a different canonical download URL. Do not retry this URL with incrementally larger caps.",
-    )
+    expect(first.message).toContain("Download exceeds the current safe workspace capacity of 6 bytes (6 bytes)")
     expect(cancelled).toBe(true)
     expect(await fs.readdir(root)).toEqual([])
     expect(await fs.readdir(base)).toEqual(["workspace"])
     await expect(
       webfetch.execute(
-        { ...input, max_bytes: 8, declared_size_bytes: 8 },
+        { ...input, max_bytes: 8, declared_size_bytes: 8 } as never,
         context(async () => {}, failedToolHistory(input, first.message, "call_chunked_oversize")),
       ),
-    ).rejects.toThrow("declared_size_bytes needs auditable evidence")
+    ).rejects.toThrow("already exceeded the live safe workspace capacity of 6 bytes")
     expect(fetches).toBe(1)
 
-    const evidenceCallID = "call_size_metadata"
-    const history = [
-      ...failedToolHistory(input, first.message, "call_chunked_oversize"),
-      ...completedToolHistory(
-        { url: "https://example.com/metadata", format: "text" },
-        JSON.stringify({ download_url: input.url, size: 8 }),
-        evidenceCallID,
-      ),
-    ]
-    const recovered = await webfetch.execute(
-      {
-        ...input,
-        max_bytes: 8,
-        declared_size_bytes: 8,
-        declared_size_evidence_call_id: evidenceCallID,
+    safeCapacity = 8
+    const history = failedToolHistory(input, first.message, "call_chunked_oversize")
+    const userTurn = {
+      info: {
+        id: "message_user_after_chunked",
+        sessionID: "session_test",
+        role: "user",
+        time: { created: Date.now() + 1_000 },
+        agent: "research",
+        model: { providerID: "test", modelID: "test" },
       },
-      context(async () => {}, history),
+      parts: [
+        {
+          id: "part_user_after_chunked",
+          sessionID: "session_test",
+          messageID: "message_user_after_chunked",
+          type: "text",
+          text: "Disk is available now; retry.",
+        },
+      ],
+    } as unknown as Tool.Context["messages"][number]
+    const recovered = await webfetch.execute(
+      input,
+      context(async () => {}, [...history, userTurn]),
     )
     expect(recovered.metadata).toMatchObject({ download: { bytes: 8 } })
     expect(fetches).toBe(2)
   } finally {
+    statfs.mockRestore()
     workspace.mockRestore()
     await fs.rm(base, { recursive: true, force: true })
   }
 })
 
-test("webfetch download uses a conservative default byte cap", async () => {
-  expect(DEFAULT_DOWNLOAD_MAX_BYTES).toBe(256 * 1024 * 1024)
-  expect(MAX_DOWNLOAD_MAX_BYTES).toBe(2 * 1024 * 1024 * 1024)
+test("webfetch rechecks the host disk reserve before every streamed write", async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-live-disk-race-"))
+  const root = path.join(base, "workspace")
+  await fs.mkdir(root)
+  const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
+  let statfsCalls = 0
+  const statfs = spyOn(fs, "statfs").mockImplementation((async () => {
+    statfsCalls++
+    // Initial preflight, response preflight, and the first write each see an
+    // 8-byte budget. Before the second write, concurrent disk use leaves one
+    // byte above the reserve; four bytes already staged makes the new total
+    // transfer ceiling exactly five bytes.
+    const safeBytes = statfsCalls < 4 ? 8 : 1
+    return { bavail: DOWNLOAD_DISK_RESERVE_BYTES + safeBytes, bsize: 1 } as StatsFs
+  }) as unknown as typeof fs.statfs)
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  let chunks = 0
+  globalThis.fetch = (async () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (chunks++ < 2) {
+            controller.enqueue(new Uint8Array([1, 2, 3, 4]))
+            return
+          }
+          controller.close()
+        },
+      }),
+      { headers: { "content-type": "application/octet-stream" } },
+    )) as unknown as typeof fetch
 
-  const webfetch = await WebFetchTool.init()
-  await expect(
-    webfetch.execute(
+  try {
+    const webfetch = await WebFetchTool.init()
+    await expect(
+      webfetch.execute(
+        {
+          url: "https://example.com/live-disk-race",
+          format: "text",
+          output_path: "race.bin",
+        },
+        context(async () => {}),
+      ),
+    ).rejects.toThrow(
+      "Download exceeds the current safe workspace capacity of 5 bytes (5 bytes); response size 8 bytes (8 bytes)",
+    )
+    expect(statfsCalls).toBe(4)
+    expect(await fs.readdir(root)).toEqual([])
+    expect(await fs.readdir(base)).toEqual(["workspace"])
+  } finally {
+    statfs.mockRestore()
+    workspace.mockRestore()
+    await fs.rm(base, { recursive: true, force: true })
+  }
+})
+
+test("webfetch classifies storage exhaustion and stops its same-turn retry before network", async () => {
+  for (const storageCode of ["ENOSPC", "EDQUOT"] as const) {
+    const base = await fs.mkdtemp(path.join(os.tmpdir(), `webfetch-${storageCode.toLowerCase()}-`))
+    const root = path.join(base, "workspace")
+    await fs.mkdir(root)
+    const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
+    const statfs = spyOn(fs, "statfs").mockResolvedValue({
+      bavail: DOWNLOAD_DISK_RESERVE_BYTES + 16,
+      bsize: 1,
+    } as StatsFs)
+    await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+    const realOpen = fs.open
+    const open = spyOn(fs, "open").mockImplementation((async (...args: unknown[]) => {
+      const staged = args[0] as Parameters<typeof fs.open>[0]
+      if (!String(staged).includes(".openscience-download-")) {
+        return (realOpen as unknown as (...input: unknown[]) => Promise<fs.FileHandle>)(...args)
+      }
+      if (storageCode === "ENOSPC") {
+        throw Object.assign(new Error(`mock ${storageCode}`), { code: storageCode })
+      }
+      await fs.writeFile(staged, new Uint8Array())
+      return {
+        write: async () => {
+          throw Object.assign(new Error(`mock ${storageCode}`), { code: storageCode })
+        },
+        sync: async () => {},
+        close: async () => {},
+      } as unknown as fs.FileHandle
+    }) as unknown as typeof fs.open)
+    let fetches = 0
+    let asks = 0
+    let cancelled = false
+    globalThis.fetch = (async () => {
+      fetches++
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array([1, 2, 3, 4]))
+          },
+          cancel() {
+            cancelled = true
+          },
+        }),
+        { headers: { "content-type": "application/octet-stream", "content-length": "4" } },
+      )
+    }) as unknown as typeof fetch
+
+    try {
+      const webfetch = await WebFetchTool.init()
+      const input = {
+        url: `https://example.com/${storageCode.toLowerCase()}`,
+        format: "text" as const,
+        output_path: `${storageCode.toLowerCase()}.bin`,
+      }
+      const first = await captureError(
+        webfetch.execute(
+          input,
+          context(async () => {
+            asks++
+          }),
+        ),
+      )
+      expect(first.message).toContain(`workspace storage returned ${storageCode}`)
+      expect(first.message).toContain("current disk-derived workspace capacity is 16 bytes (16 bytes)")
+      expect(cancelled).toBe(true)
+      expect(await fs.readdir(root)).toEqual([])
+      expect(await fs.readdir(base)).toEqual(["workspace"])
+
+      await expect(
+        webfetch.execute(
+          input,
+          context(
+            async () => {
+              asks++
+            },
+            failedToolHistory(input, first.message, `call_${storageCode.toLowerCase()}`),
+          ),
+        ),
+      ).rejects.toThrow("already exceeded the live safe workspace capacity of 16 bytes")
+      expect(fetches).toBe(1)
+      expect(asks).toBe(1)
+    } finally {
+      open.mockRestore()
+      statfs.mockRestore()
+      workspace.mockRestore()
+      await fs.rm(base, { recursive: true, force: true })
+    }
+  }
+})
+
+test("webfetch automatically accepts declared bytes within live capacity and ignores retired caps", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-live-capacity-"))
+  const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
+  const statfs = spyOn(fs, "statfs").mockResolvedValue({
+    bavail: DOWNLOAD_DISK_RESERVE_BYTES + 16,
+    bsize: 1,
+  } as StatsFs)
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  const payload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+  globalThis.fetch = (async () =>
+    new Response(payload, {
+      headers: { "content-type": "application/octet-stream", "content-length": String(payload.byteLength) },
+    })) as unknown as typeof fetch
+
+  try {
+    const webfetch = await WebFetchTool.init()
+    const result = await webfetch.execute(
       {
         url: "https://example.com/data",
         format: "text",
         output_path: "data.bin",
-        max_bytes: MAX_DOWNLOAD_MAX_BYTES + 1,
-      },
+        max_bytes: 1,
+        declared_size_bytes: 1,
+        declared_size_evidence_call_id: "retired",
+      } as never,
       context(async () => {}),
-    ),
-  ).rejects.toThrow("invalid arguments")
+    )
+    expect(result.metadata).toMatchObject({ download: { bytes: payload.byteLength } })
+    expect(await fs.readFile(path.join(root, "data.bin"))).toEqual(Buffer.from(payload))
+  } finally {
+    statfs.mockRestore()
+    workspace.mockRestore()
+    await fs.rm(root, { recursive: true, force: true })
+  }
 })
 
 test("webfetch download preserves a disk reserve before consuming the body", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-disk-reserve-"))
   const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
-  const statfs = spyOn(fs, "statfs").mockResolvedValue({ bavail: 1, bsize: 1 } as Awaited<ReturnType<typeof fs.statfs>>)
+  const statfs = spyOn(fs, "statfs").mockResolvedValue({ bavail: 1, bsize: 1 } as StatsFs)
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
-  let cancelled = false
-  globalThis.fetch = (async () =>
-    new Response(
-      new ReadableStream({
-        cancel() {
-          cancelled = true
-        },
-      }),
-      { headers: { "content-type": "application/octet-stream", "content-length": "4" } },
-    )) as unknown as typeof fetch
+  let fetches = 0
+  globalThis.fetch = (async () => {
+    fetches++
+    return new Response("must not fetch")
+  }) as unknown as typeof fetch
 
   try {
     const webfetch = await WebFetchTool.init()
@@ -750,12 +983,11 @@ test("webfetch download preserves a disk reserve before consuming the body", asy
           url: "https://example.com/data",
           format: "text",
           output_path: "data.bin",
-          max_bytes: 8,
         },
         context(async () => {}),
       ),
-    ).rejects.toThrow("Insufficient workspace disk for download")
-    expect(cancelled).toBe(true)
+    ).rejects.toThrow("current safe workspace capacity of 0 bytes (0 bytes)")
+    expect(fetches).toBe(0)
     expect(await fs.readdir(root)).toEqual([])
   } finally {
     statfs.mockRestore()

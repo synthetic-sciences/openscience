@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
+import z from "zod"
 import { ComputeJobs } from "../../src/compute/jobs"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
-import { createComputeJobTool } from "../../src/tool/compute-job"
+import { ComputeJobParameters, createComputeJobTool } from "../../src/tool/compute-job"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
 type Asked = { permission: string; patterns: string[]; always?: string[]; metadata?: Record<string, unknown> }
@@ -21,6 +22,107 @@ const context = (sessionID: string, asked: Asked[]) => ({
   ask: async (input: Asked) => {
     asked.push(input)
   },
+})
+
+test("advertises the canonical action-discriminated compute schema", () => {
+  const schema = z.toJSONSchema(ComputeJobParameters) as {
+    description?: string
+    anyOf: Array<{
+      properties: Record<string, { const?: string; description?: string; anyOf?: Array<{ type?: string }> }>
+      required: string[]
+    }>
+  }
+  expect(schema.anyOf.map((variant) => variant.properties.action.const)).toEqual([
+    "targets",
+    "plan",
+    "start",
+    "list",
+    "status",
+    "logs",
+    "artifacts",
+    "cancel",
+    "retry_delivery",
+    "release",
+  ])
+  expect(JSON.stringify(schema)).not.toContain('"operation"')
+  const plan = schema.anyOf[1]
+  expect(plan.required).toEqual(["name", "purpose", "command", "target", "action"])
+  expect(plan.properties.target.anyOf?.every((target) => target.type === "object")).toBe(true)
+  expect(schema.description).toContain('{"action":"targets"}')
+  expect(plan.properties.target.description).toContain("never a quoted JSON string")
+})
+
+test("normalizes only unambiguous action aliases and valid JSON-object targets", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const root = path.join(tmp.path, "compute")
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trustProject()
+      const session = await Session.create({})
+      const tool = await createComputeJobTool({ root, workspace: tmp.path }).init()
+      const targets = await tool.execute({ operation: "targets" } as never, context(session.id, []))
+      expect(targets.output).toContain('"kind": "local"')
+
+      const duplicate = await tool.execute(
+        { action: "targets", operation: "targets" } as never,
+        context(session.id, []),
+      )
+      expect(duplicate.output).toContain('"kind": "local"')
+
+      const preview = await tool.execute(
+        {
+          action: "plan",
+          name: "environment probe",
+          purpose: "Check the local runtime before starting work.",
+          command: "python --version",
+          target: '{"kind":"local"}',
+        } as never,
+        context(session.id, []),
+      )
+      expect(preview.output).toContain('"provider": "local"')
+
+      const dispatched = await tool.execute(
+        {
+          action: "start",
+          name: "normalization probe",
+          purpose: "Verify defaulted fields reach compute execution.",
+          command: "printf normalized",
+          target: { kind: "local" },
+        },
+        context(session.id, []),
+      )
+      const job = dispatched.metadata.job
+      if (!job) throw new Error("compute_job did not return its normalization probe")
+      const listed = await tool.execute({ operation: "list" } as never, context(session.id, []))
+      expect(listed.output).toContain(job.id)
+      await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })
+    },
+  })
+})
+
+test("rejects ambiguous or invalid compute shapes with one copy-ready repair", async () => {
+  const tool = await createComputeJobTool().init()
+  await expect(
+    tool.execute({ action: "targets", operation: "plan" } as never, context("ses_validation", [])),
+  ).rejects.toThrow('Use the field "action", not "operation"')
+  await expect(tool.execute({ operation: "inspect" } as never, context("ses_validation", []))).rejects.toThrow(
+    "Valid action values: targets, plan, start, list, status, logs, artifacts, cancel, retry_delivery, release",
+  )
+  await expect(
+    tool.execute(
+      {
+        action: "plan",
+        name: "environment probe",
+        purpose: "Check the local runtime before starting work.",
+        command: "python --version",
+        target: '{"kind":"ssh"}',
+      } as never,
+      context("ses_validation", []),
+    ),
+  ).rejects.toThrow(
+    '{"action":"plan","name":"Environment probe","purpose":"Check the local runtime before starting work.","command":"python --version","target":{"kind":"local"}}',
+  )
 })
 
 test("plans and starts a detached local job through the model-facing broker", async () => {

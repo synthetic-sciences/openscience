@@ -7,7 +7,6 @@ import { accessSync, constants, mkdirSync, statSync, unlinkSync } from "fs"
 import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
-import { Config } from "@/config/config"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Sandbox } from "@/sandbox/sandbox"
 import { KernelQueue } from "@/science/kernel/queue"
@@ -241,6 +240,8 @@ class RKernel implements Kernel {
 
   async start(opts?: KernelStartOptions): Promise<void> {
     if (this.ready) return
+    const policy = opts?.sandboxPolicy
+    if (!policy) throw new Error("R kernel start is missing its authorized sandbox policy")
     this.intentional = false
     this.stderrTail = ""
     const interpreter = await findRscript(opts?.binary)
@@ -266,7 +267,6 @@ class RKernel implements Kernel {
     // Confine the kernel to the workspace when the execution sandbox is on: the R
     // kernel runs arbitrary agent-authored code — the same threat model as the
     // bash tool — so it must respect the same boundary.
-    const policy = await Config.trustedSandbox()
     const sandboxed = Sandbox.wrapArgv({
       file: interpreter.binary,
       args: ["--vanilla", scriptPath],
@@ -274,7 +274,12 @@ class RKernel implements Kernel {
       readable,
       extraWritable: [scriptPath, configPath, ...(opts?.extraWritable ?? [])],
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: { ...policy, ...(opts?.sandboxNetwork ? { network: opts.sandboxNetwork } : {}) },
+      options: {
+        enabled: policy.enabled,
+        network: opts?.sandboxNetwork ?? policy.network,
+        allowWrite: [...policy.allowWrite],
+        onUnavailable: policy.onUnavailable,
+      },
     })
     const cwd = opts?.cwd ?? (opts?.sessionID ? await SessionFilesystem.workspace(opts.sessionID) : Instance.directory)
     this.environment = {
@@ -287,14 +292,18 @@ class RKernel implements Kernel {
       atlas: AtlasEnvironment,
       sandbox: {
         ...Sandbox.describe(),
-        requested: policy?.enabled === true,
+        requested: policy.enabled,
         enforced: sandboxed.sandboxed,
         backend: sandboxed.backend,
-        network: opts?.sandboxNetwork ?? policy?.network ?? "allow",
+        network: opts?.sandboxNetwork ?? policy.network,
         warning: sandboxed.warning,
       },
     }
-    const wrapped = WindowsJobLauncher.wrap({ file: sandboxed.file, args: sandboxed.args })
+    const wrapped = WindowsJobLauncher.wrap({
+      file: sandboxed.file,
+      args: sandboxed.args,
+      linuxOwner: opts?.processOwnership?.linuxOwner,
+    })
     let proc: ChildProcess
     try {
       proc = spawn(wrapped.file, wrapped.args, {
@@ -308,6 +317,7 @@ class RKernel implements Kernel {
         // Own process group so killing the kernel reaps its worker children (#102).
         detached: process.platform !== "win32",
       })
+      WindowsJobLauncher.bind(proc, wrapped.release)
     } catch (error) {
       Sandbox.cleanup(sandboxed)
       throw error
@@ -316,15 +326,19 @@ class RKernel implements Kernel {
     proc.once("error", () => Sandbox.cleanup(sandboxed))
     this.proc = proc
     this.process = KernelProcessIdentity.capture(proc)
+    const ownership = opts?.processOwnership ? { ...opts.processOwnership, windowsRelease: wrapped.release } : undefined
     try {
-      const ownership = opts?.processOwnership
-        ? { ...opts.processOwnership, windowsRelease: wrapped.release }
-        : undefined
       const registered = await KernelProcessIdentity.register(proc, ownership)
       if (!registered) throw new Error("R kernel exited before durable process registration")
       this.process = registered
+      const complete = () => {
+        proc.off("exit", complete)
+        void KernelProcessIdentity.complete(registered).catch(() => undefined)
+      }
+      proc.once("exit", complete)
+      if (proc.exitCode !== null || proc.signalCode !== null) complete()
     } catch (error) {
-      await this.terminate(proc)
+      await this.terminate(proc, ownership?.id)
       throw error
     }
     proc.once("exit", () => {
@@ -461,16 +475,21 @@ class RKernel implements Kernel {
   killSync(): void {
     this.intentional = true
     if (this.proc && KernelProcessIdentity.matches(this.proc, this.process)) {
-      Shell.killTreeSync(this.proc, { detached: process.platform !== "win32" })
+      if (!KernelProcessIdentity.terminateSync(this.process)) {
+        Shell.killTreeSync(this.proc, { detached: process.platform !== "win32" })
+      }
     }
     this.proc = undefined
     this.process = undefined
     this.cleanupScript()
   }
 
-  private terminate(proc: ChildProcess) {
-    if (!KernelProcessIdentity.matches(proc, this.process)) return Promise.resolve()
-    return Shell.killTree(proc, { exited: () => proc.exitCode !== null, detached: process.platform !== "win32" })
+  private async terminate(proc: ChildProcess, pendingOwnershipID?: string) {
+    const identity = this.process
+    if (!KernelProcessIdentity.matches(proc, identity)) return
+    const stopped = await KernelProcessIdentity.terminate(identity, pendingOwnershipID)
+    if (stopped || !KernelProcessIdentity.matches(proc, identity)) return
+    await Shell.killTree(proc, { exited: () => proc.exitCode !== null, detached: process.platform !== "win32" })
   }
 
   private cleanupScript(): void {

@@ -10,6 +10,25 @@ import {
 
 const root = new URL("../../src/", import.meta.url)
 const read = (path: string) => Bun.file(new URL(path, root)).text()
+const webFetchFolderDownload = 'output_path:"foo.pdf"'
+const webFetchFolderMove = "mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'"
+
+test("every WebFetch instruction teaches one root-download then sandboxed-move sequence", async () => {
+  const prompts = await Promise.all([
+    read("session/prompt/core.txt"),
+    read("agent/prompt/research.txt"),
+    read("tool/task.txt"),
+    read("tool/webfetch.txt"),
+  ])
+  for (const prompt of prompts) {
+    expect(prompt).toContain(webFetchFolderDownload)
+    expect(prompt).toContain(webFetchFolderMove)
+    expect(prompt).toContain("only after")
+    expect(prompt).toContain("live free disk")
+    expect(prompt).not.toContain("max_bytes")
+    expect(prompt).not.toContain("declared_size")
+  }
+})
 
 test("every provider receives one compact product operating contract", () => {
   const instructions = SystemPrompt.instructions()

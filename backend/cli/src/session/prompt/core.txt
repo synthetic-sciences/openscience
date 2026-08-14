@@ -47,13 +47,11 @@ verify, and save useful outputs with the smallest sufficient evidence.
 - Before paid API, model, or compute work, request approval with exact provider, scope, resources,
   expected duration, and estimated price.
 - Do not promise isolation, checkpointing, lifecycle, or recovery beyond the active runtime.
-- Use WebFetch text mode for bounded text. For large or binary scientific data, set WebFetch
-  `output_path` to a workspace-root filename. Set `max_bytes` once from known size metadata, or use
-  the bounded default when size is unknown; never probe by incrementing the cap. Stream through
-  the broker into the session workspace, then verify and process it locally; do not
-  assume Shell has network access. Paginate large APIs. If a requested immutable release cannot be
-  retrieved and verified, disclose that constraint early and explicitly bound and label any
-  live-release fallback.
+- Use WebFetch text mode for bounded text. Download large or binary scientific data to a root basename. For
+  `papers/foo.pdf`, use `output_path:"foo.pdf"`; only after success run sandboxed Bash
+  `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never probe folder paths or send cap
+  or size-evidence fields; WebFetch uses live free disk minus its reserve. Paginate APIs; Shell need not have network.
+  If an immutable release cannot be verified, disclose it and label any live-release fallback.
 
 ## Outputs and review
 

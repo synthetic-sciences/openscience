@@ -4,6 +4,7 @@ import { createReadStream } from "node:fs"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Global } from "@/global"
+import { AuthorityProcessLedger } from "@/project/authority-process"
 import { DataRoot } from "./data-root"
 import { DataRootBarrier } from "./data-root-barrier"
 
@@ -237,6 +238,12 @@ export namespace DataRelocation {
       throw new Error("Storage relocation is disabled when OPENSCIENCE_DATA_DIR explicitly owns the data root")
     }
     await using barrier = await DataRootBarrier.exclusive(120_000)
+    // The exclusive barrier drains and blocks every ledger FileLease writer,
+    // including an older server that can still publish pre-containment kernel
+    // records. Read the now-stable ledger without entering a nested barrier;
+    // a retained legacy entry quarantines relocation even after its recorded
+    // leader exits and its child-owned operation marker becomes stale.
+    await AuthorityProcessLedger.assertRelocationSafe()
     // Resolve the physical source only after this process owns the global
     // relocation transaction. A queued second server must snapshot the root
     // selected by the first switch, never the stale root it observed before

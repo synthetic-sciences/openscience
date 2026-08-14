@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
 import { changed, snapshot } from "../../src/science/execution/files"
@@ -10,7 +11,14 @@ describe("execution workspace file observation", () => {
     await Bun.write(path.join(tmp.path, "changed.csv"), "a\n1\n")
     const before = await snapshot(tmp.path)
 
-    await Bun.write(path.join(tmp.path, "changed.csv"), "a\n2\n")
+    const changedPath = path.join(tmp.path, "changed.csv")
+    await Bun.write(changedPath, "a\n2\n")
+    // The observer deliberately fingerprints metadata before hashing bounded
+    // candidates. Pin a later mtime so this same-size rewrite is deterministic
+    // even on filesystems whose timestamp granularity collapses rapid writes.
+    const priorMtime = before.get("changed.csv")?.mtimeMs ?? Date.now()
+    const changedAt = new Date(Math.ceil(priorMtime) + 1_000)
+    await fs.utimes(changedPath, changedAt, changedAt)
     await Bun.write(path.join(tmp.path, "figure.txt"), "result")
     await Bun.write(path.join(tmp.path, ".venv", "ignored.txt"), "dependency")
 

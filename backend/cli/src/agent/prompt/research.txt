@@ -34,13 +34,11 @@ result; internal profiles and skills are implementation details, not user-facing
 - Use persistent Python/R for stateful analysis and shell for builds, tests, files, and scripts.
   Kernel state is working memory, not reproducibility: save source, inputs, parameters, and outputs,
   and clean-rerun material results when practical.
-- Use WebFetch text mode only for bounded pages and API responses. For large or binary science data,
-  set WebFetch `output_path` to a simple workspace-root filename. If metadata gives an exact size,
-  set `max_bytes` once just above it; when size is unknown, omit it to use the bounded default. Never
-  probe the same URL by repeatedly raising the cap.
-  Stream once through the authorized broker into the session workspace, verify its digest, and
-  process it locally. Paginate APIs instead of repeatedly requesting an oversized response. Do not
-  assume Shell has network access.
+- Use WebFetch text mode only for bounded pages and APIs. Download large or binary scientific data to a root
+  basename. For `papers/foo.pdf`, use `output_path:"foo.pdf"`; only after success run sandboxed Bash
+  `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never probe folder paths or send retired
+  cap/size-evidence fields; WebFetch uses live free disk minus its reserve. Verify the brokered download,
+  process it locally, and paginate APIs. Do not assume Shell has network access.
 - Treat an explicitly requested immutable data release as an evidence constraint. If it cannot be
   retrieved and verified, disclose that early; stop that branch or clearly bound and label any
   live-release fallback rather than silently mixing releases.

@@ -152,15 +152,19 @@ export namespace CredentialLifecycle {
   /** Serialize credential-adjacent metadata writes without publishing a revision. */
   export async function serialized<T>(action: () => T | Promise<T>): Promise<T> {
     await using lease = await FileLease.acquire(mutationLock)
-    return await action()
+    return await lease.during(async () => {
+      return await action()
+    })
   }
 
   /** Hold the cross-process mutation lease from freshness check through child
    * spawn and durable owner registration, closing the snapshot-to-spawn race. */
   export async function admit<T>(action: () => T | Promise<T>): Promise<T> {
     await using lease = await FileLease.acquire(mutationLock)
-    await ensureFresh()
-    return await action()
+    return await lease.during(async () => {
+      await ensureFresh()
+      return await action()
+    })
   }
 
   /**
@@ -203,24 +207,26 @@ export namespace CredentialLifecycle {
     let failed = false
     {
       await using lease = await FileLease.acquire(mutationLock)
-      const token = crypto.randomUUID()
-      const base = {
-        version: 1 as const,
-        token,
-        reason,
-        pid: process.pid,
-      }
-      await publish({ ...base, phase: "updating", updated_at: new Date().toISOString() })
+      await lease.during(async () => {
+        const token = crypto.randomUUID()
+        const base = {
+          version: 1 as const,
+          token,
+          reason,
+          pid: process.pid,
+        }
+        await publish({ ...base, phase: "updating", updated_at: new Date().toISOString() })
 
-      try {
-        value = await action()
-      } catch (error) {
-        failed = true
-        failure = error
-      }
+        try {
+          value = await action()
+        } catch (error) {
+          failed = true
+          failure = error
+        }
 
-      ready = { ...base, phase: "ready", updated_at: new Date().toISOString() }
-      await publish(ready)
+        ready = { ...base, phase: "ready", updated_at: new Date().toISOString() }
+        await publish(ready)
+      })
     }
 
     if (options.reconcileLocal === false) seen = ready.token

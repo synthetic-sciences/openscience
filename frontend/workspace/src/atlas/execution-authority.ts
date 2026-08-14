@@ -16,6 +16,7 @@ export type ExecutionCapability =
 export interface ExecutionDecision {
   allowed: boolean
   reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+  message?: string
   capability: ExecutionCapability
   mode: "read_only" | "sandboxed" | "host"
   projectID: string
@@ -30,6 +31,7 @@ export interface ExecutionDecision {
     network: "allow" | "deny"
     allowWrite: string[]
     onUnavailable: "warn" | "error" | "allow"
+    requireProjectTrust?: boolean
     backend: "seatbelt" | "bubblewrap" | "none"
     available: boolean
     enforced: boolean
@@ -114,6 +116,7 @@ export function createExecutionAuthorityAPI(request: ProjectRequest) {
 
 export function executionAuthorityMessage(decision: ExecutionDecision): string | undefined {
   if (decision.allowed) return
+  if (decision.message) return decision.message
   const action = labels[decision.capability]
   if (decision.reason === "project_untrusted") return `Trust this project to ${action} in this session.`
   return `A verified OS sandbox is required to ${action}. OpenScience could not enforce one on this computer.`

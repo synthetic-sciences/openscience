@@ -115,6 +115,11 @@ export namespace CredentialProcessLedger {
     }
   }
 
+  async function serialized<T>(action: () => Promise<T>): Promise<T> {
+    await using lease = await FileLease.acquire(lockpath)
+    return await lease.during(action)
+  }
+
   function alive(pid: number): boolean {
     try {
       process.kill(pid, 0)
@@ -465,128 +470,131 @@ export namespace CredentialProcessLedger {
     }
     // Close the capture/check window before publishing durable ownership.
     if (!(await owns(input.pid, processIdentity))) return false
-    await using lease = await FileLease.acquire(lockpath)
-    const entries = await read()
-    const index = entries.findIndex((entry) => entry.id === input.id)
-    // Replacing an ID without first closing its named Job would leave the old
-    // tree contained but unreachable from the durable ledger.
-    if ((process.platform === "win32" || process.platform === "darwin") && index >= 0) {
-      await teardownGroup(entries[index]!)
-    }
-    let darwinResponsibility: string | undefined
-    const windowsJob =
-      process.platform === "win32"
-        ? WindowsJob.assign({ id: input.id, pid: input.pid, expectedIdentity: processIdentity })
-        : undefined
-    const next: Entry = {
-      version: 1,
-      id: input.id,
-      kind: input.kind,
-      pid: input.pid,
-      detached: input.detached,
-      ...(windowsJob ? { windows_job: windowsJob } : {}),
-      ...(process.platform === "linux" && input.windowsRelease ? { linux_subreaper: true } : {}),
-      identity: processIdentity,
-      owner_pid: process.pid,
-      created_at: new Date().toISOString(),
-      ...(input.projectID ? { project_id: input.projectID } : {}),
-      ...(input.sessionID ? { session_id: input.sessionID } : {}),
-      ...(input.authorityGeneration ? { authority_generation: input.authorityGeneration } : {}),
-    }
-    if (index < 0) entries.push(next)
-    else entries[index] = next
-    await write(entries).catch((error) => {
-      if (windowsJob) WindowsJob.terminate(windowsJob)
-      throw error
-    })
-    if (windowsJob && input.windowsRelease) {
-      try {
-        WindowsJob.release(input.windowsRelease, input.pid)
-      } catch (error) {
-        await teardownGroup(next)
-        await write(entries.filter((entry) => entry.id !== input.id))
-        throw error
+    return serialized(async () => {
+      const entries = await read()
+      const index = entries.findIndex((entry) => entry.id === input.id)
+      // Replacing an ID without first closing its named Job would leave the old
+      // tree contained but unreachable from the durable ledger.
+      if ((process.platform === "win32" || process.platform === "darwin") && index >= 0) {
+        await teardownGroup(entries[index]!)
       }
-    }
-    if (process.platform === "darwin" && input.windowsRelease) {
-      try {
-        await fs.writeFile(input.windowsRelease, String(input.pid), { encoding: "utf8", flag: "wx", mode: 0o600 })
-        for (let attempt = 0; attempt < 3_000; attempt++) {
-          if (!(await owns(input.pid, processIdentity))) break
-          if (DarwinResponsibility.responsible(input.pid) === input.pid) {
-            darwinResponsibility = DarwinResponsibility.unique(input.pid)
-            if (darwinResponsibility) break
-          }
-          if (attempt === 2_999) {
-            throw new Error(
-              `Credential-bearing ${input.kind} child ${input.pid} did not become a macOS responsibility root`,
-            )
-          }
-          await Bun.sleep(10)
+      let darwinResponsibility: string | undefined
+      const windowsJob =
+        process.platform === "win32"
+          ? WindowsJob.assign({ id: input.id, pid: input.pid, expectedIdentity: processIdentity })
+          : undefined
+      const next: Entry = {
+        version: 1,
+        id: input.id,
+        kind: input.kind,
+        pid: input.pid,
+        detached: input.detached,
+        ...(windowsJob ? { windows_job: windowsJob } : {}),
+        ...(process.platform === "linux" && input.windowsRelease ? { linux_subreaper: true } : {}),
+        identity: processIdentity,
+        owner_pid: process.pid,
+        created_at: new Date().toISOString(),
+        ...(input.projectID ? { project_id: input.projectID } : {}),
+        ...(input.sessionID ? { session_id: input.sessionID } : {}),
+        ...(input.authorityGeneration ? { authority_generation: input.authorityGeneration } : {}),
+      }
+      if (index < 0) entries.push(next)
+      else entries[index] = next
+      await write(entries).catch((error) => {
+        if (windowsJob) WindowsJob.terminate(windowsJob)
+        throw error
+      })
+      if (windowsJob && input.windowsRelease) {
+        try {
+          WindowsJob.release(input.windowsRelease, input.pid)
+        } catch (error) {
+          await teardownGroup(next)
+          await write(entries.filter((entry) => entry.id !== input.id))
+          throw error
         }
-      } catch (error) {
+      }
+      if (process.platform === "darwin" && input.windowsRelease) {
+        try {
+          await fs.writeFile(input.windowsRelease, String(input.pid), { encoding: "utf8", flag: "wx", mode: 0o600 })
+          for (let attempt = 0; attempt < 3_000; attempt++) {
+            if (!(await owns(input.pid, processIdentity))) break
+            if (DarwinResponsibility.responsible(input.pid) === input.pid) {
+              darwinResponsibility = DarwinResponsibility.unique(input.pid)
+              if (darwinResponsibility) break
+            }
+            if (attempt === 2_999) {
+              throw new Error(
+                `Credential-bearing ${input.kind} child ${input.pid} did not become a macOS responsibility root`,
+              )
+            }
+            await Bun.sleep(10)
+          }
+        } catch (error) {
+          await teardownGroup(next)
+          await write(entries.filter((entry) => entry.id !== input.id))
+          throw error
+        }
+      }
+      if (darwinResponsibility) {
+        next.darwin_responsibility_uniqueid = darwinResponsibility
+        const position = entries.findIndex((entry) => entry.id === input.id)
+        if (position >= 0) entries[position] = next
+        await write(entries)
+        try {
+          await fs.writeFile(`${input.windowsRelease}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, String(input.pid), {
+            encoding: "utf8",
+            flag: "wx",
+            mode: 0o600,
+          })
+        } catch (error) {
+          await teardownGroup(next)
+          await write(entries.filter((entry) => entry.id !== input.id))
+          throw error
+        }
+      }
+      if (darwinResponsibility && !DarwinResponsibility.uniquelyOwns(darwinResponsibility, input.pid)) {
         await teardownGroup(next)
         await write(entries.filter((entry) => entry.id !== input.id))
-        throw error
+        throw new Error(`Credential-bearing ${input.kind} child ${input.pid} failed macOS responsibility handoff`)
       }
-    }
-    if (darwinResponsibility) {
-      next.darwin_responsibility_uniqueid = darwinResponsibility
-      const position = entries.findIndex((entry) => entry.id === input.id)
-      if (position >= 0) entries[position] = next
-      await write(entries)
-      try {
-        await fs.writeFile(`${input.windowsRelease}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, String(input.pid), {
-          encoding: "utf8",
-          flag: "wx",
-          mode: 0o600,
-        })
-      } catch (error) {
-        await teardownGroup(next)
+      // Persist first, then close the final observation window. If the leader
+      // exited during publication, durable ownership already exists and can
+      // reap every surviving original-group member before reporting a failed
+      // spawn. A teardown failure deliberately leaves the entry on disk.
+      if (
+        !(await owns(input.pid, processIdentity)) ||
+        (windowsJob && !WindowsJob.contains(windowsJob, input.pid)) ||
+        (darwinResponsibility && !DarwinResponsibility.uniquelyOwns(darwinResponsibility, input.pid))
+      ) {
+        if (next.detached || windowsJob) await teardownGroup(next)
         await write(entries.filter((entry) => entry.id !== input.id))
-        throw error
+        return false
       }
-    }
-    if (darwinResponsibility && !DarwinResponsibility.uniquelyOwns(darwinResponsibility, input.pid)) {
-      await teardownGroup(next)
-      await write(entries.filter((entry) => entry.id !== input.id))
-      throw new Error(`Credential-bearing ${input.kind} child ${input.pid} failed macOS responsibility handoff`)
-    }
-    // Persist first, then close the final observation window. If the leader
-    // exited during publication, durable ownership already exists and can
-    // reap every surviving original-group member before reporting a failed
-    // spawn. A teardown failure deliberately leaves the entry on disk.
-    if (
-      !(await owns(input.pid, processIdentity)) ||
-      (windowsJob && !WindowsJob.contains(windowsJob, input.pid)) ||
-      (darwinResponsibility && !DarwinResponsibility.uniquelyOwns(darwinResponsibility, input.pid))
-    ) {
-      if (next.detached || windowsJob) await teardownGroup(next)
-      await write(entries.filter((entry) => entry.id !== input.id))
-      return false
-    }
-    return true
+      return true
+    })
   }
 
   export async function remove(id: string): Promise<void> {
-    await using lease = await FileLease.acquire(lockpath)
-    const entries = await read()
-    const remaining = entries.filter((entry) => entry.id !== id)
-    if (remaining.length !== entries.length) await write(remaining)
+    return serialized(async () => {
+      const entries = await read()
+      const remaining = entries.filter((entry) => entry.id !== id)
+      if (remaining.length !== entries.length) await write(remaining)
+    })
   }
 
   /** Remove a normal-completion entry only after its exact process and every
    * same-group descendant are gone. Background work is reaped before durable
    * credential ownership can be dropped. */
   export async function complete(id: string): Promise<boolean> {
-    await using lease = await FileLease.acquire(lockpath)
-    const entries = await read()
-    const entry = entries.find((item) => item.id === id)
-    if (!entry) return true
-    if (await owns(entry.pid, entry.identity)) return false
-    if (entry.detached || entry.windows_job) await teardownGroup(entry)
-    await write(entries.filter((item) => item.id !== id))
-    return true
+    return serialized(async () => {
+      const entries = await read()
+      const entry = entries.find((item) => item.id === id)
+      if (!entry) return true
+      if (await owns(entry.pid, entry.identity)) return false
+      if (entry.detached || entry.windows_job) await teardownGroup(entry)
+      await write(entries.filter((item) => item.id !== id))
+      return true
+    })
   }
 
   async function killExactProcess(entry: Entry): Promise<boolean> {
@@ -637,33 +645,34 @@ export namespace CredentialProcessLedger {
 
   /** Kill exact, identity-matched children even when their owner server died. */
   export async function revoke(scope?: Kind | Scope, options: RevokeOptions = {}): Promise<number> {
-    await using lease = await FileLease.acquire(lockpath)
-    const entries = await read()
-    const retained: Entry[] = []
-    let killed = 0
-    const failures: unknown[] = []
-    for (const entry of entries) {
-      const match =
-        typeof scope === "string"
-          ? entry.kind === scope
-          : (!scope?.id || entry.id === scope.id) &&
-            (!scope?.kind || entry.kind === scope.kind) &&
-            (!scope?.projectID || !entry.project_id || entry.project_id === scope.projectID) &&
-            (!scope?.sessionID || !entry.session_id || entry.session_id === scope.sessionID)
-      if (!match) {
-        retained.push(entry)
-        continue
+    return serialized(async () => {
+      const entries = await read()
+      const retained: Entry[] = []
+      let killed = 0
+      const failures: unknown[] = []
+      for (const entry of entries) {
+        const match =
+          typeof scope === "string"
+            ? entry.kind === scope
+            : (!scope?.id || entry.id === scope.id) &&
+              (!scope?.kind || entry.kind === scope.kind) &&
+              (!scope?.projectID || !entry.project_id || entry.project_id === scope.projectID) &&
+              (!scope?.sessionID || !entry.session_id || entry.session_id === scope.sessionID)
+        if (!match) {
+          retained.push(entry)
+          continue
+        }
+        try {
+          if (await teardown(entry, options)) killed++
+        } catch (error) {
+          retained.push(entry)
+          failures.push(error)
+        }
       }
-      try {
-        if (await teardown(entry, options)) killed++
-      } catch (error) {
-        retained.push(entry)
-        failures.push(error)
-      }
-    }
-    await write(retained)
-    if (failures.length) throw new AggregateError(failures, "Credential-bearing child revocation failed")
-    return killed
+      await write(retained)
+      if (failures.length) throw new AggregateError(failures, "Credential-bearing child revocation failed")
+      return killed
+    })
   }
 
   export function pathForTests(): string {

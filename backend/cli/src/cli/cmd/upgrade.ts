@@ -2,8 +2,9 @@ import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
+import { cmd } from "./cmd"
 
-export const UpgradeCommand = {
+export const UpgradeCommand = cmd({
   command: "upgrade [target]",
   describe: "upgrade openscience to the latest or a specific version",
   builder: (yargs: Argv) => {
@@ -68,4 +69,4 @@ export const UpgradeCommand = {
     spinner.stop("Upgrade complete")
     prompts.outro("Done")
   },
-}
+})

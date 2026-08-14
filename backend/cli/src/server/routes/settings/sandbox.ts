@@ -13,6 +13,7 @@ const PatchSchema = z.object({
   network: z.enum(["allow", "deny"]).optional(),
   allowWrite: z.array(z.string().trim().min(1).max(4096)).max(64).optional(),
   onUnavailable: z.enum(["warn", "error", "allow"]).optional(),
+  requireProjectTrust: z.boolean().optional(),
 })
 
 async function currentConfig() {

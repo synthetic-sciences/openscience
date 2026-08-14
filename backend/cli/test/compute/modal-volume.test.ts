@@ -2,12 +2,46 @@ import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { ModalVolume } from "../../src/compute/modal/volume"
+import { CredentialProcessLedger } from "../../src/credentials/process-ledger"
 
 const roots: string[] = []
+
+type LedgerEntry = {
+  id: string
+  kind: string
+  pid: number
+  identity: string
+}
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })))
 })
+
+async function ledger(): Promise<LedgerEntry[]> {
+  return Bun.file(CredentialProcessLedger.pathForTests())
+    .json()
+    .catch(() => []) as Promise<LedgerEntry[]>
+}
+
+async function waitText(file: string) {
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const value = await Bun.file(file)
+      .text()
+      .catch(() => undefined)
+    if (value?.trim()) return value.trim()
+    await Bun.sleep(10)
+  }
+  throw new Error(`Timed out waiting for ${file}`)
+}
+
+async function waitEntry(previous: Set<string>) {
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const entry = (await ledger()).find((item) => item.kind === "modal-volume" && !previous.has(item.id))
+    if (entry) return entry
+    await Bun.sleep(10)
+  }
+  throw new Error("Timed out waiting for the Modal Volume bridge ledger entry")
+}
 
 async function fixture() {
   const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-volume-"))
@@ -174,6 +208,60 @@ describe("ModalVolume", () => {
     ])
     expect(downloaded.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256))).toBe(true)
     expect(await Bun.file(path.join(item.staging, "outputs", "model.bin")).text()).toBe("weights")
+  }, 30_000)
+
+  test("request abort revokes a blocked durable download bridge before rejecting", async () => {
+    const item = await fixture()
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const blocker = path.join(item.root, "blocked-download.py")
+    const marker = path.join(item.staging, "started")
+    await Bun.write(
+      blocker,
+      [
+        "import json, os, sys, time",
+        "request = json.load(sys.stdin)",
+        "marker = os.path.join(request['staging'], 'started')",
+        "with open(marker, 'w') as handle:",
+        "    handle.write(str(os.getpid()))",
+        "    handle.flush()",
+        "    os.fsync(handle.fileno())",
+        "time.sleep(600)",
+      ].join("\n"),
+    )
+    const previous = new Set((await ledger()).map((entry) => entry.id))
+    const controller = new AbortController()
+    const reason = new DOMException("browser disconnected", "AbortError")
+    const running = ModalVolume.download(
+      { ...item.context, command: [python, "-I", blocker] },
+      "job-volume",
+      ["outputs/model.bin"],
+      item.staging,
+      controller.signal,
+    ).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    let entry: LedgerEntry | undefined
+
+    try {
+      const active = await Promise.all([waitText(marker), waitEntry(previous)]).then(([, value]) => value)
+      entry = active
+      expect(await CredentialProcessLedger.owns(active.pid, active.identity)).toBe(true)
+      controller.abort(reason)
+      const result = await running
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error("The blocked Modal Volume download unexpectedly completed")
+      expect(result.error).toBe(reason)
+      expect(await CredentialProcessLedger.owns(active.pid, active.identity)).toBe(false)
+      expect((await ledger()).some((item) => item.id === active.id)).toBe(false)
+    } finally {
+      controller.abort(reason)
+      await running
+      if (entry) {
+        await CredentialProcessLedger.revoke({ id: entry.id, kind: "modal-volume" }).catch(() => undefined)
+      }
+    }
   }, 30_000)
 
   test("waits for a durable marker inside one driver process", async () => {

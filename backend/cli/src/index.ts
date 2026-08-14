@@ -46,8 +46,8 @@ import {
   DARWIN_RESPONSIBILITY_LAUNCHER_ARG,
   DarwinResponsibilityLauncher,
 } from "./process/darwin-responsibility-launcher"
-import { DataRootBarrier } from "./global/data-root-barrier"
 import { Global } from "./global"
+import { disposeDataRootOperation, runDataRootMiddleware } from "./cli/cmd/cmd"
 
 if (process.argv[2] === WINDOWS_JOB_LAUNCHER_ARG) {
   try {
@@ -88,8 +88,6 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-const cliDataRootOperation = { current: undefined as AsyncDisposable | undefined }
-
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("openscience")
@@ -108,50 +106,48 @@ const cli = yargs(hideBin(process.argv))
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
   .middleware(async (opts) => {
-    const command = typeof opts._[0] === "string" ? opts._[0] : "web"
-    if (command !== "web" && command !== "serve" && !cliDataRootOperation.current) {
-      // Non-server CLI commands can mutate the same local stores as a running
-      // workspace. Hold one cross-process operation marker for the entire
-      // command so a live relocation either precedes it or waits for it.
-      cliDataRootOperation.current = await DataRootBarrier.enter(Global.Path.data, 120_000)
+    const initialize = async () => {
+      await Log.init({
+        print: process.argv.includes("--print-logs"),
+        dev: Installation.isLocal(),
+        level: (() => {
+          if (opts.logLevel) return opts.logLevel as Log.Level
+          if (Installation.isLocal()) return "DEBUG"
+          return "INFO"
+        })(),
+      })
+      OpenScience.reportApiBaseOverride()
+
+      process.env.AGENT = "1"
+      process.env.OPENSCIENCE = "1"
+
+      Log.Default.info("openscience", {
+        version: Installation.VERSION,
+        args: process.argv.slice(2),
+      })
+
+      // Cheap /sync/version probe (10s TTL). When the server-side version
+      // has changed, a full /api/cli/sync runs in the background so the new
+      // env applies to the NEXT command — the current one uses whatever is
+      // already cached on disk. Replaces a blocking 5s Promise.race that
+      // ran on every invocation regardless of staleness.
+      await OpenScience.refreshIfStale().catch(() => {})
+
+      // Inject decrypted service credentials (settings ▸ Credentials) into the
+      // process env so skills/tools/connectors actually use them. Dynamic import
+      // keeps the credential route module out of every command's static graph.
+      await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
+
+      // Legacy skill-based compute providers still consume their enabled keys
+      // from subprocess environments. Modal remains adapter-only.
+      await import("./server/routes/settings/compute").then((m) => m.ComputeSettings.applyComputeEnv()).catch(() => {})
+
+      // Retry any failed usage reports from previous sessions
+      OpenScience.flushPendingUsage().catch(() => {})
     }
-    await Log.init({
-      print: process.argv.includes("--print-logs"),
-      dev: Installation.isLocal(),
-      level: (() => {
-        if (opts.logLevel) return opts.logLevel as Log.Level
-        if (Installation.isLocal()) return "DEBUG"
-        return "INFO"
-      })(),
-    })
-    OpenScience.reportApiBaseOverride()
 
-    process.env.AGENT = "1"
-    process.env.OPENSCIENCE = "1"
-
-    Log.Default.info("openscience", {
-      version: Installation.VERSION,
-      args: process.argv.slice(2),
-    })
-
-    // Cheap /sync/version probe (10s TTL). When the server-side version
-    // has changed, a full /api/cli/sync runs in the background so the new
-    // env applies to the NEXT command — the current one uses whatever is
-    // already cached on disk. Replaces a blocking 5s Promise.race that
-    // ran on every invocation regardless of staleness.
-    await OpenScience.refreshIfStale().catch(() => {})
-
-    // Inject decrypted service credentials (settings ▸ Credentials) into the
-    // process env so skills/tools/connectors actually use them. Dynamic import
-    // keeps the credential route module out of every command's static graph.
-    await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
-
-    // Legacy skill-based compute providers still consume their enabled keys
-    // from subprocess environments. Modal remains adapter-only.
-    await import("./server/routes/settings/compute").then((m) => m.ComputeSettings.applyComputeEnv()).catch(() => {})
-
-    // Retry any failed usage reports from previous sessions
-    OpenScience.flushPendingUsage().catch(() => {})
+    const command = typeof opts._[0] === "string" ? opts._[0] : undefined
+    return await runDataRootMiddleware(command, Global.Path.data, initialize)
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")
@@ -202,53 +198,55 @@ const cli = yargs(hideBin(process.argv))
   })
   .strict()
 
-try {
-  await cli.parse()
-} catch (e) {
-  let data: Record<string, any> = {}
-  if (e instanceof NamedError) {
-    const obj = e.toObject()
-    Object.assign(data, {
-      ...obj.data,
-    })
-  }
+async function run() {
+  try {
+    await cli.parse()
+  } catch (e) {
+    let data: Record<string, any> = {}
+    if (e instanceof NamedError) {
+      const obj = e.toObject()
+      Object.assign(data, {
+        ...obj.data,
+      })
+    }
 
-  if (e instanceof Error) {
-    Object.assign(data, {
-      name: e.name,
-      message: e.message,
-      cause: e.cause?.toString(),
-      stack: e.stack,
-    })
-  }
+    if (e instanceof Error) {
+      Object.assign(data, {
+        name: e.name,
+        message: e.message,
+        cause: e.cause?.toString(),
+        stack: e.stack,
+      })
+    }
 
-  if (e instanceof ResolveMessage) {
-    Object.assign(data, {
-      name: e.name,
-      message: e.message,
-      code: e.code,
-      specifier: e.specifier,
-      referrer: e.referrer,
-      position: e.position,
-      importKind: e.importKind,
-    })
+    if (e instanceof ResolveMessage) {
+      Object.assign(data, {
+        name: e.name,
+        message: e.message,
+        code: e.code,
+        specifier: e.specifier,
+        referrer: e.referrer,
+        position: e.position,
+        importKind: e.importKind,
+      })
+    }
+    Log.Default.error("fatal", data)
+    const formatted = FormatError(e)
+    if (formatted) UI.error(formatted)
+    if (formatted === undefined) {
+      UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
+      console.error(e instanceof Error ? e.message : String(e))
+    }
+    process.exitCode = 1
+  } finally {
+    // Some subprocesses don't react properly to SIGTERM and similar signals.
+    // Most notably, some docker-container-based MCP servers don't handle such signals unless
+    // run using `docker run --init`.
+    // Explicitly exit to avoid any hanging subprocesses.
+    await disposeDataRootOperation().catch(() => undefined)
+    await Log.flush().catch(() => undefined)
+    process.exit()
   }
-  Log.Default.error("fatal", data)
-  const formatted = FormatError(e)
-  if (formatted) UI.error(formatted)
-  if (formatted === undefined) {
-    UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
-    console.error(e instanceof Error ? e.message : String(e))
-  }
-  process.exitCode = 1
-} finally {
-  // Some subprocesses don't react properly to SIGTERM and similar signals.
-  // Most notably, some docker-container-based MCP servers don't handle such signals unless
-  // run using `docker run --init`.
-  // Explicitly exit to avoid any hanging subprocesses.
-  if (cliDataRootOperation.current) {
-    await Promise.resolve(cliDataRootOperation.current[Symbol.asyncDispose]()).catch(() => undefined)
-  }
-  await Log.flush().catch(() => undefined)
-  process.exit()
 }
+
+await run()

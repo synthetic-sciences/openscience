@@ -2,7 +2,12 @@ import { expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { spawn } from "node:child_process"
 import { DarwinResponsibility } from "../../src/process/darwin-responsibility"
+import {
+  DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX,
+  DarwinResponsibilityLauncher,
+} from "../../src/process/darwin-responsibility-launcher"
 
 async function text(file: string, attempt = 0): Promise<string> {
   const value = await fs.readFile(file, "utf8").catch(() => undefined)
@@ -22,6 +27,64 @@ async function gone(pid: number, attempt = 0): Promise<boolean> {
   await Bun.sleep(10)
   return gone(pid, attempt + 1)
 }
+
+async function independentRoot(pid: number, attempt = 0): Promise<void> {
+  if (DarwinResponsibility.responsible(pid) === pid && DarwinResponsibility.unique(pid)) return
+  if (attempt >= 500) throw new Error(`Timed out waiting for responsibility root ${pid}`)
+  await Bun.sleep(10)
+  return independentRoot(pid, attempt + 1)
+}
+
+test.skipIf(process.platform !== "darwin")(
+  "SIGTERM before the Darwin activation gate cannot default-kill the responsibility root",
+  async () => {
+    expect(DarwinResponsibility.available()).toBe(true)
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-darwin-responsibility-signal-"))
+    const payload = path.join(root, "payload-ran")
+    const latchReady = path.join(root, "latch-ready")
+    const wrapped = DarwinResponsibilityLauncher.wrap({
+      file: process.execPath,
+      args: ["-e", `await Bun.write(${JSON.stringify(payload)}, "unsafe")`],
+    })
+    if (!wrapped.release) throw new Error("Darwin responsibility launch did not create a registration gate")
+    const child = spawn(wrapped.file, wrapped.args, {
+      cwd: path.resolve(import.meta.dir, "../.."),
+      detached: true,
+      env: {
+        ...process.env,
+        OPENSCIENCE_TEST_HOME: root,
+        OPENSCIENCE_DARWIN_SUPERVISOR_TEST_READY: latchReady,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    })
+    let stderr = ""
+    child.stderr?.setEncoding("utf8")
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk
+    })
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      child.once("exit", (code, signal) => resolve({ code, signal }))
+    })
+    try {
+      await fs.writeFile(wrapped.release, String(child.pid), { encoding: "utf8", flag: "wx", mode: 0o600 })
+      await independentRoot(child.pid!)
+      // Stage two has installed its native latch and is blocked on the separate
+      // activation marker. Signal before project code is admitted.
+      expect(Number(await text(latchReady))).toBe(child.pid!)
+      process.kill(child.pid!, "SIGTERM")
+      const outcome = await exited
+      expect(outcome.signal, stderr).toBeNull()
+      expect(outcome.code, stderr).toBe(143)
+      expect(await Bun.file(payload).exists()).toBe(false)
+    } finally {
+      child.kill("SIGKILL")
+      await fs.rm(wrapped.release, { force: true })
+      await fs.rm(`${wrapped.release}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, { force: true })
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+  15_000,
+)
 
 test.skipIf(process.platform !== "darwin")(
   "kernel responsibility tracks a setsid double-fork after it reparents to launchd",

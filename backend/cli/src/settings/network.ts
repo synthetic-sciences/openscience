@@ -4,6 +4,7 @@ import { BlockList, isIP } from "net"
 import { lookup } from "node:dns/promises"
 import { request as httpRequest } from "node:http"
 import { request as httpsRequest } from "node:https"
+import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import { domainToASCII } from "url"
 import z from "zod"
@@ -11,6 +12,7 @@ import { Global } from "../global"
 import { Lock } from "../util/lock"
 import { Log } from "../util/log"
 import { DataRootBarrier } from "@/global/data-root-barrier"
+import { FileLease } from "@/util/file-lease"
 
 // Outbound domain allow-list. A catalog of curated science/package domain
 // sets (each toggleable as a group) plus a validated list of custom domains.
@@ -208,6 +210,10 @@ export namespace Network {
 
   const file = path.join(Global.Path.data, "settings", "network.json")
   const lock = "settings:network"
+  // Keep the cross-process lease outside the relocatable data root. Holding an
+  // in-root FileLease operation and then entering the barrier again to publish
+  // can deadlock with a relocation intent that lands between those two steps.
+  const mutationLease = path.join(Global.Path.config, "network-settings.lock")
   const version = 2
   const legacyClinicalGroup = "clinical-pharma"
   const legacyClinicalCustom = "go.drugbank.com"
@@ -336,38 +342,66 @@ export namespace Network {
     return denied()
   }
 
-  export async function get(): Promise<State> {
+  type EffectiveState = { kind: "resolved"; state: State } | { kind: "migrate"; state: State }
+
+  async function effectiveState(): Promise<EffectiveState> {
     const stored = await readStoredFile()
-    if (stored.kind === "missing") return defaults()
-    if (stored.kind === "unreadable") return invalidState(stored.error)
-
+    if (stored.kind === "missing") return { kind: "resolved", state: defaults() }
+    if (stored.kind === "unreadable") return { kind: "resolved", state: invalidState(stored.error) }
     const decoded = decodeStoredState(stored.text)
-    if (decoded.kind === "current") return decoded.state
-    if (decoded.kind === "invalid") return invalidState(decoded.reason)
+    if (decoded.kind === "current") return { kind: "resolved", state: decoded.state }
+    if (decoded.kind === "invalid") return { kind: "resolved", state: invalidState(decoded.reason) }
+    return decoded
+  }
 
-    // Migrations are serialized and re-read under the same lock used by set(),
-    // so concurrent readers cannot overwrite a newer explicit policy.
-    using _ = await Lock.write(lock)
-    const latest = await readStoredFile()
-    if (latest.kind === "missing") return defaults()
-    if (latest.kind === "unreadable") return invalidState(latest.error)
-    const current = decodeStoredState(latest.text)
-    if (current.kind === "current") return current.state
-    if (current.kind === "invalid") return invalidState(current.reason)
-    return persist(current.state)
+  async function mutation<T>(action: () => Promise<T>): Promise<T> {
+    return DataRootBarrier.during(file, async () => {
+      using _ = await Lock.write(lock)
+      await using lease = await FileLease.acquire(mutationLease)
+      return await lease.during(action)
+    })
+  }
+
+  async function effectiveStateUnderMutation(): Promise<State> {
+    const current = await effectiveState()
+    return current.kind === "migrate" ? persist(current.state) : current.state
+  }
+
+  export async function get(): Promise<State> {
+    const current = await effectiveState()
+    if (current.kind === "resolved") return current.state
+    // Re-read after both the process-local lock and stable cross-process lease.
+    // A set/allow from another process may have replaced the legacy state while
+    // this caller waited and must never be overwritten by a stale migration.
+    return mutation(effectiveStateUnderMutation)
   }
 
   async function persist(state: State): Promise<State> {
     await using operation = await DataRootBarrier.enter(file)
     await fs.mkdir(path.dirname(file), { recursive: true })
-    await Bun.write(file, JSON.stringify({ version, ...state }, null, 2))
-    return state
+    const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`
+    try {
+      const handle = await fs.open(temporary, "wx", 0o600)
+      await handle
+        .writeFile(JSON.stringify({ version, ...state }, null, 2), "utf8")
+        .then(() => handle.sync())
+        .finally(() => handle.close())
+      await fs.rename(temporary, file)
+      // The file sync makes its contents durable; syncing the parent also
+      // makes the rename durable where the platform supports directory fsync.
+      const directory = await fs.open(path.dirname(file), "r").catch(() => undefined)
+      await directory?.sync().catch(() => undefined)
+      await directory?.close().catch(() => undefined)
+      return state
+    } catch (error) {
+      await fs.rm(temporary, { force: true }).catch(() => undefined)
+      throw error
+    }
   }
 
   export async function set(input: State): Promise<State> {
     const state = State.parse(input)
-    using _ = await Lock.write(lock)
-    return persist(state)
+    return mutation(() => persist(state))
   }
 
   // Effective flat list of allowed domains (enabled groups union custom).
@@ -417,10 +451,11 @@ export namespace Network {
    * one another inside the backend process. */
   export async function allow(domain: string): Promise<State> {
     const host = canonicalDomain(domain)
-    using _ = await Lock.write(lock)
-    const state = await get()
-    if (domains(state).includes(host)) return state
-    return persist(State.parse({ ...state, custom: [...state.custom, host] }))
+    return mutation(async () => {
+      const state = await effectiveStateUnderMutation()
+      if (domains(state).includes(host)) return state
+      return persist(State.parse({ ...state, custom: [...state.custom, host] }))
+    })
   }
 
   export interface FetchPolicy {

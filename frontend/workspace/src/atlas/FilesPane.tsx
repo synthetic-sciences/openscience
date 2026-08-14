@@ -181,14 +181,14 @@ export function FilesPane(
     /** Test/integration seam. Production delegates to uiStore.openFile. */
     onOpenFile?: (file: PaneFile) => void
     /**
-     * Builds an absolute URL for an artifact's bytes. `sdk.request.url` supplies
-     * it in production; a standalone mount has no SDK, and `transport` returns a
-     * Response rather than a URL, so the thumbnail's <img> and the Download link
-     * need this seam.
+     * Builds an absolute URL for browser-native downloads and artifact bytes.
+     * `sdk.request.url` supplies it in production; a standalone mount has no SDK,
+     * and `transport` returns a Response rather than a URL, so direct browser
+     * surfaces need this seam.
      */
     url?: (path: string, query: Record<string, string>) => string
     onOpenArtifact?: (artifact: StoredArtifact) => void
-    /** Receives a downloaded Modal Volume file instead of clicking an anchor. */
+    /** Bounded test/integration seam. Production downloads through a direct browser navigation. */
     onDownload?: (name: string, blob: Blob) => void
     onRenameArtifact?: (artifact: StoredArtifact, submit: (title: string) => Promise<unknown>) => void
   } = {},
@@ -601,26 +601,35 @@ export function FilesPane(
   const downloadRemote = async (row: FileRow) => {
     const volume = path()[0]
     if (!volume) return
-    setBusy(true)
     // Leading slash on purpose. The route resolves the containing directory with
     // path.posix.dirname (routes/settings/compute.ts), and dirname("hello.txt")
     // is ".", which Modal answers with NOT_FOUND -- so a file at a Volume's root
     // could not be downloaded at all. "/hello.txt" gives dirname "/", the root.
     const target = `/${(row.path ?? row.name).replace(/^\/+/, "")}`
-    return transport(`/settings/compute/modal/volumes/${encodeURIComponent(volume)}/file`, undefined, { path: target })
-      .then(async (response) => {
-        if (!response.ok) throw new Error((await response.text()) || `Download failed (${response.status})`)
-        const blob = await response.blob()
-        if (props.onDownload) return props.onDownload(row.name, blob)
-        const url = URL.createObjectURL(blob)
+    const route = `/settings/compute/modal/volumes/${encodeURIComponent(volume)}/file`
+    if (!props.onDownload) {
+      const build = props.url ?? sdk?.request.url
+      try {
+        if (!build) throw new Error("A direct download URL is unavailable.")
         const anchor = document.createElement("a")
-        anchor.href = url
+        anchor.href = build(route, { path: target })
         anchor.download = row.name
         anchor.hidden = true
         document.body.append(anchor)
         anchor.click()
         anchor.remove()
-        setTimeout(() => URL.revokeObjectURL(url), 0)
+        setError("")
+      } catch (value) {
+        setError(`${row.name} could not be downloaded. ${concise(value)}`)
+      }
+      return
+    }
+    setBusy(true)
+    return transport(route, undefined, { path: target })
+      .then(async (response) => {
+        if (!response.ok) throw new Error((await response.text()) || `Download failed (${response.status})`)
+        const blob = await response.blob()
+        props.onDownload?.(row.name, blob)
       })
       .catch((value) => setError(`${row.name} could not be downloaded. ${concise(value)}`))
       .finally(() => setBusy(false))

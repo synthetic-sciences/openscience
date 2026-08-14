@@ -95,6 +95,15 @@ export interface ExecuteOptions {
   onStart?: () => void | Promise<void>
 }
 
+/** Sandbox policy captured by ExecutionAuthority at the final spawn boundary.
+ * Kernel managers consume this snapshot instead of re-reading mutable config. */
+export interface KernelSandboxPolicy {
+  readonly enabled: boolean
+  readonly network: "allow" | "deny"
+  readonly allowWrite: readonly string[]
+  readonly onUnavailable: "warn" | "error" | "allow"
+}
+
 export interface KernelStartOptions {
   /** Owning session, used to assemble its durable filesystem grants. */
   sessionID?: string
@@ -109,6 +118,9 @@ export interface KernelStartOptions {
    * Package mutations may contact package repositories even when ordinary
    * analysis runtimes inherit a deny-by-default project policy. */
   sandboxNetwork?: "allow" | "deny"
+  /** Internal immutable sandbox snapshot authorized for this exact spawn.
+   * Registry-owned: callers cannot override the final authority decision. */
+  sandboxPolicy?: KernelSandboxPolicy
   /** Interpreter binary override (e.g. a specific python/Rscript path). */
   binary?: string
   /** Stable user-facing name for the selected interpreter environment. */
@@ -121,6 +133,8 @@ export interface KernelStartOptions {
     projectID: string
     sessionID: string
     authorityGeneration: string
+    /** Exact backend owner used by Linux's pre-exec subreaper gate. */
+    linuxOwner?: { pid: number; identity: string }
   }
 }
 

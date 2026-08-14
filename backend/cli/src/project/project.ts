@@ -314,50 +314,54 @@ export namespace Project {
         120_000,
       )
 
-      const found = await records(worktree)
-      const opaque = found.find((record) => record.id.startsWith("prj_"))
-      const source = opaque ?? found[0]
-      const id = opaque?.id ?? createID()
-      const current = found
-        .filter((record) => record.id !== source?.id)
-        .reduce(
-          (result, record) => merge(result, record.project),
-          source
-            ? {
-                ...source.project,
-                id,
-                sandboxes: [...(source.project.sandboxes ?? [])],
-              }
-            : {
-                id,
-                worktree,
-                vcs: vcs as Info["vcs"],
-                sandboxes: [],
-                time: {
-                  created: Date.now(),
-                  updated: Date.now(),
+      return await durable.during(async () => {
+        const found = await records(worktree)
+        const opaque = found.find((record) => record.id.startsWith("prj_"))
+        const source = opaque ?? found[0]
+        const id = opaque?.id ?? createID()
+        const current = found
+          .filter((record) => record.id !== source?.id)
+          .reduce(
+            (result, record) => merge(result, record.project),
+            source
+              ? {
+                  ...source.project,
+                  id,
+                  sandboxes: [...(source.project.sandboxes ?? [])],
+                }
+              : {
+                  id,
+                  worktree,
+                  vcs: vcs as Info["vcs"],
+                  sandboxes: [],
+                  time: {
+                    created: Date.now(),
+                    updated: Date.now(),
+                  },
                 },
-              },
-        )
+          )
 
-      const result: Info = {
-        ...current,
-        worktree,
-        vcs: vcs as Info["vcs"],
-        time: {
-          ...current.time,
-          updated: Date.now(),
-        },
-      }
-      if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
-      result.sandboxes = [
-        ...new Set(
-          result.sandboxes.filter((directory) => canonicalize(directory) !== result.worktree && existsSync(directory)),
-        ),
-      ]
-      await Storage.write<Info>(["project", id], result)
-      await adoptLegacy(id, worktree, found)
-      return result
+        const result: Info = {
+          ...current,
+          worktree,
+          vcs: vcs as Info["vcs"],
+          time: {
+            ...current.time,
+            updated: Date.now(),
+          },
+        }
+        if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
+        result.sandboxes = [
+          ...new Set(
+            result.sandboxes.filter(
+              (directory) => canonicalize(directory) !== result.worktree && existsSync(directory),
+            ),
+          ),
+        ]
+        await Storage.write<Info>(["project", id], result)
+        await adoptLegacy(id, worktree, found)
+        return result
+      })
     })
 
     if (Flag.OPENSCIENCE_EXPERIMENTAL_ICON_DISCOVERY) discover(result)

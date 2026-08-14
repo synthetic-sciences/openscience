@@ -40,7 +40,8 @@ export namespace Tool {
         output: string
         attachments?: MessageV2.FilePart[]
       }>
-      formatValidationError?(error: z.ZodError): string
+      normalizeInput?(args: unknown): unknown
+      formatValidationError?(error: z.ZodError, args: unknown): string
     }>
   }
 
@@ -58,30 +59,38 @@ export namespace Tool {
         const execute = toolInfo.execute
         toolInfo.execute = async (args, ctx) => {
           PlanMode.enforce(id, ctx.agent)
+          const normalized = toolInfo.normalizeInput ? toolInfo.normalizeInput(args) : args
+          let canonical: z.infer<Parameters>
           try {
-            toolInfo.parameters.parse(args)
+            // The parser's output is the public tool contract. Always execute
+            // and dedupe with it so defaults, transforms, stripped fields, and
+            // tool-specific normalization behave identically for direct and
+            // delegated calls.
+            canonical = toolInfo.parameters.parse(normalized)
           } catch (error) {
             if (error instanceof z.ZodError && toolInfo.formatValidationError) {
-              throw new Error(toolInfo.formatValidationError(error), { cause: error })
+              throw new Error(toolInfo.formatValidationError(error, normalized), { cause: error })
             }
             throw new Error(
               `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
               { cause: error },
             )
           }
-          const cached = SearchDedupe.find(ctx.messages, id, args)
+          const dedupeSignature = SearchDedupe.key(id, canonical)
+          const cached = SearchDedupe.find(ctx.messages, id, canonical)
           if (cached) return SearchDedupe.reuse(cached) as unknown as Awaited<ReturnType<typeof execute>>
-          const result = await execute(args, ctx)
+          const result = await execute(canonical, ctx)
+          const metadata = dedupeSignature ? { ...result.metadata, dedupeSignature } : result.metadata
           // skip truncation for tools that handle it themselves
           if (result.metadata.truncated !== undefined) {
-            return result
+            return { ...result, metadata }
           }
           const truncated = await Truncate.output(result.output, { sessionID: ctx.sessionID }, initCtx?.agent)
           return {
             ...result,
             output: truncated.content,
             metadata: {
-              ...result.metadata,
+              ...metadata,
               truncated: truncated.truncated,
               ...(truncated.truncated && { outputPath: truncated.outputPath }),
             },

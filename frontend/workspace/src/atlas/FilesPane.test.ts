@@ -443,6 +443,43 @@ describe("files pane", () => {
     expect(host.querySelector('[role="tablist"]')).toBeNull()
   })
 
+  test("navigates large Volume downloads directly instead of buffering them through transport", async () => {
+    let downloaded: { href: string; name: string } | undefined
+    const capture = (event: Event) => {
+      const anchor = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[download]") : null
+      if (!anchor) return
+      event.preventDefault()
+      downloaded = { href: anchor.href, name: anchor.download }
+    }
+    document.addEventListener("click", capture, true)
+    cleanups.push(() => document.removeEventListener("click", capture, true))
+    const { calls, request } = modal({
+      files: [{ path: "model.safetensors", type: "file", size: 4 * 1024 * 1024 * 1024 }],
+    })
+    const host = mount(() =>
+      subject.FilesPane({
+        request,
+        url: (route, query) => {
+          const target = new URL(route, "http://openscience.local")
+          for (const [key, value] of Object.entries(query)) target.searchParams.set(key, value)
+          return target.toString()
+        },
+      }),
+    )
+    await settle()
+    await enterModal(host)
+    host.querySelector<HTMLButtonElement>('[data-file-row="weights"]')?.click()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="model.safetensors"]')?.click()
+    await settle()
+
+    expect(downloaded?.name).toBe("model.safetensors")
+    expect(new URL(downloaded!.href).pathname).toBe("/settings/compute/modal/volumes/weights/file")
+    expect(new URL(downloaded!.href).searchParams.get("path")).toBe("/model.safetensors")
+    expect(calls).not.toContain("/settings/compute/modal/volumes/weights/file?path=/model.safetensors")
+  })
+
   test("renders the browser directly before any file is opened", async () => {
     startOn("project")
     const host = mount(() =>

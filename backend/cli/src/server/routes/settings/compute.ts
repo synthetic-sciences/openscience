@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono"
+import { stream } from "hono/streaming"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import crypto from "crypto"
@@ -50,6 +51,29 @@ async function project<T>(context: Context, fn: () => T): Promise<T> {
       return fn()
     },
   })
+}
+
+function modalDownloadDisposition(remote: string) {
+  const basename =
+    path.posix
+      .basename(remote)
+      .replace(/[\u0000-\u001f\u007f]/g, "_")
+      .trim() || "download"
+  const fallback = [...basename]
+    .map((character) => {
+      const code = character.charCodeAt(0)
+      return code >= 0x20 && code <= 0x7e && character !== '"' && character !== "\\" ? character : "_"
+    })
+    .join("")
+  const extended = [...Buffer.from(basename, "utf8")]
+    .map((byte) => {
+      const character = String.fromCharCode(byte)
+      return /[A-Za-z0-9!#$&+.^_`|~-]/.test(character)
+        ? character
+        : `%${byte.toString(16).toUpperCase().padStart(2, "0")}`
+    })
+    .join("")
+  return `attachment; filename="${fallback || "download"}"; filename*=UTF-8''${extended}`
 }
 
 // ── Compute settings store ──────────────────────────────────────────────────
@@ -770,24 +794,55 @@ export const ComputeSettingsRoutes = lazy(() =>
         const entries = await ModalVolume.list(context, input.name, path.posix.dirname(query.path), false)
         const entry = entries.find((item) => item.path === query.path.replace(/^\/+/, ""))
         if (!entry || entry.type !== "file") return c.json({ error: "Modal Volume file not found" }, 404)
-        if (entry.size > 256 * 1024 * 1024) {
-          throw new HTTPException(400, { message: "Modal Volume browser downloads are limited to 256 MB." })
-        }
         const staging = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-modal-volume-"))
-        const bytes = await ModalVolume.download(context, input.name, [entry.path], staging)
-          .then((files) => {
-            const file = files[0]
-            if (!file) throw new Error(`Modal Volume did not download ${entry.path}`)
-            return Bun.file(file.staging).arrayBuffer()
+        let cleanupPromise: Promise<void> | undefined
+        const cleanup = () => (cleanupPromise ??= fs.rm(staging, { recursive: true, force: true }))
+        let handedOff = false
+        try {
+          const file = await ModalVolume.download(context, input.name, [entry.path], staging, c.req.raw.signal).then(
+            (files) => {
+              const file = files[0]
+              if (!file) throw new Error(`Modal Volume did not download ${entry.path}`)
+              return file
+            },
+          )
+          c.req.raw.signal.throwIfAborted()
+          c.header("content-type", "application/octet-stream")
+          c.header("content-disposition", modalDownloadDisposition(entry.path))
+          c.header("content-length", String(file.size))
+          const response = stream(c, async (output) => {
+            let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+            let cancelled: Promise<void> | undefined
+            let complete = false
+            const abort = () => output.abort()
+            try {
+              reader = Bun.file(file.staging).stream().getReader()
+              output.onAbort(() => (cancelled ??= reader!.cancel().catch(() => undefined)))
+              if (c.req.raw.signal.aborted) abort()
+              else c.req.raw.signal.addEventListener("abort", abort, { once: true })
+              while (!output.aborted) {
+                const next = await reader.read()
+                if (next.done) {
+                  complete = true
+                  break
+                }
+                await output.write(next.value)
+              }
+            } finally {
+              c.req.raw.signal.removeEventListener("abort", abort)
+              if (reader) {
+                if (!complete) cancelled ??= reader.cancel().catch(() => undefined)
+                await cancelled
+                reader.releaseLock()
+              }
+              await cleanup()
+            }
           })
-          .finally(() => fs.rm(staging, { recursive: true, force: true }))
-        const filename = path.posix.basename(entry.path).replaceAll('"', "") || "download"
-        return new Response(bytes, {
-          headers: {
-            "content-type": "application/octet-stream",
-            "content-disposition": `attachment; filename="${filename}"`,
-          },
-        })
+          handedOff = true
+          return response
+        } finally {
+          if (!handedOff) await cleanup()
+        }
       },
     )
     .post(

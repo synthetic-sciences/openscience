@@ -6,7 +6,7 @@ import { Session } from "../../src/session"
 import "../../src/tool/notebook"
 import "../../src/tool/rkernel"
 
-const [, , workspace, language, marker] = process.argv
+const [, , workspace, language, marker, mode = "", ready = ""] = process.argv
 
 async function waitForMarker(attempt = 0): Promise<number> {
   const value = await Bun.file(marker)
@@ -86,6 +86,20 @@ await Instance.provide({
         ancestors.push(ancestor)
         if (ancestor === kernelPID) break
         ancestor = (await processRow(ancestor)).ppid
+      }
+      if (mode === "wait-for-signal") {
+        await Bun.write(
+          ready,
+          JSON.stringify({
+            language,
+            kernelPID,
+            childPID,
+            childPPID: child.ppid,
+            childPGID: child.pgid,
+            childAncestors: ancestors,
+          }),
+        )
+        await new Promise(() => {})
       }
       await KernelRuntime.release(identity)
       console.log(

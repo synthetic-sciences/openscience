@@ -7,6 +7,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
+import { cmd } from "./cmd"
 
 interface UninstallArgs {
   keepConfig?: boolean
@@ -22,7 +23,7 @@ interface RemovalTargets {
   binary: string | null
 }
 
-export const UninstallCommand = {
+export const UninstallCommand = cmd({
   command: "uninstall",
   describe: "uninstall openscience while keeping your work and settings by default",
   builder: (yargs: Argv) =>
@@ -88,7 +89,7 @@ export const UninstallCommand = {
 
     prompts.outro("Done")
   },
-}
+})
 
 async function collectRemovalTargets(args: UninstallArgs, method: Installation.Method): Promise<RemovalTargets> {
   const directories = uninstallDirectories(args)

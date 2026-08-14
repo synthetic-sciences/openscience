@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { DataRoot } from "@/global/data-root"
 import { DataRootBarrier } from "@/global/data-root-barrier"
 import { WindowsJunction } from "@/global/windows-junction"
+import { ProcessIdentity } from "@/process/process-identity"
 
 const roots: string[] = []
 
@@ -16,6 +17,18 @@ async function root() {
   const value = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-data-root-"))
   roots.push(value)
   return value
+}
+
+async function waitForFile(filepath: string) {
+  const deadline = Date.now() + 2_000
+  while (!(await Bun.file(filepath).exists())) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${filepath}`)
+    await Bun.sleep(10)
+  }
+}
+
+async function operationMarkers(config: string) {
+  return fs.readdir(path.join(config, "data-root-operations")).catch(() => [] as string[])
 }
 
 describe("managed data root", () => {
@@ -106,6 +119,447 @@ describe("managed data root", () => {
     const lease = await switching
     expect(exclusive).toBe(true)
     await lease[Symbol.asyncDispose]()
+  })
+
+  test("admits a physical reassignable child after intent without releasing its ancestor early", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const intent = path.join(config, "data-root-switch.intent")
+    const outerReady = Promise.withResolvers<void>()
+    const startChild = Promise.withResolvers<void>()
+    const childReady = Promise.withResolvers<void>()
+    const releaseOuter = Promise.withResolvers<void>()
+    let child: DataRootBarrier.Operation | undefined
+
+    const command = DataRootBarrier.during(
+      managed.path,
+      async () => {
+        outerReady.resolve()
+        await startChild.promise
+        child = await DataRootBarrier.enter(path.join(managed.path, "child.json"), 2_000)
+        childReady.resolve()
+        await releaseOuter.promise
+      },
+      2_000,
+    )
+    let switching: Promise<AsyncDisposable> | undefined
+    try {
+      await outerReady.promise
+      switching = DataRootBarrier.exclusive(1_000)
+      await waitForFile(intent)
+      startChild.resolve()
+      expect(await Promise.race([childReady.promise.then(() => true), Bun.sleep(250).then(() => false)])).toBe(true)
+      expect(await operationMarkers(config)).toHaveLength(2)
+
+      const identity = await ProcessIdentity.capture(process.pid)
+      if (!identity) throw new Error("Current process identity is unavailable")
+      await child!.reassign({ pid: process.pid, identity })
+      expect(await operationMarkers(config)).toHaveLength(2)
+      await expect(child!.during(async () => undefined)).rejects.toThrow(
+        "Cannot scope work under a non-active data-root operation",
+      )
+
+      releaseOuter.resolve()
+      await command
+      expect(await operationMarkers(config)).toHaveLength(1)
+      expect(await Promise.race([switching.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+    } finally {
+      startChild.resolve()
+      releaseOuter.resolve()
+      await Promise.resolve(child?.[Symbol.asyncDispose]()).catch(() => undefined)
+      const lease = await switching?.catch(() => undefined)
+      await lease?.[Symbol.asyncDispose]()
+      await command.catch(() => undefined)
+    }
+  })
+
+  test("keeps the parent marker until an admitted child marker is durable", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const operations = path.join(config, "data-root-operations")
+    const outerReady = Promise.withResolvers<void>()
+    const startChild = Promise.withResolvers<void>()
+    const childPublishing = Promise.withResolvers<void>()
+    const releasePublish = Promise.withResolvers<void>()
+    const renameOriginal = fs.rename.bind(fs)
+    let intercepted = false
+    let restoreRename = () => {}
+    let child: Promise<DataRootBarrier.Operation> | undefined
+    let command: Promise<void> | undefined
+    let switching: Promise<AsyncDisposable> | undefined
+    try {
+      command = (async () => {
+        await using outer = await DataRootBarrier.enter(managed.path, 2_000)
+        return await outer.during(async () => {
+          outerReady.resolve()
+          await startChild.promise
+          const gatedRename = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+            if (
+              !intercepted &&
+              path.dirname(String(source)) === config &&
+              path.basename(String(source)).endsWith(".pending") &&
+              path.dirname(String(destination)) === operations
+            ) {
+              intercepted = true
+              childPublishing.resolve()
+              await releasePublish.promise
+            }
+            return renameOriginal(source, destination)
+          })
+          restoreRename = () => gatedRename.mockRestore()
+          try {
+            child = DataRootBarrier.enter(path.join(managed.path, "admitted.json"), 2_000)
+          } finally {
+            await childPublishing.promise
+            restoreRename()
+          }
+        })
+      })()
+      await outerReady.promise
+      startChild.resolve()
+      await childPublishing.promise
+      expect(await operationMarkers(config)).toHaveLength(1)
+      expect(await Promise.race([command.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+      switching = DataRootBarrier.exclusive(2_000)
+      await waitForFile(path.join(config, "data-root-switch.intent"))
+      expect(await Promise.race([switching.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+
+      releasePublish.resolve()
+      const admitted = await child!
+      await command
+      expect(await operationMarkers(config)).toHaveLength(1)
+      expect(await Promise.race([switching.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+      await admitted[Symbol.asyncDispose]()
+      const exclusive = await switching
+      await exclusive[Symbol.asyncDispose]()
+    } finally {
+      restoreRename()
+      startChild.resolve()
+      releasePublish.resolve()
+      await command?.catch(() => undefined)
+      const admitted = await child?.catch(() => undefined)
+      await admitted?.[Symbol.asyncDispose]()
+      const exclusive = await switching?.catch(() => undefined)
+      await exclusive?.[Symbol.asyncDispose]()
+    }
+  })
+
+  test("an inherited background context reacquires after its enclosing scope closes", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const start = Promise.withResolvers<void>()
+    const entered = Promise.withResolvers<void>()
+    const finish = Promise.withResolvers<void>()
+    let background: Promise<void> | undefined
+
+    await DataRootBarrier.during(managed.path, async () => {
+      background = (async () => {
+        await start.promise
+        await using operation = await DataRootBarrier.enter(path.join(managed.path, "background.json"), 2_000)
+        entered.resolve()
+        await finish.promise
+        void operation
+      })()
+    })
+
+    const exclusive = await DataRootBarrier.exclusive(2_000)
+    try {
+      start.resolve()
+      expect(await Promise.race([entered.promise.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+    } finally {
+      await exclusive[Symbol.asyncDispose]()
+      start.resolve()
+      await entered.promise
+      finish.resolve()
+      await background
+    }
+  })
+
+  test("an inherited callback cannot borrow a still-open operation after its invocation ends", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const operation = await DataRootBarrier.enter(managed.path, 2_000)
+    const start = Promise.withResolvers<void>()
+    const entered = Promise.withResolvers<void>()
+    const finish = Promise.withResolvers<void>()
+    let background: Promise<void> | undefined
+
+    await operation.during(async () => {
+      background = (async () => {
+        await start.promise
+        await using child = await DataRootBarrier.enter(path.join(managed.path, "stale-frame.json"), 2_000)
+        entered.resolve()
+        await finish.promise
+        void child
+      })()
+    })
+
+    const switching = DataRootBarrier.exclusive(2_000)
+    try {
+      await waitForFile(path.join(config, "data-root-switch.intent"))
+      start.resolve()
+      expect(await Promise.race([entered.promise.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+      await operation[Symbol.asyncDispose]()
+      const exclusive = await switching
+      expect(await Promise.race([entered.promise.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+      await exclusive[Symbol.asyncDispose]()
+      await entered.promise
+      finish.resolve()
+      await background
+    } finally {
+      start.resolve()
+      finish.resolve()
+      await Promise.resolve(operation[Symbol.asyncDispose]()).catch(() => undefined)
+      const exclusive = await switching.catch(() => undefined)
+      await exclusive?.[Symbol.asyncDispose]()
+      await background?.catch(() => undefined)
+    }
+  })
+
+  test("unrelated concurrent scopes keep independent physical coverage", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const firstReady = Promise.withResolvers<void>()
+    const secondReady = Promise.withResolvers<void>()
+    const releaseFirst = Promise.withResolvers<void>()
+    const releaseSecond = Promise.withResolvers<void>()
+    const first = DataRootBarrier.during(path.join(managed.path, "first.json"), async () => {
+      firstReady.resolve()
+      await releaseFirst.promise
+    })
+    const second = DataRootBarrier.during(path.join(managed.path, "second.json"), async () => {
+      secondReady.resolve()
+      await releaseSecond.promise
+    })
+
+    await Promise.all([firstReady.promise, secondReady.promise])
+    expect(await operationMarkers(config)).toHaveLength(2)
+    releaseFirst.resolve()
+    await first
+    expect(await operationMarkers(config)).toHaveLength(1)
+
+    const switching = DataRootBarrier.exclusive(2_000)
+    await waitForFile(path.join(config, "data-root-switch.intent"))
+    expect(await Promise.race([switching.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+    releaseSecond.resolve()
+    await second
+    const exclusive = await switching
+    await exclusive[Symbol.asyncDispose]()
+  })
+
+  test("a bare marker never lets a sibling operation bypass relocation intent", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const first = await DataRootBarrier.enter(path.join(managed.path, "first.json"), 2_000)
+    let switching: Promise<AsyncDisposable> | undefined
+    let sibling: Promise<DataRootBarrier.Operation> | undefined
+
+    try {
+      switching = DataRootBarrier.exclusive(2_000)
+      await waitForFile(path.join(config, "data-root-switch.intent"))
+      sibling = DataRootBarrier.enter(path.join(managed.path, "sibling.json"), 2_000)
+      expect(await Promise.race([sibling.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+
+      await first[Symbol.asyncDispose]()
+      const exclusive = await switching
+      expect(await Promise.race([sibling.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+      await exclusive[Symbol.asyncDispose]()
+      const admitted = await sibling
+      await admitted[Symbol.asyncDispose]()
+    } finally {
+      await Promise.resolve(first[Symbol.asyncDispose]()).catch(() => undefined)
+      const exclusive = await switching?.catch(() => undefined)
+      await exclusive?.[Symbol.asyncDispose]()
+      const admitted = await sibling?.catch(() => undefined)
+      await admitted?.[Symbol.asyncDispose]()
+    }
+  })
+
+  test("exclusive relocation fails fast inside an active operation scope", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+
+    await DataRootBarrier.during(managed.path, async () => {
+      await expect(DataRootBarrier.exclusive()).rejects.toThrow(
+        "Cannot relocate the data root from inside an active data-root operation",
+      )
+      expect(await Bun.file(path.join(config, "data-root-switch.intent")).exists()).toBe(false)
+    })
+  })
+
+  test("same-tick transitions reject new scopes but preserve an active callback's nested admission", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const identity = await ProcessIdentity.capture(process.pid)
+    if (!identity) throw new Error("Current process identity is unavailable")
+    const outer = await DataRootBarrier.enter(managed.path, 2_000)
+    const scopeReady = Promise.withResolvers<void>()
+    const startChild = Promise.withResolvers<void>()
+    const childDone = Promise.withResolvers<void>()
+    const releaseScope = Promise.withResolvers<void>()
+    const command = outer.during(async () => {
+      scopeReady.resolve()
+      await startChild.promise
+      await using child = await DataRootBarrier.enter(path.join(managed.path, "same-tick.json"), 2_000)
+      childDone.resolve()
+      await releaseScope.promise
+      void child
+    })
+    let switching: Promise<AsyncDisposable> | undefined
+    let reassigning: Promise<void> | undefined
+    let disposing: PromiseLike<void> | undefined
+    try {
+      await scopeReady.promise
+      switching = DataRootBarrier.exclusive(2_000)
+      await waitForFile(path.join(config, "data-root-switch.intent"))
+      reassigning = outer.reassign({ pid: process.pid, identity })
+      disposing = outer[Symbol.asyncDispose]()
+      await expect(outer.during(async () => undefined)).rejects.toThrow(
+        "Cannot scope work under a non-active data-root operation",
+      )
+      startChild.resolve()
+      expect(await Promise.race([childDone.promise.then(() => true), Bun.sleep(250).then(() => false)])).toBe(true)
+      expect(await Promise.race([switching.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+
+      releaseScope.resolve()
+      await command
+      await Promise.all([reassigning, disposing])
+      const exclusive = await switching
+      await exclusive[Symbol.asyncDispose]()
+    } finally {
+      startChild.resolve()
+      releaseScope.resolve()
+      await command.catch(() => undefined)
+      await reassigning?.catch(() => undefined)
+      await Promise.resolve(disposing).catch(() => undefined)
+      await Promise.resolve(outer[Symbol.asyncDispose]()).catch(() => undefined)
+      const exclusive = await switching?.catch(() => undefined)
+      await exclusive?.[Symbol.asyncDispose]()
+    }
+  })
+
+  test("a closing inner scope falls back to its live structured parent for admission", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const parent = await DataRootBarrier.enter(managed.path, 2_000)
+    const childReady = Promise.withResolvers<void>()
+    const startNested = Promise.withResolvers<void>()
+    const nestedDone = Promise.withResolvers<void>()
+    const finishParent = Promise.withResolvers<void>()
+    let child: DataRootBarrier.Operation | undefined
+    const command = parent.during(async () => {
+      child = await DataRootBarrier.enter(path.join(managed.path, "child-scope.json"), 2_000)
+      await child.during(async () => {
+        childReady.resolve()
+        await startNested.promise
+        await using nested = await DataRootBarrier.enter(path.join(managed.path, "nested.json"), 2_000)
+        nestedDone.resolve()
+        void nested
+      })
+      await finishParent.promise
+    })
+    let switching: Promise<AsyncDisposable> | undefined
+
+    try {
+      await childReady.promise
+      switching = DataRootBarrier.exclusive(2_000)
+      await waitForFile(path.join(config, "data-root-switch.intent"))
+      const disposingChild = child![Symbol.asyncDispose]()
+      startNested.resolve()
+      expect(await Promise.race([nestedDone.promise.then(() => true), Bun.sleep(250).then(() => false)])).toBe(true)
+      await disposingChild
+      expect(await Promise.race([switching.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
+
+      finishParent.resolve()
+      await command
+      await parent[Symbol.asyncDispose]()
+      const exclusive = await switching
+      await exclusive[Symbol.asyncDispose]()
+    } finally {
+      startNested.resolve()
+      finishParent.resolve()
+      await command.catch(() => undefined)
+      await Promise.resolve(child?.[Symbol.asyncDispose]()).catch(() => undefined)
+      await Promise.resolve(parent[Symbol.asyncDispose]()).catch(() => undefined)
+      const exclusive = await switching?.catch(() => undefined)
+      await exclusive?.[Symbol.asyncDispose]()
+    }
+  })
+
+  test("failed reassignment restores self-owned admission when no later transition is queued", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const data = path.join(base, "data")
+    const managed = await DataRoot.ensure(config, data, false)
+    DataRootBarrier.configure({ root: managed.path, config })
+    const identity = await ProcessIdentity.capture(process.pid)
+    if (!identity) throw new Error("Current process identity is unavailable")
+    const startNested = Promise.withResolvers<void>()
+    const nestedDone = Promise.withResolvers<void>()
+    const renameOriginal = fs.rename.bind(fs)
+    let restoreRename = () => {}
+    const outer = await DataRootBarrier.enter(managed.path, 2_000)
+    const rename = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+      if (path.basename(String(source)).startsWith(".data-root-operation-")) {
+        throw Object.assign(new Error("mock reassign failure"), { code: "EIO" })
+      }
+      return renameOriginal(source, destination)
+    })
+    restoreRename = () => rename.mockRestore()
+    let command: Promise<void> | undefined
+    let switching: Promise<AsyncDisposable> | undefined
+    try {
+      await expect(outer.reassign({ pid: process.pid, identity })).rejects.toThrow("mock reassign failure")
+      restoreRename()
+      command = outer.during(async () => {
+        await startNested.promise
+        await using child = await DataRootBarrier.enter(path.join(managed.path, "after-failure.json"), 2_000)
+        nestedDone.resolve()
+        void child
+      })
+      switching = DataRootBarrier.exclusive(1_000)
+      await waitForFile(path.join(config, "data-root-switch.intent"))
+      startNested.resolve()
+      expect(await Promise.race([nestedDone.promise.then(() => true), Bun.sleep(250).then(() => false)])).toBe(true)
+      await command
+      await outer[Symbol.asyncDispose]()
+      const exclusive = await switching
+      await exclusive[Symbol.asyncDispose]()
+    } finally {
+      restoreRename()
+      startNested.resolve()
+      await command?.catch(() => undefined)
+      await Promise.resolve(outer[Symbol.asyncDispose]()).catch(() => undefined)
+      const exclusive = await switching?.catch(() => undefined)
+      await exclusive?.[Symbol.asyncDispose]()
+    }
   })
 
   test.skipIf(process.platform === "win32")(

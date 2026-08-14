@@ -153,84 +153,86 @@ export namespace LocalRuntime {
     timeoutMs?: number
   }): Promise<{ alreadyRunning: boolean; value: T }> {
     await using lease = await FileLease.acquire(lockPath(input.id), (input.timeoutMs ?? 15_000) + 10_000)
-    const already = await input.probe()
-    if (already !== null) return { alreadyRunning: true, value: already }
+    return await lease.during(async () => {
+      const already = await input.probe()
+      if (already !== null) return { alreadyRunning: true, value: already }
 
-    const current = active.get(input.id)
-    if (current && !current.settled) await stopManaged(current)
-    const ledger = ledgerID(input.id)
-    // Recover exact ownership left by a killed prior server before replacing
-    // this stable runtime id. A second live server is serialized by the lease.
-    await CredentialProcessLedger.revoke({ id: ledger, kind: "local-runtime" })
+      const current = active.get(input.id)
+      if (current && !current.settled) await stopManaged(current)
+      const ledger = ledgerID(input.id)
+      // Recover exact ownership left by a killed prior server before replacing
+      // this stable runtime id. A second live server is serialized by the lease.
+      await CredentialProcessLedger.revoke({ id: ledger, kind: "local-runtime" })
 
-    const linuxOwner =
-      process.platform === "linux"
-        ? await ProcessIdentity.capture(process.pid).then((identity) =>
-            identity ? { pid: process.pid, identity } : undefined,
-          )
-        : undefined
-    if (process.platform === "linux" && !linuxOwner) {
-      throw new Error(`Could not capture the Linux server identity for local runtime ${input.id}`)
-    }
-    const wrapped = WindowsJobLauncher.wrap({ file: input.file, args: input.args, linuxOwner })
-    const detached = process.platform !== "win32"
-    const child = spawn(wrapped.file, wrapped.args, {
-      env: environment(),
-      detached,
-      windowsHide: true,
-      stdio: "ignore",
-    })
-    WindowsJobLauncher.bind(child, wrapped.release)
-    const managed: Managed = { id: input.id, ledger, child, detached, release: wrapped.release }
-    const completion = new Promise<NonNullable<Managed["settled"]>>((resolve) => {
-      child.once("error", (error) => resolve({ code: null, signal: null, error: error.message }))
-      child.once("close", (code, signal) => resolve({ code, signal }))
-    })
-    try {
-      if (!child.pid) throw new Error(`Local runtime ${input.id} started without a process id`)
-      managed.identity = await CredentialProcessLedger.identity(child.pid)
-      if (!managed.identity) throw new Error(`Could not establish a safe identity for local runtime ${input.id}`)
-      const registered = await CredentialProcessLedger.register({
-        id: ledger,
-        kind: "local-runtime",
-        pid: child.pid,
+      const linuxOwner =
+        process.platform === "linux"
+          ? await ProcessIdentity.capture(process.pid).then((identity) =>
+              identity ? { pid: process.pid, identity } : undefined,
+            )
+          : undefined
+      if (process.platform === "linux" && !linuxOwner) {
+        throw new Error(`Could not capture the Linux server identity for local runtime ${input.id}`)
+      }
+      const wrapped = WindowsJobLauncher.wrap({ file: input.file, args: input.args, linuxOwner })
+      const detached = process.platform !== "win32"
+      const child = spawn(wrapped.file, wrapped.args, {
+        env: environment(),
         detached,
-        identity: managed.identity,
-        windowsRelease: wrapped.release,
+        windowsHide: true,
+        stdio: "ignore",
       })
-      if (!registered) throw new Error(`Local runtime ${input.id} exited before durable ownership was established`)
-      if (process.platform === "linux" && wrapped.release) {
-        await WindowsJobLauncher.release(wrapped.release, child.pid)
+      WindowsJobLauncher.bind(child, wrapped.release)
+      const managed: Managed = { id: input.id, ledger, child, detached, release: wrapped.release }
+      const completion = new Promise<NonNullable<Managed["settled"]>>((resolve) => {
+        child.once("error", (error) => resolve({ code: null, signal: null, error: error.message }))
+        child.once("close", (code, signal) => resolve({ code, signal }))
+      })
+      try {
+        if (!child.pid) throw new Error(`Local runtime ${input.id} started without a process id`)
+        managed.identity = await CredentialProcessLedger.identity(child.pid)
+        if (!managed.identity) throw new Error(`Could not establish a safe identity for local runtime ${input.id}`)
+        const registered = await CredentialProcessLedger.register({
+          id: ledger,
+          kind: "local-runtime",
+          pid: child.pid,
+          detached,
+          identity: managed.identity,
+          windowsRelease: wrapped.release,
+        })
+        if (!registered) throw new Error(`Local runtime ${input.id} exited before durable ownership was established`)
+        if (process.platform === "linux" && wrapped.release) {
+          await WindowsJobLauncher.release(wrapped.release, child.pid)
+        }
+        active.set(input.id, managed)
+        void completion.then(async (settled) => {
+          managed.settled = settled
+          if (active.get(input.id) === managed) active.delete(input.id)
+          await complete(ledger).catch((error) => log.error("local runtime completion failed", { id: input.id, error }))
+          await cleanupGate(managed.release)
+        })
+      } catch (error) {
+        await stopManaged(managed).catch(() => undefined)
+        throw error
       }
-      active.set(input.id, managed)
-      void completion.then(async (settled) => {
-        managed.settled = settled
-        if (active.get(input.id) === managed) active.delete(input.id)
-        await complete(ledger).catch((error) => log.error("local runtime completion failed", { id: input.id, error }))
-        await cleanupGate(managed.release)
-      })
-    } catch (error) {
-      await stopManaged(managed).catch(() => undefined)
-      throw error
-    }
 
-    const deadline = Date.now() + (input.timeoutMs ?? 15_000)
-    while (Date.now() < deadline) {
-      const value = await input.probe()
-      if (value !== null) {
-        // Do not report a daemonized/unowned endpoint as an OpenScience-managed
-        // start. The OS-owned supervisor must still be alive at handoff.
-        await Bun.sleep(100)
-        if (!managed.settled && active.get(input.id) === managed) return { alreadyRunning: false, value }
+      const deadline = Date.now() + (input.timeoutMs ?? 15_000)
+      while (Date.now() < deadline) {
+        const value = await input.probe()
+        if (value !== null) {
+          // Do not report a daemonized/unowned endpoint as an OpenScience-managed
+          // start. The OS-owned supervisor must still be alive at handoff.
+          await Bun.sleep(100)
+          if (!managed.settled && active.get(input.id) === managed) return { alreadyRunning: false, value }
+        }
+        if (managed.settled) {
+          const detail = managed.settled.error || `exit ${managed.settled.code ?? managed.settled.signal ?? "unknown"}`
+          throw new Error(`Local runtime ${input.id} did not remain under OpenScience ownership (${detail})`)
+        }
+        await Bun.sleep(400)
       }
-      if (managed.settled) {
-        const detail = managed.settled.error || `exit ${managed.settled.code ?? managed.settled.signal ?? "unknown"}`
-        throw new Error(`Local runtime ${input.id} did not remain under OpenScience ownership (${detail})`)
-      }
-      await Bun.sleep(400)
-    }
-    await stopManaged(managed)
-    throw new Error(`Local runtime ${input.id} did not answer within ${input.timeoutMs ?? 15_000}ms`)
+      await stopManaged(managed)
+      throw new Error(`Local runtime ${input.id} did not answer within ${input.timeoutMs ?? 15_000}ms`)
+    })
   }
 }
 

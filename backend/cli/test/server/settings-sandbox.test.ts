@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { SandboxSettingsRoutes } from "../../src/server/routes/settings/sandbox"
 import { Sandbox } from "../../src/sandbox/sandbox"
+import { Config } from "../../src/config/config"
 import os from "node:os"
 import path from "node:path"
 
@@ -54,5 +55,21 @@ describe("/settings/sandbox routes", () => {
       expect(await response.json()).toMatchObject({ error: expect.stringContaining("invalid or over-broad") })
     }
     expect(await (await app.request("/")).json()).toEqual(before)
+  })
+
+  test("PUT persists the machine-wide explicit project-trust policy", async () => {
+    const previous = await Config.trustedSandbox()
+    try {
+      const response = await app.request("/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requireProjectTrust: true }),
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ config: { requireProjectTrust: true } })
+      expect((await Config.trustedSandbox()).requireProjectTrust).toBe(true)
+    } finally {
+      await Config.setSandbox(previous)
+    }
   })
 })

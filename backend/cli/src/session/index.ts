@@ -427,59 +427,61 @@ export namespace Session {
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
     const project = Instance.project
     await using lease = await FileLease.acquire(deletionLock(project.id, sessionID), 60_000)
-    let pending = await deleting(project.id, sessionID)
-    const session = pending?.info ?? (await get(sessionID))
-    if (!current(session)) bind(session)
-    try {
-      if (!pending) {
-        // Children must finish their own tombstone/reaper lifecycle before the
-        // parent becomes unroutable.
-        for (const child of await children(sessionID)) {
-          await remove(child.id)
+    return await lease.during(async () => {
+      let pending = await deleting(project.id, sessionID)
+      const session = pending?.info ?? (await get(sessionID))
+      if (!current(session)) bind(session)
+      try {
+        if (!pending) {
+          // Children must finish their own tombstone/reaper lifecycle before the
+          // parent becomes unroutable.
+          for (const child of await children(sessionID)) {
+            await remove(child.id)
+          }
+          pending = {
+            version: 1,
+            info: session,
+            time: { created: Date.now() },
+          }
+          // Publish the recovery record before any destructive mutation. A
+          // failed reaper or killed deleter can therefore retry by session id.
+          await Storage.write(deletionKey(project.id, sessionID), pending)
         }
-        pending = {
-          version: 1,
+        // Cancellation must be visible before deletion waits for the authority
+        // lease held by a booting kernel. Otherwise that boot can become ready,
+        // run its first cell, and only then be reaped by filesystem teardown.
+        KernelRuntime.cancelSession(sessionID)
+        await unshare(sessionID).catch(() => {})
+        // Remove the routable session record before filesystem authority. A
+        // process start that wins the authority lease first is subsequently
+        // revoked; one that runs after filesystem removal cannot lazily recreate
+        // grants from a still-visible session record. The durable tombstone,
+        // unlike the old ordering, still makes cleanup retryable.
+        await Storage.remove(["session", project.id, sessionID])
+        validated().delete(sessionID)
+        const signal = await SessionFilesystem.remove(sessionID)
+        await KernelRuntime.removeSession(project.id, sessionID)
+        await Bus.publish(Event.Deleted, {
           info: session,
-          time: { created: Date.now() },
-        }
-        // Publish the recovery record before any destructive mutation. A
-        // failed reaper or killed deleter can therefore retry by session id.
-        await Storage.write(deletionKey(project.id, sessionID), pending)
-      }
-      // Cancellation must be visible before deletion waits for the authority
-      // lease held by a booting kernel. Otherwise that boot can become ready,
-      // run its first cell, and only then be reaped by filesystem teardown.
-      KernelRuntime.cancelSession(sessionID)
-      await unshare(sessionID).catch(() => {})
-      // Remove the routable session record before filesystem authority. A
-      // process start that wins the authority lease first is subsequently
-      // revoked; one that runs after filesystem removal cannot lazily recreate
-      // grants from a still-visible session record. The durable tombstone,
-      // unlike the old ordering, still makes cleanup retryable.
-      await Storage.remove(["session", project.id, sessionID])
-      validated().delete(sessionID)
-      const signal = await SessionFilesystem.remove(sessionID)
-      await KernelRuntime.removeSession(project.id, sessionID)
-      await Bus.publish(Event.Deleted, {
-        info: session,
-      })
-      await AuthoritySignal.settle(signal.revision)
+        })
+        await AuthoritySignal.settle(signal.revision)
 
-      // User data is erased only after every runtime reaper acknowledges the
-      // deletion. A crash during this phase leaves the tombstone last, so the
-      // remaining idempotent removals are retried on startup.
-      for (const msg of await Storage.list(["message", sessionID])) {
-        for (const part of await Storage.list(["part", msg.at(-1)!])) {
-          await Storage.remove(part)
+        // User data is erased only after every runtime reaper acknowledges the
+        // deletion. A crash during this phase leaves the tombstone last, so the
+        // remaining idempotent removals are retried on startup.
+        for (const msg of await Storage.list(["message", sessionID])) {
+          for (const part of await Storage.list(["part", msg.at(-1)!])) {
+            await Storage.remove(part)
+          }
+          await Storage.remove(msg)
         }
-        await Storage.remove(msg)
+        await SessionTraceStore.remove(sessionID)
+        await Storage.remove(deletionKey(project.id, sessionID))
+      } catch (e) {
+        log.error(e)
+        throw e
       }
-      await SessionTraceStore.remove(sessionID)
-      await Storage.remove(deletionKey(project.id, sessionID))
-    } catch (e) {
-      log.error(e)
-      throw e
-    }
+    })
   })
 
   /** Resume deletions whose durable tombstone outlived a failed/killed

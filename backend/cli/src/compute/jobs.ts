@@ -569,10 +569,12 @@ export namespace ComputeJobs {
       .catch(() => undefined)
       .then(async () => {
         await using lease = await FileLease.acquire(`${metaOf(root)}.lock`)
-        const jobs = await read(root).catch((error) => preserve(root, error))
-        const result = await edit(jobs)
-        await write(root, jobs)
-        return result
+        return await lease.during(async () => {
+          const jobs = await read(root).catch((error) => preserve(root, error))
+          const result = await edit(jobs)
+          await write(root, jobs)
+          return result
+        })
       })
     locks.set(
       root,
@@ -832,7 +834,7 @@ export namespace ComputeJobs {
             if (job.status === "queued" && Date.now() - Date.parse(job.created_at) < 5_000) return
             if (job.target.kind === "modal") {
               claims.add(key)
-              let lease: AsyncDisposable | undefined
+              let lease: FileLease.Lease | undefined
               let handedOff = false
               try {
                 lease = await FileLease.acquire(modalLeaseOf(root, job.id), 25).catch((error) => {
@@ -840,78 +842,95 @@ export namespace ComputeJobs {
                   throw error
                 })
                 if (!lease) return
-                const prior = await recovery(root, job)
-                if (prior.retry > Date.now()) return
-                const credentials = options.credentials ?? (await options.resolveCredentials?.().catch(() => undefined))
-                if (!credentials || !job.authority) return
-                const provider = options.provider ?? ModalAdapter
-                const authorized = await currentAuthority(job.authority).then(
-                  () => true,
-                  async () => {
-                    await cancel(job.id, {
-                      ...options,
-                      root,
-                      workspace: scope.workspace,
-                      credentials,
-                      provider,
-                    }).catch(() => undefined)
-                    return false
-                  },
-                )
-                if (!authorized) return
-                const current = await get(job.id, { root, workspace: scope.workspace })
-                if (!current || current.status === "cancelled") return
-                await activate(key, {
-                  detached: false,
-                  authority: job.authority,
-                  root,
-                  workspace: scope.workspace,
-                  id: job.id,
-                  modal: credentials,
-                  provider: options.provider,
-                })
-                const cleanup = terminal.has(job.status) && lifecycle.delivery !== "pending"
+                const setup = Promise.withResolvers<void>()
                 const ready = Promise.withResolvers<void>()
-                const task = cleanup
-                  ? cleanupModal(job, scope, credentials, provider)
-                  : recoverModal(job, scope, credentials, provider, ready.resolve)
-                const managed = task
-                  .catch(async (error) => {
-                    const current = await get(job.id, { root, workspace: scope.workspace })
-                    if (error instanceof ModalAdapter.HarvestError && current && !terminal.has(current.status)) {
-                      await deferModal(job, scope, error)
-                      return
+                let cleanup = false
+                let activated = false
+                const managed = lease
+                  .during(async () => {
+                    try {
+                      const prior = await recovery(root, job)
+                      if (prior.retry > Date.now()) return
+                      const credentials =
+                        options.credentials ?? (await options.resolveCredentials?.().catch(() => undefined))
+                      if (!credentials || !job.authority) return
+                      const provider = options.provider ?? ModalAdapter
+                      const authorized = await currentAuthority(job.authority).then(
+                        () => true,
+                        async () => {
+                          await cancel(job.id, {
+                            ...options,
+                            root,
+                            workspace: scope.workspace,
+                            credentials,
+                            provider,
+                          }).catch(() => undefined)
+                          return false
+                        },
+                      )
+                      if (!authorized) return
+                      const current = await get(job.id, { root, workspace: scope.workspace })
+                      if (!current || current.status === "cancelled") return
+                      await activate(key, {
+                        detached: false,
+                        authority: job.authority,
+                        root,
+                        workspace: scope.workspace,
+                        id: job.id,
+                        modal: credentials,
+                        provider: options.provider,
+                      })
+                      activated = true
+                      cleanup = terminal.has(job.status) && lifecycle.delivery !== "pending"
+                      setup.resolve()
+                      return await (
+                        cleanup
+                          ? cleanupModal(job, scope, credentials, provider)
+                          : recoverModal(job, scope, credentials, provider, ready.resolve)
+                      ).catch(async (error) => {
+                        const current = await get(job.id, { root, workspace: scope.workspace })
+                        if (error instanceof ModalAdapter.HarvestError && current && !terminal.has(current.status)) {
+                          await deferModal(job, scope, error)
+                          return
+                        }
+                        if (current && terminal.has(current.status) && current.lifecycle?.delivery === "pending") {
+                          await failModal(current, scope, credentials, error, provider)
+                          return
+                        }
+                        if (!current || terminal.has(current.status)) return
+                        const message = OpenScience.redactSecrets(
+                          error instanceof Error ? error.message : String(error),
+                        )
+                        const attempt = prior.attempt + 1
+                        if (attempt >= recoveryLimit) {
+                          await event(root, job.id, `Modal recovery failed after ${attempt} attempts: ${message}`)
+                          await failModal(current, scope, credentials, error, provider, true)
+                          return
+                        }
+                        await change(root, (jobs) => {
+                          const stored = jobs.find((item) => item.id === job.id)
+                          if (!stored) return
+                          stored.recovery_attempts = attempt
+                          stored.recovery_retry_at = new Date(Date.now() + recoveryDelay).toISOString()
+                        })
+                        await event(
+                          root,
+                          job.id,
+                          `Modal recovery attempt ${attempt}/${recoveryLimit} deferred for ${recoveryDelay / 1000} seconds: ${message}`,
+                        )
+                      })
+                    } catch (error) {
+                      setup.reject(error)
+                      throw error
+                    } finally {
+                      setup.resolve()
+                      if (activated) await deactivate(key)
                     }
-                    if (current && terminal.has(current.status) && current.lifecycle?.delivery === "pending") {
-                      await failModal(current, scope, credentials, error, provider)
-                      return
-                    }
-                    if (!current || terminal.has(current.status)) return
-                    const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
-                    const attempt = prior.attempt + 1
-                    if (attempt >= recoveryLimit) {
-                      await event(root, job.id, `Modal recovery failed after ${attempt} attempts: ${message}`)
-                      await failModal(current, scope, credentials, error, provider, true)
-                      return
-                    }
-                    await change(root, (jobs) => {
-                      const stored = jobs.find((item) => item.id === job.id)
-                      if (!stored) return
-                      stored.recovery_attempts = attempt
-                      stored.recovery_retry_at = new Date(Date.now() + recoveryDelay).toISOString()
-                    })
-                    await event(
-                      root,
-                      job.id,
-                      `Modal recovery attempt ${attempt}/${recoveryLimit} deferred for ${recoveryDelay / 1000} seconds: ${message}`,
-                    )
                   })
-                  .finally(async () => {
-                    await deactivate(key)
-                    await releaseLease(lease!)
-                  })
+                  .finally(() => releaseLease(lease!))
                 handedOff = true
                 void managed.catch(() => undefined)
+                await setup.promise
                 if (!cleanup)
                   await Promise.race([
                     ready.promise,
@@ -929,7 +948,7 @@ export namespace ComputeJobs {
             }
             if (job.target.kind === "ssh") {
               claims.add(key)
-              let lease: AsyncDisposable | undefined
+              let lease: FileLease.Lease | undefined
               let handedOff = false
               try {
                 lease = await FileLease.acquire(sshLeaseOf(root, job.id), 25).catch((error) => {
@@ -937,47 +956,60 @@ export namespace ComputeJobs {
                   throw error
                 })
                 if (!lease) return
-                const prior = await recovery(root, job)
-                if (prior.retry > Date.now()) return
-                await activate(key, {
-                  detached: false,
-                  authority: job.authority!,
-                  root,
-                  workspace: scope.workspace,
-                  id: job.id,
-                  host: job.ssh?.host,
-                })
-                const managed = recoverSsh(job, scope)
-                  .then(async () => {
-                    if (!job.recovery_attempts && !job.recovery_retry_at) return
-                    await change(root, (jobs) => {
-                      const stored = jobs.find((item) => item.id === job.id)
-                      if (!stored) return
-                      stored.recovery_attempts = undefined
-                      stored.recovery_retry_at = undefined
-                    })
+                const setup = Promise.withResolvers<void>()
+                let activated = false
+                const managed = lease
+                  .during(async () => {
+                    try {
+                      const prior = await recovery(root, job)
+                      if (prior.retry > Date.now()) return
+                      await activate(key, {
+                        detached: false,
+                        authority: job.authority!,
+                        root,
+                        workspace: scope.workspace,
+                        id: job.id,
+                        host: job.ssh?.host,
+                      })
+                      activated = true
+                      setup.resolve()
+                      return await recoverSsh(job, scope)
+                        .then(async () => {
+                          if (!job.recovery_attempts && !job.recovery_retry_at) return
+                          await change(root, (jobs) => {
+                            const stored = jobs.find((item) => item.id === job.id)
+                            if (!stored) return
+                            stored.recovery_attempts = undefined
+                            stored.recovery_retry_at = undefined
+                          })
+                        })
+                        .catch(async (error) => {
+                          const attempt = prior.attempt + 1
+                          const delay = Math.min(5 * 60_000, recoveryDelay * 2 ** Math.min(attempt - 1, 5))
+                          await change(root, (jobs) => {
+                            const stored = jobs.find((item) => item.id === job.id)
+                            if (!stored) return
+                            stored.recovery_attempts = attempt
+                            stored.recovery_retry_at = new Date(Date.now() + delay).toISOString()
+                          })
+                          await event(
+                            root,
+                            job.id,
+                            `SSH recovery attempt ${attempt} deferred for ${delay / 1000} seconds: ${error instanceof Error ? error.message : String(error)}`,
+                          )
+                        })
+                    } catch (error) {
+                      setup.reject(error)
+                      throw error
+                    } finally {
+                      setup.resolve()
+                      if (activated) await deactivate(key)
+                    }
                   })
-                  .catch(async (error) => {
-                    const attempt = prior.attempt + 1
-                    const delay = Math.min(5 * 60_000, recoveryDelay * 2 ** Math.min(attempt - 1, 5))
-                    await change(root, (jobs) => {
-                      const stored = jobs.find((item) => item.id === job.id)
-                      if (!stored) return
-                      stored.recovery_attempts = attempt
-                      stored.recovery_retry_at = new Date(Date.now() + delay).toISOString()
-                    })
-                    await event(
-                      root,
-                      job.id,
-                      `SSH recovery attempt ${attempt} deferred for ${delay / 1000} seconds: ${error instanceof Error ? error.message : String(error)}`,
-                    )
-                  })
-                  .finally(async () => {
-                    await deactivate(key)
-                    await releaseLease(lease!)
-                  })
+                  .finally(() => releaseLease(lease!))
                 handedOff = true
                 void managed.catch(() => undefined)
+                await setup.promise
               } finally {
                 if (lease && !handedOff) await releaseLease(lease)
                 claims.delete(key)
@@ -986,7 +1018,7 @@ export namespace ComputeJobs {
             }
             if (job.target.kind === "local") {
               claims.add(key)
-              let lease: AsyncDisposable | undefined
+              let lease: FileLease.Lease | undefined
               let handedOff = false
               try {
                 lease = await FileLease.acquire(localLeaseOf(root, job.id), 25).catch((error) => {
@@ -994,86 +1026,97 @@ export namespace ComputeJobs {
                   throw error
                 })
                 if (!lease) return
-                const current = await get(job.id, { root, workspace: scope.workspace })
-                if (!current || terminal.has(current.status)) return
-                const exit = await localExit(root, current.id)
-                if (exit !== undefined) {
-                  await change(root, (jobs) => {
-                    const index = jobs.findIndex((item) => item.id === current.id)
-                    if (index < 0 || terminal.has(jobs[index]!.status)) return
-                    const finished = move(
-                      jobs[index]!,
-                      { type: "finish", outcome: exit === 0 ? "succeeded" : "failed" },
-                      {
-                        completed_at: new Date().toISOString(),
-                        exit_code: exit,
-                        pid: undefined,
-                        process_identity: undefined,
-                      },
-                    )
-                    const closed = move(finished, { type: "close" })
-                    jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
-                  })
-                  return
-                }
-                if (!current.pid || !(await owns(current.pid, current.process_identity))) {
-                  // A normal wrapper writes its exit marker before the owned
-                  // supervisor disappears. Re-read after the identity check,
-                  // then classify a genuinely markerless death while still
-                  // holding the one durable local lifecycle lease.
-                  const reported = await localExit(root, current.id)
-                  await change(root, (jobs) => {
-                    const index = jobs.findIndex((item) => item.id === current.id)
-                    if (index < 0 || terminal.has(jobs[index]!.status)) return
-                    const draft =
-                      reported === undefined
-                        ? move(
+                const setup = Promise.withResolvers<void>()
+                let activated = false
+                const managed = lease
+                  .during(async () => {
+                    try {
+                      const current = await get(job.id, { root, workspace: scope.workspace })
+                      if (!current || terminal.has(current.status)) return
+                      const exit = await localExit(root, current.id)
+                      if (exit !== undefined) {
+                        await change(root, (jobs) => {
+                          const index = jobs.findIndex((item) => item.id === current.id)
+                          if (index < 0 || terminal.has(jobs[index]!.status)) return
+                          const finished = move(
                             jobs[index]!,
-                            { type: "interrupt" },
+                            { type: "finish", outcome: exit === 0 ? "succeeded" : "failed" },
                             {
                               completed_at: new Date().toISOString(),
-                              exit_code: null,
-                              pid: undefined,
-                              process_identity: undefined,
-                              error: "The job process ended before it could report a result.",
-                            },
-                          )
-                        : move(
-                            jobs[index]!,
-                            { type: "finish", outcome: reported === 0 ? "succeeded" : "failed" },
-                            {
-                              completed_at: new Date().toISOString(),
-                              exit_code: reported,
+                              exit_code: exit,
                               pid: undefined,
                               process_identity: undefined,
                             },
                           )
-                    const closed = reported === undefined ? draft : move(draft, { type: "close" })
-                    jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+                          const closed = move(finished, { type: "close" })
+                          jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+                        })
+                        return
+                      }
+                      if (!current.pid || !(await owns(current.pid, current.process_identity))) {
+                        // A normal wrapper writes its exit marker before the owned
+                        // supervisor disappears. Re-read after the identity check,
+                        // then classify a genuinely markerless death while still
+                        // holding the one durable local lifecycle lease.
+                        const reported = await localExit(root, current.id)
+                        await change(root, (jobs) => {
+                          const index = jobs.findIndex((item) => item.id === current.id)
+                          if (index < 0 || terminal.has(jobs[index]!.status)) return
+                          const draft =
+                            reported === undefined
+                              ? move(
+                                  jobs[index]!,
+                                  { type: "interrupt" },
+                                  {
+                                    completed_at: new Date().toISOString(),
+                                    exit_code: null,
+                                    pid: undefined,
+                                    process_identity: undefined,
+                                    error: "The job process ended before it could report a result.",
+                                  },
+                                )
+                              : move(
+                                  jobs[index]!,
+                                  { type: "finish", outcome: reported === 0 ? "succeeded" : "failed" },
+                                  {
+                                    completed_at: new Date().toISOString(),
+                                    exit_code: reported,
+                                    pid: undefined,
+                                    process_identity: undefined,
+                                  },
+                                )
+                          const closed = reported === undefined ? draft : move(draft, { type: "close" })
+                          jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+                        })
+                        return
+                      }
+                      if (!current.authority) return
+                      await activate(key, {
+                        dataRootOwner:
+                          process.platform === "win32"
+                            ? undefined
+                            : { pid: current.pid, identity: current.process_identity! },
+                        detached: process.platform !== "win32",
+                        authority: current.authority,
+                        root,
+                        workspace: scope.workspace,
+                        id: current.id,
+                      })
+                      activated = true
+                      setup.resolve()
+                      await recoverLocal(current, scope)
+                    } catch (error) {
+                      setup.reject(error)
+                      throw error
+                    } finally {
+                      setup.resolve()
+                      if (activated) await deactivate(key)
+                    }
                   })
-                  return
-                }
-                if (!current.authority) return
-                await activate(key, {
-                  dataRootOwner:
-                    process.platform === "win32"
-                      ? undefined
-                      : { pid: current.pid, identity: current.process_identity! },
-                  detached: process.platform !== "win32",
-                  authority: current.authority,
-                  root,
-                  workspace: scope.workspace,
-                  id: current.id,
-                })
-                const managed = recoverLocal(current, scope).finally(async () => {
-                  try {
-                    await deactivate(key)
-                  } finally {
-                    await releaseLease(lease!)
-                  }
-                })
+                  .finally(() => releaseLease(lease!))
                 handedOff = true
                 void managed.catch(() => undefined)
+                await setup.promise
               } finally {
                 claims.delete(key)
                 if (lease && !handedOff) await releaseLease(lease)
@@ -1996,50 +2039,52 @@ export namespace ComputeJobs {
   async function cancelSsh(job: Job, scope: Scope) {
     if (!job.ssh || !job.authority) throw new Error(`SSH job ${job.id} has no cancellable remote resource`)
     await using operation = await FileLease.acquire(sshOperationOf(scope.root, job.id))
-    const current = await change(scope.root, (jobs) => {
-      const index = jobs.findIndex((item) => item.id === job.id)
-      if (index < 0) throw new Error(`Compute job ${job.id} was not found`)
-      const stored = jobs[index]!
-      if (terminal.has(stored.status)) return stored
-      const cancelled = move(stored, { type: "cancel" }, { completed_at: new Date().toISOString(), exit_code: null })
-      jobs[index] = Job.parse({ ...cancelled, provenance: provenance(cancelled) })
-      return jobs[index]!
-    })
-    const remote = await (async () => {
-      if (!current.remote_id) return { closed: true, error: undefined }
-      const spec = await sshSpec(current, scope)
-      const checked = await sshRun(scope, current, current.ssh!.host, current.authority!, SshAdapter.inspect(spec), {
-        timeout: 30_000,
-        authorize: false,
+    return await operation.during(async () => {
+      const current = await change(scope.root, (jobs) => {
+        const index = jobs.findIndex((item) => item.id === job.id)
+        if (index < 0) throw new Error(`Compute job ${job.id} was not found`)
+        const stored = jobs[index]!
+        if (terminal.has(stored.status)) return stored
+        const cancelled = move(stored, { type: "cancel" }, { completed_at: new Date().toISOString(), exit_code: null })
+        jobs[index] = Job.parse({ ...cancelled, provenance: provenance(cancelled) })
+        return jobs[index]!
       })
-      if (!SshAdapter.parse<{ exists: boolean }>(checked.stdout).exists) return { closed: true, error: undefined }
-      const cancelled = await sshRun(
-        scope,
-        current,
-        current.ssh!.host,
-        current.authority!,
-        SshAdapter.invoke(spec, "cancel", current.remote_id),
-        { timeout: 30_000, authorize: false },
-      ).then((value) => SshAdapter.parse<{ cancelled: boolean }>(value.stdout).cancelled)
-      if (!cancelled) return { closed: false, error: "Remote scheduler did not confirm cancellation" }
-      await releaseSsh(current, scope, false)
-      return { closed: true, error: undefined }
-    })().catch((error) => ({ closed: false, error: error instanceof Error ? error.message : String(error) }))
-    if (remote.error) await event(scope.root, current.id, `Remote cancellation pending: ${remote.error}`)
-    return await change(scope.root, (jobs) => {
-      const index = jobs.findIndex((item) => item.id === current.id)
-      if (index < 0) throw new Error(`Compute job ${current.id} was not found`)
-      const stored = jobs[index]!
-      const abandoned = stored.lifecycle?.recoverable ? move(stored, { type: "abandon" }) : stored
-      const lifecycle = remote.closed ? move(abandoned, { type: "close" }) : move(abandoned, { type: "lose" })
-      jobs[index] = Job.parse({
-        ...lifecycle,
-        cleanup_error: remote.closed
-          ? undefined
-          : `Remote cancellation was not confirmed. ${remote.error ?? "Retry cancellation."}`,
-        provenance: provenance(lifecycle),
+      const remote = await (async () => {
+        if (!current.remote_id) return { closed: true, error: undefined }
+        const spec = await sshSpec(current, scope)
+        const checked = await sshRun(scope, current, current.ssh!.host, current.authority!, SshAdapter.inspect(spec), {
+          timeout: 30_000,
+          authorize: false,
+        })
+        if (!SshAdapter.parse<{ exists: boolean }>(checked.stdout).exists) return { closed: true, error: undefined }
+        const cancelled = await sshRun(
+          scope,
+          current,
+          current.ssh!.host,
+          current.authority!,
+          SshAdapter.invoke(spec, "cancel", current.remote_id),
+          { timeout: 30_000, authorize: false },
+        ).then((value) => SshAdapter.parse<{ cancelled: boolean }>(value.stdout).cancelled)
+        if (!cancelled) return { closed: false, error: "Remote scheduler did not confirm cancellation" }
+        await releaseSsh(current, scope, false)
+        return { closed: true, error: undefined }
+      })().catch((error) => ({ closed: false, error: error instanceof Error ? error.message : String(error) }))
+      if (remote.error) await event(scope.root, current.id, `Remote cancellation pending: ${remote.error}`)
+      return await change(scope.root, (jobs) => {
+        const index = jobs.findIndex((item) => item.id === current.id)
+        if (index < 0) throw new Error(`Compute job ${current.id} was not found`)
+        const stored = jobs[index]!
+        const abandoned = stored.lifecycle?.recoverable ? move(stored, { type: "abandon" }) : stored
+        const lifecycle = remote.closed ? move(abandoned, { type: "close" }) : move(abandoned, { type: "lose" })
+        jobs[index] = Job.parse({
+          ...lifecycle,
+          cleanup_error: remote.closed
+            ? undefined
+            : `Remote cancellation was not confirmed. ${remote.error ?? "Retry cancellation."}`,
+          provenance: provenance(lifecycle),
+        })
+        return jobs[index]!
       })
-      return jobs[index]!
     })
   }
 
@@ -2596,66 +2641,77 @@ export namespace ComputeJobs {
         throw new Error(`Compute job ${id} has no recoverable SSH output`)
       }
       await using operation = await FileLease.acquire(sshOperationOf(scope.root, id))
-      await using lease = await FileLease.acquire(sshLeaseOf(scope.root, id))
-      const retrying = await change(scope.root, (jobs) => {
-        const index = jobs.findIndex((item) => item.id === id)
-        if (index < 0) throw new Error(`Compute job ${id} was not found`)
-        const draft = move(jobs[index]!, { type: "retry_delivery" }, { capture_error: undefined, error: undefined })
-        jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
-        return jobs[index]!
+      return await operation.during(async () => {
+        await using lease = await FileLease.acquire(sshLeaseOf(scope.root, id))
+        return await lease.during(async () => {
+          const retrying = await change(scope.root, (jobs) => {
+            const index = jobs.findIndex((item) => item.id === id)
+            if (index < 0) throw new Error(`Compute job ${id} was not found`)
+            const draft = move(jobs[index]!, { type: "retry_delivery" }, { capture_error: undefined, error: undefined })
+            jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+            return jobs[index]!
+          })
+          await finishSsh(retrying, scope, retrying.exit_code ?? 1)
+          return (await get(id, { root: scope.root, workspace: scope.workspace }))!
+        })
       })
-      await finishSsh(retrying, scope, retrying.exit_code ?? 1)
-      return (await get(id, { root: scope.root, workspace: scope.workspace }))!
     }
     // A Modal delivery failure can become visible just before its current
     // owner releases the in-memory runtime. The durable lease is the source of
     // truth across both this process and sibling servers: wait for that owner
     // instead of rejecting an explicit retry in the handoff window.
     await using operation = await FileLease.acquire(modalOperationOf(scope.root, id))
-    const lease = await FileLease.acquire(modalLeaseOf(scope.root, id))
-    let handedOff = false
-    try {
-      const provider = options.provider ?? ModalAdapter
-      const job = await change(scope.root, (jobs) => {
-        const index = jobs.findIndex((item) => item.id === id)
-        if (index < 0) throw new Error(`Compute job ${id} was not found`)
-        const current = jobs[index]!
-        if (current.target.kind !== "modal" || !current.modal || !current.cwd || !current.authority) {
-          throw new Error(`Compute job ${id} has no recoverable Modal output`)
-        }
-        if (!terminal.has(current.status) || !current.lifecycle?.recoverable) {
-          throw new Error(`Compute job ${id} has no recoverable Modal output`)
-        }
-        const draft = move(current, { type: "retry_delivery" }, { error: undefined, capture_error: undefined })
-        const updated = Job.parse({ ...draft, provenance: provenance(draft) })
-        jobs[index] = updated
-        return updated
-      })
-      const context = await modalContext(options, "Enable Modal before retrying output delivery")
-      await activate(key, {
-        detached: false,
-        authority: job.authority!,
-        root: scope.root,
-        workspace: scope.workspace,
-        id: job.id,
-        modal: context,
-        provider,
-      })
-      const managed = recoverModal(job, scope, context, provider)
-        .catch((error) => failModal(job, scope, context, error, provider))
-        .finally(async () => {
+    return await operation.during(async () => {
+      const lease = await FileLease.acquire(modalLeaseOf(scope.root, id))
+      let handedOff = false
+      try {
+        const provider = options.provider ?? ModalAdapter
+        const job = await change(scope.root, (jobs) => {
+          const index = jobs.findIndex((item) => item.id === id)
+          if (index < 0) throw new Error(`Compute job ${id} was not found`)
+          const current = jobs[index]!
+          if (current.target.kind !== "modal" || !current.modal || !current.cwd || !current.authority) {
+            throw new Error(`Compute job ${id} has no recoverable Modal output`)
+          }
+          if (!terminal.has(current.status) || !current.lifecycle?.recoverable) {
+            throw new Error(`Compute job ${id} has no recoverable Modal output`)
+          }
+          const draft = move(current, { type: "retry_delivery" }, { error: undefined, capture_error: undefined })
+          const updated = Job.parse({ ...draft, provenance: provenance(draft) })
+          jobs[index] = updated
+          return updated
+        })
+        const context = await modalContext(options, "Enable Modal before retrying output delivery")
+        await activate(key, {
+          detached: false,
+          authority: job.authority!,
+          root: scope.root,
+          workspace: scope.workspace,
+          id: job.id,
+          modal: context,
+          provider,
+        })
+        const managed = lease
+          .during(async () => {
+            try {
+              await recoverModal(job, scope, context, provider)
+            } catch (error) {
+              await failModal(job, scope, context, error, provider)
+            } finally {
+              await deactivate(key)
+            }
+          })
+          .finally(() => releaseLease(lease))
+        handedOff = true
+        void managed.catch(() => undefined)
+        return job
+      } finally {
+        if (!handedOff) {
           await deactivate(key)
           await releaseLease(lease)
-        })
-      handedOff = true
-      void managed.catch(() => undefined)
-      return job
-    } finally {
-      if (!handedOff) {
-        await deactivate(key)
-        await releaseLease(lease)
+        }
       }
-    }
+    })
   }
 
   export async function release(id: string, options: Options = {}): Promise<Job> {
@@ -2667,46 +2723,54 @@ export namespace ComputeJobs {
       if (!terminal.has(stored.status)) throw new Error(`Cancel compute job ${id} before releasing its resources`)
       if (stored.status === "cancelled" && stored.lifecycle?.resource !== "closed") return cancelSsh(stored, scope)
       await using operation = await FileLease.acquire(sshOperationOf(scope.root, id))
-      await using lease = await FileLease.acquire(sshLeaseOf(scope.root, id))
-      await releaseSsh(stored, scope)
-      return await change(scope.root, (jobs) => {
-        const index = jobs.findIndex((item) => item.id === id)
-        if (index < 0) throw new Error(`Compute job ${id} was not found`)
-        const current = jobs[index]!
-        const abandoned = current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
-        const closed = current.lifecycle?.resource === "closed" ? abandoned : move(abandoned, { type: "close" })
-        jobs[index] = Job.parse({ ...closed, cleanup_error: undefined, provenance: provenance(closed) })
-        return jobs[index]!
+      return await operation.during(async () => {
+        await using lease = await FileLease.acquire(sshLeaseOf(scope.root, id))
+        return await lease.during(async () => {
+          await releaseSsh(stored, scope)
+          return await change(scope.root, (jobs) => {
+            const index = jobs.findIndex((item) => item.id === id)
+            if (index < 0) throw new Error(`Compute job ${id} was not found`)
+            const current = jobs[index]!
+            const abandoned = current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
+            const closed = current.lifecycle?.resource === "closed" ? abandoned : move(abandoned, { type: "close" })
+            jobs[index] = Job.parse({ ...closed, cleanup_error: undefined, provenance: provenance(closed) })
+            return jobs[index]!
+          })
+        })
       })
     }
     await using operation = await FileLease.acquire(modalOperationOf(scope.root, id))
-    await using lease = await FileLease.acquire(modalLeaseOf(scope.root, id))
-    const job = await get(id, { root: scope.root, workspace: scope.workspace })
-    if (!job) throw new Error(`Compute job ${id} was not found`)
-    if (job.target.kind !== "modal" || !job.modal || !job.cwd) {
-      throw new Error(`Compute job ${id} has no Modal resources to release`)
-    }
-    if (!terminal.has(job.status)) throw new Error(`Cancel compute job ${id} before releasing its resources`)
-    if (job.lifecycle?.resource === "closed") return job
-    const context = await modalContext(options, "Enable Modal before releasing retained job resources")
-    const provider = options.provider ?? ModalAdapter
-    const spec = modalSpec(job, [], scope)
-    await provider.release(context, spec, job.remote_id)
-    if (job.remote_id) await event(scope.root, job.id, `Closed Modal sandbox ${job.remote_id}`)
-    await event(scope.root, job.id, `Released Modal volume ${spec.volume}`)
-    const released = await change(scope.root, (jobs) => {
-      const index = jobs.findIndex((item) => item.id === id)
-      if (index < 0) throw new Error(`Compute job ${id} was not found`)
-      const current = jobs[index]!
-      if (current.lifecycle?.resource === "closed") return current
-      const abandoned = current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
-      const closed = move(abandoned, { type: "close" })
-      const updated = Job.parse({ ...closed, provenance: provenance(closed) })
-      jobs[index] = updated
-      return updated
+    return await operation.during(async () => {
+      await using lease = await FileLease.acquire(modalLeaseOf(scope.root, id))
+      return await lease.during(async () => {
+        const job = await get(id, { root: scope.root, workspace: scope.workspace })
+        if (!job) throw new Error(`Compute job ${id} was not found`)
+        if (job.target.kind !== "modal" || !job.modal || !job.cwd) {
+          throw new Error(`Compute job ${id} has no Modal resources to release`)
+        }
+        if (!terminal.has(job.status)) throw new Error(`Cancel compute job ${id} before releasing its resources`)
+        if (job.lifecycle?.resource === "closed") return job
+        const context = await modalContext(options, "Enable Modal before releasing retained job resources")
+        const provider = options.provider ?? ModalAdapter
+        const spec = modalSpec(job, [], scope)
+        await provider.release(context, spec, job.remote_id)
+        if (job.remote_id) await event(scope.root, job.id, `Closed Modal sandbox ${job.remote_id}`)
+        await event(scope.root, job.id, `Released Modal volume ${spec.volume}`)
+        const released = await change(scope.root, (jobs) => {
+          const index = jobs.findIndex((item) => item.id === id)
+          if (index < 0) throw new Error(`Compute job ${id} was not found`)
+          const current = jobs[index]!
+          if (current.lifecycle?.resource === "closed") return current
+          const abandoned = current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
+          const closed = move(abandoned, { type: "close" })
+          const updated = Job.parse({ ...closed, provenance: provenance(closed) })
+          jobs[index] = updated
+          return updated
+        })
+        await fs.rm(path.join(logsOf(scope.root), `${job.id}.modal`), { recursive: true, force: true })
+        return released
+      })
     })
-    await fs.rm(path.join(logsOf(scope.root), `${job.id}.modal`), { recursive: true, force: true })
-    return released
   }
 
   export async function plan(input: Request, options: Options = {}): Promise<Plan> {
@@ -2888,40 +2952,54 @@ export namespace ComputeJobs {
       const base = Job.parse({ ...draft, reproducibility })
       const job = Job.parse({ ...base, provenance: provenance(base) })
       await using admission = await FileLease.acquire(modalAdmissionOf(scope.root))
-      await currentAuthority(authority)
-      await change(scope.root, (jobs) => {
-        const busy = jobs.filter(reservesModal).length
-        if (busy >= context.concurrency) {
-          throw new Error(`Modal concurrency limit reached for this project (${busy}/${context.concurrency})`)
-        }
-        jobs.push(job)
+      await admission.during(async () => {
+        await currentAuthority(authority)
+        await change(scope.root, (jobs) => {
+          const busy = jobs.filter(reservesModal).length
+          if (busy >= context.concurrency) {
+            throw new Error(`Modal concurrency limit reached for this project (${busy}/${context.concurrency})`)
+          }
+          jobs.push(job)
+        })
       })
 
       const lease = await FileLease.acquire(modalLeaseOf(scope.root, job.id))
       let handedOff = false
       try {
-        await currentAuthority(authority)
-        await activate(key, {
-          detached: false,
-          authority,
-          root: scope.root,
-          workspace: scope.workspace,
-          id: job.id,
-          modal: context,
-          provider,
-        })
-        const managed = executeModal(job, prepared.files, scope, context, provider)
-          .catch((error) =>
-            error instanceof ModalAdapter.HarvestError
-              ? deferModal(job, scope, error)
-              : failModal(job, scope, context, error, provider),
-          )
-          .finally(async () => {
-            await deactivate(key)
-            await releaseLease(lease)
+        const setup = Promise.withResolvers<void>()
+        let activated = false
+        const managed = lease
+          .during(async () => {
+            try {
+              await currentAuthority(authority)
+              await activate(key, {
+                detached: false,
+                authority,
+                root: scope.root,
+                workspace: scope.workspace,
+                id: job.id,
+                modal: context,
+                provider,
+              })
+              activated = true
+              setup.resolve()
+              await executeModal(job, prepared.files, scope, context, provider).catch((error) =>
+                error instanceof ModalAdapter.HarvestError
+                  ? deferModal(job, scope, error)
+                  : failModal(job, scope, context, error, provider),
+              )
+            } catch (error) {
+              setup.reject(error)
+              throw error
+            } finally {
+              setup.resolve()
+              if (activated) await deactivate(key)
+            }
           })
+          .finally(() => releaseLease(lease))
         handedOff = true
         void managed.catch(() => undefined)
+        await setup.promise
         return job
       } catch (error) {
         await change(scope.root, (jobs) => {
@@ -2945,41 +3023,55 @@ export namespace ComputeJobs {
       const base = Job.parse({ ...draft, reproducibility })
       const job = Job.parse({ ...base, provenance: provenance(base) })
       await using admission = await FileLease.acquire(sshAdmissionOf(scope.root, host.id))
-      await currentAuthority(authority)
-      await change(scope.root, (jobs) => {
-        const busy = jobs.filter((item) => reservesSsh(item, host.id)).length
-        if (busy >= host.concurrency) {
-          throw new Error(`SSH concurrency limit reached for ${host.label} (${busy}/${host.concurrency})`)
-        }
-        jobs.push(job)
+      await admission.during(async () => {
+        await currentAuthority(authority)
+        await change(scope.root, (jobs) => {
+          const busy = jobs.filter((item) => reservesSsh(item, host.id)).length
+          if (busy >= host.concurrency) {
+            throw new Error(`SSH concurrency limit reached for ${host.label} (${busy}/${host.concurrency})`)
+          }
+          jobs.push(job)
+        })
       })
       const lease = await FileLease.acquire(sshLeaseOf(scope.root, job.id))
       const key = keyOf(scope.root, job.id)
       let handedOff = false
       try {
-        await activate(key, {
-          detached: false,
-          authority,
-          root: scope.root,
-          workspace: scope.workspace,
-          id: job.id,
-          host,
-        })
+        const setup = Promise.withResolvers<void>()
         const ready = Promise.withResolvers<void>()
-        const managed = startSsh(job, scope, remote.files, ready.resolve)
-          .catch((error) => {
-            // A caller must never receive a successful handoff for a control
-            // process that failed before durable registration. Persist the
-            // terminal job in the background, but reject the launch now.
-            ready.reject(error)
-            return failSshStart(job, scope, error)
+        let activated = false
+        const managed = lease
+          .during(async () => {
+            try {
+              await activate(key, {
+                detached: false,
+                authority,
+                root: scope.root,
+                workspace: scope.workspace,
+                id: job.id,
+                host,
+              })
+              activated = true
+              setup.resolve()
+              await startSsh(job, scope, remote.files, ready.resolve).catch((error) => {
+                // A caller must never receive a successful handoff for a control
+                // process that failed before durable registration. Persist the
+                // terminal job in the background, but reject the launch now.
+                ready.reject(error)
+                return failSshStart(job, scope, error)
+              })
+            } catch (error) {
+              setup.reject(error)
+              throw error
+            } finally {
+              setup.resolve()
+              if (activated) await deactivate(key)
+            }
           })
-          .finally(async () => {
-            await deactivate(key)
-            await releaseLease(lease)
-          })
+          .finally(() => releaseLease(lease))
         handedOff = true
         void managed.catch(() => undefined)
+        await setup.promise
         // Do not wait for network transfer or remote submission. This mirrors
         // local launch semantics: return as soon as the first credential-
         // bearing child is durably owned, while surfacing pre-registration
@@ -3029,54 +3121,63 @@ export namespace ComputeJobs {
     const lease = await FileLease.acquire(localLeaseOf(scope.root, job.id))
     let handedOff = false
     try {
-      await activate(key, {
-        detached: false,
-        authority,
-        root: scope.root,
-        workspace: scope.workspace,
-        id: job.id,
-        host,
-      })
+      const setup = Promise.withResolvers<void>()
       const ready = Promise.withResolvers<void>()
-      const managed = execute(job, host, scope, authority, planned, ready.resolve)
-        .catch(async (error) => {
-          // `Sandbox.cleanup` is idempotent. This covers authority/env failures
-          // that happen before a child is spawned; exit/error listeners own the
-          // normal running-child path.
-          Sandbox.cleanup(planned)
-          await fs.mkdir(logsOf(scope.root), { recursive: true })
-          await fs
-            .appendFile(
-              path.join(logsOf(scope.root), `${job.id}.log`),
-              `${error instanceof Error ? error.message : String(error)}\n`,
-            )
-            .catch(() => {})
-          await change(scope.root, (jobs) => {
-            const index = jobs.findIndex((item) => item.id === job.id)
-            if (index < 0 || terminal.has(jobs[index]!.status)) return
-            const message = error instanceof Error ? error.message : String(error)
-            const draft = move(
-              jobs[index]!,
-              { type: "finish", outcome: "failed", message },
-              {
-                completed_at: new Date().toISOString(),
-                exit_code: null,
-                error: message,
-              },
-            )
-            const closed = move(draft, { type: "close" })
-            jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
-          }).catch(() => {})
-        })
-        .finally(async () => {
+      let activated = false
+      const managed = lease
+        .during(async () => {
           try {
-            await deactivate(key)
+            await activate(key, {
+              detached: false,
+              authority,
+              root: scope.root,
+              workspace: scope.workspace,
+              id: job.id,
+              host,
+            })
+            activated = true
+            setup.resolve()
+            await execute(job, host, scope, authority, planned, ready.resolve).catch(async (error) => {
+              // `Sandbox.cleanup` is idempotent. This covers authority/env failures
+              // that happen before a child is spawned; exit/error listeners own the
+              // normal running-child path.
+              Sandbox.cleanup(planned)
+              await fs.mkdir(logsOf(scope.root), { recursive: true })
+              await fs
+                .appendFile(
+                  path.join(logsOf(scope.root), `${job.id}.log`),
+                  `${error instanceof Error ? error.message : String(error)}\n`,
+                )
+                .catch(() => {})
+              await change(scope.root, (jobs) => {
+                const index = jobs.findIndex((item) => item.id === job.id)
+                if (index < 0 || terminal.has(jobs[index]!.status)) return
+                const message = error instanceof Error ? error.message : String(error)
+                const draft = move(
+                  jobs[index]!,
+                  { type: "finish", outcome: "failed", message },
+                  {
+                    completed_at: new Date().toISOString(),
+                    exit_code: null,
+                    error: message,
+                  },
+                )
+                const closed = move(draft, { type: "close" })
+                jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+              }).catch(() => {})
+            })
+          } catch (error) {
+            setup.reject(error)
+            throw error
           } finally {
-            await releaseLease(lease)
+            setup.resolve()
+            if (activated) await deactivate(key)
           }
         })
+        .finally(() => releaseLease(lease))
       handedOff = true
       void managed.catch(() => undefined)
+      await setup.promise
       await Promise.race([ready.promise, managed.then(() => undefined)])
       return job
     } finally {
@@ -3126,169 +3227,176 @@ export namespace ComputeJobs {
   export async function cancel(id: string, options: Options = {}): Promise<Job> {
     const scope = await scoped(options)
     const runtime = active.get(keyOf(scope.root, id))
-    let current = (await read(scope.root).catch((error) => preserve(scope.root, error))).find((job) => job.id === id)
-    if (!current) throw new Error(`Compute job ${id} was not found`)
+    const initial = (await read(scope.root).catch((error) => preserve(scope.root, error))).find((job) => job.id === id)
+    if (!initial) throw new Error(`Compute job ${id} was not found`)
+    let current: Job = initial
     if (current.target.kind === "ssh") return cancelSsh(current, scope)
     await using operation =
       current.target.kind === "modal" ? await FileLease.acquire(modalOperationOf(scope.root, id)) : undefined
-    if (current.target.kind === "modal") {
-      current = (await read(scope.root).catch((error) => preserve(scope.root, error))).find((job) => job.id === id)
-      if (!current) throw new Error(`Compute job ${id} was not found`)
-    }
-    const needs =
-      current.target.kind === "modal" && (!terminal.has(current.status) || current.lifecycle?.resource === "unknown")
-    const context =
-      runtime?.modal ??
-      (needs ? await modalContext(options, "Enable Modal before cancelling this recovered job") : undefined)
-    const localCancellation = current.target.kind !== "modal" && !terminal.has(current.status)
-    if (localCancellation) {
-      // Preserve the live descendant closure before a best-effort process
-      // signal can kill the leader and reparent a setsid child.
-      await CredentialProcessLedger.revoke({ id: credentialProcessID(scope.root, id), kind: "compute" })
-    }
-    const result = await change(scope.root, (jobs) => {
-      const index = jobs.findIndex((item) => item.id === id)
-      if (index < 0) throw new Error(`Compute job ${id} was not found`)
-      if (terminal.has(jobs[index]!.status)) {
-        const job = jobs[index]!
-        if (localCancellation && job.status === "failed" && job.exit_code === null) {
-          const lifecycle = ComputeLifecycle.State.parse({
-            ...(job.lifecycle ?? ComputeLifecycle.from(job.status)),
-            execution: "cancelled",
-            resource: "closed",
-            error_kind: undefined,
-            system_hint: undefined,
-          })
-          const reconciled = Job.parse({
-            ...job,
-            status: "cancelled",
-            lifecycle,
+    const action = async () => {
+      if (current.target.kind === "modal") {
+        const refreshed = (await read(scope.root).catch((error) => preserve(scope.root, error))).find(
+          (job) => job.id === id,
+        )
+        if (!refreshed) throw new Error(`Compute job ${id} was not found`)
+        current = refreshed
+      }
+      const needs =
+        current.target.kind === "modal" && (!terminal.has(current.status) || current.lifecycle?.resource === "unknown")
+      const context =
+        runtime?.modal ??
+        (needs ? await modalContext(options, "Enable Modal before cancelling this recovered job") : undefined)
+      const localCancellation = current.target.kind !== "modal" && !terminal.has(current.status)
+      if (localCancellation) {
+        // Preserve the live descendant closure before a best-effort process
+        // signal can kill the leader and reparent a setsid child.
+        await CredentialProcessLedger.revoke({ id: credentialProcessID(scope.root, id), kind: "compute" })
+      }
+      const result = await change(scope.root, (jobs) => {
+        const index = jobs.findIndex((item) => item.id === id)
+        if (index < 0) throw new Error(`Compute job ${id} was not found`)
+        if (terminal.has(jobs[index]!.status)) {
+          const job = jobs[index]!
+          if (localCancellation && job.status === "failed" && job.exit_code === null) {
+            const lifecycle = ComputeLifecycle.State.parse({
+              ...(job.lifecycle ?? ComputeLifecycle.from(job.status)),
+              execution: "cancelled",
+              resource: "closed",
+              error_kind: undefined,
+              system_hint: undefined,
+            })
+            const reconciled = Job.parse({
+              ...job,
+              status: "cancelled",
+              lifecycle,
+              completed_at: new Date().toISOString(),
+              exit_code: null,
+              pid: undefined,
+              process_identity: undefined,
+              error: undefined,
+            })
+            jobs[index] = Job.parse({ ...reconciled, provenance: provenance(reconciled) })
+            return { job: jobs[index]!, changed: true, cleanup: false }
+          }
+          const cleanup = job.target.kind === "modal" && job.lifecycle?.resource === "unknown" && !!context
+          return { job, changed: false, cleanup }
+        }
+        if (jobs[index]!.target.kind === "modal" && !context) {
+          throw new Error("Enable Modal before cancelling this recovered job")
+        }
+        const draft = move(
+          jobs[index]!,
+          { type: "cancel" },
+          {
             completed_at: new Date().toISOString(),
             exit_code: null,
-            pid: undefined,
-            process_identity: undefined,
-            error: undefined,
+          },
+        )
+        const cancelled = Job.parse({ ...draft, provenance: provenance(draft) })
+        jobs[index] = cancelled
+        return { job: cancelled, changed: true, cleanup: false }
+      })
+      const job = result.job
+      if (!result.changed && !result.cleanup) return job
+      if (job.target.kind === "modal") {
+        await event(scope.root, job.id, result.cleanup ? "Retrying Modal cleanup" : "Cancellation requested")
+      }
+      const proc = runtime?.process
+      const modalClosed =
+        job.target.kind === "modal"
+          ? context
+            ? await (options.provider ?? runtime?.provider ?? ModalAdapter)
+                .release(context, modalSpec(job, [], scope), job.remote_id)
+                .then(
+                  () => true,
+                  () => false,
+                )
+            : false
+          : true
+      if (job.target.kind === "modal" && job.remote_id && modalClosed) {
+        await event(scope.root, job.id, `Closed Modal sandbox ${job.remote_id}`)
+      }
+      if (job.target.kind === "modal" && !modalClosed) {
+        await event(scope.root, job.id, "Modal did not confirm cancellation; the remote resource may still be billing")
+      }
+      if (proc) {
+        await Shell.killTree(proc, {
+          detached: runtime.detached,
+          exited: () => proc.exitCode !== null,
+        })
+      } else if (job.pid && (await owns(job.pid, job.process_identity))) {
+        try {
+          if (process.platform === "win32") process.kill(job.pid, "SIGTERM")
+          else process.kill(-job.pid, "SIGTERM")
+        } catch {}
+      } else if (job.pid) {
+        await event(
+          scope.root,
+          job.id,
+          "Skipped process termination because the persisted PID no longer matched this job",
+        )
+      }
+      const hostId = job.target.kind === "ssh" ? job.target.host_id : undefined
+      const host = hostId ? options.hosts?.find((item) => item.id === hostId) : undefined
+      if (host && host.scheduler !== "none") {
+        const action =
+          host.scheduler === "slurm"
+            ? `scancel --name ${quote(`os-${job.id}`)}`
+            : `qselect -N ${quote(name(`os-${job.id}`))} | xargs -r qdel`
+        const spec = command(
+          { id: job.id, name: job.name, command: action, cwd: host.workdir },
+          { ...host, scheduler: "none" },
+        )
+        const planned = job.authority
+          ? Sandbox.wrapArgv({
+              file: spec.argv[0]!,
+              args: spec.argv.slice(1),
+              workspace: job.authority.writable,
+              readable: job.authority.readable,
+              unreadable: OpenScience.kernelSensitivePaths(),
+              options: job.authority.sandbox,
+            })
+          : { file: spec.argv[0]!, args: spec.argv.slice(1), temporary: undefined }
+        let proc: ChildProcess
+        try {
+          proc = spawn(planned.file, planned.args, {
+            cwd: job.authority?.workspace,
+            env: OpenScience.kernelEnv(process.env),
+            windowsHide: true,
+            stdio: "ignore",
           })
-          jobs[index] = Job.parse({ ...reconciled, provenance: provenance(reconciled) })
-          return { job: jobs[index]!, changed: true, cleanup: false }
+          await new Promise<void>((resolve) => {
+            proc.once("error", () => resolve())
+            proc.once("exit", () => resolve())
+          })
+        } finally {
+          Sandbox.cleanup(planned)
         }
-        const cleanup = job.target.kind === "modal" && job.lifecycle?.resource === "unknown" && !!context
-        return { job, changed: false, cleanup }
       }
-      if (jobs[index]!.target.kind === "modal" && !context) {
-        throw new Error("Enable Modal before cancelling this recovered job")
-      }
-      const draft = move(
-        jobs[index]!,
-        { type: "cancel" },
-        {
-          completed_at: new Date().toISOString(),
-          exit_code: null,
-        },
-      )
-      const cancelled = Job.parse({ ...draft, provenance: provenance(draft) })
-      jobs[index] = cancelled
-      return { job: cancelled, changed: true, cleanup: false }
-    })
-    const job = result.job
-    if (!result.changed && !result.cleanup) return job
-    if (job.target.kind === "modal") {
-      await event(scope.root, job.id, result.cleanup ? "Retrying Modal cleanup" : "Cancellation requested")
-    }
-    const proc = runtime?.process
-    const modalClosed =
-      job.target.kind === "modal"
-        ? context
-          ? await (options.provider ?? runtime?.provider ?? ModalAdapter)
-              .release(context, modalSpec(job, [], scope), job.remote_id)
-              .then(
-                () => true,
-                () => false,
-              )
-          : false
-        : true
-    if (job.target.kind === "modal" && job.remote_id && modalClosed) {
-      await event(scope.root, job.id, `Closed Modal sandbox ${job.remote_id}`)
-    }
-    if (job.target.kind === "modal" && !modalClosed) {
-      await event(scope.root, job.id, "Modal did not confirm cancellation; the remote resource may still be billing")
-    }
-    if (proc) {
-      await Shell.killTree(proc, {
-        detached: runtime.detached,
-        exited: () => proc.exitCode !== null,
-      })
-    } else if (job.pid && (await owns(job.pid, job.process_identity))) {
-      try {
-        if (process.platform === "win32") process.kill(job.pid, "SIGTERM")
-        else process.kill(-job.pid, "SIGTERM")
-      } catch {}
-    } else if (job.pid) {
-      await event(
-        scope.root,
-        job.id,
-        "Skipped process termination because the persisted PID no longer matched this job",
-      )
-    }
-    const hostId = job.target.kind === "ssh" ? job.target.host_id : undefined
-    const host = hostId ? options.hosts?.find((item) => item.id === hostId) : undefined
-    if (host && host.scheduler !== "none") {
-      const action =
-        host.scheduler === "slurm"
-          ? `scancel --name ${quote(`os-${job.id}`)}`
-          : `qselect -N ${quote(name(`os-${job.id}`))} | xargs -r qdel`
-      const spec = command(
-        { id: job.id, name: job.name, command: action, cwd: host.workdir },
-        { ...host, scheduler: "none" },
-      )
-      const planned = job.authority
-        ? Sandbox.wrapArgv({
-            file: spec.argv[0]!,
-            args: spec.argv.slice(1),
-            workspace: job.authority.writable,
-            readable: job.authority.readable,
-            unreadable: OpenScience.kernelSensitivePaths(),
-            options: job.authority.sandbox,
-          })
-        : { file: spec.argv[0]!, args: spec.argv.slice(1), temporary: undefined }
-      let proc: ChildProcess
-      try {
-        proc = spawn(planned.file, planned.args, {
-          cwd: job.authority?.workspace,
-          env: OpenScience.kernelEnv(process.env),
-          windowsHide: true,
-          stdio: "ignore",
+      return await change(scope.root, (jobs) => {
+        const index = jobs.findIndex((item) => item.id === id)
+        if (index < 0) throw new Error(`Compute job ${id} was not found`)
+        const current = jobs[index]!
+        const abandoned = modalClosed && current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
+        const closed = modalClosed ? move(abandoned, { type: "close" }) : move(abandoned, { type: "lose" })
+        const warning =
+          job.target.kind === "modal" && !modalClosed
+            ? "Cancellation was recorded, but Modal did not confirm that the sandbox and durable volume stopped. It may still be billing; retry cancellation or check Modal."
+            : undefined
+        const legacy =
+          !current.cleanup_error &&
+          (current.error?.startsWith("Cancellation was recorded") || current.error?.startsWith("Modal cleanup failed"))
+        const updated = Job.parse({
+          ...closed,
+          error: legacy ? undefined : current.error,
+          cleanup_error: warning,
+          provenance: provenance(closed),
         })
-        await new Promise<void>((resolve) => {
-          proc.once("error", () => resolve())
-          proc.once("exit", () => resolve())
-        })
-      } finally {
-        Sandbox.cleanup(planned)
-      }
+        jobs[index] = updated
+        return jobs[index]!
+      }).finally(() => (runtime ? deactivate(keyOf(scope.root, id)) : undefined))
     }
-    return await change(scope.root, (jobs) => {
-      const index = jobs.findIndex((item) => item.id === id)
-      if (index < 0) throw new Error(`Compute job ${id} was not found`)
-      const current = jobs[index]!
-      const abandoned = modalClosed && current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
-      const closed = modalClosed ? move(abandoned, { type: "close" }) : move(abandoned, { type: "lose" })
-      const warning =
-        job.target.kind === "modal" && !modalClosed
-          ? "Cancellation was recorded, but Modal did not confirm that the sandbox and durable volume stopped. It may still be billing; retry cancellation or check Modal."
-          : undefined
-      const legacy =
-        !current.cleanup_error &&
-        (current.error?.startsWith("Cancellation was recorded") || current.error?.startsWith("Modal cleanup failed"))
-      const updated = Job.parse({
-        ...closed,
-        error: legacy ? undefined : current.error,
-        cleanup_error: warning,
-        provenance: provenance(closed),
-      })
-      jobs[index] = updated
-      return jobs[index]!
-    }).finally(() => (runtime ? deactivate(keyOf(scope.root, id)) : undefined))
+    return await (operation ? operation.during(action) : action())
   }
 
   async function cancelActive(match: (runtime: Runtime) => boolean, failClosed = false): Promise<number> {

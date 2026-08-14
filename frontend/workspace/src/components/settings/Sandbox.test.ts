@@ -29,9 +29,21 @@ test("sandbox mutations respond optimistically while server writes stay ordered"
   expect(component).toContain("config: pendingConfig(confirmed.config)")
   expect(component).toContain('busy("enabled")')
   expect(component).toContain('busy("network")')
+  expect(component).toContain('busy("trust")')
   expect(component).toContain('busy("fallback")')
   expect(component).toContain('busy("paths")')
   expect(component).not.toContain("disabled={busy()")
+})
+
+test("sandbox defaults to low-friction contained execution with an explicit stricter trust policy", async () => {
+  const component = await source
+
+  expect(component).toContain("requireProjectTrust?: boolean")
+  expect(component).toContain("requireProjectTrust: false")
+  expect(component).toContain("Sandboxed terminals, kernels, and local jobs can run immediately")
+  expect(component).toContain("Project extensions and unsandboxed execution still require trust")
+  expect(component).toContain("Every project must be trusted before it can start terminals, kernels, or local jobs")
+  expect(component).toContain("{ requireProjectTrust: checked }")
 })
 
 test("sandbox progressively discloses technical facts and self-test checks", async () => {

@@ -48,8 +48,13 @@ await Instance.provide({
           childFile,
           releaseFile,
         ]
-        const wrapped = WindowsJobLauncher.wrap({ file: process.execPath, args: command })
+        const wrapped = WindowsJobLauncher.wrap({
+          file: process.execPath,
+          args: command,
+          linuxOwner: options?.processOwnership?.linuxOwner,
+        })
         const leader = spawn(wrapped.file, wrapped.args, { detached: true, stdio: "ignore" })
+        WindowsJobLauncher.bind(leader, wrapped.release)
         const ownership = options?.processOwnership
           ? { ...options.processOwnership, windowsRelease: wrapped.release }
           : undefined

@@ -780,6 +780,12 @@ export namespace Config {
         .describe(
           "Behaviour when no sandbox backend exists on this platform: 'error' (default) refuses to run, 'warn' runs unsandboxed with a notice, and 'allow' runs unsandboxed silently.",
         ),
+      requireProjectTrust: z
+        .boolean()
+        .optional()
+        .describe(
+          "Require explicit project trust before any execution, even when a verified OS sandbox is available. Default: false.",
+        ),
     })
     .meta({
       ref: "SandboxConfig",
@@ -1784,6 +1790,7 @@ export namespace Config {
       network: policy.network ?? "deny",
       allowWrite: policy.allowWrite ?? [],
       onUnavailable: policy.onUnavailable ?? "error",
+      requireProjectTrust: policy.requireProjectTrust ?? false,
     }
   }
 

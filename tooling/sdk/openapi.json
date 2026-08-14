@@ -6362,6 +6362,9 @@
                               "sandbox_unavailable"
                             ]
                           },
+                          "message": {
+                            "type": "string"
+                          },
                           "capability": {
                             "type": "string",
                             "enum": [
@@ -6449,6 +6452,10 @@
                                   "error",
                                   "allow"
                                 ]
+                              },
+                              "requireProjectTrust": {
+                                "default": false,
+                                "type": "boolean"
                               },
                               "backend": {
                                 "type": "string",
@@ -8759,6 +8766,9 @@
                             "sandbox_unavailable"
                           ]
                         },
+                        "message": {
+                          "type": "string"
+                        },
                         "capability": {
                           "type": "string",
                           "enum": [
@@ -8846,6 +8856,10 @@
                                 "error",
                                 "allow"
                               ]
+                            },
+                            "requireProjectTrust": {
+                              "default": false,
+                              "type": "boolean"
                             },
                             "backend": {
                               "type": "string",
@@ -12089,6 +12103,9 @@
                             "sandbox_unavailable"
                           ]
                         },
+                        "message": {
+                          "type": "string"
+                        },
                         "capability": {
                           "type": "string",
                           "enum": [
@@ -12176,6 +12193,10 @@
                                 "error",
                                 "allow"
                               ]
+                            },
+                            "requireProjectTrust": {
+                              "default": false,
+                              "type": "boolean"
                             },
                             "backend": {
                               "type": "string",
@@ -14515,6 +14536,9 @@
                             "sandbox_unavailable"
                           ]
                         },
+                        "message": {
+                          "type": "string"
+                        },
                         "capability": {
                           "type": "string",
                           "enum": [
@@ -14602,6 +14626,10 @@
                                 "error",
                                 "allow"
                               ]
+                            },
+                            "requireProjectTrust": {
+                              "default": false,
+                              "type": "boolean"
                             },
                             "backend": {
                               "type": "string",
@@ -16941,6 +16969,9 @@
                             "sandbox_unavailable"
                           ]
                         },
+                        "message": {
+                          "type": "string"
+                        },
                         "capability": {
                           "type": "string",
                           "enum": [
@@ -17028,6 +17059,10 @@
                                 "error",
                                 "allow"
                               ]
+                            },
+                            "requireProjectTrust": {
+                              "default": false,
+                              "type": "boolean"
                             },
                             "backend": {
                               "type": "string",
@@ -18005,6 +18040,9 @@
                       "error",
                       "allow"
                     ]
+                  },
+                  "requireProjectTrust": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -18920,6 +18958,9 @@
                         "sandbox_unavailable"
                       ]
                     },
+                    "message": {
+                      "type": "string"
+                    },
                     "capability": {
                       "type": "string",
                       "enum": [
@@ -19007,6 +19048,10 @@
                             "error",
                             "allow"
                           ]
+                        },
+                        "requireProjectTrust": {
+                          "default": false,
+                          "type": "boolean"
                         },
                         "backend": {
                           "type": "string",
@@ -31410,6 +31455,9 @@
                                       "sandbox_unavailable"
                                     ]
                                   },
+                                  "message": {
+                                    "type": "string"
+                                  },
                                   "capability": {
                                     "type": "string",
                                     "enum": [
@@ -31497,6 +31545,10 @@
                                           "error",
                                           "allow"
                                         ]
+                                      },
+                                      "requireProjectTrust": {
+                                        "default": false,
+                                        "type": "boolean"
                                       },
                                       "backend": {
                                         "type": "string",
@@ -32008,6 +32060,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -32095,6 +32150,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -32618,6 +32677,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -32705,6 +32767,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -33228,6 +33294,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -33315,6 +33384,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -33982,6 +34055,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -34069,6 +34145,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -34565,6 +34645,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -34652,6 +34735,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -35181,6 +35268,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -35268,6 +35358,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -35798,6 +35892,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -35885,6 +35982,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -36625,6 +36726,9 @@
                                       "sandbox_unavailable"
                                     ]
                                   },
+                                  "message": {
+                                    "type": "string"
+                                  },
                                   "capability": {
                                     "type": "string",
                                     "enum": [
@@ -36712,6 +36816,10 @@
                                           "error",
                                           "allow"
                                         ]
+                                      },
+                                      "requireProjectTrust": {
+                                        "default": false,
+                                        "type": "boolean"
                                       },
                                       "backend": {
                                         "type": "string",
@@ -37223,6 +37331,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -37310,6 +37421,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -37833,6 +37948,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -37920,6 +38038,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -38443,6 +38565,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -38530,6 +38655,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -39208,6 +39337,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -39295,6 +39427,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -39791,6 +39927,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -39878,6 +40017,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -40413,6 +40556,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -40500,6 +40646,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -41036,6 +41186,9 @@
                                 "sandbox_unavailable"
                               ]
                             },
+                            "message": {
+                              "type": "string"
+                            },
                             "capability": {
                               "type": "string",
                               "enum": [
@@ -41123,6 +41276,10 @@
                                     "error",
                                     "allow"
                                   ]
+                                },
+                                "requireProjectTrust": {
+                                  "default": false,
+                                  "type": "boolean"
                                 },
                                 "backend": {
                                   "type": "string",
@@ -43683,40 +43840,6 @@
           "success"
         ]
       },
-      "Event.server.connected": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "server.connected"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
-      "Event.global.disposed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "global.disposed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
       "Event.installation.updated": {
         "type": "object",
         "properties": {
@@ -43920,6 +44043,40 @@
             "required": [
               "status"
             ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.server.connected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.connected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
           }
         },
         "required": [
@@ -46678,6 +46835,9 @@
                   "sandbox_unavailable"
                 ]
               },
+              "message": {
+                "type": "string"
+              },
               "capability": {
                 "type": "string",
                 "enum": [
@@ -46765,6 +46925,10 @@
                       "error",
                       "allow"
                     ]
+                  },
+                  "requireProjectTrust": {
+                    "default": false,
+                    "type": "boolean"
                   },
                   "backend": {
                     "type": "string",
@@ -47031,12 +47195,6 @@
       "Event": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/Event.server.connected"
-          },
-          {
-            "$ref": "#/components/schemas/Event.global.disposed"
-          },
-          {
             "$ref": "#/components/schemas/Event.installation.updated"
           },
           {
@@ -47050,6 +47208,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.project.trust.changed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
           },
           {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
@@ -48438,6 +48602,10 @@
               "error",
               "allow"
             ]
+          },
+          "requireProjectTrust": {
+            "description": "Require explicit project trust before any execution, even when a verified OS sandbox is available. Default: false.",
+            "type": "boolean"
           }
         }
       },

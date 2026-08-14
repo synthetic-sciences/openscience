@@ -1,9 +1,20 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, spyOn, test } from "bun:test"
 import { Network } from "../../src/settings/network"
 import { NetworkSettingsRoutes } from "../../src/server/routes/settings/network"
 import { Global } from "../../src/global"
+import { FileLease } from "../../src/util/file-lease"
+import { DataRootBarrier } from "../../src/global/data-root-barrier"
+import { randomUUID } from "node:crypto"
 import path from "node:path"
 import fs from "node:fs/promises"
+
+async function waitForFile(filepath: string) {
+  for (let attempt = 0; attempt < 500; attempt++) {
+    if (await Bun.file(filepath).exists()) return
+    await Bun.sleep(10)
+  }
+  throw new Error(`Timed out waiting for ${filepath}`)
+}
 
 afterEach(async () => {
   await Network.set({ allowlistEnabled: false, enabled: ["package-management"], custom: [] })
@@ -66,6 +77,138 @@ test("migrates legacy clinical policy without broadening and is serialized and i
   const before = await Bun.file(file).text()
   expect(await Network.get()).toEqual(expected)
   expect(await Bun.file(file).text()).toBe(before)
+})
+
+test("network policy publication exposes a complete old or new state, never an in-place partial write", async () => {
+  const file = path.join(Global.Path.data, "settings", "network.json")
+  const previous = { allowlistEnabled: true, enabled: ["ncbi-nih"], custom: ["old.example"] }
+  const next = { allowlistEnabled: true, enabled: ["proteomics"], custom: ["new.example"] }
+  await Network.set(previous)
+
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const renameOriginal = fs.rename.bind(fs)
+  const rename = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+    if (destination === file && String(source).startsWith(`${file}.`) && String(source).endsWith(".tmp")) {
+      entered.resolve()
+      await release.promise
+    }
+    return renameOriginal(source, destination)
+  })
+  let pending: Promise<Network.State> | undefined
+  try {
+    pending = Network.set(next)
+    await entered.promise
+    expect(await Network.get()).toEqual(previous)
+    expect(JSON.parse(await fs.readFile(file, "utf8"))).toEqual({ version: 2, ...previous })
+    release.resolve()
+    expect(await pending).toEqual(next)
+    expect(await Network.get()).toEqual(next)
+  } finally {
+    release.resolve()
+    await pending?.catch(() => undefined)
+    rename.mockRestore()
+  }
+})
+
+test("failed atomic network policy publication preserves the old state and removes its temporary", async () => {
+  const file = path.join(Global.Path.data, "settings", "network.json")
+  const previous = { allowlistEnabled: true, enabled: ["ncbi-nih"], custom: ["old.example"] }
+  const next = { allowlistEnabled: true, enabled: ["proteomics"], custom: ["new.example"] }
+  await Network.set(previous)
+
+  const renameOriginal = fs.rename.bind(fs)
+  const rename = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+    if (destination === file && String(source).startsWith(`${file}.`) && String(source).endsWith(".tmp")) {
+      throw Object.assign(new Error("mock rename failure"), { code: "EIO" })
+    }
+    return renameOriginal(source, destination)
+  })
+  try {
+    await expect(Network.set(next)).rejects.toThrow("mock rename failure")
+  } finally {
+    rename.mockRestore()
+  }
+  expect(await Network.get()).toEqual(previous)
+  expect(JSON.parse(await fs.readFile(file, "utf8"))).toEqual({ version: 2, ...previous })
+  expect((await fs.readdir(path.dirname(file))).filter((name) => /^network\.json\..+\.tmp$/.test(name))).toEqual([])
+})
+
+test("cross-process allow re-reads explicit policy after acquiring the stable settings lease", async () => {
+  const file = path.join(Global.Path.data, "settings", "network.json")
+  const leasePath = path.join(Global.Path.config, "network-settings.lock")
+  const ready = path.join(Global.Path.config, `network-child-${randomUUID()}.ready`)
+  const networkModule = new URL("../../src/settings/network.ts", import.meta.url).href
+  const initial = { allowlistEnabled: true, enabled: ["ncbi-nih"], custom: ["initial.example"] }
+  const explicit = { allowlistEnabled: true, enabled: ["proteomics"], custom: ["explicit.example"] }
+  await Network.set(initial)
+
+  const source = [
+    `import { Network } from ${JSON.stringify(networkModule)}`,
+    'import fs from "node:fs/promises"',
+    `await fs.writeFile(${JSON.stringify(ready)}, "ready")`,
+    'await Network.allow("child.example")',
+  ].join("\n")
+  let child: ReturnType<typeof Bun.spawn> | undefined
+  try {
+    {
+      await using lease = await FileLease.acquire(leasePath)
+      child = Bun.spawn([process.execPath, "-e", source], {
+        cwd: path.resolve(import.meta.dir, "../.."),
+        env: { ...process.env },
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      await waitForFile(ready)
+      expect(child.exitCode).toBeNull()
+      await Bun.write(file, JSON.stringify({ version: 2, ...explicit }, null, 2))
+      void lease
+    }
+    const exit = await child.exited
+    if (exit !== 0) {
+      const error = child.stderr instanceof ReadableStream ? await new Response(child.stderr).text() : ""
+      throw new Error(`Network child failed: ${error}`)
+    }
+    expect(await Network.get()).toEqual({ ...explicit, custom: ["explicit.example", "child.example"] })
+  } finally {
+    child?.kill()
+    await child?.exited.catch(() => undefined)
+    await fs.rm(ready, { force: true })
+  }
+})
+
+test("nested network mutation completes when relocation intent lands behind its CLI scope", async () => {
+  const intent = path.join(Global.Path.config, "data-root-switch.intent")
+  const next = { allowlistEnabled: true, enabled: ["proteomics"], custom: ["nested.example"] }
+  const outerReady = Promise.withResolvers<void>()
+  const startNested = Promise.withResolvers<void>()
+  const nestedDone = Promise.withResolvers<void>()
+  const command = (async () => {
+    await using outer = await DataRootBarrier.enter(Global.Path.data, 2_000)
+    return await outer.during(async () => {
+      outerReady.resolve()
+      await startNested.promise
+      await Network.set(next)
+      nestedDone.resolve()
+    })
+  })()
+  let switching: Promise<AsyncDisposable> | undefined
+  try {
+    await outerReady.promise
+    switching = DataRootBarrier.exclusive(1_000)
+    await waitForFile(intent)
+    startNested.resolve()
+    expect(await Promise.race([nestedDone.promise.then(() => true), Bun.sleep(250).then(() => false)])).toBe(true)
+    await command
+    const exclusive = await switching
+    await exclusive[Symbol.asyncDispose]()
+    expect(await Network.get()).toEqual(next)
+  } finally {
+    startNested.resolve()
+    await command.catch(() => undefined)
+    const exclusive = await switching?.catch(() => undefined)
+    await exclusive?.[Symbol.asyncDispose]()
+  }
 })
 
 test("invalid or unsupported persisted policy denies all instead of restoring install defaults", async () => {

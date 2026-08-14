@@ -75,22 +75,37 @@ export namespace DarwinResponsibilityLauncher {
   }
 
   async function reapOwned(): Promise<void> {
-    const owner = DarwinResponsibility.unique(process.pid)
-    if (!owner) throw new Error(`Could not resolve macOS responsibility identity for ${process.pid}`)
-    for (let attempt = 0; attempt < 250; attempt++) {
-      const members = DarwinResponsibility.uniqueMembers(owner).filter((pid) => pid !== process.pid)
+    // The responsibility root is the durable containment marker owner. It may
+    // not exit while any member could still be alive, even when enumeration or
+    // signalling fails transiently. The external ledger has its own bounded
+    // wait and retains ownership on timeout; this supervisor deliberately has
+    // no timeout and keeps retrying until it observes an empty responsibility.
+    while (true) {
+      const owner = DarwinResponsibility.unique(process.pid)
+      if (!owner) {
+        await Bun.sleep(20)
+        continue
+      }
+      const members = (() => {
+        try {
+          return DarwinResponsibility.uniqueMembers(owner).filter((pid) => pid !== process.pid)
+        } catch {
+          return
+        }
+      })()
+      if (!members) {
+        await Bun.sleep(20)
+        continue
+      }
       if (!members.length) return
       for (const pid of members) {
-        if (!DarwinResponsibility.uniquelyOwns(owner, pid)) continue
         try {
+          if (!DarwinResponsibility.uniquelyOwns(owner, pid)) continue
           process.kill(pid, "SIGKILL")
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error
-        }
+        } catch {}
       }
       await Bun.sleep(20)
     }
-    throw new Error(`macOS responsibility root ${process.pid} could not reap every owned process`)
   }
 
   async function supervise(args: string[]): Promise<number> {
@@ -108,16 +123,62 @@ export namespace DarwinResponsibilityLauncher {
     // 130 before it can forward an interrupt to a persistent kernel. Replace
     // them with the supervisor-specific forwarding contract below.
     for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"] as const) process.removeAllListeners(signal)
+    let child: ReturnType<typeof spawn> | undefined
+    let interruptPending = false
+    let teardownSignal: "SIGHUP" | "SIGTERM" | undefined
+    let requestTeardown: ((signal: "SIGHUP" | "SIGTERM") => void) | undefined
+    const teardownRequested = new Promise<"SIGHUP" | "SIGTERM">((resolve) => {
+      requestTeardown = resolve
+    })
+    const forward = (signal: NodeJS.Signals) => {
+      if (!child) {
+        if (signal === "SIGINT") interruptPending = true
+        return
+      }
+      try {
+        // Forward exactly once to the payload leader. Responsibility teardown
+        // remains the descendant-wide hard-stop path; broad group delivery
+        // here can make runtime wrappers and their interpreter both translate
+        // the same interrupt.
+        child.kill(signal)
+      } catch {}
+    }
+    // Install the supervisor latches synchronously before activation can admit
+    // project code. TERM/HUP only record a control request; this responsibility
+    // root remains alive to reap. SIGINT remains a payload-only interrupt and
+    // is delivered once if it arrives just before the payload is spawned.
+    process.on("SIGINT", () => forward("SIGINT"))
+    for (const signal of ["SIGHUP", "SIGTERM"] as const) {
+      process.on(signal, () => {
+        if (teardownSignal) return
+        teardownSignal = signal
+        requestTeardown?.(signal)
+      })
+    }
+    const latchReady = process.env.OPENSCIENCE_DARWIN_SUPERVISOR_TEST_READY
+    if (process.env.OPENSCIENCE_TEST_HOME && latchReady) {
+      await fs.writeFile(latchReady, String(process.pid), { encoding: "utf8", flag: "wx", mode: 0o600 })
+    }
     // Do not expose project code until the durable ledger has persisted the
     // kernel responsibility unique ID. If registration fails, the supervisor
     // is still an empty process-group root that can be safely torn down.
     try {
-      await waitForRelease(activation)
+      const event = await Promise.race([
+        waitForRelease(activation).then(() => "activated" as const),
+        teardownRequested.then(() => "teardown" as const),
+      ])
+      if (event === "teardown") {
+        await reapOwned()
+        return teardownSignal === "SIGTERM" ? 143 : 129
+      }
     } finally {
       await fs.rm(activation, { force: true }).catch(() => undefined)
     }
 
-    let child: ReturnType<typeof spawn>
+    if (teardownSignal) {
+      await reapOwned()
+      return teardownSignal === "SIGTERM" ? 143 : 129
+    }
     try {
       child = spawn(file, commandArgs, {
         cwd: process.cwd(),
@@ -140,16 +201,7 @@ export namespace DarwinResponsibilityLauncher {
       child.once("error", reject)
       child.once("exit", (code, signal) => resolve(code ?? (signal ? 128 : 1)))
     })
-    const forward = (signal: NodeJS.Signals) => {
-      try {
-        // Forward exactly once to the payload leader. Responsibility teardown
-        // remains the descendant-wide hard-stop path; broad group delivery
-        // here can make runtime wrappers and their interpreter both translate
-        // the same interrupt.
-        child.kill(signal)
-      } catch {}
-    }
-    for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"] as const) process.on(signal, () => forward(signal))
+    if (interruptPending) forward("SIGINT")
 
     let settled = false
     let code = 1
@@ -168,6 +220,10 @@ export namespace DarwinResponsibilityLauncher {
       if (DarwinResponsibility.identity(owner) !== ownerIdentity) {
         await reapOwned()
         return 137
+      }
+      if (teardownSignal) {
+        await reapOwned()
+        return teardownSignal === "SIGTERM" ? 143 : 129
       }
       if (settled) {
         // A normal command completion is also a lifecycle boundary. Reap any

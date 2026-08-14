@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import path from "path"
+import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { ExecutionAuthority } from "../../src/project/execution"
 import { Project } from "../../src/project/project"
@@ -46,24 +47,36 @@ test("session execution authority is inspectable through the project route", asy
   )
 
   expect(response.status).toBe(200)
-  expect(ExecutionAuthority.Decision.parse(await response.json())).toMatchObject({
-    allowed: false,
-    reason: "project_untrusted",
+  const decision = ExecutionAuthority.Decision.parse(await response.json())
+  expect(decision).toMatchObject({
+    allowed: Sandbox.available(),
+    reason: Sandbox.available() ? "allowed" : "sandbox_unavailable",
     capability: "terminal",
-    mode: "read_only",
+    mode: Sandbox.available() ? "sandboxed" : "read_only",
     projectID: project.project.id,
     sessionID,
+    sandbox: {
+      enabled: true,
+      enforced: Sandbox.available(),
+      requireProjectTrust: false,
+    },
   })
+  const { requireProjectTrust, ...legacySandbox } = decision.sandbox
+  expect(requireProjectTrust).toBe(false)
+  expect(ExecutionAuthority.Decision.parse({ ...decision, sandbox: legacySandbox }).sandbox.requireProjectTrust).toBe(
+    false,
+  )
 })
 
-test("read-only project authority rejects terminal, shell, and kernel before process spawn", async () => {
+test("untrusted projects run routine terminals, shells, and kernels only in an enforced sandbox", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       await ProjectTrust.update(Instance.project, { trusted: false })
       const session = await Session.create({})
-      const marker = path.join(tmp.path, "process-spawned")
+      const shellMarker = path.join(tmp.path, "shell-spawned")
+      const kernelMarker = path.join(tmp.path, "kernel-spawned")
       const decision = await ExecutionAuthority.decide({
         projectID: Instance.project.id,
         sessionID: session.id,
@@ -71,9 +84,9 @@ test("read-only project authority rejects terminal, shell, and kernel before pro
       })
 
       expect(decision).toMatchObject({
-        allowed: false,
-        reason: "project_untrusted",
-        mode: "read_only",
+        allowed: Sandbox.available(),
+        reason: Sandbox.available() ? "allowed" : "sandbox_unavailable",
+        mode: Sandbox.available() ? "sandboxed" : "read_only",
         projectID: Instance.project.id,
         sessionID: session.id,
         trustRevision: 2,
@@ -81,6 +94,8 @@ test("read-only project authority rejects terminal, shell, and kernel before pro
           enabled: true,
           network: "deny",
           onUnavailable: "error",
+          requireProjectTrust: false,
+          enforced: Sandbox.available(),
         },
       })
       expect(decision.grantRevision).toBeGreaterThanOrEqual(1)
@@ -88,36 +103,148 @@ test("read-only project authority rejects terminal, shell, and kernel before pro
       expect(decision.workspace).toBe(await SessionFilesystem.workspace(session.id))
       expect(decision.writable).toContain(tmp.path)
 
-      await expect(Pty.create({ sessionID: session.id })).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)
-      expect(Pty.list()).toEqual([])
-
       const bash = await BashTool.init()
-      await expect(
-        bash.execute(
-          {
-            command: `printf spawned > ${JSON.stringify(marker)}`,
-            description: "Attempt read-only spawn",
-          },
-          context(session.id),
-        ),
-      ).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)
-
       const identity = {
         projectID: Instance.project.id,
         sessionID: session.id,
         name: "authority-probe",
         language: "python" as const,
       }
-      await expect(
-        KernelRuntime.execute(identity, `open(${JSON.stringify(marker)}, "w").write("spawned")`),
-      ).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)
-      expect(KernelRuntime.status(identity)).toMatchObject({
-        active: false,
-        process_id: null,
-      })
-      expect(await Bun.file(marker).exists()).toBe(false)
+      if (!Sandbox.available()) {
+        await expect(Pty.create({ sessionID: session.id })).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)
+        await expect(
+          bash.execute(
+            {
+              command: `printf spawned > ${JSON.stringify(shellMarker)}`,
+              description: "Attempt unavailable sandbox spawn",
+            },
+            context(session.id),
+          ),
+        ).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)
+        await expect(
+          KernelRuntime.execute(identity, `open(${JSON.stringify(kernelMarker)}, "w").write("spawned")`),
+        ).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)
+        expect(await Bun.file(shellMarker).exists()).toBe(false)
+        expect(await Bun.file(kernelMarker).exists()).toBe(false)
+        return
+      }
+
+      const terminal = await Pty.create({ sessionID: session.id })
+      try {
+        expect(terminal.authority).toMatchObject({ allowed: true, mode: "sandboxed", sandbox: { enforced: true } })
+        const result = await bash.execute(
+          {
+            command: `printf spawned > ${JSON.stringify(shellMarker)}`,
+            description: "Run sandboxed untrusted shell",
+          },
+          context(session.id),
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(await Bun.file(shellMarker).text()).toBe("spawned")
+
+        await KernelRuntime.execute(identity, `open(${JSON.stringify(kernelMarker)}, "w").write("spawned")`)
+        expect(KernelRuntime.status(identity)).toMatchObject({
+          active: true,
+          authority: { allowed: true, mode: "sandboxed", sandbox: { enforced: true } },
+        })
+        expect(await Bun.file(kernelMarker).text()).toBe("spawned")
+      } finally {
+        await Pty.remove(terminal.id)
+        await KernelRuntime.removeSession(identity.projectID, identity.sessionID)
+      }
     },
   })
+})
+
+test("non-routine remote execution still requires explicit project trust", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
+      const session = await Session.create({})
+      const sandboxed = await ExecutionAuthority.decide({ sessionID: session.id, capability: "remote_job" })
+      expect(sandboxed).toMatchObject({
+        allowed: false,
+        reason: Sandbox.available() ? "project_untrusted" : "sandbox_unavailable",
+        mode: "read_only",
+      })
+      if (Sandbox.available()) {
+        expect(sandboxed.message).toContain("Trust this project")
+        expect(sandboxed.remediation?.code).toBe("trust_project_required")
+      }
+    },
+  })
+})
+
+test("global policy can require project trust even for enforced sandbox execution", async () => {
+  const previous = await Config.trustedSandbox()
+  try {
+    await Config.setSandbox({ enabled: true, onUnavailable: "error", requireProjectTrust: true })
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
+        const session = await Session.create({})
+        const decision = await ExecutionAuthority.decide({ sessionID: session.id, capability: "shell" })
+        expect(decision).toMatchObject({
+          allowed: false,
+          reason: Sandbox.available() ? "project_untrusted" : "sandbox_unavailable",
+          mode: "read_only",
+          sandbox: { requireProjectTrust: true },
+        })
+        if (Sandbox.available()) {
+          expect(decision.message).toContain("global Sandbox policy requires explicit trust")
+          expect(decision.remediation?.code).toBe("trust_project_required")
+        }
+      },
+    })
+  } finally {
+    await Config.setSandbox(previous)
+  }
+})
+
+test("unsandboxed host execution requires trust, then runs only after trust is granted", async () => {
+  const previous = await Config.trustedSandbox()
+  try {
+    await Config.setSandbox({ enabled: false, requireProjectTrust: false })
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
+        const session = await Session.create({})
+        const denied = await ExecutionAuthority.decide({ sessionID: session.id, capability: "shell" })
+        expect(denied).toMatchObject({
+          allowed: false,
+          reason: "project_untrusted",
+          mode: "read_only",
+          sandbox: { enabled: false, enforced: false },
+        })
+        expect(denied.message).toContain("without an enforced OS sandbox")
+        const error = await ExecutionAuthority.require({ sessionID: session.id, capability: "shell" }).catch(
+          (cause) => cause,
+        )
+        expect(error).toBeInstanceOf(ExecutionAuthority.DeniedError)
+        expect(error.message).toBe(denied.message)
+        expect(error.toObject()).toMatchObject({
+          name: "ExecutionAuthorityDeniedError",
+          data: { message: denied.message },
+        })
+
+        const status = await ProjectTrust.status(Instance.project)
+        await ProjectTrust.update(Instance.project, { trusted: true, root: status.root })
+        expect(await ExecutionAuthority.decide({ sessionID: session.id, capability: "shell" })).toMatchObject({
+          allowed: true,
+          reason: "allowed",
+          mode: "host",
+        })
+      },
+    })
+  } finally {
+    await Config.setSandbox(previous)
+  }
 })
 
 test("authority generations change with trust and filesystem revisions", async () => {

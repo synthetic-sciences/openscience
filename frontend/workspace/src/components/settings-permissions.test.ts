@@ -44,13 +44,17 @@ describe("permission defaults shown in Settings", () => {
     expect(busy).toBe(false)
   })
 
-  test("keeps project trust explicit and revocable from the reachable Permissions panel", () => {
+  test("keeps project-code trust explicit without blocking routine sandboxed work", () => {
     expect(panel).toContain("sdk.client.project.trust.get(input)")
     expect(panel).toContain("sdk.client.project.trust.update({")
     expect(panel).toContain('title: trusted ? "Trust this project?" : "Revoke project trust?"')
     expect(panel).toContain("body: trusted ? { trusted: true, root: status.root } : { trusted: false }")
     expect(panel).toContain('trust()?.canExecuteProjectCode ? "Revoke trust" : "Trust project"')
-    expect(panel).toContain("If sandboxing is off or unavailable")
+    expect(panel).toContain("Sandboxed terminals, kernels, and local jobs do not require project trust")
+    expect(panel).toContain("Project-owned extensions and unsandboxed execution will be blocked")
+    expect(panel).toContain('title="Project code"')
+    expect(panel).toContain('"Project extensions blocked"')
+    expect(panel).toContain('"Restricted"')
     expect(panel).not.toContain("verified OpenScience sandbox")
     expect(panel).not.toContain("verified OS sandbox")
   })

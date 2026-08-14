@@ -20,6 +20,7 @@ import { FileLease } from "@/util/file-lease"
  */
 export namespace AuthorityProcessLedger {
   export type Kind = "pty" | "biology" | "kernel"
+  export type Containment = "linux_subreaper_v1" | "darwin_responsibility_v1" | "windows_job_v1"
 
   interface Entry {
     version: 1
@@ -30,6 +31,7 @@ export namespace AuthorityProcessLedger {
     owns_process_group: boolean
     darwin_responsibility_uniqueid?: string
     windows_job?: string
+    containment?: Containment
     owner_pid: number
     project_id: string
     session_id: string
@@ -66,6 +68,10 @@ export namespace AuthorityProcessLedger {
         (typeof item.darwin_responsibility_uniqueid === "string" &&
           /^[1-9][0-9]{0,19}$/.test(item.darwin_responsibility_uniqueid))) &&
       (item.windows_job === undefined || WindowsJob.valid(item.windows_job)) &&
+      (item.containment === undefined ||
+        item.containment === "linux_subreaper_v1" ||
+        item.containment === "darwin_responsibility_v1" ||
+        item.containment === "windows_job_v1") &&
       typeof item.owner_pid === "number" &&
       Number.isSafeInteger(item.owner_pid) &&
       item.owner_pid > 0 &&
@@ -111,6 +117,36 @@ export namespace AuthorityProcessLedger {
       await fs.rm(temp, { force: true }).catch(() => undefined)
       throw error
     }
+  }
+
+  async function serialized<T>(action: () => Promise<T>): Promise<T> {
+    await using lease = await FileLease.acquire(lockpath)
+    return await lease.during(action)
+  }
+
+  const dataRootCoverage = new Map<string, DataRootBarrier.Operation>()
+
+  async function disposeCoverage(id: string) {
+    const operation = dataRootCoverage.get(id)
+    if (!operation) return
+    await operation[Symbol.asyncDispose]()
+    if (dataRootCoverage.get(id) === operation) dataRootCoverage.delete(id)
+  }
+
+  async function publishCoverage(entry: Entry) {
+    if (entry.kind !== "kernel") return
+    const operation = await DataRootBarrier.enter(Global.Path.data, 30_000, {
+      pid: entry.pid,
+      identity: entry.identity,
+    })
+    const previous = dataRootCoverage.get(entry.id)
+    if (previous) {
+      await Promise.resolve(previous[Symbol.asyncDispose]()).catch(async (error: unknown) => {
+        await Promise.resolve(operation[Symbol.asyncDispose]()).catch(() => undefined)
+        throw error
+      })
+    }
+    dataRootCoverage.set(entry.id, operation)
   }
 
   function alive(pid: number): boolean {
@@ -385,8 +421,61 @@ export namespace AuthorityProcessLedger {
       }
       return live || terminated
     }
+    const expectedContainment: Containment =
+      process.platform === "linux" ? "linux_subreaper_v1" : "darwin_responsibility_v1"
+    if (entry.kind === "kernel" && entry.containment !== expectedContainment) {
+      // A pre-containment POSIX record has no authenticated supervisor that can
+      // close a moving fork/setsid tree. Publish child-owned data-root coverage
+      // for its exact live anchor and retain both marker and ledger rather than
+      // reviving the old snapshot/SIGKILL path. An operator can stop the legacy
+      // process explicitly; automatic relocation must fail closed meanwhile.
+      await publishCoverage(entry)
+      throw new Error(
+        `Kernel process ${entry.pid} predates verified ${expectedContainment} containment; refusing unsafe automatic teardown`,
+      )
+    }
     if (!entry.owns_process_group) {
       throw new Error(`Authorized ${entry.kind} process ${entry.pid} has no safely reapable process group`)
+    }
+
+    if (
+      entry.kind === "kernel" &&
+      (entry.containment === "linux_subreaper_v1" || entry.containment === "darwin_responsibility_v1")
+    ) {
+      const live = await owns(entry.pid, entry.identity)
+      if (live) {
+        // The trusted containment anchor owns the moving process tree. Signal
+        // only that exact anchor: it repeatedly quiesces and drains descendants
+        // while remaining alive, so a concurrent fork/setsid cannot escape a
+        // stale ledger snapshot. Never SIGKILL this anchor on timeout.
+        try {
+          process.kill(entry.pid, "SIGTERM")
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error
+        }
+        for (let attempt = 0; attempt < 500; attempt++) {
+          if (!(await owns(entry.pid, entry.identity))) break
+          if (attempt === 499) {
+            throw new Error(`Kernel containment supervisor ${entry.pid} did not finish cooperative teardown`)
+          }
+          await Bun.sleep(20)
+        }
+      }
+      for (let attempt = 0; attempt < 500; attempt++) {
+        const remaining = await groupMembers(entry)
+        if (!remaining.length) return live
+        if (attempt === 499) {
+          throw new Error(
+            `Kernel containment supervisor ${entry.pid} exited before draining ${remaining.length} owned processes`,
+          )
+        }
+        // The supervisor proves its own closure before exit, but a remote
+        // process-table observer can briefly see a killed member between its
+        // final signal and kernel removal. Wait boundedly for that independent
+        // observation; persistent members retain the ledger and marker.
+        await Bun.sleep(20)
+      }
+      return live
     }
 
     let signalled = false
@@ -414,6 +503,7 @@ export namespace AuthorityProcessLedger {
     projectID: string
     sessionID: string
     authorityGeneration: string
+    containment?: Containment
   }): Promise<boolean> {
     if ((process.platform === "win32" || process.platform === "darwin") && !input.windowsRelease) {
       throw new Error(
@@ -422,6 +512,15 @@ export namespace AuthorityProcessLedger {
     }
     if (process.platform === "darwin" && !DarwinResponsibility.available()) {
       throw new Error("macOS responsibility APIs are unavailable; refusing durable process registration")
+    }
+    const expectedContainment: Containment =
+      process.platform === "linux"
+        ? "linux_subreaper_v1"
+        : process.platform === "darwin"
+          ? "darwin_responsibility_v1"
+          : "windows_job_v1"
+    if (input.kind === "kernel" && input.containment !== expectedContainment) {
+      throw new Error(`Kernel child ${input.pid} is missing verified ${expectedContainment} containment`)
     }
     const processIdentity = await identity(input.pid)
     if (!processIdentity) {
@@ -437,147 +536,205 @@ export namespace AuthorityProcessLedger {
         `Authorized ${input.kind} child ${input.pid} is not its own process-group leader; refusing an unreapable spawn`,
       )
     }
-    await using lease = await FileLease.acquire(lockpath)
-    const entries = await read()
-    const index = entries.findIndex((entry) => entry.id === input.id)
-    // A duplicate durable ID must never orphan the previous Job handle/tree.
-    // Reap it while the shared ledger lease prevents a competing replacement.
-    if ((process.platform === "win32" || process.platform === "darwin") && index >= 0) {
-      await teardown(entries[index]!)
-    }
-    let darwinResponsibility: string | undefined
-    const windowsJob =
-      process.platform === "win32"
-        ? WindowsJob.assign({ id: input.id, pid: input.pid, expectedIdentity: processIdentity })
-        : undefined
-    const next: Entry = {
-      version: 1,
-      id: input.id,
-      kind: input.kind,
-      pid: input.pid,
-      identity: processIdentity,
-      owns_process_group: ownsGroup,
-      ...(windowsJob ? { windows_job: windowsJob } : {}),
-      owner_pid: process.pid,
-      project_id: input.projectID,
-      session_id: input.sessionID,
-      authority_generation: input.authorityGeneration,
-      created_at: new Date().toISOString(),
-    }
-    if (index < 0) entries.push(next)
-    else entries[index] = next
-    await write(entries).catch((error) => {
-      if (windowsJob) WindowsJob.terminate(windowsJob)
-      throw error
-    })
-    if (windowsJob && input.windowsRelease) {
+    return serialized(async () => {
+      const entries = await read()
+      const index = entries.findIndex((entry) => entry.id === input.id)
+      // A duplicate durable ID must never orphan the previous Job handle/tree.
+      // Reap it while the shared ledger lease prevents a competing replacement.
+      if (index >= 0) {
+        await teardown(entries[index]!)
+        await disposeCoverage(input.id)
+      }
+      let darwinResponsibility: string | undefined
+      const windowsJob =
+        process.platform === "win32"
+          ? WindowsJob.assign({ id: input.id, pid: input.pid, expectedIdentity: processIdentity })
+          : undefined
+      const next: Entry = {
+        version: 1,
+        id: input.id,
+        kind: input.kind,
+        pid: input.pid,
+        identity: processIdentity,
+        owns_process_group: ownsGroup,
+        ...(windowsJob ? { windows_job: windowsJob } : {}),
+        ...(input.containment ? { containment: input.containment } : {}),
+        owner_pid: process.pid,
+        project_id: input.projectID,
+        session_id: input.sessionID,
+        authority_generation: input.authorityGeneration,
+        created_at: new Date().toISOString(),
+      }
+      if (index < 0) entries.push(next)
+      else entries[index] = next
+      await write(entries).catch((error) => {
+        if (windowsJob) WindowsJob.terminate(windowsJob)
+        throw error
+      })
       try {
-        WindowsJob.release(input.windowsRelease, input.pid)
+        // Publish before opening any platform launch gate. The marker is owned
+        // by the containment leader, not the server. Linux's subreaper and the
+        // Darwin responsibility launcher keep this exact PID alive until all
+        // adopted workers drain; Windows binds it to the kill-on-close Job.
+        // The caller's parent marker covers the preceding ledger write.
+        await publishCoverage(next)
       } catch (error) {
         await teardown(next)
+        await disposeCoverage(input.id)
         await write(entries.filter((entry) => entry.id !== input.id))
         throw error
       }
-    }
-    if (process.platform === "darwin" && input.windowsRelease) {
-      try {
-        await fs.writeFile(input.windowsRelease, String(input.pid), { encoding: "utf8", flag: "wx", mode: 0o600 })
-        for (let attempt = 0; attempt < 3_000; attempt++) {
-          if (!(await owns(input.pid, processIdentity))) break
-          if (DarwinResponsibility.responsible(input.pid) === input.pid) {
-            darwinResponsibility = DarwinResponsibility.unique(input.pid)
-            if (darwinResponsibility) break
-          }
-          if (attempt === 2_999) {
-            throw new Error(`Authorized ${input.kind} child ${input.pid} did not become a macOS responsibility root`)
-          }
-          await Bun.sleep(10)
+      if (windowsJob && input.windowsRelease) {
+        try {
+          WindowsJob.release(input.windowsRelease, input.pid)
+        } catch (error) {
+          await teardown(next)
+          await disposeCoverage(input.id)
+          await write(entries.filter((entry) => entry.id !== input.id))
+          throw error
         }
-      } catch (error) {
-        await teardown(next)
-        await write(entries.filter((entry) => entry.id !== input.id))
-        throw error
       }
-    }
-    if (darwinResponsibility) {
-      next.darwin_responsibility_uniqueid = darwinResponsibility
-      const position = entries.findIndex((entry) => entry.id === input.id)
-      if (position >= 0) entries[position] = next
-      await write(entries)
-      try {
-        await fs.writeFile(`${input.windowsRelease}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, String(input.pid), {
-          encoding: "utf8",
-          flag: "wx",
-          mode: 0o600,
-        })
-      } catch (error) {
-        await teardown(next)
-        await write(entries.filter((entry) => entry.id !== input.id))
-        throw error
+      if (process.platform === "darwin" && input.windowsRelease) {
+        try {
+          await fs.writeFile(input.windowsRelease, String(input.pid), { encoding: "utf8", flag: "wx", mode: 0o600 })
+          for (let attempt = 0; attempt < 3_000; attempt++) {
+            if (!(await owns(input.pid, processIdentity))) break
+            if (DarwinResponsibility.responsible(input.pid) === input.pid) {
+              darwinResponsibility = DarwinResponsibility.unique(input.pid)
+              if (darwinResponsibility) break
+            }
+            if (attempt === 2_999) {
+              throw new Error(`Authorized ${input.kind} child ${input.pid} did not become a macOS responsibility root`)
+            }
+            await Bun.sleep(10)
+          }
+        } catch (error) {
+          await teardown(next)
+          await disposeCoverage(input.id)
+          await write(entries.filter((entry) => entry.id !== input.id))
+          throw error
+        }
       }
-    }
-    if (darwinResponsibility && !DarwinResponsibility.uniquelyOwns(darwinResponsibility, input.pid)) {
-      await teardown(next)
-      await write(entries.filter((entry) => entry.id !== input.id))
-      throw new Error(`Authorized ${input.kind} child ${input.pid} failed macOS responsibility handoff`)
-    }
-    // Persist first, then close the observation window. If the leader exited
-    // during registration, durable ownership already exists; tear down any
-    // surviving same-group children before returning a failed spawn.
-    if (
-      !(await owns(input.pid, processIdentity)) ||
-      (windowsJob && !WindowsJob.contains(windowsJob, input.pid)) ||
-      (darwinResponsibility && !DarwinResponsibility.uniquelyOwns(darwinResponsibility, input.pid))
-    ) {
-      await teardown(next)
-      await write(entries.filter((entry) => entry.id !== input.id))
-      return false
-    }
-    return true
+      if (darwinResponsibility) {
+        next.darwin_responsibility_uniqueid = darwinResponsibility
+        const position = entries.findIndex((entry) => entry.id === input.id)
+        if (position >= 0) entries[position] = next
+        await write(entries)
+        try {
+          await fs.writeFile(`${input.windowsRelease}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, String(input.pid), {
+            encoding: "utf8",
+            flag: "wx",
+            mode: 0o600,
+          })
+        } catch (error) {
+          await teardown(next)
+          await disposeCoverage(input.id)
+          await write(entries.filter((entry) => entry.id !== input.id))
+          throw error
+        }
+      }
+      if (darwinResponsibility && !DarwinResponsibility.uniquelyOwns(darwinResponsibility, input.pid)) {
+        await teardown(next)
+        await disposeCoverage(input.id)
+        await write(entries.filter((entry) => entry.id !== input.id))
+        throw new Error(`Authorized ${input.kind} child ${input.pid} failed macOS responsibility handoff`)
+      }
+      // Persist first, then close the observation window. If the leader exited
+      // during registration, durable ownership already exists; tear down any
+      // surviving same-group children before returning a failed spawn.
+      if (
+        !(await owns(input.pid, processIdentity)) ||
+        (windowsJob && !WindowsJob.contains(windowsJob, input.pid)) ||
+        (darwinResponsibility && !DarwinResponsibility.uniquelyOwns(darwinResponsibility, input.pid))
+      ) {
+        await teardown(next)
+        await disposeCoverage(input.id)
+        await write(entries.filter((entry) => entry.id !== input.id))
+        return false
+      }
+      return true
+    })
   }
 
   /** A leader can exit while background work remains in its process group.
    * Normal completion therefore tears down and verifies the whole group before
    * dropping durable ownership. */
   export async function complete(id: string): Promise<boolean> {
-    await using lease = await FileLease.acquire(lockpath)
-    const entries = await read()
-    const entry = entries.find((item) => item.id === id)
-    if (!entry) return true
-    if (await owns(entry.pid, entry.identity)) return false
-    await teardown(entry)
-    await write(entries.filter((item) => item.id !== id))
-    return true
+    return serialized(async () => {
+      const entries = await read()
+      const entry = entries.find((item) => item.id === id)
+      if (!entry) {
+        await disposeCoverage(id)
+        return true
+      }
+      if (await owns(entry.pid, entry.identity)) return false
+      await teardown(entry)
+      await disposeCoverage(id)
+      await write(entries.filter((item) => item.id !== id))
+      return true
+    })
   }
 
   /** Kill identity-matched children even when their owning server is gone. */
   export async function revoke(scope: Scope = {}): Promise<number> {
-    await using lease = await FileLease.acquire(lockpath)
+    return serialized(async () => {
+      const entries = await read()
+      const retained: Entry[] = []
+      let killed = 0
+      const failures: unknown[] = []
+      let matched = false
+      for (const entry of entries) {
+        const match =
+          (!scope.id || entry.id === scope.id) &&
+          (!scope.kind || entry.kind === scope.kind) &&
+          (!scope.projectID || entry.project_id === scope.projectID) &&
+          (!scope.sessionID || entry.session_id === scope.sessionID) &&
+          (!scope.authorityGeneration || entry.authority_generation === scope.authorityGeneration)
+        if (!match) {
+          retained.push(entry)
+          continue
+        }
+        matched = true
+        try {
+          if (await teardown(entry)) killed++
+          await disposeCoverage(entry.id)
+        } catch (error) {
+          retained.push(entry)
+          failures.push(error)
+        }
+      }
+      if (scope.id && !matched) await disposeCoverage(scope.id)
+      await write(retained)
+      if (failures.length) throw new AggregateError(failures, "Authorized child revocation failed")
+      return killed
+    })
+  }
+
+  /**
+   * Read-only relocation quarantine. The caller must already hold the global
+   * data-root exclusive barrier: that drains every older ledger FileLease
+   * writer before this read and prevents a legacy server from publishing a new
+   * entry until the relocation finishes. Do not acquire a nested barrier here.
+   */
+  export async function assertRelocationSafe(): Promise<void> {
+    // Always parse first. A malformed or unreadable durable ledger is itself
+    // an unresolved ownership condition and must block every platform.
     const entries = await read()
-    const retained: Entry[] = []
-    let killed = 0
-    const failures: unknown[] = []
-    for (const entry of entries) {
-      const match =
-        (!scope.id || entry.id === scope.id) &&
-        (!scope.kind || entry.kind === scope.kind) &&
-        (!scope.projectID || entry.project_id === scope.projectID) &&
-        (!scope.sessionID || entry.session_id === scope.sessionID) &&
-        (!scope.authorityGeneration || entry.authority_generation === scope.authorityGeneration)
-      if (!match) {
-        retained.push(entry)
-        continue
-      }
-      try {
-        if (await teardown(entry)) killed++
-      } catch (error) {
-        retained.push(entry)
-        failures.push(error)
-      }
-    }
-    await write(retained)
-    if (failures.length) throw new AggregateError(failures, "Authorized child revocation failed")
-    return killed
+    const expectedContainment: Containment =
+      process.platform === "linux"
+        ? "linux_subreaper_v1"
+        : process.platform === "darwin"
+          ? "darwin_responsibility_v1"
+          : "windows_job_v1"
+    const unsafe = entries.filter(
+      (entry) =>
+        entry.kind === "kernel" &&
+        (entry.containment !== expectedContainment || (process.platform === "win32" && !entry.windows_job)),
+    )
+    if (!unsafe.length) return
+    throw new Error(
+      `Data-root relocation is blocked by ${unsafe.length} legacy kernel process ${unsafe.length === 1 ? "entry" : "entries"} without verified ${expectedContainment} containment${process.platform === "win32" ? " and durable Job Object ownership" : ""}`,
+    )
   }
 
   export function pathForTests(): string {

@@ -11,6 +11,8 @@ type WebFetchFailure = {
   status_code?: 404 | 405
   attempted_max_bytes?: number
   declared_size_bytes?: number
+  safe_capacity_bytes?: number
+  limit_kind?: "disk" | "legacy"
 }
 
 type KernelFailure = {
@@ -40,33 +42,21 @@ class RetryGuardError extends Error {
   }
 }
 
-type HistoryEvent =
-  | {
-      kind: "error"
-      at: number
-      tool: string
-      input: Record<string, unknown>
-      error: string
-      failure?: Failure
-      callID?: string
-    }
-  | {
-      kind: "completed"
-      at: number
-      tool: string
-      input: Record<string, unknown>
-      sizeEvidence: SizeEvidence
-      callID?: string
-    }
-
-type SizeEvidence = {
-  pairs: { normalizedURL: string; bytes: number }[]
+type HistoryEvent = {
+  kind: "error"
+  at: number
+  tool: string
+  input: Record<string, unknown>
+  error: string
+  failure?: Failure
+  callID?: string
 }
 
 type SessionHistory = {
   seeded: boolean
   events: Map<string, HistoryEvent>
   contexts: WeakSet<MessageV2.WithParts[]>
+  webFetchMigrations: Set<string>
   ordered?: HistoryEvent[]
 }
 
@@ -81,7 +71,12 @@ function cache(sessionID: string) {
     sessionHistory.set(sessionID, found)
     return found
   }
-  const result: SessionHistory = { seeded: false, events: new Map(), contexts: new WeakSet() }
+  const result: SessionHistory = {
+    seeded: false,
+    events: new Map(),
+    contexts: new WeakSet(),
+    webFetchMigrations: new Set(),
+  }
   sessionHistory.set(sessionID, result)
   while (sessionHistory.size > SESSION_CACHE_LIMIT) sessionHistory.delete(sessionHistory.keys().next().value!)
   return result
@@ -142,72 +137,6 @@ function stateTime(part: MessageV2.ToolPart) {
   return part.state.status === "running" ? part.state.time.start : part.state.time.end
 }
 
-function exactSize(key: string, value: unknown) {
-  if (!/^(?:size|bytes|content[_ -]?length|contentLength)$/i.test(key)) return
-  const parsed =
-    typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined
-}
-
-function normalizedURL(value: unknown) {
-  if (typeof value !== "string" || !/^https?:\/\//i.test(value)) return
-  try {
-    return ToolRetryGuard.normalizeURL(value)
-  } catch {
-    return
-  }
-}
-
-function extractSizeEvidence(output: string, metadata: Record<string, unknown>): SizeEvidence {
-  const pairs = new Map<string, { normalizedURL: string; bytes: number }>()
-  const visit = (value: unknown) => {
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item)
-      return
-    }
-    if (!value || typeof value !== "object") return
-    const entries = Object.entries(value as Record<string, unknown>)
-    const urls = entries.flatMap(([, item]) => {
-      const url = normalizedURL(item)
-      return url ? [url] : []
-    })
-    const localSizes = entries.flatMap(([key, item]) => {
-      const size = exactSize(key, item)
-      return size === undefined ? [] : [size]
-    })
-    // A record is evidence only when it binds one URL to one exact size.
-    // Never take a Cartesian product across a listing object containing
-    // multiple files and sizes; recurse so each unambiguous child record can
-    // still be cited independently.
-    if (urls.length === 1 && localSizes.length === 1) {
-      const url = urls[0]!
-      const size = localSizes[0]!
-      pairs.set(`${url}:${size}`, { normalizedURL: url, bytes: size })
-    }
-    for (const [, item] of entries) visit(item)
-  }
-  visit(metadata)
-  try {
-    visit(JSON.parse(output))
-  } catch {
-    for (const line of output.split("\n")) {
-      const urls = Array.from(line.matchAll(/https?:\/\/[^\s"'<>]+/gi), (match) =>
-        normalizedURL(match[0].replace(/[),.;]+$/, "")),
-      ).filter((value): value is string => Boolean(value))
-      const lineSizes = Array.from(
-        line.matchAll(/(?:size|bytes|content[_ -]?length)\s*[:=]?\s*(\d+)|\b(\d+)\s+bytes\b/gi),
-        (match) => Number(match[1] ?? match[2]),
-      ).filter((value) => Number.isSafeInteger(value) && value >= 0)
-      if (urls.length === 1 && lineSizes.length === 1) {
-        const url = urls[0]!
-        const size = lineSizes[0]!
-        pairs.set(`${url}:${size}`, { normalizedURL: url, bytes: size })
-      }
-    }
-  }
-  return { pairs: [...pairs.values()] }
-}
-
 function messageEvents(messages: MessageV2.WithParts[]): HistoryEvent[] {
   const found = contextHistory.get(messages)
   if (found) return found
@@ -215,27 +144,15 @@ function messageEvents(messages: MessageV2.WithParts[]): HistoryEvent[] {
     message.parts.flatMap((part): HistoryEvent[] => {
       if (part.type !== "tool" || part.state.status === "pending" || part.state.status === "running") return []
       if (!["webfetch", "python", "notebook", "r", "rkernel"].includes(part.tool)) return []
-      if (part.state.status === "error") {
-        return [
-          {
-            kind: "error",
-            at: stateTime(part),
-            tool: part.tool,
-            input: part.state.input,
-            error: part.state.error,
-            failure: metadataFailure(part.state.metadata),
-            callID: part.callID,
-          },
-        ]
-      }
+      if (part.state.status !== "error") return []
       return [
         {
-          kind: "completed",
+          kind: "error",
           at: stateTime(part),
           tool: part.tool,
           input: part.state.input,
-          sizeEvidence:
-            part.tool === "webfetch" ? extractSizeEvidence(part.state.output, part.state.metadata) : { pairs: [] },
+          error: part.state.error,
+          failure: metadataFailure(part.state.metadata),
           callID: part.callID,
         },
       ]
@@ -292,13 +209,23 @@ export namespace ToolRetryGuard {
 
   function oldOversizeFailure(input: Record<string, unknown>, error: string): WebFetchFailure | undefined {
     if (typeof input.url !== "string" || typeof input.output_path !== "string") return
-    if (!/Download exceeds max_bytes/i.test(error)) return
+    if (
+      !/Download exceeds max_bytes|Download exceeds the current safe workspace capacity|Download could not continue because workspace storage returned/i.test(
+        error,
+      )
+    )
+      return
+    const diskCapacity = /(?:safe workspace capacity of|disk-derived workspace capacity is) [^(]*\((\d+) bytes\)/i.exec(
+      error,
+    )?.[1]
     return {
       version: 1,
       code: "webfetch_download_oversize",
       tool: "webfetch",
       normalized_url: normalizeURL(input.url),
       attempted_max_bytes: typeof input.max_bytes === "number" ? input.max_bytes : undefined,
+      safe_capacity_bytes: diskCapacity ? Number(diskCapacity) : undefined,
+      limit_kind: diskCapacity ? "disk" : "legacy",
       // Older builds emitted exact server Content-Length only for byte-sized
       // declared failures (`9 bytes > 8 bytes`). Rounded KiB/MiB and chunked
       // boundary messages are not exact evidence and intentionally stay unset.
@@ -331,9 +258,8 @@ export namespace ToolRetryGuard {
     )
   }
 
-  function sizeEvidence(event: HistoryEvent, callID: string, bytes: number, normalizedURL: string) {
-    if (event.kind !== "completed" || event.tool !== "webfetch" || event.callID !== callID) return false
-    return event.sizeEvidence.pairs.some((pair) => pair.normalizedURL === normalizedURL && pair.bytes === bytes)
+  function userTurnAfter(ctx: Tool.Context, at: number) {
+    return ctx.messages.some((message) => message.info.role === "user" && message.info.time.created > at)
   }
 
   export async function assertWebFetch(
@@ -341,9 +267,6 @@ export namespace ToolRetryGuard {
     input: {
       url: string
       output_path?: string
-      max_bytes?: number
-      declared_size_bytes?: number
-      declared_size_evidence_call_id?: string
     },
   ) {
     const normalized = normalizeURL(input.url)
@@ -385,65 +308,50 @@ export namespace ToolRetryGuard {
       )
     }
 
-    if (!input.output_path || input.declared_size_bytes === undefined) {
-      const oversize = failures.findLast((item) => item.failure.code === "webfetch_download_oversize")
-      if (!oversize || !input.output_path) return
-      const known = oversize.failure.declared_size_bytes
+    const oversize = failures.findLast((item) => item.failure.code === "webfetch_download_oversize")
+    if (!oversize || !input.output_path) return
+    // One migration attempt is safe for any pre-redesign max_bytes failure,
+    // including calls where the agent supplied that retired field. Record the
+    // allowance before network/permission work so an unrelated failure cannot
+    // turn migration into a same-turn loop. If the disk-policy call itself
+    // reaches capacity, its new disk failure also becomes the latest guard.
+    if (oversize.failure.limit_kind !== "disk") {
+      if (userTurnAfter(ctx, oversize.event.at)) return
+      const migration = `${normalized}:${eventKey(oversize.event)}`
+      const history = cache(ctx.sessionID)
+      if (!history.webFetchMigrations.has(migration)) {
+        history.webFetchMigrations.add(migration)
+        return
+      }
       throw blocked(
         {
-          code: "webfetch_download_size_required",
+          code: "webfetch_legacy_capacity_migration_used",
           tool: "webfetch",
           normalized_url: normalized,
           prior_call_id: oversize.event.callID,
-          attempted_max_bytes: oversize.failure.attempted_max_bytes,
-          known_declared_size_bytes: oversize.failure.declared_size_bytes,
+          legacy_max_bytes: oversize.failure.attempted_max_bytes,
         },
-        known !== undefined
-          ? "This URL already exceeded a download cap in this session, so another guessed max_bytes escalation was stopped before network access. " +
-              `The server previously declared exactly ${known} bytes. Retry at most once with ` +
-              `output_path: ${JSON.stringify(input.output_path)}, declared_size_bytes: ${known}, and max_bytes: ${known}. ` +
-              "These values come from the recorded Content-Length; do not substitute a guessed larger cap."
-          : "This URL already exceeded a download cap in this session, so another guessed max_bytes escalation was stopped before network access. " +
-              "Obtain the exact byte size from a metadata/listing endpoint, then retry at most once with max_bytes equal to declared_size_bytes and cite that completed call with declared_size_evidence_call_id. If no exact size evidence exists, choose a smaller or paginated source, or a different canonical download URL; do not probe with incrementally larger caps.",
+        "This URL already used its one same-turn migration from the retired per-call cap policy to the live disk-derived policy. " +
+          "The repeat was stopped before permission or network access. Do not invent cap/evidence fields; wait for a new user turn or use a smaller or paginated source.",
       )
     }
-
-    if (!input.output_path) return
-    if (input.max_bytes === undefined || input.max_bytes < input.declared_size_bytes) {
-      throw blocked(
-        {
-          code: "webfetch_download_cap_below_declared_size",
-          tool: "webfetch",
-          normalized_url: normalized,
-          max_bytes: input.max_bytes,
-          declared_size_bytes: input.declared_size_bytes,
-        },
-        "max_bytes must be explicitly set to at least declared_size_bytes; this prevents a supposedly evidence-backed request from immediately repeating the same bounded failure.",
-      )
-    }
-
-    const oversize = failures.findLast((item) => item.failure.code === "webfetch_download_oversize")
-    const known = oversize?.failure.declared_size_bytes
-    const cachedEvidence = known !== undefined && known === input.declared_size_bytes
-    const citedEvidence =
-      input.declared_size_evidence_call_id !== undefined &&
-      history.some((event) =>
-        sizeEvidence(event, input.declared_size_evidence_call_id!, input.declared_size_bytes!, normalized),
-      )
-    if (cachedEvidence || citedEvidence) return
-
+    // A later user turn may retry after actually freeing disk or selecting a
+    // different operational strategy. Within one assistant turn, repeated
+    // calls are stopped before permission and network access.
+    if (userTurnAfter(ctx, oversize.event.at)) return
     throw blocked(
       {
-        code: "webfetch_download_size_evidence_required",
+        code: "webfetch_download_capacity_strategy_required",
         tool: "webfetch",
         normalized_url: normalized,
-        declared_size_bytes: input.declared_size_bytes,
-        known_declared_size_bytes: known,
-        evidence_call_id: input.declared_size_evidence_call_id,
+        prior_call_id: oversize.event.callID,
+        safe_capacity_bytes: oversize.failure.safe_capacity_bytes,
+        legacy_max_bytes: oversize.failure.attempted_max_bytes,
       },
-      known !== undefined
-        ? `declared_size_bytes must exactly match the server Content-Length already recorded for this URL (${known} bytes).`
-        : "declared_size_bytes needs auditable evidence. Supply declared_size_evidence_call_id for a completed WebFetch metadata response whose labelled size/content-length equals this exact byte value; an arbitrary larger number is not accepted.",
+      `This URL already exceeded the live safe workspace capacity${
+        oversize.failure.safe_capacity_bytes === undefined ? "" : ` of ${oversize.failure.safe_capacity_bytes} bytes`
+      } in this assistant turn. The unchanged retry was stopped before permission or network access. ` +
+        "Do not invent a per-call byte cap or repeat the transfer. Use a smaller or paginated source, free disk space, a provider-native dataset client, or a dedicated approved transfer path.",
     )
   }
 
@@ -451,7 +359,7 @@ export namespace ToolRetryGuard {
     ctx: Tool.Context,
     input: Record<string, unknown> & { url: string },
     error: unknown,
-    details?: { attemptedMaxBytes?: number; declaredSizeBytes?: number },
+    details?: { safeCapacityBytes?: number; declaredSizeBytes?: number },
   ) {
     const message = text(error)
     const failure =
@@ -463,9 +371,10 @@ export namespace ToolRetryGuard {
             code: "webfetch_download_oversize",
             tool: "webfetch",
             normalized_url: normalizeURL(input.url),
-            attempted_max_bytes:
-              details?.attemptedMaxBytes ?? (typeof input.max_bytes === "number" ? input.max_bytes : undefined),
+            attempted_max_bytes: typeof input.max_bytes === "number" ? input.max_bytes : undefined,
             declared_size_bytes: details?.declaredSizeBytes,
+            safe_capacity_bytes: details?.safeCapacityBytes,
+            limit_kind: details?.safeCapacityBytes !== undefined ? "disk" : "legacy",
           } satisfies WebFetchFailure)
         : undefined)
     if (!failure) return error instanceof Error ? error : new Error(message)
@@ -482,23 +391,6 @@ export namespace ToolRetryGuard {
       },
     ])
     return result
-  }
-
-  export function recordWebFetchSuccess(
-    ctx: Tool.Context,
-    input: Record<string, unknown>,
-    result: { output: string; metadata: Record<string, unknown> },
-  ) {
-    add(cache(ctx.sessionID), [
-      {
-        kind: "completed",
-        at: Date.now(),
-        tool: "webfetch",
-        input,
-        sizeEvidence: extractSizeEvidence(result.output, result.metadata),
-        callID: ctx.callID,
-      },
-    ])
   }
 
   /** SessionProcessor persists this alongside ToolStateError. The public

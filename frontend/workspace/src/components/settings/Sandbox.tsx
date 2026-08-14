@@ -23,6 +23,7 @@ interface SandboxConfig {
   network?: "allow" | "deny"
   allowWrite?: string[]
   onUnavailable?: "warn" | "error" | "allow"
+  requireProjectTrust?: boolean
 }
 interface Status {
   platform: string
@@ -50,7 +51,7 @@ interface SelfTest {
   ok: boolean
 }
 
-type WriteKey = "enabled" | "network" | "fallback" | "paths"
+type WriteKey = "enabled" | "trust" | "network" | "fallback" | "paths"
 type PendingWrite = { body: SandboxConfig; key: WriteKey; failure: string }
 
 const NETWORK_OPTS = [
@@ -86,7 +87,13 @@ const Sandbox: Component = () => {
   let writeLoop: Promise<void> | undefined
 
   const config = (): SandboxConfig =>
-    data()?.config ?? { enabled: true, network: "deny", allowWrite: [], onUnavailable: "error" }
+    data()?.config ?? {
+      enabled: true,
+      network: "deny",
+      allowWrite: [],
+      onUnavailable: "error",
+      requireProjectTrust: false,
+    }
   const status = () => data()?.status
   const unavailable = () => data.loading || !!data.error
   const busy = (key: WriteKey) => busyKeys().has(key)
@@ -223,7 +230,7 @@ const Sandbox: Component = () => {
                   <span>
                     {config().enabled !== false
                       ? "On — reads and writes stay within the workspace and approved paths."
-                      : "Off — commands run with your full user authority."}
+                      : "Off — trusted projects may run with your full user authority; untrusted projects remain blocked."}
                   </span>
                 </div>
                 <Switch
@@ -320,8 +327,32 @@ const Sandbox: Component = () => {
           </Section>
 
           <Show when={config().enabled !== false}>
-            <Section title="Policy" description="Choose the default containment policy for sandboxed commands.">
+            <Section
+              title="Policy"
+              description="Choose the default autonomy and containment policy for local commands."
+            >
               <div class="settings-card settings-preferences-card">
+                <div class="settings-row settings-sandbox-control-row">
+                  <div class="settings-row-copy">
+                    <strong>Require project trust</strong>
+                    <span>
+                      {config().requireProjectTrust === true
+                        ? "Every project must be trusted before it can start terminals, kernels, or local jobs."
+                        : "Sandboxed terminals, kernels, and local jobs can run immediately. Project extensions and unsandboxed execution still require trust."}
+                    </span>
+                  </div>
+                  <Switch
+                    hideLabel
+                    checked={config().requireProjectTrust === true}
+                    disabled={busy("trust") || unavailable()}
+                    onChange={(checked) =>
+                      patch({ requireProjectTrust: checked }, "trust", "Couldn't update the project trust policy")
+                    }
+                  >
+                    Require project trust
+                  </Switch>
+                </div>
+
                 <div class="settings-row settings-sandbox-control-row">
                   <div class="settings-row-copy">
                     <strong>Network access</strong>

@@ -69,6 +69,28 @@ function context(messages: Tool.Context["messages"]): Tool.Context {
   }
 }
 
+function userMessage(sessionID: string, created: number): Tool.Context["messages"][number] {
+  return {
+    info: {
+      id: `message_user_${sessionID}`,
+      sessionID,
+      role: "user",
+      time: { created },
+      agent: "research",
+      model: { providerID: "test", modelID: "test" },
+    },
+    parts: [
+      {
+        id: `part_user_${sessionID}`,
+        sessionID,
+        messageID: `message_user_${sessionID}`,
+        type: "text",
+        text: "The strategy changed; retry now.",
+      },
+    ],
+  } as unknown as Tool.Context["messages"][number]
+}
+
 test("kernel timeout similarity catches the P5 pandas retry but allows a raw-byte preflight", () => {
   const first = {
     environment: "python",
@@ -391,7 +413,7 @@ test("URL normalization keeps resource identity but not client fragments", () =>
   )
 })
 
-test("legacy P5 oversize history blocks cap probing and exact byte history remains usable evidence", async () => {
+test("a legacy agent-chosen cap gets exactly one same-turn disk-policy migration", async () => {
   const url = "https://www.ebi.ac.uk/gxa/sc/experiment/E-MTAB-6701/download/zip?fileType=quantification-raw"
   const legacyInput = { url, output_path: "raw.zip", max_bytes: 20_000_000 }
   const legacy = [
@@ -417,100 +439,76 @@ test("legacy P5 oversize history blocks cap probing and exact byte history remai
     },
   ] as unknown as Tool.Context["messages"]
   const legacyContext = { ...context(legacy), sessionID: "session_legacy_webfetch" }
-  await expect(ToolRetryGuard.assertWebFetch(legacyContext, { ...legacyInput, max_bytes: 40_000_000 })).rejects.toThrow(
-    "another guessed max_bytes escalation was stopped before network access",
+  await expect(ToolRetryGuard.assertWebFetch(legacyContext, { url, output_path: "raw.zip" })).resolves.toBeUndefined()
+  await expect(ToolRetryGuard.assertWebFetch(legacyContext, { url, output_path: "raw.zip" })).rejects.toThrow(
+    "already used its one same-turn migration",
   )
 
-  const exactInput = { url: "https://example.com/exact.bin", output_path: "exact.bin", max_bytes: 8 }
-  const exact = [
+  const diskFailure = [
+    ...legacy,
     {
-      info: { id: "message_exact_webfetch", sessionID: "session_exact_webfetch", role: "assistant" },
+      info: { id: "message_disk_webfetch", sessionID: "session_legacy_webfetch", role: "assistant" },
       parts: [
         {
-          id: "part_exact_webfetch",
-          sessionID: "session_exact_webfetch",
-          messageID: "message_exact_webfetch",
+          id: "part_disk_webfetch",
+          sessionID: "session_legacy_webfetch",
+          messageID: "message_disk_webfetch",
           type: "tool",
           tool: "webfetch",
-          callID: "call_exact_webfetch",
+          callID: "call_disk_webfetch",
           state: {
             status: "error",
-            input: exactInput,
+            input: { url, output_path: "raw.zip" },
             error:
-              "Download exceeds max_bytes (9 bytes > 8 bytes). No destination file was created. Choose a smaller source or explicitly set max_bytes once from the declared size.",
+              "Download exceeds the current safe workspace capacity of 12 bytes (12 bytes); response size 13 bytes (13 bytes). " +
+              "This capacity is computed from live free disk minus the 512.0 MiB (536870912 bytes) host reserve.",
             time: { start: 3, end: 4 },
           },
         },
       ],
     },
   ] as unknown as Tool.Context["messages"]
-  const exactContext = { ...context(exact), sessionID: "session_exact_webfetch" }
-  await expect(ToolRetryGuard.assertWebFetch(exactContext, { ...exactInput, max_bytes: 16 })).rejects.toThrow(
-    "The server previously declared exactly 9 bytes",
-  )
-  await expect(ToolRetryGuard.assertWebFetch(exactContext, { ...exactInput, max_bytes: 16 })).rejects.toThrow(
-    'output_path: "exact.bin", declared_size_bytes: 9, and max_bytes: 9',
-  )
   await expect(
-    ToolRetryGuard.assertWebFetch(exactContext, { ...exactInput, max_bytes: 9, declared_size_bytes: 9 }),
+    ToolRetryGuard.assertWebFetch({ ...legacyContext, messages: diskFailure }, { url, output_path: "raw.zip" }),
+  ).rejects.toThrow("already exceeded the live safe workspace capacity of 12 bytes")
+
+  await expect(
+    ToolRetryGuard.assertWebFetch(
+      { ...legacyContext, messages: [...diskFailure, userMessage("session_legacy_webfetch", 5)] },
+      { url, output_path: "raw.zip" },
+    ),
   ).resolves.toBeUndefined()
 })
 
-test("declared-size evidence rejects an ambiguous listing record", async () => {
-  const target = "https://example.com/target.bin"
-  const prior = {
-    id: "part_prior_ambiguous",
-    sessionID: "session_ambiguous_evidence",
-    messageID: "message_ambiguous_evidence",
-    type: "tool",
-    tool: "webfetch",
-    callID: "call_prior_ambiguous",
-    state: {
-      status: "error",
-      input: { url: target, output_path: "target.bin", max_bytes: 7 },
-      error: "Download exceeds max_bytes (7 bytes). Partial data was discarded.",
-      time: { start: 1, end: 2 },
-    },
-  }
-  const evidence = {
-    id: "part_ambiguous_listing",
-    sessionID: "session_ambiguous_evidence",
-    messageID: "message_ambiguous_evidence",
-    type: "tool",
-    tool: "webfetch",
-    callID: "call_ambiguous_listing",
-    state: {
-      status: "completed",
-      input: { url: "https://example.com/listing", format: "text" },
-      output: JSON.stringify({
-        download_url: target,
-        mirror_url: "https://mirror.example.com/target.bin",
-        size: 8,
-        bytes: 12,
-      }),
-      title: "Ambiguous listing",
-      metadata: {},
-      time: { start: 3, end: 4 },
-    },
-  }
+test("a legacy default-cap failure migrates once to live disk policy without evidence", async () => {
+  const target = "https://example.com/legacy-default.bin"
   const messages = [
     {
-      info: { id: "message_ambiguous_evidence", sessionID: "session_ambiguous_evidence", role: "assistant" },
-      parts: [prior, evidence],
+      info: { id: "message_legacy_default", sessionID: "session_legacy_default", role: "assistant" },
+      parts: [
+        {
+          id: "part_legacy_default",
+          sessionID: "session_legacy_default",
+          messageID: "message_legacy_default",
+          type: "tool",
+          tool: "webfetch",
+          callID: "call_legacy_default",
+          state: {
+            status: "error",
+            input: { url: target, output_path: "target.bin" },
+            error: "Download exceeds max_bytes (256.0 MiB). Partial data was discarded.",
+            time: { start: 1, end: 2 },
+          },
+        },
+      ],
     },
   ] as unknown as Tool.Context["messages"]
   await expect(
     ToolRetryGuard.assertWebFetch(
-      { ...context(messages), sessionID: "session_ambiguous_evidence" },
-      {
-        url: target,
-        output_path: "target.bin",
-        max_bytes: 8,
-        declared_size_bytes: 8,
-        declared_size_evidence_call_id: "call_ambiguous_listing",
-      },
+      { ...context(messages), sessionID: "session_legacy_default" },
+      { url: target, output_path: "target.bin" },
     ),
-  ).rejects.toThrow("declared_size_bytes needs auditable evidence")
+  ).resolves.toBeUndefined()
 })
 
 test("current and legacy text oversize history require a body strategy change", async () => {
@@ -541,9 +539,7 @@ test("current and legacy text oversize history require a body strategy change", 
     await expect(ToolRetryGuard.assertWebFetch(ctx, { url })).rejects.toThrow(
       "already exceeded the WebFetch body-response limit",
     )
-    await expect(
-      ToolRetryGuard.assertWebFetch(ctx, { url, output_path: "large.json", max_bytes: 10_000_000 }),
-    ).resolves.toBeUndefined()
+    await expect(ToolRetryGuard.assertWebFetch(ctx, { url, output_path: "large.json" })).resolves.toBeUndefined()
     await expect(ToolRetryGuard.assertWebFetch(ctx, { url: `${url}?page=2` })).resolves.toBeUndefined()
   }
 })

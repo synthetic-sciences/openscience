@@ -30,12 +30,11 @@ Rules:
 6. A Task call blocks the lead until it returns. Issue genuinely independent calls together when
    parallelism is worthwhile. Continue a child only for new missing work, never merely to restate
    or reformat a result already returned.
-7. WebFetch text mode is for bounded text and API responses. For large or binary scientific data,
-   set WebFetch `output_path` to a simple workspace-root filename. Set `max_bytes` once from known
-   size metadata, or omit it to use the bounded default when size is unknown. Never probe the same
-   URL by repeatedly increasing the cap.
-   Stream once through the authorized broker into the session workspace, verify its digest, and
-   process it locally. Paginate large APIs; do not assume Shell has network access.
+7. WebFetch text mode is for bounded text and APIs. Download large or binary scientific data to a root basename.
+   For `papers/foo.pdf`, use `output_path:"foo.pdf"`; only after success run sandboxed Bash
+   `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never probe folder paths or send retired
+   cap/size-evidence fields; WebFetch uses live free disk minus its reserve. Verify locally and paginate APIs; Shell
+   need not have network access.
 8. If a requested immutable release cannot be retrieved and verified, report the constraint early.
    Stop that branch or explicitly bound and label any live-release fallback; never silently mix
    releases or spend repeated calls before disclosure.

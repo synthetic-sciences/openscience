@@ -36,20 +36,6 @@ export type BadRequestError = {
   success: false
 }
 
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type EventInstallationUpdated = {
   type: "installation.updated"
   properties: {
@@ -102,6 +88,20 @@ export type EventProjectTrustChanged = {
         }
       }
     }
+  }
+}
+
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -897,6 +897,7 @@ export type Pty = {
   authority: {
     allowed: boolean
     reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+    message?: string
     capability:
       | "terminal"
       | "kernel"
@@ -924,6 +925,7 @@ export type Pty = {
       network: "allow" | "deny"
       allowWrite: Array<string>
       onUnavailable: "warn" | "error" | "allow"
+      requireProjectTrust?: boolean
       backend: "seatbelt" | "bubblewrap" | "none"
       available: boolean
       enforced: boolean
@@ -988,13 +990,13 @@ export type EventWorktreeFailed = {
 }
 
 export type Event =
-  | EventServerConnected
-  | EventGlobalDisposed
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
   | EventServerInstanceDisposed
   | EventProjectTrustChanged
+  | EventServerConnected
+  | EventGlobalDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileWatcherUpdated
@@ -1757,6 +1759,10 @@ export type SandboxConfig = {
    * Behaviour when no sandbox backend exists on this platform: 'error' (default) refuses to run, 'warn' runs unsandboxed with a notice, and 'allow' runs unsandboxed silently.
    */
   onUnavailable?: "warn" | "error" | "allow"
+  /**
+   * Require explicit project trust before any execution, even when a verified OS sandbox is available. Default: false.
+   */
+  requireProjectTrust?: boolean
 }
 
 export type Config = {
@@ -4425,6 +4431,7 @@ export type SettingsComputeJobsListResponses = {
     authority?: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -4452,6 +4459,7 @@ export type SettingsComputeJobsListResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -5172,6 +5180,7 @@ export type SettingsComputeJobsStartResponses = {
     authority?: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -5199,6 +5208,7 @@ export type SettingsComputeJobsStartResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -6118,6 +6128,7 @@ export type SettingsComputeJobsRetryResponses = {
     authority?: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -6145,6 +6156,7 @@ export type SettingsComputeJobsRetryResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -6836,6 +6848,7 @@ export type SettingsComputeJobsReleaseResponses = {
     authority?: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -6863,6 +6876,7 @@ export type SettingsComputeJobsReleaseResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -7550,6 +7564,7 @@ export type SettingsComputeJobsCancelResponses = {
     authority?: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -7577,6 +7592,7 @@ export type SettingsComputeJobsCancelResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -7846,6 +7862,7 @@ export type PutSettingsSandboxData = {
     network?: "allow" | "deny"
     allowWrite?: Array<string>
     onUnavailable?: "warn" | "error" | "allow"
+    requireProjectTrust?: boolean
   }
   path?: never
   query?: never
@@ -8218,6 +8235,7 @@ export type ProjectExecutionResponses = {
   200: {
     allowed: boolean
     reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+    message?: string
     capability:
       | "terminal"
       | "kernel"
@@ -8245,6 +8263,7 @@ export type ProjectExecutionResponses = {
       network: "allow" | "deny"
       allowWrite: Array<string>
       onUnavailable: "warn" | "error" | "allow"
+      requireProjectTrust?: boolean
       backend: "seatbelt" | "bubblewrap" | "none"
       available: boolean
       enforced: boolean
@@ -12419,6 +12438,7 @@ export type KernelsListResponses = {
       authority: {
         allowed: boolean
         reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+        message?: string
         capability:
           | "terminal"
           | "kernel"
@@ -12446,6 +12466,7 @@ export type KernelsListResponses = {
           network: "allow" | "deny"
           allowWrite: Array<string>
           onUnavailable: "warn" | "error" | "allow"
+          requireProjectTrust?: boolean
           backend: "seatbelt" | "bubblewrap" | "none"
           available: boolean
           enforced: boolean
@@ -12546,6 +12567,7 @@ export type KernelsRestartByIdResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -12573,6 +12595,7 @@ export type KernelsRestartByIdResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -12672,6 +12695,7 @@ export type KernelsStopByIdResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -12699,6 +12723,7 @@ export type KernelsStopByIdResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -12798,6 +12823,7 @@ export type KernelsInterruptByIdResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -12825,6 +12851,7 @@ export type KernelsInterruptByIdResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -12968,6 +12995,7 @@ export type KernelsStatusResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -12995,6 +13023,7 @@ export type KernelsStatusResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -13094,6 +13123,7 @@ export type KernelsRestartResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -13121,6 +13151,7 @@ export type KernelsRestartResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -13220,6 +13251,7 @@ export type KernelsStopResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -13247,6 +13279,7 @@ export type KernelsStopResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -13346,6 +13379,7 @@ export type KernelsInterruptResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -13373,6 +13407,7 @@ export type KernelsInterruptResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -13550,6 +13585,7 @@ export type NotebookKernelsResponses = {
       authority: {
         allowed: boolean
         reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+        message?: string
         capability:
           | "terminal"
           | "kernel"
@@ -13577,6 +13613,7 @@ export type NotebookKernelsResponses = {
           network: "allow" | "deny"
           allowWrite: Array<string>
           onUnavailable: "warn" | "error" | "allow"
+          requireProjectTrust?: boolean
           backend: "seatbelt" | "bubblewrap" | "none"
           available: boolean
           enforced: boolean
@@ -13677,6 +13714,7 @@ export type NotebookKernelRestartResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -13704,6 +13742,7 @@ export type NotebookKernelRestartResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -13803,6 +13842,7 @@ export type NotebookKernelStopResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -13830,6 +13870,7 @@ export type NotebookKernelStopResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -13929,6 +13970,7 @@ export type NotebookKernelInterruptResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -13956,6 +13998,7 @@ export type NotebookKernelInterruptResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -14100,6 +14143,7 @@ export type NotebookStatusResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -14127,6 +14171,7 @@ export type NotebookStatusResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -14227,6 +14272,7 @@ export type NotebookRestartResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -14254,6 +14300,7 @@ export type NotebookRestartResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -14354,6 +14401,7 @@ export type NotebookStopResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -14381,6 +14429,7 @@ export type NotebookStopResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean
@@ -14481,6 +14530,7 @@ export type NotebookInterruptResponses = {
     authority: {
       allowed: boolean
       reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      message?: string
       capability:
         | "terminal"
         | "kernel"
@@ -14508,6 +14558,7 @@ export type NotebookInterruptResponses = {
         network: "allow" | "deny"
         allowWrite: Array<string>
         onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust?: boolean
         backend: "seatbelt" | "bubblewrap" | "none"
         available: boolean
         enforced: boolean

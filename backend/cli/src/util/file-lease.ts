@@ -12,6 +12,10 @@ export namespace FileLease {
     created: number
   }
 
+  export interface Lease extends AsyncDisposable {
+    during<T>(action: () => Promise<T>): Promise<T>
+  }
+
   function running(pid: number) {
     try {
       process.kill(pid, 0)
@@ -49,7 +53,7 @@ export namespace FileLease {
     return !!stat && Date.now() - stat.mtimeMs > grace
   }
 
-  export async function acquire(filepath: string, timeoutMs = timeout): Promise<AsyncDisposable> {
+  export async function acquire(filepath: string, timeoutMs = timeout): Promise<Lease> {
     const operation = await DataRootBarrier.enter(filepath, timeoutMs)
     try {
       let blockedAt = Date.now()
@@ -105,16 +109,45 @@ export namespace FileLease {
           await fs.rm(filepath, { force: true }).catch(() => undefined)
           throw error
         })
+      let closing = false
+      let uses = 0
+      let drained: (() => void) | undefined
+      let disposal: Promise<void> | undefined
+
+      const releaseUse = () => {
+        uses--
+        if (uses) return
+        const resolve = drained
+        drained = undefined
+        resolve?.()
+      }
+
+      const drain = async () => {
+        if (!uses) return
+        await new Promise<void>((resolve) => (drained = resolve))
+      }
+
       return {
-        async [Symbol.asyncDispose]() {
-          await handle.close().catch(() => undefined)
-          const owner = await Bun.file(filepath)
-            .json()
-            .catch(() => undefined)
-          if (owner && typeof owner === "object" && "token" in owner && owner.token === token) {
-            await fs.rm(filepath, { force: true }).catch(() => undefined)
-          }
-          await Promise.resolve(operation[Symbol.asyncDispose]()).catch(() => undefined)
+        during<T>(action: () => Promise<T>) {
+          if (closing) return Promise.reject(new Error("Cannot scope work under a closing file lease"))
+          uses++
+          return operation.during(action).finally(releaseUse)
+        },
+        [Symbol.asyncDispose]() {
+          if (disposal) return disposal
+          closing = true
+          disposal = (async () => {
+            await drain()
+            await handle.close().catch(() => undefined)
+            const owner = await Bun.file(filepath)
+              .json()
+              .catch(() => undefined)
+            if (owner && typeof owner === "object" && "token" in owner && owner.token === token) {
+              await fs.rm(filepath, { force: true }).catch(() => undefined)
+            }
+            await Promise.resolve(operation[Symbol.asyncDispose]()).catch(() => undefined)
+          })()
+          return disposal
         },
       }
     } catch (error) {

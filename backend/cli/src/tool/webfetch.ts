@@ -17,9 +17,7 @@ const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 const DEFAULT_DOWNLOAD_TIMEOUT = 10 * 60 * 1000 // 10 minutes
 const MAX_DOWNLOAD_TIMEOUT = 30 * 60 * 1000 // 30 minutes
-export const DEFAULT_DOWNLOAD_MAX_BYTES = 256 * 1024 * 1024 // 256 MiB
-export const MAX_DOWNLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024 // 2 GiB
-const DOWNLOAD_DISK_RESERVE_BYTES = 512 * 1024 * 1024 // preserve 512 MiB for the host
+export const DOWNLOAD_DISK_RESERVE_BYTES = 512 * 1024 * 1024 // preserve 512 MiB for the host
 
 const parameters = z
   .object({
@@ -35,75 +33,38 @@ const parameters = z
       .optional(),
     output_path: z
       .string()
-      .optional()
-      .describe(
-        "Optional new filename at the root of this session's workspace. Streams the response to that file instead of returning its body. " +
-          "Use this for archives, compressed datasets, binary files, or text responses larger than 5 MiB.",
-      ),
-    max_bytes: z
-      .number()
-      .int()
-      .positive()
-      .max(MAX_DOWNLOAD_MAX_BYTES)
-      .optional()
-      .describe(
-        `Maximum allowed download size in bytes when output_path is set (default ${DEFAULT_DOWNLOAD_MAX_BYTES}; ` +
-          `hard maximum ${MAX_DOWNLOAD_MAX_BYTES}). Rejected before transfer when Content-Length exceeds it and during ` +
-          "streaming when the server omits Content-Length.",
-      ),
-    declared_size_bytes: z
-      .number()
-      .int()
-      .positive()
-      .max(MAX_DOWNLOAD_MAX_BYTES)
-      .optional()
-      .describe(
-        "Exact download size in bytes from evidence, used only after a prior max_bytes failure or for a one-shot known-size download. " +
-          "It must match the server Content-Length cached by WebFetch or a labelled size in declared_size_evidence_call_id.",
-      ),
-    declared_size_evidence_call_id: z
-      .string()
-      .trim()
       .min(1)
-      .max(256)
+      .refine((value) => value === value.trim(), "output_path must not be blank or have surrounding whitespace")
       .optional()
       .describe(
-        "Prior completed WebFetch call ID whose metadata response labels the exact declared_size_bytes. Not needed when the prior failure recorded server Content-Length.",
+        "Optional new filename at the root of this session's workspace. Folder paths are rejected so mutable intermediate " +
+          'directories cannot redirect a brokered write. For papers/foo.pdf, download with output_path:"foo.pdf"; only after ' +
+          "success run sandboxed Bash: mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'. " +
+          "Use download mode for archives, " +
+          "compressed datasets, binary files, or text responses larger than 5 MiB.",
       ),
   })
-  .superRefine((params, issue) => {
-    if (params.declared_size_bytes !== undefined && !params.output_path) {
-      issue.addIssue({
-        code: "custom",
-        path: ["declared_size_bytes"],
-        message: "declared_size_bytes is only valid when output_path is set",
-      })
-    }
-    if (params.declared_size_evidence_call_id !== undefined && params.declared_size_bytes === undefined) {
-      issue.addIssue({
-        code: "custom",
-        path: ["declared_size_evidence_call_id"],
-        message: "declared_size_evidence_call_id requires declared_size_bytes",
-      })
-    }
-  })
+  .strict()
 
 export const WebFetchTool = Tool.define("webfetch", {
   description: DESCRIPTION,
   parameters,
+  // Parse defaults and strip retired max_bytes / declared-size fields from
+  // older callers. Download authority now comes only from live disk capacity.
+  normalizeInput(args) {
+    if (!args || typeof args !== "object" || Array.isArray(args)) return args
+    const result = { ...(args as Record<string, unknown>) }
+    delete result.max_bytes
+    delete result.declared_size_bytes
+    delete result.declared_size_evidence_call_id
+    return result
+  },
   async execute(params, ctx) {
     // Validate URL
     if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
       throw new Error("URL must start with http:// or https://")
     }
-    if (params.max_bytes !== undefined && !params.output_path) {
-      throw new Error("max_bytes is only valid when output_path is set")
-    }
     await ToolRetryGuard.assertWebFetch(ctx, params)
-    const complete = <T extends { output: string; metadata: Record<string, unknown> }>(result: T) => {
-      ToolRetryGuard.recordWebFetchSuccess(ctx, params, result)
-      return result
-    }
     // A domain outside the enforced allow-list asks instead of failing.
     // Answering "always" adds the domain to the persisted allow-list (visible
     // in Network settings); conversation/project scopes approve quietly on
@@ -144,18 +105,25 @@ export const WebFetchTool = Tool.define("webfetch", {
         format: params.format,
         timeout: params.timeout,
         output_path: params.output_path,
-        max_bytes: params.max_bytes,
-        declared_size_bytes: params.declared_size_bytes,
-        declared_size_evidence_call_id: params.declared_size_evidence_call_id,
       },
     })
 
-    const download = params.output_path ? await resolveDownloadTarget(ctx.sessionID, params.output_path) : undefined
+    const download =
+      params.output_path !== undefined ? await resolveDownloadTarget(ctx.sessionID, params.output_path) : undefined
+    const downloadCapacity = download
+      ? await safeDownloadCapacity(download).catch((error) => {
+          if (error instanceof DownloadCapacityError) {
+            throw ToolRetryGuard.annotateWebFetch(ctx, params, error, {
+              safeCapacityBytes: error.safeCapacityBytes,
+              declaredSizeBytes: error.responseBytes,
+            })
+          }
+          throw error
+        })
+      : undefined
     const defaultTimeout = download ? DEFAULT_DOWNLOAD_TIMEOUT : DEFAULT_TIMEOUT
     const maxTimeout = download ? MAX_DOWNLOAD_TIMEOUT : MAX_TIMEOUT
     const timeout = Math.min((params.timeout ?? defaultTimeout / 1000) * 1000, maxTimeout)
-    const maxDownloadBytes = params.max_bytes ?? DEFAULT_DOWNLOAD_MAX_BYTES
-
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)
 
@@ -189,7 +157,7 @@ export const WebFetchTool = Tool.define("webfetch", {
         params.url,
         { signal, headers },
         download
-          ? { authorize, streamResponse: true, maxResponseBytes: maxDownloadBytes }
+          ? { authorize, streamResponse: true, maxResponseBytes: downloadCapacity! }
           : { authorize, maxResponseBytes: MAX_RESPONSE_SIZE },
       )
 
@@ -201,7 +169,7 @@ export const WebFetchTool = Tool.define("webfetch", {
           params.url,
           { signal, headers: { ...headers, "User-Agent": "openscience" } },
           download
-            ? { authorize, streamResponse: true, maxResponseBytes: maxDownloadBytes }
+            ? { authorize, streamResponse: true, maxResponseBytes: downloadCapacity! }
             : { authorize, maxResponseBytes: MAX_RESPONSE_SIZE },
         )
       }
@@ -234,22 +202,9 @@ export const WebFetchTool = Tool.define("webfetch", {
                 contentLength: responseDeclaredBytes,
               },
             }
-      if (
-        download &&
-        params.declared_size_bytes !== undefined &&
-        responseDeclaredBytes !== undefined &&
-        responseDeclaredBytes !== params.declared_size_bytes
-      ) {
-        await response.body?.cancel().catch(() => {})
-        throw new Error(
-          `Server Content-Length (${responseDeclaredBytes} bytes) does not match declared_size_bytes ` +
-            `(${params.declared_size_bytes} bytes). No destination file was created; refresh the size evidence before retrying.`,
-        )
-      }
-
       if (download) {
-        const result = await streamDownload(response, download, maxDownloadBytes)
-        return complete({
+        const result = await streamDownload(response, download, downloadCapacity!)
+        return {
           title: `Downloaded ${result.filename}`,
           output: [
             "Downloaded through the authorized network broker into this session's workspace.",
@@ -265,7 +220,7 @@ export const WebFetchTool = Tool.define("webfetch", {
           metadata: {
             download: { url: Network.finalURL(response) || params.url, ...result },
           } as Record<string, unknown>,
-        })
+        }
       }
 
       const contentType = response.headers.get("content-type") || ""
@@ -301,61 +256,63 @@ export const WebFetchTool = Tool.define("webfetch", {
         case "markdown":
           if (contentType.includes("text/html")) {
             const markdown = convertHTMLToMarkdown(content)
-            return complete({
+            return {
               output: markdown,
               title,
               metadata: responseMetadata,
-            })
+            }
           }
-          return complete({
+          return {
             output: content,
             title,
             metadata: responseMetadata,
-          })
+          }
 
         case "text":
           if (contentType.includes("text/html")) {
             const text = await extractTextFromHTML(content)
-            return complete({
+            return {
               output: text,
               title,
               metadata: responseMetadata,
-            })
+            }
           }
-          return complete({
+          return {
             output: content,
             title,
             metadata: responseMetadata,
-          })
+          }
 
         case "html":
-          return complete({
+          return {
             output: content,
             title,
             metadata: responseMetadata,
-          })
+          }
 
         default:
-          return complete({
+          return {
             output: content,
             title,
             metadata: responseMetadata,
-          })
+          }
       }
     } catch (error) {
       if (error instanceof Network.ResponseTooLargeError) {
         if (download) {
-          const failure = new Error(
-            `Download exceeds max_bytes (${formatBytes(error.declaredBytes ?? error.receivedBytes)} > ` +
-              `${formatBytes(error.limitBytes)}). No destination file was created. Choose a smaller source or explicitly ` +
-              "set max_bytes once from the declared size within the supported limit; do not retry with incremental caps.",
-          )
+          const failure = downloadCapacityError(error.limitBytes, error.declaredBytes ?? error.receivedBytes)
           throw ToolRetryGuard.annotateWebFetch(ctx, params, failure, {
-            attemptedMaxBytes: error.limitBytes,
+            safeCapacityBytes: error.limitBytes,
             declaredSizeBytes: error.declaredBytes,
           })
         }
         throw ToolRetryGuard.annotateWebFetch(ctx, params, responseTooLargeError(error))
+      }
+      if (error instanceof DownloadCapacityError) {
+        throw ToolRetryGuard.annotateWebFetch(ctx, params, error, {
+          safeCapacityBytes: error.safeCapacityBytes,
+          declaredSizeBytes: error.responseBytes,
+        })
       }
       if (controller.signal.aborted && !ctx.abort.aborted) {
         throw new Error(
@@ -392,6 +349,7 @@ function isTextualMime(mime: string) {
 
 function formatBytes(bytes: number | undefined) {
   if (bytes === undefined) return undefined
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KiB`
   return `${bytes} bytes`
@@ -399,9 +357,12 @@ function formatBytes(bytes: number | undefined) {
 
 function downloadGuidance() {
   return (
-    "Do not repeat the same text-mode request. For a data file, call Web fetch again with output_path set to a simple " +
-    "workspace-root filename without directories; it will stream through the authorized network broker without entering model context. " +
-    "For a large JSON API response, request a smaller page and follow its pagination metadata."
+    "Do not repeat the same text-mode request. For a data file, call Web fetch again with a root-only filename such as " +
+    'output_path:"foo.pdf"; it will stream through the authorized network broker without entering model context. ' +
+    "For a folder destination such as papers/foo.pdf, only after that download succeeds run sandboxed Bash: " +
+    "mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'. " +
+    "For a large JSON API response, request a smaller page " +
+    "and follow its pagination metadata. WebFetch derives download capacity from live free disk; never add download-cap or claimed-size override fields."
   )
 }
 
@@ -469,6 +430,76 @@ type DownloadTarget = {
   relative: string
 }
 
+function exactBytes(bytes: number) {
+  return `${formatBytes(bytes)} (${bytes} bytes)`
+}
+
+class DownloadCapacityError extends Error {
+  constructor(
+    readonly safeCapacityBytes: number,
+    readonly responseBytes?: number,
+    readonly storageCode?: "ENOSPC" | "EDQUOT",
+  ) {
+    const observedText = responseBytes === undefined ? "" : `; response size ${exactBytes(responseBytes)}`
+    const heading = storageCode
+      ? `Download could not continue because workspace storage returned ${storageCode}. ` +
+        `The current disk-derived workspace capacity is ${exactBytes(safeCapacityBytes)}${observedText}. `
+      : `Download exceeds the current safe workspace capacity of ${exactBytes(safeCapacityBytes)}${observedText}. `
+    super(
+      heading +
+        `This capacity is computed from live free disk minus the ${exactBytes(DOWNLOAD_DISK_RESERVE_BYTES)} host reserve. ` +
+        "No destination file was created. Use a smaller or paginated source, free disk space, a provider-native dataset " +
+        "client, or a dedicated approved transfer path. Do not retry the unchanged URL without changing that strategy.",
+    )
+    this.name = "DownloadCapacityError"
+  }
+}
+
+function downloadCapacityError(safeCapacityBytes: number, responseBytes?: number, storageCode?: "ENOSPC" | "EDQUOT") {
+  return new DownloadCapacityError(safeCapacityBytes, responseBytes, storageCode)
+}
+
+function storageCapacityCode(error: unknown) {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  return code === "ENOSPC" || code === "EDQUOT" ? code : undefined
+}
+
+async function availableDownloadBytes(target: DownloadTarget) {
+  const disk = await fs.statfs(target.root)
+  const available = disk.bavail * disk.bsize
+  if (!Number.isSafeInteger(available) || available < 0) {
+    throw new Error("Workspace disk capacity could not be represented safely; the download was not started")
+  }
+  return Math.max(0, available - DOWNLOAD_DISK_RESERVE_BYTES)
+}
+
+async function safeDownloadCapacity(target: DownloadTarget) {
+  const capacity = await availableDownloadBytes(target)
+  if (capacity > 0) return capacity
+  throw downloadCapacityError(capacity)
+}
+
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", `'\\''`)}'`
+}
+
+function folderDestinationGuidance(requested: string) {
+  // WebFetch documents slash-separated workspace paths even on platforms
+  // whose native separator differs. Only offer a copy-ready move for a
+  // canonical relative spelling; traversal and ambiguous spellings fail with
+  // the generic root-only error below.
+  const parts = requested.split("/")
+  if (parts.length < 2 || parts.some((part) => !part || part === "." || part === "..")) return
+  const filename = parts.at(-1)!
+  const folder = parts.slice(0, -1).join("/")
+  const destination = parts.join("/")
+  return (
+    "output_path is root-only by design: brokered downloads must not traverse mutable intermediate directories. " +
+    `Retry with output_path:${JSON.stringify(filename)}. Only after that download succeeds, run sandboxed Bash from the workspace: ` +
+    `mkdir -p -- ${shellQuote(folder)} && test ! -e ${shellQuote(destination)} && mv -- ${shellQuote(filename)} ${shellQuote(destination)}`
+  )
+}
+
 async function resolveDownloadTarget(sessionID: string, requested: string): Promise<DownloadTarget> {
   if (!requested || requested !== requested.trim() || requested.includes("\0")) {
     throw new Error("output_path must be a non-empty workspace-root filename without surrounding whitespace")
@@ -477,6 +508,8 @@ async function resolveDownloadTarget(sessionID: string, requested: string): Prom
     throw new Error("output_path must be a workspace-root filename, not an absolute path")
   }
   if (requested !== path.basename(requested)) {
+    const guidance = folderDestinationGuidance(requested)
+    if (guidance) throw new Error(guidance)
     throw new Error("output_path must be a filename at the root of this session's workspace, without directories")
   }
 
@@ -580,25 +613,30 @@ function validateDownloadedFormat(target: DownloadTarget, response: Response, pr
   }
 }
 
-async function assertDownloadCapacity(response: Response, target: DownloadTarget, maxBytes: number) {
-  const disk = await fs.statfs(target.root)
-  const available = disk.bavail * disk.bsize
+async function refreshDownloadCapacity(response: Response, target: DownloadTarget, initialCapacity: number) {
+  const currentCapacity = await safeDownloadCapacity(target)
+  const capacity = Math.min(initialCapacity, currentCapacity)
   const declared = parseContentLength(response.headers.get("content-length"))
-  const required = declared ?? maxBytes
-  const usable = Math.max(0, available - DOWNLOAD_DISK_RESERVE_BYTES)
-  if (required <= usable) return
-  throw new Error(
-    `Insufficient workspace disk for download: ${formatBytes(required)} may be written, but only ` +
-      `${formatBytes(usable)} is available after the ${formatBytes(DOWNLOAD_DISK_RESERVE_BYTES)} safety reserve. ` +
-      "Choose a smaller source, lower max_bytes, or free disk space.",
-  )
+  if (declared !== undefined && declared > capacity) throw downloadCapacityError(capacity, declared)
+  return capacity
 }
 
-async function streamDownload(response: Response, target: DownloadTarget, maxBytes: number) {
-  await assertDownloadTarget(target)
-  await SafeFileIO.absent(target.path)
+async function refreshStreamingCapacity(target: DownloadTarget, initialCapacity: number, bytesWritten: number) {
+  const available = await availableDownloadBytes(target)
+  // statfs already reflects bytes written to the staged file. Add those bytes
+  // back only to express a total-transfer ceiling, and never grow beyond the
+  // initial snapshot. Rechecking before every write preserves the host reserve
+  // if another process consumes disk while an unknown/chunked body is flowing.
+  const remainingInitialBudget = Math.max(0, initialCapacity - bytesWritten)
+  return bytesWritten + Math.min(remainingInitialBudget, available)
+}
+
+async function streamDownload(response: Response, target: DownloadTarget, initialCapacity: number) {
+  let capacity: number
   try {
-    await assertDownloadCapacity(response, target, maxBytes)
+    await assertDownloadTarget(target)
+    await SafeFileIO.absent(target.path)
+    capacity = await refreshDownloadCapacity(response, target, initialCapacity)
   } catch (error) {
     await response.body?.cancel().catch(() => {})
     throw error
@@ -608,7 +646,17 @@ async function streamDownload(response: Response, target: DownloadTarget, maxByt
   // output_path contract, a concurrent runtime cannot swap an intermediate
   // directory to redirect either the temporary write or final hard-link.
   const staged = path.join(path.dirname(target.root), `.openscience-download-${crypto.randomUUID()}.tmp`)
-  const handle = await fs.open(staged, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | FS.O_NOFOLLOW, 0o644)
+  let handle: fs.FileHandle
+  try {
+    handle = await fs.open(staged, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | FS.O_NOFOLLOW, 0o644)
+  } catch (error) {
+    await response.body?.cancel().catch(() => {})
+    await fs.rm(staged, { force: true }).catch(() => {})
+    const storageCode = storageCapacityCode(error)
+    if (!storageCode) throw error
+    const liveCapacity = await refreshStreamingCapacity(target, initialCapacity, 0).catch(() => capacity)
+    throw downloadCapacityError(liveCapacity, undefined, storageCode)
+  }
   const hash = crypto.createHash("sha256")
   let bytes = 0
   const prefix = new Uint8Array(512)
@@ -620,14 +668,10 @@ async function streamDownload(response: Response, target: DownloadTarget, maxByt
         while (true) {
           const next = await reader.read()
           if (next.done) break
-          if (bytes + next.value.byteLength > maxBytes) {
+          capacity = await refreshStreamingCapacity(target, initialCapacity, bytes)
+          if (bytes + next.value.byteLength > capacity) {
             await reader.cancel().catch(() => {})
-            throw new Error(
-              `Download exceeds max_bytes (${formatBytes(maxBytes)}). Partial data was discarded; ` +
-                "use a metadata/listing endpoint to obtain the exact byte size for one evidence-backed retry, " +
-                "choose a smaller or paginated source, or use a different canonical download URL. " +
-                "Do not retry this URL with incrementally larger caps.",
-            )
+            throw downloadCapacityError(capacity, bytes + next.value.byteLength)
           }
           await writeChunk(handle, next.value)
           if (prefixBytes < prefix.byteLength) {
@@ -670,6 +714,11 @@ async function streamDownload(response: Response, target: DownloadTarget, maxByt
       sha256: hash.digest("hex"),
       contentType: response.headers.get("content-type") ?? "",
     }
+  } catch (error) {
+    const storageCode = storageCapacityCode(error)
+    if (!storageCode) throw error
+    const liveCapacity = await refreshStreamingCapacity(target, initialCapacity, bytes).catch(() => capacity)
+    throw downloadCapacityError(liveCapacity, bytes || undefined, storageCode)
   } finally {
     await handle.close().catch(() => {})
     await fs.rm(staged, { force: true })

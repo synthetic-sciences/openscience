@@ -28,14 +28,18 @@ function latchLinuxControl(): LinuxControl {
   })
   for (const candidate of ["SIGHUP", "SIGINT", "SIGTERM"] as const) {
     const inherited = process.listeners(candidate)
+    // Bun 1.3.9 drops the native signal watcher when the replacement listener
+    // is installed before inherited listeners are removed, even though
+    // listenerCount() still reports the replacement. This function runs
+    // synchronously before subreaper activation, gate release, or payload
+    // spawn, so remove the inherited server hooks first and then install the
+    // supervisor's sole native watcher without an externally visible gap.
+    for (const listener of inherited) process.removeListener(candidate, listener as (...args: unknown[]) => void)
     process.on(candidate, () => {
       if (signal) return
       signal = candidate
       request?.(candidate)
     })
-    // Install the containment latch first, then remove server handlers. There
-    // is never a default-disposition window where a revoke can kill the gate.
-    for (const listener of inherited) process.removeListener(candidate, listener as (...args: unknown[]) => void)
   }
   return {
     get signal() {
@@ -215,11 +219,13 @@ export namespace WindowsJobLauncher {
     }
     let subreaper: LinuxSubreaper.Handle | undefined
     try {
+      // Replace the statically imported server signal hooks before any
+      // containment/gate work can make this launcher externally targetable.
+      const control = latchLinuxControl()
       // This is established and kernel-verified before project code can run.
       // If prctl or /proc containment is unavailable, activation throws and
       // the body is never spawned.
       subreaper = LinuxSubreaper.activate()
-      const control = latchLinuxControl()
       for (let attempt = 0; attempt < 3_000; attempt++) {
         if (control.signal) return signalExitCode(control.signal)
         const assigned = await fs.readFile(release, "utf8").catch(() => undefined)

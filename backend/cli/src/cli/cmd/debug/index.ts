@@ -24,15 +24,17 @@ export const DebugCommand = cmd({
       .command(SnapshotCommand)
       .command(AgentCommand)
       .command(PathsCommand)
-      .command({
-        command: "wait",
-        describe: "wait indefinitely (for debugging)",
-        async handler() {
-          await bootstrap(process.cwd(), async () => {
-            await new Promise((resolve) => setTimeout(resolve, 1_000 * 60 * 60 * 24))
-          })
-        },
-      })
+      .command(
+        cmd({
+          command: "wait",
+          describe: "wait indefinitely (for debugging)",
+          async handler() {
+            await bootstrap(process.cwd(), async () => {
+              await new Promise((resolve) => setTimeout(resolve, 1_000 * 60 * 60 * 24))
+            })
+          },
+        }),
+      )
       .demandCommand(),
   async handler() {},
 })

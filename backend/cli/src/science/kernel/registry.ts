@@ -11,6 +11,7 @@ import { Global } from "@/global"
 import { FileLease } from "@/util/file-lease"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { KernelMetrics } from "./metrics"
+import { ProcessIdentity } from "@/process/process-identity"
 import * as ExecutionFiles from "@/science/execution/files"
 import { ExecutionHistory } from "@/science/execution/history"
 import type {
@@ -73,7 +74,8 @@ type Entry = {
   authority: ExecutionAuthority.Decision | null
   lastCell: KernelCell | null
   process: KernelProcess | null
-  lease?: AsyncDisposable
+  ownershipID: string | null
+  lease?: FileLease.Lease
   claiming?: Promise<void>
   idle?: ReturnType<typeof setTimeout>
   expiring?: Promise<void>
@@ -91,6 +93,7 @@ type Pending = {
 type StartTicket = {
   cancelled: boolean
   minimumIncarnation: number
+  ownershipID: string
   incarnation?: number
 }
 
@@ -107,6 +110,7 @@ const Persisted = z.object({
   incarnation: z.number().int().nullable(),
   execution_count: z.number().int().nonnegative(),
   last_activity_at: z.number().nullable(),
+  ownership_id: z.string().nullable().optional(),
   process: z
     .object({
       pid: z.number().int().positive(),
@@ -226,6 +230,7 @@ async function persist(value: Entry) {
     incarnation: value.incarnation,
     execution_count: value.executionCount,
     last_activity_at: value.lastActivityAt,
+    ownership_id: value.ownershipID,
     process: value.kernel?.process ?? value.process,
   } satisfies z.infer<typeof Persisted>)
 }
@@ -247,6 +252,7 @@ function restore(value: z.infer<typeof Persisted>) {
     authority: null,
     lastCell: null,
     process: value.process ?? null,
+    ownershipID: value.ownership_id ?? value.process?.ownershipID ?? null,
   }
   records().entries.set(id, entry)
   return entry
@@ -291,6 +297,7 @@ const record = (identity: KernelIdentity) => {
     authority: null,
     lastCell: null,
     process: null,
+    ownershipID: null,
   }
   records().entries.set(id, value)
   return value
@@ -299,6 +306,12 @@ const record = (identity: KernelIdentity) => {
 async function releaseLease(value: Entry) {
   await value.lease?.[Symbol.asyncDispose]()
   value.lease = undefined
+}
+
+function withLease<T>(value: Entry, action: () => Promise<T>): Promise<T> {
+  const lease = value.lease
+  if (!lease) return Promise.reject(new Error(`Kernel ${value.key} is missing its durable lease`))
+  return lease.during(action)
 }
 
 function running(pid: number) {
@@ -310,13 +323,24 @@ function running(pid: number) {
   }
 }
 
-async function reap(value: Entry) {
+type ReapOptions = {
+  ownershipID?: string
+  preserveOwnership?: boolean
+}
+
+async function reap(value: Entry, options: ReapOptions = {}) {
   const identity = value.process
-  if (!identity) return
+  const ownershipID = identity?.ownershipID ?? options.ownershipID ?? value.ownershipID ?? undefined
+  if (!identity && !ownershipID) return
+  if (!identity) {
+    await KernelProcessIdentity.terminate(undefined, ownershipID)
+    value.ownershipID = options.preserveOwnership ? (options.ownershipID ?? value.ownershipID) : null
+    return
+  }
   if (!identity.token && running(identity.pid)) {
     throw new Error(`Refusing to terminate unverified persisted kernel process ${identity.pid}.`)
   }
-  await KernelProcessIdentity.terminate(identity)
+  await KernelProcessIdentity.terminate(identity, ownershipID)
   const stopped = async (attempt = 0): Promise<boolean> => {
     if (!KernelProcessIdentity.matchesRecorded(identity)) return true
     if (attempt >= 100) return false
@@ -327,14 +351,14 @@ async function reap(value: Entry) {
     throw new Error(`Kernel process ${identity.pid} is still running after an identity-verified termination attempt.`)
   }
   value.process = null
+  value.ownershipID = options.preserveOwnership ? (options.ownershipID ?? value.ownershipID) : null
 }
 
-async function reapCurrent(value: Entry) {
+async function reapCurrent(value: Entry, options: ReapOptions = {}) {
   const identity = value.kernel?.process ?? value.process
   if (identity) value.process = identity
-  await reap(value).catch(async (error) => {
+  await reap(value, options).catch(async (error) => {
     await persist(value).catch(() => undefined)
-    await releaseLease(value)
     throw error
   })
   return identity
@@ -348,7 +372,7 @@ function reserveIncarnation(value: Entry, ticket?: StartTicket) {
   value.incarnation = Math.max(value.incarnation ?? 0, ticket.incarnation)
 }
 
-async function claim(value: Entry, ticket?: StartTicket) {
+async function claim(value: Entry, ticket?: StartTicket, options: ReapOptions = {}) {
   if (value.lease) {
     reserveIncarnation(value, ticket)
     return
@@ -359,26 +383,31 @@ async function claim(value: Entry, ticket?: StartTicket) {
     return
   }
   const pending = (async () => {
-    value.lease = await FileLease.acquire(leasePath(value.key), 1_000).catch(() => {
+    const lease = await FileLease.acquire(leasePath(value.key), 1_000).catch(() => {
       throw new Error("This kernel is active in another OpenScience server. Stop it there before starting it here.")
     })
-    const stored = await Storage.read<unknown>(storageKey(value.identity)).catch(async (error) => {
-      if (Storage.NotFoundError.isInstance(error)) return
+    value.lease = lease
+    try {
+      await lease.during(async () => {
+        const stored = await Storage.read<unknown>(storageKey(value.identity)).catch((error) => {
+          if (Storage.NotFoundError.isInstance(error)) return
+          throw error
+        })
+        const parsed = Persisted.safeParse(stored)
+        if (parsed.success) {
+          value.incarnation = parsed.data.incarnation
+          value.executionCount = parsed.data.execution_count
+          value.lastActivityAt = parsed.data.last_activity_at
+          value.process = parsed.data.process ?? null
+          value.ownershipID = parsed.data.ownership_id ?? parsed.data.process?.ownershipID ?? null
+        }
+        await reap(value, options)
+        reserveIncarnation(value, ticket)
+      })
+    } catch (error) {
       await releaseLease(value)
       throw error
-    })
-    const parsed = Persisted.safeParse(stored)
-    if (parsed.success) {
-      value.incarnation = parsed.data.incarnation
-      value.executionCount = parsed.data.execution_count
-      value.lastActivityAt = parsed.data.last_activity_at
-      value.process = parsed.data.process ?? null
     }
-    await reap(value).catch(async (error) => {
-      await releaseLease(value)
-      throw error
-    })
-    reserveIncarnation(value, ticket)
   })()
   value.claiming = pending
   await pending.finally(() => {
@@ -400,44 +429,56 @@ async function reclaimEntry(value: Entry) {
   // A restart may win the authority lease before this pending start enters its
   // own spawn section; without this reservation the replacement reused
   // incarnation 1 and looked indistinguishable from the boot it cancelled.
-  await claim(value, pending?.ticket)
+  const ownershipID = pending?.ticket.ownershipID
+  const preserve = !!pending
+  await claim(value, pending?.ticket, { ownershipID, preserveOwnership: preserve })
   // Reap through the durable ledger while the interpreter leader is still
   // alive. Its live descendant closure includes workers that called setsid()
   // and left the kernel's process group; killing the manager/leader first
   // would reparent those workers and erase the only safe ownership proof.
-  await reapCurrent(value)
-  const released = await value.manager.release(value.key).then(
-    () => ({ ok: true as const }),
-    (error) => ({ ok: false as const, error }),
-  )
+  const firstLease = value.lease!
+  try {
+    await firstLease.during(() =>
+      reapCurrent(value, { ownershipID, preserveOwnership: preserve }).then(() => undefined),
+    )
+  } catch (error) {
+    await releaseLease(value)
+    throw error
+  }
   if (entered) await pending?.promise.catch(() => undefined)
   else void pending?.promise.catch(() => undefined)
   records().starts.delete(value.key)
   // A cancelled startup releases its lease in the pending promise. Reclaim it
   // before touching the durable record so a different server cannot start the
   // same kernel between cancellation and the final stopped-state write.
-  if (!value.lease) await claim(value)
+  if (!value.lease) await claim(value, undefined, { ownershipID, preserveOwnership: preserve })
   // A cancelled startup may have crossed its spawn boundary after the first
-  // pass. Keep this second pass to reclaim that late durable registration.
-  const identity = await reapCurrent(value)
-  if (!released.ok && !identity) {
-    await releaseLease(value)
-    throw released.error
-  }
-  value.kernel = undefined
-  value.state = "stopped"
-  value.executionCount = 0
-  value.environment = null
-  value.startedAt = null
-  value.lastActivityAt = Date.now()
-  value.authority = null
-  value.lastCell = null
-  value.process = null
-  await persist(value).catch(async (error) => {
+  // pass. Keep the lexical ticket ID until this second pass has reclaimed any
+  // late durable registration; only then may the pointer be cleared.
+  const finalLease = value.lease!
+  const failures: unknown[] = []
+  try {
+    await finalLease.during(async () => {
+      await reapCurrent(value, { ownershipID })
+      await value.manager.release(value.key).catch((error) => failures.push(error))
+      value.kernel = undefined
+      value.state = "stopped"
+      value.executionCount = 0
+      value.environment = null
+      value.startedAt = null
+      value.lastActivityAt = Date.now()
+      value.authority = null
+      value.lastCell = null
+      value.process = null
+      value.ownershipID = null
+      await persist(value)
+    })
+  } catch (error) {
     await releaseLease(value)
     throw error
-  })
+  }
   await releaseLease(value)
+  if (failures.length) throw new AggregateError(failures, "Kernel manager cleanup failed after durable teardown")
 }
 
 function releaseEntry(value: Entry) {
@@ -627,6 +668,7 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
     return value
   }
   if (value.kernel?.ready) {
+    await reapCurrent(value)
     await value.manager.release(value.key)
     value.kernel = undefined
     value.state = "stopped"
@@ -643,14 +685,17 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
   }
   if (pending) {
     pending.ticket.cancelled = true
-    await pending.manager.release(pending.key)
+    await KernelProcessIdentity.terminate(undefined, pending.ticket.ownershipID)
     await pending.promise.catch(() => undefined)
+    await KernelProcessIdentity.terminate(undefined, pending.ticket.ownershipID)
+    await pending.manager.release(pending.key)
     records().starts.delete(value.key)
   }
 
   const ticket: StartTicket = {
     cancelled: false,
     minimumIncarnation: (value.incarnation ?? 0) + 1,
+    ownershipID: `kernel-${crypto.randomUUID()}`,
   }
   const drop = () => {
     if (records().starts.get(value.key)?.ticket === ticket) records().starts.delete(value.key)
@@ -658,8 +703,21 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
   const stale = () => ticket.cancelled || records().entries.get(value.key) !== value
   const abort = async () => {
     drop()
-    await value.manager.release(value.key)
+    const failures: unknown[] = []
+    const terminated = await KernelProcessIdentity.terminate(undefined, ticket.ownershipID).then(
+      () => {
+        if (value.ownershipID === ticket.ownershipID) value.ownershipID = null
+        return true
+      },
+      (error) => {
+        failures.push(error)
+        return false
+      },
+    )
+    if (terminated) await value.manager.release(value.key).catch((error) => failures.push(error))
+    await persist(value).catch((error) => failures.push(error))
     await releaseLease(value)
+    if (failures.length) throw new AggregateError(failures, "Cancelled kernel startup could not be safely reclaimed")
     throw new KernelStartupCancelled()
   }
   // Publish the pending start before acquiring the cross-process authority
@@ -688,12 +746,27 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
     value.lastActivityAt = Date.now()
     value.authority = current
     value.lastCell = null
+    const linuxIdentity = process.platform === "linux" ? await ProcessIdentity.capture(process.pid) : undefined
+    if (process.platform === "linux" && !linuxIdentity) {
+      throw new Error("Could not capture the Linux server identity for kernel launch")
+    }
     const processOwnership: KernelProcessIdentity.Ownership = {
-      id: `kernel-${crypto.randomUUID()}`,
+      id: ticket.ownershipID,
       projectID: identity.projectID,
       sessionID: identity.sessionID,
       authorityGeneration: current.generation,
+      ...(linuxIdentity ? { linuxOwner: { pid: process.pid, identity: linuxIdentity } } : {}),
     }
+    // Persist the durable ownership ID before spawn. If the server dies after
+    // ledger registration but before the child pointer is published, a fresh
+    // server can still revoke the exact containment group by this ID.
+    value.ownershipID = processOwnership.id
+    const sandboxPolicy = Object.freeze({
+      enabled: current.sandbox.enabled,
+      network: current.sandbox.network,
+      allowWrite: Object.freeze([...current.sandbox.allowWrite]),
+      onUnavailable: current.sandbox.onUnavailable,
+    })
     return (async () => {
       await persist(value)
       const kernel = await value.manager.get(value.key, {
@@ -701,15 +774,10 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
         sessionID: identity.sessionID,
         cwd: current.workspace,
         processOwnership,
+        sandboxPolicy,
       })
-      const registered = await KernelProcessIdentity.ensureRegistered(kernel.process, processOwnership).catch(
-        async (error) => {
-          await value.manager.release(value.key).catch(() => undefined)
-          throw error
-        },
-      )
+      const registered = await KernelProcessIdentity.ensureRegistered(kernel.process, processOwnership)
       if (!registered) {
-        await value.manager.release(value.key).catch(() => undefined)
         throw new Error("Kernel manager did not expose a process for durable registration")
       }
       return kernel
@@ -718,6 +786,7 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
         if (stale()) return abort()
         value.environment = kernel.environment ?? null
         value.process = kernel.process ?? null
+        value.ownershipID = kernel.process?.ownershipID ?? processOwnership.id
         value.authority = current
         value.startedAt = kernel.process?.startedAt ?? Date.now()
         value.lastActivityAt = value.startedAt
@@ -733,11 +802,26 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
         return value
       },
       async (error) => {
+        const failures: unknown[] = []
+        const terminated = await KernelProcessIdentity.terminate(undefined, ticket.ownershipID).then(
+          () => {
+            if (value.ownershipID === ticket.ownershipID) value.ownershipID = null
+            return true
+          },
+          (failure) => {
+            failures.push(failure)
+            return false
+          },
+        )
+        if (terminated) await value.manager.release(value.key).catch((failure) => failures.push(failure))
         value.kernel = undefined
         value.authority = current
         value.state = ticket.cancelled ? "stopped" : "crashed"
         await persist(value)
         await releaseLease(value)
+        if (failures.length) {
+          throw new AggregateError([error, ...failures], "Kernel startup ownership cleanup failed")
+        }
         if (ticket.cancelled) throw new KernelStartupCancelled()
         throw error
       },
@@ -894,117 +978,119 @@ export namespace KernelRuntime {
       throw new Error("Kernel startup completed without a queued execution")
     }
     return execution.then(
-      async (result) => {
-        // The count belongs to this cell, so capture it before the awaits below.
-        // `value.executionCount` is the kernel's running total and every cell
-        // queued behind this one advances it — reading it back after the persist
-        // reported the count of whichever cell had most recently finished.
-        const count = result.executionCount ?? value.executionCount + 1
-        value.executionCount = count
-        const completedAt = Date.now()
-        const startedAt = running.startedAt ?? completedAt
-        value.lastActivityAt = completedAt
-        const completeCell: KernelCell = {
-          ...(running.cell ?? cell(value)),
-          status: result.ok ? "succeeded" : "failed",
-          executionCount: count,
-        }
-        if (!value.lastCell || value.lastCell === running.cell) value.lastCell = completeCell
-        await persist(value)
-        scheduleIdle(value)
-        const complete = { ...result, executionCount: count }
-        await running.metricStart
-        const resources =
-          running.metricScope && kernel.process?.pid
-            ? await KernelMetrics.sampleAll(running.metricScope, [kernel.process.pid])
-                .then((samples) => samples.get(kernel.process!.pid))
-                .catch(() => undefined)
-            : undefined
-        const files =
-          running.fileRoot && running.fileStart
-            ? await running.fileStart
-                .then((before) => ExecutionFiles.changed(running.fileRoot!, before, completedAt))
-                .catch(() => [])
-            : []
-        const summary = complete.outputs.find((item) => item.type === "result")?.data?.["text/plain"] ?? ""
-        const fault = complete.outputs.find((item) => item.type === "error")?.error
-        await ExecutionHistory.complete(running.journal!, {
-          status: complete.ok ? "succeeded" : "failed",
-          completedAt,
-          summary,
-          stdout: complete.stdout,
-          stderr: complete.stderr,
-          error: fault?.traceback?.join("\n") ?? (fault ? `${fault.name}: ${fault.message}` : ""),
-          outputCount: complete.outputs.length,
-          resources,
-          files,
-        })
-        const node = await provenance(
-          identity,
-          value,
-          code,
-          startedAt,
-          completedAt,
-          running.codeState,
-          options?.origin,
-          complete,
-          undefined,
-          resources,
-          complete.ok ? "succeeded" : "failed",
-          files,
-          running.sequence,
-        )
-        await ExecutionHistory.link(running.journal!, node.id)
-        return { ...complete, provenanceID: node.id }
-      },
-      async (error) => {
-        const completedAt = Date.now()
-        const startedAt = running.startedAt ?? completedAt
-        value.lastActivityAt = completedAt
-        const failedCell: KernelCell = { ...(running.cell ?? cell(value)), status: "failed" }
-        if (!value.lastCell || value.lastCell === running.cell) value.lastCell = failedCell
-        if (kernel.crashed) value.state = "crashed"
-        await persist(value)
-        scheduleIdle(value)
-        await running.metricStart
-        const resources =
-          running.metricScope && kernel.process?.pid
-            ? await KernelMetrics.sampleAll(running.metricScope, [kernel.process.pid])
-                .then((samples) => samples.get(kernel.process!.pid))
-                .catch(() => undefined)
-            : undefined
-        const files =
-          running.fileRoot && running.fileStart
-            ? await running.fileStart
-                .then((before) => ExecutionFiles.changed(running.fileRoot!, before, completedAt))
-                .catch(() => [])
-            : []
-        const status = options?.signal?.aborted ? "cancelled" : kernel.crashed ? "interrupted" : "failed"
-        await ExecutionHistory.complete(running.journal!, {
-          status,
-          completedAt,
-          error: error instanceof Error ? error.message : String(error),
-          resources,
-          files,
-        })
-        const node = await provenance(
-          identity,
-          value,
-          code,
-          startedAt,
-          completedAt,
-          running.codeState,
-          options?.origin,
-          undefined,
-          error,
-          resources,
-          status,
-          files,
-          running.sequence,
-        )
-        await ExecutionHistory.link(running.journal!, node.id)
-        throw new KernelExecutionError(error, node.id)
-      },
+      (result) =>
+        withLease(value, async () => {
+          // The count belongs to this cell, so capture it before the awaits below.
+          // `value.executionCount` is the kernel's running total and every cell
+          // queued behind this one advances it — reading it back after the persist
+          // reported the count of whichever cell had most recently finished.
+          const count = result.executionCount ?? value.executionCount + 1
+          value.executionCount = count
+          const completedAt = Date.now()
+          const startedAt = running.startedAt ?? completedAt
+          value.lastActivityAt = completedAt
+          const completeCell: KernelCell = {
+            ...(running.cell ?? cell(value)),
+            status: result.ok ? "succeeded" : "failed",
+            executionCount: count,
+          }
+          if (!value.lastCell || value.lastCell === running.cell) value.lastCell = completeCell
+          await persist(value)
+          scheduleIdle(value)
+          const complete = { ...result, executionCount: count }
+          await running.metricStart
+          const resources =
+            running.metricScope && kernel.process?.pid
+              ? await KernelMetrics.sampleAll(running.metricScope, [kernel.process.pid])
+                  .then((samples) => samples.get(kernel.process!.pid))
+                  .catch(() => undefined)
+              : undefined
+          const files =
+            running.fileRoot && running.fileStart
+              ? await running.fileStart
+                  .then((before) => ExecutionFiles.changed(running.fileRoot!, before, completedAt))
+                  .catch(() => [])
+              : []
+          const summary = complete.outputs.find((item) => item.type === "result")?.data?.["text/plain"] ?? ""
+          const fault = complete.outputs.find((item) => item.type === "error")?.error
+          await ExecutionHistory.complete(running.journal!, {
+            status: complete.ok ? "succeeded" : "failed",
+            completedAt,
+            summary,
+            stdout: complete.stdout,
+            stderr: complete.stderr,
+            error: fault?.traceback?.join("\n") ?? (fault ? `${fault.name}: ${fault.message}` : ""),
+            outputCount: complete.outputs.length,
+            resources,
+            files,
+          })
+          const node = await provenance(
+            identity,
+            value,
+            code,
+            startedAt,
+            completedAt,
+            running.codeState,
+            options?.origin,
+            complete,
+            undefined,
+            resources,
+            complete.ok ? "succeeded" : "failed",
+            files,
+            running.sequence,
+          )
+          await ExecutionHistory.link(running.journal!, node.id)
+          return { ...complete, provenanceID: node.id }
+        }),
+      (error) =>
+        withLease(value, async () => {
+          const completedAt = Date.now()
+          const startedAt = running.startedAt ?? completedAt
+          value.lastActivityAt = completedAt
+          const failedCell: KernelCell = { ...(running.cell ?? cell(value)), status: "failed" }
+          if (!value.lastCell || value.lastCell === running.cell) value.lastCell = failedCell
+          if (kernel.crashed) value.state = "crashed"
+          await persist(value)
+          scheduleIdle(value)
+          await running.metricStart
+          const resources =
+            running.metricScope && kernel.process?.pid
+              ? await KernelMetrics.sampleAll(running.metricScope, [kernel.process.pid])
+                  .then((samples) => samples.get(kernel.process!.pid))
+                  .catch(() => undefined)
+              : undefined
+          const files =
+            running.fileRoot && running.fileStart
+              ? await running.fileStart
+                  .then((before) => ExecutionFiles.changed(running.fileRoot!, before, completedAt))
+                  .catch(() => [])
+              : []
+          const status = options?.signal?.aborted ? "cancelled" : kernel.crashed ? "interrupted" : "failed"
+          await ExecutionHistory.complete(running.journal!, {
+            status,
+            completedAt,
+            error: error instanceof Error ? error.message : String(error),
+            resources,
+            files,
+          })
+          const node = await provenance(
+            identity,
+            value,
+            code,
+            startedAt,
+            completedAt,
+            running.codeState,
+            options?.origin,
+            undefined,
+            error,
+            resources,
+            status,
+            files,
+            running.sequence,
+          )
+          await ExecutionHistory.link(running.journal!, node.id)
+          throw new KernelExecutionError(error, node.id)
+        }),
     )
   }
 

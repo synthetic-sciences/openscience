@@ -1,11 +1,13 @@
 import fs from "node:fs/promises"
 import fsSync from "node:fs"
-import { dlopen, FFIType, ptr } from "bun:ffi"
+import { dlopen, FFIType, ptr, toArrayBuffer } from "bun:ffi"
+import type { Pointer } from "bun:ffi"
 import { ProcessIdentity } from "./process-identity"
 
 const PR_SET_CHILD_SUBREAPER = 36
 const PR_GET_CHILD_SUBREAPER = 37
 const WNOHANG = 1
+const ECHILD = 10
 const DRAIN_DELAY_MS = 20
 
 type Library = ReturnType<typeof dlopen>
@@ -33,6 +35,9 @@ function openLibrary(): Library {
         waitpid: {
           args: [FFIType.i32, FFIType.ptr, FFIType.i32],
           returns: FFIType.i32,
+        },
+        __errno_location: {
+          returns: FFIType.ptr,
         },
       })
     } catch (error) {
@@ -77,6 +82,33 @@ async function processTable(): Promise<ProcessRow[]> {
   return rows
 }
 
+async function taskChildren(pid: number): Promise<number[]> {
+  const tasks = await fs.readdir(`/proc/${pid}/task`).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT" || error.code === "ESRCH") return undefined
+    throw error
+  })
+  if (!tasks) return []
+  const children = await Promise.all(
+    tasks
+      .filter((task) => /^\d+$/.test(task))
+      .map((task) =>
+        fs.readFile(`/proc/${pid}/task/${task}/children`, "utf8").catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT" || error.code === "ESRCH") return ""
+          throw error
+        }),
+      ),
+  )
+  return [
+    ...new Set(
+      children
+        .flatMap((value) => value.trim().split(/\s+/))
+        .filter(Boolean)
+        .map(Number)
+        .filter((child) => Number.isSafeInteger(child) && child > 0),
+    ),
+  ]
+}
+
 interface Descendant {
   pid: number
   depth: number
@@ -85,16 +117,39 @@ interface Descendant {
 
 async function descendants(): Promise<Descendant[]> {
   const rows = await processTable()
+  const table = new Map(rows.map((row) => [row.pid, row]))
+  const childrenByParent = new Map<number, number[]>()
+  for (const row of rows) {
+    const children = childrenByParent.get(row.ppid) ?? []
+    children.push(row.pid)
+    childrenByParent.set(row.ppid, children)
+  }
   const found: Descendant[] = []
   const seen = new Set<number>([process.pid])
+  let parents = [process.pid]
   let depth = 1
-  while (true) {
-    const added = rows.filter((row) => !seen.has(row.pid) && seen.has(row.ppid))
-    if (!added.length) break
-    for (const row of added) {
-      seen.add(row.pid)
-      found.push({ pid: row.pid, depth, state: row.state })
+  while (parents.length) {
+    const children = new Set<number>()
+    for (const parent of parents) {
+      for (const child of childrenByParent.get(parent) ?? []) children.add(child)
+      // Linux records a child forked by a non-leader thread against that
+      // thread ID. `/proc`'s top-level process table contains only thread-group
+      // leaders, so PPID traversal alone can miss exactly the rapid worker
+      // forks kernels create. Each task's `children` file is the complete
+      // kernel-owned edge set and closes that escape without trusting names or
+      // process groups.
+      for (const child of await taskChildren(parent)) children.add(child)
     }
+    const added: number[] = []
+    for (const pid of children) {
+      if (seen.has(pid)) continue
+      const row = table.get(pid) ?? (await processRow(pid))
+      if (!row) continue
+      seen.add(pid)
+      added.push(pid)
+      found.push({ pid, depth, state: row.state })
+    }
+    parents = added
     depth++
   }
   return found
@@ -135,6 +190,11 @@ async function signalExact(member: Pick<ExactProcess, "pid" | "identity">, signa
 async function quiesce(primary?: LinuxSubreaper.Primary): Promise<ExactProcess[]> {
   let stable = ""
   while (true) {
+    // Pin the authenticated ancestry root before the first potentially large
+    // /proc sweep. Otherwise an unbounded fork loop can grow the table faster
+    // than it is enumerated and prevent containment from ever reaching the
+    // first SIGSTOP.
+    if (primary) await signalExact(primary, "SIGSTOP")
     const snapshot = await pinnedDescendants()
     snapshot.live.sort((a, b) => a.depth - b.depth)
     for (const member of snapshot.live) await signalExact(member, "SIGSTOP")
@@ -194,6 +254,7 @@ export namespace LinuxSubreaper {
       arg5: number,
     ) => number
     const waitpid = library.symbols.waitpid as unknown as (pid: number, status: number, options: number) => number
+    const errnoLocation = library.symbols.__errno_location as unknown as () => number | bigint | null
     try {
       // Full /proc PPID snapshots are required for worker-thread forks as well
       // as main-thread children. Verify the inputs before spawning any body.
@@ -209,7 +270,16 @@ export namespace LinuxSubreaper {
       retainedLibraries.add(library)
 
       const reap = () => {
-        while (waitpid(-1, 0, WNOHANG) > 0) {}
+        const status = Buffer.alloc(4)
+        while (true) {
+          const result = waitpid(-1, ptr(status), WNOHANG)
+          if (result > 0) continue
+          if (result === 0) return false
+          const location = errnoLocation()
+          if (!location) return false
+          const errno = new Int32Array(toArrayBuffer(location as Pointer, 0, 4))[0]
+          return errno === ECHILD
+        }
       }
 
       return {
@@ -271,6 +341,7 @@ export namespace LinuxSubreaper {
           // Never drop the subreaper boundary while a descendant remains. An
           // uninterruptible child may delay completion, but returning would
           // reparent it to host init and violate the containment guarantee.
+          let stable = false
           while (true) {
             try {
               const stopped = await quiesce()
@@ -278,12 +349,20 @@ export namespace LinuxSubreaper {
               for (const member of stopped) await signalExact(member, "SIGKILL")
               // The managed primary has already delivered its exit event
               // before drain() is called, so waitpid cannot steal Bun's child
-              // status. Every remaining direct child is adopted.
-              reap()
-              if (!(await descendants()).length) return
+              // status. Every remaining direct child is adopted. A zero from
+              // waitpid proves a live child remains even if a racing /proc
+              // census missed its worker-thread parent edge; only ECHILD plus
+              // two stable empty full-closure observations can release the
+              // subreaper anchor.
+              const reaped = reap()
+              const closure = await descendants()
+              const empty = reaped && !closure.length
+              if (empty && stable) return
+              stable = empty
             } catch {
               // Keep the verified subreaper alive and retry. Exiting on a
               // cleanup error would reparent the unresolved tree to host init.
+              stable = false
             }
             await Bun.sleep(DRAIN_DELAY_MS)
           }

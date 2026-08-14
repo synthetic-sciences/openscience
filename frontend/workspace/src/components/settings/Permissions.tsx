@@ -83,8 +83,8 @@ const Permissions: Component = () => {
     const confirmed = await confirmDialog(dialog, {
       title: trusted ? "Trust this project?" : "Revoke project trust?",
       message: trusted
-        ? `Allow project code under ${status.root} to run using the current execution policy. If sandboxing is off or unavailable and fallback permits it, code may run with your user authority. Review Sandbox settings first.`
-        : "New terminals, kernels, package installs, and compute jobs will stay blocked until you trust this project again. Existing processes are stopped when trust is revoked.",
+        ? `Allow project-owned code under ${status.root}, including plugins, MCP servers, formatters, language servers, provider commands, and startup hooks. Trust also permits host execution when the sandbox is off or explicitly configured to fall back without containment. Sandboxed terminals, kernels, and local jobs do not require project trust unless you enable that stricter policy in Sandbox settings.`
+        : "Project-owned extensions and unsandboxed execution will be blocked. Existing project processes are stopped. Sandboxed terminals, kernels, and local jobs remain available unless Sandbox settings require project trust for all execution.",
       confirmLabel: trusted ? "Trust project" : "Revoke trust",
       danger: !trusted,
     })
@@ -118,8 +118,8 @@ const Permissions: Component = () => {
         <PanelBody>
           <Show when={route()}>
             <Section
-              title="Project execution"
-              description="Project code runs only after you trust its current location."
+              title="Project code"
+              description="Trust project-owned extensions and host execution separately from routine sandboxed work."
             >
               <div class="settings-card settings-preferences-card">
                 <Show
@@ -151,14 +151,16 @@ const Permissions: Component = () => {
                         <Icon name={trust()?.canExecuteProjectCode ? "shield" : "shield-alert"} size="small" />
                       </span>
                       <div class="settings-row-copy">
-                        <strong>{trust()?.canExecuteProjectCode ? "Trusted project" : "Execution blocked"}</strong>
+                        <strong>
+                          {trust()?.canExecuteProjectCode ? "Project code enabled" : "Project extensions blocked"}
+                        </strong>
                         <span class="text-11-regular text-text-weak break-all">{trust()?.root}</span>
                       </div>
                       <span
                         class="settings-preference-status"
                         data-tone={trust()?.canExecuteProjectCode ? "success" : "warning"}
                       >
-                        {trust()?.canExecuteProjectCode ? "Trusted" : "Blocked"}
+                        {trust()?.canExecuteProjectCode ? "Trusted" : "Restricted"}
                       </span>
                       <Button
                         size="small"
