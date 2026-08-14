@@ -4,6 +4,7 @@ import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { AuthorityProcessLedger } from "../../src/project/authority-process"
 import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
+import { ExecutionAuthority } from "../../src/project/execution"
 import { Pty } from "../../src/pty"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
@@ -65,6 +66,17 @@ async function ledger(kind: AuthorityProcessLedger.Kind) {
   const entry = entries.find((item) => item.kind === kind && item.owner_pid === process.pid)
   if (!entry) throw new Error(`Missing ${kind} authority ledger entry for owner ${process.pid}`)
   return entry
+}
+
+async function hostPID(entry: { pid: number; identity: string }, reportedPID: number): Promise<number> {
+  if (process.platform !== "linux") return reportedPID
+  const resolved = await AuthorityProcessLedger.resolveLinuxNamespacePID({
+    leaderPID: entry.pid,
+    leaderIdentity: entry.identity,
+    namespacePID: reportedPID,
+  })
+  if (!resolved) throw new Error(`Could not resolve sandbox PID ${reportedPID} below authority leader ${entry.pid}`)
+  return resolved
 }
 
 await Instance.provide({
@@ -129,9 +141,9 @@ await Instance.provide({
       const descendantFile = descendantFileArg
       if (!descendantFile) throw new Error("Missing PTY descendant marker path")
       process.env.SHELL = shell
-      await Pty.create({ sessionID, title: "orphan" })
+      const terminal = await Pty.create({ sessionID, title: "orphan" })
       const entry = await ledger("pty")
-      const descendantPID = Number(await waitText(descendantFile))
+      const descendantPID = await hostPID(entry, Number(await waitText(descendantFile)))
       const descendantIdentity = await AuthorityProcessLedger.identity(descendantPID)
       if (!descendantIdentity) throw new Error(`Missing PTY descendant identity for ${descendantPID}`)
       const descendantGroup = await waitEscapedGroup(descendantPID, entry.pid)
@@ -139,6 +151,7 @@ await Instance.provide({
         result,
         JSON.stringify({
           ...entry,
+          sandboxed: terminal.authority.sandbox.enforced,
           descendant: {
             pid: descendantPID,
             identity: descendantIdentity,
@@ -154,6 +167,11 @@ await Instance.provide({
     if (mode === "owner-biology") {
       const descendantFile = descendantFileArg
       if (!descendantFile) throw new Error("Missing biology descendant marker path")
+      const authority = await ExecutionAuthority.require({
+        projectID: Instance.project.id,
+        sessionID,
+        capability: "kernel",
+      })
       const tool = await NotebookTool.init()
       await tool.execute(
         {
@@ -180,7 +198,7 @@ await Instance.provide({
         context(sessionID),
       )
       const entry = await ledger("biology")
-      const descendantPID = Number(await waitText(descendantFile))
+      const descendantPID = await hostPID(entry, Number(await waitText(descendantFile)))
       const descendantIdentity = await AuthorityProcessLedger.identity(descendantPID)
       if (!descendantIdentity) throw new Error(`Missing biology descendant identity for ${descendantPID}`)
       const descendantGroup = await waitEscapedGroup(descendantPID, entry.pid)
@@ -188,6 +206,7 @@ await Instance.provide({
         result,
         JSON.stringify({
           ...entry,
+          sandboxed: authority.sandbox.enforced,
           descendant: {
             pid: descendantPID,
             identity: descendantIdentity,

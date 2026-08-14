@@ -5,7 +5,6 @@ import os from "node:os"
 import path from "node:path"
 import { CredentialProcessLedger } from "../../src/credentials/process-ledger"
 import { Instance } from "../../src/project/instance"
-import { WindowsJobLauncher } from "../../src/process/windows-job-launcher"
 import { CommandRuntime } from "../../src/science/command/registry"
 import { Shell } from "../../src/shell/shell"
 import { BashTool } from "../../src/tool/bash"
@@ -61,7 +60,7 @@ test("bash registers only its live process in the project compute ledger", async
 }, 30_000)
 
 test("credential revocation stops every real registered command", async () => {
-  const wrapped = WindowsJobLauncher.wrap({
+  const wrapped = await CommandRuntime.wrap({
     file: process.execPath,
     args: ["-e", "console.log(process.env.LAB_ACCESS_TOKEN); setInterval(() => {}, 1000)"],
   })
@@ -100,6 +99,126 @@ test("credential revocation stops every real registered command", async () => {
 })
 
 const posixTest = process.platform === "win32" ? test.skip : test
+const linuxTest = process.platform === "linux" ? test : test.skip
+
+test("pre-exec ownership preserves immediate exit 0 and exit 127", async () => {
+  for (const code of [0, 127]) {
+    const projectID = `project-command-fast-${code}-${crypto.randomUUID()}`
+    const sessionID = `session-command-fast-${code}`
+    const wrapped = await CommandRuntime.wrap({
+      file: process.execPath,
+      args: ["-e", `process.exit(${code})`],
+    })
+    const child = spawn(wrapped.file, wrapped.args, {
+      detached: process.platform !== "win32",
+      stdio: "ignore",
+    })
+    const completion = new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject)
+      child.once("exit", resolve)
+    })
+    const entry = await CommandRuntime.start(
+      {
+        projectID,
+        sessionID,
+        messageID: `message-command-fast-${code}`,
+        description: `Immediate exit ${code}`,
+        command: `exit ${code}`,
+      },
+      child,
+      () =>
+        Shell.killTree(child, {
+          exited: () => child.exitCode !== null || child.signalCode !== null,
+          detached: process.platform !== "win32",
+        }),
+      { windowsRelease: wrapped.release },
+    )
+
+    expect(await completion).toBe(code)
+    CommandRuntime.finish(entry.id)
+    expect(CommandRuntime.list(projectID, sessionID)).toEqual([])
+  }
+})
+
+linuxTest("the owner gate executes an unsandboxed shell only after registration", async () => {
+  const projectID = `project-command-shell-${crypto.randomUUID()}`
+  const wrapped = await CommandRuntime.wrap({
+    file: "printf 'registered-shell'",
+    shell: true,
+  })
+  const child = spawn(wrapped.file, wrapped.args, {
+    detached: true,
+    shell: wrapped.spawnShell,
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+  let output = ""
+  child.stdout!.on("data", (chunk) => {
+    output += String(chunk)
+  })
+  const completion = new Promise<number | null>((resolve, reject) => {
+    child.once("error", reject)
+    child.once("exit", resolve)
+  })
+  const entry = await CommandRuntime.start(
+    {
+      projectID,
+      sessionID: "session-command-shell",
+      messageID: "message-command-shell",
+      description: "Registered unsandboxed shell",
+      command: "printf registered-shell",
+    },
+    child,
+    () => Shell.killTree(child, { exited: () => child.exitCode !== null, detached: true }),
+    { windowsRelease: wrapped.release },
+  )
+
+  expect(await completion).toBe(0)
+  expect(output).toBe("registered-shell")
+  CommandRuntime.finish(entry.id)
+})
+
+linuxTest("registration failure never releases the command body", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-command-gate-"))
+  const marker = path.join(root, "executed")
+  const previous = process.env.OPENSCIENCE_COMMAND_TEST_REGISTRATION_FAILURE
+  process.env.OPENSCIENCE_COMMAND_TEST_REGISTRATION_FAILURE = "1"
+  const projectID = `project-command-gate-${crypto.randomUUID()}`
+  let child: ReturnType<typeof spawn> | undefined
+  try {
+    const wrapped = await CommandRuntime.wrap({
+      file: process.execPath,
+      args: ["-e", `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")`],
+    })
+    child = spawn(wrapped.file, wrapped.args, { detached: true, stdio: "ignore" })
+    const completion = new Promise<void>((resolve) => {
+      child!.once("exit", () => resolve())
+      child!.once("error", () => resolve())
+    })
+    await expect(
+      CommandRuntime.start(
+        {
+          projectID,
+          sessionID: "session-command-gate",
+          messageID: "message-command-gate",
+          description: "Injected registration failure",
+          command: "must not execute",
+        },
+        child,
+        () => Shell.killTree(child!, { exited: () => child!.exitCode !== null, detached: true }),
+        { windowsRelease: wrapped.release },
+      ),
+    ).rejects.toThrow("Injected command registration failure")
+    await completion
+
+    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(CommandRuntime.list(projectID, "session-command-gate")).toEqual([])
+  } finally {
+    if (previous === undefined) delete process.env.OPENSCIENCE_COMMAND_TEST_REGISTRATION_FAILURE
+    else process.env.OPENSCIENCE_COMMAND_TEST_REGISTRATION_FAILURE = previous
+    if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL")
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
 
 posixTest("command completion reaps a same-group background descendant", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-command-descendant-"))
@@ -116,7 +235,7 @@ posixTest("command completion reaps a same-group background descendant", async (
     "  process.exit(0)",
     "}, 20)",
   ].join("\n")
-  const wrapped = WindowsJobLauncher.wrap({ file: process.execPath, args: ["-e", script, marker, release] })
+  const wrapped = await CommandRuntime.wrap({ file: process.execPath, args: ["-e", script, marker, release] })
   const child = spawn(wrapped.file, wrapped.args, { detached: true, stdio: "ignore" })
   let descendantPID = 0
   let descendantIdentity: string | undefined
@@ -173,7 +292,7 @@ posixTest("command revocation reaps a direct child that starts a new session", a
     "open(sys.argv[1], 'w').write(str(child.pid))",
     "time.sleep(600)",
   ].join("; ")
-  const wrapped = WindowsJobLauncher.wrap({ file: python, args: ["-c", script, marker] })
+  const wrapped = await CommandRuntime.wrap({ file: python, args: ["-c", script, marker] })
   const child = spawn(wrapped.file, wrapped.args, { detached: true, stdio: "ignore" })
   let descendantPID = 0
   let descendantIdentity: string | undefined

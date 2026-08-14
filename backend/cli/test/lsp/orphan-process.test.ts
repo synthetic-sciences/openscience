@@ -21,10 +21,6 @@ function environment(root: string) {
     XDG_CONFIG_HOME: path.join(root, "config-xdg"),
     XDG_DATA_HOME: path.join(root, "data-xdg"),
     XDG_STATE_HOME: path.join(root, "state-xdg"),
-    // The process-group contract is independent of the OS sandbox. Disabling
-    // it here also avoids Linux bubblewrap's stronger --die-with-parent
-    // behavior masking the dead-owner recovery path this test exercises.
-    OPENSCIENCE_CONFIG_CONTENT: JSON.stringify({ sandbox: { enabled: false } }),
   }
 }
 
@@ -92,6 +88,8 @@ posixTest(
     const trust = new URL("../../src/project/trust.ts", import.meta.url).href
     const lsp = new URL("../../src/lsp/index.ts", import.meta.url).href
     const ledger = new URL("../../src/credentials/process-ledger.ts", import.meta.url).href
+    const config = new URL("../../src/config/config.ts", import.meta.url).href
+    const sandbox = new URL("../../src/sandbox/sandbox.ts", import.meta.url).href
     const python = Bun.which("python3") ?? "/usr/bin/python3"
     await fs.mkdir(workspace, { recursive: true })
     const fake = await fs.readFile(path.join(import.meta.dir, "../fixture/lsp/fake-lsp-server.js"), "utf8")
@@ -137,6 +135,8 @@ import { InstanceBootstrap } from ${JSON.stringify(bootstrap)}
 import { ProjectTrust } from ${JSON.stringify(trust)}
 import { LSP } from ${JSON.stringify(lsp)}
 import { CredentialProcessLedger } from ${JSON.stringify(ledger)}
+import { Config } from ${JSON.stringify(config)}
+import { Sandbox } from ${JSON.stringify(sandbox)}
 
 const [mode, workspace, source, descendantFile] = process.argv.slice(2)
 async function waitText(file, attempt = 0) {
@@ -162,17 +162,28 @@ if (mode === "owner") {
     directory: workspace,
     init: InstanceBootstrap,
     fn: async () => {
+      const policy = await Config.trustedSandbox()
+      const sandboxed = policy.enabled === true && Sandbox.available()
       await LSP.touchFile(source)
       const entries = await Bun.file(CredentialProcessLedger.pathForTests()).json()
       const entry = entries.find((item) => item.kind === "lsp" && item.project_id === Instance.project.id)
       if (!entry) throw new Error("Missing durable LSP process entry")
-      const descendantPID = Number(await waitText(descendantFile))
+      const reportedPID = Number(await waitText(descendantFile))
+      const descendantPID = process.platform === "linux"
+        ? await CredentialProcessLedger.resolveLinuxNamespacePID({
+            leaderPID: entry.pid,
+            leaderIdentity: entry.identity,
+            namespacePID: reportedPID,
+          })
+        : reportedPID
+      if (!descendantPID) throw new Error("Could not resolve LSP sandbox descendant PID")
       const descendantIdentity = await CredentialProcessLedger.identity(descendantPID)
       if (!descendantIdentity) throw new Error("Missing LSP descendant identity")
       console.log(JSON.stringify({
         projectID: Instance.project.id,
         pid: entry.pid,
         identity: entry.identity,
+        sandboxed,
         descendant: { pid: descendantPID, identity: descendantIdentity },
       }))
       await new Promise(() => {})
@@ -213,6 +224,7 @@ if (mode === "owner") {
           projectID: string
           pid: number
           identity: string
+          sandboxed: boolean
           descendant: { pid: number; identity: string }
         }
       | undefined
@@ -220,6 +232,10 @@ if (mode === "owner") {
       owner = spawn("owner")
       const registered = await readJsonLine<NonNullable<typeof entry>>(owner, "LSP owner")
       entry = registered
+      // This fixture intentionally uses the default trusted sandbox. The old
+      // OPENSCIENCE_CONFIG_CONTENT override was project-scoped and therefore
+      // could not disable the global/managed execution boundary.
+      expect(registered.sandboxed).toBe(true)
       expect(await CredentialProcessLedger.owns(registered.pid, registered.identity)).toBe(true)
       expect(await CredentialProcessLedger.owns(registered.descendant.pid, registered.descendant.identity)).toBe(true)
       expect(await processGroup(registered.descendant.pid)).toBe(registered.descendant.pid)
@@ -228,10 +244,10 @@ if (mode === "owner") {
       owner.kill("SIGKILL")
       await owner.exited
       await Bun.sleep(100)
-      // macOS responsibility supervision observes the exact server identity
-      // and reaps its tree immediately on owner death. Other POSIX platforms
-      // retain the orphan for the fresh-server revocation path below.
-      const survivesOwner = process.platform !== "darwin"
+      // macOS responsibility supervision and Linux bubblewrap's parent-death
+      // namespace reap immediately. A fresh server still verifies and clears
+      // the durable ledger record below.
+      const survivesOwner = process.platform !== "darwin" && !(process.platform === "linux" && registered.sandboxed)
       expect(await CredentialProcessLedger.owns(registered.pid, registered.identity)).toBe(survivesOwner)
       expect(await CredentialProcessLedger.owns(registered.descendant.pid, registered.descendant.identity)).toBe(
         survivesOwner,

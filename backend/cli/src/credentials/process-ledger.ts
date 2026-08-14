@@ -21,6 +21,7 @@ export namespace CredentialProcessLedger {
     detached: boolean
     darwin_responsibility_uniqueid?: string
     windows_job?: string
+    linux_subreaper?: boolean
     owner_pid: number
     created_at: string
     project_id?: string
@@ -70,6 +71,7 @@ export namespace CredentialProcessLedger {
         (typeof item.darwin_responsibility_uniqueid === "string" &&
           /^[1-9][0-9]{0,19}$/.test(item.darwin_responsibility_uniqueid))) &&
       (item.windows_job === undefined || WindowsJob.valid(item.windows_job)) &&
+      (item.linux_subreaper === undefined || typeof item.linux_subreaper === "boolean") &&
       typeof item.owner_pid === "number" &&
       Number.isSafeInteger(item.owner_pid) &&
       typeof item.created_at === "string" &&
@@ -136,6 +138,17 @@ export namespace CredentialProcessLedger {
     return AuthorityProcessLedger.owns(pid, expected)
   }
 
+  /** Diagnostic bridge for tests and inspectors that receive a PID from
+   * inside a Linux sandbox. The authority ledger performs the identity-pinned
+   * descendant-closure and NSpid validation. */
+  export async function resolveLinuxNamespacePID(input: {
+    leaderPID: number
+    leaderIdentity: string
+    namespacePID: number
+  }): Promise<number | undefined> {
+    return AuthorityProcessLedger.resolveLinuxNamespacePID(input)
+  }
+
   function linuxProcess(stat: string) {
     const close = stat.lastIndexOf(")")
     if (close < 0) return
@@ -143,10 +156,11 @@ export namespace CredentialProcessLedger {
       .slice(close + 2)
       .trim()
       .split(/\s+/)
+    const state = fields[0]
     const ppid = Number(fields[1])
     const pgid = Number(fields[2])
-    if (!Number.isSafeInteger(ppid) || ppid < 0 || !Number.isSafeInteger(pgid) || pgid <= 0) return
-    return { ppid, pgid }
+    if (!state || !Number.isSafeInteger(ppid) || ppid < 0 || !Number.isSafeInteger(pgid) || pgid <= 0) return
+    return { state, ppid, pgid }
   }
 
   async function linuxProcessFor(pid: number) {
@@ -155,6 +169,11 @@ export namespace CredentialProcessLedger {
       throw error
     })
     return stat ? linuxProcess(stat) : undefined
+  }
+
+  async function live(pid: number): Promise<boolean> {
+    if (process.platform === "linux" && (await linuxProcessFor(pid))?.state === "Z") return false
+    return alive(pid)
   }
 
   async function darwinProcess(pid: number): Promise<{ ppid: number; pgid: number } | undefined> {
@@ -206,7 +225,7 @@ export namespace CredentialProcessLedger {
         if (!/^\d+$/.test(name)) continue
         const pid = Number(name)
         const info = await linuxProcessFor(pid)
-        if (info) result.push({ pid, ppid: info.ppid, pgid: info.pgid })
+        if (info && info.state !== "Z") result.push({ pid, ppid: info.ppid, pgid: info.pgid })
       }
       return result
     }
@@ -271,15 +290,15 @@ export namespace CredentialProcessLedger {
     )
     for (const pid of responsible) selected.set(pid, selected.get(pid) ?? false)
     const members: Member[] = []
-    let unverified = !currentLeader && alive(entry.pid) && (await processGroup(entry.pid)) === entry.pid
+    let unverified = !currentLeader && (await live(entry.pid)) && (await processGroup(entry.pid)) === entry.pid
     for (const [pid, groupBound] of selected) {
       const memberIdentity = await identity(pid)
       if (!memberIdentity) {
-        if ((!groupBound || (await processGroup(pid)) === entry.pid) && alive(pid)) {
-          // A just-signalled child may remain briefly as a zombie: it still
-          // has a PID/PGID but no libproc identity. Do not authenticate or
-          // signal it, and do not call the group empty. Retry until it is
-          // reaped; persistent opacity fails closed at the teardown timeout.
+        if ((!groupBound || (await processGroup(pid)) === entry.pid) && (await live(pid))) {
+          // A process may become temporarily opaque between enumeration and
+          // identity capture. Do not authenticate or signal it, and do not
+          // call the group empty while it remains live. Linux zombies are not
+          // live execution principals and are filtered by live().
           unverified = true
         }
         continue
@@ -312,6 +331,34 @@ export namespace CredentialProcessLedger {
     }
   }
 
+  async function teardownLinuxSubreaper(entry: Entry, options: RevokeOptions): Promise<boolean> {
+    if (!(await owns(entry.pid, entry.identity))) return false
+    // Give an in-process owner its authenticated teardown hook before the
+    // cooperative signal. Bash uses this to record user-abort metadata; its
+    // branded Shell.killTree path may also complete the supervisor drain.
+    // Re-authenticate afterwards so a callback-completed launcher (or a reused
+    // PID) is never signalled by this durable fallback.
+    await options.onPinned?.(entry.id)
+    if (!(await owns(entry.pid, entry.identity))) return true
+    // The launcher handles this control signal by stopping the payload tree,
+    // killing identity-pinned descendants, waitpid-reaping adopted orphans,
+    // and only then exiting. Never group-kill or SIGKILL this anchor.
+    try {
+      process.kill(entry.pid, "SIGTERM")
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error
+    }
+    for (let attempt = 0; attempt < 250; attempt++) {
+      if (!(await owns(entry.pid, entry.identity))) {
+        return true
+      }
+      await Bun.sleep(20)
+    }
+    // Keep the durable row and live subreaper anchor. A hard-kill fallback
+    // would turn a diagnosable timeout into an escaped credential process.
+    throw new Error(`Linux child-subreaper ${entry.pid} did not finish cooperative descendant cleanup`)
+  }
+
   async function teardownGroup(entry: Entry, options: RevokeOptions = {}): Promise<boolean> {
     if (process.platform === "win32") {
       if (!entry.windows_job) {
@@ -325,6 +372,7 @@ export namespace CredentialProcessLedger {
       }
       return live || terminated
     }
+    if (entry.linux_subreaper) return teardownLinuxSubreaper(entry, options)
     if (!entry.detached) {
       throw new Error(`Credential-bearing ${entry.kind} process ${entry.pid} has no safely reapable process group`)
     }
@@ -437,6 +485,7 @@ export namespace CredentialProcessLedger {
       pid: input.pid,
       detached: input.detached,
       ...(windowsJob ? { windows_job: windowsJob } : {}),
+      ...(process.platform === "linux" && input.windowsRelease ? { linux_subreaper: true } : {}),
       identity: processIdentity,
       owner_pid: process.pid,
       created_at: new Date().toISOString(),

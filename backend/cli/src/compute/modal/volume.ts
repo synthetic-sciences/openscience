@@ -246,6 +246,7 @@ export namespace ModalVolume {
         windowsHide: true,
         stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"],
       })
+      WindowsJobLauncher.bind(child, wrapped.release)
       const completion = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
         child.once("error", reject)
         child.once("close", (code, signal) => resolve({ code, signal }))

@@ -7,6 +7,7 @@ import { RuntimeEvents } from "../../src/runtime/events"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import { CommandRuntime } from "../../src/science/command/registry"
 import { handoffRuntimeEvents, RuntimeRoutes } from "../../src/server/routes/runtime"
 import { SessionRoutes } from "../../src/server/routes/session"
 import { Server } from "../../src/server/server"
@@ -22,10 +23,10 @@ const Tick = BusEvent.define(
   }),
 )
 
-async function waitUntil(check: () => boolean, timeout = 5_000) {
+async function waitUntil(check: () => boolean | Promise<boolean>, timeout = 5_000) {
   const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
-    if (check()) return
+    if (await check()) return
     await Bun.sleep(5)
   }
   throw new Error("Condition did not become true")
@@ -255,6 +256,7 @@ describe("public runtime event journal", () => {
             return true
           }
         })
+        await waitUntil(() => CommandRuntime.list(Instance.project.id, session.id).length === 1)
         const unsubscribe = RuntimeEvents.subscribe(session.id, () => {
           throw new Error("subscriber delivery failed")
         })
@@ -270,6 +272,7 @@ describe("public runtime event journal", () => {
           properties: { source: "user" },
         })
         await running
+        expect(CommandRuntime.list(Instance.project.id, session.id)).toEqual([])
         await Session.remove(session.id)
       },
     })
@@ -350,6 +353,7 @@ describe("public runtime event journal", () => {
 
         const pending = Promise.withResolvers<RuntimeEvents.CancelResult>()
         const requestCancel = spyOn(RuntimeEvents, "requestCancel").mockImplementation(() => pending.promise)
+        let newRun: ReturnType<typeof SessionPrompt.shell> | undefined
         try {
           const response = SessionRoutes().request(`/${session.id}/abort`, { method: "POST" })
           await waitUntil(() => requestCancel.mock.calls.length === 1)
@@ -357,8 +361,7 @@ describe("public runtime event journal", () => {
           // Replace the controller while the route awaits durable cancellation.
           // Its eventual finally block must stay bound to the old signal.
           SessionPrompt.cancel(session.id)
-          await oldRun
-          const newRun = SessionPrompt.shell({
+          newRun = SessionPrompt.shell({
             sessionID: session.id,
             agent: "research",
             model: { providerID: "test", modelID: "test" },
@@ -374,14 +377,21 @@ describe("public runtime event journal", () => {
           })
 
           pending.resolve({ status: "inactive" })
+          // Once the deferred route has captured its result, release the
+          // process-wide spy before awaiting any command settlement. A broken
+          // cancellation path must fail this test without poisoning the next
+          // test with a requestCancel implementation that never resolves.
+          requestCancel.mockRestore()
           expect((await response).status).toBe(200)
           expect(() => SessionPrompt.assertNotBusy(session.id)).toThrow(Session.BusyError)
 
           SessionPrompt.cancel(session.id)
-          await newRun
+          await Promise.all([oldRun, newRun])
         } finally {
+          pending.resolve({ status: "inactive" })
           requestCancel.mockRestore()
           SessionPrompt.cancel(session.id)
+          await Promise.allSettled([oldRun, ...(newRun ? [newRun] : [])])
           await Session.remove(session.id)
         }
       },
@@ -600,29 +610,57 @@ describe("/runtime routes", () => {
       directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
-        const response = await RuntimeRoutes().request("/prompt", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ sessionID: session.id, message: "Inspect the data", effort: "normal" }),
-        })
-        expect(response.status).toBe(202)
-        const accepted = (await response.json()) as { runID: string; acceptedAt: number }
-        expect(accepted.runID).toStartWith("run_")
-        expect(accepted.acceptedAt).toBeGreaterThan(0)
+        const prompt = Promise.withResolvers<MessageV2.WithParts>()
+        const promptStub: typeof SessionPrompt.prompt = Object.assign(
+          (_input: SessionPrompt.PromptInput) => prompt.promise,
+          { force: SessionPrompt.prompt.force, schema: SessionPrompt.prompt.schema },
+        )
+        const promptCall = spyOn(SessionPrompt, "prompt").mockImplementation(promptStub)
+        try {
+          const response = await RuntimeRoutes().request("/prompt", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ sessionID: session.id, message: "Inspect the data", effort: "normal" }),
+          })
+          expect(response.status).toBe(202)
+          const accepted = (await response.json()) as { runID: string; acceptedAt: number }
+          expect(accepted.runID).toStartWith("run_")
+          expect(accepted.acceptedAt).toBeGreaterThan(0)
 
-        const replay = await RuntimeRoutes().request(`/events/replay?sessionID=${session.id}&afterSequence=0`)
-        expect(replay.status).toBe(200)
-        expect(await replay.json()).toMatchObject({
-          events: [
-            {
-              sequence: 1,
+          const replay = await RuntimeRoutes().request(`/events/replay?sessionID=${session.id}&afterSequence=0`)
+          expect(replay.status).toBe(200)
+          expect(await replay.json()).toMatchObject({
+            events: [
+              {
+                sequence: 1,
+                sessionID: session.id,
+                runID: accepted.runID,
+                type: "runtime.accepted",
+                properties: { effort: "normal" },
+              },
+            ],
+          })
+        } finally {
+          prompt.resolve({
+            info: {
+              id: "msg_runtime_prompt_stub",
               sessionID: session.id,
-              runID: accepted.runID,
-              type: "runtime.accepted",
-              properties: { effort: "normal" },
+              role: "user",
+              time: { created: 101 },
+              agent: "research",
+              model: { providerID: "test", modelID: "test" },
+              effort: "normal",
             },
-          ],
-        })
+            parts: [],
+          })
+          const started = promptCall.mock.calls.length > 0
+          promptCall.mockRestore()
+          if (started) {
+            await waitUntil(async () =>
+              (await RuntimeEvents.replay(session.id)).events.some((event) => event.type === "runtime.completed"),
+            )
+          }
+        }
       },
     })
   })

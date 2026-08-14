@@ -40,8 +40,20 @@ export namespace Sandbox {
     readableExact?: string[]
     /** Exact host files the sandboxed process must not be able to read. */
     unreadable?: string[]
+    /** Canonical host sources that must also appear at stable lexical paths
+     * inside a Linux mount namespace (for example the managed data-root
+     * symlink). The source is resolved before spawn; bubblewrap never follows
+     * the caller-provided lexical spelling on the host. */
+    readableAliases?: MountAlias[]
+    writableAliases?: MountAlias[]
+    unreadableAliases?: MountAlias[]
     /** Whether the sandboxed process may reach the network. */
     network: boolean
+  }
+
+  export interface MountAlias {
+    source: string
+    destination: string
   }
 
   /** A ready-to-spawn argv: `spawn(file, args)` with no shell wrapping. */
@@ -252,6 +264,40 @@ export namespace Sandbox {
     }
   }
 
+  /** Preserve an approved stable spelling when canonicalization crosses a
+   * symlink. Linux starts from an empty root, so mounting only the physical
+   * path would make commands that use the stable spelling fail with ENOENT.
+   * The canonical source remains the sole host authority; destination is only
+   * a normalized name created inside the private mount namespace. */
+  function mountAliases(paths: string[]): MountAlias[] {
+    const out = new Map<string, MountAlias>()
+    for (const input of paths) {
+      if (!input || !path.isAbsolute(input)) continue
+      const destination = path.normalize(input)
+      const source = canonicalPolicyPath(destination)
+      if (!source || source === destination) continue
+      if (tooBroadToConfine(destination)) {
+        log.warn("refusing an over-broad sandbox alias destination", { path: destination })
+        continue
+      }
+      out.set(destination, { source, destination })
+    }
+    return [...out.values()]
+  }
+
+  function safeMountAliases(aliases: MountAlias[] | undefined, allowBroadSource = false): MountAlias[] {
+    const out = new Map<string, MountAlias>()
+    for (const alias of aliases ?? []) {
+      if (!path.isAbsolute(alias.source) || !path.isAbsolute(alias.destination)) continue
+      const source = canonicalPolicyPath(alias.source)
+      const destination = path.normalize(alias.destination)
+      if (!source || source === destination || tooBroadToConfine(destination)) continue
+      if (!allowBroadSource && tooBroadToConfine(source)) continue
+      out.set(destination, { source, destination })
+    }
+    return [...out.values()]
+  }
+
   function dedupe(paths: string[]): string[] {
     const out = new Set<string>()
     for (const p of paths)
@@ -415,31 +461,36 @@ export namespace Sandbox {
     entrypoints?: string[]
     options: Options
   }): Policy {
-    const candidates = dedupe([
+    const writableInputs = [
       ...input.workspace,
       input.temporary,
       ...(input.options.allowWrite ?? []),
       ...(input.extraWritable ?? []),
-    ])
-    const writable = candidates.filter((p) => {
+    ]
+    const writable = dedupe(writableInputs).filter((p) => {
       if (tooBroadToConfine(p)) {
         log.warn("refusing to grant sandbox write access to an over-broad path", { path: p })
         return false
       }
       return true
     })
-    const readable = dedupe([
+    const readableInputs = [
       ...runtimeReadRoots(input.entrypoints ?? []),
       ...input.workspace,
       ...(input.readable ?? []),
       ...(input.extraWritable ?? []),
       ...writable,
-    ]).filter((value) => !tooBroadToConfine(value))
+    ]
+    const readable = dedupe(readableInputs).filter((value) => !tooBroadToConfine(value))
+    const unreadableInputs = input.unreadable ?? []
     return {
       writable,
       readable,
       readableExact: traversalRoots(readable),
-      unreadable: dedupe(input.unreadable ?? []).filter((value) => !tooBroadToConfine(value)),
+      unreadable: dedupe(unreadableInputs).filter((value) => !tooBroadToConfine(value)),
+      readableAliases: mountAliases(readableInputs),
+      writableAliases: mountAliases(writableInputs),
+      unreadableAliases: mountAliases(unreadableInputs),
       network: (input.options.network ?? "allow") !== "deny",
     }
   }
@@ -574,6 +625,9 @@ export namespace Sandbox {
     for (const value of linuxRuntimeMounts()) args.push("--ro-bind", value, value)
     args.push(...linuxRuntimeAliases())
     for (const value of dedupe(policy.readable ?? [])) args.push("--ro-bind-try", value, value)
+    for (const alias of safeMountAliases(policy.readableAliases)) {
+      args.push("--ro-bind-try", alias.source, alias.destination)
+    }
     const tmpRoots = new Set(dedupe(["/tmp"]))
     for (const p of dedupe(policy.writable)) {
       // Skip only the /tmp mount root itself — it is provided as a fresh tmpfs and
@@ -583,15 +637,27 @@ export namespace Sandbox {
       // --bind-try: don't abort if the source path doesn't exist.
       args.push("--bind-try", p, p)
     }
-    for (const value of dedupe(policy.unreadable ?? [])) {
+    // Writable aliases deliberately follow readable aliases so an identical
+    // destination is upgraded rather than accidentally left read-only.
+    for (const alias of safeMountAliases(policy.writableAliases)) {
+      args.push("--bind-try", alias.source, alias.destination)
+    }
+    const unreadable = new Map<string, string>()
+    for (const value of dedupe(policy.unreadable ?? [])) unreadable.set(value, value)
+    // A mask may safely name a broad source because only its file type is
+    // consulted; the source is never mounted into the namespace.
+    for (const alias of safeMountAliases(policy.unreadableAliases, true)) {
+      unreadable.set(alias.destination, alias.source)
+    }
+    for (const [destination, source] of unreadable) {
       // bwrap's *-try only tolerates a missing source. With /dev/null as the
       // source it still attempts to create a missing destination, which fails
       // beneath our read-only root before the command can start. An absent
       // credential cannot be read and the sandbox cannot create it, so only
       // mount masks for files that exist when the namespace is assembled.
-      if (!fs.existsSync(value)) continue
-      if (fs.statSync(value).isDirectory()) args.push("--tmpfs", value)
-      else args.push("--ro-bind-try", "/dev/null", value)
+      if (!fs.existsSync(source)) continue
+      if (fs.statSync(source).isDirectory()) args.push("--tmpfs", destination)
+      else args.push("--ro-bind-try", "/dev/null", destination)
     }
     // bubblewrap cannot express "internet but never host loopback" without a
     // separately configured network namespace. Sharing the host namespace in

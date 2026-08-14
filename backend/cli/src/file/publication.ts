@@ -16,7 +16,6 @@ import { Filesystem } from "../util/filesystem"
 import { escapeHtml } from "../util/html"
 import { PublicationReview } from "./review"
 import { SafeFileIO } from "./safe-io"
-import { WindowsJobLauncher } from "../process/windows-job-launcher"
 
 export namespace PublicationFile {
   export const Format = z.enum(["html", "pdf", "docx", "latex", "pptx"])
@@ -270,7 +269,10 @@ ${body}
           unreadable: OpenScience.kernelSensitivePaths(),
           options,
         })
-        const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
+        const wrapped = await CommandRuntime.wrap({
+          file: sandbox.file,
+          args: sandbox.args,
+        })
         const detached = process.platform !== "win32"
         let child: ChildProcess
         try {
@@ -310,7 +312,10 @@ ${body}
           Sandbox.cleanup(sandbox)
           throw error
         })
-        return { child, output, registered, sandbox, stop, pdfEngine }
+        const safeStop = async () => {
+          await CommandRuntime.stop(registered.id, registered.projectID, registered.sessionID)
+        }
+        return { child, output, registered, sandbox, stop: safeStop, pdfEngine }
       })
       lifecycle = {
         child: launched.child,

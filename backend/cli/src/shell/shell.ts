@@ -3,6 +3,7 @@ import { lazy } from "@/util/lazy"
 import path from "path"
 import fs from "fs"
 import { spawn, spawnSync, type ChildProcess } from "child_process"
+import { WindowsJobLauncher } from "../process/windows-job-launcher"
 
 const SIGKILL_TIMEOUT_MS = 200
 
@@ -36,6 +37,25 @@ export namespace Shell {
         killer.once("error", () => resolve())
       })
       return
+    }
+
+    if (process.platform === "linux" && WindowsJobLauncher.isLinuxSubreaper(proc)) {
+      // This child is a verified subreaper, not the payload. A direct control
+      // signal makes it quiesce, kill, and waitpid-reap its adopted tree. Never
+      // group-signal or SIGKILL the anchor: on timeout it must remain alive so
+      // escaped descendants cannot reparent to host init.
+      if (opts?.exited?.()) return
+      try {
+        proc.kill("SIGTERM")
+      } catch (error) {
+        if (opts?.exited?.() || (error as NodeJS.ErrnoException).code === "ESRCH") return
+        throw error
+      }
+      for (let attempt = 0; attempt < 250; attempt++) {
+        if (opts?.exited?.() || proc.exitCode !== null || proc.signalCode !== null) return
+        await Bun.sleep(20)
+      }
+      throw new Error(`Linux child-subreaper ${pid} did not finish cooperative descendant cleanup`)
     }
 
     // `detached` is captured at spawn time, so it remains trustworthy after the
@@ -156,6 +176,16 @@ export namespace Shell {
           windowsHide: true,
           timeout: 5_000,
         })
+      } catch {}
+      return
+    }
+
+    if (process.platform === "linux" && WindowsJobLauncher.isLinuxSubreaper(proc)) {
+      // Exit handlers cannot await cleanup. Ask the subreaper to drain and
+      // deliberately leave it alive rather than replacing containment with a
+      // best-effort group SIGKILL.
+      try {
+        proc.kill("SIGTERM")
       } catch {}
       return
     }

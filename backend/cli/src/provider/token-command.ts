@@ -240,6 +240,7 @@ export namespace ProviderTokenCommand {
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"],
           })
+          WindowsJobLauncher.bind(child, wrapped.release)
         } catch (error) {
           Sandbox.cleanup(sandbox)
           throw error

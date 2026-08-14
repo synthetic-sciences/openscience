@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs"
 import os from "os"
 import path from "path"
+import { ProcessIdentity } from "../../src/process/process-identity"
 import { Sandbox } from "../../src/sandbox/sandbox"
 import { tmpdir } from "../fixture/fixture"
 
@@ -108,6 +109,69 @@ describe("Sandbox.bubblewrapArgs", () => {
     expect(args[i + 2]).toBe("/work/project")
   })
 
+  test("mounts canonical sources at normalized stable alias destinations", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openscience-bwrap-alias-"))
+    const source = path.join(root, "physical")
+    const destination = path.join(root, "config", "data-root")
+    fs.mkdirSync(source)
+    try {
+      const canonicalSource = fs.realpathSync.native(source)
+      const args = Sandbox.bubblewrapArgs({
+        writable: [source],
+        writableAliases: [{ source, destination: path.join(destination, "nested", "..") }],
+        network: false,
+      })
+      const alias = args.findIndex(
+        (value, index) =>
+          value === "--bind-try" && args[index + 1] === canonicalSource && args[index + 2] !== canonicalSource,
+      )
+      expect(args.slice(alias, alias + 3)).toEqual(["--bind-try", canonicalSource, destination])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test("does not reintroduce a filtered broad source through a narrow readable alias", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openscience-bwrap-broad-alias-"))
+    const alias = path.join(root, "narrow")
+    fs.symlinkSync("/", alias, "dir")
+    try {
+      const args = Sandbox.bubblewrapArgs({
+        writable: [path.join(root, "workspace")],
+        readableAliases: [{ source: alias, destination: alias }],
+        network: false,
+      })
+      expect(
+        args.some((value, index) => value === "--ro-bind-try" && args[index + 1] === "/" && args[index + 2] === alias),
+      ).toBe(false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test("masks both canonical and stable alias spellings without following the alias source", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openscience-bwrap-mask-alias-"))
+    const source = path.join(root, "physical-secret")
+    const destination = path.join(root, "config", "data-root", "secret")
+    fs.writeFileSync(source, "secret")
+    try {
+      const canonicalSource = fs.realpathSync.native(source)
+      const args = Sandbox.bubblewrapArgs({
+        writable: [path.join(root, "workspace")],
+        unreadable: [source],
+        unreadableAliases: [{ source, destination }],
+        network: false,
+      })
+      const masks = args.flatMap((value, index) =>
+        value === "--ro-bind-try" && args[index + 1] === "/dev/null" ? [args[index + 2]!] : [],
+      )
+      expect(masks).toContain(canonicalSource)
+      expect(masks).toContain(destination)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   test("fails closed to an isolated network namespace in both policy modes", () => {
     expect(Sandbox.bubblewrapArgs({ writable: ["/w"], network: false })).toContain("--unshare-net")
     expect(Sandbox.bubblewrapArgs({ writable: ["/w"], network: true })).toContain("--unshare-net")
@@ -210,21 +274,26 @@ describe("Sandbox.bubblewrapArgs", () => {
   test.skipIf(Sandbox.backend() !== "bubblewrap")(
     "keeps a setsid double-fork inside the PID namespace and kills it with the wrapper",
     async () => {
-      if (!Bun.which("python3")) return
+      const python = Bun.which("python3")
+      if (!python) return
       await using tmp = await tmpdir()
       const marker = path.join(tmp.path, "double-fork.pid")
       const script = [
         "import os,time",
-        "os.fork() and os._exit(0)",
-        "os.setsid()",
-        "os.fork() and os._exit(0)",
-        `open(${JSON.stringify(marker)}, 'w').write('ready')`,
+        "child = os.fork()",
+        "if child == 0:",
+        "    os.setsid()",
+        "    os.fork() and os._exit(0)",
+        `    open(${JSON.stringify(marker)}, 'w').write(str(os.getpid()))`,
+        "    time.sleep(3600)",
+        // Keep bwrap's monitored command alive after the daemon forks. If the
+        // initial command exits first, --die-with-parent correctly tears down
+        // the namespace before the daemon can publish its marker.
         "time.sleep(3600)",
-      ].join(";")
-      const plan = Sandbox.plan({
-        command: `python3 -c ${JSON.stringify(script)}`,
-        shell,
-        cwd: tmp.path,
+      ].join("\n")
+      const plan = Sandbox.wrapArgv({
+        file: python,
+        args: ["-c", script],
         workspace: [tmp.path],
         options: { enabled: true, network: "deny", onUnavailable: "error" },
       })
@@ -233,48 +302,84 @@ describe("Sandbox.bubblewrapArgs", () => {
         stdout: "ignore",
         stderr: "pipe",
       })
-      const alive = (pid: number) => {
-        try {
-          process.kill(pid, 0)
-          return true
-        } catch {
-          return false
-        }
-      }
-      const hostPID = () =>
-        fs
+      const hostPID = (leaderPID: number, namespacePID: number) => {
+        const rows = fs
           .readdirSync("/proc")
           .filter((value) => /^\d+$/.test(value))
-          .map(Number)
-          .find((pid) => {
+          .flatMap((value) => {
+            const pid = Number(value)
             try {
-              const argv = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").filter(Boolean)
-              return path.basename(argv[0] ?? "").startsWith("python") && argv.some((value) => value.includes(marker))
+              const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8")
+              const fields = stat
+                .slice(stat.lastIndexOf(")") + 2)
+                .trim()
+                .split(/\s+/)
+              return [{ pid, ppid: Number(fields[1]) }]
             } catch {
-              return false
+              return []
             }
           })
-      const escaped = { pid: 0 }
+        const descendants = new Set([leaderPID])
+        let changed = true
+        while (changed) {
+          changed = false
+          for (const row of rows) {
+            if (descendants.has(row.pid) || !descendants.has(row.ppid)) continue
+            descendants.add(row.pid)
+            changed = true
+          }
+        }
+        const matches = [...descendants].filter((pid) => {
+          try {
+            const value = fs.readFileSync(`/proc/${pid}/status`, "utf8").match(/^NSpid:\s+(.+)$/m)?.[1]
+            return Number(value?.trim().split(/\s+/).at(-1)) === namespacePID
+          } catch {
+            return false
+          }
+        })
+        return matches.length === 1 ? matches[0] : undefined
+      }
+      const escaped: { pid: number; identity?: string } = { pid: 0 }
       try {
         for (let attempt = 0; attempt < 300 && !fs.existsSync(marker); attempt++) await Bun.sleep(10)
-        expect(fs.existsSync(marker)).toBe(true)
-        escaped.pid = hostPID() ?? 0
+        if (!fs.existsSync(marker)) {
+          if (proc.exitCode === null) proc.kill("SIGKILL")
+          await proc.exited
+          const stderr = await new Response(proc.stderr).text()
+          throw new Error(`double-fork sandbox marker was not created: ${stderr.trim() || "no stderr"}`)
+        }
+        const namespacePID = Number(fs.readFileSync(marker, "utf8"))
+        // The daemon can publish its marker while the intermediate fork is
+        // concurrently exiting and reparenting it to the namespace init. A
+        // single host /proc snapshot can therefore see a temporarily broken
+        // ancestry chain. Retry the complete PPID/NSpid proof; do not accept a
+        // PID until one stable snapshot authenticates it below the wrapper.
+        for (let attempt = 0; attempt < 300 && !escaped.pid; attempt++) {
+          escaped.pid = hostPID(proc.pid, namespacePID) ?? 0
+          if (!escaped.pid) await Bun.sleep(10)
+        }
         expect(escaped.pid).toBeGreaterThan(0)
-        expect(alive(escaped.pid)).toBe(true)
+        escaped.identity = await ProcessIdentity.capture(escaped.pid)
+        expect(escaped.identity).toMatch(/^[a-f0-9]{64}$/)
+        expect(await ProcessIdentity.owns(escaped.pid, escaped.identity)).toBe(true)
 
-        // The initial Python process has exited twice, but bwrap's namespace
-        // reaper still owns the daemon and therefore has not reported exit.
+        // The intermediate daemon parent has exited, but the monitored Python
+        // process keeps bwrap alive while the setsid grandchild runs.
         expect(proc.exitCode).toBeNull()
         proc.kill("SIGKILL")
         await proc.exited
-        for (let attempt = 0; attempt < 300 && alive(escaped.pid); attempt++) await Bun.sleep(10)
-        expect(alive(escaped.pid)).toBe(false)
+        for (let attempt = 0; attempt < 300 && (await ProcessIdentity.owns(escaped.pid, escaped.identity)); attempt++) {
+          await Bun.sleep(10)
+        }
+        expect(await ProcessIdentity.owns(escaped.pid, escaped.identity)).toBe(false)
       } finally {
         if (proc.exitCode === null) {
           proc.kill("SIGKILL")
           await proc.exited
         }
-        if (escaped.pid && alive(escaped.pid)) process.kill(escaped.pid, "SIGKILL")
+        if (escaped.pid && (await ProcessIdentity.owns(escaped.pid, escaped.identity))) {
+          process.kill(escaped.pid, "SIGKILL")
+        }
         Sandbox.cleanup(plan)
       }
     },
@@ -427,6 +532,41 @@ describe("Sandbox.plan", () => {
 })
 
 describe("Sandbox native isolation", () => {
+  test.skipIf(Sandbox.backend() !== "bubblewrap")(
+    "keeps a managed symlink spelling usable while mounting only its canonical source",
+    async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "openscience-bwrap-managed-root-"))
+      const physical = path.join(root, "physical")
+      const config = path.join(root, "config")
+      const stable = path.join(config, "data-root")
+      const workspace = path.join(stable, "workspace")
+      const output = path.join(workspace, "result.txt")
+      fs.mkdirSync(path.join(physical, "workspace"), { recursive: true })
+      fs.mkdirSync(config)
+      fs.symlinkSync(physical, stable, "dir")
+      const plan = Sandbox.plan({
+        command: `printf stable-ok > ${JSON.stringify(output)}`,
+        shell,
+        cwd: workspace,
+        workspace: [workspace],
+        options: { enabled: true, network: "deny", onUnavailable: "error" },
+      })
+      try {
+        const canonicalWorkspace = fs.realpathSync.native(workspace)
+        const alias = (plan.args ?? []).findIndex(
+          (value, index, args) =>
+            value === "--bind-try" && args[index + 1] === canonicalWorkspace && args[index + 2] === workspace,
+        )
+        expect(alias).toBeGreaterThan(-1)
+        expect(await executeWithoutCleanup(plan, workspace)).toMatchObject({ exit: 0 })
+        expect(fs.readFileSync(path.join(physical, "workspace", "result.txt"), "utf8")).toBe("stable-ok")
+      } finally {
+        Sandbox.cleanup(plan)
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    },
+  )
+
   test.skipIf(!Sandbox.available())(
     "enforces separate canonical read and write grants and blocks symlink escapes",
     async () => {

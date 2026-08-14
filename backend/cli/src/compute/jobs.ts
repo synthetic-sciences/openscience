@@ -730,6 +730,7 @@ export namespace ComputeJobs {
               windowsHide: true,
               stdio: [input?.fd ?? "ignore", output?.fd ?? "pipe", "pipe"],
             })
+            WindowsJobLauncher.bind(proc, wrapped.release)
           } catch (error) {
             await cleanupGate(wrapped.release)
             throw error
@@ -796,10 +797,7 @@ export namespace ComputeJobs {
               Bun.sleep(options.timeout ?? 30_000).then(() => ({ code: null, error: "SSH operation timed out" })),
             ])
             if (proc.exitCode === null && proc.signalCode === null) {
-              await Shell.killTree(proc, {
-                detached,
-                exited: () => proc.exitCode !== null || proc.signalCode !== null,
-              })
+              await CredentialProcessLedger.revoke({ id: ledger, kind: "compute" })
             }
             await completeCredentialProcess(ledger)
             const stderr = OpenScience.redactSecrets(Buffer.concat(errors).toString("utf8").trim())
@@ -2192,6 +2190,7 @@ export namespace ComputeJobs {
             windowsHide: true,
             stdio: ["ignore", output.fd, output.fd],
           })
+          WindowsJobLauncher.bind(proc, wrapped.release)
           proc.once("exit", () => Sandbox.cleanup(launch))
           proc.once("error", () => Sandbox.cleanup(launch))
           const result = new Promise<{ code: number | null; error?: string }>((resolve) => {

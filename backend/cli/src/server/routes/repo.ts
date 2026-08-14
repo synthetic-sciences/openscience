@@ -31,7 +31,6 @@ import { Sandbox } from "@/sandbox/sandbox"
 import { OpenScience } from "@/openscience"
 import { CommandRuntime } from "@/science/command/registry"
 import { Shell } from "@/shell/shell"
-import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 interface RunResult {
   code: number
@@ -63,7 +62,10 @@ async function run(command: string, args: string[], cwd: string, ok: number[] = 
       unreadable: OpenScience.kernelSensitivePaths(),
       options,
     })
-    const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
+    const wrapped = await CommandRuntime.wrap({
+      file: sandbox.file,
+      args: sandbox.args,
+    })
     const child = (() => {
       try {
         return spawn(wrapped.file, wrapped.args, {
@@ -113,7 +115,12 @@ async function run(command: string, args: string[], cwd: string, ok: number[] = 
       Sandbox.cleanup(sandbox)
       throw error
     })
-    return { registered, sandbox, stop, output }
+    const safeStop = registered
+      ? async () => {
+          await CommandRuntime.stop(registered.id, registered.projectID, registered.sessionID)
+        }
+      : stop
+    return { registered, sandbox, stop: safeStop, output }
   })
 
   const timeout = new Promise<never>((_resolve, reject) => {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { ProcessIdentity } from "../../src/process/process-identity"
 
 const routes = new URL("../../src/server/routes/settings/storage.ts", import.meta.url).href
 const globalModule = new URL("../../src/global/index.ts", import.meta.url).href
@@ -60,6 +61,16 @@ async function waitFor(filepath: string) {
     if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${filepath}`)
     await Bun.sleep(20)
   }
+}
+
+async function processParent(pid: number): Promise<number> {
+  const stat = await fs.readFile(`/proc/${pid}/stat`, "utf8")
+  return Number(
+    stat
+      .slice(stat.lastIndexOf(")") + 2)
+      .trim()
+      .split(/\s+/)[1],
+  )
 }
 
 describe("Storage Settings integration", () => {
@@ -276,7 +287,7 @@ describe("Storage Settings integration", () => {
   }, 30_000)
 
   test.skipIf(process.platform !== "linux")(
-    "waits for a surviving local compute child after its owning server is SIGKILLed",
+    "reclaims a compute marker after owner-death supervision reaps the child",
     async () => {
       const workspace = await root()
       const project = path.join(workspace, "workspace")
@@ -307,7 +318,19 @@ describe("Storage Settings integration", () => {
           "    const status = await ProjectTrust.status(Instance.project)",
           "    if (!status.canExecuteProjectCode) await ProjectTrust.update(Instance.project, { trusted: true, root: status.root })",
           "    const session = await Session.create({})",
-          "    const command = `printf child-ready > ${quote(childReady)}; while [ ! -f ${quote(release)} ]; do sleep 0.02; done; printf surviving-child`",
+          "    const python = Bun.which('python3')",
+          "    if (!python) throw new Error('Python is required for the compute subreaper fixture')",
+          "    const daemon = path.join(project, 'compute-daemon.py')",
+          "    await fs.writeFile(daemon, [",
+          "      'import os, sys, time',",
+          "      'os.setsid()',",
+          "      'if os.fork(): os._exit(0)',",
+          "      `open(${JSON.stringify(childReady)}, 'w').write(str(os.getpid()))`,",
+          "      `while not os.path.exists(${JSON.stringify(release)}): time.sleep(0.02)`,",
+          "      `print('surviving-child', flush=True)`,",
+          "      'time.sleep(600)',",
+          "    ].join('\\n'))",
+          "    const command = `${quote(python)} ${quote(daemon)}; while :; do sleep 0.02; done`",
           "    const root = path.join(Global.Path.data, 'compute-runtime')",
           "    const job = await ComputeJobs.start({ name: 'survivor', command, target: { kind: 'local' }, sessionID: session.id }, { root, workspace: project })",
           "    const stored = await ComputeJobs.get(job.id, { root, workspace: project })",
@@ -326,21 +349,39 @@ describe("Storage Settings integration", () => {
         stdout: "pipe",
         stderr: "pipe",
       })
-      let childPID: number | undefined
+      const ownerError = new Response(owner.stderr).text()
+      let childOwner: { pid: number; identity: string } | undefined
+      let escaped: { pid: number; identity: string } | undefined
       try {
-        await waitFor(ownerReady)
+        await Promise.race([
+          waitFor(ownerReady),
+          owner.exited.then(async (code) => {
+            throw new Error(`Compute owner exited ${code} before registration: ${await ownerError}`)
+          }),
+        ])
         await waitFor(childReady)
         const running = (await Bun.file(ownerReady).json()) as { id: string; pid: number; identity: string }
-        childPID = running.pid
+        childOwner = running
+        const daemonPID = Number((await fs.readFile(childReady, "utf8")).trim())
+        const daemonIdentity = await ProcessIdentity.capture(daemonPID)
+        if (!daemonIdentity) throw new Error("compute daemon identity was not captured")
+        escaped = { pid: daemonPID, identity: daemonIdentity }
         const operations = path.join(workspace, "config", "openscience", "data-root-operations")
         const records = await Promise.all(
           (await fs.readdir(operations)).map((name) => Bun.file(path.join(operations, name)).json()),
         )
         expect(records).toContainEqual(expect.objectContaining({ pid: running.pid, identity: running.identity }))
+        expect(await ProcessIdentity.owns(running.pid, running.identity)).toBe(true)
+        expect(await ProcessIdentity.owns(escaped.pid, escaped.identity)).toBe(true)
+        expect(await processParent(escaped.pid)).toBe(running.pid)
 
         process.kill(owner.pid, "SIGKILL")
         await owner.exited
-        expect(() => process.kill(running.pid, 0)).not.toThrow()
+        for (let attempt = 0; attempt < 300 && (await ProcessIdentity.owns(running.pid, running.identity)); attempt++) {
+          await Bun.sleep(10)
+        }
+        expect(await ProcessIdentity.owns(running.pid, running.identity)).toBe(false)
+        expect(await ProcessIdentity.owns(escaped.pid, escaped.identity)).toBe(false)
 
         const moverFile = path.join(workspace, "compute-mover.ts")
         await fs.writeFile(
@@ -359,10 +400,6 @@ describe("Storage Settings integration", () => {
           stdout: "pipe",
           stderr: "pipe",
         })
-        await Bun.sleep(200)
-        expect(mover.exitCode).toBeNull()
-
-        await fs.writeFile(release, "release")
         const [moverExit, moverOut, moverError] = await Promise.all([
           mover.exited,
           new Response(mover.stdout).text(),
@@ -370,17 +407,26 @@ describe("Storage Settings integration", () => {
         ])
         expect(moverExit, moverError).toBe(0)
         expect(JSON.parse(moverOut)).toMatchObject({ target: await fs.realpath(target) })
+        const remaining = await Promise.all(
+          (await fs.readdir(operations)).map((name) => Bun.file(path.join(operations, name)).json()),
+        )
+        expect(remaining).not.toContainEqual(expect.objectContaining({ pid: running.pid, identity: running.identity }))
         const log = await fs.readFile(path.join(target, "compute-runtime", "jobs", `${running.id}.log`), "utf8")
-        expect(log).toContain("surviving-child")
+        expect(log).not.toContain("surviving-child")
       } finally {
         if (owner.exitCode === null) {
           try {
             process.kill(owner.pid, "SIGKILL")
           } catch {}
         }
-        if (childPID) {
+        if (childOwner && (await ProcessIdentity.owns(childOwner.pid, childOwner.identity))) {
           try {
-            process.kill(-childPID, "SIGKILL")
+            process.kill(-childOwner.pid, "SIGKILL")
+          } catch {}
+        }
+        if (escaped && (await ProcessIdentity.owns(escaped.pid, escaped.identity))) {
+          try {
+            process.kill(escaped.pid, "SIGKILL")
           } catch {}
         }
       }

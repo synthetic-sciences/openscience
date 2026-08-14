@@ -43,27 +43,49 @@ test("Windows Job Object names are local, random, and ledger-valid", () => {
 })
 
 test("every durable Windows runtime launch uses the registration gate", async () => {
-  const files = [
+  const direct = [
     "src/pty/index.ts",
     "src/tool/biology/notebook.ts",
     "src/tool/notebook.ts",
     "src/tool/rkernel.ts",
-    "src/tool/bash.ts",
-    "src/session/prompt.ts",
-    "src/file/publication.ts",
-    "src/format/index.ts",
-    "src/server/routes/repo.ts",
     "src/lsp/server.ts",
     "src/compute/jobs.ts",
     "src/compute/modal/volume.ts",
     "src/provider/token-command.ts",
     "src/server/routes/settings/local.ts",
   ]
-  for (const file of files) {
+  for (const file of direct) {
     const source = await Bun.file(path.join(import.meta.dir, "../..", file)).text()
     expect(source, file).toContain("WindowsJobLauncher")
     expect(source, file).toContain(".release")
   }
+  const commandRuntime = [
+    "src/tool/bash.ts",
+    "src/session/prompt.ts",
+    "src/file/publication.ts",
+    "src/file/science.ts",
+    "src/format/index.ts",
+    "src/server/routes/repo.ts",
+  ]
+  for (const file of commandRuntime) {
+    const source = await Bun.file(path.join(import.meta.dir, "../..", file)).text()
+    expect(source, file).toContain("CommandRuntime.wrap")
+    expect(source, file).toContain(".release")
+  }
+  const registry = await Bun.file(path.join(import.meta.dir, "../../src/science/command/registry.ts")).text()
+  expect(registry).toContain("WindowsJobLauncher.bind(process, options.windowsRelease)")
+  const directLinuxOwners = [
+    "src/auth/wellknown-command.ts",
+    "src/compute/modal/volume.ts",
+    "src/provider/token-command.ts",
+    "src/server/routes/settings/local.ts",
+  ]
+  for (const file of directLinuxOwners) {
+    const source = await Bun.file(path.join(import.meta.dir, "../..", file)).text()
+    expect(source, file).toContain("WindowsJobLauncher.bind(")
+  }
+  const compute = await Bun.file(path.join(import.meta.dir, "../../src/compute/jobs.ts")).text()
+  expect(compute.match(/WindowsJobLauncher\.bind\(/g)).toHaveLength(2)
   const authority = await Bun.file(path.join(import.meta.dir, "../../src/project/authority-process.ts")).text()
   const credentials = await Bun.file(path.join(import.meta.dir, "../../src/credentials/process-ledger.ts")).text()
   for (const source of [authority, credentials]) {

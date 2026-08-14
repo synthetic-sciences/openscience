@@ -63,7 +63,6 @@ import { CommandRuntime } from "@/science/command/registry"
 import { ExecutionAuthority } from "@/project/execution"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { Sandbox } from "@/sandbox/sandbox"
-import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 import { BashTool } from "@/tool/bash"
 
 // @ts-ignore
@@ -1957,7 +1956,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
         options: current.sandbox,
       })
       return OpenScience.withSubprocessEnv(process.env, async (env) => {
-        const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
+        const wrapped = await CommandRuntime.wrap({
+          file: sandbox.file,
+          args: sandbox.args,
+        })
         const child = spawn(wrapped.file, wrapped.args, {
           cwd,
           detached: process.platform !== "win32",
@@ -1992,7 +1994,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
             },
             { authorityGeneration: current.generation, windowsRelease: wrapped.release },
           )
-          return { proc: child, command: registered, kill: stop, sandbox, completion }
+          const kill = async () => {
+            await CommandRuntime.stop(registered.id, registered.projectID, registered.sessionID)
+          }
+          return { proc: child, command: registered, kill, sandbox, completion }
         } catch (error) {
           await stop()
           Sandbox.cleanup(sandbox)

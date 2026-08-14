@@ -6,8 +6,6 @@ import z from "zod"
 import { Config } from "@/config/config"
 import { CredentialProcessLedger } from "@/credentials/process-ledger"
 import { OpenScience } from "@/openscience"
-import { ProcessIdentity } from "@/process/process-identity"
-import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { ExecutionAuthority } from "@/project/execution"
 import { Instance } from "@/project/instance"
@@ -499,16 +497,10 @@ print(json.dumps(result))
           unreadable: OpenScience.kernelSensitivePaths(),
           options: { ...policy, network: "deny" },
         })
-        const linuxOwner =
-          process.platform === "linux"
-            ? await ProcessIdentity.capture(process.pid).then((identity) =>
-                identity ? { pid: process.pid, identity } : undefined,
-              )
-            : undefined
-        if (process.platform === "linux" && !linuxOwner) {
-          throw new Error("Could not capture the Linux server identity for scientific preview")
-        }
-        const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args, linuxOwner })
+        const wrapped = await CommandRuntime.wrap({
+          file: sandbox.file,
+          args: sandbox.args,
+        })
         child = spawn(wrapped.file, wrapped.args, {
           cwd: scratch,
           env: environment(scratch),
@@ -532,9 +524,6 @@ print(json.dumps(result))
           () => stop(child!),
           { authorityGeneration: generation, windowsRelease: wrapped.release },
         )
-        if (process.platform === "linux" && wrapped.release) {
-          await WindowsJobLauncher.release(wrapped.release, child.pid!)
-        }
         return { completion, child, registered }
       })
 

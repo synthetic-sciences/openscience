@@ -21,6 +21,7 @@ interface Entry {
   project_id: string
   session_id: string
   authority_generation: string
+  sandboxed: boolean
   descendant: {
     pid: number
     identity: string
@@ -39,7 +40,6 @@ function environment(root: string) {
     XDG_CONFIG_HOME: path.join(root, "xdg-config"),
     XDG_CACHE_HOME: path.join(root, "xdg-cache"),
     XDG_STATE_HOME: path.join(root, "xdg-state"),
-    OPENSCIENCE_CONFIG_CONTENT: JSON.stringify({ sandbox: { enabled: false } }),
   }
 }
 
@@ -105,10 +105,18 @@ async function scenario(kind: "pty" | "biology", action: "trust" | "filesystem" 
     expect(entry.project_id).toBe(setup.projectID)
     expect(entry.session_id).toBe(setup.sessionID)
     expect(entry.authority_generation).toHaveLength(64)
+    // The fixture intentionally exercises the default enforced sandbox. The
+    // old project-config override was ineffective because sandbox policy is
+    // trusted global/managed configuration, not project configuration.
+    expect(entry.sandboxed).toBe(true)
     expect(await AuthorityProcessLedger.owns(entry.pid, entry.identity)).toBe(true)
     expect(await AuthorityProcessLedger.owns(entry.descendant.pid, entry.descendant.identity)).toBe(true)
     expect(entry.descendant.pgid).not.toBe(entry.pid)
-    expect(entry.descendant.ppid).toBe(1)
+    // A double-fork reparents to host init without a sandbox. Inside
+    // bubblewrap it reparents to the namespace init, whose host PID remains a
+    // descendant of the durable outer leader.
+    if (process.platform === "linux" && entry.sandboxed) expect(entry.descendant.ppid).not.toBe(1)
+    else expect(entry.descendant.ppid).toBe(1)
 
     owner.kill("SIGKILL")
     await owner.exited
@@ -116,10 +124,10 @@ async function scenario(kind: "pty" | "biology", action: "trust" | "filesystem" 
     // leader and its escaped descendant genuinely outlive the killed server.
     await Bun.sleep(100)
     const survivedOwner = await AuthorityProcessLedger.owns(entry.pid, entry.identity)
-    // On macOS the responsibility supervisor observes the exact owner start
-    // identity and performs kernel-backed teardown immediately. Linux relies
-    // on durable cross-process revocation after owner loss.
-    expect(survivedOwner).toBe(process.platform !== "darwin")
+    // macOS responsibility supervision and Linux bubblewrap's parent-death PID
+    // namespace both tear down immediately. The durable ledger remains so a
+    // fresh server can verify the dead tree and clear ownership atomically.
+    expect(survivedOwner).toBe(process.platform !== "darwin" && !(process.platform === "linux" && entry.sandboxed))
 
     await run(
       root,

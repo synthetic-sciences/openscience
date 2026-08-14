@@ -113,7 +113,26 @@ posixTest("credential revision revokes an in-flight token helper", async () => {
         (error) => ({ ok: false as const, error }),
       )
       try {
-        pid = Number(await waitText(tmp.extra))
+        const reportedPID = Number(await waitText(tmp.extra))
+        if (process.platform === "linux") {
+          const entries = (await Bun.file(CredentialProcessLedger.pathForTests()).json()) as Array<{
+            kind: string
+            pid: number
+            identity: string
+            project_id?: string
+          }>
+          const entry = entries.find((item) => item.kind === "provider" && item.project_id === Instance.project.id)
+          if (!entry) throw new Error("Missing durable provider process entry")
+          pid =
+            (await CredentialProcessLedger.resolveLinuxNamespacePID({
+              leaderPID: entry.pid,
+              leaderIdentity: entry.identity,
+              namespacePID: reportedPID,
+            })) ?? 0
+          if (!pid) throw new Error("Could not resolve token helper sandbox PID")
+        } else {
+          pid = reportedPID
+        }
         identity = await CredentialProcessLedger.identity(pid)
         expect(identity).toMatch(/^[a-f0-9]{64}$/)
         await CredentialLifecycle.mutate("token-command-process-test", async () => undefined)

@@ -76,6 +76,19 @@ async function start(input: ComputeJobs.Input, options: StartOptions) {
   })
 }
 
+async function hostDescendantPID(job: ComputeJobs.Job, options: StartOptions, reportedPID: number): Promise<number> {
+  if (process.platform !== "linux") return reportedPID
+  const stored = await ComputeJobs.get(job.id, options)
+  if (!stored?.pid || !stored.process_identity) throw new Error("Compute leader identity was not persisted")
+  const resolved = await CredentialProcessLedger.resolveLinuxNamespacePID({
+    leaderPID: stored.pid,
+    leaderIdentity: stored.process_identity,
+    namespacePID: reportedPID,
+  })
+  if (!resolved) throw new Error(`Could not resolve sandbox PID ${reportedPID} below compute leader ${stored.pid}`)
+  return resolved
+}
+
 describe("ComputeJobs command adapters", () => {
   const host = {
     id: "cluster",
@@ -789,7 +802,11 @@ describe("ComputeJobs local lifecycle", () => {
       const ownedRelease = path.join(job.cwd!, release)
       for (let attempt = 0; attempt < 500 && !(await Bun.file(ownedMarker).exists()); attempt++) await Bun.sleep(10)
       expect(await Bun.file(ownedMarker).exists()).toBe(true)
-      descendantPID = Number((await Bun.file(ownedMarker).text()).trim())
+      descendantPID = await hostDescendantPID(
+        job,
+        { root, workspace: tmp.path },
+        Number((await Bun.file(ownedMarker).text()).trim()),
+      )
       descendantIdentity = await CredentialProcessLedger.identity(descendantPID)
       expect(descendantIdentity).toMatch(/^[a-f0-9]{64}$/)
 
@@ -833,7 +850,11 @@ describe("ComputeJobs local lifecycle", () => {
       const ownedMarker = path.join(job.cwd!, marker)
       for (let attempt = 0; attempt < 500 && !(await Bun.file(ownedMarker).exists()); attempt++) await Bun.sleep(10)
       expect(await Bun.file(ownedMarker).exists()).toBe(true)
-      descendantPID = Number((await Bun.file(ownedMarker).text()).trim())
+      descendantPID = await hostDescendantPID(
+        job,
+        { root, workspace: tmp.path },
+        Number((await Bun.file(ownedMarker).text()).trim()),
+      )
       descendantIdentity = await CredentialProcessLedger.identity(descendantPID)
       expect(descendantIdentity).toMatch(/^[a-f0-9]{64}$/)
 

@@ -15,7 +15,6 @@ import { Sandbox } from "@/sandbox/sandbox"
 import { CommandRuntime } from "@/science/command/registry"
 import { Shell } from "@/shell/shell"
 import { spawn } from "node:child_process"
-import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
@@ -113,7 +112,10 @@ export namespace Format {
         unreadable: OpenScience.kernelSensitivePaths(),
         options,
       })
-      const wrapped = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
+      const wrapped = await CommandRuntime.wrap({
+        file: sandbox.file,
+        args: sandbox.args,
+      })
       const child = (() => {
         try {
           return spawn(wrapped.file, wrapped.args, {

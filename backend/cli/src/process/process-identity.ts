@@ -4,7 +4,7 @@ import { WindowsJob } from "./windows-job"
 
 /** Exact, PID-reuse-safe process-start identities shared by durable owners. */
 export namespace ProcessIdentity {
-  async function linux(pid: number): Promise<string | undefined> {
+  async function linux(pid: number): Promise<{ raw: string; state: string } | undefined> {
     const stat = await fs.readFile(`/proc/${pid}/stat`, "utf8").catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT" || error.code === "ESRCH") return undefined
       throw error
@@ -12,11 +12,13 @@ export namespace ProcessIdentity {
     if (!stat) return
     const close = stat.lastIndexOf(")")
     if (close < 0) return
-    const started = stat
+    const fields = stat
       .slice(close + 2)
       .trim()
-      .split(/\s+/)[19]
-    return started ? `linux:${started}` : undefined
+      .split(/\s+/)
+    const state = fields[0]
+    const started = fields[19]
+    return state && started ? { raw: `linux:${started}`, state } : undefined
   }
 
   async function darwin(pid: number): Promise<string | undefined> {
@@ -43,7 +45,7 @@ export namespace ProcessIdentity {
   /** Stable, hashed OS process-start identity. */
   export async function capture(pid: number): Promise<string | undefined> {
     const raw = await (async () => {
-      if (process.platform === "linux") return linux(pid)
+      if (process.platform === "linux") return (await linux(pid))?.raw
       if (process.platform === "darwin") return darwin(pid)
       if (process.platform === "win32") return WindowsJob.identity(pid)
     })()
@@ -52,6 +54,11 @@ export namespace ProcessIdentity {
 
   export async function owns(pid: number, expected: string | undefined): Promise<boolean> {
     if (!expected) return false
+    if (process.platform === "linux") {
+      const info = await linux(pid)
+      if (!info || info.state === "Z") return false
+      return crypto.createHash("sha256").update(info.raw).digest("hex") === expected
+    }
     return (await capture(pid)) === expected
   }
 }

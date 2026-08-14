@@ -104,13 +104,24 @@ const result = await Instance.provide({
     await ProjectTrust.update(Instance.project, { trusted: true, root: trust.root })
     const detail = await MCP.inspect("descendant")
     if (detail.status.status !== "connected") throw new Error(JSON.stringify(detail))
-    let pid = 0
+    let reportedPID = 0
     for (let attempt = 0; attempt < 200; attempt++) {
-      pid = Number((await fs.readFile(process.argv[3], "utf8").catch(() => "0")).trim())
-      if (pid) break
+      reportedPID = Number((await fs.readFile(process.argv[3], "utf8").catch(() => "0")).trim())
+      if (reportedPID) break
       await Bun.sleep(10)
     }
-    if (!pid) throw new Error("MCP descendant did not report its PID")
+    if (!reportedPID) throw new Error("MCP descendant did not report its PID")
+    const entries = await Bun.file(CredentialProcessLedger.pathForTests()).json()
+    const entry = entries.find((item) => item.kind === "mcp" && item.project_id === Instance.project.id)
+    if (!entry) throw new Error("Missing durable MCP process entry")
+    const pid = process.platform === "linux"
+      ? await CredentialProcessLedger.resolveLinuxNamespacePID({
+          leaderPID: entry.pid,
+          leaderIdentity: entry.identity,
+          namespacePID: reportedPID,
+        })
+      : reportedPID
+    if (!pid) throw new Error("Could not resolve MCP sandbox descendant PID")
     const identity = await CredentialProcessLedger.identity(pid)
     if (!identity) throw new Error("MCP descendant had no process identity")
     await MCP.disposeLocal()

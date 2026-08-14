@@ -134,16 +134,27 @@ export namespace AuthorityProcessLedger {
       .slice(close + 2)
       .trim()
       .split(/\s+/)
+    const state = fields[0]
     const ppid = Number(fields[1])
     const pgid = Number(fields[2])
     const started = fields[19]
-    if (!Number.isSafeInteger(ppid) || ppid < 0 || !Number.isSafeInteger(pgid) || pgid <= 0 || !started) return
-    return { ppid, pgid, started }
+    if (!state || !Number.isSafeInteger(ppid) || ppid < 0 || !Number.isSafeInteger(pgid) || pgid <= 0 || !started)
+      return
+    return { state, ppid, pgid, started }
   }
 
   async function linuxProcessFor(pid: number) {
     const stat = await fs.readFile(`/proc/${pid}/stat`, "utf8").catch(() => undefined)
     return stat ? linuxProcess(stat) : undefined
+  }
+
+  async function linuxNamespacePIDs(pid: number): Promise<number[] | undefined> {
+    const status = await fs.readFile(`/proc/${pid}/status`, "utf8").catch(() => undefined)
+    const value = status?.match(/^NSpid:\s+(.+)$/m)?.[1]
+    if (!value) return
+    const result = value.trim().split(/\s+/).map(Number)
+    if (!result.length || result.some((item) => !Number.isSafeInteger(item) || item <= 0)) return
+    return result
   }
 
   async function darwinProcess(pid: number) {
@@ -194,6 +205,10 @@ export namespace AuthorityProcessLedger {
 
   export async function owns(pid: number, expected: string | undefined): Promise<boolean> {
     if (!expected || !alive(pid)) return false
+    // A zombie retains its PID and immutable start time until its parent reaps
+    // it, so identity() stays useful for authenticating the descendant closure.
+    // It cannot execute or receive a signal and is not a live owned process.
+    if (process.platform === "linux" && (await linuxProcessFor(pid))?.state === "Z") return false
     return (await identity(pid)) === expected
   }
 
@@ -228,7 +243,7 @@ export namespace AuthorityProcessLedger {
         if (!/^\d+$/.test(name)) continue
         const pid = Number(name)
         const info = await linuxProcessFor(pid)
-        if (info) result.push({ pid, ppid: info.ppid, pgid: info.pgid })
+        if (info && info.state !== "Z") result.push({ pid, ppid: info.ppid, pgid: info.pgid })
       }
       return result
     }
@@ -259,6 +274,38 @@ export namespace AuthorityProcessLedger {
         .map(([pid, ppid, pgid]) => ({ pid, ppid, pgid }))
     }
     throw new Error(`Durable authority process teardown is unsupported on ${process.platform}`)
+  }
+
+  /** Resolve a PID reported from inside a Linux sandbox to the exact host PID
+   * without weakening the PID namespace. Namespace-local numbers repeat across
+   * sandboxes, so a match is accepted only when it is unique within the live,
+   * identity-pinned durable leader's host descendant closure. */
+  export async function resolveLinuxNamespacePID(input: {
+    leaderPID: number
+    leaderIdentity: string
+    namespacePID: number
+  }): Promise<number | undefined> {
+    if (process.platform !== "linux") return
+    if (!Number.isSafeInteger(input.namespacePID) || input.namespacePID <= 0) return
+    if (!(await owns(input.leaderPID, input.leaderIdentity))) return
+    const rows = await processTable()
+    const descendants = new Set([input.leaderPID])
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const row of rows) {
+        if (descendants.has(row.pid) || !descendants.has(row.ppid)) continue
+        descendants.add(row.pid)
+        changed = true
+      }
+    }
+    const candidates: number[] = []
+    for (const pid of descendants) {
+      const namespace = await linuxNamespacePIDs(pid)
+      if (namespace?.at(-1) === input.namespacePID) candidates.push(pid)
+    }
+    if (candidates.length !== 1 || !(await owns(input.leaderPID, input.leaderIdentity))) return
+    return candidates[0]
   }
 
   /** Capture exact identities for every current group member and live

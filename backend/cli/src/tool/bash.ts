@@ -24,7 +24,6 @@ import { ProvenanceEnvelope } from "@/science/provenance/envelope"
 import { ExecutionAuthority } from "@/project/execution"
 import { CommandRuntime } from "@/science/command/registry"
 import { AuthoritySignal } from "@/project/authority-signal"
-import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENSCIENCE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 0
@@ -316,14 +315,14 @@ export const BashTool = Tool.define("bash", async () => {
         })
         return OpenScience.withSubprocessEnv(process.env, async (env) => {
           let child: ReturnType<typeof spawn>
-          const wrapped = WindowsJobLauncher.wrap({
+          const wrapped = await CommandRuntime.wrap({
             file: sandbox.file,
             args: sandbox.args ?? [],
             shell: sandbox.sandboxed ? false : sandbox.useShell,
           })
           try {
             child = spawn(wrapped.file, wrapped.args, {
-              shell: process.platform === "win32" ? false : sandbox.sandboxed ? false : sandbox.useShell,
+              shell: wrapped.spawnShell,
               cwd,
               env,
               stdio: ["ignore", "pipe", "pipe"],
@@ -361,7 +360,10 @@ export const BashTool = Tool.define("bash", async () => {
               },
               { authorityGeneration: current.generation, windowsRelease: wrapped.release },
             )
-            return { proc: child, command: registered, kill: stop, sandbox, completion }
+            const kill = async () => {
+              await CommandRuntime.stop(registered.id, registered.projectID, registered.sessionID)
+            }
+            return { proc: child, command: registered, kill, sandbox, completion }
           } catch (error) {
             await stop()
             Sandbox.cleanup(sandbox)

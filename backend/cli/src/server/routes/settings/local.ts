@@ -180,6 +180,7 @@ export namespace LocalRuntime {
       windowsHide: true,
       stdio: "ignore",
     })
+    WindowsJobLauncher.bind(child, wrapped.release)
     const managed: Managed = { id: input.id, ledger, child, detached, release: wrapped.release }
     const completion = new Promise<NonNullable<Managed["settled"]>>((resolve) => {
       child.once("error", (error) => resolve({ code: null, signal: null, error: error.message }))

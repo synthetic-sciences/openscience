@@ -23,6 +23,11 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   await fs.mkdir(dirpath, { recursive: true })
   if (options?.git) {
     await $`git init`.cwd(dirpath).quiet()
+    // The runtime deliberately ignores the host's global Git config. Keep
+    // synthetic repositories hermetic so commits still have an identity in
+    // that sanitized environment and on runners without global Git settings.
+    await $`git config user.name OpenScience`.cwd(dirpath).quiet()
+    await $`git config user.email test@openscience.local`.cwd(dirpath).quiet()
     await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
   }
   if (options?.config) {
