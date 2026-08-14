@@ -78,6 +78,9 @@ Body`).bibliographies,
     expect(relativeArtifactPath("reports/paper.md", "figures/result plot.svg")).toBe("../figures/result plot.svg")
     expect(relativeArtifactPath("paper.md", "figures/result.svg")).toBe("figures/result.svg")
     expect(resolveReferencePath("reports/paper.md", "../references/core.bib")).toBe("references/core.bib")
+    expect(resolveReferencePath("/work/project/reports/paper.md", "../references/core.bib")).toBe(
+      "/work/project/references/core.bib",
+    )
     expect(figureMarkdown("Primary endpoint", "reports/paper.md", "figures/result plot.svg")).toBe(
       "![Primary endpoint](../figures/result%20plot.svg)",
     )

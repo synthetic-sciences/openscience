@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, spyOn, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Agent } from "../../src/agent/agent"
@@ -9,11 +9,51 @@ import { Provenance } from "../../src/science/provenance/store"
 import { SessionRoutes } from "../../src/server/routes/session"
 import { Session } from "../../src/session"
 import { SessionReview } from "../../src/session/review"
+import { SessionPrompt } from "../../src/session/prompt"
+import { ReviewSettings } from "../../src/settings/review"
 import { ArtifactSnapshotTool } from "../../src/tool/artifact-snapshot"
 import { tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
   await ArtifactStore.reset()
+  await ReviewSettings.set({ auto: false, model: null })
+})
+
+test("review settings choose the model and auto-review only opted-in Result saves", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "configured review" })
+      const selected = { providerID: "test-provider", modelID: "test-review-model" }
+      const prompt = spyOn(SessionPrompt, "prompt").mockResolvedValue(undefined as never)
+      try {
+        await ReviewSettings.set({ auto: false, model: selected })
+        await SessionReview.auto(session.id, "research")
+        expect(prompt).not.toHaveBeenCalled()
+
+        await SessionReview.start(session.id)
+        expect(prompt).toHaveBeenLastCalledWith(
+          expect.objectContaining({ sessionID: session.id, agent: "reviewer", model: selected }),
+        )
+
+        prompt.mockClear()
+        await ReviewSettings.set({ auto: true, model: selected })
+        await SessionReview.auto(session.id, "research")
+        expect(prompt).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionID: session.id, agent: "reviewer", model: selected }),
+        )
+
+        prompt.mockClear()
+        await SessionReview.auto(session.id, "reviewer")
+        await SessionReview.auto(session.id, "artifact-reviewer")
+        expect(prompt).not.toHaveBeenCalled()
+      } finally {
+        prompt.mockRestore()
+        await Session.remove(session.id)
+      }
+    },
+  })
 })
 
 test("a direct review grants the reviewer's provenance tools at session scope", async () => {

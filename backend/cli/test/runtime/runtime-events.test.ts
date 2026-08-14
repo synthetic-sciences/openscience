@@ -1,16 +1,18 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import z from "zod"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
 import { RuntimeEvents } from "../../src/runtime/events"
 import { Session } from "../../src/session"
+import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { handoffRuntimeEvents, RuntimeRoutes } from "../../src/server/routes/runtime"
 import { SessionRoutes } from "../../src/server/routes/session"
 import { Server } from "../../src/server/server"
 import { Storage } from "../../src/storage/storage"
 import { tmpdir, trustProject } from "../fixture/fixture"
+import { applyRuntimeCancellationRequest } from "../../src/project/bootstrap"
 
 const Tick = BusEvent.define(
   "test.runtime.tick",
@@ -60,6 +62,111 @@ describe("public runtime event journal", () => {
             { sequence: 2, runID: "run_stable", type: "test.runtime.tick", properties: { value: 7 } },
             { sequence: 3, runID: "run_stable", type: "runtime.completed" },
           ],
+        })
+      },
+    })
+  })
+
+  test("captures real message progress events with their explicit nested session owners", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const info: MessageV2.User = {
+          id: "msg_runtime_progress",
+          sessionID: session.id,
+          role: "user",
+          time: { created: 101 },
+          agent: "research",
+          model: { providerID: "test", modelID: "test" },
+          effort: "normal",
+        }
+        const part: MessageV2.TextPart = {
+          id: "prt_runtime_progress",
+          sessionID: session.id,
+          messageID: info.id,
+          type: "text",
+          text: "streamed",
+        }
+
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_progress",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+        await Bus.publish(MessageV2.Event.Updated, { info })
+        await Bus.publish(MessageV2.Event.PartUpdated, { part, delta: "streamed" })
+        await RuntimeEvents.capture({
+          type: "test.runtime.unknown-nested-owner",
+          properties: { info: { sessionID: session.id } },
+        })
+
+        expect(await RuntimeEvents.replay(session.id)).toMatchObject({
+          latestSequence: 3,
+          events: [
+            { sequence: 1, type: "runtime.accepted" },
+            {
+              sequence: 2,
+              type: "message.updated",
+              properties: { info: { id: info.id, sessionID: session.id } },
+            },
+            {
+              sequence: 3,
+              type: "message.part.updated",
+              properties: { part: { id: part.id, sessionID: session.id }, delta: "streamed" },
+            },
+          ],
+        })
+      },
+    })
+  })
+
+  test("isolates cyclic subscriber rejections from durable capture and healthy subscribers", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_subscriber_isolation",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+
+        const rejection: Record<string, unknown> = {}
+        rejection.self = rejection
+        const received: RuntimeEvents.Event[] = []
+        const unsubscribeFailing = RuntimeEvents.subscribe(session.id, () => {
+          throw rejection
+        })
+        const unsubscribeHealthy = RuntimeEvents.subscribe(session.id, (event) => {
+          received.push(event)
+        })
+        try {
+          await expect(
+            RuntimeEvents.capture({
+              type: Tick.type,
+              properties: { sessionID: session.id, value: 1 },
+            }),
+          ).resolves.toBeUndefined()
+        } finally {
+          unsubscribeFailing()
+          unsubscribeHealthy()
+        }
+
+        expect(received).toMatchObject([{ runID: "run_subscriber_isolation", type: Tick.type }])
+        expect((await RuntimeEvents.replay(session.id)).events.at(-1)).toMatchObject({
+          runID: "run_subscriber_isolation",
+          type: Tick.type,
+          properties: { sessionID: session.id, value: 1 },
+        })
+        await RuntimeEvents.finish({
+          sessionID: session.id,
+          runID: "run_subscriber_isolation",
+          messageID: "msg_subscriber_isolation",
         })
       },
     })
@@ -164,6 +271,119 @@ describe("public runtime event journal", () => {
         })
         await running
         await Session.remove(session.id)
+      },
+    })
+  }, 15_000)
+
+  test("a stale run-specific cancellation request cannot cancel a newer prompt", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const cancel = spyOn(SessionPrompt, "cancel")
+        try {
+          await RuntimeEvents.begin({
+            sessionID: session.id,
+            runID: "run_stale_request",
+            acceptedAt: 100,
+            effort: "normal",
+          })
+          await RuntimeEvents.finish({
+            sessionID: session.id,
+            runID: "run_stale_request",
+            messageID: "msg_old",
+          })
+          await RuntimeEvents.begin({
+            sessionID: session.id,
+            runID: "run_new_owner",
+            acceptedAt: 200,
+            effort: "normal",
+          })
+
+          await expect(
+            applyRuntimeCancellationRequest({
+              sessionID: session.id,
+              runID: "run_stale_request",
+              source: "user",
+            }),
+          ).resolves.toEqual({ status: "inactive" })
+          expect(cancel).not.toHaveBeenCalled()
+          expect((await RuntimeEvents.replay(session.id)).events.at(-1)).toMatchObject({
+            runID: "run_new_owner",
+            type: "runtime.accepted",
+          })
+
+          await RuntimeEvents.cancel({ sessionID: session.id, runID: "run_new_owner", source: "user" })
+        } finally {
+          cancel.mockRestore()
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("the HTTP abort endpoint cannot cancel a controller that replaced its original owner", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({
+          permission: [{ permission: "bash", pattern: "*", action: "allow" }],
+        })
+        const command = `${JSON.stringify(process.execPath)} -e ${JSON.stringify("setInterval(() => {}, 1000)")}`
+        const oldRun = SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "research",
+          model: { providerID: "test", modelID: "test" },
+          command,
+        })
+        await waitUntil(() => {
+          try {
+            SessionPrompt.assertNotBusy(session.id)
+            return false
+          } catch {
+            return true
+          }
+        })
+
+        const pending = Promise.withResolvers<RuntimeEvents.CancelResult>()
+        const requestCancel = spyOn(RuntimeEvents, "requestCancel").mockImplementation(() => pending.promise)
+        try {
+          const response = SessionRoutes().request(`/${session.id}/abort`, { method: "POST" })
+          await waitUntil(() => requestCancel.mock.calls.length === 1)
+
+          // Replace the controller while the route awaits durable cancellation.
+          // Its eventual finally block must stay bound to the old signal.
+          SessionPrompt.cancel(session.id)
+          await oldRun
+          const newRun = SessionPrompt.shell({
+            sessionID: session.id,
+            agent: "research",
+            model: { providerID: "test", modelID: "test" },
+            command,
+          })
+          await waitUntil(() => {
+            try {
+              SessionPrompt.assertNotBusy(session.id)
+              return false
+            } catch {
+              return true
+            }
+          })
+
+          pending.resolve({ status: "inactive" })
+          expect((await response).status).toBe(200)
+          expect(() => SessionPrompt.assertNotBusy(session.id)).toThrow(Session.BusyError)
+
+          SessionPrompt.cancel(session.id)
+          await newRun
+        } finally {
+          requestCancel.mockRestore()
+          SessionPrompt.cancel(session.id)
+          await Session.remove(session.id)
+        }
       },
     })
   }, 15_000)

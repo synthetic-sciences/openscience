@@ -62,7 +62,12 @@ test("right pane stays inline at desktop widths and overlays below the breakpoin
   await expect(pane).toHaveAttribute("data-overlay", "true")
   await expect(page.locator(".session-right-pane-backdrop")).toHaveCount(1)
   await page.keyboard.press("Escape")
-  await expect(pane).toHaveCount(0)
+  // Open file tabs stay mounted so their editor state survives a temporary
+  // mobile dismissal. The gate, rather than the retained pane node, owns
+  // visibility after Escape.
+  await expect(page.locator(".right-pane-gate")).toHaveAttribute("data-open", "false")
+  await expect(pane).toBeHidden()
+  await expect(page.locator(".session-right-pane-backdrop")).toHaveCount(0)
 })
 
 test("artifact review threads persist and can be resolved", async ({ page, openSession }) => {
@@ -125,7 +130,7 @@ test("publication preflight blocks, audits overrides, finalizes, and persists ex
   const blockers = () =>
     review
       .locator('[data-component="publication-finding"]')
-      .filter({ has: page.getByText("blocking", { exact: true }) })
+      .filter({ has: page.getByText(/^blocking$/i) })
       .filter({ has: page.getByRole("button", { name: "Override", exact: true }) })
   while ((await blockers().count()) > 0) {
     const before = await blockers().count()

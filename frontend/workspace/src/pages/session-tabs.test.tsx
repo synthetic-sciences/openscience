@@ -65,11 +65,17 @@ describe("SessionTabStrip", () => {
   test("renders truthful state with roving horizontal keyboard navigation", async () => {
     const selected: string[] = []
     const reordered: Array<[string, number]> = []
+    const [active, setActive] = (await server.ssrLoadModule("solid-js")).createSignal("session-a")
     const host = mount(() =>
       SessionTabStrip({
         tabs,
-        active: "session-a",
-        onSelect: (id) => selected.push(id),
+        get active() {
+          return active()
+        },
+        onSelect: (id) => {
+          selected.push(id)
+          setActive(id)
+        },
         onClose: () => {},
         onReorder: (id, to) => reordered.push([id, to]),
         onRename: async () => true,

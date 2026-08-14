@@ -7,6 +7,8 @@ export interface FileRow {
   type: "file" | "directory"
   size?: number
   ignored?: boolean
+  /** Canonical location returned by the local file API. */
+  absolute?: string
   /**
    * The server's own handle for the row (File.list, backend/cli/src/file/index.ts:522):
    * relative to the listing root when the folder sits inside it, absolute when

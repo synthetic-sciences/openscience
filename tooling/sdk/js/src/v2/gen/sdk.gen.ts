@@ -317,6 +317,8 @@ import type {
   SettingsNetworkSetResponses,
   SettingsPreferencesGetResponses,
   SettingsPreferencesUpdateResponses,
+  SettingsReviewGetResponses,
+  SettingsReviewSetResponses,
   SettingsSkillsInstallErrors,
   SettingsSkillsInstallResponses,
   SettingsStorageRelocateErrors,
@@ -1619,6 +1621,54 @@ export class Compute extends HeyApiClient {
   }
 }
 
+export class Review extends HeyApiClient {
+  /**
+   * Get reviewer preferences
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsReviewGetResponses, unknown, ThrowOnError>({
+      url: "/settings/review",
+      ...options,
+    })
+  }
+
+  /**
+   * Update reviewer preferences
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters?: {
+      auto?: boolean
+      model?: {
+        providerID: string
+        modelID: string
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "auto" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<SettingsReviewSetResponses, unknown, ThrowOnError>({
+      url: "/settings/review",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Preferences extends HeyApiClient {
   /**
    * Get settings preferences
@@ -1877,6 +1927,11 @@ export class Settings extends HeyApiClient {
   private _compute?: Compute
   get compute(): Compute {
     return (this._compute ??= new Compute({ client: this.client }))
+  }
+
+  private _review?: Review
+  get review(): Review {
+    return (this._review ??= new Review({ client: this.client }))
   }
 
   private _preferences?: Preferences

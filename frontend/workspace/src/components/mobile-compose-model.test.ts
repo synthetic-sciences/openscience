@@ -51,6 +51,9 @@ describe("mobile compose and model sheets", () => {
     )
     expect(css).toContain("@media (max-width: 719px)")
     expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto")
+    expect(css).toContain("@container conversation (max-width: 540px)")
+    expect(css).toMatch(/@container conversation \(max-width: 540px\)[\s\S]*grid-template-columns: minmax\(0, 1fr\);/)
+    expect(css).toContain("width: min(292px, calc(100cqw - 32px))")
     expect(css).toContain("overflow: visible")
     expect(css).not.toContain("overflow-x: auto")
     expect(css).toContain(".workspace-composer__research-effort-options")
@@ -84,6 +87,9 @@ describe("mobile compose and model sheets", () => {
     expect(css).toContain("transform: none !important")
     expect(css).toContain("inset: auto 0 0 !important")
     expect(css).toContain("border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important")
+    expect(css).toMatch(
+      /@media \(pointer: coarse\)[\s\S]*\[data-model-control-group="label"\][\s\S]*height: 44px;[\s\S]*\[data-model-effort-chip\][\s\S]*min-height: 44px;/,
+    )
   })
 
   test("renders model discovery as a scrollable edge-to-edge mobile dialog", async () => {

@@ -89,7 +89,15 @@ test("Atlas canvas distinguishes a connected graph from an unavailable bridge", 
   const action = page.getByRole("button", { name: "Open Atlas", exact: true })
   await action.click()
   await expect(action).toHaveAttribute("aria-pressed", "true")
-  await expect(page.locator(".research-inspector__context strong")).toHaveText("Atlas")
+  // Context surfaces now live in the inspector's persistent work-tab strip.
+  // The old standalone heading is intentionally absent whenever a work tab is
+  // open; assert the selected Atlas tab rather than its retired duplicate.
+  await expect(
+    page.getByRole("tablist", { name: "Contextual work tabs", exact: true }).getByRole("tab", {
+      name: "Atlas",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-selected", "true")
 
   if (response.ok()) {
     const body = graphBody!

@@ -1,5 +1,7 @@
 # SKILL 4: Parameter Fixation Strategy
 
+> Modified by Synthetic Sciences: formatting-only normalization of trailing whitespace.
+
 ## Overview
 This skill helps scientists strategically decide which parameters to fix and which to keep flexible in their project. The paradox: too many fixed parameters creates brittleness, but too few causes paralysis. The key is fixing ONE parameter thoughtfully and letting others float—constraints engender creativity.
 

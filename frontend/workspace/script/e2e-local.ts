@@ -176,7 +176,7 @@ const runnerEnv = {
   PLAYWRIGHT_PORT: String(webPort),
 } satisfies Record<string, string>
 
-const seed = Bun.spawn(["bun", "script/seed-e2e.ts"], {
+const seed = Bun.spawn([process.execPath, "script/seed-e2e.ts"], {
   cwd: openscienceDir,
   env: serverEnv,
   stdout: "inherit",

@@ -1,5 +1,6 @@
 import { test as base, expect } from "@playwright/test"
-import { createSdk, getWorktree, promptSelector, serverUrl, sessionPath } from "./utils"
+import { projectPathname, projectSegment } from "../src/utils/project-route"
+import { createSdk, getWorktree, promptSelector, serverUrl } from "./utils"
 
 type TestFixtures = {
   sdk: ReturnType<typeof createSdk>
@@ -22,15 +23,14 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   ],
   // Session URLs carry the canonical project segment: the project id, plus a
   // `~<checksum>` suffix when the route points at a secondary worktree rather
-  // than the primary one. Legacy base64 directory slugs redirect to it. Every
-  // spec interpolates `slug` inside a RegExp, so expose it as a fragment with
-  // the optional worktree suffix baked in — matching either shape.
+  // than the primary one. Legacy base64 directory slugs are reserved for the
+  // explicit redirect-compatibility spec.
   slug: [
     async ({ directory }, use) => {
       const sdk = createSdk(directory)
       const project = await sdk.project.current().then((result) => result.data)
       if (!project?.id) throw new Error(`Failed to resolve the current project from ${serverUrl}/project/current`)
-      await use(`${project.id}(?:~[^/]+)?`)
+      await use(projectSegment(project, directory))
     },
     { scope: "worker" },
   ],
@@ -51,7 +51,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     })
     for (const id of created) await sdk.session.delete({ sessionID: id }).catch(() => undefined)
   },
-  gotoSession: async ({ page, directory }, use) => {
+  gotoSession: async ({ page, directory, slug }, use) => {
     await page.addInitScript(
       (input: { directory: string; serverUrl: string }) => {
         const key = "openscience.global.dat:server"
@@ -102,7 +102,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     )
 
     const gotoSession = async (sessionID?: string) => {
-      await page.goto(sessionPath(directory, sessionID))
+      await page.goto(projectPathname(slug, sessionID))
       await expect(page.locator(promptSelector)).toBeVisible()
     }
     await use(gotoSession)

@@ -72,35 +72,46 @@ async function pickSource(page: Page, name: string) {
   await expect(label).toHaveText(name)
 }
 
-/** Opens the Files browser and selects the session filesystem source. */
+/** Opens the Files browser and selects the project's working-files source. */
 export async function openFilesSources(page: Page) {
   const files = page.getByRole("region", { name: "Files", exact: true })
   if (!(await files.isVisible().catch(() => false))) {
     await page.getByRole("button", { name: "Open project files", exact: true }).click()
     await expect(files).toBeVisible()
   }
-  const browser = files.getByRole("tab", { name: "Files", exact: true })
-  if ((await browser.getAttribute("aria-selected")) !== "true") await browser.click()
-  await pickSource(page, "Session files")
+  const picker = files.locator("[data-source-button]")
+  await expect(picker).toBeVisible()
+  if ((await picker.getAttribute("data-source-kind")) !== "project") {
+    await picker.click()
+    await files.locator('[data-source-item="project"]').click()
+  }
+  await expect(picker).toHaveAttribute("data-source-kind", "project")
+  const root = files.locator("[data-path-root]")
+  if (await root.isVisible().catch(() => false)) await root.click()
 }
 
 export async function openFileRow(page: Page, name: string) {
   const files = page.getByRole("region", { name: "Files", exact: true })
-  await files.getByRole("searchbox", { name: prefix("Search") }).fill(name)
-  await files.getByRole("button", { name: prefix(name) }).click()
+  await files.getByRole("searchbox").fill(name)
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  await files.getByRole("button", { name: new RegExp(`^Open (?:file|folder) ${escaped}$`) }).click()
 }
 
 export function fileTab(page: Page, title: string) {
-  return page.locator(`.files-tabs [role="tab"][title="${title}"]`)
+  return page.getByRole("tablist", { name: "Contextual work tabs", exact: true }).getByRole("tab", {
+    name: title,
+    exact: true,
+  })
 }
 
 /** The visible active-session title now lives in the chat header tab strip. */
 export function sessionHeading(page: Page, title: string) {
-  return page.locator(".workspace-tabs").getByRole("tab", { name: prefix(title) })
+  const exact = new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`)
+  return page.locator(".workspace-tabs [data-session-tab]").filter({ hasText: exact })
 }
 
 /**
- * Opens a project file through the session-files source. `relativePath` is
+ * Opens a project file through the project's working-files source. `relativePath` is
  * relative to the project root; folders are descended one at a time exactly
  * like a user would. Returns the file tab, asserted active.
  */
@@ -192,7 +203,7 @@ export async function modelRowValue(page: Page, kind: "effort" | "speed") {
 export async function connectFolder(page: Page, folder: string, access: "read" | "write") {
   await openFilesSources(page)
   await page.locator("[data-source-button]").click()
-  await page.getByRole("button", { name: "Add folder…", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Add folder…", exact: true }).click()
   const form = page.getByRole("form", { name: "Connect a folder" })
   await form.getByLabel("Folder path").fill(folder)
   await form.getByLabel("Folder access").selectOption(access)

@@ -25,7 +25,7 @@ The bare `openscience` (no arguments) starts the local server and opens the **br
 | `openscience run [message..]` | One-shot prompt in the terminal; streams, then exits. |
 | `openscience session list` | List recent sessions (`-n`, `--format`). |
 
-`run` flags: `-c/--continue`, `-s/--session <id>`, `-m/--model <provider/model>`, `--variant <high|max|minimal>` (provider-specific reasoning effort), `--agent <name>`, `--format <default|json>`, `-f/--file <path>`, `--attach <url>` (attach to a running server, e.g. `http://localhost:4096`), `--port`, `--title <text>`.
+`run` flags: `-c/--continue`, `-s/--session <id>`, `-m/--model <provider/model>`, `--variant <high|max|minimal>` (provider-specific reasoning effort), `--effort <normal|ultra>` (Research breadth), `--format <default|json>`, `-f/--file <path>`, `--attach <url>` (attach to a running server, e.g. `http://localhost:4096`), `--port`, `--title <text>`.
 
 ```bash
 openscience run "Plot the attention entropy across layers for this checkpoint"
@@ -138,9 +138,9 @@ openscience completion zsh > ~/.zsh/completions/_openscience
     Credential boundary, env hygiene, the trust boundary.
   </Card>
   <Card title="Skills" icon="book-open" href="/openscience/skills">
-    250+ research skills and the scientific databases.
+    295 bundled research skills and the scientific databases.
   </Card>
   <Card title="Agents" icon="bot" href="/openscience/agents">
-    The research agent, the specialists, and custom profiles.
+    The Research harness, effort levels, plan mode, and custom profiles.
   </Card>
 </CardGroup>

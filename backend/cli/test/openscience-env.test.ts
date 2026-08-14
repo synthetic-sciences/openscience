@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { OpenScience } from "../src/openscience"
+import { ToolOutputPath } from "../src/tool/tool-output-path"
 
 test("subprocess env filtering never passes managed Atlas provider keys", () => {
   const filtered = OpenScience.filterEnvForSubprocess({
@@ -84,6 +85,7 @@ test("kernel credential mask covers Atlas and OpenScience credential stores", ()
   expect(names).toContain("auth.json")
   expect(names).toContain("credentials.json")
   expect(names).toContain("mcp-auth.json")
+  expect(paths).toContain(ToolOutputPath.root)
   expect(names).toContain(".ssh")
   expect(names).toContain(".aws")
   expect(names).toContain(".netrc")

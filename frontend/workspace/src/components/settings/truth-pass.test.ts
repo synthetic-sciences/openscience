@@ -103,6 +103,7 @@ describe("launch settings truth pass", () => {
 
   test("exposes verified live storage relocation without restart copy", () => {
     const storage = source("Storage.tsx")
+    const styles = source("preference-panels.css")
 
     expect(storage).not.toContain("Cloud storage")
     expect(storage).not.toContain("manage cloud credentials")
@@ -113,6 +114,9 @@ describe("launch settings truth pass", () => {
     expect(storage).toContain("Move data")
     expect(storage).toContain('method: "DELETE"')
     expect(storage).toContain("switches every running server")
+    expect(storage).toContain("settings-storage-location-input")
+    expect(styles).toContain(".settings-dialog .settings-storage-location-input")
+    expect(styles).toContain("font-family: var(--font-family-mono)")
   })
 
   test("states the effective grant-only sandbox boundary", () => {

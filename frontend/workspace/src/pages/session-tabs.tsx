@@ -44,6 +44,7 @@ export function SessionTabStrip(props: {
   })
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
+  let pendingFocus = ""
 
   const buttons = () => Array.from(root?.querySelectorAll<HTMLButtonElement>("[data-session-tab]") ?? [])
   const button = (id: string) => buttons().find((item) => item.dataset.sessionTab === id)
@@ -127,7 +128,16 @@ export function SessionTabStrip(props: {
       () => props.active,
       (active) => {
         if (state.editing && state.editing !== active) clear()
-        queueMicrotask(() => button(active)?.scrollIntoView?.({ block: "nearest", inline: "nearest" }))
+        queueMicrotask(() => {
+          const target = button(active)
+          target?.scrollIntoView?.({ block: "nearest", inline: "nearest" })
+          // Selecting a tab can remount the session route. A focus scheduled
+          // before navigation then lands on the removed button, so complete
+          // keyboard focus restoration only after the new active tab exists.
+          if (pendingFocus !== active) return
+          pendingFocus = ""
+          target?.focus()
+        })
       },
     ),
   )
@@ -204,6 +214,7 @@ export function SessionTabStrip(props: {
                       if (target === undefined) return
                       event.preventDefault()
                       const next = props.tabs[target]
+                      pendingFocus = next.id
                       props.onSelect(next.id)
                       focus(next.id)
                     }}

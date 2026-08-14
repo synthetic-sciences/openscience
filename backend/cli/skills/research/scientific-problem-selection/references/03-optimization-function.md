@@ -1,5 +1,7 @@
 # SKILL 3: Optimization Function Selection
 
+> Modified by Synthetic Sciences: formatting-only normalization of trailing whitespace.
+
 ## Overview
 This skill helps scientists articulate HOW their project should be evaluated and define what success means. While Skill 2 focused on likelihood of success (the X-axis), this skill focuses on impact if successful (the Y-axis). The key insight: **value is in the eye of a belief system**—the value creation framework must be explicitly stated and led with.
 

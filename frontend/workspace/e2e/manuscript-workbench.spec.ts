@@ -28,7 +28,7 @@ test("authors Markdown with live preview, local citations, and local figures", a
   await figures.getByPlaceholder("Find a local figure…").fill("manuscript-figure")
   await figures.getByLabel("Figure alt text").fill("Primary endpoint")
   await figures.getByRole("button", { name: "Insert manuscript-figure.svg", exact: true }).click()
-  await expect(editor).toHaveValue(/!\[Primary endpoint\]\(manuscript-figure\.svg\)$/)
+  await expect(editor).toHaveValue(/!\[Primary endpoint\]\([^)]*manuscript-figure\.svg\)$/)
   await expect(preview.getByRole("img", { name: "Primary endpoint", exact: true })).toBeVisible()
 
   await page.getByRole("button", { name: "Discard changes", exact: true }).click()

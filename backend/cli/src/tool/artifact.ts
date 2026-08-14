@@ -7,6 +7,9 @@ import { ArtifactFile } from "@/file/artifacts"
 import { Instance } from "@/project/instance"
 import { Provenance } from "@/science/provenance/store"
 import type { Node, Run } from "@/science/provenance/store"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "tool.artifact" })
 
 function result(title: string, output: string, metadata: Record<string, unknown> = {}) {
   return { title, output, metadata }
@@ -160,6 +163,16 @@ export const ArtifactTool = Tool.define("artifact", {
         ...(entry ? { execution: savedExecution(entry) } : {}),
       })
       if (entry) await traceSavedArtifact(saved, entry)
+      // Dynamic import avoids a registry cycle: review launches route back
+      // through the session prompt loop that owns this tool definition.
+      const { SessionReview } = await import("@/session/review")
+      void SessionReview.auto(ctx.sessionID, ctx.agent).catch((error) =>
+        log.warn("automatic review launch failed after Result save", {
+          sessionID: ctx.sessionID,
+          artifactID: saved.id,
+          error,
+        }),
+      )
       return result(
         `Saved Result: ${saved.title}`,
         [

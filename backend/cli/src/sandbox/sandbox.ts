@@ -490,25 +490,27 @@ export namespace Sandbox {
       )
     }
     const unreadable = withPrivateAliases(dedupe(policy.unreadable ?? []))
-    if (unreadable.length) {
-      lines.push(
-        `(deny file-read* ${unreadable
-          .map((value) => {
-            try {
-              return fs.statSync(value).isDirectory() ? `(subpath "${sbpl(value)}")` : `(literal "${sbpl(value)}")`
-            } catch {
-              return `(literal "${sbpl(value)}")`
-            }
-          })
-          .join(" ")})`,
-      )
-    }
+    const unreadableRules = unreadable
+      .map((value) => {
+        try {
+          return fs.statSync(value).isDirectory() ? `(subpath "${sbpl(value)}")` : `(literal "${sbpl(value)}")`
+        } catch {
+          return `(literal "${sbpl(value)}")`
+        }
+      })
+      .join(" ")
+    if (unreadableRules) lines.push(`(deny file-read* ${unreadableRules})`)
     const writable = withPrivateAliases(dedupe(policy.writable))
     if (writable.length) {
       lines.push(`(allow file-write* ${writable.map((p) => `(subpath "${sbpl(p)}")`).join(" ")})`)
     }
     // Character devices tools legitimately write (null, tty, ptys, urandom, …).
     lines.push('(allow file-write* (subpath "/dev"))')
+    // Seatbelt uses the last matching rule, so the sensitive write deny must
+    // follow every broad writable-parent allow. These are host-managed
+    // enclaves, not merely secrets to hide. Bubblewrap's later tmpfs/dev-null
+    // masks enforce the same read/write property on Linux.
+    if (unreadableRules) lines.push(`(deny file-write* ${unreadableRules})`)
     return lines.join("\n")
   }
 

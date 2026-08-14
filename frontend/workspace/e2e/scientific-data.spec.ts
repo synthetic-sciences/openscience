@@ -33,7 +33,7 @@ test("inspects and searches genomics and sequencing files", async ({ page, sdk, 
     await expect(vcf.getByText("Variant classes", { exact: true })).toBeVisible()
     await expect(vcf.getByText("GRCh38", { exact: true })).toBeVisible()
 
-    await vcf.getByRole("button", { name: "records", exact: true }).click()
+    await vcf.getByRole("button", { name: "Records", exact: true }).click()
     await expect(vcf.getByText("chr1:10", { exact: true })).toBeVisible()
     await vcf.getByLabel("Filter scientific records").fill("LowQual")
     await expect(vcf.getByText("chr2:30", { exact: true })).toBeVisible()

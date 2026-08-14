@@ -104,7 +104,7 @@ const snapshot = (grants: unknown[]) => ({
   projectID: "prj_1",
   directory: DIRECTORY,
   grants,
-  enforcement: { broker: "enforced", processWrite: "workspace_only", processRead: "policy_only" },
+  enforcement: { broker: "enforced", processWrite: "grant_only", processRead: "policy_only" },
 })
 
 const grant = (id: string, path: string, access: "read" | "write") => ({
@@ -1017,6 +1017,26 @@ describe("files pane", () => {
     // uiStore callback activates RightPane's persisted WorkTabStrip.
     expect(host.querySelector('[role="tablist"]')).toBeNull()
     expect(host.querySelector(".files-table")).not.toBeNull()
+  })
+
+  test("opens a listed project file through its canonical API handle", async () => {
+    startOn("project")
+    const opened: PaneFile[] = []
+    const absolute = `${DIRECTORY}/src/train_lr.py`
+    const host = mount(() =>
+      subject.FilesPane({
+        directory: DIRECTORY,
+        session: SESSION,
+        request: async () =>
+          listing([{ name: "train_lr.py", type: "file", size: 10, path: "src/train_lr.py", absolute }]),
+        onOpenFile: (file) => opened.push(file),
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="train_lr.py"]')?.click()
+
+    expect(opened.at(-1)?.path).toBe(absolute)
   })
 
   test("keeps same-named files distinct by their full paths", async () => {

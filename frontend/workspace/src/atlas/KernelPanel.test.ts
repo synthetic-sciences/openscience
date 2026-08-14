@@ -9,7 +9,7 @@ const command = () => read("./CommandCard.tsx")
 const remote = () => read("./RemoteJobCard.tsx")
 
 describe("project Compute inventory", () => {
-  test("shows only live or actionable compute in one project inventory", () => {
+  test("shows live, actionable, and bounded successful compute in one project inventory", () => {
     const panel = source()
 
     expect(panel).toContain('aria-label="Project compute"')
@@ -24,7 +24,7 @@ describe("project Compute inventory", () => {
     expect(panel).not.toContain("<TraceKernelCard")
     expect(panel).not.toContain("<ResearchActivityCard")
     expect(panel).toContain("jobApi.list()")
-    expect(panel).toContain('jobLive(item) || item.status !== "succeeded"')
+    expect(panel).toContain("visibleJobs(jobs)")
     expect(panel).toContain("<RemoteJobCard")
     expect(panel).toContain('data-location="local"')
     expect(panel).not.toContain('data-location="research"')

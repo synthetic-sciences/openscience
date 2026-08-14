@@ -31,7 +31,7 @@ Piped stdin is appended to the message. `openscience run` supports:
 | `-s, --session <id>` | Continue a specific session by id. |
 | `-m, --model <provider/model>` | Model for this run, e.g. `anthropic/claude-opus-4-8`. See [Models](/openscience/models). |
 | `--variant <tier>` | Reasoning-effort tier (`high`, `max`, `minimal`; model-dependent). |
-| `--agent <name>` | Run a specific primary agent. See [Agents](/openscience/agents). |
+| `--effort <normal\|ultra>` | Research breadth. Normal is focused; Ultra permits a wider bounded investigation. |
 | `--command <name>` | Run a custom command, with the message as its arguments. |
 | `-f, --file <path>` | Attach a local file to the message (repeatable). |
 | `--title <text>` | Title for the session in `session list`. |
@@ -81,7 +81,7 @@ openscience import session.json
     Per-run and per-session model choice.
   </Card>
   <Card title="Agents" icon="bot" href="/openscience/agents">
-    Primary agents, specialists, and plan mode.
+    The Research harness, effort levels, and plan mode.
   </Card>
   <Card title="Commands" icon="terminal" href="/openscience/commands">
     The full command reference.

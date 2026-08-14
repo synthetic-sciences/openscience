@@ -16,6 +16,7 @@ import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
 import { TerminalProvider } from "@/context/terminal"
 import { FileProvider } from "@/context/file"
+import { PromptProvider } from "@/context/prompt"
 
 import { DataProvider } from "@synsci/ui/context"
 import { MarkdownImages } from "@synsci/ui/markdown"
@@ -239,15 +240,17 @@ export default function Layout(props: ParentProps) {
                   <LocalProvider>
                     <TerminalProvider>
                       <FileProvider>
-                        <ProjectWorkspaceFrame
-                          inspector={
-                            <Suspense>
-                              <ProjectRightPane project={sdk.scope} session={params.id ?? "new"} />
-                            </Suspense>
-                          }
-                        >
-                          {props.children}
-                        </ProjectWorkspaceFrame>
+                        <PromptProvider>
+                          <ProjectWorkspaceFrame
+                            inspector={
+                              <Suspense>
+                                <ProjectRightPane project={sdk.scope} session={params.id ?? "new"} />
+                              </Suspense>
+                            }
+                          >
+                            {props.children}
+                          </ProjectWorkspaceFrame>
+                        </PromptProvider>
                       </FileProvider>
                     </TerminalProvider>
                   </LocalProvider>

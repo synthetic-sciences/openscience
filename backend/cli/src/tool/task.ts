@@ -16,12 +16,15 @@ import { Lock } from "@/util/lock"
 import { observableToolStatus } from "@/session/tool-outcome"
 import { Truncate } from "./truncation"
 import { SessionFilesystem } from "@/session/filesystem"
+import { Instance } from "@/project/instance"
 import fs from "fs/promises"
 import { constants as FS } from "fs"
 import path from "path"
 
 export const DELEGATION_PROFILES = ["explore", "execute", "review"] as const
-const COMPUTE_SUBAGENTS = new Set(["biology", "ml", "physics"])
+export function isComputeDelegationProfile(name: string) {
+  return name === "execute"
+}
 export const NORMAL_CHILD_AGENTS = MessageV2.ResearchEffortLimits.normal
 export const MAX_CHILD_AGENTS = MessageV2.ResearchEffortLimits.ultra
 export const TASK_WALL_CLOCK_MS = {
@@ -51,6 +54,15 @@ export function childPermissionRules(primaryTools: string[] = []): PermissionNex
   ]
 }
 
+export function assertTaskContinuation(input: { session: Session.Info; parentSessionID: string; projectID: string }) {
+  if (input.session.projectID !== input.projectID || input.session.parentID !== input.parentSessionID) {
+    throw new Error(
+      `Task continuation session ${input.session.id} is not a direct child of the calling session ${input.parentSessionID}`,
+    )
+  }
+  return input.session
+}
+
 const TOOL_OUTPUT_NAME = /^tool_[A-Za-z0-9]{26}$/
 
 function escapeRegex(value: string) {
@@ -65,7 +77,11 @@ function escapeRegex(value: string) {
  * rewrite those references. This keeps arbitrary external paths and sibling
  * workspaces outside the child boundary.
  */
-export async function materializeTaskToolOutputs(input: { prompt: string; sessionID: string }) {
+export async function materializeTaskToolOutputs(input: {
+  prompt: string
+  parentSessionID: string
+  childSessionID: string
+}) {
   const root = await fs.realpath(Truncate.DIR).catch(() => undefined)
   if (!root) return { prompt: input.prompt, files: [] as string[] }
 
@@ -92,7 +108,8 @@ export async function materializeTaskToolOutputs(input: { prompt: string; sessio
         !info?.isFile() ||
         !source ||
         path.dirname(source) !== root ||
-        path.basename(source) !== name
+        path.basename(source) !== name ||
+        !(await SessionFilesystem.ownsToolOutput({ sessionID: input.parentSessionID, path: source }))
       ) {
         throw new Error(`Task input references an unavailable broker tool output: ${name}`)
       }
@@ -100,7 +117,7 @@ export async function materializeTaskToolOutputs(input: { prompt: string; sessio
     }),
   )
 
-  const workspace = await SessionFilesystem.workspace(input.sessionID)
+  const workspace = await SessionFilesystem.workspace(input.childSessionID)
   const directory = await fs.mkdtemp(path.join(workspace, ".task-handoff-"))
   const destinations = new Map<string, string>()
   for (const source of sources) {
@@ -292,10 +309,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const session = await iife(async () => {
         if (params.session_id) {
-          const found = await Session.get(params.session_id).catch((error) => {
-            if (Session.DirectoryMismatchError.isInstance(error)) throw error
+          const found = await Session.get(params.session_id)
+          return assertTaskContinuation({
+            session: found,
+            parentSessionID: ctx.sessionID,
+            projectID: Instance.project.id,
           })
-          if (found) return found
         }
 
         return await Session.create({
@@ -319,7 +338,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // A nested compute agent takes over its waiting parent's permit. Parallel
       // nested siblings serialize on that lease, so nesting cannot bypass the
       // global cap and a full pool cannot deadlock on permits held by parents.
-      const releaseComputeSlot = COMPUTE_SUBAGENTS.has(agent.name)
+      const releaseComputeSlot = isComputeDelegationProfile(agent.name)
         ? await computeSlots.acquire(session.id, { parent: ctx.sessionID, signal: childAbort })
         : undefined
       using _computeSlot = defer(() => releaseComputeSlot?.())
@@ -389,7 +408,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const previous = new Set((await Session.messages({ sessionID: session.id })).map((message) => message.info.id))
-      const handoff = await materializeTaskToolOutputs({ prompt: params.prompt, sessionID: session.id })
+      const handoff = await materializeTaskToolOutputs({
+        prompt: params.prompt,
+        parentSessionID: ctx.sessionID,
+        childSessionID: session.id,
+      })
       const promptParts = await SessionPrompt.resolvePromptParts(handoff.prompt)
       const childReminder = {
         type: "text" as const,

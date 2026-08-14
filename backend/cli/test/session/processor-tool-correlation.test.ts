@@ -4,7 +4,9 @@ import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
+import { ToolRetryGuard } from "../../src/session/tool-retry-guard"
 import { BashTool } from "../../src/tool/bash"
+import type { Tool } from "../../src/tool/tool"
 import { executionSession, tmpdir } from "../fixture/fixture"
 
 function running(callID: string, input: Record<string, unknown> = {}): MessageV2.ToolPart {
@@ -97,6 +99,51 @@ describe("SessionProcessor tool outcome correlation", () => {
       },
     })
     expect(rejected).toEqual([failure])
+  })
+
+  test("persists retry state as error metadata without exposing internal markers", async () => {
+    const { coordinator, updates } = fixture()
+    const ctx = {
+      sessionID: "session_retry_metadata",
+      messageID: "message_retry_metadata",
+      callID: "call_retry_metadata",
+      agent: "research",
+      abort: new AbortController().signal,
+      messages: [],
+      metadata() {},
+      async ask() {},
+    } as Tool.Context
+    const failure = ToolRetryGuard.annotateKernelTimeout(
+      ctx,
+      { code: "import time\ntime.sleep(30)", environment: "custom", timeout: 120_000 },
+      "python",
+      "custom",
+      new Error("Cell execution timed out after 120s"),
+    )
+
+    expect(failure.message).toBe("Cell execution timed out after 120s")
+    expect(failure.message).not.toContain("[openscience-")
+    await expect(
+      coordinator.execute("call_retry_metadata", {}, async () => {
+        throw failure
+      }),
+    ).rejects.toThrow("Cell execution timed out after 120s")
+    await coordinator.running(running("call_retry_metadata"))
+
+    expect(updates.at(-1)).toMatchObject({
+      state: {
+        status: "error",
+        error: "Cell execution timed out after 120s",
+        metadata: {
+          openscienceRetryGuard: {
+            version: 1,
+            kind: "failure",
+            failure: { code: "kernel_timeout", tool: "python", environment: "custom" },
+          },
+        },
+      },
+    })
+    expect(JSON.stringify(updates.at(-1))).not.toContain("[openscience-")
   })
 
   test("drains an execute promise that settles just after the provider stream closes", async () => {

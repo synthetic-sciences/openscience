@@ -25,12 +25,13 @@ test("existing folder import remains available through the in-app picker", async
   await page.goto("/")
   await page.getByRole("button", { name: "Import existing folder", exact: true }).first().click()
 
-  // The picker renders in "lite" mode (plain divs, no role=dialog), so target
-  // its controls at the page level.
-  const location = page.getByPlaceholder(/paste any absolute path/)
+  // The path field is the stable accessible contract; its example placeholder
+  // may evolve as the picker accepts more path forms.
+  const location = page.getByRole("textbox", { name: "Go to path", exact: true })
   await expect(location).toBeVisible()
   await location.fill(directory)
   await location.press("Enter")
+  await expect(location).toHaveValue("")
   await page.getByRole("button", { name: "Use this folder", exact: true }).click()
 
   await expect(page).toHaveURL(new RegExp(`/${slug}/session`))

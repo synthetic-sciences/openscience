@@ -3,8 +3,10 @@ import { Instance } from "../project/instance"
 import { Storage } from "../storage/storage"
 import { Identifier } from "../id/id"
 import { ProcessIdentity } from "../process/process-identity"
+import { Log } from "../util/log"
 
 export namespace RuntimeEvents {
+  const log = Log.create({ service: "runtime-events" })
   /**
    * Runtime events are deliberately a small, stable envelope around the
    * internal bus. Consumers can persist a cursor without depending on any
@@ -30,6 +32,13 @@ export namespace RuntimeEvents {
       .object({
         pid: z.number().int().positive(),
         identity: z.string(),
+      })
+      .optional(),
+    cancelRequest: z
+      .object({
+        runID: Identifier.schema("runtime"),
+        source: z.enum(["user", "runner_timeout"]),
+        requestedAt: z.number().int().nonnegative(),
       })
       .optional(),
   })
@@ -60,6 +69,12 @@ export namespace RuntimeEvents {
       super(`Runtime event cursor ${afterSequence} is ahead of latest sequence ${latestSequence}`)
     }
   }
+
+  export type CancelResult =
+    | { status: "inactive" }
+    | { status: "cancelled"; runID: string; owner: "local" | "stale" }
+    | { status: "foreign_owner"; runID: string }
+    | { status: "forwarded"; runID: string }
 
   type Subscriber = (event: Event) => void | Promise<void>
 
@@ -95,9 +110,31 @@ export namespace RuntimeEvents {
     })
   }
 
+  function logSafeError(error: unknown) {
+    if (error instanceof Error) return error
+    try {
+      return String(error)
+    } catch {
+      return "Non-Error subscriber rejection"
+    }
+  }
+
   async function notify(event: Event) {
-    for (const subscriber of state().subscriptions.get(event.sessionID) ?? []) {
-      await subscriber(event)
+    for (const subscriber of [...(state().subscriptions.get(event.sessionID) ?? [])]) {
+      try {
+        await subscriber(event)
+      } catch (error) {
+        // The journal is already durable at this point. A disconnected or
+        // otherwise faulty stream consumer must not fail the runtime action
+        // that produced the event or prevent delivery to healthy consumers.
+        log.error("runtime event subscriber delivery failed", {
+          sessionID: event.sessionID,
+          runID: event.runID,
+          sequence: event.sequence,
+          type: event.type,
+          error: logSafeError(error),
+        })
+      }
     }
     return event
   }
@@ -116,10 +153,12 @@ export namespace RuntimeEvents {
     runID: string
     type: string
     properties?: Record<string, unknown>
-  }): Promise<Event> {
+    requireActive?: boolean
+  }): Promise<Event | undefined> {
     let event: Event | undefined
     await Storage.upsert<Journal>(key(input.sessionID), (current) => {
       const journal = current ? Journal.parse(current) : empty()
+      if (input.requireActive && journal.activeRunID !== input.runID) return journal
       event = nextEvent(journal, input)
       return {
         ...journal,
@@ -127,7 +166,7 @@ export namespace RuntimeEvents {
         events: [...journal.events, event].slice(-RETAINED_EVENTS),
       }
     })
-    if (!event) throw new Error("Runtime event append did not produce an event")
+    if (!event) return
     return notify(event)
   }
 
@@ -170,12 +209,15 @@ export namespace RuntimeEvents {
         let nextSequence = journal.nextSequence
         const events = [...journal.events]
         if (journal.activeRunID) {
+          const requested = journal.cancelRequest?.runID === journal.activeRunID ? journal.cancelRequest : undefined
           const recovered = Event.parse({
             sequence: nextSequence++,
             sessionID: input.sessionID,
             runID: journal.activeRunID,
-            type: "runtime.failed",
-            properties: { message: "The runtime server stopped before this run completed.", recovered: true },
+            type: requested ? "runtime.cancelled" : "runtime.failed",
+            properties: requested
+              ? { source: requested.source, recovered: true }
+              : { message: "The runtime server stopped before this run completed.", recovered: true },
             time: Date.now(),
           })
           emitted.push(recovered)
@@ -245,19 +287,105 @@ export namespace RuntimeEvents {
     }
   }
 
-  export async function cancel(input: { sessionID: string; source: "user" | "runner_timeout" }) {
+  /**
+   * Terminalize a runtime only when this process owns it or its durable owner
+   * is provably gone. A process sharing the same data root must never release
+   * a live sibling's run merely because it can mutate the journal.
+   */
+  export async function cancel(input: {
+    sessionID: string
+    source: "user" | "runner_timeout"
+    runID?: string
+    onCancelled?: () => void
+  }): Promise<CancelResult> {
     const active = state().active
-    const runID = active.get(input.sessionID) ?? (await read(input.sessionID)).activeRunID
-    if (!runID) return
+    const localRunID = active.get(input.sessionID)
+    const journal = await read(input.sessionID)
+    const runID = input.runID ?? localRunID ?? journal.activeRunID
+    if (!runID || journal.activeRunID !== runID) return { status: "inactive" }
+
+    const identity = await ProcessIdentity.capture(process.pid)
+    if (!identity) throw new Error("Could not capture the runtime server process identity")
+    const owner = journal.activeOwner
+    const localOwner = localRunID === runID && owner?.pid === process.pid && owner.identity === identity
+    if (!localOwner && owner && (await ProcessIdentity.owns(owner.pid, owner.identity))) {
+      return { status: "foreign_owner", runID }
+    }
+
     try {
-      return await terminal({
+      await terminal({
         sessionID: input.sessionID,
         runID,
         type: "runtime.cancelled",
         properties: { source: input.source },
+        verifyOwner: true,
+        expectedOwner: owner,
+        onTerminal: input.onCancelled,
       })
+      return { status: "cancelled", runID, owner: localOwner ? "local" : "stale" }
     } finally {
       if (active.get(input.sessionID) === runID) active.delete(input.sessionID)
+    }
+  }
+
+  /**
+   * Request cancellation from the durable owner without releasing its run.
+   * The owner polls this journal field; a later process can also honor it once
+   * the recorded owner is provably stale.
+   */
+  export async function requestCancel(input: {
+    sessionID: string
+    source: "user" | "runner_timeout"
+  }): Promise<CancelResult> {
+    const result = await cancel(input)
+    if (result.status !== "foreign_owner") return result
+    let forwarded = false
+    await Storage.upsert<Journal>(key(input.sessionID), (current) => {
+      const journal = current ? Journal.parse(current) : empty()
+      if (journal.activeRunID !== result.runID) return journal
+      forwarded = true
+      return {
+        ...journal,
+        cancelRequest:
+          journal.cancelRequest?.runID === result.runID
+            ? journal.cancelRequest
+            : { runID: result.runID, source: input.source, requestedAt: Date.now() },
+      }
+    })
+    return forwarded ? { status: "forwarded", runID: result.runID } : { status: "inactive" }
+  }
+
+  /** Poll only runs owned by this instance for durable cancellation requests. */
+  export function watchCancellationRequests(
+    handler: (input: { sessionID: string; runID: string; source: "user" | "runner_timeout" }) => Promise<void>,
+    pollMs = 100,
+  ) {
+    let polling = false
+    let active = true
+    const poll = async () => {
+      if (!active || polling) return
+      polling = true
+      try {
+        for (const [sessionID, runID] of state().active) {
+          const request = (await read(sessionID)).cancelRequest
+          if (!request || request.runID !== runID) continue
+          await handler({ sessionID, runID, source: request.source })
+        }
+      } finally {
+        polling = false
+      }
+    }
+    const timer = setInterval(
+      () => void poll().catch((error) => log.error("failed to poll runtime cancellation requests", { error })),
+      pollMs,
+    )
+    ;(timer as { unref?: () => void }).unref?.()
+    return {
+      async [Symbol.asyncDispose]() {
+        active = false
+        clearInterval(timer)
+        while (polling) await new Promise<void>((resolve) => setTimeout(resolve, 5))
+      },
     }
   }
 
@@ -266,11 +394,21 @@ export namespace RuntimeEvents {
     runID: string
     type: "runtime.completed" | "runtime.failed" | "runtime.cancelled"
     properties: Record<string, unknown>
+    verifyOwner?: boolean
+    expectedOwner?: Journal["activeOwner"]
+    onTerminal?: () => void
   }) {
     let event: Event | undefined
     await Storage.upsert<Journal>(key(input.sessionID), (current) => {
       const journal = current ? Journal.parse(current) : empty()
       if (journal.activeRunID !== input.runID) {
+        throw new ActiveRunError(input.sessionID)
+      }
+      if (
+        input.verifyOwner &&
+        (journal.activeOwner?.pid !== input.expectedOwner?.pid ||
+          journal.activeOwner?.identity !== input.expectedOwner?.identity)
+      ) {
         throw new ActiveRunError(input.sessionID)
       }
       event = nextEvent(journal, input)
@@ -280,15 +418,29 @@ export namespace RuntimeEvents {
       }
     })
     if (!event) throw new Error("Runtime completion did not produce an event")
+    if (state().active.get(input.sessionID) === input.runID) state().active.delete(input.sessionID)
+    input.onTerminal?.()
     return notify(event)
   }
 
   /** Capture an internal event only while a public runtime run owns the session. */
+  function captureSessionID(type: string, properties: Record<string, unknown>) {
+    const direct = properties.sessionID
+    if (typeof direct === "string") return direct
+
+    const nestedKey = type === "message.updated" ? "info" : type === "message.part.updated" ? "part" : undefined
+    if (!nestedKey) return
+    const nested = properties[nestedKey]
+    if (!nested || typeof nested !== "object" || Array.isArray(nested)) return
+    const sessionID = Reflect.get(nested, "sessionID")
+    return typeof sessionID === "string" ? sessionID : undefined
+  }
+
   export async function capture(payload: { type: string; properties: unknown }) {
     const properties = payload.properties
     if (!properties || typeof properties !== "object" || Array.isArray(properties)) return
-    const sessionID = Reflect.get(properties, "sessionID")
-    if (typeof sessionID !== "string") return
+    const sessionID = captureSessionID(payload.type, properties as Record<string, unknown>)
+    if (!sessionID) return
     const runID = state().active.get(sessionID)
     if (!runID) return
     await append({
@@ -296,6 +448,7 @@ export namespace RuntimeEvents {
       runID,
       type: payload.type,
       properties: properties as Record<string, unknown>,
+      requireActive: true,
     })
   }
 

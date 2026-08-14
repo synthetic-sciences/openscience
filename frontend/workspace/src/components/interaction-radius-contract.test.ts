@@ -26,6 +26,8 @@ describe("live interaction radius contract", () => {
     expect(files.composer).toContain("border-radius: var(--composer-radius-pill)")
     expect(files.servers).toContain("--server-radius-pill: 999px")
     expect(files.servers).toContain("border-radius: var(--server-radius-pill)")
+    expect(files.chat).toContain("--chat-radius-pill: 999px")
+    expect(files.chat).toContain("border-radius: var(--chat-radius-pill)")
     expect(files.chat).toContain("--user-message-radius: var(--radius-sm)")
     expect(files.chat).toContain("border-radius: var(--user-message-radius)")
     expect(files.chat).not.toContain("--user-message-tail-radius")

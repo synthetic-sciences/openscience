@@ -53,6 +53,7 @@ interface ArtifactFixture {
   data: unknown
   tool?: string
   title?: string
+  input?: Record<string, unknown>
 }
 
 interface BrowserFixture {
@@ -79,6 +80,10 @@ async function seedArtifact(sdk: Sdk, fixture: ArtifactFixture) {
   const source = reply?.parts.find((part) => part.type === "text")
   if (!reply?.info.id || !source) throw new Error("Deterministic model did not return an assistant text part")
 
+  // SessionTurn is anchored by the user message but discovers steps and
+  // promoted results only from its assistant children. Keep the synthetic
+  // tool on this assistant reply; replacing the user part hides the fixture.
+
   const now = Date.now()
   await sdk.part.update({
     sessionID,
@@ -93,7 +98,7 @@ async function seedArtifact(sdk: Sdk, fixture: ArtifactFixture) {
       tool: fixture.tool ?? "__artifact__",
       state: {
         status: "completed",
-        input: {},
+        input: fixture.input ?? {},
         output: `${fixture.kind} fixture ready`,
         title: fixture.title ?? `${fixture.kind} fixture`,
         metadata: {
@@ -121,6 +126,8 @@ async function withArtifact(
   browser: BrowserFixture,
   fixture: ArtifactFixture,
   verify: (artifact: Locator) => Promise<void>,
+  locate: (page: Page) => Locator = (page) =>
+    page.locator(`[data-component="science-artifact"][data-kind="${fixture.kind}"]`),
 ) {
   const sessionID = await seedArtifact(browser.sdk, fixture)
   try {
@@ -131,7 +138,7 @@ async function withArtifact(
     await expect(steps).toBeVisible()
     await steps.click()
 
-    const artifact = browser.page.locator(`[data-component="science-artifact"][data-kind="${fixture.kind}"]`)
+    const artifact = locate(browser.page)
     await expect(artifact).toBeVisible()
     await verify(artifact)
   } finally {
@@ -139,7 +146,7 @@ async function withArtifact(
   }
 }
 
-test("notebook artifact metadata renders through the science fallback", async ({ page, sdk, gotoSession }) => {
+test("notebook artifact metadata renders through the canonical kernel tool", async ({ page, sdk, gotoSession }) => {
   await withArtifact(
     { page, sdk, gotoSession },
     {
@@ -147,13 +154,18 @@ test("notebook artifact metadata renders through the science fallback", async ({
       data: { images: [ONE_PIXEL_PNG] },
       tool: "notebook",
       title: "Notebook output",
+      input: { code: "display(result)", kernel: "python" },
     },
-    async (artifact) => {
-      await expect(page.locator('[data-component="tool-part-wrapper"]').filter({ hasText: "notebook" })).toBeVisible()
-      const image = artifact.getByRole("img", { name: "artifact", exact: true })
+    async (tool) => {
+      await expect(tool).toContainText("Python")
+      await tool.locator('[data-slot="collapsible-trigger"]').click()
+      const kernel = tool.locator('[data-component="kernel-tool"]')
+      await expect(kernel).toBeVisible()
+      const image = kernel.getByRole("img", { name: "Python execution result", exact: true })
       await expect(image).toBeVisible()
       await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(1)
     },
+    (current) => current.locator('[data-slot="session-turn-promoted-results"] [data-component="tool-part-wrapper"]'),
   )
 })
 
@@ -268,7 +280,7 @@ test("rasterizes an inline one-page PDF", async ({ page, sdk, gotoSession }) => 
     { page, sdk, gotoSession },
     { kind: "pdf", data: { base64: ONE_PAGE_PDF, scale: 0.6, maxPages: 1 } },
     async (artifact) => {
-      await expect(artifact.locator('[data-slot="pdf-header"]')).toContainText("1 page", { timeout: 30_000 })
+      await expect(artifact.locator('[data-slot="pdf-header"]')).toContainText("Page 1 of 1", { timeout: 30_000 })
       await expect(artifact.locator('[data-slot="pdf-error"]')).toHaveCount(0)
       const canvas = artifact.locator('[data-slot="pdf-pages"] canvas')
       await expect(canvas).toBeVisible()

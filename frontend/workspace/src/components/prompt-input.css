@@ -723,8 +723,23 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
   }
 
   form.workspace-composer .workspace-composer__footer {
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
     padding: 2px 5px 5px;
+  }
+
+  form.workspace-composer .workspace-composer__controls,
+  form.workspace-composer .workspace-composer__actions {
+    width: 100%;
+  }
+
+  form.workspace-composer .workspace-composer__actions {
+    justify-content: flex-end;
+  }
+
+  form.workspace-composer .workspace-composer__research-tools-menu {
+    left: -46px;
+    width: min(292px, calc(100cqw - 32px));
   }
 }
 
@@ -738,8 +753,23 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
   }
 
   form.workspace-composer .workspace-composer__footer {
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
     padding: 2px 5px 5px;
+  }
+
+  form.workspace-composer .workspace-composer__controls,
+  form.workspace-composer .workspace-composer__actions {
+    width: 100%;
+  }
+
+  form.workspace-composer .workspace-composer__actions {
+    justify-content: flex-end;
+  }
+
+  form.workspace-composer .workspace-composer__research-tools-menu {
+    left: -46px;
+    width: min(292px, calc(100vw - 32px));
   }
 }
 

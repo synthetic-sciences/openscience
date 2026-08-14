@@ -6,8 +6,10 @@ branch.
 
 ## Cutting a release
 
-1. Make sure `main` is green (the required checks are Typecheck, Test, and
-   Build (web)).
+1. Make sure the exact `main` commit you will release is green across the full
+   CI workflow: Typecheck, Format, the Linux test suite, web/docs and landing
+   builds, migration and runtime ownership checks on their platform matrices,
+   launcher/release-script smoke tests, and workflow linting.
 2. Trigger the `publish` workflow with a bump level:
 
    ```bash
@@ -18,8 +20,16 @@ branch.
    manual version editing in `package.json` and no risk of a tag collision.
 
 3. The workflow then, in order: computes the version and opens a draft GitHub
-   release → builds the platform binaries → publishes to npm (with provenance)
-   and updates the Homebrew tap → records an npm deployment.
+   release → builds the platform binaries and uploads their checksum manifest →
+   verifies the Linux x64 and ARM64 npm wrappers on native runners → publishes
+   the CLI, SDK, plugin, and launcher packages to npm with provenance → attempts
+   the Homebrew tap update → makes the release public only after required npm
+   publishes succeed → records an npm deployment.
+
+   The publish job commits the generated package-version changes. It pushes that
+   commit to `main` when the workflow identity may bypass branch protection;
+   otherwise it opens a `release/vX.Y.Z` pull request. A green publish can
+   therefore still require that small release PR to be merged.
 
 ## Conventions
 
@@ -32,14 +42,28 @@ branch.
 ## Verifying a release
 
 ```bash
-npm view @synsci/openscience version     # equals the new version once npm propagates
-gh release view vX.Y.Z --json assets     # binaries + checksums.txt attached
+npm view @synsci/openscience version
+npm view @synsci/sdk version
+npm view @synsci/plugin version
+gh release view vX.Y.Z --json isDraft,tagName,targetCommitish,assets
 ```
+
+Confirm that the three npm packages report the new version, the GitHub release
+is not a draft, the tag targets the release commit, and the assets include the
+platform archives plus `checksums.txt`. Inspect the publish run for Homebrew or
+launcher warnings; those updates are deliberately non-fatal and may need owner
+follow-up.
 
 See [verification.md](verification.md) for the local gates to run before you
 push to `main`.
 
 ## Isolated npm test installs
+
+The `test publish` workflow uses registry credentials and therefore runs only
+from the protected `main` branch. Validate a candidate branch with the local
+pack/build and browser gates first; after it lands on `main`, dispatch the test
+workflow and require its packaged E2E and operating-system smoke jobs to pass
+before starting the production publish.
 
 Every npm test build must use separate binary, config, data, cache, and state
 roots. Use the exact prerelease version being validated; do not rely on a

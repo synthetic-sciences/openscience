@@ -5,7 +5,7 @@ import { identify } from "@/atlas/poll-identity"
 import { KernelCard, type KernelAction } from "@/atlas/KernelCard"
 import { CommandCard } from "@/atlas/CommandCard"
 import type { Job } from "@/atlas/ComputeJobsAPI"
-import { RemoteJobCard, jobLive } from "@/atlas/RemoteJobCard"
+import { RemoteJobCard, visibleJobs } from "@/atlas/RemoteJobCard"
 import { useKernelList } from "@/atlas/use-kernel-list"
 import { useStableList } from "@/atlas/use-stable-list"
 import { createKernelRouteRequester, kernelAPI, type KernelRoute } from "@/atlas/kernel-api"
@@ -62,8 +62,6 @@ export const usage = (group: Group) => {
 }
 
 const plural = (value: number, one: string, many = `${one}s`) => `${value} ${value === 1 ? one : many}`
-
-export const actionableJobs = (items: Job[]) => items.filter((item) => jobLive(item) || item.status !== "succeeded")
 
 export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   const transport = props.request ?? useSDK().request
@@ -152,7 +150,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
       const value = group(command.sessionID)
       groups.set(command.sessionID, { ...value, commands: [...value.commands, command] })
     }
-    for (const job of actionableJobs(jobs)) {
+    for (const job of visibleJobs(jobs)) {
       const sessionID = job.session_id ?? projectJobs
       const value = group(sessionID)
       groups.set(sessionID, { ...value, jobs: [...value.jobs, job] })

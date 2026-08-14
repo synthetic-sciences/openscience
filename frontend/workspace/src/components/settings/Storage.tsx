@@ -198,7 +198,7 @@ export const Storage: Component = () => {
                   </label>
                   <input
                     id="storage-location-input"
-                    class="settings-field min-w-0 flex-1 basis-[240px] font-mono"
+                    class="settings-field settings-storage-location-input min-w-0 flex-1 basis-[240px] font-mono"
                     value={target()}
                     placeholder="/Users/you/OpenScience-data"
                     spellcheck={false}

@@ -19,7 +19,7 @@ import {
   IconSettings,
 } from "@/atlas/shared/Icon"
 import { FONT_CODE, FONT_MONO, FONT_SANS } from "@/styles/tokens"
-import type { ArtifactContext } from "./context"
+import { resolveArtifactPath, type ArtifactContext } from "./context"
 import {
   filterReviewerFindings,
   inspectorTabs,
@@ -119,6 +119,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
   const params = useParams()
   const dialog = useDialog()
   const [tab, setTab] = createSignal<InspectorTab>("details")
+  const path = () => resolveArtifactPath(props.context.directory, props.context.path)
   const query = (path?: string) => ({
     path,
     sessionID: params.id && params.id !== "new" ? params.id : undefined,
@@ -127,7 +128,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
   const [records, api] = createResource(
     () => ({
       id: props.context.id,
-      path: props.context.path,
+      path: path(),
       directory: props.context.directory,
       sessionID: params.id && params.id !== "new" ? params.id : undefined,
     }),
@@ -179,7 +180,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
     toast.success("Added to context", props.context.name)
   }
   const download = async () => {
-    const response = await sdk.request("/file/raw", undefined, query(props.context.path)).catch(() => undefined)
+    const response = await sdk.request("/file/raw", undefined, query(path())).catch(() => undefined)
     if (!response?.ok) {
       toast.error("Download failed", response ? `${response.status}` : "Request failed")
       return
@@ -212,7 +213,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
   }
   const addAnnotation = (body: string) =>
     mutateAnnotation("/file/annotations", "POST", {
-      path: props.context.path,
+      path: path(),
       body,
       anchor:
         props.context.inspection?.selection?.kind === "molecule"
@@ -284,7 +285,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
   }
   const runReview = () =>
     mutateReview("/file/reviews", "POST", {
-      path: props.context.path,
+      path: path(),
       actor: actor(),
     })
   const resolveFinding = (report: string, finding: string, status: "resolved" | "overridden", reason: string) =>

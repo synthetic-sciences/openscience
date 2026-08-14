@@ -130,6 +130,45 @@ test("trust revocation acknowledges eviction of loaded project commands and tool
   })
 }, 30_000)
 
+test("filesystem authority changes do not re-enter a tool module during initialization", async () => {
+  await using external = await tmpdir()
+  await using tmp = await tmpdir({ git: true })
+  const modules = {
+    bootstrap: new URL("../../src/project/bootstrap.ts", import.meta.url).href,
+    instance: new URL("../../src/project/instance.ts", import.meta.url).href,
+    session: new URL("../../src/session/index.ts", import.meta.url).href,
+    filesystem: new URL("../../src/session/filesystem.ts", import.meta.url).href,
+    biology: new URL("../../src/tool/biology/notebook.ts", import.meta.url).href,
+  }
+  const script = [
+    `import { InstanceBootstrap } from ${JSON.stringify(modules.bootstrap)}`,
+    `import { Instance } from ${JSON.stringify(modules.instance)}`,
+    `import { Session } from ${JSON.stringify(modules.session)}`,
+    `import { SessionFilesystem } from ${JSON.stringify(modules.filesystem)}`,
+    "const [directory, external] = process.argv.slice(1)",
+    "await Instance.provide({ directory, init: InstanceBootstrap, fn: async () => {",
+    "  const session = await Session.create({})",
+    "  try {",
+    `    const [biology, grant] = await Promise.all([import(${JSON.stringify(modules.biology)}), SessionFilesystem.grant({ sessionID: session.id, path: external, access: 'read', scope: 'session' })])`,
+    "    if (!biology.NotebookTool || grant.path !== external) throw new Error('concurrent initialization result mismatch')",
+    "  } finally {",
+    "    await Session.remove(session.id)",
+    "    await Instance.dispose()",
+    "  }",
+    "} })",
+  ].join("\n")
+  const child = Bun.spawn([process.execPath, "-e", script, tmp.path, external.path], {
+    cwd: tmp.path,
+    env: { ...process.env },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const code = await Promise.race([child.exited, Bun.sleep(10_000).then(() => -1)])
+  if (code === -1) child.kill("SIGKILL")
+  const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
+  expect(code, `${stdout}\n${stderr}`).toBe(0)
+}, 15_000)
+
 test("the durable authority watcher evicts project execution caches in another process", async () => {
   await using tmp = await tmpdir({
     git: true,

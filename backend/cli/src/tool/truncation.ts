@@ -1,16 +1,17 @@
 import fs from "fs/promises"
 import path from "path"
-import { Global } from "../global"
 import { Identifier } from "../id/id"
 import { PermissionNext } from "../permission/next"
 import type { Agent } from "../agent/agent"
 import { Scheduler } from "../scheduler"
+import { SessionFilesystem } from "../session/filesystem"
+import { ToolOutputPath } from "./tool-output-path"
 
 export namespace Truncate {
   export const MAX_LINES = 2000
   export const MAX_BYTES = 50 * 1024
-  export const DIR = path.join(Global.Path.data, "tool-output")
-  export const GLOB = path.join(DIR, "*")
+  export const DIR = ToolOutputPath.root
+  export const GLOB = ToolOutputPath.glob
   const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
   const HOUR_MS = 60 * 60 * 1000
 
@@ -20,6 +21,7 @@ export namespace Truncate {
     maxLines?: number
     maxBytes?: number
     direction?: "head" | "tail"
+    sessionID?: string
   }
 
   export function init() {
@@ -92,6 +94,12 @@ export namespace Truncate {
     const id = Identifier.ascending("tool")
     const filepath = path.join(DIR, id)
     await Bun.write(Bun.file(filepath), text)
+    if (options.sessionID?.startsWith("ses_")) {
+      await SessionFilesystem.grantToolOutput({
+        sessionID: options.sessionID,
+        path: filepath,
+      })
+    }
 
     const hint = hasTaskTool(agent)
       ? `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`

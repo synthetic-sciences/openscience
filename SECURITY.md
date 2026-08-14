@@ -4,9 +4,11 @@
 
 OpenScience is an AI agent that runs locally on your machine. The agent can run shell commands, read and write files, and access the web.
 
-### No sandbox
+### Execution sandbox
 
-OpenScience does not sandbox the agent. The permission system prompts you before the agent runs a command or writes a file, so you stay aware of what it is doing. It is not an isolation boundary. If you need real isolation, run OpenScience inside a container or a VM.
+The permission system prompts you before the agent runs a command or writes a file, so you stay aware of what it is doing. A permission prompt is not an isolation boundary by itself, and the execution sandbox is off by default.
+
+When enabled, OpenScience wraps shell commands and Python/R kernel code in an OS sandbox: macOS Seatbelt or Linux bubblewrap. It confines writes to the workspace and approved paths and can deny network egress. Run `openscience sandbox enable`, then `openscience sandbox test`; if the test does not report **Containment verified**, do not rely on it. Reads and local IPC remain available, Windows has no sandbox backend, and the boundary is not a full jail. Use a container or VM for hostile code.
 
 ### Server mode
 
@@ -17,7 +19,8 @@ Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforc
 | Category                    | Why                                                                  |
 | --------------------------- | -------------------------------------------------------------------- |
 | Server access when opted in | If you enable server mode, API access is expected behavior.          |
-| Sandbox escapes             | The permission system is not a sandbox.                              |
+| Full read isolation         | The sandbox confines writes; it does not hide readable local files.  |
+| Windows sandboxing          | Windows has no execution-sandbox backend yet.                        |
 | LLM provider data handling  | Data you send to a provider is governed by that provider's policies. |
 | MCP server behavior         | External MCP servers you configure are outside the trust boundary.   |
 | Malicious config files      | You control your own config; editing it is not an attack.            |
@@ -27,10 +30,10 @@ Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforc
 Security fixes ship in the latest release on npm (`@synsci/openscience`). Please
 upgrade to the newest version before reporting — earlier versions are not patched.
 
-| Version        | Supported |
-| -------------- | --------- |
-| latest `1.2.x` | ✅        |
-| older          | ❌        |
+| Version            | Supported |
+| ------------------ | --------- |
+| latest npm release | ✅        |
+| older releases     | ❌        |
 
 ## Reporting a vulnerability
 

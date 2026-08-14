@@ -1,15 +1,19 @@
 import { test, expect } from "./fixtures"
 import { openWorkspaceFile } from "./utils"
 
-const view = (page: import("@playwright/test").Page) => page.locator('[data-component="file-view"]')
+const view = (page: import("@playwright/test").Page) => page.locator('[data-component="file-view"]:visible')
 
 test("markdown files render and can toggle their editable source", async ({ page, openSession }) => {
   await openSession()
   await openWorkspaceFile(page, "README.md")
 
-  await expect(view(page).locator("[data-component=markdown].atlas-md")).toBeVisible()
-  await expect(page.getByText("The open-source AI workbench for scientific research", { exact: true })).toBeVisible()
-  await view(page).getByRole("tab", { name: "Source", exact: true }).click()
+  // A README with a centered hero is intentionally split into two sanitized
+  // Markdown regions, so assert the preview container instead of assuming one.
+  await expect(view(page).locator(".atlas-file-document")).toBeVisible()
+  await expect(
+    view(page).getByText("The open-source AI workbench for scientific research", { exact: true }),
+  ).toBeVisible()
+  await view(page).getByRole("tab", { name: "Edit", exact: true }).click()
   await expect(view(page).getByRole("tab", { name: "Preview", exact: true })).toBeVisible()
   await expect(view(page).getByLabel("File source")).toHaveValue(
     /### The open-source AI workbench for scientific research/,
@@ -33,7 +37,7 @@ test("PDF files rasterize their pages without an error", async ({ page, openSess
 
   const viewer = page.locator('[data-component="science-pdf"]')
   await expect(viewer).toBeVisible()
-  await expect(viewer.locator('[data-slot="pdf-header"]')).toContainText("1 page", { timeout: 30_000 })
+  await expect(viewer.locator('[data-slot="pdf-header"]')).toContainText("Page 1 of 1", { timeout: 30_000 })
   const canvas = viewer.locator('[data-slot="pdf-body"] canvas').first()
   await expect(canvas).toBeVisible()
   expect(await canvas.evaluate((node: HTMLCanvasElement) => node.width * node.height)).toBeGreaterThan(0)
@@ -51,7 +55,7 @@ test("XYZ files open as interactive 3D chemistry with source access", async ({ p
   await expect(summary).toContainText("3 atoms")
   await expect(summary).toContainText("H 2")
   await expect(summary).toContainText("O 1")
-  await expect(view(page).getByRole("tab", { name: "Source", exact: true })).toBeVisible()
+  await expect(view(page).getByRole("tab", { name: "Edit", exact: true })).toBeVisible()
   await expect(view(page).getByRole("button", { name: "Copy contents", exact: true })).toBeVisible()
   await expect(view(page).getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0)
 
@@ -72,7 +76,7 @@ test("XYZ files open as interactive 3D chemistry with source access", async ({ p
   await controls.getByRole("button", { name: "Export PNG", exact: true }).click()
   await expect((await download).suggestedFilename()).toMatch(/^water-structure\.png$/)
 
-  await view(page).getByRole("tab", { name: "Source", exact: true }).click()
+  await view(page).getByRole("tab", { name: "Edit", exact: true }).click()
   await expect(view(page).getByRole("tab", { name: "Preview", exact: true })).toBeVisible()
   await expect(view(page).getByLabel("File source")).toHaveValue(/water/)
 })

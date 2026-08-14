@@ -22,7 +22,7 @@ test("Models keeps ChatGPT Codex access first-class", async ({ page, gotoSession
   const dialog = await openSettings(page)
 
   await expect(dialog.getByRole("heading", { name: "Models", exact: true })).toBeVisible()
-  await expect(dialog.getByRole("heading", { name: "ChatGPT / Codex" })).toBeVisible()
+  await expect(dialog.getByRole("heading", { name: "Access and routing", exact: true })).toBeVisible()
   await expect(dialog.getByText("Sign in with ChatGPT", { exact: true }).first()).toBeVisible()
 })
 
@@ -33,7 +33,11 @@ test("models settings saves and removes a local provider key", async ({ page, go
     await gotoSession()
     const dialog = await openSettings(page)
 
-    await dialog.locator("select").selectOption("openai")
+    await dialog.getByRole("button", { name: /^Model provider / }).click()
+    await page
+      .locator('[data-slot="select-select-item"]')
+      .filter({ hasText: /^OpenAI$/ })
+      .click()
     await dialog.getByLabel("API key", { exact: true }).fill("sk-e2e-local-only")
     await dialog.getByRole("button", { name: "Save key", exact: true }).click()
 
@@ -45,11 +49,13 @@ test("models settings saves and removes a local provider key", async ({ page, go
       .toBe(true)
     await expect(dialog.getByText("OpenAI", { exact: true }).last()).toBeVisible()
 
-    page.once("dialog", (prompt) => prompt.accept())
     await dialog
       .getByRole("region", { name: "Provider keys", exact: true })
       .getByRole("button", { name: "Remove", exact: true })
       .click()
+    const confirmation = page.getByRole("alertdialog")
+    await expect(confirmation.getByText("Remove OpenAI key?", { exact: true })).toBeVisible()
+    await confirmation.getByRole("button", { name: "Remove key", exact: true }).click()
     await expect
       .poll(async () => {
         const response = await sdk.provider.list()

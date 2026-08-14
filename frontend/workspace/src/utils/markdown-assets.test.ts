@@ -41,6 +41,10 @@ describe("markdown asset resolution", () => {
   test("normalizes windows separators and duplicate slashes", () => {
     expect(resolvePath("notes\\paper.md", "figures//plot.png")).toBe("notes/figures/plot.png")
     expect(resolvePath("", "./a/./b.png")).toBe("a/b.png")
+    expect(resolvePath("/work/project/notes/paper.md", "../figures/plot.png")).toBe("/work/project/figures/plot.png")
+    expect(resolvePath("C:\\work\\project\\notes\\paper.md", "../figures/plot.png")).toBe(
+      "C:/work/project/figures/plot.png",
+    )
   })
 
   test("aligns mismatched loopback hostnames without changing the API port or project capability", () => {

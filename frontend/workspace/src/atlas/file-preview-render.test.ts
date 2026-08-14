@@ -9,7 +9,10 @@ describe("file preview markdown images", () => {
 
     expect(preview).toContain('import { assetUrl } from "@/utils/markdown-assets"')
     expect(preview).toContain("base: props.path")
-    expect(preview).toContain('url: (path) => sdk.request.url("/file/raw", { path, sessionID: sessionID() })')
+    expect(preview).toContain("url: (path) =>")
+    expect(preview).toContain('sdk.request.url("/file/raw", {')
+    expect(preview).toContain("path: resolveArtifactPath(directory(), path)")
+    expect(preview).toContain("sessionID: sessionID()")
     expect(preview).toContain('<Markdown class="atlas-md" text={view.draft} resolveImage={image} />')
   })
 

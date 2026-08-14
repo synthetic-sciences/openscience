@@ -64,6 +64,8 @@ describe("model control surface", () => {
     expect(settings).toContain("tabindex={catalogTab() === choice.key ? 0 : -1}")
     expect(settings.match(/onKeyDown=\{focusModelRadio\}/g)).toHaveLength(2)
     expect(settings).toContain("onKeyDown={onMenuKeyDown}")
+    expect(settings).toContain('window.addEventListener("keydown", dismiss, true)')
+    expect(settings).toContain('window.removeEventListener("keydown", dismiss, true)')
     expect(settings).not.toContain("<span data-model-menu-label>Advanced</span>")
     expect(settings).not.toContain("Auto-accept permissions")
     expect(settings).toContain('<DialogSettings initial="models" />')

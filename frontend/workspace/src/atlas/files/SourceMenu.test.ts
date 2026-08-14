@@ -15,10 +15,11 @@ const server = await createServer({
   resolve: { conditions: ["browser", "production"], dedupe: ["solid-js", "solid-js/web"] },
   ssr: { noExternal: true, resolve: { conditions: ["browser", "production"] } },
 })
-const [subject, web] = await Promise.all([
-  server.ssrLoadModule("/src/atlas/files/SourceMenu.tsx") as Promise<typeof import("./SourceMenu")>,
-  server.ssrLoadModule("solid-js/web") as Promise<typeof import("solid-js/web")>,
-])
+// Load Solid sequentially through Vite so the signal driving the refresh and
+// the component renderer share one owner/runtime.
+const core = (await server.ssrLoadModule("solid-js")) as typeof import("solid-js")
+const web = (await server.ssrLoadModule("solid-js/web")) as typeof import("solid-js/web")
+const subject = (await server.ssrLoadModule("/src/atlas/files/SourceMenu.tsx")) as typeof import("./SourceMenu")
 const cleanups: Array<() => void> = []
 
 afterAll(() => server.close())
@@ -210,6 +211,35 @@ describe("source menu", () => {
 
     expect(host.querySelector("[data-source-menu]")).toBeNull()
     expect(document.activeElement).toBe(trigger)
+  })
+
+  test("keeps the menu open and restores semantic focus when an async source refresh replaces its rows", async () => {
+    const [sources, setSources] = core.createSignal(SOURCES)
+    const host = mount(() =>
+      subject.SourceMenu({
+        get sources() {
+          return sources()
+        },
+        get active() {
+          return sources()[0]!
+        },
+        onPick: () => {},
+      }),
+    )
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await Promise.resolve()
+
+    const focused = document.activeElement as HTMLElement
+    expect(focused.getAttribute("data-source-item")).toBe("artifacts")
+
+    // A filesystem snapshot refresh rebuilds PaneSource objects. Browsers
+    // report the focused row's removal as focusout with no related target.
+    focused.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }))
+    setSources(SOURCES.map((source) => ({ ...source })))
+    await Promise.resolve()
+
+    expect(host.querySelector("[data-source-menu]")).not.toBeNull()
+    expect(document.activeElement?.getAttribute("data-source-item")).toBe("artifacts")
   })
 
   test("uses roving arrow navigation and keeps the invisible scrim out of the tab order", async () => {

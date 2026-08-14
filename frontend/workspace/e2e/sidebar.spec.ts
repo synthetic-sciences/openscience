@@ -42,7 +42,7 @@ test.describe("mobile workspace", () => {
     // The backdrop button spans the full viewport behind the drawer, so a
     // centered click lands on the drawer that covers it. Dispatch the click on
     // the backdrop element directly to exercise its close handler.
-    await page.getByRole("button", { name: "Close sessions" }).dispatchEvent("click")
+    await page.locator(".session-sidebar-backdrop").dispatchEvent("click")
     await expect(sidebar).toHaveAttribute("data-mobile-open", "false")
   })
 })

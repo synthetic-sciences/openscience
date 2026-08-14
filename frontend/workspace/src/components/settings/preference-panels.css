@@ -565,6 +565,10 @@
   font-variant-numeric: slashed-zero;
 }
 
+.settings-dialog .settings-storage-location-input {
+  font-family: var(--font-family-mono);
+}
+
 .settings-storage-usage-row {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto;

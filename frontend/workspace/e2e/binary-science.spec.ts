@@ -20,7 +20,7 @@ test("inspects and streams scientific binary containers", async ({ page, sdk, op
     await openConnectedFile(page, directory, "cells.h5ad")
     const h5ad = page.locator('[data-component="binary-science"][data-format="h5ad"]')
     await expect(h5ad).toBeVisible()
-    await expect(h5ad.getByText("signature valid", { exact: true })).toBeVisible()
+    await expect(h5ad.getByText("Signature valid", { exact: true })).toBeVisible()
     await expect(h5ad.getByText("H5AD container detected", { exact: true })).toBeVisible()
     await expect(h5ad.getByText("python -m pip install h5py anndata", { exact: true })).toBeVisible()
 

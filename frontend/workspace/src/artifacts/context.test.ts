@@ -4,6 +4,7 @@ import {
   createArtifactContext,
   createArtifactState,
   inferArtifactKind,
+  resolveArtifactPath,
   type ArtifactContext,
   type ArtifactStorage,
 } from "./context"
@@ -39,6 +40,11 @@ describe("artifact context", () => {
       kind: "structure",
       scienceKind: "chem-3d",
     })
+  })
+
+  test("resolves project-relative paths without rewriting external paths", () => {
+    expect(resolveArtifactPath("/work/project/", "results/water.xyz")).toBe("/work/project/results/water.xyz")
+    expect(resolveArtifactPath("/work/project", "/external/water.xyz")).toBe("/external/water.xyz")
   })
 
   test("classifies scientific and publication formats without pretending unknown files are reports", () => {

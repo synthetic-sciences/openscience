@@ -19,6 +19,7 @@ import { OpenScience, InsufficientCreditsError } from "@/openscience"
 import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource, llmBillingMode } from "./billing-gate"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
+import { ToolRetryGuard } from "./tool-retry-guard"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -149,12 +150,14 @@ export namespace SessionProcessor {
             },
           }
         } else {
+          const metadata = ToolRetryGuard.errorMetadata(outcome.error)
           terminal = {
             ...match,
             state: {
               status: "error",
               input: outcome.input ?? match.state.input,
               error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
+              ...(metadata ? { metadata } : {}),
               time: { start: match.state.time.start, end: outcome.endedAt },
             },
           }

@@ -37,6 +37,7 @@ describe("session-scoped file requests", () => {
     expect(inspector).toContain('read("/file/provenance", current.path)')
     expect(manuscript).toContain('sdk.request("/file/content", undefined, query(path))')
     expect(manuscript).toContain('sdk.request.url("/file/raw", query(path))')
+    expect(manuscript).toContain('sdk.request.url("/file/raw", query(figure.path))')
   })
 
   test("keeps project-scoped drafts stable across session navigation and blocks stale artifact saves", () => {

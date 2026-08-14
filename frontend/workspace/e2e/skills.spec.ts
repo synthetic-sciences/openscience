@@ -16,21 +16,27 @@ test("skills can be searched and disabled", async ({ page, gotoSession }) => {
   await expect(dialog.getByText(/\d+ enabled/).first()).toBeVisible()
 
   const search = dialog.getByPlaceholder("Search skills")
-  // Source-mode runs include the on-disk bundled catalog. The standalone
-  // binary intentionally resolves that catalog from Atlas after login, but it
-  // always embeds its system skills so account-free installs remain usable.
-  const knownSkill = process.env.OPENSCIENCE_E2E_PACKAGED === "1" ? "initialize-atlas-graph" : "scientific-writing"
+  // Exercise search against the catalog the runtime actually returned. Skill
+  // bundles can differ across source, packaged, and signed-in installations.
+  const firstSkill = dialog.getByRole("listitem").first()
+  const slug = (await firstSkill.locator("code").innerText()).trim()
+  expect(slug).toMatch(/^\/[a-z0-9-]+$/)
+  const knownSkill = slug.slice(1)
   await search.fill(knownSkill)
-  await expect(dialog.getByText(knownSkill, { exact: true }).first()).toBeVisible()
+  const skill = dialog.getByRole("listitem").filter({ hasText: `/${knownSkill}` })
+  await expect(skill).toBeVisible()
 
-  await search.fill("")
-  const toggle = dialog.locator('[data-action="skill-toggle"]').first()
+  const toggle = skill.locator('[data-action="skill-toggle"]')
   await expect(toggle).toBeVisible()
   const initiallyEnabled = (await toggle.getAttribute("data-checked")) !== null
   await toggle.click()
   await expect.poll(async () => (await toggle.getAttribute("data-checked")) !== null).toBe(!initiallyEnabled)
   await toggle.click()
   await expect.poll(async () => (await toggle.getAttribute("data-checked")) !== null).toBe(initiallyEnabled)
+  // The checked state is optimistic. Wait until both serialized config writes
+  // (and their instance disposals) have completed before this browser context
+  // closes, otherwise the next spec can bootstrap against an in-flight reset.
+  await expect(skill).not.toHaveAttribute("aria-busy", "true", { timeout: 15_000 })
 })
 
 // The product bug is fixed: the add-skill dropdown now mounts inside the

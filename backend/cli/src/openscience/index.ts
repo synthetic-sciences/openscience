@@ -18,6 +18,7 @@ import {
 import { resolveAtlasPackageDir } from "./atlas-package"
 import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 import { CredentialLifecycle } from "../credentials/lifecycle"
+import { ToolOutputPath } from "../tool/tool-output-path"
 
 const log = Log.create({ service: "openscience" })
 
@@ -1203,6 +1204,10 @@ export namespace OpenScience {
       CredentialLifecycle.revisionPath(),
       path.join(Global.Path.data, "mcp-auth.json"),
       path.join(Global.Path.data, "file-trash"),
+      // Exact truncated outputs are broker capabilities. Mask the entire
+      // enclave inside arbitrary subprocesses so a historical broad parent
+      // grant cannot expose or mutate another session's files.
+      ToolOutputPath.root,
       path.join(getSyncedConfigDir(), "synced-env.json"),
       path.join(getSyncedConfigDir(), syncedGcpFilename),
       process.env.ATLAS_CLI_CONFIG_PATH || path.join(home, ".config", "atlas-cli", "config.json"),

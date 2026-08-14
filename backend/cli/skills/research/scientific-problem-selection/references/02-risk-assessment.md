@@ -1,5 +1,7 @@
 # SKILL 2: Risk Assessment and Assumption Analysis
 
+> Modified by Synthetic Sciences: formatting-only normalization of trailing whitespace.
+
 ## Overview
 This skill helps scientists systematically identify, quantify, and manage project risk through rigorous assumption analysis. The goal is not to eliminate risk—risk-free projects tend to be incremental—but to name it, quantify it, and work steadily to chip away at it. This skill builds directly on the Problem Ideation Document from Skill 1.
 

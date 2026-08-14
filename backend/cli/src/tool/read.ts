@@ -40,12 +40,14 @@ export const ReadTool = Tool.define("read", {
     const filepath = authorized?.path ?? requested
     const title = path.relative(Instance.worktree, filepath)
 
-    await ctx.ask({
-      permission: "read",
-      patterns: [filepath],
-      always: ["*"],
-      metadata: {},
-    })
+    if (!authorized?.managedToolOutput) {
+      await ctx.ask({
+        permission: "read",
+        patterns: [filepath],
+        always: ["*"],
+        metadata: {},
+      })
+    }
 
     const snapshot = await SafeFileIO.optional(filepath)
     if (!snapshot) {

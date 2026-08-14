@@ -558,12 +558,16 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         await Session.assertDirectory(sessionID)
         const source = c.req.header("x-openscience-abort-source") === "runner_timeout" ? "runner_timeout" : "user"
+        const controller = SessionPrompt.activeController(sessionID)
         try {
-          await RuntimeEvents.cancel({ sessionID, source })
+          await RuntimeEvents.requestCancel({ sessionID, source })
         } catch (error) {
           log.error("failed to record runtime cancellation", { sessionID, source, error })
         } finally {
-          SessionPrompt.cancel(sessionID)
+          // Durable cancellation can await a foreign owner. Bind the local
+          // abort to the controller observed when this HTTP request arrived so
+          // an old/stale request can never cancel a newer prompt.
+          if (controller) SessionPrompt.cancel(sessionID, controller)
         }
         return c.json(true)
       },

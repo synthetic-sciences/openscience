@@ -1,4 +1,7 @@
+import { fileURLToPath } from "node:url"
+
 const MODEL_ID = "e2e/echo"
+const PROJECT_PACKAGE = fileURLToPath(new URL("../../../package.json", import.meta.url))
 
 export const E2E_TOOL_SENTINELS = {
   question: "E2E_TOOL_QUESTION",
@@ -112,7 +115,10 @@ function toolCallFor(body: ChatRequest): { call: ToolCall; sentinel: string } | 
       type: "function",
       function: {
         name: "read",
-        arguments: JSON.stringify({ filePath: "package.json", limit: 1 }),
+        // Agent-relative paths resolve inside the isolated session workspace.
+        // Use the fixture repository's real package file so this flow tests
+        // permission approval rather than failing on an unrelated missing file.
+        arguments: JSON.stringify({ filePath: PROJECT_PACKAGE, limit: 1 }),
       },
     },
   }

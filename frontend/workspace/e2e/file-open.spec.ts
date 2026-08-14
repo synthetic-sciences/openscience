@@ -8,15 +8,15 @@ test("open files become tabs in the right pane", async ({ page, openSession }) =
   await openSession()
 
   await openWorkspaceFile(page, "package.json")
-  const view = page.locator('[data-component="file-view"]')
+  const view = page.locator('[data-component="file-view"]:visible')
   await expect(view).toBeVisible()
   await expect(view).toContainText("@synsci/monorepo")
   await expect(view.getByRole("tab", { name: "Preview", exact: true })).toBeVisible()
-  await expect(view.getByRole("tab", { name: "Source", exact: true })).toBeVisible()
+  await expect(view.getByRole("tab", { name: "Edit", exact: true })).toBeVisible()
 
   // Opening a second file adds a tab and activates it.
   await openWorkspaceFile(page, "README.md")
-  const tabs = page.locator('.files-tabs [role="tab"]')
+  const tabs = page.getByRole("tablist", { name: "Contextual work tabs", exact: true }).getByRole("tab")
   await expect(tabs).toHaveCount(3)
   await expect(fileTab(page, "package.json")).toHaveAttribute("aria-selected", "false")
 
@@ -35,13 +35,13 @@ test("open files become tabs in the right pane", async ({ page, openSession }) =
   await page.getByRole("button", { name: "Open project files", exact: true }).click()
   await fileTab(page, "package.json").focus()
   await page.keyboard.press("Alt+ArrowRight")
-  await expect(tabs.nth(1)).toHaveAttribute("title", "README.md")
+  await expect(tabs.nth(1)).toHaveAccessibleName("README.md")
 
   await page.getByRole("button", { name: "Close README.md", exact: true }).click()
   await page.getByRole("button", { name: "Close package.json", exact: true }).click()
   await expect(fileTab(page, "README.md")).toHaveCount(0)
   await expect(fileTab(page, "package.json")).toHaveCount(0)
-  await expect(tabs).toHaveCount(1)
+  await expect(page.getByRole("tab", { name: "Files", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
 test("can edit, discard, save, and close a text file", async ({ page, sdk, openSession }) => {
@@ -55,18 +55,19 @@ test("can edit, discard, save, and close a text file", async ({ page, sdk, openS
     await sdk.session.filesystem.grant({ sessionID, path: directory, access: "write", scope: "session" })
 
     const tab = await openConnectedFile(page, directory, filename)
-    await page.getByRole("tab", { name: "Source", exact: true }).click()
+    const view = page.locator('[data-component="file-view"]:visible')
+    await view.getByRole("tab", { name: "Edit", exact: true }).click()
 
-    const editor = page.getByLabel("File source")
+    const editor = view.getByRole("textbox", { name: "File source", exact: true })
     await expect(editor).toHaveValue("original\n")
     await editor.fill("discarded\n")
-    await page.getByRole("button", { name: "Discard changes", exact: true }).click()
+    await view.getByRole("button", { name: "Discard changes", exact: true }).click()
     await expect(editor).toHaveValue("original\n")
 
     await editor.fill("saved\n")
-    await page.getByRole("button", { name: "Save changes", exact: true }).click()
+    await view.getByRole("button", { name: "Save changes", exact: true }).click()
     await expect.poll(() => readFileSync(filepath, "utf8")).toBe("saved\n")
-    await expect(page.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0)
+    await expect(view.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0)
 
     await page.getByRole("button", { name: `Close ${filename}`, exact: true }).click()
     await expect(tab).toHaveCount(0)
@@ -86,7 +87,7 @@ test("opens ordinary Markdown as a focused document", async ({ page, sdk, openSe
     await sdk.session.filesystem.grant({ sessionID, path: directory, access: "write", scope: "session" })
     await openConnectedFile(page, directory, filename)
 
-    const view = page.locator('[data-component="file-view"]')
+    const view = page.locator('[data-component="file-view"]:visible')
     await expect(view.getByRole("heading", { name: "Notes", exact: true })).toBeVisible()
     await expect(view.locator('[data-component="manuscript-workbench"]')).toHaveCount(0)
     await expect(view.getByRole("button", { name: "Citations", exact: true })).toHaveCount(0)
@@ -94,7 +95,7 @@ test("opens ordinary Markdown as a focused document", async ({ page, sdk, openSe
     await expect(view.getByRole("button", { name: "Review", exact: true })).toHaveCount(0)
     await expect(view.getByRole("button", { name: "Publish", exact: true })).toHaveCount(0)
 
-    await view.getByRole("tab", { name: "Source", exact: true }).click()
+    await view.getByRole("tab", { name: "Edit", exact: true }).click()
     const editor = view.getByLabel("File source")
     await expect(editor).toHaveValue("# Notes\n\nA focused research note.\n")
     await editor.fill("# Notes\n\nA calmer research note.\n")

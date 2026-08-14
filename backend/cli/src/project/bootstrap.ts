@@ -26,6 +26,9 @@ import { MCP } from "@/mcp"
 import { CredentialProcessLedger } from "@/credentials/process-ledger"
 import { Agent } from "@/agent/agent"
 import { ToolRegistry } from "@/tool/registry"
+import { RuntimeEvents } from "@/runtime/events"
+import { SessionPrompt } from "@/session/prompt"
+import { BiologyKernelLifecycle } from "@/tool/biology/kernel-lifecycle"
 
 async function invalidateProjectTokenCache(projectID: string) {
   const { Provider } = await import("@/provider/provider")
@@ -52,9 +55,7 @@ async function invalidateProjectExecutionCaches() {
 async function stopSessions(sessionIDs: string[]) {
   const sessions = [...new Set(sessionIDs)]
   const projectID = Instance.project.id
-  const biology = import("@/tool/biology/notebook").then((module) =>
-    Promise.all(sessions.map((sessionID) => module.releaseBiologySession(projectID, sessionID))),
-  )
+  const biology = Promise.all(sessions.map((sessionID) => BiologyKernelLifecycle.releaseSession(projectID, sessionID)))
   const jobs = import("../compute/jobs").then((module) =>
     Promise.all(sessions.map((sessionID) => module.ComputeJobs.cancelSession(sessionID))),
   )
@@ -143,7 +144,7 @@ const authoritySync = Instance.state(
               return true
             }
             const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(projectID))
-            const biology = import("@/tool/biology/notebook").then((module) => module.releaseBiologyProject(projectID))
+            const biology = BiologyKernelLifecycle.releaseProject(projectID)
             await Promise.all([
               Pty.releaseAll(),
               KernelRuntime.releaseProject(projectID),
@@ -174,6 +175,31 @@ const authoritySync = Instance.state(
   },
 )
 
+const runtimeCancellationSync = Instance.state(
+  () =>
+    RuntimeEvents.watchCancellationRequests(async (request) => {
+      await applyRuntimeCancellationRequest(request)
+    }),
+  async (watcher) => {
+    await watcher[Symbol.asyncDispose]()
+  },
+)
+
+export function applyRuntimeCancellationRequest(request: {
+  sessionID: string
+  runID: string
+  source: "user" | "runner_timeout"
+}) {
+  return RuntimeEvents.cancel({
+    ...request,
+    // Run the controller abort synchronously after the exact journal owner is
+    // terminalized but before terminal event delivery yields. A stale request
+    // that no longer owns the journal never invokes this callback and cannot
+    // cancel a newer prompt in the same session.
+    onCancelled: () => SessionPrompt.cancel(request.sessionID),
+  })
+}
+
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
@@ -186,6 +212,7 @@ export async function InstanceBootstrap() {
   Truncate.init()
   filesystemSync()
   await authoritySync()
+  runtimeCancellationSync()
 
   // Scratch workspaces: remove orphans whose session record is gone.
   SessionFilesystem.sweep().catch(() => {})
@@ -212,9 +239,7 @@ export async function InstanceBootstrap() {
     const jobs = import("../compute/jobs").then((module) =>
       module.ComputeJobs.cancelSession(payload.properties.info.id),
     )
-    const biology = import("@/tool/biology/notebook").then((module) =>
-      module.releaseBiologySession(Instance.project.id, payload.properties.info.id),
-    )
+    const biology = BiologyKernelLifecycle.releaseSession(Instance.project.id, payload.properties.info.id)
     await Promise.all([
       Pty.releaseSession(payload.properties.info.id),
       KernelRuntime.removeSession(Instance.project.id, payload.properties.info.id),
@@ -237,9 +262,7 @@ export async function InstanceBootstrap() {
       return
     }
     const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(Instance.project.id))
-    const biology = import("@/tool/biology/notebook").then((module) =>
-      module.releaseBiologyProject(Instance.project.id),
-    )
+    const biology = BiologyKernelLifecycle.releaseProject(Instance.project.id)
     await Promise.all([
       Pty.releaseAll(),
       KernelRuntime.releaseProject(Instance.project.id),

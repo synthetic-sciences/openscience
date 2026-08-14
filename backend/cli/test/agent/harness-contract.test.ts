@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test"
 import { SystemPrompt } from "../../src/session/system"
-import { DELEGATION_PROFILES, MAX_CHILD_AGENTS, NORMAL_CHILD_AGENTS, TASK_WALL_CLOCK_MS } from "../../src/tool/task"
+import {
+  DELEGATION_PROFILES,
+  MAX_CHILD_AGENTS,
+  NORMAL_CHILD_AGENTS,
+  TASK_WALL_CLOCK_MS,
+  isComputeDelegationProfile,
+} from "../../src/tool/task"
 
 const root = new URL("../../src/", import.meta.url)
 const read = (path: string) => Bun.file(new URL(path, root)).text()
@@ -54,6 +60,8 @@ test("delegation is rare, bounded, and observable", async () => {
   expect(NORMAL_CHILD_AGENTS).toBe(2)
   expect(MAX_CHILD_AGENTS).toBe(4)
   expect(TASK_WALL_CLOCK_MS).toEqual({ normal: 600_000, ultra: 1_200_000 })
+  expect(DELEGATION_PROFILES.filter(isComputeDelegationProfile)).toEqual(["execute"])
+  expect(["biology", "ml", "physics"].some(isComputeDelegationProfile)).toBe(false)
   expect(prompt).toContain("default to zero children")
   expect(prompt).toContain("at most two")
   expect(prompt).toContain("at most four")

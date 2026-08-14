@@ -1,6 +1,6 @@
 ---
 title: "Security"
-description: "The trust boundary, credential storage, and subprocess environment hygiene — in an open-source agent you can audit end to end."
+description: "The trust boundary, credential storage, execution sandbox, and subprocess environment hygiene — in an open-source agent you can audit end to end."
 icon: "shield-check"
 ---
 
@@ -16,22 +16,20 @@ You can add a real boundary: the opt-in [execution sandbox](/openscience/sandbox
 
 | Surface | Where | Notes |
 | --- | --- | --- |
-| BYOK provider keys | Environment variables or the local credential store | Never leave your machine; requests go straight to the provider. No account required. |
-| Atlas session | `~/.config/openscience/config.json` | `thk_*` key created by `openscience login`; revocable from the dashboard. |
-| Synced service credentials | `~/.config/openscience/credentials.json` | Present only when [connected to Atlas](/openscience/atlas); refresh with `openscience sync`. |
+| BYOK provider keys | Environment variables or `<data-root>/auth.json` | Model requests go straight to the provider. No account required. Approved skill subprocesses can receive supported user-owned keys; arbitrary Python/R kernels receive a minimal environment without provider keys. |
+| Atlas session | `<data-root>/openscience-session.json` | `thk_*` key created by `openscience login`; revocable from the dashboard. |
+| Synced service credentials | `<data-root>/credentials.json` | Present only when [connected to Atlas](/openscience/atlas); encrypted at rest and refreshed with `openscience sync`. |
 | Native binary (curl install) | `~/.openscience/bin/openscience` | Added to PATH through your shell rc. |
 
-Override the config parent directory with `XDG_CONFIG_HOME`. Run `openscience debug paths` to print the resolved data, config, cache, and state directories on your machine.
+The data root defaults to `~/.openscience` and can be relocated from Storage settings or with `OPENSCIENCE_DATA_DIR`. Override the config directory with `OPENSCIENCE_CONFIG_DIR` (or its XDG parent with `XDG_CONFIG_HOME`). Run `openscience debug paths` to print the resolved data, config, cache, and state directories on your machine.
 
-## Subprocess environment allow-list
+## Subprocess environment boundaries
 
-When the agent shells out, it rebuilds the subprocess environment from a curated allow-list rather than inheriting your full shell. Provider keys stay out of commands that have no business seeing them.
+Shell tools receive a sanitized environment: managed Atlas tokens and control-plane variables are stripped, while ordinary user environment values and supported user-owned provider or service credentials may be available to approved commands. Credential files, SSH/cloud config, and other sensitive paths are denied to OS-sandboxed Python/R kernels; kernels also receive a minimal runtime and locale environment without provider, Atlas, or cloud keys.
 
-**Always passed through:** `PATH`, `HOME`, `USER`, `SHELL`, `TERM`, `LANG`, `LC_*`, `TMPDIR`, `XDG_*`, `EDITOR`, `VISUAL`.
+Managed Modal credentials are narrower still: they resolve only inside the trusted compute adapter after approval and are not injected into general shell or kernel environments.
 
-**Passed through only when a subprocess needs them:** `HF_TOKEN`, `WANDB_API_KEY`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, `LAMBDA_API_KEY`, `RUNPOD_API_KEY`, `PRIME_INTELLECT_API_KEY`, `TENSORPOOL_API_KEY`, `VAST_API_KEY`, `TINKER_API_KEY`, `LANGSMITH_API_KEY`, `PINECONE_API_KEY`, `TOGETHER_API_KEY`, `GROQ_API_KEY`, `FIREWORKS_API_KEY`, `OPENROUTER_API_KEY`.
-
-**Explicitly filtered out, even if set in your shell:** provider credentials such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, and `META_MODEL_API_KEY`. The agent talks to model providers itself; subprocesses do not need these keys.
+The browser's interactive system terminal is a user-owned shell rather than an agent tool. It inherits the user's environment (minus terminal-session bookkeeping), so treat it like any terminal you launch yourself.
 
 ## Output redaction
 
@@ -44,9 +42,9 @@ Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforc
 ## What leaves your machine
 
 - Prompts and responses sent to your model provider, governed by that provider's policy.
-- Nothing else, in BYOK mode. If you [connect to Atlas](/openscience/atlas), synced credentials and usage metering are held against your account.
+- Nothing else automatically, in BYOK mode. If you [connect to Atlas](/openscience/atlas), synced credentials and usage metering are held against your account.
 
-Source files stay local unless the agent explicitly uploads them through a tool you approve, and local environment variables outside the allow-list above are never forwarded.
+Source files stay local unless the agent explicitly uploads them through a tool you approve. Approved shell commands and user-owned terminals can still access credentials in their environment, while Python/R kernels stay on the minimal environment described above.
 
 ## Reporting a vulnerability
 

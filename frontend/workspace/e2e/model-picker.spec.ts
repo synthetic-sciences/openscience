@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures"
-import { modelPopoverSelector, modelTriggerSelector } from "./utils"
+import { effortChipSelector, modelPopoverSelector, modelTriggerSelector } from "./utils"
 
 test("smoke model selection updates the composer trigger", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -17,7 +17,7 @@ test("smoke model selection updates the composer trigger", async ({ page, gotoSe
   const target = picker.locator('[data-model-catalog-item][aria-checked="false"]').first()
   await expect(target).toBeVisible()
 
-  const name = (await target.locator("strong").innerText()).trim()
+  const name = (await target.locator(".model-settings-model > strong").textContent())?.trim() ?? ""
   if (!name) throw new Error("Failed to resolve model name from list item")
   await target.click()
 
@@ -25,7 +25,7 @@ test("smoke model selection updates the composer trigger", async ({ page, gotoSe
   await expect(trigger).toContainText(name)
 })
 
-test("effort back-navigation stays compact and Manage models opens Customize", async ({ page, gotoSession }) => {
+test("effort selection closes cleanly and Manage models opens Customize", async ({ page, gotoSession }) => {
   await page.setViewportSize({ width: 1280, height: 720 })
   await gotoSession()
 
@@ -35,14 +35,18 @@ test("effort back-navigation stays compact and Manage models opens Customize", a
   await picker.locator('[data-model-menu-row="effort"]').click()
   await picker.locator('[data-model-option="effort"][data-model-option-id="high"]').click()
 
+  await expect(picker).toBeHidden()
+  await expect(page.locator(effortChipSelector)).toHaveText("High")
+
+  await trigger.click()
   await expect(picker).toHaveAttribute("data-model-settings-view", "root")
-  await expect(picker.getByText("Quick models", { exact: true })).toBeVisible()
+  await expect(picker.getByText("Suggested models", { exact: true })).toBeVisible()
   expect(await picker.locator("[data-model-quick]").count()).toBeLessThanOrEqual(4)
   await expect.poll(() => picker.evaluate((element) => element.scrollTop)).toBe(0)
 
   await picker.locator('[data-model-menu-row="model"]').click()
   await expect(picker).toHaveAttribute("data-model-settings-view", "models")
-  const manage = picker.getByRole("button", { name: "Manage models", exact: true })
+  const manage = picker.getByRole("button", { name: /^Manage models/ })
   await expect(manage).toBeVisible()
 
   const layout = await picker.evaluate((element) => {

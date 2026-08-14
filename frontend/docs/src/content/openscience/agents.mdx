@@ -1,38 +1,41 @@
 ---
 title: "Agents"
-description: "The research agent roster — a default research agent, three domain specialists, critique sub-agents, and a read-only plan mode — plus how to build your own."
+description: "One adaptive Research agent, bounded internal task profiles, a read-only plan mode, and custom agent profiles."
 icon: "bot"
 ---
 
-The default agent is `research`, a scientific research agent that runs the whole loop: literature review, hypothesis, code, experiments on real compute, analysis, and write-up. Three domain specialists ship alongside it, backed by read-only critique sub-agents and a `plan` mode that cannot edit files.
+`research` is the single user-facing built-in agent. It owns the whole loop: literature review, hypothesis, code, experiments on real compute, analysis, and write-up. It loads narrow domain skills when they help and delegates only when a bounded piece of work is genuinely independent.
 
 ## Built-in roster
 
 | Agent | Role | What it does |
 | --- | --- | --- |
-| `research` | Default | Scientific research across the full skill library — literature, data analysis, GPU compute, and synthesis. |
-| `biology` | Specialist | Computational biology: bioinformatics workflows and 30+ biological database integrations. |
-| `physics` | Specialist | Computational physics: simulation, PDE solving, dynamical systems, symbolic regression. |
-| `ml` | Specialist | Trains, evaluates, and analyzes models end to end — deep learning, LLMs, classical ML, RL. |
+| `research` | Default | Scientific research across the full skill library — literature, data analysis, compute, and synthesis. |
 | `plan` | Mode | Read-only planning. Edit tools are disabled except for plan files. |
 
-Two sub-agents back the roster. The main agent delegates to them like tools:
+Research has three canonical internal task profiles. They are hidden from the picker and selected by the kind of work, not by a user-facing persona:
 
-| Sub-agent | What it does |
+| Profile | What it does |
 | --- | --- |
-| `critique` | Read-only scientific critique. Finds blocking errors — data leakage, wrong statistics, unsupported claims — before expensive or irreversible actions. |
-| `literature-review` | Full PRISMA literature review: systematic search, screening, eligibility, synthesis, verification. |
+| Explore | Bounded read/search work: inspect a codebase, source set, or project state. |
+| Execute | Bounded implementation or computation using the active project permissions. |
+| Review | Proportionate read-only review of files, results, citations, and provenance. |
 
-Run `openscience agent list` to print the complete set on your install, including utility sub-agents like `explore` and `reviewer`.
+Older domain and helper names remain as hidden compatibility profiles so existing config and sessions keep working; they are not the product roster. Run `openscience agent list` to inspect the complete registry on your install, including hidden compatibility and system profiles.
 
-## Pick an agent
+## Choose Research effort
 
 ```bash
-# one-shot run with a specific agent
-openscience run --agent physics "Fit the dispersion relation in data/spectra.csv"
+# focused by default
+openscience run "Fit the dispersion relation in data/spectra.csv"
+
+# wider bounded investigation when independent branches justify it
+openscience run --effort ultra "Compare three defensible fitting approaches"
 ```
 
-In the workspace, switch agents from the session picker. To change the default, set `default_agent` in `openscience.json`. Only agents with mode `primary` or `all` can lead a session; `subagent` profiles are reachable only by delegation.
+Normal and Ultra use the same Research harness. Ultra raises the bounded delegation allowance; it does not switch to a different persona or force delegation. Plan mode is available when you want to agree on method, spend, or consequential actions before execution.
+
+Custom agents remain available for teams with a deliberate specialized workflow. Set a custom agent with mode `primary` or `all` as `default_agent` in `openscience.json`; `subagent` profiles are reachable only by delegation.
 
 ## Create a custom agent
 
@@ -75,7 +78,7 @@ Resolution is project-local, then user-global, then built-in.
 
 <Columns cols={2}>
   <Card title="Skills" icon="book-open" href="/openscience/skills">
-    The 250+ skill library the agents draw on.
+    The 295-skill library Research draws on.
   </Card>
   <Card title="Sessions" icon="terminal" href="/openscience/sessions">
     Start, resume, and share sessions with any agent.

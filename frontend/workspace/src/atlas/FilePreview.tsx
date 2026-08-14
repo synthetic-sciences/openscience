@@ -27,7 +27,7 @@ import { DataTableView } from "@/data/DataTableView"
 import type { TableFormat } from "@/data/table"
 import { ManuscriptWorkbench } from "@/manuscript/ManuscriptWorkbench"
 import { parseManuscript } from "@/manuscript/model"
-import { artifactContext, createArtifactContext } from "@/artifacts/context"
+import { artifactContext, createArtifactContext, resolveArtifactPath } from "@/artifacts/context"
 import { normalizeStoredArtifact, savedResultLabel } from "@/artifacts/store"
 import type { ArtifactInspection } from "@/science/renderers"
 import { toast } from "@/atlas/Toast"
@@ -99,6 +99,7 @@ export function FileView(props: {
   const params = useParams()
   const directory = () => props.directory || sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
   const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)
+  const requestPath = () => resolveArtifactPath(directory(), props.path)
   const name = () => props.path.split("/").pop() || props.path
   const e = () => ext(name())
 
@@ -114,7 +115,7 @@ export function FileView(props: {
 
   createEffect(() => {
     const dir = directory()
-    const path = props.path
+    const path = requestPath()
     const activeSession = untrack(sessionID)
     view.refresh
     const id = ++request.current
@@ -207,7 +208,8 @@ export function FileView(props: {
   const image = (src: string) =>
     assetUrl(src, {
       base: props.path,
-      url: (path) => sdk.request.url("/file/raw", { path, sessionID: sessionID() }),
+      url: (path) =>
+        sdk.request.url("/file/raw", { path: resolveArtifactPath(directory(), path), sessionID: sessionID() }),
     })
 
   const badge = () => {
@@ -261,7 +263,7 @@ export function FileView(props: {
       return
     }
     const id = request.current
-    const path = props.path
+    const path = requestPath()
     const content = view.draft
     const title = name()
     setView({ saving: true, saveError: undefined })
@@ -313,7 +315,7 @@ export function FileView(props: {
       const res = await sdk.request("/file/artifact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: props.path, sessionID: session }),
+        body: JSON.stringify({ path: requestPath(), sessionID: session }),
       })
       if (!res.ok) throw new Error(`artifact save failed (${res.status})`)
       const saved = normalizeStoredArtifact(await res.json().catch(() => undefined))
@@ -349,7 +351,7 @@ export function FileView(props: {
     try {
       const session = sessionID()
       const response = await sdk.request("/file/raw", undefined, {
-        path: props.path,
+        path: requestPath(),
         sessionID: session,
       })
       if (!response.ok) throw new Error(`download failed (${response.status})`)
@@ -448,7 +450,7 @@ export function FileView(props: {
                 <Match when={kind() === "markdown" && !view.source && manuscript()}>
                   <ManuscriptWorkbench
                     directory={directory()}
-                    path={props.path}
+                    path={requestPath()}
                     text={view.draft}
                     dirty={dirty()}
                     saving={view.saving}
@@ -506,7 +508,7 @@ export function FileView(props: {
                   <Show when={binaryScience()}>
                     {(format) => (
                       <BinaryScienceView
-                        path={props.path}
+                        path={requestPath()}
                         directory={directory()}
                         sessionID={sessionID()}
                         format={format()}

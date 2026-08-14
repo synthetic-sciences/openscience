@@ -24,12 +24,30 @@ concurrency: ${{ github.workflow }}
 permissions:
   id-token: write
   contents: write
+  # publish.ts falls back to a release PR when branch protection rejects the
+  # automated version-bump commit on main.
+  pull-requests: write
 
 jobs:
+  release-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require the protected default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REPOSITORY" != "synthetic-sciences/OpenScience" || "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Production releases must be dispatched from synthetic-sciences/OpenScience main; received $GITHUB_REPOSITORY at $GITHUB_REF."
+            exit 1
+          fi
+
   version:
+    needs: release-source
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: github.repository == 'synthetic-sciences/OpenScience'
     steps:
       - name: Require a bump or version input
         if: ${{ !inputs.bump && !inputs.version }}

@@ -18,16 +18,19 @@ describe("Task tool-output handoff", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        const parent = await Session.create({})
         const child = await Session.create({})
         const name = Identifier.ascending("tool")
         const source = path.join(Truncate.DIR, name)
         await fs.mkdir(Truncate.DIR, { recursive: true })
         await Bun.write(source, "alpha evidence\nbeta evidence\n")
+        await SessionFilesystem.grantToolOutput({ sessionID: parent.id, path: source })
 
         try {
           const physical = await fs.realpath(source)
           const result = await materializeTaskToolOutputs({
-            sessionID: child.id,
+            parentSessionID: parent.id,
+            childSessionID: child.id,
             prompt: `Inspect ${source}, then confirm the same file at ${physical}. Repeat ${source}.`,
           })
 
@@ -60,7 +63,7 @@ describe("Task tool-output handoff", () => {
           expect(requests.some((request) => request.permission === "external_directory")).toBe(false)
         } finally {
           await fs.rm(source, { force: true })
-          await Session.remove(child.id)
+          await Promise.all([Session.remove(parent.id), Session.remove(child.id)])
         }
       },
     })
@@ -72,6 +75,7 @@ describe("Task tool-output handoff", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        const parent = await Session.create({})
         const child = await Session.create({})
         const sibling = await Session.create({})
         const externalPath = path.join(external.path, Identifier.ascending("tool"))
@@ -80,7 +84,11 @@ describe("Task tool-output handoff", () => {
         await Bun.write(siblingPath, "sibling secret")
 
         const prompt = `Leave ${externalPath}, ${siblingPath}, and ${Truncate.DIR} unchanged.`
-        const result = await materializeTaskToolOutputs({ prompt, sessionID: child.id })
+        const result = await materializeTaskToolOutputs({
+          prompt,
+          parentSessionID: parent.id,
+          childSessionID: child.id,
+        })
         expect(result).toEqual({ prompt, files: [] })
 
         await expect(
@@ -90,7 +98,7 @@ describe("Task tool-output handoff", () => {
           SessionFilesystem.authorize({ sessionID: child.id, path: siblingPath, access: "read" }),
         ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
 
-        await Promise.all([Session.remove(child.id), Session.remove(sibling.id)])
+        await Promise.all([Session.remove(parent.id), Session.remove(child.id), Session.remove(sibling.id)])
       },
     })
   })
@@ -101,6 +109,7 @@ describe("Task tool-output handoff", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        const parent = await Session.create({})
         const child = await Session.create({})
         await fs.mkdir(Truncate.DIR, { recursive: true })
         const missing = path.join(Truncate.DIR, Identifier.ascending("tool"))
@@ -111,14 +120,52 @@ describe("Task tool-output handoff", () => {
 
         try {
           await expect(
-            materializeTaskToolOutputs({ prompt: `Inspect ${missing}`, sessionID: child.id }),
+            materializeTaskToolOutputs({
+              prompt: `Inspect ${missing}`,
+              parentSessionID: parent.id,
+              childSessionID: child.id,
+            }),
           ).rejects.toThrow("unavailable broker tool output")
-          await expect(materializeTaskToolOutputs({ prompt: `Inspect ${link}`, sessionID: child.id })).rejects.toThrow(
-            "unavailable broker tool output",
-          )
+          await expect(
+            materializeTaskToolOutputs({
+              prompt: `Inspect ${link}`,
+              parentSessionID: parent.id,
+              childSessionID: child.id,
+            }),
+          ).rejects.toThrow("unavailable broker tool output")
         } finally {
           await fs.rm(link, { force: true })
-          await Session.remove(child.id)
+          await Promise.all([Session.remove(parent.id), Session.remove(child.id)])
+        }
+      },
+    })
+  })
+
+  test("rejects a broker output owned by another session", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const owner = await Session.create({})
+        const parent = await Session.create({})
+        const child = await Session.create({})
+        const source = path.join(Truncate.DIR, Identifier.ascending("tool"))
+        await fs.mkdir(Truncate.DIR, { recursive: true })
+        await Bun.write(source, "session-private evidence")
+        await SessionFilesystem.grantToolOutput({ sessionID: owner.id, path: source })
+
+        try {
+          await expect(
+            materializeTaskToolOutputs({
+              prompt: `Inspect ${source}`,
+              parentSessionID: parent.id,
+              childSessionID: child.id,
+            }),
+          ).rejects.toThrow("unavailable broker tool output")
+          expect(await fs.readdir(await SessionFilesystem.workspace(child.id))).toEqual([])
+        } finally {
+          await fs.rm(source, { force: true })
+          await Promise.all([Session.remove(owner.id), Session.remove(parent.id), Session.remove(child.id)])
         }
       },
     })

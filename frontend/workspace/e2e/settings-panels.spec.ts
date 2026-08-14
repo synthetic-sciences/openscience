@@ -5,7 +5,6 @@ const panels = [
   "Models",
   "Skills",
   "Connectors",
-  "Specialists",
   "Compute",
   "Network",
   "Permissions",

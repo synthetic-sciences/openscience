@@ -1,6 +1,6 @@
 import z from "zod"
 import { Tool } from "../tool"
-import { spawn, type ChildProcess } from "child_process"
+import { spawn } from "child_process"
 import path from "path"
 import os from "os"
 import { mkdirSync, rmSync } from "fs"
@@ -12,6 +12,7 @@ import { ExecutionAuthority } from "@/project/execution"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { AuthorityProcessLedger } from "@/project/authority-process"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
+import { BiologyKernelLifecycle } from "./kernel-lifecycle"
 
 const KERNEL_SCRIPT = `
 import sys, json, io, traceback, os, re
@@ -97,18 +98,8 @@ export function biologyKernelScriptForTests() {
   return KERNEL_SCRIPT
 }
 
-interface Kernel {
-  process: ChildProcess
-  projectID: string
-  scriptPath: string
-  configPath: string
-  cachePath: string
-  lastUsed: number
-  generation: string
-  authorityID: string
-}
-
-const kernels = new Map<string, Kernel>()
+type Kernel = BiologyKernelLifecycle.Kernel
+const kernels = BiologyKernelLifecycle.kernels
 const executionQueues = new Map<string, Promise<void>>()
 
 async function serialize<T>(sessionID: string, action: () => Promise<T>): Promise<T> {
@@ -128,48 +119,19 @@ async function serialize<T>(sessionID: string, action: () => Promise<T>): Promis
   }
 }
 
-function removeKernel(id: string, kernel: Kernel) {
-  try {
-    require("fs").unlinkSync(kernel.scriptPath)
-  } catch {}
-  try {
-    require("fs").unlinkSync(kernel.configPath)
-  } catch {}
-  rmSync(kernel.cachePath, { recursive: true, force: true })
-  if (kernels.get(id) === kernel) kernels.delete(id)
-  void AuthorityProcessLedger.complete(kernel.authorityID).catch(() => undefined)
-}
-
-// Clean up all kernels on process exit
-function cleanupAll() {
-  for (const [id, kernel] of kernels) {
-    Shell.killTreeSync(kernel.process, { detached: process.platform !== "win32" })
-    removeKernel(id, kernel)
-  }
-}
+const removeKernel = BiologyKernelLifecycle.remove
 
 export function shutdownBiologyKernels() {
-  cleanupAll()
+  BiologyKernelLifecycle.cleanupAll()
 }
 
 export async function releaseBiologySession(projectID: string, sessionID: string) {
-  const kernel = kernels.get(sessionID)
-  if (kernel && kernel.projectID === projectID) {
-    await AuthorityProcessLedger.revoke({ id: kernel.authorityID, kind: "biology" })
-    removeKernel(sessionID, kernel)
-  }
-  await AuthorityProcessLedger.revoke({ kind: "biology", projectID, sessionID })
+  await BiologyKernelLifecycle.releaseSession(projectID, sessionID)
 }
 
 export async function releaseBiologyProject(projectID: string) {
-  const sessions = [...kernels].filter(([, kernel]) => kernel.projectID === projectID).map(([sessionID]) => sessionID)
-  await Promise.all(sessions.map((sessionID) => releaseBiologySession(projectID, sessionID)))
-  await AuthorityProcessLedger.revoke({ kind: "biology", projectID })
+  await BiologyKernelLifecycle.releaseProject(projectID)
 }
-
-process.on("exit", cleanupAll)
-process.on("SIGTERM", cleanupAll)
-process.on("SIGINT", cleanupAll)
 
 async function cleanupIdle() {
   const now = Date.now()

@@ -30,13 +30,14 @@ test("explores, filters, plots, sorts, and exports a scientific CSV", async ({ p
 
     await filter.fill("")
     await table.locator('[data-action="table-schema"]').click()
-    await expect(table.getByText("1 missing", { exact: true })).toBeVisible()
-    await expect(table.getByText("number", { exact: true })).toBeVisible()
+    const schema = table.getByRole("region", { name: "Column schema", exact: true })
+    await expect(schema.getByText("1 missing", { exact: true })).toBeVisible()
+    await expect(schema.getByText("number", { exact: true })).toBeVisible()
 
     await table.getByTitle("Sort by count").click()
     await table.locator('[data-action="table-plot"]').click()
     await expect(table.getByRole("img", { name: "count histogram" })).toBeVisible()
-    await expect(table.getByText("mean 12", { exact: true })).toBeVisible()
+    await expect(table.getByLabel("Distribution summary").getByText("Mean 12", { exact: true })).toBeVisible()
 
     const download = page.waitForEvent("download")
     await table.locator('[data-action="table-export"]').click()

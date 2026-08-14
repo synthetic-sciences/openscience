@@ -13,9 +13,10 @@ test("model speed toggles through the settings popover and reaches the prompt re
 }) => {
   await gotoSession()
 
-  // Speed defaults to Standard; no effort chip while effort stays default.
+  // Speed and thinking effort are independent. Both defaults remain visible so
+  // users can inspect or change either setting without opening the full menu.
   await expect(modelRowValue(page, "speed")).resolves.toBe("Standard")
-  await expect(page.locator(effortChipSelector)).toHaveCount(0)
+  await expect(page.locator(effortChipSelector)).toHaveText("Standard")
 
   const send = async (tier?: string) => {
     const request = page.waitForRequest((request) => {

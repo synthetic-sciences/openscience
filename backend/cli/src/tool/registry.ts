@@ -116,7 +116,7 @@ export namespace ToolRegistry {
           worktree: Instance.worktree,
         } as unknown as PluginToolContext
         const result = await def.execute(args as any, pluginCtx)
-        const out = await Truncate.output(result, {}, initCtx?.agent)
+        const out = await Truncate.output(result, { sessionID: ctx.sessionID }, initCtx?.agent)
         return {
           title: "",
           output: out.truncated ? out.content : result,

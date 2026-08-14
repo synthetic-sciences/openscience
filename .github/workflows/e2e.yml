@@ -20,13 +20,13 @@ jobs:
           - name: linux
             host: ubuntu-latest
             playwright: bunx playwright install --with-deps
-            workdir: .
-            # Only the browser suite. The backend unit suite already runs in
-            # ci.yml on every push/PR; re-running it here fails (this job never
-            # configures a git identity) and reads the seeded XDG dirs as its
-            # global config.
-            command: |
-              bun turbo test --filter=@synsci/workspace
+            workdir: frontend/workspace
+            # Use the same hermetic runner developers use locally. It owns a
+            # disposable data root, fake model, backend, Vite server, ports,
+            # and teardown. Prestarting any of those here creates two distinct
+            # test systems and makes failures depend on which one the browser
+            # reaches.
+            command: bun run test:e2e
           # Windows e2e:local skipped — chronically failing since
           # 2026-04-28 across all PRs from all authors. Root cause is
           # the in-process Playwright/bun/Vite spawn chain not
@@ -66,143 +66,12 @@ jobs:
         working-directory: frontend/workspace
         run: ${{ matrix.settings.playwright }}
 
-      - name: Pin openscience server Basic-Auth password
-        if: matrix.settings.name != 'windows'
-        run: |
-          # Pin OPENSCIENCE_SERVER_PASSWORD to a known value before booting
-          # the in-process server, and broadcast the same value to
-          # VITE_OPENSCIENCE_SERVER_PASSWORD so Playwright (via the
-          # extraHTTPHeaders branch in playwright.config.ts) attaches a
-          # matching Basic-Auth header on every browser request.
-          # Without this, the auto-generated password is unknown to
-          # Playwright and all browser-driven /session, /event, /provider
-          # calls get 401 → home.spec "Open project" never appears.
-          PASS="ci-$(openssl rand -hex 16)"
-          {
-            echo "OPENSCIENCE_SERVER_PASSWORD=$PASS"
-            echo "VITE_OPENSCIENCE_SERVER_PASSWORD=$PASS"
-          } >> "$GITHUB_ENV"
-          # Vite reads VITE_* from .env.local at build time — the Playwright
-          # webServer env-pass doesn't reach the bundle. Mirror e2e-local.ts
-          # by writing the same .env.local frontend/workspace expects.
-          cat > frontend/workspace/.env.local <<ENV
-          VITE_OPENSCIENCE_SERVER_HOST=127.0.0.1
-          VITE_OPENSCIENCE_SERVER_PORT=4096
-          VITE_OPENSCIENCE_SERVER_USERNAME=openscience
-          VITE_OPENSCIENCE_SERVER_PASSWORD=$PASS
-          ENV
-
-      - name: Set OS-specific paths
-        run: |
-          # shellcheck disable=SC2129
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            printf '%s\n' "OPENSCIENCE_E2E_ROOT=${{ runner.temp }}\\openscience-e2e" >> "$GITHUB_ENV"
-            printf '%s\n' "OPENSCIENCE_TEST_HOME=${{ runner.temp }}\\openscience-e2e\\home" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_DATA_HOME=${{ runner.temp }}\\openscience-e2e\\share" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}\\openscience-e2e\\cache" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}\\openscience-e2e\\config" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}\\openscience-e2e\\state" >> "$GITHUB_ENV"
-          else
-            printf '%s\n' "OPENSCIENCE_E2E_ROOT=${{ runner.temp }}/openscience-e2e" >> "$GITHUB_ENV"
-            printf '%s\n' "OPENSCIENCE_TEST_HOME=${{ runner.temp }}/openscience-e2e/home" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_DATA_HOME=${{ runner.temp }}/openscience-e2e/share" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}/openscience-e2e/cache" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}/openscience-e2e/config" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}/openscience-e2e/state" >> "$GITHUB_ENV"
-          fi
-
-      - name: Start deterministic E2E model
-        if: matrix.settings.name != 'windows'
-        run: |
-          CONFIG=$(bun frontend/workspace/script/e2e-fake-model.ts --port 4097 --print-config)
-          {
-            printf '%s\n' "OPENSCIENCE_CONFIG_CONTENT=$CONFIG"
-            printf '%s\n' "OPENSCIENCE_E2E_MODEL=e2e/echo"
-            printf '%s\n' "OPENSCIENCE_E2E_FAKE_MODEL=1"
-          } >> "$GITHUB_ENV"
-          bun frontend/workspace/script/e2e-fake-model.ts --port 4097 > "$RUNNER_TEMP/openscience-fake-model.log" 2>&1 &
-          for _ in $(seq 1 30); do
-            curl -fsS "http://127.0.0.1:4097/health" > /dev/null && exit 0
-            sleep 1
-          done
-          echo "::error::deterministic E2E model never became healthy on 127.0.0.1:4097"
-          exit 1
-
-      - name: Seed openscience data
-        if: matrix.settings.name != 'windows'
-        working-directory: backend/cli
-        run: bun script/seed-e2e.ts
-        env:
-          OPENSCIENCE_DISABLE_SHARE: "true"
-          OPENSCIENCE_DISABLE_LSP_DOWNLOAD: "true"
-          OPENSCIENCE_DISABLE_DEFAULT_PLUGINS: "true"
-          OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
-          OPENSCIENCE_TEST_HOME: ${{ env.OPENSCIENCE_TEST_HOME }}
-          XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
-          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
-          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
-          XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
-          OPENSCIENCE_E2E_PROJECT_DIR: ${{ github.workspace }}
-          OPENSCIENCE_E2E_SESSION_TITLE: "E2E Session"
-          OPENSCIENCE_E2E_MESSAGE: "Seeded for UI e2e"
-          OPENSCIENCE_E2E_MODEL: "e2e/echo"
-
-      - name: Run openscience server
-        if: matrix.settings.name != 'windows'
-        working-directory: backend/cli
-        # `serve` is loopback-only and rejects --hostname (yargs exits 1 with
-        # help text), so don't pass one. Keep the log on disk: a backgrounded
-        # process loses its output once this step ends, which made boot
-        # failures undiagnosable.
-        run: bun dev -- --print-logs --log-level WARN serve --port 4096 > "$RUNNER_TEMP/openscience-server.log" 2>&1 &
-        env:
-          OPENSCIENCE_DISABLE_SHARE: "true"
-          OPENSCIENCE_DISABLE_LSP_DOWNLOAD: "true"
-          OPENSCIENCE_DISABLE_DEFAULT_PLUGINS: "true"
-          OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
-          OPENSCIENCE_TEST_HOME: ${{ env.OPENSCIENCE_TEST_HOME }}
-          XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
-          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
-          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
-          XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
-          OPENSCIENCE_CLIENT: "app"
-
-      - name: Wait for openscience server
-        if: matrix.settings.name != 'windows'
-        run: |
-          for _ in $(seq 1 120); do
-            curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null && exit 0
-            sleep 1
-          done
-          echo "::error::openscience server never became healthy on 127.0.0.1:4096"
-          exit 1
-
       - name: run
         working-directory: ${{ matrix.settings.workdir }}
         run: ${{ matrix.settings.command }}
         env:
           CI: true
-          OPENSCIENCE_DISABLE_SHARE: "true"
-          OPENSCIENCE_DISABLE_LSP_DOWNLOAD: "true"
-          OPENSCIENCE_DISABLE_DEFAULT_PLUGINS: "true"
-          OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
-          OPENSCIENCE_TEST_HOME: ${{ env.OPENSCIENCE_TEST_HOME }}
-          XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
-          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
-          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
-          XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
-          PLAYWRIGHT_SERVER_HOST: "127.0.0.1"
-          PLAYWRIGHT_SERVER_PORT: "4096"
-          VITE_OPENSCIENCE_SERVER_HOST: "127.0.0.1"
-          VITE_OPENSCIENCE_SERVER_PORT: "4096"
-          OPENSCIENCE_CLIENT: "app"
         timeout-minutes: 30
-
-      - name: Print server log
-        if: failure() && matrix.settings.name != 'windows'
-        run: |
-          cat "$RUNNER_TEMP/openscience-server.log" || true
-          cat "$RUNNER_TEMP/openscience-fake-model.log" || true
 
       - name: Upload Playwright artifacts
         if: failure()
@@ -214,5 +83,3 @@ jobs:
           path: |
             frontend/workspace/e2e/test-results
             frontend/workspace/e2e/playwright-report
-            ${{ runner.temp }}/openscience-server.log
-            ${{ runner.temp }}/openscience-fake-model.log

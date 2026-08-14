@@ -26,8 +26,8 @@ It is model-agnostic, open source, and built to do real work in machine learning
 ## What it does
 
 - **Runs the whole loop.** Literature review, hypothesis, code, experiment, analysis, and write-up, in one continuous session.
-- **Research agents.** A `research` agent by default, plus `biology`, `physics`, and `ml` specialists, with critique and literature-review sub-agents and a read-only plan mode.
-- **290+ skills.** Training (DeepSpeed, PEFT, TRL), evaluation, dataset work, molecular and clinical biology, cheminformatics, papers and LaTeX, figures, and cloud compute (Modal, Tinker, and others).
+- **One adaptive Research agent.** A single user-facing collaborator handles the task end to end, loads domain skills when useful, and can delegate bounded Explore, Execute, or Review work internally. Normal and Ultra efforts control how widely it investigates; plan mode stays read-only.
+- **295 bundled skills.** Training (DeepSpeed, PEFT, TRL), evaluation, dataset work, molecular and clinical biology, cheminformatics, papers and LaTeX, figures, and cloud compute (Modal, Tinker, and others).
 - **Scientific databases as tools.** UniProt, PDB, Ensembl, ChEMBL, PubChem, arXiv, OpenAlex, Semantic Scholar, and around 30 more, queryable directly by the agent.
 - **A real workspace.** A browser UI with a file tree, an editor, a terminal, session history, and inline rendering for molecules, structures, genomes, and plots.
 - **Extensible.** LSP integration, MCP servers, plugins, custom agents and commands, and a TypeScript SDK.
@@ -111,7 +111,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for how the system fits together, [CONTRI
 
 ## Security
 
-The agent is not sandboxed. The permission system keeps you aware of what the agent is doing; it is not an isolation boundary. Run inside a container or VM if you need isolation. Provider and synced credentials are filtered out of subprocess environments and redacted from output. To report a vulnerability, see [SECURITY.md](SECURITY.md).
+The permission system keeps you aware of what the agent is doing; it is not an isolation boundary by itself. OpenScience also includes an opt-in OS execution sandbox: macOS Seatbelt or Linux bubblewrap can confine writes to the workspace and deny network egress. It is off by default and is not a full jail, so run inside a container or VM for hostile code. Managed Atlas tokens stay out of general subprocess environments, arbitrary Python/R kernels receive a minimal environment, and credential-shaped values are redacted from output. To configure and verify containment, run `openscience sandbox enable` and `openscience sandbox test`; to report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 

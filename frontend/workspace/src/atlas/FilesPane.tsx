@@ -237,6 +237,11 @@ export function FilesPane(
   const [snapshot, { refetch: refetchSnapshot }] = createResource(identity, (current) =>
     readAccess(transport, current).catch(() => undefined),
   )
+  const filesystemChanged = sdk?.event.on("session.filesystem.changed", (event) => {
+    if (event.properties.sessionID !== sessionID()) return
+    void refetchSnapshot()
+  })
+  if (filesystemChanged) onCleanup(filesystemChanged)
   // Whether Modal is offered at all. Asking costs a settings read, so it waits
   // until someone opens the picker looking for a source; the Volumes themselves
   // are not listed until that source is actually entered.
@@ -623,7 +628,11 @@ export function FilesPane(
 
   const open = (row: FileRow) => {
     const from = current()
-    const target = row.path ?? [where(), row.name].filter(Boolean).join("/")
+    // A session's relative FileNode.path is relative to its isolated scratch
+    // root, even when the picker is browsing the project or a connected
+    // folder. Preserve the API's canonical handle so the preview and Details
+    // requests do not accidentally read an empty same-named scratch path.
+    const target = row.absolute ?? row.path ?? [where(), row.name].filter(Boolean).join("/")
     const file: PaneFile = {
       name: row.name,
       path: target,
@@ -728,7 +737,13 @@ export function FilesPane(
           <SourceMenu
             sources={sources()}
             active={current()}
-            onOpen={() => setOpened(opened() + 1)}
+            onOpen={() => {
+              setOpened(opened() + 1)
+              // Grants may be added by another surface or process. The picker
+              // is the point at which that inventory must be current even if
+              // an SSE reconnect caused the change event to be missed.
+              if (identity()) void refetchSnapshot()
+            }}
             onPick={(next) => {
               choose(next.id)
               setPath([])

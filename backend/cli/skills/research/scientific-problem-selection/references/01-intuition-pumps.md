@@ -1,5 +1,7 @@
 # SKILL: Intuition Pumps for Scientific Problem Ideation
 
+> Modified by Synthetic Sciences: formatting-only normalization of trailing whitespace.
+
 ## Overview
 This skill helps scientists generate high-quality research ideas by providing systematic prompts ("intuition pumps") and identifying common ideation traps. Based on the framework that most biological and chemical science projects involve **perturbing a system, measuring it, and analyzing the data**, this skill guides users through structured ideation that can significantly impact how they spend years of their career.
 

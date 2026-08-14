@@ -1,6 +1,6 @@
 export type FilesystemAccess = "read" | "write"
 export type FilesystemScope = "once" | "session" | "project" | "installation"
-export type FilesystemSource = "workspace" | "permission" | "api"
+export type FilesystemSource = "workspace" | "permission" | "api" | "tool"
 
 export interface FilesystemGrant {
   id: string
@@ -24,8 +24,8 @@ export interface FilesystemSnapshot {
   grants: FilesystemGrant[]
   enforcement: {
     broker: "enforced"
-    processWrite: "workspace_only"
-    processRead: "policy_only"
+    processWrite: "grant_only"
+    processRead: "grant_only" | "policy_only"
   }
 }
 
@@ -82,8 +82,8 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
     normalizeFilePath(root.directory) !== normalizeFilePath(identity.directory) ||
     !Array.isArray(root.grants) ||
     enforcement?.broker !== "enforced" ||
-    enforcement.processWrite !== "workspace_only" ||
-    enforcement.processRead !== "policy_only"
+    enforcement.processWrite !== "grant_only" ||
+    (enforcement.processRead !== "grant_only" && enforcement.processRead !== "policy_only")
   )
     return
 
@@ -99,7 +99,10 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
         grant.scope !== "session" &&
         grant.scope !== "project" &&
         grant.scope !== "installation") ||
-      (grant.source !== "workspace" && grant.source !== "permission" && grant.source !== "api") ||
+      (grant.source !== "workspace" &&
+        grant.source !== "permission" &&
+        grant.source !== "api" &&
+        grant.source !== "tool") ||
       typeof time?.created !== "number" ||
       (time.consumed !== undefined && typeof time.consumed !== "number") ||
       (time.revoked !== undefined && typeof time.revoked !== "number")
@@ -131,8 +134,8 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
     grants,
     enforcement: {
       broker: "enforced",
-      processWrite: "workspace_only",
-      processRead: "policy_only",
+      processWrite: "grant_only",
+      processRead: enforcement.processRead,
     },
   }
 }
@@ -142,7 +145,7 @@ export function activeFilesystemGrants(snapshot?: FilesystemSnapshot) {
 }
 
 export function connectedFilesystemGrants(snapshot?: FilesystemSnapshot) {
-  return activeFilesystemGrants(snapshot).filter((grant) => grant.source !== "workspace")
+  return activeFilesystemGrants(snapshot).filter((grant) => grant.source === "permission" || grant.source === "api")
 }
 
 export function sessionFilesystemRoot(snapshot?: FilesystemSnapshot) {

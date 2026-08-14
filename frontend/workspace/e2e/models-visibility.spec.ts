@@ -18,7 +18,7 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
   const target = picker.locator('[data-model-catalog-item][aria-checked="false"]').first()
   await expect(target).toBeVisible()
 
-  const name = (await target.locator("strong").innerText()).trim()
+  const name = (await target.locator(".model-settings-model > strong").textContent())?.trim() ?? ""
   if (!name) throw new Error("Failed to resolve model name from list item")
 
   await picker.getByRole("button", { name: "manage models" }).first().click()

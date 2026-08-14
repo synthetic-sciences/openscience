@@ -13,6 +13,7 @@ import path from "path"
 import z from "zod"
 import { SessionWorkspace } from "./workspace"
 import { AuthoritySignal } from "@/project/authority-signal"
+import { ToolOutputPath } from "@/tool/tool-output-path"
 
 /**
  * Durable, directional filesystem authority for a session and its project.
@@ -29,7 +30,7 @@ export namespace SessionFilesystem {
   export const Scope = z.enum(["once", "session", "project", "installation"])
   export type Scope = z.infer<typeof Scope>
 
-  export const Source = z.enum(["workspace", "permission", "api"])
+  export const Source = z.enum(["workspace", "permission", "api", "tool"])
   export type Source = z.infer<typeof Source>
 
   export const Grant = z.object({
@@ -129,6 +130,36 @@ export namespace SessionFilesystem {
     const result = await Filesystem.canonical(target)
     if (result) return Project.canonicalize(result)
     throw new InvalidPathError({ path: target })
+  }
+
+  async function toolOutputRoot() {
+    // Resolve through the stable managed data-root link on every authority
+    // operation. Filesystem.canonical preserves a nonexistent tail below the
+    // nearest existing physical parent, so this remains correct before the
+    // first truncated output creates the directory and after a live data-root
+    // retarget.
+    const root = await Filesystem.canonical(ToolOutputPath.root)
+    if (!root) throw new InvalidPathError({ path: ToolOutputPath.root })
+    return Project.canonicalize(root)
+  }
+
+  async function assertNotToolOutput(target: string) {
+    if (!Filesystem.overlaps(await toolOutputRoot(), target)) return
+    throw new InvalidPathError({ path: target })
+  }
+
+  async function managedToolOutput(target: string) {
+    return Filesystem.contains(await toolOutputRoot(), target)
+  }
+
+  function exactToolOutputGrant(grant: Grant, target: string, access: Access) {
+    return (
+      access === "read" &&
+      grant.source === "tool" &&
+      grant.scope === "session" &&
+      grant.path === target &&
+      permits(grant, access)
+    )
   }
 
   function managedProject() {
@@ -271,6 +302,12 @@ export namespace SessionFilesystem {
   export async function initialize(sessionID: string, directory: string, options: { revokeExisting?: boolean } = {}) {
     const root = await canonical(directory)
     const worktree = await canonical(Instance.worktree)
+    // The global tool-output directory is a managed broker enclave, never a
+    // project root. Refuse an imported folder (including a broad ancestor such
+    // as the data root or home directory) that would turn initialization's
+    // implicit API grant into authority over every session's broker files.
+    await assertNotToolOutput(root)
+    await assertNotToolOutput(worktree)
     const existing = await read(sessionID).catch((error) => {
       if (Storage.NotFoundError.isInstance(error)) return
       throw error
@@ -340,6 +377,7 @@ export namespace SessionFilesystem {
         if (!path.isAbsolute(grant.path)) throw new InvalidPathError({ path: grant.path })
         const root = await Filesystem.canonical(grant.path)
         if (!root) throw new InvalidPathError({ path: grant.path })
+        await assertNotToolOutput(Project.canonicalize(root))
         return { path: Project.canonicalize(root), access: grant.access }
       }),
     )
@@ -381,8 +419,54 @@ export namespace SessionFilesystem {
     scope: Scope
     source?: Source
   }) {
+    if (input.source === "tool") {
+      throw new InvalidPathError({ path: input.path })
+    }
+    return insert(input)
+  }
+
+  /** Internal exact-file capability for app-managed truncated tool output. */
+  export async function grantToolOutput(input: { sessionID: string; path: string }) {
     const state = await ensure(input.sessionID)
     const root = await canonical(input.path)
+    assertPrivate(state, root, "read")
+    const grant: Grant = {
+      id: `fsg_${crypto.randomUUID()}`,
+      path: root,
+      access: "read",
+      scope: "session",
+      source: "tool",
+      time: { created: Date.now() },
+    }
+    const result = await Storage.update<State>(key(input.sessionID), (draft) => {
+      const duplicate = draft.grants.find(
+        (item) =>
+          item.source === "tool" &&
+          !item.time.consumed &&
+          !item.time.revoked &&
+          item.path === root &&
+          item.access === "read" &&
+          item.scope === "session",
+      )
+      if (duplicate) {
+        grant.id = duplicate.id
+        grant.time = duplicate.time
+        return
+      }
+      draft.grants.push(grant)
+    })
+    // Tool-output authority is broker-only. It must not change the process
+    // authority generation or emit the revocation event used to stop warm
+    // kernels, PTYs, commands, and compute jobs. Native processes never mount
+    // this grant; only brokered file tools and an explicitly materialized Task
+    // handoff can consume it.
+    return result.grants.find((item) => item.id === grant.id) ?? grant
+  }
+
+  async function insert(input: { sessionID: string; path: string; access: Access; scope: Scope; source?: Source }) {
+    const state = await ensure(input.sessionID)
+    const root = await canonical(input.path)
+    await assertNotToolOutput(root)
     assertPrivate(state, root, input.access)
     const now = Date.now()
     const grant: Grant = {
@@ -468,8 +552,13 @@ export namespace SessionFilesystem {
     const record = await state(input.sessionID)
     const target = await canonical(input.path, workspaceGrant(record)?.path ?? record.directory)
     assertPrivate(record, target, input.access)
+    const enclave = await managedToolOutput(target)
     const matches = record.grants
-      .filter((grant) => permits(grant, input.access) && Filesystem.contains(grant.path, target))
+      .filter((grant) =>
+        enclave
+          ? exactToolOutputGrant(grant, target, input.access)
+          : permits(grant, input.access) && Filesystem.contains(grant.path, target),
+      )
       .sort((a, b) => {
         const priority = { installation: 0, project: 1, session: 2, once: 3 }
         if (a.scope !== b.scope) return priority[a.scope] - priority[b.scope]
@@ -512,8 +601,28 @@ export namespace SessionFilesystem {
     const record = await state(input.sessionID)
     const target = await canonical(input.path, workspaceGrant(record)?.path ?? record.directory)
     assertPrivate(record, target, input.access)
+    const enclave = await managedToolOutput(target)
     return record.grants.some(
-      (grant) => grant.scope !== "once" && permits(grant, input.access) && Filesystem.contains(grant.path, target),
+      (grant) =>
+        grant.scope !== "once" &&
+        (enclave
+          ? exactToolOutputGrant(grant, target, input.access)
+          : permits(grant, input.access) && Filesystem.contains(grant.path, target)),
+    )
+  }
+
+  /**
+   * An exact app-managed tool output belongs to the session that produced it.
+   * This is deliberately narrower than a normal filesystem grant: callers may
+   * read that one file without reopening the external-directory policy, but a
+   * parent directory, sibling output, or another session never inherits it.
+   */
+  export async function ownsToolOutput(input: { sessionID: string; path: string }) {
+    const record = await state(input.sessionID)
+    const target = await canonical(input.path, workspaceGrant(record)?.path ?? record.directory)
+    return record.grants.some(
+      (grant) =>
+        grant.source === "tool" && grant.scope === "session" && grant.path === target && permits(grant, "read"),
     )
   }
 
@@ -554,7 +663,9 @@ export namespace SessionFilesystem {
    * grants are bound to the single brokered invocation that consumes them. */
   export async function processReadRoots(sessionID: string) {
     const record = await state(sessionID)
-    return record.grants.filter((grant) => grant.scope !== "once" && permits(grant, "read")).map((grant) => grant.path)
+    return record.grants
+      .filter((grant) => grant.source !== "tool" && grant.scope !== "once" && permits(grant, "read"))
+      .map((grant) => grant.path)
   }
 
   /** Persistent explicit write roots for newly launched processes. */
@@ -574,6 +685,14 @@ export namespace SessionFilesystem {
       const target = current.grants.find((item) => item.id === grantID)
       if (!target) throw new Storage.NotFoundError({ message: `Filesystem grant not found: ${grantID}` })
       const revoked = Date.now()
+      if (target.source === "tool") {
+        const record = await Storage.update<State>(key(sessionID), (draft) => {
+          const grant = draft.grants.find((item) => item.id === grantID && item.source === "tool")
+          if (!grant) throw new Storage.NotFoundError({ message: `Filesystem grant not found: ${grantID}` })
+          grant.time.revoked = revoked
+        })
+        return record.grants.find((item) => item.id === grantID)!
+      }
       if (target.scope === "installation") {
         const record = await Storage.update<InstallationState>(installationKey, (draft) => {
           const grant = draft.grants.find((item) => item.id === grantID)

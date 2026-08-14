@@ -84,6 +84,18 @@ describe("project-ID navigation wiring", () => {
     }
   })
 
+  test("starts ordinary E2E sessions on canonical routes and keeps one legacy redirect check", async () => {
+    const [fixtures, navigation] = await Promise.all([
+      read("../../e2e/fixtures.ts"),
+      read("../../e2e/navigation.spec.ts"),
+    ])
+
+    expect(fixtures).toContain("await use(projectSegment(project, directory))")
+    expect(fixtures).toContain("await page.goto(projectPathname(slug, sessionID))")
+    expect(fixtures).not.toContain("await page.goto(sessionPath(directory, sessionID))")
+    expect(navigation).toContain("await page.goto(dirPath(directory))")
+  })
+
   test("keeps linked-worktree sessions and file surfaces on the selected directory", async () => {
     const [explorer, tree, preview] = await Promise.all([
       read("../atlas/FileExplorer.tsx"),

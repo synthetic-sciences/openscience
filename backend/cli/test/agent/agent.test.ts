@@ -562,7 +562,7 @@ test("legacy tools config maps write/edit/patch/multiedit to edit permission", a
   })
 })
 
-test("Truncate.DIR is allowed even when user denies external_directory globally", async () => {
+test("a global external_directory deny also protects the tool-output broker", async () => {
   const { Truncate } = await import("../../src/tool/truncation")
   await using tmp = await tmpdir({
     config: {
@@ -576,8 +576,8 @@ test("Truncate.DIR is allowed even when user denies external_directory globally"
     fn: async () => {
       await trustProject()
       const research = await Agent.get("research")
-      expect(PermissionNext.evaluate("external_directory", Truncate.DIR, research!.permission).action).toBe("allow")
-      expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, research!.permission).action).toBe("allow")
+      expect(PermissionNext.evaluate("external_directory", Truncate.DIR, research!.permission).action).toBe("deny")
+      expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, research!.permission).action).toBe("deny")
       expect(PermissionNext.evaluate("external_directory", "/some/other/path", research!.permission).action).toBe(
         "deny",
       )
@@ -585,7 +585,7 @@ test("Truncate.DIR is allowed even when user denies external_directory globally"
   })
 })
 
-test("Truncate.DIR is allowed even when user denies external_directory per-agent", async () => {
+test("a per-agent external_directory deny also protects the tool-output broker", async () => {
   const { Truncate } = await import("../../src/tool/truncation")
   await using tmp = await tmpdir({
     config: {
@@ -603,8 +603,8 @@ test("Truncate.DIR is allowed even when user denies external_directory per-agent
     fn: async () => {
       await trustProject()
       const research = await Agent.get("research")
-      expect(PermissionNext.evaluate("external_directory", Truncate.DIR, research!.permission).action).toBe("allow")
-      expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, research!.permission).action).toBe("allow")
+      expect(PermissionNext.evaluate("external_directory", Truncate.DIR, research!.permission).action).toBe("deny")
+      expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, research!.permission).action).toBe("deny")
       expect(PermissionNext.evaluate("external_directory", "/some/other/path", research!.permission).action).toBe(
         "deny",
       )

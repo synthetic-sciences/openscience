@@ -28,6 +28,7 @@ import type {
 } from "@/science/kernel/types"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 import { ExecutionAuthority } from "@/project/execution"
+import { ToolRetryGuard } from "@/session/tool-retry-guard"
 
 /**
  * Persistent R runtime, following the same pattern as the Python runtime in
@@ -641,6 +642,13 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
     }
   }
   const title = params.title ?? "R execution"
+  const retryInput = { ...params, code: params.code! }
+  await ToolRetryGuard.assertKernel(ctx, {
+    language: "r",
+    environment: "r",
+    source: params.source,
+    code: params.code!,
+  })
   const mutation = KernelEnvironmentMutation.detect({ language: "r", environment: "r", code: params.code! })
   ctx.metadata({
     title,
@@ -697,7 +705,7 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
     )
   } catch (error) {
     if (mutation) await KernelRuntime.release(identity).catch(() => undefined)
-    throw error
+    throw ToolRetryGuard.annotateKernelTimeout(ctx, retryInput, "r", "r", error)
   }
 
   let restarted = false

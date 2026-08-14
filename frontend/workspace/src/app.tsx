@@ -10,7 +10,6 @@ import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { normalizeServerUrl, ServerProvider, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
-import { PromptProvider } from "@/context/prompt"
 import { CommentsProvider } from "@/context/comments"
 import { NotificationProvider } from "@/context/notification"
 import { ModelsProvider } from "@/context/models"
@@ -162,13 +161,11 @@ export function AppInterface(props: { defaultUrl?: string }) {
                   path="/session/:id?"
                   component={(p) => (
                     <Show when={p.params.id ?? "new"}>
-                      <PromptProvider>
-                        <CommentsProvider>
-                          <Suspense fallback={<Loading />}>
-                            <Session />
-                          </Suspense>
-                        </CommentsProvider>
-                      </PromptProvider>
+                      <CommentsProvider>
+                        <Suspense fallback={<Loading />}>
+                          <Session />
+                        </Suspense>
+                      </CommentsProvider>
                     </Show>
                   )}
                 />

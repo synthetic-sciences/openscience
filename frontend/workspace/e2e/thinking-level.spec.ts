@@ -8,10 +8,10 @@ test("thinking effort and speed reach the prompt request through the settings po
 }) => {
   await gotoSession()
 
-  // Effort defaults to Auto (standard); the inline effort chip stays hidden
-  // until a non-default effort is chosen.
-  await expect(modelRowValue(page, "effort")).resolves.toBe("Auto")
-  await expect(page.locator(effortChipSelector)).toHaveCount(0)
+  // The explicit Standard default stays visible so users can inspect and
+  // change thinking effort without opening the full model menu.
+  await expect(modelRowValue(page, "effort")).resolves.toBe("Standard")
+  await expect(page.locator(effortChipSelector)).toHaveText("Standard")
 
   const send = async (options: { variant?: string; tier?: string } = {}) => {
     const request = page.waitForRequest((request) => {

@@ -7,6 +7,7 @@
 [data-component="conversation-center"] {
   /* The dock height is replaced with its measured value by the session shell.
      These fallbacks keep first paint and non-ResizeObserver environments safe. */
+  --chat-radius-pill: 999px;
   --workspace-composer-height: calc(116px + env(safe-area-inset-bottom));
   --workspace-composer-clearance: var(--space-5);
   --workspace-composer-reserve: calc(var(--workspace-composer-height) + var(--workspace-composer-clearance));
@@ -413,7 +414,7 @@
   gap: 6px;
   padding: 6px 12px;
   border: 1px solid var(--color-border-strong);
-  border-radius: 999px;
+  border-radius: var(--chat-radius-pill);
   background: var(--color-surface-solid);
   box-shadow: var(--atlas-shadow-sm);
   color: var(--color-text);

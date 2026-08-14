@@ -4,7 +4,7 @@ import path from "node:path"
 import { test, expect } from "./fixtures"
 import { openConnectedFile } from "./utils"
 
-test("opens, executes, edits, and saves a native Jupyter notebook", async ({ page, sdk, openSession }) => {
+test("opens, edits, and saves a Jupyter notebook as source", async ({ page, sdk, openSession }) => {
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "openscience-notebook-e2e-")))
   const filename = "analysis.ipynb"
   const filepath = path.join(directory, filename)
@@ -45,39 +45,21 @@ test("opens, executes, edits, and saves a native Jupyter notebook", async ({ pag
     await sdk.session.filesystem.grant({ sessionID, path: directory, access: "write", scope: "session" })
     await openConnectedFile(page, directory, filename)
 
-    const notebook = page.locator('[data-component="notebook"]')
-    await expect(notebook).toBeVisible()
-    await expect(notebook.getByText("Experiment", { exact: true })).toBeVisible()
-    await expect(notebook.locator('[data-cell-type="code"]')).toHaveCount(2)
+    const view = page.locator('[data-component="file-view"]:visible')
+    await expect(view).toContainText("IPYNB source")
+    await expect(view.getByRole("tab", { name: "Preview", exact: true })).toBeVisible()
+    await expect(view.getByRole("tab", { name: "Edit", exact: true })).toBeVisible()
+    await expect(view.getByText('"nbformat": 4,', { exact: true })).toBeVisible()
 
-    await notebook.locator('[data-action="run-all"]').click()
-    await expect(notebook.getByText("42", { exact: true })).toBeVisible({ timeout: 20_000 })
-    // The kernel-ready state is a 6px status dot; assert it exists rather than
-    // its pixel visibility, since the "42" output already proves execution.
-    await expect(notebook.getByLabel("Kernel ready")).toBeAttached()
+    await view.getByRole("tab", { name: "Edit", exact: true }).click()
+    const editor = view.getByLabel("File source")
+    const source = JSON.parse(await editor.inputValue())
+    expect(source.cells[2].source).toEqual(["value + 1"])
+    source.cells[2].source = ["value + 2"]
+    await editor.fill(JSON.stringify(source, null, 2))
+    await view.getByRole("button", { name: "Save changes", exact: true }).click()
 
-    const result = notebook.getByLabel("code cell 3")
-    await result.fill("value + 2")
-    await notebook.locator('[data-action="notebook-diff"]').click()
-    await expect(page.getByRole("dialog", { name: "Notebook changes" })).toBeVisible()
-    await page.getByRole("dialog", { name: "Notebook changes" }).getByRole("button", { name: "close" }).click()
-
-    await notebook.locator('[data-action="notebook-export"]').click()
-    const download = page.waitForEvent("download")
-    await page.getByRole("menuitem", { name: "Python script (.py)" }).click()
-    expect((await download).suggestedFilename()).toBe("analysis.py")
-
-    await notebook.locator('[data-cell-id="result"] [data-action="run-cell"]').click()
-    await expect(notebook.getByText("43", { exact: true })).toBeVisible()
-
-    await page.keyboard.press("Control+s")
     await expect.poll(() => JSON.parse(readFileSync(filepath, "utf8")).cells[2].source).toEqual(["value + 2"])
-    await expect
-      .poll(() => JSON.parse(readFileSync(filepath, "utf8")).cells[2].outputs[0].data["text/plain"])
-      .toBe("43")
-    await expect
-      .poll(() => JSON.parse(readFileSync(filepath, "utf8")).cells[2].metadata.openscience.provenance_id)
-      .toMatch(/^[a-f0-9]{16}$/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

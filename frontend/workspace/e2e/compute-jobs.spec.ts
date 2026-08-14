@@ -1,122 +1,71 @@
-import { mkdtempSync, realpathSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import path from "node:path"
 import type { Page } from "@playwright/test"
 import { expect, test } from "./fixtures"
-import { createSdk, promptSelector, sessionPath, trustProject } from "./utils"
 
-async function openJobs(page: Page) {
-  await page.getByRole("button", { name: "Open session compute", exact: true }).click()
-  const pane = page.locator(".session-right-pane")
-  await pane.getByRole("tab", { name: "Jobs", exact: true }).click()
-  await expect(pane.getByText("Research jobs", { exact: true })).toBeVisible()
-  return pane
+const completedJob = {
+  id: "job_completed_e2e",
+  name: "Completed remote result",
+  command: "python train.py",
+  target: { kind: "modal" },
+  target_label: "Modal",
+  scheduler: "none",
+  status: "succeeded",
+  created_at: "2026-08-08T10:00:00.000Z",
+  started_at: "2026-08-08T10:00:01.000Z",
+  completed_at: "2026-08-08T10:01:01.000Z",
+  exit_code: 0,
+  resources: { cpus: 4, gpus: 1, memory_gb: 16 },
+  artifacts: [
+    {
+      path: "model.pkl",
+      size: 10,
+      sha256: "a".repeat(64),
+      modified_at: "2026-08-08T10:01:01.000Z",
+    },
+  ],
+  lifecycle: { execution: "succeeded", delivery: "delivered", resource: "closed", recoverable: false },
+  modal: {
+    app: "openscience",
+    image: "python:3.12",
+    gpu: "A100",
+    network: "none",
+    timeout_minutes: 10,
+    uploads: [],
+    upload_bytes: 0,
+    approval: "b".repeat(64),
+    sdk: "1",
+  },
 }
 
-test("runs a reproducible local job and captures outputs from the right pane", async ({
-  page,
-  directory: project,
-  openSession,
-}) => {
-  // Local compute jobs must run inside the project workspace, so stage the
-  // working directory beneath the project root rather than in the OS tmp dir.
-  const directory = realpathSync(mkdtempSync(path.join(project, ".e2e-compute-")))
-  try {
-    await openSession()
-    await trustProject(createSdk(project), project)
+async function openCompute(page: Page) {
+  await page.getByRole("button", { name: "Open project compute", exact: true }).click()
+  const surface = page.getByRole("region", { name: "Compute", exact: true })
+  await expect(surface).toBeVisible()
+  return surface
+}
 
-    const pane = await openJobs(page)
-    // Kernel cards and jobs share the Compute surface; the kernels tab is the
-    // default landing view.
-    await expect(pane.getByRole("tab", { name: "Kernels", exact: true })).toBeVisible()
+test("keeps a completed remote result readable in project Compute", async ({ page, openSession }) => {
+  await page.route("**/settings/compute/jobs", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([completedJob]) }),
+  )
 
-    await pane.getByTitle("New job").click()
-    await pane.getByLabel("Job name").fill("Playwright compute smoke")
-    await pane.getByLabel("Working directory").fill(directory)
-    await pane
-      .getByLabel("Command")
-      .fill(
-        "mkdir -p outputs && printf 'metric,value\\nloss,0.1\\n' > outputs/ui-results.csv && printf 'ui-compute-ok\\n'",
-      )
-    await pane.getByRole("button", { name: "Resources and reproducibility" }).click()
-    await pane.getByLabel("CPU cores").fill("2")
-    await pane.getByLabel("Memory in GB").fill("4")
-    await pane.getByLabel("Artifact patterns").fill("outputs/**/*.csv")
-
-    // Dispatch is absent until an explicit review of the exact staged command.
-    const dispatch = pane.getByRole("button", { name: "Dispatch", exact: true })
-    await expect(dispatch).toHaveCount(0)
-    await pane.getByRole("button", { name: "Review command", exact: true }).click()
-    await expect(pane.getByTestId("dispatch-preview")).toContainText("ui-compute-ok")
-    await expect(dispatch).toBeVisible()
-    await dispatch.click()
-
-    await expect(pane.getByText("Playwright compute smoke", { exact: true })).toHaveCount(1)
-    await expect(pane.locator("pre")).toContainText("ui-compute-ok")
-    await expect(pane.getByText(/This computer · succeeded/)).toBeVisible()
-    await expect(pane.getByText("Captured outputs", { exact: true })).toBeVisible()
-    await expect(pane.getByText("outputs/ui-results.csv", { exact: true })).toBeVisible()
-    await expect(pane.getByText("Reproducibility", { exact: true })).toBeVisible()
-    await expect(pane.getByRole("button", { name: "Export manifest" })).toBeVisible()
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
-})
-
-test("shows a cancelled run without duplicating its expanded title", async ({ page, directory, openSession }) => {
   await openSession()
-  await trustProject(createSdk(directory), directory)
+  const surface = await openCompute(page)
 
-  const pane = await openJobs(page)
-  await pane.getByTitle("New job").click()
-  await pane.getByLabel("Job name").fill("Playwright cancellation")
-  await pane.getByRole("textbox", { name: "Command", exact: true }).fill("sleep 300")
-  await pane.getByRole("button", { name: "Review command", exact: true }).click()
-  await pane.getByRole("button", { name: "Dispatch", exact: true }).click()
-
-  await expect(pane.getByText("Playwright cancellation", { exact: true })).toHaveCount(1)
-  await expect(pane.getByText(/This computer · running/)).toBeVisible()
-  await pane.getByTitle("Cancel job").click()
-
-  await expect(pane.getByText(/This computer · cancelled/)).toBeVisible()
-  await expect(pane.locator("pre").filter({ hasText: "Run cancelled." })).toBeVisible()
-  await expect(pane.getByText("Playwright cancellation", { exact: true })).toHaveCount(1)
+  await expect(surface.getByText("Completed remote result", { exact: true })).toBeVisible()
+  await expect(surface.getByText("Exit 0 · 1 file", { exact: true })).toBeVisible()
+  await expect(surface.getByRole("region", { name: "Remote activity", exact: true })).toBeVisible()
+  await expect(surface.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0)
 })
 
-test("defaults a local compute job to the active research project", async ({ page }) => {
-  const first = realpathSync(mkdtempSync(path.join(tmpdir(), "openscience-compute-first-")))
-  const project = realpathSync(mkdtempSync(path.join(tmpdir(), "openscience-compute-project-")))
-  const firstSdk = createSdk(first)
-  const projectSdk = createSdk(project)
-  const firstSession = await firstSdk.session.create({ title: "First compute project" }).then((result) => result.data)
-  const projectSession = await projectSdk.session
-    .create({ title: "Current compute project" })
-    .then((result) => result.data)
-  if (!firstSession?.id || !projectSession?.id) throw new Error("Session create did not return an id")
-  try {
-    await trustProject(firstSdk, first)
-    await trustProject(projectSdk, project)
-    await page.goto(sessionPath(first, firstSession.id))
-    await expect(page.locator(promptSelector)).toBeVisible()
-    await openJobs(page)
+test("project Compute remains an inventory rather than a second launcher", async ({ page, openSession }) => {
+  await page.route("**/settings/compute/jobs", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  )
 
-    await page.goto(sessionPath(project, projectSession.id))
-    await expect(page.locator(promptSelector)).toBeVisible()
-    const pane = await openJobs(page)
-    await pane.getByTitle("New job").click()
+  await openSession()
+  const surface = await openCompute(page)
 
-    await pane.getByLabel("Job name").fill("Project cwd smoke")
-    await pane.getByRole("textbox", { name: "Command", exact: true }).fill("pwd")
-    await pane.getByRole("button", { name: "Review command", exact: true }).click()
-    await pane.getByRole("button", { name: "Dispatch", exact: true }).click()
-
-    await expect(pane.getByText("Project cwd smoke", { exact: true }).first()).toBeVisible()
-    await expect(pane.locator("pre")).toContainText(project)
-    await expect(pane).toContainText(`Working directory · ${project}`)
-  } finally {
-    await firstSdk.session.delete({ sessionID: firstSession.id }).catch(() => undefined)
-    await projectSdk.session.delete({ sessionID: projectSession.id }).catch(() => undefined)
-    rmSync(first, { recursive: true, force: true })
-    rmSync(project, { recursive: true, force: true })
-  }
+  await expect(surface.getByRole("region", { name: "Project compute", exact: true })).toBeVisible()
+  await expect(surface.getByTitle("New job")).toHaveCount(0)
+  await expect(surface.getByRole("tab", { name: "Jobs", exact: true })).toHaveCount(0)
 })

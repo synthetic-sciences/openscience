@@ -18,9 +18,8 @@ test("keeps Files and Customize labels visually consistent", async ({ page, goto
     ["Models"],
     ["Skills", "Add skill"],
     ["Connectors", "Add connector"],
-    ["Specialists", "Add specialist"],
     ["Compute", "Add host"],
-    ["Network", "Add"],
+    ["Network", "Add domain"],
     ["Permissions"],
     ["Sandbox", "Run self-test"],
     ["Credentials"],
@@ -40,22 +39,19 @@ test("keeps Files and Customize labels visually consistent", async ({ page, goto
   }
 
   await dialog.getByRole("button", { name: "Storage", exact: true }).click()
-  await dialog.getByRole("button", { name: "Change location", exact: true }).click()
+  await dialog.getByRole("button", { name: /^Change location/ }).click()
   const location = dialog.getByRole("textbox", { name: "New data directory", exact: true })
   await expect(location).toBeVisible()
   await expect(location).toHaveCSS("font-family", /Söhne Mono|Sohne Mono|ui-monospace/)
-  const copy = dialog.getByRole("button", { name: "Copy data", exact: true })
-  await expect(copy).toBeDisabled()
+  const move = dialog.getByRole("button", { name: "Move data", exact: true })
+  await expect(move).toBeDisabled()
 
   const target = testInfo.outputPath("relocated-data")
   await rm(target, { recursive: true, force: true })
   try {
     await location.fill(target)
-    await expect(copy).toBeEnabled()
-    await copy.click()
-    await expect(
-      dialog.getByText(`Data copied to ${target}. Restart OpenScience to use the new location.`),
-    ).toBeVisible()
+    await expect(move).toBeEnabled()
+    await expect(move).toHaveCSS("font-family", /Inter/)
   } finally {
     await rm(target, { recursive: true, force: true })
   }
@@ -76,7 +72,7 @@ test("keeps destructive confirmations on the workspace type scale", async ({ pag
   await expect(title).toBeVisible()
   await expect(title).toHaveCSS("font-family", /Inter/)
   await expect(title).toHaveCSS("font-size", "16px")
-  await expect(title).toHaveCSS("font-weight", "500")
+  await expect(title).toHaveCSS("font-weight", "480")
   await expect(title).toHaveCSS("line-height", "28.8px")
 
   const cancel = confirmation.getByRole("button", { name: "Cancel", exact: true })

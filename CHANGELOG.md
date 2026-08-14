@@ -6,6 +6,177 @@ All notable changes to OpenScience are recorded here. The project follows
 [`@synsci/openscience`](https://www.npmjs.com/package/@synsci/openscience); each
 tagged release also ships native binaries for Linux, macOS, and Windows.
 
+## Unreleased
+
+### Added
+
+- Added a conversation-first Research harness with bounded Normal and Ultra
+  delegation, persistent Python and R analysis, governed remote compute, and a
+  reproducible trajectory dashboard for harness evaluation.
+
+### Changed
+
+- Simplified the project sidebar, model and effort controls, chat typography,
+  sent-message surfaces, and Compute into a quieter results-first workspace.
+- Unified logical model names while keeping API-key and ChatGPT access routes
+  explicit in both the composer and Settings.
+
+### Fixed
+
+- Hardened research runs against repeated terminal URLs, guessed download-size
+  escalation, substantially identical timed-out kernel work, stale tool
+  outcomes, cross-process cancellation races, and orphaned kernel lifecycles.
+- Preserved exact session and tool-output filesystem capabilities across local
+  work and delegated handoffs without broadening external-directory access.
+- Restored the v2 Review settings API, truthful runtime progress capture, and
+  hermetic browser and publication workflows for release validation.
+
+## v2.0.23 — 2026-08-09
+
+### Changed
+
+- Unified scientific compute, results, and artifact workflows around a smaller
+  project-scoped Compute surface, with truthful kernel lifecycle and durable job
+  history.
+- Minimized completed compute records while keeping recovery, result delivery,
+  and provenance visible.
+- Updated provider branding in settings.
+
+## v2.0.22 — 2026-08-07
+
+### Changed
+
+- Streamlined the research workspace and terminal, removed redundant starter
+  surfaces, and unified credential access with Atlas sync.
+- Hardened legacy data migration and added recognizable credential-provider
+  logos.
+
+## v2.0.21 — 2026-08-07
+
+### Fixed
+
+- Restored legacy OpenScience data during upgrades.
+
+## v2.0.2 — 2026-08-06
+
+### Added
+
+- Added the local-first scientific workbench, 42 scientific connectors, durable
+  artifacts, governed Modal compute, truthful host/kernel capacity, and rich
+  previews for scientific files.
+
+### Changed
+
+- Rebuilt Files and Artifacts, simplified model selection and research
+  navigation, and made the core workspace work offline without an Atlas account.
+
+### Fixed
+
+- Stabilized sessions, storage, managed inference, kernel startup, Modal Volume
+  delivery, model-picker navigation, and multi-platform packaging.
+
+## v2.0.1 — 2026-07-29
+
+### Changed
+
+- Focused the workspace around Files, stabilized Evidence, and simplified the
+  research session surface.
+
+## v2.0.0 — 2026-07-29
+
+### Added
+
+- Added a scientific workbench with native notebook and data-table views,
+  molecular and binary-file inspection, local artifacts, managed compute jobs,
+  research mission control, and resilient workspace recovery.
+- Added reproducibility and publication workflows, versioned review annotations,
+  secure HTML export, and manuscript authoring and review.
+
+### Changed
+
+- Reworked the workspace around contextual artifact inspection and focused
+  research sessions.
+
+## v1.3.5 — 2026-07-27
+
+### Changed
+
+- Updated frontier-model routing and reasoning controls, hardened managed and
+  bring-your-own-key paths, and improved model-selection UX.
+- Hardened native packaging, network boundaries, subprocess environments,
+  kernel/process cleanup, scientific viewers, and workspace performance.
+
+## v1.3.4 — 2026-07-11
+
+### Added
+
+- Added refreshable command-based provider credentials and text/Markdown file
+  attachments.
+
+### Fixed
+
+- Improved context compaction, weak-model continuity, user-config precedence,
+  notebook thread limits, and terminal-session completion behavior.
+
+## v1.3.3 — 2026-07-10
+
+### Added
+
+- Added automatic context compaction and richer streaming chat, tool, skill, and
+  scroll behavior.
+
+### Fixed
+
+- Prevented PDF tab-close hangs and isolated failing file/skill panes from the
+  rest of the session.
+
+## v1.3.2 — 2026-07-09
+
+### Changed
+
+- Consolidated Wallet, Spend, and Usage into Billing and promoted Skills to its
+  own workspace tab.
+- Corrected provider reasoning-effort routing and stabilized the development
+  Atlas graph bridge.
+
+## v1.3.1 — 2026-07-08
+
+### Added
+
+- Added browser-first onboarding, ChatGPT/Codex sign-in, wallet and status
+  surfaces, and broader provider-native reasoning modes.
+
+### Fixed
+
+- Hardened Atlas timeouts, credential precedence, Codex OAuth, scientific source
+  retrieval, local BYOK routing, and file error states.
+
+## v1.3.0 — 2026-07-08
+
+### Added
+
+- Added the opt-in Seatbelt/bubblewrap execution sandbox, first-class local
+  models, session search and history controls, and a simpler composer/model
+  picker.
+
+### Fixed
+
+- Hardened provider routing, config precedence, session retries and cancellation,
+  credential handling, installation detection, and repository transport safety.
+
+## v1.2.10 — 2026-07-06
+
+### Fixed
+
+- Requested OpenAI reasoning summaries on the managed path and replaced the chat
+  turn divider with clearer spacing.
+
+## v1.2.9 — 2026-07-06
+
+### Changed
+
+- Flattened the new-session action and refined composer focus and corner styling.
+
 ## v1.2.8 — 2026-07-06
 
 ### Fixed

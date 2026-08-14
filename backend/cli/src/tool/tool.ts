@@ -76,7 +76,7 @@ export namespace Tool {
           if (result.metadata.truncated !== undefined) {
             return result
           }
-          const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
+          const truncated = await Truncate.output(result.output, { sessionID: ctx.sessionID }, initCtx?.agent)
           return {
             ...result,
             output: truncated.content,

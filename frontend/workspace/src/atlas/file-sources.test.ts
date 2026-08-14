@@ -58,7 +58,7 @@ const snapshot = {
   ],
   enforcement: {
     broker: "enforced",
-    processWrite: "workspace_only",
+    processWrite: "grant_only",
     processRead: "policy_only",
   },
 } satisfies FilesystemSnapshot
@@ -104,6 +104,34 @@ describe("filesystem source isolation", () => {
     expect(findFilesystemGrant(snapshot, "/data/publish/report.pdf", "write")?.id).toBe("fsg_publish")
     expect(findFilesystemGrant(snapshot, "/data/shared/reference.csv", "read")?.id).toBe("fsg_installation")
     expect(findFilesystemGrant(snapshot, "/data/old/result.csv", "read")).toBeUndefined()
+  })
+
+  test("accepts internal tool authority without exposing it as a connected folder", () => {
+    const mixed = {
+      ...snapshot,
+      enforcement: { ...snapshot.enforcement, processRead: "grant_only" as const },
+      grants: [
+        snapshot.grants[0],
+        {
+          id: "fsg_tool",
+          path: "/work/alpha/.scratch/tool-output",
+          access: "read",
+          scope: "session",
+          source: "tool",
+          time: { created: 2 },
+        },
+        snapshot.grants[1],
+      ],
+    } satisfies FilesystemSnapshot
+
+    const parsed = parseFilesystemSnapshot(mixed, {
+      sessionID: "ses_alpha",
+      projectID: "prj_alpha",
+      directory: "/work/alpha",
+    })
+
+    expect(parsed?.grants.map((grant) => grant.source)).toEqual(["workspace", "tool", "api"])
+    expect(connectedFilesystemGrants(parsed).map((grant) => grant.id)).toEqual(["fsg_read"])
   })
 
   test("uses the durable session workspace grant as the Session files root", () => {

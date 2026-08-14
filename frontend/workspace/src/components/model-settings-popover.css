@@ -125,6 +125,17 @@
   font-weight: var(--font-weight-medium);
 }
 
+@media (pointer: coarse) {
+  [data-model-control-group="label"] {
+    height: 44px;
+  }
+
+  [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"],
+  [data-model-effort-chip] {
+    min-height: 44px;
+  }
+}
+
 [data-model-effort-chip]:hover,
 [data-model-effort-chip]:focus-visible {
   background: var(--model-control-hover);

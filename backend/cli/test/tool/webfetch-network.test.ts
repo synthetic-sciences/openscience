@@ -15,6 +15,15 @@ import path from "node:path"
 
 const realFetch = globalThis.fetch
 
+async function captureError(promise: Promise<unknown>): Promise<Error> {
+  try {
+    await promise
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error))
+  }
+  throw new Error("Expected operation to fail")
+}
+
 async function waitForStagedDownload(parent: string) {
   for (let attempt = 0; attempt < 250; attempt++) {
     const staged = (await fs.readdir(parent)).find((entry) => entry.startsWith(".openscience-download-"))
@@ -24,17 +33,62 @@ async function waitForStagedDownload(parent: string) {
   throw new Error("Timed out waiting for the staged WebFetch download")
 }
 
-function context(ask: Tool.Context["ask"]): Tool.Context {
+function context(ask: Tool.Context["ask"], messages: Tool.Context["messages"] = []): Tool.Context {
   return {
     sessionID: "session_test",
     messageID: "message_test",
     agent: "research",
     abort: new AbortController().signal,
     extra: {},
-    messages: [],
+    messages,
     metadata: () => {},
     ask,
   }
+}
+
+function failedToolHistory(input: Record<string, unknown>, error: string, callID = "call_prior") {
+  return [
+    {
+      info: { id: "message_prior", sessionID: "session_test", role: "assistant" },
+      parts: [
+        {
+          id: "part_prior",
+          sessionID: "session_test",
+          messageID: "message_prior",
+          type: "tool",
+          tool: "webfetch",
+          callID,
+          state: { status: "error", input, error, time: { start: 1, end: 2 } },
+        },
+      ],
+    },
+  ] as unknown as Tool.Context["messages"]
+}
+
+function completedToolHistory(input: Record<string, unknown>, output: string, callID: string) {
+  return [
+    {
+      info: { id: "message_evidence", sessionID: "session_test", role: "assistant" },
+      parts: [
+        {
+          id: "part_evidence",
+          sessionID: "session_test",
+          messageID: "message_evidence",
+          type: "tool",
+          tool: "webfetch",
+          callID,
+          state: {
+            status: "completed",
+            input,
+            output,
+            title: "Metadata",
+            metadata: {},
+            time: { start: 3, end: 4 },
+          },
+        },
+      ],
+    },
+  ] as unknown as Tool.Context["messages"]
 }
 
 afterEach(async () => {
@@ -124,6 +178,54 @@ test("webfetch rejects declared oversized text with terminal pagination and down
   )
 })
 
+test("webfetch stops a repeated oversized body before network but permits pagination", async () => {
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  let fetches = 0
+  globalThis.fetch = (async () => {
+    fetches++
+    if (fetches === 1) {
+      return new Response("body must not be exposed", {
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(MAX_RESPONSE_SIZE + 1),
+        },
+      })
+    }
+    return new Response("page two", { headers: { "content-type": "text/plain" } })
+  }) as unknown as typeof fetch
+
+  const webfetch = await WebFetchTool.init()
+  const url = "https://example.com/oversized-body"
+  const first = await captureError(
+    webfetch.execute(
+      { url, format: "text" },
+      context(async () => {}),
+    ),
+  )
+  expect(first.message).toContain("Response is too large for Web fetch")
+  expect(first.message).not.toContain("[openscience-")
+
+  let asks = 0
+  await expect(
+    webfetch.execute(
+      { url: `${url}#format-only`, format: "html" },
+      context(async () => {
+        asks++
+      }),
+    ),
+  ).rejects.toThrow("already exceeded the WebFetch body-response limit")
+  expect(fetches).toBe(1)
+  expect(asks).toBe(0)
+
+  await expect(
+    webfetch.execute(
+      { url: `${url}?page=2`, format: "text" },
+      context(async () => {}),
+    ),
+  ).resolves.toMatchObject({ output: "page two" })
+  expect(fetches).toBe(2)
+})
+
 test("webfetch bounds a chunked response while it is being read", async () => {
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
   let cancelled = false
@@ -174,31 +276,93 @@ test("webfetch refuses binary attachments instead of decoding them as UTF-8", as
 
 test("webfetch marks a 404 as terminal instead of inviting a blind retry", async () => {
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
-  globalThis.fetch = (async () => new Response("missing", { status: 404 })) as unknown as typeof fetch
+  let fetches = 0
+  globalThis.fetch = (async () => {
+    fetches++
+    return new Response("missing", { status: 404 })
+  }) as unknown as typeof fetch
 
   const webfetch = await WebFetchTool.init()
-  await expect(
+  const input = { url: "https://example.com/missing", format: "text" as const }
+  const first = await captureError(
     webfetch.execute(
-      { url: "https://example.com/missing", format: "text" },
+      input,
       context(async () => {}),
     ),
-  ).rejects.toThrow("Do not retry the same URL; verify it with the service's listing or metadata endpoint.")
+  )
+  expect(first.message).toContain(
+    "Do not retry the same URL; verify it with the service's listing or metadata endpoint.",
+  )
+
+  let asks = 0
+  await expect(
+    webfetch.execute(
+      { url: "https://EXAMPLE.COM:443/missing#client-fragment", format: "markdown", timeout: 120 },
+      context(
+        async () => {
+          asks++
+        },
+        failedToolHistory(input, first.message),
+      ),
+    ),
+  ).rejects.toThrow("already received deterministic HTTP 404")
+  expect(fetches).toBe(1)
+  expect(asks).toBe(0)
 })
 
 test("webfetch explains that a 405 needs a documented non-GET request", async () => {
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
-  globalThis.fetch = (async () => new Response("method not allowed", { status: 405 })) as unknown as typeof fetch
+  let fetches = 0
+  globalThis.fetch = (async () => {
+    fetches++
+    return new Response("method not allowed", { status: 405 })
+  }) as unknown as typeof fetch
 
   const webfetch = await WebFetchTool.init()
-  await expect(
+  const input = { url: "https://example.com/post-only", format: "text" as const }
+  const first = await captureError(
     webfetch.execute(
-      { url: "https://example.com/post-only", format: "text" },
+      input,
       context(async () => {}),
     ),
-  ).rejects.toThrow(
-    "Web fetch sends GET, but this endpoint does not accept GET. Do not retry the same URL with Web fetch; " +
-      "verify the documented HTTP method",
   )
+  expect(first.message).toContain(
+    "Web fetch sends GET, but this endpoint does not accept GET. Do not retry the same URL with Web fetch; verify the documented HTTP method",
+  )
+  await expect(
+    webfetch.execute(
+      { url: "https://example.com:443/post-only#retry", format: "html" },
+      context(async () => {}, failedToolHistory(input, first.message)),
+    ),
+  ).rejects.toThrow("already received deterministic HTTP 405")
+  expect(fetches).toBe(1)
+})
+
+test("webfetch still permits a same-URL retry after a non-terminal server failure", async () => {
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  let fetches = 0
+  globalThis.fetch = (async () => {
+    fetches++
+    return fetches === 1
+      ? new Response("temporary", { status: 503 })
+      : new Response("recovered", { headers: { "content-type": "text/plain" } })
+  }) as unknown as typeof fetch
+
+  const webfetch = await WebFetchTool.init()
+  const input = { url: "https://example.com/transient", format: "text" as const }
+  const first = await captureError(
+    webfetch.execute(
+      input,
+      context(async () => {}),
+    ),
+  )
+  expect(first.message).toContain("status code: 503")
+  const result = await webfetch.execute(
+    input,
+    context(async () => {}, failedToolHistory(input, first.message, "call_transient")),
+  )
+  expect(result.output).toBe("recovered")
+  expect(fetches).toBe(2)
 })
 
 test("webfetch streams a brokered binary download through a reauthorized redirect", async () => {
@@ -381,14 +545,21 @@ test("webfetch download rejects a direct final-component symlink escape before f
   }
 })
 
-test("webfetch download rejects declared oversize before consuming the body and creates no file", async () => {
+test("webfetch download stops guessed cap escalation and permits one server-declared retry", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-declared-limit-"))
   const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
   let cancelled = false
-  globalThis.fetch = (async () =>
-    new Response(
+  let fetches = 0
+  const payload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+  globalThis.fetch = (async () => {
+    fetches++
+    return new Response(
       new ReadableStream({
+        start(controller) {
+          controller.enqueue(payload)
+          controller.close()
+        },
         cancel() {
           cancelled = true
         },
@@ -399,25 +570,54 @@ test("webfetch download rejects declared oversize before consuming the body and 
           "content-length": "9",
         },
       },
-    )) as unknown as typeof fetch
+    )
+  }) as unknown as typeof fetch
 
   try {
     const webfetch = await WebFetchTool.init()
-    await expect(
+    const input = {
+      url: "https://example.com/too-large",
+      format: "text" as const,
+      output_path: "declared.bin",
+      max_bytes: 8,
+    }
+    const first = await captureError(
       webfetch.execute(
-        {
-          url: "https://example.com/too-large",
-          format: "text",
-          output_path: "declared.bin",
-          max_bytes: 8,
-        },
+        input,
         context(async () => {}),
       ),
-    ).rejects.toThrow(
+    )
+    expect(first.message).toContain(
       "Download exceeds max_bytes (9 bytes > 8 bytes). No destination file was created. Choose a smaller source or explicitly set max_bytes once from the declared size",
     )
     expect(cancelled).toBe(true)
     expect(await fs.readdir(root)).toEqual([])
+
+    const history = failedToolHistory(input, first.message, "call_declared_oversize")
+    const guessed = await captureError(
+      webfetch.execute(
+        { ...input, output_path: "guessed.bin", max_bytes: 16 },
+        context(async () => {}, history),
+      ),
+    )
+    expect(guessed.message).toContain("another guessed max_bytes escalation was stopped before network access")
+    expect(guessed.message).toContain("The server previously declared exactly 9 bytes")
+    expect(guessed.message).toContain('output_path: "guessed.bin", declared_size_bytes: 9, and max_bytes: 9')
+    await expect(
+      webfetch.execute(
+        { ...input, output_path: "invented.bin", max_bytes: 10, declared_size_bytes: 10 },
+        context(async () => {}, history),
+      ),
+    ).rejects.toThrow("must exactly match the server Content-Length already recorded for this URL (9 bytes)")
+    expect(fetches).toBe(1)
+
+    const result = await webfetch.execute(
+      { ...input, output_path: "declared.bin", max_bytes: 9, declared_size_bytes: 9 },
+      context(async () => {}, history),
+    )
+    expect(result.metadata).toMatchObject({ download: { bytes: 9 } })
+    expect(await fs.readFile(path.join(root, "declared.bin"))).toEqual(Buffer.from(payload))
+    expect(fetches).toBe(2)
   } finally {
     workspace.mockRestore()
     await fs.rm(root, { recursive: true, force: true })
@@ -431,38 +631,77 @@ test("webfetch download aborts a chunked body at max_bytes and removes the parti
   const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
   let cancelled = false
-  globalThis.fetch = (async () =>
-    new Response(
+  let fetches = 0
+  let chunks = 0
+  globalThis.fetch = (async () => {
+    fetches++
+    if (fetches > 1) {
+      return new Response(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), {
+        headers: { "content-type": "application/octet-stream" },
+      })
+    }
+    return new Response(
       new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new Uint8Array([1, 2, 3, 4]))
-          controller.enqueue(new Uint8Array([5, 6, 7, 8]))
+        pull(controller) {
+          const next = chunks++ === 0 ? [1, 2, 3, 4] : [5, 6, 7, 8]
+          controller.enqueue(new Uint8Array(next))
         },
         cancel() {
           cancelled = true
         },
       }),
       { headers: { "content-type": "application/octet-stream" } },
-    )) as unknown as typeof fetch
+    )
+  }) as unknown as typeof fetch
 
   try {
     const webfetch = await WebFetchTool.init()
-    await expect(
+    const input = {
+      url: "https://example.com/chunked-large",
+      format: "text" as const,
+      output_path: "chunked.bin",
+      max_bytes: 6,
+    }
+    const first = await captureError(
       webfetch.execute(
-        {
-          url: "https://example.com/chunked-large",
-          format: "text",
-          output_path: "chunked.bin",
-          max_bytes: 6,
-        },
+        input,
         context(async () => {}),
       ),
-    ).rejects.toThrow(
-      "Download exceeds max_bytes (6 bytes). Partial data was discarded; choose a smaller source, or omit a custom max_bytes once to use the bounded default. Do not retry this URL with incrementally larger caps.",
+    )
+    expect(first.message).toContain(
+      "Download exceeds max_bytes (6 bytes). Partial data was discarded; use a metadata/listing endpoint to obtain the exact byte size for one evidence-backed retry, choose a smaller or paginated source, or use a different canonical download URL. Do not retry this URL with incrementally larger caps.",
     )
     expect(cancelled).toBe(true)
     expect(await fs.readdir(root)).toEqual([])
     expect(await fs.readdir(base)).toEqual(["workspace"])
+    await expect(
+      webfetch.execute(
+        { ...input, max_bytes: 8, declared_size_bytes: 8 },
+        context(async () => {}, failedToolHistory(input, first.message, "call_chunked_oversize")),
+      ),
+    ).rejects.toThrow("declared_size_bytes needs auditable evidence")
+    expect(fetches).toBe(1)
+
+    const evidenceCallID = "call_size_metadata"
+    const history = [
+      ...failedToolHistory(input, first.message, "call_chunked_oversize"),
+      ...completedToolHistory(
+        { url: "https://example.com/metadata", format: "text" },
+        JSON.stringify({ download_url: input.url, size: 8 }),
+        evidenceCallID,
+      ),
+    ]
+    const recovered = await webfetch.execute(
+      {
+        ...input,
+        max_bytes: 8,
+        declared_size_bytes: 8,
+        declared_size_evidence_call_id: evidenceCallID,
+      },
+      context(async () => {}, history),
+    )
+    expect(recovered.metadata).toMatchObject({ download: { bytes: 8 } })
+    expect(fetches).toBe(2)
   } finally {
     workspace.mockRestore()
     await fs.rm(base, { recursive: true, force: true })

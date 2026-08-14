@@ -29,6 +29,7 @@ import type {
 } from "@/science/kernel/types"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 import { ExecutionAuthority } from "@/project/execution"
+import { ToolRetryGuard } from "@/session/tool-retry-guard"
 
 /**
  * General, non-domain-gated persistent Python runtime.
@@ -768,6 +769,13 @@ async function executePython(params: PythonInput, ctx: Tool.Context, compatibili
     }
   }
   const title = params.title ?? "Python execution"
+  const retryInput = { ...params, environment, code: params.code! }
+  await ToolRetryGuard.assertKernel(ctx, {
+    language: "python",
+    environment,
+    source: params.source,
+    code: params.code!,
+  })
   const mutation = KernelEnvironmentMutation.detect({
     language: "python",
     environment,
@@ -821,7 +829,7 @@ async function executePython(params: PythonInput, ctx: Tool.Context, compatibili
     )
   } catch (error) {
     if (mutation) await KernelRuntime.release(identity).catch(() => undefined)
-    throw error
+    throw ToolRetryGuard.annotateKernelTimeout(ctx, retryInput, "python", environment, error)
   }
 
   let restarted = false

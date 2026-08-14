@@ -36,6 +36,20 @@ export type BadRequestError = {
   success: false
 }
 
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type EventInstallationUpdated = {
   type: "installation.updated"
   properties: {
@@ -91,20 +105,6 @@ export type EventProjectTrustChanged = {
   }
 }
 
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -138,7 +138,7 @@ export type EventSessionFilesystemChanged = {
       path: string
       access: "read" | "write"
       scope: "once" | "session" | "project" | "installation"
-      source: "workspace" | "permission" | "api"
+      source: "workspace" | "permission" | "api" | "tool"
       time: {
         created: number
         consumed?: number
@@ -260,6 +260,7 @@ export type AssistantMessage = {
   parentID: string
   modelID: string
   providerID: string
+  reasoningEffort?: string
   mode: string
   agent: string
   path: {
@@ -987,13 +988,13 @@ export type EventWorktreeFailed = {
 }
 
 export type Event =
+  | EventServerConnected
+  | EventGlobalDisposed
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
   | EventServerInstanceDisposed
   | EventProjectTrustChanged
-  | EventServerConnected
-  | EventGlobalDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileWatcherUpdated
@@ -1651,10 +1652,14 @@ export type ProviderConfig = {
      */
     setCacheKey?: boolean
     /**
-     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
+     * Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. Use idleTimeout to bound silent connections without cutting off active generations.
      */
     timeout?: number | false
-    [key: string]: unknown | string | boolean | number | false | undefined
+    /**
+     * Maximum provider inactivity in milliseconds while connecting or waiting for the next response-body chunk. Defaults to 300000 (5 minutes), resets on each body chunk, and does not cap total generation time.
+     */
+    idleTimeout?: number | false
+    [key: string]: unknown | string | boolean | number | false | number | false | undefined
   }
 }
 
@@ -7683,6 +7688,56 @@ export type SettingsComputeJobsCancelResponses = {
 export type SettingsComputeJobsCancelResponse =
   SettingsComputeJobsCancelResponses[keyof SettingsComputeJobsCancelResponses]
 
+export type SettingsReviewGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/review"
+}
+
+export type SettingsReviewGetResponses = {
+  /**
+   * Reviewer preferences
+   */
+  200: {
+    auto: boolean
+    model?: {
+      providerID: string
+      modelID: string
+    } | null
+  }
+}
+
+export type SettingsReviewGetResponse = SettingsReviewGetResponses[keyof SettingsReviewGetResponses]
+
+export type SettingsReviewSetData = {
+  body?: {
+    auto: boolean
+    model?: {
+      providerID: string
+      modelID: string
+    } | null
+  }
+  path?: never
+  query?: never
+  url: "/settings/review"
+}
+
+export type SettingsReviewSetResponses = {
+  /**
+   * Updated preferences
+   */
+  200: {
+    auto: boolean
+    model?: {
+      providerID: string
+      modelID: string
+    } | null
+  }
+}
+
+export type SettingsReviewSetResponse = SettingsReviewSetResponses[keyof SettingsReviewSetResponses]
+
 export type SettingsPreferencesGetData = {
   body?: never
   path?: never
@@ -9018,7 +9073,7 @@ export type SessionTraceResponses = {
       messageID: string
       name: string
       category: "tool" | "search" | "kernel" | "child" | "artifact" | "review" | "external"
-      status: "pending" | "running" | "completed" | "error"
+      status: "pending" | "running" | "completed" | "partial" | "error"
       title?: string
       startedAt?: number
       completedAt?: number
@@ -9034,7 +9089,7 @@ export type SessionTraceResponses = {
         providerID: string
         modelID: string
       }
-      status: "pending" | "running" | "completed" | "error"
+      status: "pending" | "running" | "completed" | "partial" | "error"
       startedAt?: number
       completedAt?: number
       durationMs?: number
@@ -9207,7 +9262,7 @@ export type SessionFilesystemListResponses = {
       path: string
       access: "read" | "write"
       scope: "once" | "session" | "project" | "installation"
-      source: "workspace" | "permission" | "api"
+      source: "workspace" | "permission" | "api" | "tool"
       time: {
         created: number
         consumed?: number
@@ -9276,7 +9331,7 @@ export type SessionFilesystemGrantResponses = {
     path: string
     access: "read" | "write"
     scope: "once" | "session" | "project" | "installation"
-    source: "workspace" | "permission" | "api"
+    source: "workspace" | "permission" | "api" | "tool"
     time: {
       created: number
       consumed?: number
@@ -9321,7 +9376,7 @@ export type SessionFilesystemRevokeResponses = {
     path: string
     access: "read" | "write"
     scope: "once" | "session" | "project" | "installation"
-    source: "workspace" | "permission" | "api"
+    source: "workspace" | "permission" | "api" | "tool"
     time: {
       created: number
       consumed?: number

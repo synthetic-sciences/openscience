@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
 import {
+  assertTaskContinuation,
   childPermissionRules,
   classifyTaskOutcome,
   summarizeTurn,
@@ -13,6 +14,7 @@ import {
 import { PermissionNext } from "../../src/permission/next"
 import { tmpdir } from "../fixture/fixture"
 import type { MessageV2 } from "../../src/session/message-v2"
+import { Session } from "../../src/session"
 
 test("Task advertises only generic internal profiles while legacy agents remain retrievable", async () => {
   await using tmp = await tmpdir()
@@ -42,6 +44,24 @@ test("child sessions deny recursive delegation even when a profile allows Task",
 
   expect(PermissionNext.evaluate("task", "explore", configuredProfile, child).action).toBe("deny")
   expect(PermissionNext.disabled(["task"], child)).toContain("task")
+})
+
+test("Task continuation accepts only a direct child of the calling session", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parent = await Session.create({})
+      const ownChild = await Session.create({ parentID: parent.id })
+      const siblingParent = await Session.create({})
+      const siblingChild = await Session.create({ parentID: siblingParent.id })
+      const scope = { parentSessionID: parent.id, projectID: parent.projectID }
+
+      expect(assertTaskContinuation({ session: ownChild, ...scope })).toBe(ownChild)
+      expect(() => assertTaskContinuation({ session: parent, ...scope })).toThrow("not a direct child")
+      expect(() => assertTaskContinuation({ session: siblingChild, ...scope })).toThrow("not a direct child")
+    },
+  })
 })
 
 test("continued Tasks report only the current child turn", () => {

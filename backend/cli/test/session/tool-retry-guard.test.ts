@@ -1,0 +1,549 @@
+import { expect, test } from "bun:test"
+import { ToolRetryGuard } from "../../src/session/tool-retry-guard"
+import type { Tool } from "../../src/tool/tool"
+
+function history(input: {
+  tool: "python" | "r"
+  args: Record<string, unknown>
+  error: string
+  metadata?: Record<string, unknown>
+  withHealthProbe?: boolean
+}): Tool.Context["messages"] {
+  const timeout = {
+    id: "part_timeout",
+    sessionID: "session_retry_guard",
+    messageID: "message_timeout",
+    type: "tool" as const,
+    tool: input.tool,
+    callID: "call_timeout",
+    state: {
+      status: "error" as const,
+      input: input.args,
+      error: input.error,
+      metadata: input.metadata,
+      time: { start: 1, end: 2 },
+    },
+  }
+  const health = {
+    id: "part_health",
+    sessionID: "session_retry_guard",
+    messageID: "message_health",
+    type: "tool" as const,
+    tool: input.tool,
+    callID: "call_health",
+    state: {
+      status: "completed" as const,
+      input: { code: input.tool === "python" ? "print(1)" : "cat(1)", timeout: 5_000 },
+      output: "1",
+      title: "Runtime health",
+      metadata: { ok: true },
+      time: { start: 3, end: 4 },
+    },
+  }
+  return [
+    {
+      info: { id: "message_timeout", sessionID: "session_retry_guard", role: "assistant" },
+      parts: [timeout],
+    },
+    ...(input.withHealthProbe
+      ? [
+          {
+            info: { id: "message_health", sessionID: "session_retry_guard", role: "assistant" },
+            parts: [health],
+          },
+        ]
+      : []),
+  ] as unknown as Tool.Context["messages"]
+}
+
+function context(messages: Tool.Context["messages"]): Tool.Context {
+  return {
+    sessionID: "session_retry_guard",
+    messageID: "message_current",
+    callID: "call_current",
+    agent: "research",
+    abort: new AbortController().signal,
+    messages,
+    metadata() {},
+    async ask() {},
+  }
+}
+
+test("kernel timeout similarity catches the P5 pandas retry but allows a raw-byte preflight", () => {
+  const first = {
+    environment: "python",
+    code: [
+      "import pandas as pd, csv, os, json",
+      "for f in ['e_mtab_6701_scea_design.tsv','e_mtab_6701_scea_clusters.tsv']:",
+      "    d=pd.read_csv(f,sep='\\t')",
+      "    print(d.columns.tolist())",
+      "    print(d.head(3).to_string())",
+    ].join("\n"),
+  }
+  const p5Retry = {
+    environment: "python",
+    code: [
+      "import pandas as pd",
+      "for f in ['e_mtab_6701_scea_design.tsv','e_mtab_6701_scea_clusters.tsv']:",
+      "    d=pd.read_csv(f,sep='\\t',nrows=10)",
+      "    print(d.shape,d.columns.tolist())",
+      "    print(d.head(3).to_string())",
+    ].join("\n"),
+  }
+  const preflight = {
+    environment: "python",
+    code: [
+      "from pathlib import Path",
+      "for f in ['e_mtab_6701_scea_design.tsv','e_mtab_6701_scea_clusters.tsv']:",
+      "    print(Path(f).stat().st_size)",
+      "    with open(f,'rb') as handle: print(handle.readline(4096))",
+    ].join("\n"),
+  }
+
+  expect(ToolRetryGuard.kernelSimilarity(first, p5Retry)).toMatchObject({
+    same: true,
+    sharedResources: ["e_mtab_6701_scea_design.tsv", "e_mtab_6701_scea_clusters.tsv"],
+  })
+  expect(ToolRetryGuard.kernelSimilarity(first, preflight).same).toBe(false)
+  expect(ToolRetryGuard.kernelSimilarity(first, { environment: "different", code: first.code }).same).toBe(true)
+  expect(
+    ToolRetryGuard.kernelSimilarity(first, {
+      environment: "different",
+      code: [
+        "from pandas import read_csv",
+        "for f in ['e_mtab_6701_scea_design.tsv','e_mtab_6701_scea_clusters.tsv']:",
+        "    d=read_csv(f,sep='\\t',nrows=10)",
+        "    print(d.head(3).to_string())",
+      ].join("\n"),
+    }).same,
+  ).toBe(true)
+  expect(
+    ToolRetryGuard.kernelSimilarity(first, {
+      environment: "different",
+      code: first.code.replaceAll("pd.read_csv", "pd.read_table"),
+    }),
+  ).toMatchObject({ same: true, changedStrategy: false })
+
+  const cosmeticMarkers = {
+    environment: "renamed-environment",
+    code: `${p5Retry.code}\n# streaming\nnote = 'chunk_size'\nchunk_size = 1000`,
+  }
+  expect(ToolRetryGuard.kernelSimilarity(first, cosmeticMarkers)).toMatchObject({
+    same: true,
+    changedStrategy: false,
+  })
+
+  const appendedUnrelatedStrategy = {
+    environment: "renamed-environment",
+    code: `${first.code}\nimport polars as pl\npl.scan_csv('tiny-unrelated.csv').collect_schema()`,
+  }
+  expect(ToolRetryGuard.kernelSimilarity(first, appendedUnrelatedStrategy)).toMatchObject({
+    same: true,
+    changedStrategy: false,
+  })
+
+  const chunked = {
+    environment: "renamed-environment",
+    code: [
+      "import pandas as pd",
+      "for f in ['e_mtab_6701_scea_design.tsv','e_mtab_6701_scea_clusters.tsv']:",
+      "    for chunk in pd.read_csv(f, sep='\\t', chunksize=1000):",
+      "        print(chunk.shape)",
+    ].join("\n"),
+  }
+  expect(ToolRetryGuard.kernelSimilarity(first, chunked)).toMatchObject({
+    same: false,
+    changedStrategy: true,
+  })
+
+  const transformed = {
+    environment: "renamed-environment",
+    code: "df=pd.read_csv('wide.tsv')\nresult=df.groupby('gene').sum()",
+  }
+  const transformedChunked = {
+    environment: "renamed-environment",
+    code: ["for chunk in pd.read_csv('wide.tsv', chunksize=1000):", "    result=chunk.groupby('gene').sum()"].join(
+      "\n",
+    ),
+  }
+  expect(ToolRetryGuard.kernelSimilarity(transformed, transformedChunked)).toMatchObject({
+    same: false,
+    changedStrategy: true,
+  })
+
+  const polars = {
+    environment: "renamed-environment",
+    code: "import polars as pl\nprint(pl.scan_csv('e_mtab_6701_scea_design.tsv').collect_schema())",
+  }
+  expect(ToolRetryGuard.kernelSimilarity(first, polars)).toMatchObject({
+    same: false,
+    changedStrategy: true,
+  })
+})
+
+test("a successful health probe does not clear a Python timeout for the same operation", async () => {
+  const args = {
+    code: "import time\ntime.sleep(30)",
+    source: "analysis.py",
+    environment: "nbody",
+    timeout: 120_000,
+  }
+  const annotated = ToolRetryGuard.annotateKernelTimeout(
+    context([]),
+    args,
+    "python",
+    "nbody",
+    new Error("Cell execution timed out after 120s"),
+  )
+  expect(annotated.message).toBe("Cell execution timed out after 120s")
+  expect(ToolRetryGuard.errorMetadata(annotated)).toMatchObject({
+    openscienceRetryGuard: {
+      kind: "failure",
+      failure: { code: "kernel_timeout", environment: "nbody", timeout_ms: 120_000 },
+    },
+  })
+
+  await expect(
+    ToolRetryGuard.assertKernel(
+      context(
+        history({
+          tool: "python",
+          args,
+          error: annotated.message,
+          metadata: ToolRetryGuard.errorMetadata(annotated),
+          withHealthProbe: true,
+        }),
+      ),
+      {
+        language: "python",
+        environment: "nbody",
+        source: "analysis.py",
+        code: "import time\n# only cosmetic\ntime.sleep(30)",
+      },
+    ),
+  ).rejects.toThrow("stopped before starting a new kernel")
+
+  await expect(
+    ToolRetryGuard.assertKernel(context(history({ tool: "python", args, error: annotated.message })), {
+      language: "python",
+      environment: "renamed-environment",
+      source: "analysis.py",
+      code: "import time\n# streaming\nnote = 'chunk_size'\nchunk_size = 1000\ntime.sleep(30)",
+    }),
+  ).rejects.toThrow("stopped before starting a new kernel")
+
+  await expect(
+    ToolRetryGuard.assertKernel(context(history({ tool: "python", args, error: annotated.message })), {
+      language: "python",
+      environment: "nbody",
+      source: "analysis.py",
+      code: "from pathlib import Path\nprint(Path('input.tsv').stat().st_size)",
+    }),
+  ).resolves.toBeUndefined()
+})
+
+test("the same timeout guard and changed-strategy escape apply to R", async () => {
+  const args = {
+    code: "d <- read.delim('wide.tsv')\nsummary(d)",
+    timeout: 120_000,
+  }
+  const annotated = ToolRetryGuard.annotateKernelTimeout(
+    context([]),
+    args,
+    "r",
+    "r",
+    new Error("Cell execution timed out after 120s"),
+  )
+  await expect(
+    ToolRetryGuard.assertKernel(context(history({ tool: "r", args, error: annotated.message })), {
+      language: "r",
+      environment: "r",
+      code: "d <- read.delim('wide.tsv', nrows=10)\nsummary(d)",
+    }),
+  ).rejects.toThrow("stopped before starting a new kernel")
+  await expect(
+    ToolRetryGuard.assertKernel(context(history({ tool: "r", args, error: annotated.message })), {
+      language: "r",
+      environment: "renamed-r-environment",
+      code: "d <- utils::read.delim('wide.tsv', nrows=10)\nsummary(d)",
+    }),
+  ).rejects.toThrow("stopped before starting a new kernel")
+  await expect(
+    ToolRetryGuard.assertKernel(context(history({ tool: "r", args, error: annotated.message })), {
+      language: "r",
+      environment: "renamed-r-environment",
+      code: "d <- utils::read.table('wide.tsv', nrows=10)\nsummary(d)",
+    }),
+  ).rejects.toThrow("stopped before starting a new kernel")
+  await expect(
+    ToolRetryGuard.assertKernel(context(history({ tool: "r", args, error: annotated.message })), {
+      language: "r",
+      environment: "renamed-r-environment",
+      code: `${args.code}\nvroom::vroom('tiny-unrelated.tsv')`,
+    }),
+  ).rejects.toThrow("stopped before starting a new kernel")
+  await expect(
+    ToolRetryGuard.assertKernel(context(history({ tool: "r", args, error: annotated.message })), {
+      language: "r",
+      environment: "renamed-r-environment",
+      code: `${args.code}\n# streaming\nchunk_size <- 1000\nnote <- 'chunk_size'`,
+    }),
+  ).rejects.toThrow("stopped before starting a new kernel")
+  await expect(
+    ToolRetryGuard.assertKernel(context(history({ tool: "r", args, error: annotated.message })), {
+      language: "r",
+      environment: "r",
+      code: "print(file.info('wide.tsv')$size)",
+    }),
+  ).resolves.toBeUndefined()
+  await expect(
+    ToolRetryGuard.assertKernel(context(history({ tool: "r", args, error: annotated.message })), {
+      language: "r",
+      environment: "r",
+      code: "d <- vroom::vroom('wide.tsv')\nsummary(d)",
+    }),
+  ).resolves.toBeUndefined()
+})
+
+test("kernel resources canonicalize cosmetic local and HTTP spellings", () => {
+  const local = { environment: "python", source: "cell", code: "df = pd.read_csv('wide.tsv')" }
+  for (const resource of ["./wide.tsv", "./data/../wide.tsv"]) {
+    expect(
+      ToolRetryGuard.kernelSimilarity(local, {
+        environment: "renamed",
+        source: "cell",
+        code: `df = pandas.read_table('${resource}')`,
+      }),
+    ).toMatchObject({ same: true, sharedResources: ["wide.tsv"], changedStrategy: false })
+  }
+
+  expect(
+    ToolRetryGuard.kernelSimilarity(
+      { environment: "python", source: "cell", code: "pd.read_csv('HTTPS://EXAMPLE.COM:443/data.csv#old')" },
+      { environment: "other", source: "cell", code: "pandas.read_table('https://example.com/data.csv')" },
+    ),
+  ).toMatchObject({ same: true, sharedResources: ["https://example.com/data.csv"], changedStrategy: false })
+
+  expect(
+    ToolRetryGuard.kernelSimilarity(
+      { environment: "r", source: "cell", code: "d <- read.delim('./data/../wide.tsv')" },
+      { environment: "renamed", source: "cell", code: "d <- utils::read.table('wide.tsv')" },
+    ),
+  ).toMatchObject({ same: true, sharedResources: ["wide.tsv"], changedStrategy: false })
+
+  expect(
+    ToolRetryGuard.kernelSimilarity(
+      { environment: "python", source: "cell", code: "pd.read_csv('Tumor.csv')" },
+      { environment: "python", source: "cell", code: "pd.read_csv('tumor.csv')" },
+    ),
+  ).toMatchObject({ same: false, sharedResources: [], changedStrategy: false })
+})
+
+test("bounded executable subsets authorize retained operations without cosmetic bypasses", () => {
+  const fit = { environment: "python", source: "cell", code: "model.fit(X_train, y_train)" }
+  expect(
+    ToolRetryGuard.kernelSimilarity(fit, {
+      environment: "renamed",
+      source: "cell",
+      code: "model.fit(X_train[:1000], y_train[:1000])",
+    }),
+  ).toMatchObject({ same: false, changedStrategy: true })
+
+  const aggregate = {
+    environment: "python",
+    source: "cell",
+    code: "result = df.groupby('gene').sum()",
+  }
+  expect(
+    ToolRetryGuard.kernelSimilarity(aggregate, {
+      environment: "python",
+      source: "cell",
+      code: "result = df.head(100).groupby('gene').sum()",
+    }),
+  ).toMatchObject({ same: false, changedStrategy: true })
+  expect(
+    ToolRetryGuard.kernelSimilarity(aggregate, {
+      environment: "python",
+      source: "cell",
+      code: "result = df.sample(n=100).groupby('gene').sum()",
+    }),
+  ).toMatchObject({ same: false, changedStrategy: true })
+
+  for (const cosmetic of [
+    `${fit.code}\n# model.fit(X_train[:1000], y_train[:1000])`,
+    `${fit.code}\nnote = 'model.fit(X_train[:1000], y_train[:1000])'`,
+    `other.head(100)\n${fit.code}`,
+    "model.fit(X_train, y_train, verbose=flags[0])",
+    "model.fit(X_train, y_train, callbacks=[1])",
+  ]) {
+    expect(
+      ToolRetryGuard.kernelSimilarity(fit, { environment: "renamed", source: "cell", code: cosmetic }),
+    ).toMatchObject({ same: true, changedStrategy: false })
+  }
+})
+
+test("URL normalization keeps resource identity but not client fragments", () => {
+  expect(ToolRetryGuard.normalizeURL("HTTPS://EXAMPLE.COM:443/a/../data?q=1#first")).toBe(
+    "https://example.com/data?q=1",
+  )
+  expect(ToolRetryGuard.normalizeURL("https://example.com/data?q=2")).not.toBe(
+    ToolRetryGuard.normalizeURL("https://example.com/data?q=1"),
+  )
+})
+
+test("legacy P5 oversize history blocks cap probing and exact byte history remains usable evidence", async () => {
+  const url = "https://www.ebi.ac.uk/gxa/sc/experiment/E-MTAB-6701/download/zip?fileType=quantification-raw"
+  const legacyInput = { url, output_path: "raw.zip", max_bytes: 20_000_000 }
+  const legacy = [
+    {
+      info: { id: "message_legacy_webfetch", sessionID: "session_legacy_webfetch", role: "assistant" },
+      parts: [
+        {
+          id: "part_legacy_webfetch",
+          sessionID: "session_legacy_webfetch",
+          messageID: "message_legacy_webfetch",
+          type: "tool",
+          tool: "webfetch",
+          callID: "call_legacy_webfetch",
+          state: {
+            status: "error",
+            input: legacyInput,
+            error:
+              "Download exceeds max_bytes (19.1 MiB). Partial data was discarded; choose a smaller source or explicitly raise max_bytes within the supported limit.",
+            time: { start: 1, end: 2 },
+          },
+        },
+      ],
+    },
+  ] as unknown as Tool.Context["messages"]
+  const legacyContext = { ...context(legacy), sessionID: "session_legacy_webfetch" }
+  await expect(ToolRetryGuard.assertWebFetch(legacyContext, { ...legacyInput, max_bytes: 40_000_000 })).rejects.toThrow(
+    "another guessed max_bytes escalation was stopped before network access",
+  )
+
+  const exactInput = { url: "https://example.com/exact.bin", output_path: "exact.bin", max_bytes: 8 }
+  const exact = [
+    {
+      info: { id: "message_exact_webfetch", sessionID: "session_exact_webfetch", role: "assistant" },
+      parts: [
+        {
+          id: "part_exact_webfetch",
+          sessionID: "session_exact_webfetch",
+          messageID: "message_exact_webfetch",
+          type: "tool",
+          tool: "webfetch",
+          callID: "call_exact_webfetch",
+          state: {
+            status: "error",
+            input: exactInput,
+            error:
+              "Download exceeds max_bytes (9 bytes > 8 bytes). No destination file was created. Choose a smaller source or explicitly set max_bytes once from the declared size.",
+            time: { start: 3, end: 4 },
+          },
+        },
+      ],
+    },
+  ] as unknown as Tool.Context["messages"]
+  const exactContext = { ...context(exact), sessionID: "session_exact_webfetch" }
+  await expect(ToolRetryGuard.assertWebFetch(exactContext, { ...exactInput, max_bytes: 16 })).rejects.toThrow(
+    "The server previously declared exactly 9 bytes",
+  )
+  await expect(ToolRetryGuard.assertWebFetch(exactContext, { ...exactInput, max_bytes: 16 })).rejects.toThrow(
+    'output_path: "exact.bin", declared_size_bytes: 9, and max_bytes: 9',
+  )
+  await expect(
+    ToolRetryGuard.assertWebFetch(exactContext, { ...exactInput, max_bytes: 9, declared_size_bytes: 9 }),
+  ).resolves.toBeUndefined()
+})
+
+test("declared-size evidence rejects an ambiguous listing record", async () => {
+  const target = "https://example.com/target.bin"
+  const prior = {
+    id: "part_prior_ambiguous",
+    sessionID: "session_ambiguous_evidence",
+    messageID: "message_ambiguous_evidence",
+    type: "tool",
+    tool: "webfetch",
+    callID: "call_prior_ambiguous",
+    state: {
+      status: "error",
+      input: { url: target, output_path: "target.bin", max_bytes: 7 },
+      error: "Download exceeds max_bytes (7 bytes). Partial data was discarded.",
+      time: { start: 1, end: 2 },
+    },
+  }
+  const evidence = {
+    id: "part_ambiguous_listing",
+    sessionID: "session_ambiguous_evidence",
+    messageID: "message_ambiguous_evidence",
+    type: "tool",
+    tool: "webfetch",
+    callID: "call_ambiguous_listing",
+    state: {
+      status: "completed",
+      input: { url: "https://example.com/listing", format: "text" },
+      output: JSON.stringify({
+        download_url: target,
+        mirror_url: "https://mirror.example.com/target.bin",
+        size: 8,
+        bytes: 12,
+      }),
+      title: "Ambiguous listing",
+      metadata: {},
+      time: { start: 3, end: 4 },
+    },
+  }
+  const messages = [
+    {
+      info: { id: "message_ambiguous_evidence", sessionID: "session_ambiguous_evidence", role: "assistant" },
+      parts: [prior, evidence],
+    },
+  ] as unknown as Tool.Context["messages"]
+  await expect(
+    ToolRetryGuard.assertWebFetch(
+      { ...context(messages), sessionID: "session_ambiguous_evidence" },
+      {
+        url: target,
+        output_path: "target.bin",
+        max_bytes: 8,
+        declared_size_bytes: 8,
+        declared_size_evidence_call_id: "call_ambiguous_listing",
+      },
+    ),
+  ).rejects.toThrow("declared_size_bytes needs auditable evidence")
+})
+
+test("current and legacy text oversize history require a body strategy change", async () => {
+  const url = "https://example.com/large.json"
+  for (const [suffix, error] of [
+    ["current", "Response is too large for Web fetch (6.0 MiB); the text-response limit is 5.0 MiB."],
+    ["legacy", "Response too large (exceeds 5MB limit)"],
+  ] as const) {
+    const input = { url, format: "text" }
+    const messages = [
+      {
+        info: { id: `message_${suffix}`, sessionID: `session_${suffix}`, role: "assistant" },
+        parts: [
+          {
+            id: `part_${suffix}`,
+            sessionID: `session_${suffix}`,
+            messageID: `message_${suffix}`,
+            type: "tool",
+            tool: "webfetch",
+            callID: `call_${suffix}`,
+            state: { status: "error", input, error, time: { start: 1, end: 2 } },
+          },
+        ],
+      },
+    ] as unknown as Tool.Context["messages"]
+    const ctx = { ...context(messages), sessionID: `session_${suffix}` }
+
+    await expect(ToolRetryGuard.assertWebFetch(ctx, { url })).rejects.toThrow(
+      "already exceeded the WebFetch body-response limit",
+    )
+    await expect(
+      ToolRetryGuard.assertWebFetch(ctx, { url, output_path: "large.json", max_bytes: 10_000_000 }),
+    ).resolves.toBeUndefined()
+    await expect(ToolRetryGuard.assertWebFetch(ctx, { url: `${url}?page=2` })).resolves.toBeUndefined()
+  }
+})

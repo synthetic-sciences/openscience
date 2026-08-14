@@ -310,6 +310,14 @@ export namespace SessionPrompt {
     return
   }
 
+  /** Snapshot the exact local controller currently owning a session. Callers
+   * that await cross-process coordination can pass this signal back to
+   * cancel(); if a newer prompt starts in the meantime, cancellation is a
+   * deliberate no-op rather than aborting the replacement controller. */
+  export function activeController(sessionID: string) {
+    return state()[sessionID]?.abort.signal
+  }
+
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
     const session = await Session.get(sessionID)
     const abort = start(sessionID)
@@ -1129,7 +1137,11 @@ export namespace SessionPrompt {
               }
             }
 
-            const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+            const truncated = await Truncate.output(
+              textParts.join("\n\n"),
+              { sessionID: input.session.id },
+              input.agent,
+            )
             const metadata = {
               ...(result.metadata ?? {}),
               truncated: truncated.truncated,

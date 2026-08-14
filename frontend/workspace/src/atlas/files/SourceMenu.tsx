@@ -46,6 +46,22 @@ export function SourceMenu(props: {
     items().forEach((candidate) => (candidate.tabIndex = candidate === item ? 0 : -1))
     item.focus()
   }
+  const restoreRefreshFocus = (target: EventTarget | null) => {
+    const previous = target instanceof HTMLElement ? target : undefined
+    const sourceID = previous?.dataset.sourceItem
+    const revokeID = previous?.dataset.sourceRevoke
+    queueMicrotask(() => {
+      const active = document.activeElement
+      if (active?.isConnected && active !== document.body) return
+      if (!open() || !refs.menu?.isConnected) return
+      const replacement = items().find(
+        (candidate) =>
+          (sourceID !== undefined && candidate.dataset.sourceItem === sourceID) ||
+          (revokeID !== undefined && candidate.dataset.sourceRevoke === revokeID),
+      )
+      focusItem(replacement ?? items()[0])
+    })
+  }
   const close = (restoreFocus = false) => {
     setOpen(false)
     if (restoreFocus)
@@ -134,6 +150,15 @@ export function SourceMenu(props: {
             onFocusOut={(event) => {
               const next = event.relatedTarget
               if (next instanceof Node && (refs.menu?.contains(next) || refs.trigger?.contains(next))) return
+              // Refreshing the grant inventory replaces fresh PaneSource rows.
+              // Browsers surface removal of the focused row with no related
+              // target; closing here strands pointer and keyboard selection on
+              // a menu that vanished underneath them. Keep it open and move
+              // focus to the row with the same durable source id.
+              if (next === null) {
+                restoreRefreshFocus(event.target)
+                return
+              }
               close()
             }}
           >

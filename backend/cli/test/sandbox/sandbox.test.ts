@@ -57,7 +57,7 @@ describe("Sandbox.seatbeltProfile", () => {
     expect(profile).toContain('/weird/pa\\"th')
   })
 
-  test("denies reads of host credential files", () => {
+  test("denies reads and writes of host-managed sensitive paths", () => {
     const profile = Sandbox.seatbeltProfile({
       writable: ["/work/project"],
       unreadable: ["/home/user/.config/atlas-cli/config.json"],
@@ -65,6 +65,9 @@ describe("Sandbox.seatbeltProfile", () => {
     })
     expect(profile).toContain(
       `(deny file-read* (literal "${fs.realpathSync.native("/home")}/user/.config/atlas-cli/config.json"))`,
+    )
+    expect(profile).toContain(
+      `(deny file-write* (literal "${fs.realpathSync.native("/home")}/user/.config/atlas-cli/config.json"))`,
     )
   })
 
@@ -453,12 +456,22 @@ describe("Sandbox native isolation", () => {
           command: `cat "${path.join(readonly, "data.txt")}"`,
           shell,
           cwd: work,
-          workspace: [work],
+          workspace: [work, readonly],
           readable: [readonly],
           unreadable: [path.join(readonly, "data.txt")],
           options,
         })
         expect((await execute(masked, work)).exit).not.toBe(0)
+        const maskedWrite = Sandbox.plan({
+          command: `printf exposed > "${path.join(readonly, "data.txt")}"`,
+          shell,
+          cwd: work,
+          workspace: [work, readonly],
+          unreadable: [path.join(readonly, "data.txt")],
+          options,
+        })
+        expect((await execute(maskedWrite, work)).exit).not.toBe(0)
+        expect(fs.readFileSync(path.join(readonly, "data.txt"), "utf8")).toBe("granted")
 
         const mutate = Sandbox.plan({
           command: `printf changed > "${path.join(readonly, "data.txt")}"`,

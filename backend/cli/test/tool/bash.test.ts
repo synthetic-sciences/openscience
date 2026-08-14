@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
@@ -102,6 +103,8 @@ describe("tool.bash permissions", () => {
   test("asks for external_directory permission when cd leaves the workspace", async () => {
     await using tmp = await tmpdir({ git: true })
     await using outside = await tmpdir()
+    const target = path.join(outside.path, "target")
+    await fs.mkdir(target)
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -125,7 +128,7 @@ describe("tool.bash permissions", () => {
         }
         await bash.execute(
           {
-            command: `cd ${outside.path}`,
+            command: `cd ${target}`,
             description: "Change to an external directory",
           },
           testCtx,

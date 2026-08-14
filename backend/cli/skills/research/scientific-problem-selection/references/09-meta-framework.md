@@ -1,5 +1,7 @@
 # SKILL 9: Meta-Framework - Complete Problem Selection Workflow
 
+> Modified by Synthetic Sciences: formatting-only normalization of trailing whitespace.
+
 ## Overview
 This meta-skill orchestrates the complete problem selection process, guiding users through Skills 1-8 in a systematic, iterative way. This skill should be used when comprehensive support is needed from ideation through execution planning, with integrated literature searches and coherent documentation.
 

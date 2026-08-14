@@ -26,8 +26,23 @@ permissions:
   id-token: write
 
 jobs:
+  test-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require the protected default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REPOSITORY" != "synthetic-sciences/OpenScience" || "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::npm test publishing uses registry credentials and must be dispatched from synthetic-sciences/OpenScience main; received $GITHUB_REPOSITORY at $GITHUB_REF."
+            exit 1
+          fi
+
   version:
-    if: github.repository == 'synthetic-sciences/OpenScience'
+    needs: test-source
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:

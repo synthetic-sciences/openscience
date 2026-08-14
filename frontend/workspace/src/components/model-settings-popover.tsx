@@ -335,6 +335,34 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
     if (prepareFrame) cancelAnimationFrame(prepareFrame)
     window.clearTimeout(searchTimer)
   })
+
+  const resetMenu = () => {
+    window.clearTimeout(searchTimer)
+    if (prepareFrame) cancelAnimationFrame(prepareFrame)
+    prepareFrame = 0
+    setView("root")
+    setQuery("")
+    setCatalogQuery("")
+    setRouteTarget("")
+  }
+
+  const close = () => {
+    setOpen(false)
+    resetMenu()
+  }
+
+  createEffect(() => {
+    if (!open()) return
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      event.stopPropagation()
+      close()
+    }
+    window.addEventListener("keydown", dismiss, true)
+    onCleanup(() => window.removeEventListener("keydown", dismiss, true))
+  })
+
   const control = createMemo(() =>
     modelControl({
       name: current() ? modelDisplayName(current()!.name, current()!.provider.id, current()!.id) : "Select model",
@@ -393,7 +421,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
     }
     const model = choice.model
     local.model.set({ providerID: model.provider.id, modelID: model.id }, { recent: true })
-    setOpen(false)
+    close()
   }
 
   const choose = () => {
@@ -411,11 +439,15 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   }
 
   const manage = () => {
-    setOpen(false)
+    close()
     queueMicrotask(() => dialog.show(() => <DialogSettings initial="models" />))
   }
 
   const onMenuKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      close()
+      return
+    }
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
     const target = event.target
     if (!(target instanceof HTMLElement)) return
@@ -443,15 +475,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
       open={open()}
       onOpenChange={(next) => {
         setOpen(next)
-        if (!next) {
-          window.clearTimeout(searchTimer)
-          if (prepareFrame) cancelAnimationFrame(prepareFrame)
-          prepareFrame = 0
-          setView("root")
-          setQuery("")
-          setCatalogQuery("")
-          setRouteTarget("")
-        }
+        if (!next) resetMenu()
       }}
       modal={mobile()}
       placement="top-end"
@@ -497,23 +521,22 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
         </Show>
       </div>
       <Kobalte.Portal>
-        <div data-mobile-model-settings-overlay onPointerDown={() => setOpen(false)} />
+        <div data-mobile-model-settings-overlay onPointerDown={close} />
         <Kobalte.Content
           ref={(element) => (refs.content = element)}
           data-model-settings-popover
           data-model-settings-view={view()}
           class="z-50 outline-none"
+          onEscapeKeyDown={(event) => {
+            close()
+            event.preventDefault()
+            event.stopPropagation()
+          }}
           onKeyDown={onMenuKeyDown}
         >
           <header class="mobile-model-settings__header">
             <Kobalte.Title>Options</Kobalte.Title>
-            <IconButton
-              type="button"
-              icon="close"
-              variant="ghost"
-              aria-label="Close model options"
-              onClick={() => setOpen(false)}
-            />
+            <IconButton type="button" icon="close" variant="ghost" aria-label="Close model options" onClick={close} />
           </header>
           <p aria-live="polite" class="sr-only">
             {notice()}
@@ -798,7 +821,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                         setView(routeReturn())
                         focus(`[data-model-choice="${choice().key}"]`, true)
                       }}
-                      onDone={() => setOpen(false)}
+                      onDone={close}
                     />
                   )
                 }}
@@ -814,7 +837,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                     options={effort().options}
                     onSelect={local.model.variant.set}
                     onBack={() => root("effort")}
-                    onDone={() => setOpen(false)}
+                    onDone={close}
                   />
                 )}
               </Match>
@@ -829,7 +852,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                     options={speed().options}
                     onSelect={local.model.tier.set}
                     onBack={() => root("speed")}
-                    onDone={() => setOpen(false)}
+                    onDone={close}
                   />
                 )}
               </Match>

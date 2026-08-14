@@ -10,6 +10,7 @@ import crypto from "node:crypto"
 import { constants as FS } from "node:fs"
 import fs from "node:fs/promises"
 import path from "node:path"
+import { ToolRetryGuard } from "@/session/tool-retry-guard"
 
 export const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5 MiB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -20,9 +21,8 @@ export const DEFAULT_DOWNLOAD_MAX_BYTES = 256 * 1024 * 1024 // 256 MiB
 export const MAX_DOWNLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024 // 2 GiB
 const DOWNLOAD_DISK_RESERVE_BYTES = 512 * 1024 * 1024 // preserve 512 MiB for the host
 
-export const WebFetchTool = Tool.define("webfetch", {
-  description: DESCRIPTION,
-  parameters: z.object({
+const parameters = z
+  .object({
     url: z.string().describe("The URL to fetch content from"),
     format: z
       .enum(["text", "markdown", "html"])
@@ -51,7 +51,46 @@ export const WebFetchTool = Tool.define("webfetch", {
           `hard maximum ${MAX_DOWNLOAD_MAX_BYTES}). Rejected before transfer when Content-Length exceeds it and during ` +
           "streaming when the server omits Content-Length.",
       ),
-  }),
+    declared_size_bytes: z
+      .number()
+      .int()
+      .positive()
+      .max(MAX_DOWNLOAD_MAX_BYTES)
+      .optional()
+      .describe(
+        "Exact download size in bytes from evidence, used only after a prior max_bytes failure or for a one-shot known-size download. " +
+          "It must match the server Content-Length cached by WebFetch or a labelled size in declared_size_evidence_call_id.",
+      ),
+    declared_size_evidence_call_id: z
+      .string()
+      .trim()
+      .min(1)
+      .max(256)
+      .optional()
+      .describe(
+        "Prior completed WebFetch call ID whose metadata response labels the exact declared_size_bytes. Not needed when the prior failure recorded server Content-Length.",
+      ),
+  })
+  .superRefine((params, issue) => {
+    if (params.declared_size_bytes !== undefined && !params.output_path) {
+      issue.addIssue({
+        code: "custom",
+        path: ["declared_size_bytes"],
+        message: "declared_size_bytes is only valid when output_path is set",
+      })
+    }
+    if (params.declared_size_evidence_call_id !== undefined && params.declared_size_bytes === undefined) {
+      issue.addIssue({
+        code: "custom",
+        path: ["declared_size_evidence_call_id"],
+        message: "declared_size_evidence_call_id requires declared_size_bytes",
+      })
+    }
+  })
+
+export const WebFetchTool = Tool.define("webfetch", {
+  description: DESCRIPTION,
+  parameters,
   async execute(params, ctx) {
     // Validate URL
     if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
@@ -59,6 +98,11 @@ export const WebFetchTool = Tool.define("webfetch", {
     }
     if (params.max_bytes !== undefined && !params.output_path) {
       throw new Error("max_bytes is only valid when output_path is set")
+    }
+    await ToolRetryGuard.assertWebFetch(ctx, params)
+    const complete = <T extends { output: string; metadata: Record<string, unknown> }>(result: T) => {
+      ToolRetryGuard.recordWebFetchSuccess(ctx, params, result)
+      return result
     }
     // A domain outside the enforced allow-list asks instead of failing.
     // Answering "always" adds the domain to the persisted allow-list (visible
@@ -101,6 +145,8 @@ export const WebFetchTool = Tool.define("webfetch", {
         timeout: params.timeout,
         output_path: params.output_path,
         max_bytes: params.max_bytes,
+        declared_size_bytes: params.declared_size_bytes,
+        declared_size_evidence_call_id: params.declared_size_evidence_call_id,
       },
     })
 
@@ -178,9 +224,32 @@ export const WebFetchTool = Tool.define("webfetch", {
         throw new Error(`Request failed with status code: ${response.status}`)
       }
 
+      const responseDeclaredBytes = parseContentLength(response.headers.get("content-length"))
+      const responseMetadata =
+        responseDeclaredBytes === undefined
+          ? {}
+          : {
+              response: {
+                url: Network.finalURL(response) || params.url,
+                contentLength: responseDeclaredBytes,
+              },
+            }
+      if (
+        download &&
+        params.declared_size_bytes !== undefined &&
+        responseDeclaredBytes !== undefined &&
+        responseDeclaredBytes !== params.declared_size_bytes
+      ) {
+        await response.body?.cancel().catch(() => {})
+        throw new Error(
+          `Server Content-Length (${responseDeclaredBytes} bytes) does not match declared_size_bytes ` +
+            `(${params.declared_size_bytes} bytes). No destination file was created; refresh the size evidence before retrying.`,
+        )
+      }
+
       if (download) {
         const result = await streamDownload(response, download, maxDownloadBytes)
-        return {
+        return complete({
           title: `Downloaded ${result.filename}`,
           output: [
             "Downloaded through the authorized network broker into this session's workspace.",
@@ -196,7 +265,7 @@ export const WebFetchTool = Tool.define("webfetch", {
           metadata: {
             download: { url: Network.finalURL(response) || params.url, ...result },
           } as Record<string, unknown>,
-        }
+        })
       }
 
       const contentType = response.headers.get("content-type") || ""
@@ -232,57 +301,61 @@ export const WebFetchTool = Tool.define("webfetch", {
         case "markdown":
           if (contentType.includes("text/html")) {
             const markdown = convertHTMLToMarkdown(content)
-            return {
+            return complete({
               output: markdown,
               title,
-              metadata: {},
-            }
+              metadata: responseMetadata,
+            })
           }
-          return {
+          return complete({
             output: content,
             title,
-            metadata: {},
-          }
+            metadata: responseMetadata,
+          })
 
         case "text":
           if (contentType.includes("text/html")) {
             const text = await extractTextFromHTML(content)
-            return {
+            return complete({
               output: text,
               title,
-              metadata: {},
-            }
+              metadata: responseMetadata,
+            })
           }
-          return {
+          return complete({
             output: content,
             title,
-            metadata: {},
-          }
+            metadata: responseMetadata,
+          })
 
         case "html":
-          return {
+          return complete({
             output: content,
             title,
-            metadata: {},
-          }
+            metadata: responseMetadata,
+          })
 
         default:
-          return {
+          return complete({
             output: content,
             title,
-            metadata: {},
-          }
+            metadata: responseMetadata,
+          })
       }
     } catch (error) {
       if (error instanceof Network.ResponseTooLargeError) {
         if (download) {
-          throw new Error(
+          const failure = new Error(
             `Download exceeds max_bytes (${formatBytes(error.declaredBytes ?? error.receivedBytes)} > ` +
               `${formatBytes(error.limitBytes)}). No destination file was created. Choose a smaller source or explicitly ` +
               "set max_bytes once from the declared size within the supported limit; do not retry with incremental caps.",
           )
+          throw ToolRetryGuard.annotateWebFetch(ctx, params, failure, {
+            attemptedMaxBytes: error.limitBytes,
+            declaredSizeBytes: error.declaredBytes,
+          })
         }
-        throw responseTooLargeError(error)
+        throw ToolRetryGuard.annotateWebFetch(ctx, params, responseTooLargeError(error))
       }
       if (controller.signal.aborted && !ctx.abort.aborted) {
         throw new Error(
@@ -290,7 +363,7 @@ export const WebFetchTool = Tool.define("webfetch", {
             "use a smaller paginated request, or set output_path for a brokered workspace download with a longer timeout.",
         )
       }
-      throw error
+      throw ToolRetryGuard.annotateWebFetch(ctx, params, error)
     } finally {
       clearTimeout(timeoutId)
     }
@@ -551,7 +624,8 @@ async function streamDownload(response: Response, target: DownloadTarget, maxByt
             await reader.cancel().catch(() => {})
             throw new Error(
               `Download exceeds max_bytes (${formatBytes(maxBytes)}). Partial data was discarded; ` +
-                "choose a smaller source, or omit a custom max_bytes once to use the bounded default. " +
+                "use a metadata/listing endpoint to obtain the exact byte size for one evidence-backed retry, " +
+                "choose a smaller or paginated source, or use a different canonical download URL. " +
                 "Do not retry this URL with incrementally larger caps.",
             )
           }

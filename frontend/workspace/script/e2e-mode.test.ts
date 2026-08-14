@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { E2E_MODE_ENV, externalRunnerEnvironment, playwrightCommand, resolvePlaywrightTarget } from "./e2e-mode"
 
 describe("E2E command selection", () => {
+  test("runs isolated seed setup under the exact Bun executing the harness", () => {
+    const harness = readFileSync(fileURLToPath(new URL("./e2e-local.ts", import.meta.url)), "utf8")
+    expect(harness).toContain('Bun.spawn([process.execPath, "script/seed-e2e.ts"]')
+    expect(harness).not.toContain('Bun.spawn(["bun", "script/seed-e2e.ts"]')
+  })
+
   test("package scripts make the isolated free-port harness the default", async () => {
     const pkg = (await Bun.file(new URL("../package.json", import.meta.url)).json()) as {
       scripts: Record<string, string>

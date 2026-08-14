@@ -71,7 +71,16 @@ if (Script.release) {
     const branch = `release/v${Script.version}`
     console.warn(`main push rejected by branch protection — opening a release PR from ${branch}`)
     await $`git push origin HEAD:refs/heads/${branch} --force --no-verify`
-    await $`gh pr create --base main --head ${branch} --title "release: v${Script.version}" --body "Version bumps from the v${Script.version} release."`.nothrow()
+    const existing = await $`gh pr list --base main --head ${branch} --state open --json url --jq '.[0].url // ""'`
+      .text()
+      .then((value) => value.trim())
+    const url = existing
+      ? existing
+      : await $`gh pr create --base main --head ${branch} --title "release: v${Script.version}" --body "Version bumps from the v${Script.version} release."`
+          .text()
+          .then((value) => value.trim())
+    if (!url) throw new Error(`Failed to create or resolve the release PR for ${branch}`)
+    console.log(`release PR: ${url}`)
   }
 }
 

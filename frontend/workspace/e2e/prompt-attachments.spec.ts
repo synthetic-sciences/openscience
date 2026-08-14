@@ -11,5 +11,5 @@ test("attached research files keep their filename, extension, and size visible",
   const attachments = page.getByLabel("Attached files")
   await expect(attachments).toBeVisible()
   await expect(attachments.getByText("manuscript.md", { exact: true })).toBeVisible()
-  await expect(attachments).toContainText(/markdown · [\d.]+ (?:B|KB)/)
+  await expect(attachments).toContainText(/Attached · MD · [\d.]+ (?:B|KB)/)
 })

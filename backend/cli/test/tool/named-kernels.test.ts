@@ -5,17 +5,54 @@ import { KernelRuntime, type KernelIdentity } from "../../src/science/kernel/reg
 import { NotebookTool, PythonTool } from "../../src/tool/notebook"
 import { RKernelTool, RTool } from "../../src/tool/rkernel"
 import { executionSession, tmpdir } from "../fixture/fixture"
+import { ToolRetryGuard } from "../../src/session/tool-retry-guard"
 
-const context = (sessionID: string, callID: string) => ({
+async function captureError(promise: Promise<unknown>): Promise<Error> {
+  try {
+    await promise
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error))
+  }
+  throw new Error("Expected operation to fail")
+}
+
+const context = (sessionID: string, callID: string, messages: ToolMessages = []) => ({
   sessionID,
   messageID: "message_managed_runtimes",
   callID,
   agent: "research",
   abort: new AbortController().signal,
-  messages: [],
+  messages,
   metadata() {},
   async ask() {},
 })
+
+type ToolMessages = import("../../src/tool/tool").Tool.Context["messages"]
+
+function messageHistory(input: {
+  sessionID: string
+  tool: "python" | "r"
+  callID: string
+  args: Record<string, unknown>
+  error: string
+}) {
+  return [
+    {
+      info: { id: "message_timeout_history", sessionID: input.sessionID, role: "assistant" },
+      parts: [
+        {
+          id: "part_timeout_history",
+          sessionID: input.sessionID,
+          messageID: "message_timeout_history",
+          type: "tool",
+          tool: input.tool,
+          callID: input.callID,
+          state: { status: "error", input: input.args, error: input.error, time: { start: 1, end: 2 } },
+        },
+      ],
+    },
+  ] as unknown as import("../../src/tool/tool").Tool.Context["messages"]
+}
 
 test("canonical Python and R expose one fixed runtime per conversation and environment", async () => {
   const python = await PythonTool.init()
@@ -106,11 +143,16 @@ test("a timed-out Python cell fully retires its process before the next call sta
       }
 
       try {
-        const timedOut = tool.execute(
-          { code: "import time\ntime.sleep(30)", timeout: 5_000 },
-          context(session.id, "call_timeout"),
-        )
-        await expect(timedOut).rejects.toThrow("Cell execution timed out after 5s")
+        const timeoutArgs = { code: "import time\ntime.sleep(30)", timeout: 5_000 }
+        const timedOut = tool.execute(timeoutArgs, context(session.id, "call_timeout"))
+        const timeoutError = await captureError(timedOut)
+        expect(timeoutError.message).toContain("Cell execution timed out after 5s")
+        expect(ToolRetryGuard.errorMetadata(timeoutError)).toMatchObject({
+          openscienceRetryGuard: {
+            kind: "failure",
+            failure: { code: "kernel_timeout", tool: "python", timeout_ms: 5_000 },
+          },
+        })
         expect(KernelRuntime.status(identity)).toMatchObject({ active: false, state: "stopped", process_id: null })
 
         const recovered = await tool.execute(
@@ -123,6 +165,32 @@ test("a timed-out Python cell fully retires its process before the next call sta
           state: "idle",
           execution_count: 1,
           incarnation: 2,
+        })
+
+        const recoveredPID = KernelRuntime.status(identity).process_id
+        const blockedAt = Date.now()
+        await expect(
+          tool.execute(
+            { code: "import time\n\n# cosmetic retry\ntime.sleep(30)", timeout: 120_000 },
+            context(
+              session.id,
+              "call_repeated_timeout",
+              messageHistory({
+                sessionID: session.id,
+                tool: "python",
+                callID: "call_timeout",
+                args: timeoutArgs,
+                error: timeoutError.message,
+              }),
+            ),
+          ),
+        ).rejects.toThrow("stopped before starting a new kernel")
+        expect(Date.now() - blockedAt).toBeLessThan(1_000)
+        expect(KernelRuntime.status(identity)).toMatchObject({
+          active: true,
+          state: "idle",
+          process_id: recoveredPID,
+          execution_count: 1,
         })
       } finally {
         await KernelRuntime.release(identity)

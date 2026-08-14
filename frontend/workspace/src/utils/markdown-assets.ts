@@ -23,8 +23,12 @@ function decode(value: string): string {
 
 /** Resolve a reference against the directory containing `base`, collapsing `.` and `..`. */
 export function resolvePath(base: string, reference: string): string {
-  const parts = [...clean(base).split("/").slice(0, -1), ...clean(reference).split("/")]
-  return parts
+  const normalizedBase = clean(base)
+  const drive = /^([A-Za-z]:)\//.exec(normalizedBase)?.[1]
+  const rooted = !drive && normalizedBase.startsWith("/")
+  const baseBody = drive ? normalizedBase.slice(drive.length + 1) : rooted ? normalizedBase.slice(1) : normalizedBase
+  const parts = [...baseBody.split("/").slice(0, -1), ...clean(reference).split("/")]
+  const resolved = parts
     .reduce<string[]>((result, part) => {
       if (!part || part === ".") return result
       if (part === "..") {
@@ -35,6 +39,8 @@ export function resolvePath(base: string, reference: string): string {
       return result
     }, [])
     .join("/")
+  if (drive) return `${drive}/${resolved}`
+  return rooted ? `/${resolved}` : resolved
 }
 
 /**
