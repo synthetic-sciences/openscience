@@ -35,8 +35,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Made brokered downloads derive their safe size from available workspace disk
   instead of agent-guessed byte caps, with copy-ready root-download and
   sandboxed move guidance for folder destinations.
-- Removed the fixed Modal Volume browser-download ceiling and stream verified
-  files directly with cancellation-safe cleanup instead of buffering them.
+- Removed the fixed Modal Volume browser-download ceiling and made large file
+  delivery use live disk-derived staging capacity plus cancellation-safe
+  streaming instead of buffering responses in memory.
 - Preserved exact session and tool-output filesystem capabilities across local
   work and delegated handoffs without broadening external-directory access.
 - Restored the v2 Review settings API, truthful runtime progress capture, and

@@ -6,10 +6,12 @@ stdout. Credentials arrive only through MODAL_TOKEN_ID/MODAL_TOKEN_SECRET.
 No Modal Function or Sandbox is created by this driver.
 """
 
-import json
+import errno
 import hashlib
+import json
 import os
 import posixpath
+import shutil
 import sys
 import time
 
@@ -17,6 +19,46 @@ import time
 def fail(message):
     print("modal volume bridge: %s" % message, file=sys.stderr)
     raise SystemExit(2)
+
+
+class CapacityError(Exception):
+    def __init__(self, safe_capacity, response_bytes=None, storage_code=None):
+        self.safe_capacity = safe_capacity
+        self.response_bytes = response_bytes
+        self.storage_code = storage_code
+
+
+def fail_capacity(error):
+    payload = {"safe_capacity_bytes": error.safe_capacity}
+    if error.response_bytes is not None:
+        payload["response_bytes"] = error.response_bytes
+    if error.storage_code is not None:
+        payload["storage_code"] = error.storage_code
+    print("modal volume bridge capacity: %s" % json.dumps(payload, separators=(",", ":")), file=sys.stderr)
+    raise SystemExit(2)
+
+
+def capacity_value(spec, name):
+    value = spec.get(name)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        fail("%s must be a non-negative integer" % name)
+    return value
+
+
+def live_capacity(staging, initial_capacity, reserve, written):
+    stats = os.statvfs(staging)
+    available = stats.f_bavail * stats.f_frsize
+    live = max(0, available - reserve)
+    remaining = max(0, initial_capacity - written)
+    return written + min(remaining, live)
+
+
+def storage_code(error):
+    if error.errno == errno.ENOSPC:
+        return "ENOSPC"
+    if hasattr(errno, "EDQUOT") and error.errno == errno.EDQUOT:
+        return "EDQUOT"
+    return None
 
 
 def relative(value):
@@ -135,21 +177,54 @@ def main():
         fail("staging must be an absolute path")
     if not isinstance(paths, list) or not all(isinstance(item, str) for item in paths):
         fail("paths must be a list of strings")
-    os.makedirs(staging, mode=0o700, exist_ok=True)
-    rows = []
-    for item in paths:
-        remote = relative(item)
-        local = destination(staging, remote)
-        os.makedirs(os.path.dirname(local), mode=0o700, exist_ok=True)
-        size = 0
-        digest = hashlib.sha256()
-        with open(local, "wb") as output:
-            for chunk in target.read_file(remote):
-                output.write(chunk)
-                size += len(chunk)
-                digest.update(chunk)
-        rows.append({"path": remote, "staging": local, "size": size, "sha256": digest.hexdigest()})
-    print(json.dumps(rows))
+    capacity = capacity_value(spec, "capacity_bytes")
+    reserve = capacity_value(spec, "reserve_bytes")
+    written = 0
+    try:
+        os.makedirs(staging, mode=0o700, exist_ok=True)
+        rows = []
+        for item in paths:
+            remote = relative(item)
+            local = destination(staging, remote)
+            os.makedirs(os.path.dirname(local), mode=0o700, exist_ok=True)
+            size = 0
+            digest = hashlib.sha256()
+            with open(local, "wb", buffering=0) as output:
+                for chunk in target.read_file(remote):
+                    view = memoryview(chunk)
+                    while view:
+                        safe = live_capacity(staging, capacity, reserve, written)
+                        if written + len(view) > safe:
+                            raise CapacityError(safe, written + len(view))
+                        try:
+                            count = output.write(view)
+                        except OSError as error:
+                            code = storage_code(error)
+                            if code is None:
+                                raise
+                            safe = live_capacity(staging, capacity, reserve, written)
+                            raise CapacityError(safe, written + len(view), code) from error
+                        if not isinstance(count, int) or count <= 0:
+                            raise OSError("Modal Volume staging write made no progress")
+                        digest.update(view[:count])
+                        size += count
+                        written += count
+                        view = view[count:]
+            rows.append({"path": remote, "staging": local, "size": size, "sha256": digest.hexdigest()})
+        print(json.dumps(rows))
+    except CapacityError as error:
+        shutil.rmtree(staging, ignore_errors=True)
+        fail_capacity(error)
+    except OSError as error:
+        code = storage_code(error)
+        if code is None:
+            raise
+        try:
+            safe = live_capacity(staging, capacity, reserve, written)
+        except OSError:
+            safe = written
+        shutil.rmtree(staging, ignore_errors=True)
+        fail_capacity(CapacityError(safe, written, code))
 
 
 if __name__ == "__main__":

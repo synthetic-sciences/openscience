@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { ModalVolume } from "../../src/compute/modal/volume"
@@ -237,7 +237,7 @@ describe("ModalVolume", () => {
       "job-volume",
       ["outputs/model.bin"],
       item.staging,
-      controller.signal,
+      { signal: controller.signal },
     ).then(
       (value) => ({ ok: true as const, value }),
       (error: unknown) => ({ ok: false as const, error }),
@@ -282,6 +282,109 @@ describe("ModalVolume", () => {
       /unsafe path/,
     )
   })
+
+  test("rejects a declared aggregate above live safe capacity before launching the provider bridge", async () => {
+    const item = await fixture()
+    const launched = path.join(item.root, "provider-launched")
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const statfs = spyOn(fs, "statfs").mockResolvedValue({
+      bavail: ModalVolume.DOWNLOAD_DISK_RESERVE_BYTES + 6,
+      bsize: 1,
+    } as Awaited<ReturnType<typeof fs.statfs>>)
+
+    try {
+      const error = await ModalVolume.download(
+        {
+          ...item.context,
+          command: [
+            python,
+            "-I",
+            "-c",
+            `from pathlib import Path; Path(${JSON.stringify(launched)}).write_text('launched')`,
+          ],
+        },
+        "job-volume",
+        ["outputs/model.bin"],
+        item.staging,
+        { declaredBytes: 7 },
+      ).catch((value) => value)
+
+      expect(error).toBeInstanceOf(ModalVolume.DownloadCapacityError)
+      expect((error as ModalVolume.DownloadCapacityError).safeCapacityBytes).toBe(6)
+      expect((error as ModalVolume.DownloadCapacityError).responseBytes).toBe(7)
+      expect((error as Error).message).toContain("512 MiB")
+      expect(await Bun.file(launched).exists()).toBe(false)
+      expect(await Bun.file(item.staging).exists()).toBe(false)
+    } finally {
+      statfs.mockRestore()
+    }
+  })
+
+  test("bounds understated provider bytes and removes partial staging", async () => {
+    const item = await fixture()
+    const statfs = spyOn(fs, "statfs").mockResolvedValue({
+      bavail: ModalVolume.DOWNLOAD_DISK_RESERVE_BYTES + 6,
+      bsize: 1,
+    } as Awaited<ReturnType<typeof fs.statfs>>)
+
+    try {
+      const error = await ModalVolume.download(item.context, "job-volume", ["outputs/model.bin"], item.staging, {
+        declaredBytes: 1,
+      }).catch((value) => value)
+
+      expect(error).toBeInstanceOf(ModalVolume.DownloadCapacityError)
+      expect((error as ModalVolume.DownloadCapacityError).safeCapacityBytes).toBe(6)
+      expect((error as ModalVolume.DownloadCapacityError).responseBytes).toBe(7)
+      expect(await Bun.file(item.staging).exists()).toBe(false)
+    } finally {
+      statfs.mockRestore()
+    }
+  }, 30_000)
+
+  test("classifies an ENOSPC staging write and removes the partial tree", async () => {
+    const item = await fixture()
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const wrapper = path.join(item.root, "enospc-download.py")
+    await Bun.write(
+      wrapper,
+      [
+        "import builtins, errno, os, runpy, sys",
+        "real_open = builtins.open",
+        `staging = os.path.realpath(${JSON.stringify(item.staging)})`,
+        "def guarded_open(file, mode='r', *args, **kwargs):",
+        "    target = os.path.realpath(os.fspath(file))",
+        "    if 'w' in mode and (target == staging or target.startswith(staging + os.sep)):",
+        "        raise OSError(errno.ENOSPC, 'injected staging exhaustion')",
+        "    return real_open(file, mode, *args, **kwargs)",
+        "builtins.open = guarded_open",
+        "sys.path.insert(0, sys.argv[1])",
+        "runpy.run_path(sys.argv[2], run_name='__main__')",
+      ].join("\n"),
+    )
+    const statfs = spyOn(fs, "statfs").mockResolvedValue({
+      bavail: ModalVolume.DOWNLOAD_DISK_RESERVE_BYTES + 64,
+      bsize: 1,
+    } as Awaited<ReturnType<typeof fs.statfs>>)
+
+    try {
+      const error = await ModalVolume.download(
+        { ...item.context, command: [python, "-I", wrapper, item.root, await ModalVolume.driverPath()] },
+        "job-volume",
+        ["outputs/model.bin"],
+        item.staging,
+        { declaredBytes: 7 },
+      ).catch((value) => value)
+
+      expect(error).toBeInstanceOf(ModalVolume.DownloadCapacityError)
+      expect((error as ModalVolume.DownloadCapacityError).storageCode).toBe("ENOSPC")
+      expect((error as Error).message).toContain("staging storage returned ENOSPC")
+      expect(await Bun.file(item.staging).exists()).toBe(false)
+    } finally {
+      statfs.mockRestore()
+    }
+  }, 30_000)
 
   test("accepts downloads when a staging parent is reached through a symlink", async () => {
     const item = await fixture()

@@ -167,7 +167,18 @@ export namespace ModalAdapter {
     const paths = [
       ...new Set([...(complete ? [codePath] : []), logPath, ...selected.map((entry) => clean(entry.path))]),
     ]
-    const downloaded = await ModalVolume.download(context, spec.volume, paths, spec.staging)
+    const sizes = new Map(
+      entries.filter((entry) => entry.type === "file").map((entry) => [clean(entry.path), entry.size]),
+    )
+    const declared = paths.map((entry) => sizes.get(entry))
+    let declaredBytes: number | undefined
+    if (declared.every((entry) => entry !== undefined)) {
+      declaredBytes = 0
+      for (const entry of declared) {
+        declaredBytes = Math.min(Number.MAX_SAFE_INTEGER, declaredBytes + entry!)
+      }
+    }
+    const downloaded = await ModalVolume.download(context, spec.volume, paths, spec.staging, { declaredBytes })
     const files = new Map(downloaded.map((entry) => [entry.path, entry]))
     const saved = files.get(codePath)
     const logged = files.get(logPath)

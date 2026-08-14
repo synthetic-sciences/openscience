@@ -13,6 +13,7 @@ import { Shell } from "../../shell/shell"
 
 export namespace ModalVolume {
   export const VERSION = "1.1.4"
+  export const DOWNLOAD_DISK_RESERVE_BYTES = 512 * 1024 * 1024 // preserve 512 MiB for the host
 
   export type Context = {
     tokenId: string
@@ -42,6 +43,32 @@ export namespace ModalVolume {
     sha256: string
   }
 
+  export type DownloadOptions = {
+    signal?: AbortSignal
+    /** Aggregate size reported by the already-completed provider listing. */
+    declaredBytes?: number
+  }
+
+  export class DownloadCapacityError extends Error {
+    constructor(
+      readonly safeCapacityBytes: number,
+      readonly responseBytes?: number,
+      readonly storageCode?: "ENOSPC" | "EDQUOT",
+    ) {
+      const observed = responseBytes === undefined ? "" : `; response size ${responseBytes} bytes`
+      const heading = storageCode
+        ? `Modal Volume download could not continue because staging storage returned ${storageCode}. ` +
+          `The current disk-derived staging capacity is ${safeCapacityBytes} bytes${observed}. `
+        : `Modal Volume download exceeds the current safe staging capacity of ${safeCapacityBytes} bytes${observed}. `
+      super(
+        heading +
+          `This capacity is computed from live free disk minus the ${DOWNLOAD_DISK_RESERVE_BYTES}-byte (512 MiB) host reserve. ` +
+          "No partial staging files were kept. Free disk space, select smaller outputs, or use a dedicated approved transfer path before retrying.",
+      )
+      this.name = "ModalVolumeDownloadCapacityError"
+    }
+  }
+
   type Request =
     | { action: "check" }
     | { action: "volumes"; environment?: string }
@@ -56,10 +83,17 @@ export namespace ModalVolume {
         attempts: number
         interval_ms: number
       }
-    | { action: "download"; volume: string; environment?: string; paths: string[]; staging: string }
+    | {
+        action: "download"
+        volume: string
+        environment?: string
+        paths: string[]
+        staging: string
+        capacity_bytes: number
+        reserve_bytes: number
+      }
 
   const LIST_TIMEOUT = 60_000
-  const DOWNLOAD_TIMEOUT = 10 * 60_000
   const PROBE_TIMEOUT = 15_000
   const MAX_STDOUT = 8 * 1024 * 1024
   const MAX_STDERR = 1024 * 1024
@@ -72,6 +106,43 @@ export namespace ModalVolume {
   }
   const abortReason = (signal: AbortSignal) =>
     signal.reason ?? new DOMException("Modal Volume request was aborted", "AbortError")
+
+  function storageCapacityCode(error: unknown) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code
+    return code === "ENOSPC" || code === "EDQUOT" ? code : undefined
+  }
+
+  async function availableDownloadBytes(root: string) {
+    const disk = await fs.statfs(root)
+    const available = disk.bavail * disk.bsize
+    if (!Number.isSafeInteger(available) || available < 0) {
+      throw new Error("Modal Volume staging capacity could not be represented safely; the download was not started")
+    }
+    return Math.max(0, available - DOWNLOAD_DISK_RESERVE_BYTES)
+  }
+
+  function driverCapacityError(message: string) {
+    const prefix = "modal volume bridge capacity:"
+    const line = message
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .findLast((item) => item.startsWith(prefix))
+    if (!line) return
+    try {
+      const value = JSON.parse(line.slice(prefix.length).trim()) as Record<string, unknown>
+      const safe = value.safe_capacity_bytes
+      const response = value.response_bytes
+      const storage = value.storage_code
+      if (typeof safe !== "number" || !Number.isSafeInteger(safe) || safe < 0) return
+      if (response !== undefined && (typeof response !== "number" || !Number.isSafeInteger(response) || response < 0)) {
+        return
+      }
+      if (storage !== undefined && storage !== "ENOSPC" && storage !== "EDQUOT") return
+      return new DownloadCapacityError(safe, response as number | undefined, storage as "ENOSPC" | "EDQUOT" | undefined)
+    } catch {
+      return
+    }
+  }
 
   const cache: { path?: Promise<string> } = {}
 
@@ -230,7 +301,7 @@ export namespace ModalVolume {
   async function execute(
     argv: string[],
     env: Record<string, string>,
-    timeout: number,
+    timeout: number | undefined,
     action: string,
     stdin?: Buffer,
     signal?: AbortSignal,
@@ -302,9 +373,15 @@ export namespace ModalVolume {
       })
 
       let timer: ReturnType<typeof setTimeout> | undefined
-      const expired = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`Modal Volume ${action} timed out after ${timeout}ms`)), timeout)
-      })
+      const expired =
+        timeout === undefined
+          ? undefined
+          : new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error(`Modal Volume ${action} timed out after ${timeout}ms`)),
+                timeout,
+              )
+            })
       const result = Promise.all([launched.stdout, launched.stderr, launched.completion] as const)
       const interrupted = signal ? Promise.withResolvers<never>() : undefined
       const abort = () => interrupted?.reject(abortReason(signal!))
@@ -314,7 +391,7 @@ export namespace ModalVolume {
       try {
         const [stdout, stderr, status] = await Promise.race([
           result,
-          expired,
+          ...(expired ? [expired] : []),
           ...(interrupted ? [interrupted.promise] : []),
         ])
         normal = true
@@ -332,7 +409,7 @@ export namespace ModalVolume {
     })
   }
 
-  async function invoke(request: Request, context: Context, timeout: number, signal?: AbortSignal) {
+  async function invoke(request: Request, context: Context, timeout?: number, signal?: AbortSignal) {
     if (signal?.aborted) throw abortReason(signal)
     const env = environment({ ...process.env, ...context.env })
     env.MODAL_TOKEN_ID = context.tokenId
@@ -358,6 +435,10 @@ export namespace ModalVolume {
         (value, secret) => (secret ? value.replaceAll(secret, "[REDACTED]") : value),
         text.decode(detail).trim(),
       )
+      if (request.action === "download") {
+        const capacity = driverCapacityError(message)
+        if (capacity) throw capacity
+      }
       throw new Error(`Modal Volume ${request.action} failed (exit ${code}): ${message}`)
     }
     try {
@@ -448,52 +529,79 @@ export namespace ModalVolume {
     volume: string,
     paths: string[],
     staging: string,
-    signal?: AbortSignal,
+    options: DownloadOptions = {},
   ): Promise<Download[]> {
+    const { signal, declaredBytes } = options
     if (signal?.aborted) throw abortReason(signal)
     const files = paths.map(safe)
-    await fs.rm(staging, { recursive: true, force: true })
-    await fs.mkdir(staging, { recursive: true, mode: 0o700 })
-    const result = await invoke(
-      { action: "download", volume, environment: context.environment, paths: files, staging },
-      context,
-      DOWNLOAD_TIMEOUT,
-      signal,
-    )
-    if (signal?.aborted) throw abortReason(signal)
-    if (!Array.isArray(result)) throw new Error("Modal Volume download did not return an array")
-    const root = await fs.realpath(staging)
-    const downloaded = await Promise.all(
-      result.map(async (entry) => {
-        if (!entry || typeof entry !== "object") throw new Error("Modal Volume download returned an invalid entry")
-        if (!("path" in entry) || typeof entry.path !== "string") {
-          throw new Error("Modal Volume download returned an entry without a path")
-        }
-        if (!("staging" in entry) || typeof entry.staging !== "string") {
-          throw new Error(`Modal Volume download returned no local path for ${entry.path}`)
-        }
-        if (
-          !("size" in entry) ||
-          typeof entry.size !== "number" ||
-          !Number.isSafeInteger(entry.size) ||
-          entry.size < 0
-        ) {
-          throw new Error(`Modal Volume download returned an invalid size for ${entry.path}`)
-        }
-        if (!("sha256" in entry) || typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
-          throw new Error(`Modal Volume download returned an invalid checksum for ${entry.path}`)
-        }
-        const relative = safe(entry.path)
-        const expected = path.resolve(root, ...relative.split("/"))
-        const actual = await fs.realpath(entry.staging).catch(() => undefined)
-        if (actual !== expected) {
-          throw new Error(`Modal Volume download escaped its staging directory: ${entry.path}`)
-        }
-        return { path: relative, staging: expected, size: entry.size, sha256: entry.sha256 }
-      }),
-    )
-    if (signal?.aborted) throw abortReason(signal)
-    return downloaded
+    if (declaredBytes !== undefined && (!Number.isSafeInteger(declaredBytes) || declaredBytes < 0)) {
+      throw new Error("Modal Volume download received an invalid declared aggregate size")
+    }
+    let capacity = 0
+    try {
+      await fs.rm(staging, { recursive: true, force: true })
+      const parent = path.dirname(staging)
+      await fs.mkdir(parent, { recursive: true, mode: 0o700 })
+      capacity = await availableDownloadBytes(parent)
+      if (capacity === 0 || (declaredBytes !== undefined && declaredBytes > capacity)) {
+        throw new DownloadCapacityError(capacity, declaredBytes)
+      }
+      await fs.mkdir(staging, { recursive: true, mode: 0o700 })
+      const result = await invoke(
+        {
+          action: "download",
+          volume,
+          environment: context.environment,
+          paths: files,
+          staging,
+          capacity_bytes: capacity,
+          reserve_bytes: DOWNLOAD_DISK_RESERVE_BYTES,
+        },
+        context,
+        undefined,
+        signal,
+      )
+      if (signal?.aborted) throw abortReason(signal)
+      if (!Array.isArray(result)) throw new Error("Modal Volume download did not return an array")
+      const root = await fs.realpath(staging)
+      const downloaded = await Promise.all(
+        result.map(async (entry) => {
+          if (!entry || typeof entry !== "object") throw new Error("Modal Volume download returned an invalid entry")
+          if (!("path" in entry) || typeof entry.path !== "string") {
+            throw new Error("Modal Volume download returned an entry without a path")
+          }
+          if (!("staging" in entry) || typeof entry.staging !== "string") {
+            throw new Error(`Modal Volume download returned no local path for ${entry.path}`)
+          }
+          if (
+            !("size" in entry) ||
+            typeof entry.size !== "number" ||
+            !Number.isSafeInteger(entry.size) ||
+            entry.size < 0
+          ) {
+            throw new Error(`Modal Volume download returned an invalid size for ${entry.path}`)
+          }
+          if (!("sha256" in entry) || typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
+            throw new Error(`Modal Volume download returned an invalid checksum for ${entry.path}`)
+          }
+          const relative = safe(entry.path)
+          const expected = path.resolve(root, ...relative.split("/"))
+          const actual = await fs.realpath(entry.staging).catch(() => undefined)
+          if (actual !== expected) {
+            throw new Error(`Modal Volume download escaped its staging directory: ${entry.path}`)
+          }
+          return { path: relative, staging: expected, size: entry.size, sha256: entry.sha256 }
+        }),
+      )
+      if (signal?.aborted) throw abortReason(signal)
+      return downloaded
+    } catch (error) {
+      await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined)
+      if (error instanceof DownloadCapacityError) throw error
+      const storage = storageCapacityCode(error)
+      if (storage) throw new DownloadCapacityError(capacity, undefined, storage)
+      throw error
+    }
   }
 }
 

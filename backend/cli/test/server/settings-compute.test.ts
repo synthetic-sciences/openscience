@@ -322,6 +322,7 @@ test("Modal Volume browser downloads stream past the retired cap and clean up on
   try {
     const cancelled = await ComputeSettingsRoutes().request("/modal/volumes/weights/file?path=/large.bin")
     expect(cancelled.status).toBe(200)
+    expect(download.mock.calls[0]?.[4]?.declaredBytes).toBe(size)
     expect(cancelled.headers.get("content-length")).toBe(String(size))
     expect(cancelled.headers.get("content-disposition")).toContain('filename="large.bin"')
     const cancelledReader = cancelled.body!.getReader()
@@ -365,8 +366,10 @@ test("Modal Volume browser downloads abort blocked staging and await helper tear
   })
   const list = spyOn(ModalVolume, "list").mockResolvedValue([{ path: "blocked.bin", type: "file", size: 1 }])
   const download = spyOn(ModalVolume, "download").mockImplementation(
-    async (_context, _volume, _paths, target, signal) => {
+    async (_context, _volume, _paths, target, options) => {
+      const signal = options?.signal
       if (!signal) throw new Error("The Modal Volume route did not forward its request signal")
+      expect(options.declaredBytes).toBe(1)
       staging = target
       await fs.writeFile(path.join(target, "partial"), "staged")
       const interrupted = Promise.withResolvers<never>()

@@ -799,13 +799,14 @@ export const ComputeSettingsRoutes = lazy(() =>
         const cleanup = () => (cleanupPromise ??= fs.rm(staging, { recursive: true, force: true }))
         let handedOff = false
         try {
-          const file = await ModalVolume.download(context, input.name, [entry.path], staging, c.req.raw.signal).then(
-            (files) => {
-              const file = files[0]
-              if (!file) throw new Error(`Modal Volume did not download ${entry.path}`)
-              return file
-            },
-          )
+          const file = await ModalVolume.download(context, input.name, [entry.path], staging, {
+            signal: c.req.raw.signal,
+            declaredBytes: entry.size,
+          }).then((files) => {
+            const file = files[0]
+            if (!file) throw new Error(`Modal Volume did not download ${entry.path}`)
+            return file
+          })
           c.req.raw.signal.throwIfAborted()
           c.header("content-type", "application/octet-stream")
           c.header("content-disposition", modalDownloadDisposition(entry.path))
