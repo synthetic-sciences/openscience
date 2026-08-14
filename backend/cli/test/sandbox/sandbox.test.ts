@@ -206,6 +206,63 @@ describe("Sandbox.bubblewrapArgs", () => {
     expect(sources).not.toContain("/var")
   })
 
+  test("freezes empty-root mount scaffolding after explicit mounts are assembled", () => {
+    const args = Sandbox.bubblewrapArgs({
+      writable: ["/work/project"],
+      readable: ["/home/user/.bun"],
+      network: false,
+    })
+    const rootRemount = args.findIndex((value, index) => value === "--remount-ro" && args[index + 1] === "/")
+    const filesystemOptions = new Set([
+      "--proc",
+      "--dev",
+      "--tmpfs",
+      "--dir",
+      "--file",
+      "--symlink",
+      "--bind",
+      "--bind-try",
+      "--ro-bind",
+      "--ro-bind-try",
+    ])
+    const lastMount = args.reduce((last, value, index) => (filesystemOptions.has(value) ? index : last), -1)
+    expect(rootRemount).toBeGreaterThan(lastMount)
+  })
+
+  test.skipIf(Sandbox.backend() !== "bubblewrap")(
+    "keeps mount-parent scaffolding read-only while explicit workspace binds remain writable",
+    async () => {
+      const readable = fs.mkdtempSync(path.join(os.homedir(), `.openscience-bwrap-readable-${process.pid}-`))
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), `.openscience-bwrap-workspace-${process.pid}-`))
+      const outside = path.join(os.homedir(), `.openscience-bwrap-sibling-${process.pid}`)
+      const inside = path.join(workspace, "inside")
+      fs.rmSync(outside, { force: true })
+      try {
+        const args = Sandbox.bubblewrapArgs({ writable: [workspace], readable: [readable], network: false })
+        const script = [
+          `touch ${JSON.stringify(outside)} 2>/dev/null`,
+          "outside_status=$?",
+          `touch ${JSON.stringify(inside)}`,
+          "inside_status=$?",
+          '[ "$outside_status" -ne 0 ] && [ "$inside_status" -eq 0 ]',
+        ].join("; ")
+        const proc = Bun.spawn(["bwrap", ...args, "--", "/bin/sh", "-c", script], {
+          stdout: "pipe",
+          stderr: "pipe",
+        })
+        const [exit, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()])
+
+        expect(exit, stderr).toBe(0)
+        expect(fs.existsSync(outside)).toBe(false)
+        expect(fs.existsSync(inside)).toBe(true)
+      } finally {
+        fs.rmSync(outside, { force: true })
+        fs.rmSync(readable, { recursive: true, force: true })
+        fs.rmSync(workspace, { recursive: true, force: true })
+      }
+    },
+  )
+
   test("masks host credential files with an empty device", () => {
     const file = path.join(os.tmpdir(), `openscience-sandbox-secret-${process.pid}`)
     fs.writeFileSync(file, "secret")

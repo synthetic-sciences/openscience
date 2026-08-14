@@ -659,6 +659,14 @@ export namespace Sandbox {
       if (fs.statSync(source).isDirectory()) args.push("--tmpfs", destination)
       else args.push("--ro-bind-try", "/dev/null", destination)
     }
+    // Bubblewrap creates missing destination ancestors in the empty root while
+    // assembling nested mounts. Those directories are scaffolding, not policy
+    // grants: for example, mounting /home/user/.bun read-only must not leave
+    // /home/user writable inside the namespace. Freeze only the root tmpfs
+    // after every mount is in place. --remount-ro is non-recursive, so explicit
+    // writable binds, the private /tmp tmpfs, /dev, and /proc keep their own
+    // intended mount permissions.
+    args.push("--remount-ro", "/")
     // bubblewrap cannot express "internet but never host loopback" without a
     // separately configured network namespace. Sharing the host namespace in
     // allow mode would expose 127.0.0.1 services, so fail closed and deny all
