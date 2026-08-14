@@ -36,6 +36,20 @@ export type BadRequestError = {
   success: false
 }
 
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type EventInstallationUpdated = {
   type: "installation.updated"
   properties: {
@@ -88,20 +102,6 @@ export type EventProjectTrustChanged = {
         }
       }
     }
-  }
-}
-
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
   }
 }
 
@@ -990,13 +990,13 @@ export type EventWorktreeFailed = {
 }
 
 export type Event =
+  | EventServerConnected
+  | EventGlobalDisposed
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
   | EventServerInstanceDisposed
   | EventProjectTrustChanged
-  | EventServerConnected
-  | EventGlobalDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileWatcherUpdated
