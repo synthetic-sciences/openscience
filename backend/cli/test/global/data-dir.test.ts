@@ -27,6 +27,21 @@ async function root() {
   return value
 }
 
+function rewriteRacingFile(filepath: string, content: string) {
+  try {
+    fsSync.writeFileSync(filepath, content)
+    return true
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    // This fixture deliberately writes while migration reads the same file.
+    // Windows may transiently deny that competing open; skipping one timer
+    // tick preserves the race without turning a sharing violation into an
+    // unhandled test-runner error and cleanup cascade.
+    if (process.platform === "win32" && (code === "EBUSY" || code === "EACCES" || code === "EPERM")) return false
+    throw error
+  }
+}
+
 async function artifact(root: string, key: string) {
   const dir = path.join(root, "artifact-store")
   await fs.mkdir(path.join(dir, "blobs"), { recursive: true })
@@ -245,10 +260,14 @@ describe("OpenScience data directory", () => {
     // verification. Only that file may be dropped.
     const torn = path.join(legacy, "storage", "session", "ses_b.json")
     const original = fsSync.readFileSync(torn)
-    const watcher = setInterval(() => fsSync.writeFileSync(torn, `{"id":"b","n":${Math.random()}}`), 1)
+    let rewrites = 0
+    const watcher = setInterval(() => {
+      if (rewriteRacingFile(torn, `{"id":"b","n":${Math.random()}}`)) rewrites++
+    }, 1)
     const result = await resolveDataDirectory({ home, legacy }).finally(() => clearInterval(watcher))
 
     expect(result.path).toBe(target)
+    expect(rewrites).toBeGreaterThan(0)
     expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
     expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
     for (const id of ["a", "c"])
