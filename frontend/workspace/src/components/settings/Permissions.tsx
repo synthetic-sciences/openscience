@@ -83,8 +83,8 @@ const Permissions: Component = () => {
     const confirmed = await confirmDialog(dialog, {
       title: trusted ? "Trust this project?" : "Revoke project trust?",
       message: trusted
-        ? `Allow project-owned code under ${status.root}, including plugins, MCP servers, formatters, language servers, provider commands, and startup hooks. Trust also permits host execution when the sandbox is off or explicitly configured to fall back without containment. Sandboxed terminals, kernels, and local jobs do not require project trust unless you enable that stricter policy in Sandbox settings.`
-        : "Project-owned extensions and unsandboxed execution will be blocked. Existing project processes are stopped. Sandboxed terminals, kernels, and local jobs remain available unless Sandbox settings require project trust for all execution.",
+        ? `Allow project-owned code under ${status.root}, including plugins, MCP servers, formatters, language servers, provider commands, and startup hooks. Trust also permits remote jobs, kernel environment changes such as package installs, and host execution when the sandbox is off or explicitly configured to fall back without containment. Sandboxed terminals, kernels, and local jobs do not require project trust unless you enable that stricter policy in Sandbox settings.`
+        : "Remote jobs, kernel environment changes such as package installs, project-owned extensions, and unsandboxed execution will be blocked. Existing project processes are stopped. Sandboxed terminals, kernels, and local jobs remain available unless Sandbox settings require project trust for all execution.",
       confirmLabel: trusted ? "Trust project" : "Revoke trust",
       danger: !trusted,
     })
@@ -119,7 +119,7 @@ const Permissions: Component = () => {
           <Show when={route()}>
             <Section
               title="Project code"
-              description="Trust project-owned extensions and host execution separately from routine sandboxed work."
+              description="Trust remote jobs, kernel environment changes, project-owned extensions, and host execution separately from routine sandboxed work."
             >
               <div class="settings-card settings-preferences-card">
                 <Show

@@ -41,7 +41,9 @@ test("sandbox defaults to low-friction contained execution with an explicit stri
   expect(component).toContain("requireProjectTrust?: boolean")
   expect(component).toContain("requireProjectTrust: false")
   expect(component).toContain("Sandboxed terminals, kernels, and local jobs can run immediately")
-  expect(component).toContain("Project extensions and unsandboxed execution still require trust")
+  expect(component).toContain(
+    "Remote jobs, kernel environment changes, project extensions, and unsandboxed execution still require trust",
+  )
   expect(component).toContain("Every project must be trusted before it can start terminals, kernels, or local jobs")
   expect(component).toContain("{ requireProjectTrust: checked }")
 })

@@ -338,7 +338,7 @@ const Sandbox: Component = () => {
                     <span>
                       {config().requireProjectTrust === true
                         ? "Every project must be trusted before it can start terminals, kernels, or local jobs."
-                        : "Sandboxed terminals, kernels, and local jobs can run immediately. Project extensions and unsandboxed execution still require trust."}
+                        : "Sandboxed terminals, kernels, and local jobs can run immediately. Remote jobs, kernel environment changes, project extensions, and unsandboxed execution still require trust."}
                     </span>
                   </div>
                   <Switch

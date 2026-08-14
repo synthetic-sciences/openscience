@@ -10,7 +10,7 @@ OpenScience is open source under Apache-2.0, so the whole security model below i
 
 The permission system decides whether an agent may take an action. It is not, on its own, an isolation boundary.
 
-OpenScience enables a real [execution sandbox](/openscience/sandbox) by default. It wraps terminals, shell commands, Python/R kernels, and local jobs in macOS Seatbelt or Linux bubblewrap, limits them to the workspace and approved paths, and denies network egress. Routine work can start immediately when that boundary is enforced; project-owned extensions and host execution still require explicit project trust. The default refuses to run when no native backend is available rather than silently falling back to the host. Verify the effective boundary with `openscience sandbox test`. It is OS containment, not a full VM — for actively hostile code, still run OpenScience inside a container or VM.
+OpenScience enables a real [execution sandbox](/openscience/sandbox) by default. It wraps terminals, shell commands, Python/R kernels, and local jobs in macOS Seatbelt or Linux bubblewrap, limits them to the workspace and approved paths, and denies network egress. Routine work can start immediately when that boundary is enforced; remote jobs, kernel environment changes, project-owned extensions, and host execution still require explicit project trust. The default refuses to run when no native backend is available rather than silently falling back to the host. Verify the effective boundary with `openscience sandbox test`. It is OS containment, not a full VM — for actively hostile code, still run OpenScience inside a container or VM.
 
 ## Credential storage
 

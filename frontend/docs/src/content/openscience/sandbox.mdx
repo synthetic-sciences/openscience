@@ -8,9 +8,9 @@ OpenScience separates three controls that solve different problems:
 
 - **Tool permissions** decide whether an agent may take an action.
 - **The execution sandbox** limits what a spawned terminal, shell command, Python/R kernel, or local compute job can reach.
-- **Project trust** controls project-owned executable code such as plugins, MCP servers, formatters, language servers, provider commands, and startup hooks. It also gates execution with full host authority.
+- **Project trust** controls remote jobs, kernel environment changes such as package installs, project-owned executable code such as plugins and MCP servers, and execution with full host authority.
 
-This separation keeps routine work moving without treating every newly opened project as trusted code. By default, terminals, kernels, shell commands, and local jobs may run immediately **only when OpenScience can enforce the OS sandbox**. Project extensions and unsandboxed execution remain blocked until you explicitly trust that project.
+This separation keeps routine work moving without treating every newly opened project as trusted code. By default, terminals, kernels, shell commands, and local jobs may run immediately **only when OpenScience can enforce the OS sandbox**. Remote jobs, kernel environment changes, project extensions, and unsandboxed execution remain blocked until you explicitly trust that project.
 
 ## Default behavior
 
@@ -42,9 +42,9 @@ This means ordinary approved work can continue autonomously inside a boundary yo
 
 A new project starts with project-owned executable code disabled. You can still use sandboxed terminals, Python/R kernels, shell commands, and local compute unless **Require project trust** is enabled.
 
-Trust a project only after reviewing its local configuration and code. Trust enables project plugins, MCP processes, formatters, LSP commands, provider token commands/modules, publication exporters, repository/startup commands, and other project-defined executable hooks. It also allows routine execution when you intentionally turn the sandbox off or configure an unsandboxed fallback.
+Trust a project only after reviewing its local configuration and code. Trust enables remote jobs, kernel environment changes such as package installs, project plugins, MCP processes, formatters, LSP commands, provider token commands/modules, publication exporters, repository/startup commands, and other project-defined executable hooks. It also allows routine execution when you intentionally turn the sandbox off or configure an unsandboxed fallback.
 
-Open **Settings → Permissions → Project code** to trust or revoke the current project. Revoking trust stops existing project processes and disables project-owned extensions. Sandboxed routine work remains available unless your Sandbox policy requires trust for all execution.
+Open **Settings → Permissions → Project code** to trust or revoke the current project. Revoking trust stops existing project processes and disables remote jobs, kernel environment changes, and project-owned extensions. Sandboxed routine work remains available unless your Sandbox policy requires trust for all execution.
 
 ## Native backends
 

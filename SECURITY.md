@@ -8,7 +8,7 @@ OpenScience is an AI agent that runs locally on your machine. The agent can run 
 
 The permission system decides whether the agent may take an action. A permission prompt is not an isolation boundary by itself. OpenScience enables its execution sandbox by default and refuses to run when a native backend is unavailable unless you explicitly choose a fallback policy.
 
-OpenScience wraps terminal and shell commands, Python/R kernels, and local compute jobs in macOS Seatbelt or Linux bubblewrap. It confines reads and writes to the session workspace and explicitly granted paths and denies network egress. Routine work can run immediately inside that verified boundary; project-owned extensions and host execution still require explicit project trust. Run `openscience sandbox test`; if it does not report **Containment verified**, do not rely on that backend. Windows has no sandbox backend, and the boundary is not a full VM. Use a container or VM for hostile code.
+OpenScience wraps terminal and shell commands, Python/R kernels, and local compute jobs in macOS Seatbelt or Linux bubblewrap. It confines reads and writes to the session workspace and explicitly granted paths and denies network egress. Routine work can run immediately inside that verified boundary; remote jobs, kernel environment changes, project-owned extensions, and host execution still require explicit project trust. Run `openscience sandbox test`; if it does not report **Containment verified**, do not rely on that backend. Windows has no sandbox backend, and the boundary is not a full VM. Use a container or VM for hostile code.
 
 ### Server mode
 
