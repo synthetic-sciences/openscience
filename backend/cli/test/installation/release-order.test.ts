@@ -10,3 +10,16 @@ test("production publish pushes the release commit before targeting it on GitHub
   expect(release).toBeGreaterThan(tag)
   expect(script.slice(tag, release)).not.toContain(".nothrow()")
 })
+
+test("publish source gates normalize GitHub's case-insensitive repository slug", async () => {
+  const workflows = ["npm-test.yml", "publish.yml"]
+
+  for (const workflow of workflows) {
+    const source = await Bun.file(path.join(import.meta.dir, `../../../../.github/workflows/${workflow}`)).text()
+
+    expect(source).toContain(
+      '[[ "${GITHUB_REPOSITORY,,}" != "synthetic-sciences/openscience" || "$GITHUB_REF" != "refs/heads/main" ]]',
+    )
+    expect(source).not.toContain('[[ "$GITHUB_REPOSITORY" != "synthetic-sciences/OpenScience"')
+  }
+})
