@@ -619,6 +619,9 @@ describe("/notebook routes", () => {
         await trustProject()
         const app = NotebookRoutes()
         const session = await Session.create({})
+        const workspace = await SessionFilesystem.workspace(session.id)
+        const firstRelease = path.join(workspace, ".release-first-cell")
+        const secondRelease = path.join(workspace, ".release-second-cell")
         const execute = (code: string) =>
           app.request("/execute", {
             method: "POST",
@@ -630,85 +633,121 @@ describe("/notebook routes", () => {
               code,
             }),
           })
-
-        const first = execute(
-          "(__import__('time').sleep(0.5), globals().__setitem__('queue_value', ['first']), 'first')[-1]",
-        )
-        const waitForKernel = async (): Promise<void> => {
-          // Kernel startup includes the governed-process handshake and has a
-          // bounded 15s production timeout. A fixed 101-poll budget made this
-          // test impose an unrelated ~1s timeout and fail under full-suite CPU
-          // pressure while the runtime was still correctly reporting
-          // `starting`. Keep the assertion bounded, but against the real
-          // startup contract and a monotonic deadline.
-          const deadline = performance.now() + 20_000
-          let last: unknown
-          while (performance.now() < deadline) {
-            const response = await app.request(
-              `/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.ipynb&language=python`,
-            )
-            last = await response.json()
-            if ((last as { active?: boolean }).active) return
+        type Status = {
+          active?: boolean
+          state?: string
+          queue_depth?: number
+          last_cell?: {
+            source?: string
+            code?: string
+            status?: string
+            execution_count?: number
+          } | null
+        }
+        const status = async () =>
+          (await (
+            await app.request(`/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.ipynb&language=python`)
+          ).json()) as Status
+        const statusDeadline = performance.now() + 20_000
+        const waitForStatus = async (label: string, predicate: (value: Status) => boolean) => {
+          let last: Status = {}
+          while (performance.now() < statusDeadline) {
+            last = await status()
+            if (predicate(last)) return last
             await Bun.sleep(10)
           }
-          throw new Error(`kernel did not start; last status: ${JSON.stringify(last)}`)
+          throw new Error(`${label}; last status: ${JSON.stringify(last)}`)
         }
-        await waitForKernel()
-        const secondCode = "(__import__('time').sleep(0.4), queue_value.append('second'), queue_value)[-1]"
-        const second = execute(secondCode)
-        await Bun.sleep(20)
-        const status = await app.request(
-          `/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.ipynb&language=python`,
-        )
-        expect(await status.json()).toMatchObject({
-          state: "running",
-          queue_depth: 1,
-          last_cell: {
-            source: "analysis.ipynb",
-            code: "(__import__('time').sleep(0.5), globals().__setitem__('queue_value', ['first']), 'first')[-1]",
-            status: "running",
-            execution_count: 1,
-          },
-        })
-        const firstResponse = await first
-        await Bun.sleep(20)
-        const secondStatus = await app.request(
-          `/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.ipynb&language=python`,
-        )
-        expect(await secondStatus.json()).toMatchObject({
-          state: "running",
-          queue_depth: 0,
-          last_cell: {
-            source: "analysis.ipynb",
-            code: secondCode,
-            status: "running",
-            execution_count: 2,
-          },
-        })
-        const secondResponse = await second
-        const firstResult = (await firstResponse.json()) as {
-          execution_count: number
-          outputs: Array<{ data?: Record<string, string> }>
-        }
-        const secondResult = (await secondResponse.json()) as {
-          execution_count: number
-          outputs: Array<{ data?: Record<string, string> }>
-        }
+        const waitUntilExists = (file: string) =>
+          `(lambda ready: ready or (_ for _ in ()).throw(TimeoutError('release sentinel timed out')))(next((True for _ in range(3000) if __import__('pathlib').Path(${JSON.stringify(file)}).exists() or (__import__('time').sleep(0.01), False)[1]), False))`
+        const pending: Array<ReturnType<typeof execute>> = []
 
-        expect(firstResult.execution_count).toBe(1)
-        expect(firstResult.outputs.some((output) => output.data?.["text/plain"] === "'first'")).toBe(true)
-        expect(secondResult.execution_count).toBe(2)
-        expect(secondResult.outputs.some((output) => output.data?.["text/plain"] === "['first', 'second']")).toBe(true)
+        try {
+          const firstCode = `(${waitUntilExists(firstRelease)}, globals().__setitem__('queue_value', ['first']), 'first')[-1]`
+          const first = execute(firstCode)
+          pending.push(first)
+          await waitForStatus(
+            "first cell did not begin running",
+            (value) =>
+              value.active === true &&
+              value.state === "running" &&
+              value.queue_depth === 0 &&
+              value.last_cell?.code === firstCode &&
+              value.last_cell.execution_count === 1,
+          )
+          const secondCode = `(${waitUntilExists(secondRelease)}, queue_value.append('second'), queue_value)[-1]`
+          const second = execute(secondCode)
+          pending.push(second)
+          const queued = await waitForStatus(
+            "second cell did not enter the kernel queue",
+            (value) =>
+              value.state === "running" &&
+              value.queue_depth === 1 &&
+              value.last_cell?.code === firstCode &&
+              value.last_cell.execution_count === 1,
+          )
+          expect(queued).toMatchObject({
+            state: "running",
+            queue_depth: 1,
+            last_cell: {
+              source: "analysis.ipynb",
+              code: firstCode,
+              status: "running",
+              execution_count: 1,
+            },
+          })
+          await fs.writeFile(firstRelease, "")
+          const firstResponse = await first
+          const secondRunning = await waitForStatus(
+            "second cell did not begin after the first completed",
+            (value) =>
+              value.state === "running" &&
+              value.queue_depth === 0 &&
+              value.last_cell?.code === secondCode &&
+              value.last_cell.execution_count === 2,
+          )
+          expect(secondRunning).toMatchObject({
+            state: "running",
+            queue_depth: 0,
+            last_cell: {
+              source: "analysis.ipynb",
+              code: secondCode,
+              status: "running",
+              execution_count: 2,
+            },
+          })
+          await fs.writeFile(secondRelease, "")
+          const secondResponse = await second
+          const firstResult = (await firstResponse.json()) as {
+            execution_count: number
+            outputs: Array<{ data?: Record<string, string> }>
+          }
+          const secondResult = (await secondResponse.json()) as {
+            execution_count: number
+            outputs: Array<{ data?: Record<string, string> }>
+          }
 
-        await app.request("/stop", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionID: session.id,
-            id: "analysis.ipynb",
-            language: "python",
-          }),
-        })
+          expect(firstResult.execution_count).toBe(1)
+          expect(firstResult.outputs.some((output) => output.data?.["text/plain"] === "'first'")).toBe(true)
+          expect(secondResult.execution_count).toBe(2)
+          expect(secondResult.outputs.some((output) => output.data?.["text/plain"] === "['first', 'second']")).toBe(
+            true,
+          )
+        } finally {
+          await Promise.allSettled([fs.writeFile(firstRelease, ""), fs.writeFile(secondRelease, "")])
+          await Promise.allSettled([
+            app.request("/stop", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sessionID: session.id,
+                id: "analysis.ipynb",
+                language: "python",
+              }),
+            }),
+            ...pending,
+          ])
+        }
       },
     })
   }, 45_000)
