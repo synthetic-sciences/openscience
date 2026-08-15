@@ -156,7 +156,12 @@ export namespace Sandbox {
   export function resolved(options?: Options): { enabled: boolean; network: "deny" | "allowlist" | "allow" } {
     return {
       enabled: options?.enabled === true,
-      network: options?.network ?? "allowlist",
+      // "deny", matching Config.trustedSandbox. These two defaults must agree:
+      // while they disagreed, every caller that omitted `network` resolved to
+      // "allowlist" here and then threw in bubblewrapArgs for want of an egress
+      // socket nobody had asked for. Failing closed is also the right default
+      // for a value that decides whether a sandboxed process reaches the network.
+      network: options?.network ?? "deny",
     }
   }
 
@@ -792,26 +797,18 @@ export namespace Sandbox {
     // Deciding that HERE rather than in the caller is what lets callers stay
     // platform-agnostic: `Installer` and the kernels say what must be readable
     // and never which backend needs telling.
-    // No /tmp-only filter any more. That filter was correct while bubblewrap
-    // mounted `--ro-bind / /`: everything was already visible and only paths the
-    // `--tmpfs /tmp` masked had to be bound back. main builds an EMPTY root and
-    // mounts explicitly, so nothing is reachable unless it is named here — and
-    // dropping the shim's launcher, its bundle and the interpreter is precisely
-    // why the shim stopped starting and every allowlisted request came back
-    // "Could not connect to server".
-    const readBind = dedupe(input.readable ?? []).filter((value) => !tooBroadToConfine(value))
+    // No readBind from `readable` at all. main binds every readable root itself,
+    // BEFORE the unreadable masks, so re-binding them here — after the masks —
+    // re-exposed the very files a mask had just covered: a `--ro-bind-try` of a
+    // directory shadows the /dev/null mount inside it. Measured as main's own
+    // symlink-escape test reading a masked file successfully.
+    //
+    // readBind now carries only what plan()/wrapArgv() add: the shim launcher,
+    // its bundle and the interpreter. Those are individual FILES, so nothing can
+    // be nested inside them and the shadowing has no trigger.
     return {
       ...base,
       // The lexical spelling too, not just the canonical one. Global.Path.bin
-      // reaches the data root through a symlink, so the shim launcher's own
-      // path — the one interpolated into the script — differs from the path
-      // that resolves on the host. Under `--ro-bind / /` both worked because
-      // the symlink itself existed; under main's empty root only what is
-      // mounted exists, and the script exec'd a path that was not there.
-      // Nothing reported it: the shim is backgrounded to /dev/null, so the
-      // only symptom was every allowlisted request failing to connect.
-      readableAliases: [...(base.readableAliases ?? []), ...mountAliases(readBind)],
-      ...(readBind.length ? { readBind } : {}),
       ...(egressOk ? { egress } : {}),
     }
   }
