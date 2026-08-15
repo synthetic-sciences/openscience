@@ -761,8 +761,21 @@ export namespace Sandbox {
       // execute nothing whose ACL does not name its package SID. Without this
       // the shim cannot start and the payload's proxy is a dead port.
       const shim = pipe ? shimArgv() : undefined
-      const granted = dedupe([...(input.readable ?? []), ...(shim?.paths ?? [])]).filter(
-        (value) => !tooBroadToConfine(value),
+      // NOT dedupe(): it canonicalises, and canonicalising is precisely wrong
+      // here. uv keeps a patch-versioned interpreter directory with a stable
+      // name linked beside it, and `pyvenv.cfg` — and therefore `sys.base_prefix`
+      // — names the stable one. Resolving it away meant only the target got an
+      // ACE, and Python then failed to stat the path it actually uses:
+      //
+      //     PermissionError: [WinError 5] Access is denied:
+      //     '...\uv\python\cpython-3.12-windows-x86_64-none'
+      //
+      // On Linux the lexical spelling is restored by a mount alias. Windows has
+      // no such indirection: a name is reachable only if that exact name carries
+      // an ACE, so the caller's spelling is kept and `grant()` adds the resolved
+      // form alongside it.
+      const granted = [...new Set([...(input.readable ?? []), ...(shim?.paths ?? [])])].filter(
+        (value) => value && path.isAbsolute(value) && !tooBroadToConfine(value),
       )
       return {
         ...base,
