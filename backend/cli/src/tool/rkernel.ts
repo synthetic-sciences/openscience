@@ -16,6 +16,7 @@ import { KernelQueue } from "@/science/kernel/queue"
 import { KernelProcessIdentity } from "@/science/kernel/process"
 import { KernelRuntime } from "@/science/kernel/registry"
 import { KernelEnvironmentMutation } from "@/science/kernel/environment-mutation"
+import { KernelEnvironmentName } from "@/science/kernel/interpreter"
 import { AtlasEnvironment } from "@/science/kernel/types"
 import type {
   Kernel,
@@ -604,6 +605,9 @@ const RFields = {
     .max(1024)
     .optional()
     .describe("Script path associated with this execution, when applicable"),
+  environment: KernelEnvironmentName.optional().describe(
+    "Optional project R environment provisioned by package_install. Omit it or use 'default' for the host runtime.",
+  ),
   timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
 }
 

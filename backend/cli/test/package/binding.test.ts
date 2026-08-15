@@ -18,49 +18,59 @@ test.skipIf(!python)("a kernel bound to an environment runs that environment's i
   expect((await findPython(undefined, env)).binary).toBe(Installer.interpreter(env))
 })
 
-test("an environment that does not exist falls back to the host interpreter", async () => {
-  // Failing closed here would make a typo'd environment name look like a
-  // broken machine — the exact failure mode this whole design started from,
-  // where a missing pip, a severed network and a read-only site-packages all
-  // surfaced as one opaque error.
-  const resolved = await findPython(undefined, "/nonexistent/env")
-  expect(resolved).not.toContain("/nonexistent/env")
+test("a name with no environment behind it says so, and says where it looked", async () => {
+  // This branch used to fall back to the host interpreter, on the reasoning that
+  // failing closed makes a typo'd name look like a broken machine. main answers
+  // the same worry differently and better: it fails, and the error names every
+  // candidate path plus the way to ask for the default. Keep main's.
+  const { pythonEnvironment, KernelEnvironmentUnavailable } = await import("../../src/science/kernel/interpreter")
+  await using dir = await tmpdir()
+  const failed = await pythonEnvironment(dir.path, "nope-not-here").then(
+    () => undefined,
+    (error) => error,
+  )
+  expect(failed).toBeInstanceOf(KernelEnvironmentUnavailable)
+  expect(String(failed)).toContain("nope-not-here")
 })
 
 test("no environment at all is the unchanged host lookup", async () => {
-  expect(await findPython()).toBeString()
+  expect((await findPython()).binary).toBeString()
 })
 
-test("environment binding is not part of the kernel identity", async () => {
+test("the managed environment is consulted before a project's own .venv", async () => {
+  // `package_install` only ever provisions the managed one, so a name it has
+  // provisioned must resolve there rather than to a same-named directory the
+  // project happens to carry.
+  const source = await read("../../src/science/kernel/interpreter.ts")
+  const roots = source.slice(source.indexOf("const managed ="), source.indexOf("const candidates ="))
+  expect(roots.indexOf("managed")).toBeLessThan(roots.indexOf(".venv"))
+})
+
+test("only the managed environment is handed to the sandbox as a grant", async () => {
+  // A project's own .venv lives inside the workspace and is already reachable;
+  // the managed one lives under the cache root and is not.
+  const source = await read("../../src/science/kernel/interpreter.ts")
+  expect(source).toContain("candidate.root === managed ? { environment: managed } : {}")
+})
+
+test("changing the environment gets a different kernel rather than reusing one", async () => {
   const source = await read("../../src/science/kernel/registry.ts")
+  // main keys the identity by environmentName, so two names cannot share a
+  // kernel and no staleness comparison is needed. This branch carried a
+  // separate `boundEnvironment` for the same property; main's is load-bearing.
   const identity = source.slice(source.indexOf("export type KernelIdentity"), source.indexOf("type KernelCell"))
-  // Adding it to the tuple would rekey every persisted record and orphan them.
-  expect(identity.includes("environment")).toBe(false)
+  expect(identity).toContain("environmentName")
+  expect(source).toContain("identity.environmentName ?")
 })
 
-test("the binding is carried under a name that cannot collide with KernelEnvironment", async () => {
-  const source = await read("../../src/science/kernel/registry.ts")
-  // The entry already has an `environment` field of type KernelEnvironment —
-  // the kernel's runtime context (cwd, sandbox platform), nothing to do with
-  // packages. Merging the two would silently bind kernels to the wrong thing.
-  expect(source.includes("boundEnvironment")).toBe(true)
-})
-
-test("changing the bound environment restarts the kernel rather than reusing it", async () => {
-  const source = await read("../../src/science/kernel/registry.ts")
-  // Staleness is compared at the registry level, because ExecutionAuthority's
-  // signature carries no kernel identity and so cannot see this.
-  expect(source.includes("value.boundEnvironment !== ")).toBe(true)
-})
-
-test("the notebook tool exposes environment beside kernel", async () => {
-  const source = await read("../../src/tool/notebook.ts")
-  expect(source.includes("environment: z")).toBe(true)
-})
-
-test("the R kernel tool exposes environment too", async () => {
-  const source = await read("../../src/tool/rkernel.ts")
-  expect(source.includes("environment: z")).toBe(true)
+test("both kernel tools accept an environment name, bounded", async () => {
+  for (const file of ["../../src/tool/notebook.ts", "../../src/tool/rkernel.ts"]) {
+    const source = await read(file)
+    // KernelEnvironmentName, not a bare string: it bounds length and refuses
+    // path separators, so a name can never address a directory outside the two
+    // places `pythonEnvironment` looks.
+    expect(source, file).toContain("KernelEnvironmentName")
+  }
 })
 
 test("the derived directory is stable for a project and name", () => {
