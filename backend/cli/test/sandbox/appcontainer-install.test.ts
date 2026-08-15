@@ -227,7 +227,15 @@ test.if(windows)(
 test.if(windows)(
   "a pre-existing subdirectory of the workspace is writable inside the container",
   async () => {
-    // TMPDIR now points inside the granted environment and pip STILL cannot
+    // NOTE, corrected: this test now PASSES, and the conclusion drawn from its
+    // earlier failure was wrong. The Low label does reach a pre-existing
+    // subdirectory; what actually broke was an over-broad `readable` list
+    // leaking main's derived read roots into the Windows GRANT list, which sent
+    // icacls at every directory on PATH. The check is kept because it is cheap
+    // and it pins a property the sandbox genuinely depends on.
+    //
+    // Original note, left for the reasoning it records:
+    // TMPDIR pointed inside the granted environment and pip STILL could not
     // write there:
     //
     //     [Errno 13] Permission denied:
@@ -293,16 +301,12 @@ test.if(windows)(
     expect(egress).toBeTruthy()
     const home = await Installer.base(environment!)
     const cache = path.join(workspace!, "pip-cache")
-    // TMPDIR matters as much as the cache. Left unset, pip unpacks into the
-    // container's OWN redirected temp (...\Packages\<profile>\AC\Temp) and
-    // fails there with `[Errno 13] Permission denied` -- after a successful
-    // download, which makes it read like a transport fault when it is not one.
-    // `Installer.install` sets this for exactly that reason; spawning pip
-    // directly to stream stderr dropped it, so this is a fidelity gap in the
-    // test rather than a defect in the product.
-    const scratch = path.join(environment!, ".tmp")
+    // No TMPDIR of its own. `spec.env` carries the sandbox's per-spawn temp
+    // root, which is granted and labelled as a ROOT; a directory pre-created
+    // here would be a child of the workspace and is not what the product uses
+    // any more. This test reconstructs `Installer.install`, and drifting from
+    // it is precisely how the reconstruction stops proving anything.
     await fs.mkdir(cache, { recursive: true })
-    await fs.mkdir(scratch, { recursive: true })
     const spec = await Sandbox.wrapArgv({
       file: Installer.interpreter(environment!),
       args: ["-m", "pip", "install", "--disable-pip-version-check", "--only-binary", ":all:", "six"],
@@ -311,7 +315,7 @@ test.if(windows)(
       options: { ...policy, egress },
     })
     const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
-      env: { ...process.env, ...spec.env, PIP_CACHE_DIR: cache, TMPDIR: scratch },
+      env: { ...process.env, ...spec.env, PIP_CACHE_DIR: cache },
       cwd: environment!,
       stdout: "pipe",
       stderr: "inherit",
@@ -341,6 +345,11 @@ test.if(windows)(
       packages: ["six"],
       index: "",
       source: false,
+      // Bounded so it RETURNS. install() buffers stderr and prints it only on
+      // return, so a run that outlives the test timeout produces five minutes
+      // of silence and not one line about why — which is exactly what the last
+      // run did.
+      signal: AbortSignal.timeout(150_000),
       onProgress: (status) => console.log(`  ${status}`),
     })
     if (!result.ok) console.log(result.log)
