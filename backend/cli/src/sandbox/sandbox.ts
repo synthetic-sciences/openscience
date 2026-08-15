@@ -767,11 +767,25 @@ export namespace Sandbox {
       return {
         ...base,
         profile: appContainerProfile(input.workspace),
-        // Overrides base.readable deliberately: on Windows this is a GRANT list
-        // (every path gets an ACE naming the package SID), not the "what may be
-        // read" set the POSIX backends derive from the workspace. Granting the
-        // latter would hand the container an ACE on every workspace path.
-        ...(granted.length ? { readable: granted } : {}),
+        // ALWAYS this list, never main's derived one, and unconditionally —
+        // including when it is empty.
+        //
+        // On POSIX `readable` means "what may be read" and is derived from the
+        // runtime roots, the workspace and the writable set; binding those into
+        // a namespace costs nothing. On Windows it is a GRANT list: every entry
+        // has an ACE written to it with `icacls`. Spreading it conditionally
+        // let main's derived set through whenever nothing explicit was named,
+        // and the launcher then tried to rewrite the ACLs of every directory on
+        // PATH:
+        //
+        //     could not grant sandbox access to C:\Windows\System32: Access is denied.
+        //     could not grant sandbox access to C:\Windows: Access is denied.
+        //
+        // Unelevated it merely failed, slowly — 117 seconds of icacls calls
+        // before a trivial `exit 7` gave up. Elevated it would have succeeded,
+        // and quietly granted an AppContainer standing access to the system
+        // directories. Windows grants exactly what the caller named, or nothing.
+        readable: granted,
         ...(shim ? { shim: shim.argv } : {}),
         ...(pipe && proxyOk ? { egress: pipe, port, secret } : {}),
       }

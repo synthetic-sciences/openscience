@@ -129,6 +129,64 @@ test("the entry point is wired before anything else the process does", async () 
   expect(source.match(/^import .*/gm)).toBeNull()
 })
 
+test("the Windows grant list is exactly what the caller named", () => {
+  // `readable` means two different things per backend. On POSIX it is "what may
+  // be read", derived from runtime roots and the workspace, and binding those
+  // into a namespace costs nothing. On Windows every entry gets an ACE written
+  // to it with `icacls`, so inheriting the derived set made the launcher try to
+  // rewrite the ACLs of every directory on PATH — C:\Windows and
+  // C:\Windows\System32 among them. Unelevated that merely failed, slowly:
+  // 117 seconds of icacls calls before a trivial `exit 7` gave up. Elevated it
+  // would have SUCCEEDED, granting an AppContainer standing access to the
+  // system directories.
+  //
+  // So: nothing the caller did not name, and empty stays empty.
+  const spec = (wrapped: { args?: string[] }) => {
+    const args = wrapped.args ?? []
+    const at = args.indexOf("__appcontainer-launch")
+    expect(at).toBeGreaterThan(-1)
+    return AppContainer.decode(args[at + 1]!)
+  }
+
+  // POSIX-shaped paths even though the backend is win32: this runs on a Linux
+  // runner, where `dedupe`'s path.resolve rewrites a `C:\...` string into a
+  // cwd-relative one and the filters then drop it. The property under test is
+  // how many entries survive, which does not depend on their spelling.
+  const bare = Sandbox.wrapArgv({
+    file: "cmd.exe",
+    args: ["/c", "exit 7"],
+    workspace: ["/work/project"],
+    options: { enabled: true, network: "deny" },
+    platform: "win32",
+  })
+  try {
+    expect(spec(bare).readable ?? []).toEqual([])
+  } finally {
+    Sandbox.cleanup(bare)
+  }
+
+  const base = "/opt/uv/python/cpython-3.12"
+  const named = Sandbox.wrapArgv({
+    file: "python.exe",
+    args: [],
+    workspace: ["/work/project"],
+    readable: [base],
+    options: { enabled: true, network: "deny" },
+    platform: "win32",
+  })
+  try {
+    // Count and content, not the exact string: `dedupe` resolves paths, and a
+    // Windows path resolved on a Linux test runner comes back rewritten. The
+    // regression this guards against produced dozens of entries, so one is the
+    // assertion that matters.
+    const readable = spec(named).readable ?? []
+    expect(readable).toHaveLength(1)
+    expect(readable[0]).toContain("cpython-3.12")
+  } finally {
+    Sandbox.cleanup(named)
+  }
+})
+
 test("describe() reports the appcontainer backend as available", () => {
   // Two commands reading the same backend() disagreed on a real Windows
   // machine: `sandbox status` printed "unavailable - no sandbox backend for
