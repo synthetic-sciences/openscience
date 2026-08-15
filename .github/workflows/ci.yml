@@ -76,6 +76,18 @@ jobs:
   macos-runtime:
     name: macOS runtime ownership
     runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - run: >-
+          bun test
+          test/process/darwin-responsibility.test.ts
+          test/credentials/process-ledger.test.ts
+          test/project/authority-process-ledger.test.ts
+        shell: bash
+        working-directory: backend/cli
+
   # Task 7 gave macOS a seatbelt profile for network:"allowlist" — an SBPL
   # profile plus an authenticated loopback proxy, built and unit-tested
   # entirely from Linux with the platform injected, because no Mac exists on
