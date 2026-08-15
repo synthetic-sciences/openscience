@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { afterAll, beforeAll, expect, test } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -43,6 +43,25 @@ import { Sandbox } from "../../src/sandbox/sandbox"
  */
 
 const windows = process.platform === "win32"
+
+// Stated, not inherited. `Config.trustedSandbox()` defaults to disabled/deny, so
+// a test that reads the ambient policy runs UNSANDBOXED and passes while proving
+// nothing — which is exactly what happened: "Successfully installed six-1.17.0"
+// with `egress: <none>`, on a job whose entire purpose is the sandboxed path.
+beforeAll(async () => {
+  const { Config } = await import("../../src/config/config")
+  await Config.setSandbox({ enabled: true, network: "allowlist" })
+})
+
+afterAll(async () => {
+  const { Global } = await import("../../src/global")
+  const { Config } = await import("../../src/config/config")
+  const fsp = await import("fs/promises")
+  for (const name of ["openscience.jsonc", "openscience.json", "config.json"]) {
+    await fsp.rm(path.join(Global.Path.config, name), { force: true }).catch(() => {})
+  }
+  Config.global.reset()
+})
 
 /** Kept across the staged tests: each one builds on the last, and rebuilding an
  *  environment per test would triple an already slow job. */

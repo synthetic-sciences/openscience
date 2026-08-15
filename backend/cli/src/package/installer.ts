@@ -696,9 +696,8 @@ export namespace Installer {
     // the scratch directory pip unpacks into stays environment-local, because it
     // is throwaway and sharing it would let concurrent installs collide.
     const cache = shared()
-    const scratch = path.join(input.directory, ".tmp")
+
     await fs.mkdir(cache, { recursive: true })
-    await fs.mkdir(scratch, { recursive: true })
     // Wheels-only is a speed and reliability default, NOT a security boundary:
     // if bwrap contains agent Python at import time it contains setup.py at
     // install time.
@@ -715,7 +714,19 @@ export namespace Installer {
     ]
     const spec = await confined(input.directory, argv)
     const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
-      env: { ...process.env, ...spec.env, PIP_CACHE_DIR: cache, TMPDIR: scratch },
+      // No TMPDIR of our own. It used to be `<env>/.tmp`, pre-created here on the
+      // host — and on Windows the sandbox cannot make a pre-existing
+      // SUBDIRECTORY writable: `icacls /setintegritylevel (OI)(CI)L` labels the
+      // granted root and does not propagate to children that already exist, and
+      // Mandatory Integrity Control is evaluated before the DACL. Measured
+      // directly: a directory created before the launch is unwritable inside the
+      // container while one created inside it is fine. pip then failed unpacking
+      // a wheel it had already downloaded, which read as a transport fault.
+      //
+      // `spec.env` carries TMPDIR/TMP/TEMP for the sandbox's own per-spawn temp
+      // root, which IS granted and labelled as a root. Letting that through is
+      // both the fix and the reason the mechanism exists.
+      env: { ...process.env, ...spec.env, PIP_CACHE_DIR: cache },
       // The environment, not wherever the server happens to be running. A
       // sandboxed child inherits this working directory, and the sandbox is not
       // granted the server's cwd — the same latent fault that killed the egress
