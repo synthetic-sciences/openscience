@@ -792,10 +792,28 @@ export namespace Sandbox {
     // Deciding that HERE rather than in the caller is what lets callers stay
     // platform-agnostic: `Installer` and the kernels say what must be readable
     // and never which backend needs telling.
-    const readBind = dedupe(input.readable ?? [])
-      .filter((value) => !tooBroadToConfine(value))
-      .filter((value) => value === "/tmp" || value.startsWith("/tmp/"))
-    return { ...base, ...(readBind.length ? { readBind } : {}), ...(egressOk ? { egress } : {}) }
+    // No /tmp-only filter any more. That filter was correct while bubblewrap
+    // mounted `--ro-bind / /`: everything was already visible and only paths the
+    // `--tmpfs /tmp` masked had to be bound back. main builds an EMPTY root and
+    // mounts explicitly, so nothing is reachable unless it is named here — and
+    // dropping the shim's launcher, its bundle and the interpreter is precisely
+    // why the shim stopped starting and every allowlisted request came back
+    // "Could not connect to server".
+    const readBind = dedupe(input.readable ?? []).filter((value) => !tooBroadToConfine(value))
+    return {
+      ...base,
+      // The lexical spelling too, not just the canonical one. Global.Path.bin
+      // reaches the data root through a symlink, so the shim launcher's own
+      // path — the one interpolated into the script — differs from the path
+      // that resolves on the host. Under `--ro-bind / /` both worked because
+      // the symlink itself existed; under main's empty root only what is
+      // mounted exists, and the script exec'd a path that was not there.
+      // Nothing reported it: the shim is backgrounded to /dev/null, so the
+      // only symptom was every allowlisted request failing to connect.
+      readableAliases: [...(base.readableAliases ?? []), ...mountAliases(readBind)],
+      ...(readBind.length ? { readBind } : {}),
+      ...(egressOk ? { egress } : {}),
+    }
   }
 
   // ── macOS: Seatbelt (sandbox-exec) ──────────────────────────────────────────
@@ -1041,6 +1059,14 @@ export namespace Sandbox {
     // after every mount is in place. --remount-ro is non-recursive, so explicit
     // writable binds, the private /tmp tmpfs, /dev, and /proc keep their own
     // intended mount permissions.
+    // After the writable binds and before --remount-ro: these are the shim's
+    // launcher, its bundle and the interpreter, and under an empty root they
+    // exist only if named. Bound read-only, and after the writable loop so an
+    // overlap cannot silently turn part of a workspace read-only.
+    for (const value of dedupe(policy.readBind ?? [])) {
+      if (value === "/tmp") continue
+      args.push("--ro-bind-try", value, value)
+    }
     if (policy.network === "allowlist") {
       if (!policy.egress) throw new Error("sandbox network 'allowlist' requires an egress socket path")
       // --unshare-net below is what makes this the ONLY route out: there is no
@@ -1717,7 +1743,18 @@ export namespace Sandbox {
       const argv = shim ? ["/bin/sh", "-c", shim] : [input.shell, ...Shell.invocation(input.shell, input.command)]
       const s = specForArgv(
         posix ? withTempEnvironment(argv, temporary) : argv,
-        shimmed ? { ...policy, readBind: [...(policy.readBind ?? []), ...shimmed.bind] } : policy,
+        shimmed
+          ? {
+              ...policy,
+              readBind: [...(policy.readBind ?? []), ...shimmed.bind],
+              // And their lexical spellings. shimPlan writes into Global.Path.bin,
+              // which reaches the data root through a symlink, so the path
+              // interpolated into the shim script is not the path that resolves
+              // on the host. buildPolicy cannot do this for us — these paths are
+              // added here, after it has already computed its aliases.
+              readableAliases: [...(policy.readableAliases ?? []), ...mountAliases(shimmed.bind)],
+            }
+          : policy,
         b,
       )!
       log.info("sandboxing command", { backend: b, network: policy.network, writable: policy.writable.length })
@@ -1787,10 +1824,34 @@ export namespace Sandbox {
       // See plan(): POSIX gets the temp through `/usr/bin/env`, Windows through
       // the same `env` channel that carries the proxy variables.
       const posix = b !== "appcontainer"
-      const argv = [input.file, ...input.args]
-      const s = specForArgv(posix ? withTempEnvironment(argv, temporary) : argv, policy, b)!
+      // Same shim composition plan() does, and it is not optional here: kernels
+      // reach the network through wrapArgv, so dropping it left every notebook
+      // and R kernel with no egress at all under "allowlist" — the exact route
+      // package installs from a kernel depend on.
+      const shimmed = b === "bubblewrap" && policy.network === "allowlist" && policy.egress ? shimPlan() : undefined
+      const shim = shimmed
+        ? shimScript({
+            binary: shimmed.binary,
+            port: SHIM_PORT,
+            socket: policy.egress!,
+            file: input.file,
+            args: input.args,
+          })
+        : undefined
+      const argv = shim ? ["/bin/sh", "-c", shim] : [input.file, ...input.args]
+      const s = specForArgv(
+        posix ? withTempEnvironment(argv, temporary) : argv,
+        shimmed
+          ? {
+              ...policy,
+              readBind: [...(policy.readBind ?? []), ...shimmed.bind],
+              readableAliases: [...(policy.readableAliases ?? []), ...mountAliases(shimmed.bind)],
+            }
+          : policy,
+        b,
+      )!
       log.info("sandboxing process", { backend: b, network: policy.network, writable: policy.writable.length })
-      const proxy = proxyUrl(undefined, b, policy)
+      const proxy = proxyUrl(shim, b, policy)
       const env = {
         ...(proxy ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy } : {}),
         ...(posix ? {} : { TMPDIR: temporary, TMP: temporary, TEMP: temporary }),
