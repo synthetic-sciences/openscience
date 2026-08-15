@@ -16,6 +16,7 @@ import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { FileTrash } from "../file/trash"
+import { Lock } from "@/util/lock"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -27,6 +28,18 @@ type ApprovedFile = {
   dev: number
   ino: number
   mode: number
+}
+
+type FileChange = {
+  filePath: string
+  oldContent: string
+  newContent: string
+  type: "add" | "update" | "delete" | "move"
+  movePath?: string
+  diff: string
+  additions: number
+  deletions: number
+  approved?: ApprovedFile
 }
 
 async function readApprovedFile(filepath: string): Promise<ApprovedFile> {
@@ -93,31 +106,132 @@ async function installExclusive(staged: string, target: string) {
   }
 }
 
-async function applyUpdate(change: { filePath: string; newContent: string; approved: ApprovedFile }) {
-  const staged = await stageFile(change.filePath, change.newContent, change.approved.mode)
-  const backup = path.join(path.dirname(change.filePath), `.openscience-approved-${crypto.randomUUID()}.bak`)
-  let moved = false
-  let installed = false
+type PreparedChange = {
+  change: FileChange
+  target?: string
+  staged?: string
+  stagedApproved?: ApprovedFile
+  backup?: string
+  sourceMoved: boolean
+  installed: boolean
+  removed?: FileTrash.Record
+}
+
+async function prepareChange(change: FileChange): Promise<PreparedChange> {
+  if (change.type === "delete") return { change, sourceMoved: false, installed: false }
+  const target = change.movePath ?? change.filePath
+  const mode = change.approved?.mode ?? 0o644
+  const staged = await stageFile(target, change.newContent, mode)
   try {
-    await fs.rename(change.filePath, backup)
-    moved = true
-    await assertApprovedFile(backup, change.approved)
-    await installExclusive(staged, change.filePath)
-    installed = true
-    await fs.unlink(staged)
-    await fs.unlink(backup)
+    return {
+      change,
+      target,
+      staged,
+      stagedApproved: await readApprovedFile(staged),
+      ...(change.type === "update"
+        ? { backup: path.join(path.dirname(change.filePath), `.openscience-approved-${crypto.randomUUID()}.bak`) }
+        : {}),
+      sourceMoved: false,
+      installed: false,
+    }
   } catch (error) {
-    if (moved && !installed) {
-      try {
-        await installExclusive(backup, change.filePath)
-        await fs.unlink(backup)
-      } catch (rollbackError) {
-        throw new AggregateError([error, rollbackError], `Edit failed; approved original retained at ${backup}`)
+    await fs.rm(staged, { force: true })
+    throw error
+  }
+}
+
+async function removeInstalled(item: PreparedChange) {
+  if (!item.installed || !item.target || !item.stagedApproved) return
+  await assertApprovedFile(item.target, item.stagedApproved)
+  await fs.unlink(item.target)
+  item.installed = false
+}
+
+async function applyTransaction(changes: FileChange[], ctx: Tool.Context) {
+  const prepared: PreparedChange[] = []
+  try {
+    for (const change of changes) prepared.push(await prepareChange(change))
+  } catch (error) {
+    await Promise.all(prepared.map((item) => (item.staged ? fs.rm(item.staged, { force: true }) : undefined)))
+    throw error
+  }
+
+  const started: PreparedChange[] = []
+  try {
+    for (const item of prepared) {
+      const change = item.change
+      started.push(item)
+      switch (change.type) {
+        case "add":
+          await installExclusive(item.staged!, change.filePath)
+          item.installed = true
+          break
+        case "update":
+          if (!change.approved || !item.backup) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
+          await fs.rename(change.filePath, item.backup)
+          item.sourceMoved = true
+          await assertApprovedFile(item.backup, change.approved)
+          await installExclusive(item.staged!, change.filePath)
+          item.installed = true
+          break
+        case "move":
+          if (!change.approved || !change.movePath) {
+            throw new Error(`Missing approved move state for ${change.filePath}`)
+          }
+          item.removed = await FileTrash.trash({
+            projectID: Instance.project.id,
+            sessionID: ctx.sessionID,
+            path: change.filePath,
+            expectedContent: change.approved.bytes,
+          })
+          await installExclusive(item.staged!, change.movePath)
+          item.installed = true
+          break
+        case "delete":
+          if (!change.approved) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
+          item.removed = await FileTrash.trash({
+            projectID: Instance.project.id,
+            sessionID: ctx.sessionID,
+            path: change.filePath,
+            expectedContent: change.approved.bytes,
+          })
+          break
       }
+    }
+
+    await Promise.all(
+      prepared.map(async (item) => {
+        // Cleanup is post-commit housekeeping. A transient unlink failure must
+        // not convert a fully committed transaction into an unsafe rollback.
+        if (item.backup) await fs.rm(item.backup, { force: true }).catch(() => undefined)
+        if (item.staged) await fs.rm(item.staged, { force: true }).catch(() => undefined)
+      }),
+    )
+    return prepared.flatMap((item) => (item.removed ? [item.removed] : []))
+  } catch (error) {
+    const rollbackErrors: unknown[] = []
+    for (const item of started.toReversed()) {
+      try {
+        await removeInstalled(item)
+        if (item.removed) await FileTrash.rollback(item.removed)
+        if (item.sourceMoved && item.backup) {
+          await installExclusive(item.backup, item.change.filePath)
+          await fs.unlink(item.backup)
+          item.sourceMoved = false
+        }
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError)
+      }
+    }
+    if (rollbackErrors.length) {
+      throw new AggregateError(
+        [error, ...rollbackErrors],
+        "Multi-file patch failed and one or more rollback steps need manual recovery",
+      )
     }
     throw error
   } finally {
-    await fs.rm(staged, { force: true })
+    await Promise.all(prepared.map((item) => (item.staged ? fs.rm(item.staged, { force: true }) : undefined)))
   }
 }
 
@@ -146,25 +260,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       throw new Error("apply_patch verification failed: no hunks found")
     }
 
-    // There is no cross-file filesystem transaction primitive available to
-    // this broker. Refuse multi-file patches before permission prompts or
-    // writes so a later-file failure can never leave a partial patch.
-    if (hunks.length > 1) {
-      throw new Error("apply_patch verification failed: multi-file patches are not atomic; submit one file per patch")
-    }
-
     // Validate file paths and check permissions
-    const fileChanges: Array<{
-      filePath: string
-      oldContent: string
-      newContent: string
-      type: "add" | "update" | "delete" | "move"
-      movePath?: string
-      diff: string
-      additions: number
-      deletions: number
-      approved?: ApprovedFile
-    }> = []
+    const fileChanges: FileChange[] = []
 
     let totalDiff = ""
 
@@ -303,78 +400,39 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       },
     })
 
-    // Approval is bound to exact source bytes+inode and to an absent add/move
-    // destination. Revalidate after the user answers, before any side effect.
+    // Approval is bound to exact source bytes+inode and to absent add/move
+    // destinations. Serialize the full preflight + commit and roll every
+    // completed file back if a later commit step fails.
+    using _transaction = await Lock.write(`apply-patch:${Instance.project.id}`)
     for (const change of fileChanges) {
       if (change.approved) await assertApprovedFile(change.filePath, change.approved)
       if (change.type === "add") await assertAbsent(change.filePath)
       if (change.type === "move" && change.movePath) await assertAbsent(change.movePath)
     }
 
-    // Apply the changes
+    const trash = await applyTransaction(fileChanges, ctx)
     const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
-    const trash: FileTrash.Record[] = []
-
     for (const change of fileChanges) {
       const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
       switch (change.type) {
         case "add":
-          {
-            const staged = await stageFile(change.filePath, change.newContent, 0o644)
-            try {
-              await installExclusive(staged, change.filePath)
-            } finally {
-              await fs.rm(staged, { force: true })
-            }
-          }
           updates.push({ file: change.filePath, event: "add" })
           break
 
         case "update":
-          if (!change.approved) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
-          await applyUpdate({ filePath: change.filePath, newContent: change.newContent, approved: change.approved })
           updates.push({ file: change.filePath, event: "change" })
           break
 
         case "move":
           if (change.movePath) {
-            if (!change.approved) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
-            const staged = await stageFile(change.movePath, change.newContent, change.approved.mode)
-            let removed: FileTrash.Record | undefined
-            try {
-              removed = await FileTrash.trash({
-                projectID: Instance.project.id,
-                sessionID: ctx.sessionID,
-                path: change.filePath,
-                expectedContent: change.approved.bytes,
-              })
-              try {
-                await installExclusive(staged, change.movePath)
-              } catch (error) {
-                await FileTrash.rollback(removed)
-                throw error
-              }
-            } finally {
-              await fs.rm(staged, { force: true })
-            }
-            trash.push(removed)
             updates.push({ file: change.filePath, event: "unlink" })
             updates.push({ file: change.movePath, event: "add" })
           }
           break
 
-        case "delete": {
-          if (!change.approved) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
-          const removed = await FileTrash.trash({
-            projectID: Instance.project.id,
-            sessionID: ctx.sessionID,
-            path: change.filePath,
-            expectedContent: change.approved.bytes,
-          })
-          trash.push(removed)
+        case "delete":
           updates.push({ file: change.filePath, event: "unlink" })
           break
-        }
       }
 
       if (edited) {

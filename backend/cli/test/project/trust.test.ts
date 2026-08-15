@@ -29,6 +29,16 @@ description: ${name} trust test skill.
   )
 }
 
+async function containedExecution() {
+  const previous = (await Config.trustedSandbox()).enabled
+  await Config.setSandbox({ enabled: true })
+  return {
+    async [Symbol.asyncDispose]() {
+      await Config.setSandbox({ enabled: previous })
+    },
+  }
+}
+
 test("repeated trust decisions preserve authority until the state actually changes", async () => {
   await using tmp = await tmpdir()
   await using stale = await tmpdir()
@@ -98,6 +108,7 @@ test("an identical trust decision retries cleanup left pending by a failed reape
 })
 
 test("project code is inspectable but in-process plugins stay blocked by the execution sandbox", async () => {
+  await using _sandbox = await containedExecution()
   await using tmp = await tmpdir({
     init: async (dir) => {
       const local = path.join(dir, ".openscience")
@@ -149,6 +160,12 @@ export default async function Probe() {
 
   await Instance.provide({
     directory: tmp.path,
+    fn: () => ProjectTrust.update(Instance.project, { trusted: false }),
+  })
+  await Instance.disposeAll()
+
+  await Instance.provide({
+    directory: tmp.path,
     init: Plugin.init,
     fn: async () => {
       const status = await ProjectTrust.status(Instance.project)
@@ -157,8 +174,8 @@ export default async function Probe() {
       const skills = await Skill.all()
       const mcps = await MCP.status()
 
-      expect(status.state).toBe("untrusted")
-      expect(status.source).toBe("default")
+      expect(status.state).toBe("revoked")
+      expect(status.source).toBe("persisted")
       expect(status.canExecuteProjectCode).toBe(false)
       expect(status.remediation?.body).toEqual({ trusted: true, root: status.root })
       expect(visible.mcp?.probe).toBeDefined()
@@ -189,6 +206,7 @@ export default async function Probe() {
 })
 
 test("trust is canonical and project-isolated while sandboxed project hooks remain inert", async () => {
+  await using _sandbox = await containedExecution()
   await using first = await tmpdir({
     init: async (dir) => {
       const marker = path.join(dir, "hook-ran")
@@ -240,12 +258,12 @@ test("trust is canonical and project-isolated while sandboxed project hooks rema
   })
   const isolated = await Instance.provide({
     directory: second.path,
-    fn: () => ProjectTrust.status(Instance.project),
+    fn: () => ProjectTrust.update(Instance.project, { trusted: false }),
   })
   expect(alias.state).toBe("trusted")
   expect(alias.root).toBe(trusted.root)
-  expect(isolated.state).toBe("untrusted")
-  expect(isolated.source).toBe("default")
+  expect(isolated.state).toBe("revoked")
+  expect(isolated.source).toBe("persisted")
   expect(isolated.canExecuteProjectCode).toBe(false)
   expect(isolated.projectID).not.toBe(trusted.projectID)
 
@@ -304,6 +322,11 @@ test("user-global code stays available while project-local skills require trust"
       },
     })
 
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => ProjectTrust.update(Instance.project, { trusted: false }),
+    })
+    await Instance.disposeAll()
     await Instance.provide({
       directory: tmp.path,
       init: Plugin.init,
@@ -376,7 +399,7 @@ test("revoked startup scripts fail closed before spawning a shell", async () => 
   expect(await Bun.file(marker).text()).toBe("startup")
 })
 
-test("default denial is inspectable, trustable, and revocable through the project permission surface", async () => {
+test("default trust is inspectable, revocable, and restorable through the project permission surface", async () => {
   await using tmp = await tmpdir()
   const project = await Project.fromDirectory(tmp.path)
   const fetch = Server.internalFetch()
@@ -391,20 +414,8 @@ test("default denial is inspectable, trustable, and revocable through the projec
   expect(status).toMatchObject({
     projectID: project.project.id,
     root: project.project.worktree,
-    state: "untrusted",
-    source: "default",
-    canExecuteProjectCode: false,
-    remediation: { code: "trust_project_required" },
-  })
-
-  const trusted = await fetch(`http://openscience.internal/project/${project.project.id}/trust`, {
-    method: "PUT",
-    headers,
-    body: JSON.stringify(status.remediation?.body),
-  })
-  expect(trusted.status).toBe(200)
-  expect(await trusted.json()).toMatchObject({
     state: "trusted",
+    source: "default",
     canExecuteProjectCode: true,
   })
 
@@ -418,5 +429,16 @@ test("default denial is inspectable, trustable, and revocable through the projec
     state: "revoked",
     canExecuteProjectCode: false,
     remediation: { code: "trust_project_required" },
+  })
+
+  const trusted = await fetch(`http://openscience.internal/project/${project.project.id}/trust`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ trusted: true, root: status.root }),
+  })
+  expect(trusted.status).toBe(200)
+  expect(await trusted.json()).toMatchObject({
+    state: "trusted",
+    canExecuteProjectCode: true,
   })
 })

@@ -351,7 +351,7 @@ describe("tool.read truncation", () => {
     })
   })
 
-  test("images with any dimension > 2000px are rejected to avoid poisoning session history", async () => {
+  test("Anthropic images with any dimension > 2000px are rejected to avoid poisoning session history", async () => {
     // The fixture at large-image.png is 2560x1422. Anthropic's API rejects
     // images with any dimension > 2000px in multi-image requests, and a single
     // rejected image poisons every subsequent turn in the session. The Read
@@ -360,9 +360,27 @@ describe("tool.read truncation", () => {
       directory: FIXTURES_DIR,
       fn: async () => {
         const read = await ReadTool.init()
-        await expect(read.execute({ filePath: path.join(FIXTURES_DIR, "large-image.png") }, ctx)).rejects.toThrow(
-          /Image too large to attach \(2560x1422\)/,
+        await expect(
+          read.execute(
+            { filePath: path.join(FIXTURES_DIR, "large-image.png") },
+            { ...ctx, extra: { model: { providerID: "anthropic", id: "claude-sonnet" } } },
+          ),
+        ).rejects.toThrow(/Image too large to attach \(2560x1422\)/)
+      },
+    })
+  })
+
+  test("does not apply Anthropic's image dimension limit to an OpenAI model routed through OpenRouter", async () => {
+    await Instance.provide({
+      directory: FIXTURES_DIR,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute(
+          { filePath: path.join(FIXTURES_DIR, "large-image.png") },
+          { ...ctx, extra: { model: { providerID: "openrouter", id: "openai/gpt-5.6-sol" } } },
         )
+        expect(result.attachments).toHaveLength(1)
+        expect(result.output).toBe("Image read successfully")
       },
     })
   })

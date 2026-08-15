@@ -9,6 +9,7 @@ import { SafeFileIO } from "@/file/safe-io"
 import crypto from "node:crypto"
 import { constants as FS } from "node:fs"
 import fs from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 import { ToolRetryGuard } from "@/session/tool-retry-guard"
 
@@ -18,6 +19,40 @@ const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 const DEFAULT_DOWNLOAD_TIMEOUT = 10 * 60 * 1000 // 10 minutes
 const MAX_DOWNLOAD_TIMEOUT = 30 * 60 * 1000 // 30 minutes
 export const DOWNLOAD_DISK_RESERVE_BYTES = 512 * 1024 * 1024 // preserve 512 MiB for the host
+
+function generatedDownloadName(url: unknown, format: unknown) {
+  const suffix = format === "html" ? "html" : format === "markdown" ? "md" : "txt"
+  return `download-${crypto
+    .createHash("sha256")
+    .update(String(url ?? "download"))
+    .digest("hex")
+    .slice(0, 12)}.${suffix}`
+}
+
+/**
+ * Models naturally express destinations as absolute temp paths or nested
+ * workspace paths. The broker never honors those directories: it reduces the
+ * request to one safe root filename before validation or permission checks.
+ */
+export function normalizeDownloadOutputPath(args: unknown) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return args
+  const result = { ...(args as Record<string, unknown>) }
+  const requested = result.output_path
+  if (typeof requested !== "string" || !requested || requested !== requested.trim()) return result
+
+  const portable = requested.replaceAll("\\", "/")
+  const absolute = path.posix.isAbsolute(portable) || path.win32.isAbsolute(requested)
+  const normalizedTemp = path.resolve(requested)
+  const commonTempDirectory = ["/tmp", "/var/tmp", os.tmpdir()].some(
+    (candidate) => normalizedTemp === path.resolve(candidate),
+  )
+  const basename = path.posix.basename(portable.replace(/\/+$/, ""))
+  const useGenerated = !basename || basename === "." || basename === "/" || (absolute && commonTempDirectory)
+  if (absolute || portable.includes("/")) {
+    result.output_path = useGenerated ? generatedDownloadName(result.url, result.format) : basename
+  }
+  return result
+}
 
 const parameters = z
   .object({
@@ -37,8 +72,9 @@ const parameters = z
       .refine((value) => value === value.trim(), "output_path must not be blank or have surrounding whitespace")
       .optional()
       .describe(
-        "Optional new filename at the root of this session's workspace. Folder paths are rejected so mutable intermediate " +
-          'directories cannot redirect a brokered write. For papers/foo.pdf, download with output_path:"foo.pdf"; only after ' +
+        "Optional destination. Absolute and folder paths are reduced to a new filename at the root of this session's workspace, " +
+          "so mutable intermediate directories can never redirect a brokered write. For papers/foo.pdf, the broker downloads " +
+          'to output_path:"foo.pdf"; only after ' +
           "success run sandboxed Bash: mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'. " +
           "Use download mode for archives, " +
           "compressed datasets, binary files, or text responses larger than 5 MiB.",
@@ -52,8 +88,9 @@ export const WebFetchTool = Tool.define("webfetch", {
   // Parse defaults and strip retired max_bytes / declared-size fields from
   // older callers. Download authority now comes only from live disk capacity.
   normalizeInput(args) {
-    if (!args || typeof args !== "object" || Array.isArray(args)) return args
-    const result = { ...(args as Record<string, unknown>) }
+    const normalized = normalizeDownloadOutputPath(args)
+    if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return normalized
+    const result = { ...(normalized as Record<string, unknown>) }
     delete result.max_bytes
     delete result.declared_size_bytes
     delete result.declared_size_evidence_call_id
@@ -64,6 +101,10 @@ export const WebFetchTool = Tool.define("webfetch", {
     if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
       throw new Error("URL must start with http:// or https://")
     }
+    // Resolve the complete local write contract before asking for network or
+    // tool permission. Invalid destinations must never create approval noise.
+    const download =
+      params.output_path !== undefined ? await resolveDownloadTarget(ctx.sessionID, params.output_path) : undefined
     await ToolRetryGuard.assertWebFetch(ctx, params)
     // A domain outside the enforced allow-list asks instead of failing.
     // Answering "always" adds the domain to the persisted allow-list (visible
@@ -108,8 +149,6 @@ export const WebFetchTool = Tool.define("webfetch", {
       },
     })
 
-    const download =
-      params.output_path !== undefined ? await resolveDownloadTarget(ctx.sessionID, params.output_path) : undefined
     const downloadCapacity = download
       ? await safeDownloadCapacity(download).catch((error) => {
           if (error instanceof DownloadCapacityError) {

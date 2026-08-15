@@ -15,13 +15,18 @@ import { SafeFileIO } from "@/file/safe-io"
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_BYTES = 50 * 1024
-// Anthropic's API caps base64-embedded PDFs/images at ~32 MB. Reject bigger
-// files up front instead of OOMing while encoding.
+// Bound base64 attachments before encoding so one file cannot exhaust the
+// local process or provider request budget.
 const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024
-// Anthropic rejects images with any dimension > 2000px when a request contains
-// multiple images. Reject at attach time so a single oversized figure cannot
-// poison the entire session's history (which would fail every follow-up turn).
+// Anthropic rejects images with any dimension > 2000px in multi-image turns.
 const MAX_IMAGE_DIMENSION = 2000
+
+function usesAnthropicImageLimit(ctx: Tool.Context) {
+  const model = ctx.extra?.model as { providerID?: unknown; id?: unknown; modelID?: unknown } | undefined
+  const provider = String(model?.providerID ?? "").toLowerCase()
+  const id = String(model?.id ?? model?.modelID ?? "").toLowerCase()
+  return provider === "anthropic" || id.includes("anthropic/") || id.includes("claude")
+}
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -82,7 +87,7 @@ export const ReadTool = Tool.define("read", {
       if (snapshot.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
         throw new Error(
           `${kind} too large to attach (${snapshot.bytes.byteLength} bytes > ${MAX_ATTACHMENT_BYTES}). ` +
-            `Anthropic's API caps base64 attachments at ~32 MB. ` +
+            `The harness caps base64 attachments at 32 MiB. ` +
             (isPdf
               ? "Use the liteparse skill to extract text via the `lit` CLI instead " +
                 "(install with `npm i -g @llamaindex/liteparse` if missing)."
@@ -93,7 +98,7 @@ export const ReadTool = Tool.define("read", {
       const fileBytes = snapshot.bytes
       if (isImage) {
         const dims = readImageDimensions(fileBytes)
-        if (dims && Math.max(dims.width, dims.height) > MAX_IMAGE_DIMENSION) {
+        if (usesAnthropicImageLimit(ctx) && dims && Math.max(dims.width, dims.height) > MAX_IMAGE_DIMENSION) {
           throw new Error(
             `Image too large to attach (${dims.width}x${dims.height}). ` +
               `Anthropic's API rejects any image dimension > ${MAX_IMAGE_DIMENSION}px in multi-image requests, ` +

@@ -66,6 +66,7 @@ test("the primary and domain prompts stay adaptive instead of procedural", async
   expect(research).toContain("lazy skills")
   expect(research).toContain("bounded pages")
   expect(research).toContain("output_path")
+  expect(research).toContain("optional binaries as capabilities")
   expect(research).not.toContain("data once to the workspace with Shell")
   expect(research).toContain("immutable data release")
   expect(ml).toContain("simplest method")

@@ -16,6 +16,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Added Ask for approval, Approve for me, and Full access presets directly to
+  the composer’s Research tools menu, with trusted Full access as the default
+  for new local projects and explicit or managed restrictions preserved.
 - Simplified the project sidebar, model and effort controls, chat typography,
   sent-message surfaces, and Compute into a quieter results-first workspace.
 - Unified logical model names while keeping API-key and ChatGPT access routes
@@ -27,6 +30,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Made the research harness normalize WebFetch download destinations, authorize
+  Explore retrieval consistently, apply multi-file patches transactionally,
+  resolve the default Python environment, enforce image limits by the active
+  provider, and accept valid manual-run provenance.
 - Hardened research runs against repeated terminal URLs, guessed download-size
   escalation, substantially identical timed-out kernel work, stale tool
   outcomes, cross-process cancellation races, and orphaned kernel lifecycles.

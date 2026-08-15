@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import path from "path"
 import * as fs from "fs/promises"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
@@ -75,7 +75,7 @@ describe("tool.apply_patch freeform", () => {
     await expect(execute({ patchText: emptyPatch }, ctx)).rejects.toThrow("patch rejected: empty patch")
   })
 
-  test("rejects multi-file patches before permission or side effects", async () => {
+  test("applies a fully preflighted multi-file patch in one transaction", async () => {
     await using fixture = await tmpdir({ git: true })
     const { ctx, calls } = makeCtx()
 
@@ -90,11 +90,53 @@ describe("tool.apply_patch freeform", () => {
         const patchText =
           "*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Delete File: delete.txt\n*** Update File: modify.txt\n@@\n-line2\n+changed\n*** End Patch"
 
-        await expect(execute({ patchText }, ctx)).rejects.toThrow("multi-file patches are not atomic")
-        expect(calls).toEqual([])
-        await expect(fs.readFile(path.join(fixture.path, "nested", "new.txt"), "utf-8")).rejects.toThrow()
-        expect(await fs.readFile(modifyPath, "utf-8")).toBe("line1\nline2\n")
-        expect(await fs.readFile(deletePath, "utf-8")).toBe("obsolete\n")
+        const result = await execute({ patchText }, ctx)
+        expect(calls).toHaveLength(1)
+        expect(calls[0]?.metadata.files.map((file) => file.type)).toEqual(["add", "delete", "update"])
+        expect(await fs.readFile(path.join(fixture.path, "nested", "new.txt"), "utf-8")).toBe("created\n")
+        expect(await fs.readFile(modifyPath, "utf-8")).toBe("line1\nchanged\n")
+        await expect(fs.readFile(deletePath, "utf-8")).rejects.toThrow()
+        expect(result.output).toContain("A nested/new.txt")
+        expect(await FileTrash.list(Instance.project.id)).toHaveLength(1)
+      },
+    })
+  })
+
+  test("rolls back earlier files when a later multi-file commit fails", async () => {
+    await using fixture = await tmpdir({ git: true })
+    const { ctx, calls } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const original = path.join(fixture.path, "original.txt")
+        const later = path.join(fixture.path, "later.txt")
+        await fs.writeFile(original, "before\n", "utf8")
+        const realLink = fs.link.bind(fs)
+        const link = spyOn(fs, "link").mockImplementation(async (source, destination) => {
+          if (path.resolve(String(destination)) === later) {
+            throw Object.assign(new Error("injected later-file failure"), { code: "EIO" })
+          }
+          return realLink(source, destination)
+        })
+        try {
+          await expect(
+            execute(
+              {
+                patchText:
+                  "*** Begin Patch\n*** Update File: original.txt\n@@\n-before\n+after\n*** Add File: later.txt\n+later\n*** End Patch",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("injected later-file failure")
+        } finally {
+          link.mockRestore()
+        }
+
+        expect(calls).toHaveLength(1)
+        expect(await fs.readFile(original, "utf8")).toBe("before\n")
+        await expect(fs.readFile(later)).rejects.toThrow()
+        expect((await fs.readdir(fixture.path)).filter((name) => name.startsWith(".openscience-"))).toEqual([])
         expect(await FileTrash.list(Instance.project.id)).toEqual([])
       },
     })

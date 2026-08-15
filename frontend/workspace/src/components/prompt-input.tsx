@@ -10,6 +10,7 @@ import {
   Switch,
   Match,
   createMemo,
+  createResource,
   createSignal,
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
@@ -68,6 +69,12 @@ import {
   type ResearchEffort,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
+import {
+  RESEARCH_ACCESS_OPTIONS,
+  researchAccessMode,
+  researchAccessMutations,
+  type ResearchAccessMode,
+} from "./research-access"
 
 type PendingPrompt = {
   abort: AbortController
@@ -91,6 +98,16 @@ interface SlashCommand {
   description?: string
   keybind?: string
   type: "builtin" | "custom" | "skill"
+}
+
+interface ResearchAccessSnapshot {
+  root: string
+  trusted: boolean
+  sandboxEnabled: boolean
+}
+
+interface SandboxSettingsPayload {
+  config: { enabled?: boolean }
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -140,6 +157,106 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setEfforts("workspace", value)
     if (sessionID) setEfforts("sessions", sessionID, value)
   }
+
+  const readSandboxSettings = async (init?: RequestInit) => {
+    const response = await sdk.request("/settings/sandbox", init)
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "")
+      throw new Error(detail || `${response.status} ${response.statusText}`)
+    }
+    return (await response.json()) as SandboxSettingsPayload
+  }
+  const loadResearchAccess = async (projectID: string): Promise<ResearchAccessSnapshot> => {
+    const [trust, sandbox] = await Promise.all([
+      sdk.client.project.trust.get({ projectID, directory: sdk.directory }),
+      readSandboxSettings(),
+    ])
+    if (!trust.data) throw new Error("Project trust status was empty.")
+    return {
+      root: trust.data.root,
+      trusted: trust.data.canExecuteProjectCode,
+      sandboxEnabled: sandbox.config.enabled !== false,
+    }
+  }
+  const [researchAccess, researchAccessControls] = createResource(() => sdk.projectID || false, loadResearchAccess)
+  const [researchAccessSaving, setResearchAccessSaving] = createSignal(false)
+  const selectedResearchAccess = createMemo(() => {
+    const current = researchAccess()
+    return current ? researchAccessMode(current) : "full"
+  })
+  const researchAccessLabel = createMemo(
+    () => RESEARCH_ACCESS_OPTIONS.find((option) => option.value === selectedResearchAccess())?.label ?? "Full access",
+  )
+
+  const applyResearchAccess = async (mode: ResearchAccessMode, target: HTMLButtonElement) => {
+    target.focus()
+    const projectID = sdk.projectID
+    const initial = researchAccess()
+    if (!projectID || !initial || researchAccessSaving()) return
+    if (researchAccessMode(initial) === mode) return
+
+    setResearchAccessSaving(true)
+    try {
+      let current = { ...initial }
+      for (const mutation of researchAccessMutations(mode)) {
+        if (mutation.kind === "sandbox") {
+          if (current.sandboxEnabled === mutation.enabled) continue
+          const sandbox = await readSandboxSettings({
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ enabled: mutation.enabled }),
+          })
+          current.sandboxEnabled = sandbox.config.enabled !== false
+          continue
+        }
+
+        if (current.trusted === mutation.trusted) continue
+        const trust = await sdk.client.project.trust.update({
+          projectID,
+          directory: sdk.directory,
+          body: mutation.trusted ? { trusted: true, root: current.root } : { trusted: false },
+        })
+        if (!trust.data) throw new Error("Project trust update was empty.")
+        current = {
+          ...current,
+          root: trust.data.root,
+          trusted: trust.data.canExecuteProjectCode,
+        }
+      }
+
+      const confirmed = await loadResearchAccess(projectID)
+      researchAccessControls.mutate(confirmed)
+      const effective = researchAccessMode(confirmed)
+      if (effective !== mode) {
+        showToast({
+          title: "Access is limited by managed settings",
+          description: `The effective mode remains ${RESEARCH_ACCESS_OPTIONS.find((option) => option.value === effective)?.label}.`,
+        })
+        return
+      }
+      showToast({ variant: "success", title: `${researchAccessLabel()} enabled` })
+    } catch (error) {
+      showToast({
+        title: "Couldn't update action approval",
+        description: error instanceof Error ? error.message : String(error),
+      })
+      void researchAccessControls.refetch()
+    } finally {
+      setResearchAccessSaving(false)
+    }
+  }
+
+  const refreshResearchAccess = () => {
+    if (!sdk.projectID || researchAccessSaving()) return
+    void researchAccessControls.refetch()
+  }
+  const trustSubscription = sdk.event.on("project.trust.changed", (event) => {
+    if (event.properties.status.projectID !== sdk.projectID) return
+    refreshResearchAccess()
+  })
+  const instanceSubscription = sdk.event.on("server.instance.disposed", refreshResearchAccess)
+  onCleanup(trustSubscription)
+  onCleanup(instanceSubscription)
 
   const mirror = { input: false }
 
@@ -227,6 +344,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!choice || (value !== "normal" && value !== "ultra")) return
     event.preventDefault()
     selectResearchEffort(value, choice)
+  }
+
+  const navigateResearchAccess = (event: KeyboardEvent) => {
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
+    const target = event.target
+    const scope = event.currentTarget
+    if (!(target instanceof HTMLButtonElement) || target.getAttribute("role") !== "radio") return
+    if (!(scope instanceof HTMLElement)) return
+    const choices = Array.from(scope.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
+    const index = choices.indexOf(target)
+    if (index < 0 || choices.length === 0) return
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? choices.length - 1
+          : event.key === "ArrowDown"
+            ? (index + 1) % choices.length
+            : (index <= 0 ? choices.length : index) - 1
+    const choice = choices[next]
+    const value = choice?.dataset.researchAccess
+    if (!choice || (value !== "ask" && value !== "approve" && value !== "full")) return
+    event.preventDefault()
+    void applyResearchAccess(value, choice)
   }
 
   const dismissResearchTools = (event: PointerEvent) => {
@@ -2124,7 +2265,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     researchToolsRef?.querySelector("summary")?.focus()
                   }}
                 >
-                  <summary aria-label={`Research tools, ${researchEffortLabel(effort())} effort`}>
+                  <summary
+                    aria-label={`Research tools, ${researchEffortLabel(effort())} effort, ${researchAccessLabel()}`}
+                  >
                     <span class="workspace-composer__research-tools-label">Research</span>
                     <span class="workspace-composer__research-tools-separator" aria-hidden="true">
                       ·
@@ -2166,6 +2309,65 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </button>
                       </div>
                       <p>Ultra uses more parallel research when it is useful.</p>
+                    </section>
+                    <section class="workspace-composer__research-access" aria-label="Action approval">
+                      <div class="workspace-composer__research-tools-heading">
+                        <strong>Action approval</strong>
+                        <span aria-live="polite">{researchAccessSaving() ? "Saving…" : researchAccessLabel()}</span>
+                      </div>
+                      <Show
+                        when={!researchAccess.error}
+                        fallback={
+                          <button
+                            type="button"
+                            class="workspace-composer__research-access-retry"
+                            onClick={() => void researchAccessControls.refetch()}
+                          >
+                            Access settings unavailable · Retry
+                          </button>
+                        }
+                      >
+                        <div
+                          class="workspace-composer__research-access-options"
+                          role="radiogroup"
+                          aria-label="How should OpenScience actions be approved?"
+                          aria-busy={researchAccessSaving() ? "true" : undefined}
+                          onKeyDown={navigateResearchAccess}
+                        >
+                          <For each={RESEARCH_ACCESS_OPTIONS}>
+                            {(option) => (
+                              <button
+                                type="button"
+                                role="radio"
+                                data-research-access={option.value}
+                                data-tone={option.value === "full" ? "warning" : undefined}
+                                aria-checked={selectedResearchAccess() === option.value}
+                                tabindex={selectedResearchAccess() === option.value ? 0 : -1}
+                                disabled={researchAccess.loading || researchAccessSaving()}
+                                onClick={(event) => void applyResearchAccess(option.value, event.currentTarget)}
+                              >
+                                <Icon
+                                  name={
+                                    option.value === "ask"
+                                      ? "shield-alert"
+                                      : option.value === "approve"
+                                        ? "shield"
+                                        : "bolt"
+                                  }
+                                  size="small"
+                                />
+                                <span class="workspace-composer__research-access-copy">
+                                  <strong>{option.label}</strong>
+                                  <small>{option.description}</small>
+                                </span>
+                                <Show when={selectedResearchAccess() === option.value}>
+                                  <Icon name="check" size="small" />
+                                </Show>
+                              </button>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
                     </section>
                     <div class="workspace-composer__research-tools-actions">
                       <button type="button" onClick={openCompute}>

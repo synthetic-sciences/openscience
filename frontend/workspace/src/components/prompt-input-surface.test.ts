@@ -58,7 +58,9 @@ describe("floating prompt surface", () => {
     expect(source).toContain('role="group"')
     expect(source).toContain('aria-label="Composer tools"')
     expect(source).toContain('aria-label="Model and send"')
-    expect(source).toContain("aria-label={`Research tools, ${researchEffortLabel(effort())} effort`}")
+    expect(source).toContain(
+      "aria-label={`Research tools, ${researchEffortLabel(effort())} effort, ${researchAccessLabel()}`}",
+    )
     expect(popover).toContain("aria-label={`Model: ${control().trigger}`}")
     expect(source).not.toContain('aria-label="Research capabilities"')
     expect(source).not.toContain("workspace-composer__overflow")
@@ -174,6 +176,19 @@ describe("composer control consolidation", () => {
     expect(source).not.toContain("onClick={toggleEffort}")
     expect(componentCss).toContain('.workspace-composer__research-effort-options > button[aria-checked="true"]')
     expect(componentCss).not.toContain(".workspace-composer__effort")
+  })
+
+  test("offers three real action-approval modes inside Research tools", () => {
+    expect(source).toContain("data-research-access={option.value}")
+    expect(source).toContain('aria-label="How should OpenScience actions be approved?"')
+    expect(source).toContain("sdk.client.project.trust.get({ projectID, directory: sdk.directory })")
+    expect(source).toContain("sdk.client.project.trust.update({")
+    expect(source).toContain('sdk.request("/settings/sandbox", init)')
+    expect(source).toContain('sdk.event.on("project.trust.changed"')
+    expect(source).toContain('sdk.event.on("server.instance.disposed"')
+    expect(source).toContain("onKeyDown={navigateResearchAccess}")
+    expect(componentCss).toContain(".workspace-composer__research-access-options > button")
+    expect(componentCss).toContain('button[data-tone="warning"][aria-checked="true"]')
   })
 
   test("sends the selected research effort through the SDK prompt", () => {

@@ -507,7 +507,7 @@ form.workspace-composer .workspace-composer__research-tools-menu {
   bottom: calc(100% + var(--space-2));
   left: 0;
   z-index: 40;
-  width: min(292px, calc(100vw - 24px));
+  width: min(336px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -604,6 +604,113 @@ form.workspace-composer .workspace-composer__research-effort-options > button:fo
 
 form.workspace-composer .workspace-composer__research-effort-options > button:active {
   transform: scale(0.98);
+}
+
+form.workspace-composer .workspace-composer__research-access {
+  padding: 7px;
+  border-top: 1px solid var(--color-border);
+}
+
+form.workspace-composer .workspace-composer__research-access-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 5px;
+}
+
+form.workspace-composer .workspace-composer__research-access-options > button {
+  width: 100%;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-base);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 150ms var(--ease-standard),
+    color 150ms var(--ease-standard),
+    transform 120ms var(--ease-standard);
+}
+
+form.workspace-composer .workspace-composer__research-access-options > button:hover:not(:disabled),
+form.workspace-composer .workspace-composer__research-access-options > button:focus-visible,
+form.workspace-composer .workspace-composer__research-access-options > button[aria-checked="true"] {
+  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+}
+
+form.workspace-composer .workspace-composer__research-access-options > button:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: -2px;
+}
+
+form.workspace-composer .workspace-composer__research-access-options > button:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+form.workspace-composer .workspace-composer__research-access-options > button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+form.workspace-composer .workspace-composer__research-access-options > button > [data-component="icon"] {
+  color: var(--text-weaker);
+}
+
+form.workspace-composer .workspace-composer__research-access-options > button[data-tone="warning"][aria-checked="true"],
+form.workspace-composer
+  .workspace-composer__research-access-options
+  > button[data-tone="warning"][aria-checked="true"]
+  > [data-component="icon"] {
+  color: var(--color-warning, var(--text-warning-base));
+}
+
+form.workspace-composer .workspace-composer__research-access-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+form.workspace-composer .workspace-composer__research-access-copy strong {
+  color: currentColor;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+}
+
+form.workspace-composer .workspace-composer__research-access-copy small {
+  overflow: hidden;
+  color: var(--text-weak);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+form.workspace-composer .workspace-composer__research-access-retry {
+  width: 100%;
+  min-height: 32px;
+  margin-top: 5px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-critical-weak);
+  color: var(--text-critical-base);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+form.workspace-composer .workspace-composer__research-access-retry:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: -2px;
 }
 
 form.workspace-composer .workspace-composer__research-tools-actions {

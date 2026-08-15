@@ -144,3 +144,46 @@ test("artifact save_file binds the immutable result to its exact producing execu
     },
   })
 })
+
+test("artifact save_file accepts a project-owned manually recorded run from the same session", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await executionSession()
+      const tool = await ArtifactTool.init()
+      const workspace = await SessionFilesystem.workspace(session.id)
+      await Bun.write(path.join(workspace, "review.pdf"), "%PDF-1.5\nmanual result\n")
+      const scope = { projectID: Instance.project.id, directory: Instance.directory }
+      const run = await Provenance.recordOwned(scope, {
+        kind: "run",
+        label: "Compile review",
+        tool: "tectonic, pdfinfo",
+        meta: {
+          sessionID: session.id,
+          projectID: Instance.project.id,
+          stdout: "review.pdf validated",
+        },
+      } as Parameters<typeof Provenance.record>[0])
+
+      const response = await tool.execute(
+        { action: "save_file", path: "review.pdf", provenance_id: run.id },
+        context(session.id),
+      )
+      const saved = response.metadata.savedArtifact as { id: string; versionID: string }
+      const detail = await ArtifactStore.get(Instance.project.id, saved.id)
+      expect(detail?.execution).toMatchObject({
+        command: "tectonic, pdfinfo",
+        status: "unknown",
+        stdout: "review.pdf validated",
+        source: run.id,
+        captureQuality: "declared",
+      })
+      expect((await Provenance.project(scope)).edges).toContainEqual({
+        from: run.id,
+        to: ArtifactStore.reviewTargetID(saved.versionID, detail!.current.sha256),
+        relation: "produced",
+      })
+    },
+  })
+})

@@ -48,8 +48,9 @@ verify, and save useful outputs with the smallest sufficient evidence.
   expected duration, and estimated price.
 - Do not promise isolation, checkpointing, lifecycle, or recovery beyond the active runtime.
 - Use WebFetch text mode for bounded text. Download large or binary scientific data to a root basename. For
-  `papers/foo.pdf`, use `output_path:"foo.pdf"`; only after success run sandboxed Bash
-  `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never probe folder paths or send cap
+  absolute and nested destinations are reduced to a safe root filename. For `papers/foo.pdf`, the download is
+  `output_path:"foo.pdf"`; only after success run sandboxed Bash
+  `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never send cap
   or size-evidence fields; WebFetch uses live free disk minus its reserve. Paginate APIs; Shell need not have network.
   If an immutable release cannot be verified, disclose it and label any live-release fallback.
 

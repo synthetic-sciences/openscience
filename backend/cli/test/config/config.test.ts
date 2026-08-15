@@ -35,8 +35,8 @@ test("loads config with defaults when no files exist", async () => {
   })
 })
 
-test("trusted sandbox defaults project trust enforcement off and managed config can require it", async () => {
-  expect((await Config.trustedSandbox()).requireProjectTrust).toBe(false)
+test("trusted sandbox defaults to full access while managed config can require containment", async () => {
+  expect(await Config.trustedSandbox()).toMatchObject({ enabled: false, requireProjectTrust: false })
 
   await using tmp = await tmpdir({
     init: (dir) => writeConfig(dir, { sandbox: { requireProjectTrust: true } }),
@@ -46,9 +46,9 @@ test("trusted sandbox defaults project trust enforcement off and managed config 
     fn: async () => expect((await Config.trustedSandbox()).requireProjectTrust).toBe(false),
   })
 
-  await writeManagedSettings({ sandbox: { requireProjectTrust: true } })
+  await writeManagedSettings({ sandbox: { enabled: true, requireProjectTrust: true } })
 
-  expect((await Config.trustedSandbox()).requireProjectTrust).toBe(true)
+  expect(await Config.trustedSandbox()).toMatchObject({ enabled: true, requireProjectTrust: true })
 })
 
 test("loads JSON config file", async () => {

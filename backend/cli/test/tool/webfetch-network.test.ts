@@ -1,6 +1,11 @@
 import { afterEach, expect, spyOn, test } from "bun:test"
 import { Network } from "../../src/settings/network"
-import { DOWNLOAD_DISK_RESERVE_BYTES, MAX_RESPONSE_SIZE, WebFetchTool } from "../../src/tool/webfetch"
+import {
+  DOWNLOAD_DISK_RESERVE_BYTES,
+  MAX_RESPONSE_SIZE,
+  WebFetchTool,
+  normalizeDownloadOutputPath,
+} from "../../src/tool/webfetch"
 import type { Tool } from "../../src/tool/tool"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import crypto from "node:crypto"
@@ -73,6 +78,7 @@ test("webfetch schema teaches the root-download then sandboxed-move sequence", a
     properties?: Record<string, { description?: string }>
   }
   const description = schema.properties?.output_path?.description
+  expect(description).toContain("Absolute and folder paths are reduced")
   expect(description).toContain('output_path:"foo.pdf"')
   expect(description).toContain("only after success")
   expect(description).toContain(
@@ -81,6 +87,30 @@ test("webfetch schema teaches the root-download then sandboxed-move sequence", a
   expect(schema.properties?.max_bytes).toBeUndefined()
   expect(schema.properties?.declared_size_bytes).toBeUndefined()
   expect(schema.properties?.declared_size_evidence_call_id).toBeUndefined()
+})
+
+test("webfetch reduces absolute, temp-directory, and nested destinations to safe root filenames", () => {
+  expect(
+    normalizeDownloadOutputPath({
+      url: "https://example.com/archive.pdf",
+      format: "text",
+      output_path: "/tmp/papers/archive.pdf",
+    }),
+  ).toMatchObject({ output_path: "archive.pdf" })
+  expect(
+    normalizeDownloadOutputPath({
+      url: "https://example.com/query?id=42",
+      format: "text",
+      output_path: "/tmp",
+    }),
+  ).toMatchObject({ output_path: expect.stringMatching(/^download-[a-f0-9]{12}\.txt$/) })
+  expect(
+    normalizeDownloadOutputPath({
+      url: "https://example.com/archive.pdf",
+      format: "text",
+      output_path: "papers/archive.pdf",
+    }),
+  ).toMatchObject({ output_path: "archive.pdf" })
 })
 
 test("webfetch rejects empty or whitespace-padded download paths before permission or network access", async () => {
@@ -483,7 +513,7 @@ test("webfetch streams a brokered binary download through a reauthorized redirec
   }
 })
 
-test("webfetch download gives a copy-ready root-first fallback for a folder destination", async () => {
+test("webfetch validates the normalized root target before permission or network access", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-contained-"))
   await fs.writeFile(path.join(root, "existing.bin"), "keep")
   const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
@@ -498,24 +528,7 @@ test("webfetch download gives a copy-ready root-first fallback for a folder dest
 
   try {
     await expect(
-      webfetch.execute({ url: "https://example.com/data", format: "text", output_path: "../outside.bin" }, ctx),
-    ).rejects.toThrow("must be a filename at the root of this session's workspace, without directories")
-    const nested = await captureError(
-      webfetch.execute({ url: "https://example.com/data", format: "text", output_path: "papers/foo.pdf" }, ctx),
-    )
-    expect(nested.message).toBe(
-      "output_path is root-only by design: brokered downloads must not traverse mutable intermediate directories. " +
-        'Retry with output_path:"foo.pdf". Only after that download succeeds, run sandboxed Bash from the workspace: ' +
-        "mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'",
-    )
-    await expect(
-      webfetch.execute(
-        { url: "https://example.com/data", format: "text", output_path: path.join(root, "absolute.bin") },
-        ctx,
-      ),
-    ).rejects.toThrow("must be a workspace-root filename, not an absolute path")
-    await expect(
-      webfetch.execute({ url: "https://example.com/data", format: "text", output_path: "existing.bin" }, ctx),
+      webfetch.execute({ url: "https://example.com/data", format: "text", output_path: "/tmp/existing.bin" }, ctx),
     ).rejects.toThrow("Refusing to overwrite")
     expect(fetches).toBe(0)
     expect(await fs.readFile(path.join(root, "existing.bin"), "utf8")).toBe("keep")

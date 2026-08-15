@@ -4,13 +4,13 @@ description: "The trust boundary, credential storage, execution sandbox, and sub
 icon: "shield-check"
 ---
 
-OpenScience is open source under Apache-2.0, so the whole security model below is auditable in the [repository](https://github.com/synthetic-sciences/openscience). The agent runs locally, while spawned commands are constrained by the native sandbox and explicit filesystem grants by default. Two principles anchor the design: keep credentials out of subprocesses that do not need them, and make each trust boundary explicit instead of treating permissions, sandboxing, and project trust as the same control.
+OpenScience is open source under Apache-2.0, so the whole security model below is auditable in the [repository](https://github.com/synthetic-sciences/openscience). The agent runs locally. New local installs default to trusted **Full access**, while two contained presets are available directly beneath the composer. Two principles anchor the design: keep credentials out of subprocesses that do not need them, and make each trust boundary explicit instead of treating permissions, sandboxing, and project trust as the same control.
 
 ## Permissions are not the sandbox
 
 The permission system decides whether an agent may take an action. It is not, on its own, an isolation boundary.
 
-OpenScience enables a real [execution sandbox](/openscience/sandbox) by default. It wraps terminals, shell commands, Python/R kernels, and local jobs in macOS Seatbelt or Linux bubblewrap, limits them to the workspace and approved paths, and denies network egress. Routine work can start immediately when that boundary is enforced; remote jobs, kernel environment changes, project-owned extensions, and host execution still require explicit project trust. The default refuses to run when no native backend is available rather than silently falling back to the host. Verify the effective boundary with `openscience sandbox test`. It is OS containment, not a full VM — for actively hostile code, still run OpenScience inside a container or VM.
+OpenScience ships a real [execution sandbox](/openscience/sandbox), but **Full access** is the default. In that mode a trusted project has your user account's filesystem and network authority. Open **Research tools → Action approval** and select **Approve for me** to trust the project inside macOS Seatbelt or Linux bubblewrap, or **Ask for approval** to enable that boundary and revoke project trust. Containment limits commands to the workspace and approved paths and denies network egress; if the selected boundary is unavailable, the default policy refuses to run rather than silently falling back to the host. Verify it with `openscience sandbox test`. It is OS containment, not a full VM — for actively hostile code, still run OpenScience inside a container or VM.
 
 ## Credential storage
 

@@ -764,7 +764,7 @@ export namespace Config {
         .boolean()
         .optional()
         .describe(
-          "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Enabled by default.",
+          "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Disabled by default; enable it from the composer or Sandbox settings.",
         ),
       network: z
         .enum(["allow", "deny"])
@@ -1786,7 +1786,7 @@ export namespace Config {
     }
     const policy = { ...(base ?? {}), ...(managed ?? {}) }
     return {
-      enabled: policy.enabled ?? true,
+      enabled: policy.enabled ?? false,
       network: policy.network ?? "deny",
       allowWrite: policy.allowWrite ?? [],
       onUnavailable: policy.onUnavailable ?? "error",

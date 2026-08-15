@@ -68,7 +68,7 @@ export const ProjectRoutes = lazy(() =>
       describeRoute({
         summary: "Inspect project trust",
         description:
-          "Inspect whether project-local code may execute. New and relocated projects are untrusted until their canonical root is explicitly approved.",
+          "Inspect whether project-local code may execute. New projects are trusted by default; an explicit revocation or canonical-root mismatch blocks project code.",
         operationId: "project.trust.get",
         responses: {
           200: {
@@ -94,7 +94,7 @@ export const ProjectRoutes = lazy(() =>
       describeRoute({
         summary: "Update project trust",
         description:
-          "Allow project-local code only after submitting the canonical root returned by the trust status endpoint, or revoke that permission immediately.",
+          "Trust project-local code by submitting the canonical root returned by the status endpoint, or revoke that permission immediately.",
         operationId: "project.trust.update",
         responses: {
           200: {

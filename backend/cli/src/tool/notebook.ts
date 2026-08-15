@@ -724,7 +724,8 @@ const PythonFields = {
     .optional()
     .describe("Script path associated with this execution, when applicable"),
   environment: KernelEnvironmentName.optional().describe(
-    "Project Python environment: .venv/<name>, with .venv itself also used for the default python environment.",
+    "Optional project Python environment. Omit it or use 'default' for the host/conventional .venv runtime. " +
+      "Named venv or Conda-prefix interpreters live at .venv/<name>.",
   ),
   timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
 }
@@ -921,7 +922,7 @@ const PythonDefinition: Awaited<ReturnType<Tool.Info<typeof PythonParameters>["i
   description: [
     "Run Python code in one long-lived managed process per conversation and selected environment. Variables, imports, and state persist across calls in that environment; child conversations and other environments are isolated.",
     "Treat persistent state as working memory, not reproducibility. For a material result, save the source, declared inputs, parameters, and outputs and clean-rerun when practical.",
-    "Choose `environment` to address a project interpreter under .venv/<name>; the default python environment also discovers a conventional .venv.",
+    "Omit `environment` or use `default` for the host/conventional .venv runtime. Named venv or Conda-prefix interpreters live under .venv/<name>.",
     "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
     "Set `source` when the execution belongs to a script so Activity can identify that source.",
     "Use `action: stop` with the same environment when its in-memory state should be cleared.",

@@ -18561,7 +18561,7 @@
           }
         ],
         "summary": "Inspect project trust",
-        "description": "Inspect whether project-local code may execute. New and relocated projects are untrusted until their canonical root is explicitly approved.",
+        "description": "Inspect whether project-local code may execute. New projects are trusted by default; an explicit revocation or canonical-root mismatch blocks project code.",
         "responses": {
           "200": {
             "description": "Project trust state and remediation",
@@ -18709,7 +18709,7 @@
           }
         ],
         "summary": "Update project trust",
-        "description": "Allow project-local code only after submitting the canonical root returned by the trust status endpoint, or revoke that permission immediately.",
+        "description": "Trust project-local code by submitting the canonical root returned by the status endpoint, or revoke that permission immediately.",
         "responses": {
           "200": {
             "description": "Updated project trust state",
@@ -48576,7 +48576,7 @@
         "type": "object",
         "properties": {
           "enabled": {
-            "description": "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Enabled by default.",
+            "description": "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Disabled by default; enable it from the composer or Sandbox settings.",
             "type": "boolean"
           },
           "network": {

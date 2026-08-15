@@ -31,8 +31,9 @@ Rules:
    parallelism is worthwhile. Continue a child only for new missing work, never merely to restate
    or reformat a result already returned.
 7. WebFetch text mode is for bounded text and APIs. Download large or binary scientific data to a root basename.
-   For `papers/foo.pdf`, use `output_path:"foo.pdf"`; only after success run sandboxed Bash
-   `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never probe folder paths or send retired
+   Absolute and nested destinations are normalized to a safe root filename. For `papers/foo.pdf`, the root download is
+   `output_path:"foo.pdf"`; only after success run sandboxed Bash
+   `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never send retired
    cap/size-evidence fields; WebFetch uses live free disk minus its reserve. Verify locally and paginate APIs; Shell
    need not have network access.
 8. If a requested immutable release cannot be retrieved and verified, report the constraint early.

@@ -45,7 +45,7 @@ function savedExecution(run: Run): Omit<ArtifactStore.Execution, "id" | "artifac
     ...(typeof run.meta?.effort === "string" ? { effort: run.meta.effort } : {}),
     source: run.id,
     ...(run.inputs ? { inputs: run.inputs } : {}),
-    captureQuality: "exact",
+    captureQuality: envelope ? "exact" : "declared",
     files,
     ...(envelope
       ? {
@@ -110,7 +110,9 @@ export const ArtifactTool = Tool.define("artifact", {
     provenance_id: z
       .string()
       .optional()
-      .describe("Producing Python/R or job provenance ID from this project and session"),
+      .describe(
+        "Optional producing run provenance ID from this project and session, including a manually recorded run",
+      ),
   }),
   async execute(params, ctx) {
     const node = params.provenance_id
@@ -123,13 +125,15 @@ export const ArtifactTool = Tool.define("artifact", {
         )
       : undefined
     const entry = runnable(node) ? node : undefined
+    const sessionID =
+      entry?.sessionID ?? (typeof entry?.meta?.sessionID === "string" ? entry.meta.sessionID : undefined)
     const owner =
       entry?.provenance?.identity.project_id.status === "available"
         ? entry.provenance.identity.project_id.value
         : typeof entry?.meta?.projectID === "string"
           ? entry.meta.projectID
           : undefined
-    if (params.provenance_id && (!entry || entry.sessionID !== ctx.sessionID || owner !== Instance.project.id)) {
+    if (params.provenance_id && (!entry || sessionID !== ctx.sessionID || owner !== Instance.project.id)) {
       return result("Invalid provenance", "The producing run was not found in this project and session.")
     }
     {

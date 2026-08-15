@@ -2030,7 +2030,7 @@ export class Trust extends HeyApiClient {
   /**
    * Inspect project trust
    *
-   * Inspect whether project-local code may execute. New and relocated projects are untrusted until their canonical root is explicitly approved.
+   * Inspect whether project-local code may execute. New projects are trusted by default; an explicit revocation or canonical-root mismatch blocks project code.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
@@ -2060,7 +2060,7 @@ export class Trust extends HeyApiClient {
   /**
    * Update project trust
    *
-   * Allow project-local code only after submitting the canonical root returned by the trust status endpoint, or revoke that permission immediately.
+   * Trust project-local code by submitting the canonical root returned by the status endpoint, or revoke that permission immediately.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {

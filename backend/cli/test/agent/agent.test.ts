@@ -3,6 +3,7 @@ import { tmpdir, trustProject } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { PermissionNext } from "../../src/permission/next"
+import { ProjectTrust } from "../../src/project/trust"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionNext.Action | undefined {
@@ -117,6 +118,8 @@ test("explore agent denies edit and write", async () => {
       expect(explore?.mode).toBe("subagent")
       expect(evalPerm(explore, "edit")).toBe("deny")
       expect(evalPerm(explore, "write")).toBe("deny")
+      expect(evalPerm(explore, "webfetch")).toBe("allow")
+      expect(evalPerm(explore, "network")).toBe("allow")
       expect(evalPerm(explore, "todoread")).toBe("deny")
       expect(evalPerm(explore, "todowrite")).toBe("deny")
     },
@@ -173,6 +176,7 @@ test("untrusted project agent configuration stays inert", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
       expect(await Agent.get("repo-agent")).toBeUndefined()
       const research = await Agent.get("research")
       expect(research?.prompt).toBeUndefined()
@@ -493,14 +497,17 @@ test("Agent.get returns undefined for non-existent agent", async () => {
   })
 })
 
-test("default permission includes doom_loop and external_directory as ask", async () => {
+test("default Full access removes routine approval prompts", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const research = await Agent.get("research")
-      expect(evalPerm(research, "doom_loop")).toBe("ask")
-      expect(evalPerm(research, "external_directory")).toBe("ask")
+      expect(evalPerm(research, "mcp")).toBe("allow")
+      expect(evalPerm(research, "doom_loop")).toBe("allow")
+      expect(evalPerm(research, "external_directory")).toBe("allow")
+      expect(evalPerm(research, "compute_job")).toBe("allow")
+      expect(PermissionNext.evaluate("read", ".env", research!.permission).action).toBe("allow")
     },
   })
 })

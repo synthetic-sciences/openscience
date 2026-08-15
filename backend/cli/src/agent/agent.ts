@@ -50,26 +50,29 @@ export namespace Agent {
   export type Info = z.infer<typeof Info>
 
   const compute = async () => {
-    const cfg = await Config.getExecution()
+    const [cfg, sandbox] = await Promise.all([Config.getExecution(), Config.trustedSandbox()])
+    const boundaryAction = sandbox.enabled ? "ask" : "allow"
 
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
-      mcp: "ask",
-      doom_loop: "ask",
+      mcp: boundaryAction,
+      doom_loop: boundaryAction,
       external_directory: {
-        "*": "ask",
+        "*": boundaryAction,
       },
       question: "deny",
       plan_enter: "deny",
       plan_exit: "deny",
-      compute_job: "ask",
+      compute_job: boundaryAction,
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
-      read: {
-        "*": "allow",
-        "*.env": "ask",
-        "*.env.*": "ask",
-        "*.env.example": "allow",
-      },
+      read: sandbox.enabled
+        ? {
+            "*": "allow",
+            "*.env": "ask",
+            "*.env.*": "ask",
+            "*.env.example": "allow",
+          }
+        : "allow",
     })
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
@@ -260,6 +263,10 @@ export namespace Agent {
             glob: "allow",
             list: "allow",
             bash: "allow",
+            // WebFetch owns a narrowly scoped brokered transfer. Without this
+            // explicit rule the profile's wildcard deny blocks the broker's
+            // per-host authorization before the webfetch allow can apply.
+            network: "allow",
             webfetch: "allow",
             websearch: "allow",
             codesearch: "allow",
@@ -283,6 +290,7 @@ export namespace Agent {
           PermissionNext.fromConfig({
             "*": "deny",
             bash: "allow",
+            network: "allow",
             read: "allow",
             glob: "allow",
             grep: "allow",

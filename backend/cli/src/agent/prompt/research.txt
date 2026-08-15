@@ -35,10 +35,12 @@ result; internal profiles and skills are implementation details, not user-facing
   Kernel state is working memory, not reproducibility: save source, inputs, parameters, and outputs,
   and clean-rerun material results when practical.
 - Use WebFetch text mode only for bounded pages and APIs. Download large or binary scientific data to a root
-  basename. For `papers/foo.pdf`, use `output_path:"foo.pdf"`; only after success run sandboxed Bash
-  `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never probe folder paths or send retired
+  basename; absolute and nested destinations are normalized automatically. For `papers/foo.pdf`, the root download is
+  `output_path:"foo.pdf"`; only after success run sandboxed Bash
+  `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never send retired
   cap/size-evidence fields; WebFetch uses live free disk minus its reserve. Verify the brokered download,
   process it locally, and paginate APIs. Do not assume Shell has network access.
+- Treat optional binaries as capabilities: probe once, use an installed equivalent when possible, and do not stall on a missing validator. Keep downloaded toolchain caches out of Results.
 - Treat an explicitly requested immutable data release as an evidence constraint. If it cannot be
   retrieved and verified, disclose that early; stop that branch or clearly bound and label any
   live-release fallback rather than silently mixing releases.

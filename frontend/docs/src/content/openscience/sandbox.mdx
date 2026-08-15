@@ -10,7 +10,13 @@ OpenScience separates three controls that solve different problems:
 - **The execution sandbox** limits what a spawned terminal, shell command, Python/R kernel, or local compute job can reach.
 - **Project trust** controls remote jobs, kernel environment changes such as package installs, project-owned executable code such as plugins and MCP servers, and execution with full host authority.
 
-This separation keeps routine work moving without treating every newly opened project as trusted code. By default, terminals, kernels, shell commands, and local jobs may run immediately **only when OpenScience can enforce the OS sandbox**. Remote jobs, kernel environment changes, project extensions, and unsandboxed execution remain blocked until you explicitly trust that project.
+The composer exposes those controls as three practical presets under **Research tools → Action approval**:
+
+- **Ask for approval** enables containment and revokes trust for the current project.
+- **Approve for me** enables containment and trusts the current project, so only actions outside the chosen boundary need intervention.
+- **Full access** trusts the current project and disables containment.
+
+New local installs default to **Full access** for an immediately working research environment. Choose one of the contained modes before opening code you do not trust. Managed configuration can enforce a stricter policy than the selected preset.
 
 ## Default behavior
 
@@ -19,7 +25,7 @@ The global defaults are:
 ```jsonc
 {
   "sandbox": {
-    "enabled": true,
+    "enabled": false,
     "network": "deny",
     "allowWrite": [],
     "onUnavailable": "error",
@@ -28,9 +34,9 @@ The global defaults are:
 }
 ```
 
-With a working native backend, routine commands can read and write only the active session workspace and explicitly granted paths. Network access is denied, including loopback, LAN, link-local, and metadata endpoints. When no backend is available, the default `onUnavailable: "error"` refuses to run rather than silently falling back to the host.
+With this default, a trusted project runs with the same filesystem and network authority as your user account. Selecting **Approve for me** or **Ask for approval** writes `enabled: true`; with a working native backend, routine commands can then read and write only the active session workspace and explicitly granted paths, and network access is denied, including loopback, LAN, link-local, and metadata endpoints. When containment is requested but no backend is available, `onUnavailable: "error"` refuses to run rather than silently falling back to the host.
 
-Set `requireProjectTrust: true` if you prefer the stricter posture where every new project must be trusted before it starts any local process, even inside a verified sandbox.
+Set `requireProjectTrust: true` if you want a revoked or root-mismatched project blocked from every local process, even inside a verified sandbox.
 
 ## Permissions and sandboxing
 
@@ -40,7 +46,7 @@ This means ordinary approved work can continue autonomously inside a boundary yo
 
 ## Project trust
 
-A new project starts with project-owned executable code disabled. You can still use sandboxed terminals, Python/R kernels, shell commands, and local compute unless **Require project trust** is enabled.
+New projects start trusted unless an explicit trust record or managed policy says otherwise. The **Ask for approval** preset revokes that trust for the current project; **Approve for me** and **Full access** restore it after verifying the canonical project root.
 
 Trust a project only after reviewing its local configuration and code. Trust enables remote jobs, kernel environment changes such as package installs, project plugins, MCP processes, formatters, LSP commands, provider token commands/modules, publication exporters, repository/startup commands, and other project-defined executable hooks. It also allows routine execution when you intentionally turn the sandbox off or configure an unsandboxed fallback.
 
@@ -52,7 +58,7 @@ Open **Settings → Permissions → Project code** to trust or revoke the curren
 | --- | --- | --- |
 | macOS | Seatbelt (`sandbox-exec`) | Built in. |
 | Linux | bubblewrap (`bwrap`) | Install `bubblewrap`; unprivileged user namespaces must work. |
-| Windows | unavailable | Commands follow `onUnavailable`; the default is to refuse. |
+| Windows | unavailable | Contained modes follow `onUnavailable`; the default is to refuse. |
 
 On Ubuntu/Debian:
 
@@ -97,7 +103,7 @@ Sandbox policy is read only from global and managed configuration. A project's `
 
 | Key | Meaning | Default |
 | --- | --- | --- |
-| `enabled` | Request the native sandbox for local execution. | `true` |
+| `enabled` | Request the native sandbox for local execution. | `false` |
 | `network` | Requested network policy. Current native backends enforce deny-all. | `"deny"` |
 | `allowWrite` | Extra absolute writable roots beyond session grants. | `[]` |
 | `onUnavailable` | `"error"`, `"warn"`, or `"allow"` when no backend can run. | `"error"` |
@@ -115,4 +121,4 @@ The sandbox applies to spawned commands, including shell utilities, compilers, p
 - Linux requires a working bubblewrap/user-namespace setup. Windows currently has no filesystem sandbox backend.
 - For actively hostile code or stronger kernel isolation, run OpenScience itself inside a container or VM as an additional boundary.
 
-The safe low-friction preset is the default: sandbox enabled, unavailable backend refused, project trust not required for routine contained work. Full host access is an explicit combination: disable containment (or allow fallback) **and** trust the current project.
+Full host access is the default: containment disabled and the current project trusted. Use the composer preset or Settings to enable containment. **Ask for approval** additionally revokes the current project's trust; **Approve for me** keeps it trusted inside the sandbox. Explicit saved choices survive restarts, and managed policy remains authoritative.
