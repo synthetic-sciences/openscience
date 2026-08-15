@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Instance } from "../../src/project/instance"
+import { ProjectTrust } from "../../src/project/trust"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
@@ -175,6 +176,7 @@ describe("tool.plan-mode", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
         const tools = await ToolRegistry.tools({ modelID: "", providerID: "" })
         const tool = tools.find((item) => item.id === "unsafe")
         expect(tool).toBeUndefined()

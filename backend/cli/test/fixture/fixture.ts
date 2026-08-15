@@ -2,7 +2,7 @@ import { $ } from "bun"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
-import type { Config } from "../../src/config/config"
+import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
 import { Session } from "../../src/session"
@@ -64,4 +64,16 @@ export async function trustProject() {
 export async function executionSession() {
   await trustProject()
   return Session.create({})
+}
+
+/** Explicitly opt a containment test into the machine-wide sandbox and restore
+ * the prior policy afterward. Product defaults intentionally remain Full access. */
+export async function sandboxedExecution() {
+  const previous = await Config.trustedSandbox()
+  await Config.setSandbox({ enabled: true, onUnavailable: "error" })
+  return {
+    async [Symbol.asyncDispose]() {
+      await Config.setSandbox(previous)
+    },
+  }
 }

@@ -4,6 +4,7 @@ import path from "node:path"
 import {
   KernelEnvironmentName,
   KernelEnvironmentUnavailable,
+  normalizeKernelEnvironmentName,
   pythonEnvironment,
 } from "../../../src/science/kernel/interpreter"
 import { tmpdir } from "../../fixture/fixture"
@@ -33,8 +34,8 @@ test("Python environment names cannot escape the project virtual-environment dir
   expect(() => KernelEnvironmentName.parse("../nbody")).toThrow("path separators")
   expect(() => KernelEnvironmentName.parse("nbody/main")).toThrow("path separators")
   expect(KernelEnvironmentName.parse("nbody-3.12")).toBe("nbody-3.12")
-  expect(KernelEnvironmentName.parse("default")).toBe("python")
-  expect(KernelEnvironmentName.parse("DEFAULT")).toBe("python")
+  expect(normalizeKernelEnvironmentName("default")).toBe("python")
+  expect(normalizeKernelEnvironmentName("DEFAULT")).toBe("python")
 })
 
 test("the default Python environment falls back to the host but a missing named environment fails closed", async () => {

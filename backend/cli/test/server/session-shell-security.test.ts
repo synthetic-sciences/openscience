@@ -5,14 +5,18 @@ import { ProjectTrust } from "../../src/project/trust"
 import { Sandbox } from "../../src/sandbox/sandbox"
 import { Server } from "../../src/server/server"
 import { Session } from "../../src/session"
-import { tmpdir } from "../fixture/fixture"
+import { sandboxedExecution, tmpdir } from "../fixture/fixture"
 
 test("the legacy session shell route runs untrusted projects only inside its sandbox", async () => {
+  await using _sandbox = await sandboxedExecution()
   await using workspace = await tmpdir()
   await using outside = await tmpdir()
   const state = await Instance.provide({
     directory: workspace.path,
-    fn: async () => ({ projectID: Instance.project.id, session: await Session.create({ title: "shell route" }) }),
+    fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
+      return { projectID: Instance.project.id, session: await Session.create({ title: "shell route" }) }
+    },
   })
   const target = path.join(outside.path, "escaped")
   const fetch = Server.internalFetch()

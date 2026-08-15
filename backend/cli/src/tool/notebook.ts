@@ -12,7 +12,7 @@ import { Sandbox } from "@/sandbox/sandbox"
 import { KernelQueue } from "@/science/kernel/queue"
 import { KernelProcessIdentity } from "@/science/kernel/process"
 import { KernelRuntime } from "@/science/kernel/registry"
-import { KernelEnvironmentName } from "@/science/kernel/interpreter"
+import { KernelEnvironmentName, normalizeKernelEnvironmentName } from "@/science/kernel/interpreter"
 import { KernelEnvironmentMutation } from "@/science/kernel/environment-mutation"
 import { AtlasEnvironment } from "@/science/kernel/types"
 import type {
@@ -761,7 +761,7 @@ type PythonInput = z.infer<typeof NotebookParameters>
 
 async function executePython(params: PythonInput, ctx: Tool.Context, compatibilityNamed: boolean) {
   const name = compatibilityNamed ? (params.kernel ?? "agent") : "python"
-  const environment = params.environment ?? "python"
+  const environment = normalizeKernelEnvironmentName(params.environment)
   const identity = {
     projectID: Instance.project.id,
     sessionID: ctx.sessionID,

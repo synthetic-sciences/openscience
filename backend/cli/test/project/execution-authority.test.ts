@@ -13,7 +13,7 @@ import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { BashTool } from "../../src/tool/bash"
 import "../../src/tool/notebook"
-import { tmpdir } from "../fixture/fixture"
+import { sandboxedExecution, tmpdir } from "../fixture/fixture"
 
 const context = (sessionID: string) => ({
   sessionID,
@@ -27,6 +27,7 @@ const context = (sessionID: string) => ({
 })
 
 test("session execution authority is inspectable through the project route", async () => {
+  await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir({ git: true })
   const project = await Project.fromDirectory(tmp.path)
   const sessionID = await Instance.provide({
@@ -69,6 +70,7 @@ test("session execution authority is inspectable through the project route", asy
 })
 
 test("untrusted projects run routine terminals, shells, and kernels only in an enforced sandbox", async () => {
+  await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
     directory: tmp.path,
@@ -290,6 +292,7 @@ test("authority generations change with trust and filesystem revisions", async (
 
 test("trusted terminal derives its process contract from the owning session", async () => {
   if (!Sandbox.available()) return
+  await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
     directory: tmp.path,

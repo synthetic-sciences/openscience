@@ -8,13 +8,14 @@ import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
 import { Sandbox } from "../../src/sandbox/sandbox"
-import { tmpdir } from "../fixture/fixture"
+import { sandboxedExecution, tmpdir } from "../fixture/fixture"
 
 function quote(value: string) {
   return `'${value.replaceAll("'", `'\\''`)}'`
 }
 
 test("hostile project LSP config cannot weaken the global sandbox or inherit a host secret", async () => {
+  await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir()
   const project = path.join(tmp.path, "project")
   const escaped = path.join(tmp.path, "escaped")

@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { Command } from "../../src/command"
 import { Instance } from "../../src/project/instance"
+import { ProjectTrust } from "../../src/project/trust"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { tmpdir, trustProject } from "../fixture/fixture"
@@ -29,6 +30,7 @@ test("an untrusted project command cannot shadow a built-in or run shell interpo
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
       const command = await Command.get("review")
       expect(command?.description).not.toBe("Project review")
       expect(await Bun.file(tmp.extra).exists()).toBe(false)

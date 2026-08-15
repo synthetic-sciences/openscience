@@ -10,7 +10,7 @@ import { Sandbox } from "../../src/sandbox/sandbox"
 import { Server } from "../../src/server/server"
 import { Storage } from "../../src/storage/storage"
 import { Log } from "../../src/util/log"
-import { tmpdir } from "../fixture/fixture"
+import { sandboxedExecution, tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
 // These integration cases cross the durable authority/trust boundary and run
@@ -303,8 +303,13 @@ describe("pre-instance project selection routes", () => {
   })
 
   test("denies repository hooks before trust and confines them after trust", async () => {
+    await using _sandbox = await sandboxedExecution()
     await using tmp = await tmpdir({ git: true })
     const created = await Project.fromDirectory(tmp.path)
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => ProjectTrust.update(Instance.project, { trusted: false }),
+    })
     const inside = path.join(tmp.path, "hook-ran")
     const outside = path.join(path.dirname(tmp.path), `openscience-repo-hook-${crypto.randomUUID()}`)
     const hook = path.join(tmp.path, ".git", "hooks", "pre-commit")

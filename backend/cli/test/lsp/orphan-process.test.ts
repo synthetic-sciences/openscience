@@ -147,6 +147,8 @@ async function waitText(file, attempt = 0) {
   return waitText(file, attempt + 1)
 }
 
+await Config.setSandbox({ enabled: true, onUnavailable: "error" })
+
 if (mode === "owner") {
   await Instance.provide({
     directory: workspace,
@@ -232,9 +234,8 @@ if (mode === "owner") {
       owner = spawn("owner")
       const registered = await readJsonLine<NonNullable<typeof entry>>(owner, "LSP owner")
       entry = registered
-      // This fixture intentionally uses the default trusted sandbox. The old
-      // OPENSCIENCE_CONFIG_CONTENT override was project-scoped and therefore
-      // could not disable the global/managed execution boundary.
+      // This fixture explicitly opts into containment; product defaults use
+      // trusted host execution, while this test verifies sandbox teardown.
       expect(registered.sandboxed).toBe(true)
       expect(await CredentialProcessLedger.owns(registered.pid, registered.identity)).toBe(true)
       expect(await CredentialProcessLedger.owns(registered.descendant.pid, registered.descendant.identity)).toBe(true)

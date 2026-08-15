@@ -7,9 +7,10 @@ import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
-import { tmpdir } from "../fixture/fixture"
+import { sandboxedExecution, tmpdir } from "../fixture/fixture"
 
 test("untrusted project agent and permission policy cannot auto-grant external paths", async () => {
+  await using _sandbox = await sandboxedExecution()
   await using external = await tmpdir()
   await using tmp = await tmpdir({
     init: async (directory) => {
@@ -35,6 +36,7 @@ test("untrusted project agent and permission policy cannot auto-grant external p
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
       expect((await ProjectTrust.status(Instance.project)).canExecuteProjectCode).toBe(false)
       expect((await Config.get()).permission?.external_directory).toBe("allow") // inspectable
       const executable = await Config.getExecution()

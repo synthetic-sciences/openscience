@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { KernelRoutes, NotebookRoutes } from "../../src/server/routes/notebook"
 import { Instance } from "../../src/project/instance"
-import { tmpdir, trustProject } from "../fixture/fixture"
+import { sandboxedExecution, tmpdir, trustProject } from "../fixture/fixture"
 import { Provenance } from "../../src/science/provenance/store"
 import { Session } from "../../src/session"
 import { Identifier } from "../../src/id/id"
@@ -1011,6 +1011,7 @@ describe("/notebook routes", () => {
   }, 30_000)
 
   test("interrupts a running cell without discarding Python state", async () => {
+    await using _sandbox = await sandboxedExecution()
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
@@ -1074,6 +1075,7 @@ describe("/notebook routes", () => {
   }, 30_000)
 
   test("controls a live kernel by id only for its owning session", async () => {
+    await using _sandbox = await sandboxedExecution()
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,

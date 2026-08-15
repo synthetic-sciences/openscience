@@ -5,13 +5,14 @@ import { LSP } from "../../src/lsp"
 import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
 import { Sandbox } from "../../src/sandbox/sandbox"
-import { tmpdir } from "../fixture/fixture"
+import { sandboxedExecution, tmpdir } from "../fixture/fixture"
 
 function quote(value: string) {
   return `'${value.replaceAll("'", `'\\''`)}'`
 }
 
 test("globally installed language servers cannot start in an untrusted project", async () => {
+  await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir()
   const bin = path.join(tmp.path, "host-bin")
   const project = path.join(tmp.path, "project")
@@ -38,6 +39,7 @@ test("globally installed language servers cannot start in an untrusted project",
     await Instance.provide({
       directory: project,
       fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
         expect((await ProjectTrust.status(Instance.project)).canExecuteProjectCode).toBe(false)
         await LSP.touchFile(source)
         await Bun.sleep(50)

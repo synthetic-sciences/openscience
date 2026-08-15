@@ -4,7 +4,7 @@ import { Instance } from "../../src/project/instance"
 import { KernelRuntime, type KernelIdentity } from "../../src/science/kernel/registry"
 import { NotebookTool, PythonTool } from "../../src/tool/notebook"
 import { RKernelTool, RTool } from "../../src/tool/rkernel"
-import { executionSession, tmpdir } from "../fixture/fixture"
+import { executionSession, sandboxedExecution, tmpdir } from "../fixture/fixture"
 import { ToolRetryGuard } from "../../src/session/tool-retry-guard"
 
 async function captureError(promise: Promise<unknown>): Promise<Error> {
@@ -248,6 +248,7 @@ test.skipIf(!Bun.which("Rscript"))(
 )
 
 test("an interrupt requested during durable start waits for Python to arm SIGINT and preserves state", async () => {
+  await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
     directory: tmp.path,

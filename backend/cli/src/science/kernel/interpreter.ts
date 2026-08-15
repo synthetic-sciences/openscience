@@ -10,7 +10,11 @@ export const KernelEnvironmentName = z
   .min(1)
   .max(64)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use a simple environment name without path separators")
-  .transform((value) => (value.toLowerCase() === "default" ? "python" : value))
+
+export function normalizeKernelEnvironmentName(input?: string) {
+  const value = KernelEnvironmentName.parse(input ?? "python")
+  return value.toLowerCase() === "default" ? "python" : value
+}
 
 export class KernelEnvironmentUnavailable extends Error {
   constructor(
@@ -48,7 +52,7 @@ async function executable(file: string) {
  * default `python` environment so existing projects work without setup.
  */
 export async function pythonEnvironment(projectRoot: string, input?: string): Promise<KernelStartOptions> {
-  const environmentName = KernelEnvironmentName.parse(input ?? "python")
+  const environmentName = normalizeKernelEnvironmentName(input)
   const roots = [path.join(projectRoot, ".venv", environmentName)]
   if (environmentName === "python") roots.push(path.join(projectRoot, ".venv"))
   const candidates = roots.map(layout)

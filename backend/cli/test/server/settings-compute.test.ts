@@ -13,7 +13,7 @@ import { Sandbox } from "../../src/sandbox/sandbox"
 import { Log } from "../../src/util/log"
 import { Global } from "../../src/global"
 import { ModalVolume } from "../../src/compute/modal/volume"
-import { executionSession, tmpdir } from "../fixture/fixture"
+import { executionSession, sandboxedExecution, tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
 
@@ -878,6 +878,7 @@ test(
 )
 
 test("untrusted projects start local compute only when the OS sandbox is enforced", async () => {
+  await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir()
   const created = await Project.fromDirectory(tmp.path)
   const current = await session(tmp.path, false)

@@ -13,7 +13,7 @@ import { Sandbox } from "../../src/sandbox/sandbox"
 import { ExecutionAuthority } from "../../src/project/execution"
 import { ArtifactStore } from "../../src/artifact/store"
 import { CredentialProcessLedger } from "../../src/credentials/process-ledger"
-import { tmpdir, trustProject } from "../fixture/fixture"
+import { sandboxedExecution, tmpdir, trustProject } from "../fixture/fixture"
 
 type StartOptions = NonNullable<Parameters<typeof ComputeJobs.start>[1]>
 
@@ -2058,6 +2058,7 @@ describe("ComputeJobs project boundaries", () => {
   })
 
   test("enforces the configured sandbox or fails closed when no backend is available", async () => {
+    await using _sandbox = await sandboxedExecution()
     await using tmp = await tmpdir()
     const data = path.join(tmp.path, "data")
     const workspace = path.join(tmp.path, "project")

@@ -8,7 +8,7 @@ import { PublicationReview } from "../../src/file/review"
 import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
 import { CommandRuntime } from "../../src/science/command/registry"
-import { tmpdir, trustProject } from "../fixture/fixture"
+import { sandboxedExecution, tmpdir, trustProject } from "../fixture/fixture"
 
 describe("PublicationFile", () => {
   test("detects real local publication export capabilities", async () => {
@@ -109,6 +109,7 @@ describe("PublicationFile", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
         const prior = process.env.PATH
         process.env.PATH = `${tmp.extra.bin}${path.delimiter}${prior ?? ""}`
         try {
@@ -242,6 +243,7 @@ while true; do sleep 1; done
   })
 
   test("a reviewed Pandoc export renders the finalized snapshot when the source changes mid-export", async () => {
+    await using _sandbox = await sandboxedExecution()
     await using tmp = await tmpdir({
       git: true,
       init: async (directory) => {
