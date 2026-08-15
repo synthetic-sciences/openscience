@@ -1542,7 +1542,7 @@ export namespace Sandbox {
   }
 
   // Warn only once per process so every command doesn't repeat the same notice.
-  const warned = { unavailable: false, loopback: false }
+  const warned = { unavailable: false, loopback: false, allow: false }
 
   /**
    * Forget which one-time warnings have been issued.
@@ -1556,6 +1556,7 @@ export namespace Sandbox {
   export function forgetWarnings() {
     warned.unavailable = false
     warned.loopback = false
+    warned.allow = false
   }
 
   /**
@@ -1624,6 +1625,32 @@ export namespace Sandbox {
     )
   }
 
+  /**
+   * `network: "allow"` reaches nothing on the POSIX backends, and saying so is
+   * not optional.
+   *
+   * bubblewrap cannot express "the internet but never host loopback" without a
+   * separately configured network namespace, and SBPL's `remote ip` filter
+   * accepts only `*` and `localhost` — no literals, no CIDR — so an
+   * allow-with-private-denies profile would expose LAN, link-local and
+   * cloud-metadata endpoints. Both fail closed instead, which is right.
+   *
+   * What was wrong is that nothing told anyone. `sandbox status` printed
+   * "network allow", the settings panel showed it selected, the schema said
+   * "whether sandboxed commands may reach the network" — and every connection
+   * failed to resolve, with no path from the symptom back to the setting the
+   * user had deliberately turned on. A config value that reports one thing and
+   * does another is a bug even when the behaviour behind it is correct.
+   */
+  function allowMessage(b: Backend): string {
+    return (
+      `Sandbox network 'allow' reaches nothing on this backend (${b}): it denies every socket, because it ` +
+      "cannot grant outbound access without also exposing everything bound to 127.0.0.1 on this machine. " +
+      "Use 'allowlist' and add the hosts you need - that route goes through the proxy and is the only one " +
+      "with an audit trail."
+    )
+  }
+
   function unavailableMessage(): string {
     return `Sandbox is enabled but unavailable on this machine (${describe().reason}). Running the command WITHOUT isolation. Install the backend, or set sandbox.onUnavailable to "error" to refuse instead.`
   }
@@ -1644,6 +1671,14 @@ export namespace Sandbox {
     if (b === "appcontainer" && resolved(options).network === "allow" && !warned.loopback) {
       warned.loopback = true
       return { backend: b, warning: loopbackMessage() }
+    }
+    // Same channel, same one-time rule. Not an error: the run proceeds, confined,
+    // with no network — which is what the user gets either way. The warning is
+    // the part that was missing.
+    if ((b === "bubblewrap" || b === "seatbelt") && resolved(options).network === "allow" && !warned.allow) {
+      warned.allow = true
+      log.warn("sandbox network 'allow' denies all sockets on this backend", { backend: b })
+      return { backend: b, warning: allowMessage(b) }
     }
     if (b !== "none") return { backend: b }
     const mode = options?.onUnavailable ?? "warn"

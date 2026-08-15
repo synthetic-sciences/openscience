@@ -48,7 +48,16 @@ function printStatus(config?: Config.Sandbox) {
     }`,
   )
   if (enabled) {
-    UI.println(`  network   ${config?.network ?? "deny"}`)
+    // "allow" is not what it says on bubblewrap or seatbelt: both deny every
+    // socket in every mode, because neither can grant outbound access without
+    // also exposing everything bound to 127.0.0.1. Printing the configured word
+    // alone made this command state a capability the machine does not have.
+    const net = config?.network ?? "deny"
+    const hollow = net === "allow" && (d.backend === "bubblewrap" || d.backend === "seatbelt")
+    UI.println(
+      `  network   ${net}` +
+        (hollow ? `${S.TEXT_DIM}  (this backend denies all sockets - use 'allowlist')${S.TEXT_NORMAL}` : ""),
+    )
     UI.println(
       `  project trust   ${config?.requireProjectTrust ? "required for all execution" : "routine sandboxed work allowed"}`,
     )

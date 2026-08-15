@@ -312,9 +312,12 @@ test("the prerequisite is checked where users actually meet it", async () => {
     new URL("../../../../frontend/workspace/src/components/settings/Sandbox.tsx", import.meta.url).pathname,
   ).text()
   expect(panel).toContain("data()?.blocked")
-  // Above the availability box: a green backend next to "installs will fail"
-  // reads as a contradiction, and this is the line the user has to act on.
-  expect(panel.indexOf("data()?.blocked")).toBeLessThan(panel.indexOf("Backend availability"))
+  // Above the first policy control: a green backend sitting next to "installs
+  // will fail" reads as a contradiction, and this is the line the user has to
+  // act on before any of the switches below it matter. Anchored on the
+  // "Protection" section rather than a specific box, because the panel's own
+  // headings are main's and may be renamed without changing this property.
+  expect(panel.indexOf("data()?.blocked")).toBeLessThan(panel.indexOf('title="Protection"'))
 })
 
 test("an environment pinned to an ungrantable base is rebuilt, not reused forever", async () => {
