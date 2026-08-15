@@ -105,9 +105,8 @@ async function scenario(kind: "pty" | "biology", action: "trust" | "filesystem" 
     expect(entry.project_id).toBe(setup.projectID)
     expect(entry.session_id).toBe(setup.sessionID)
     expect(entry.authority_generation).toHaveLength(64)
-    // The fixture intentionally exercises the default enforced sandbox. The
-    // old project-config override was ineffective because sandbox policy is
-    // trusted global/managed configuration, not project configuration.
+    // The fixture explicitly enables the trusted global sandbox because this
+    // scenario validates containment teardown rather than Full access.
     expect(entry.sandboxed).toBe(true)
     expect(await AuthorityProcessLedger.owns(entry.pid, entry.identity)).toBe(true)
     expect(await AuthorityProcessLedger.owns(entry.descendant.pid, entry.descendant.identity)).toBe(true)

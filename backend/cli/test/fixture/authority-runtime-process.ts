@@ -9,6 +9,7 @@ import { Pty } from "../../src/pty"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { NotebookTool } from "../../src/tool/biology/notebook"
+import { Config } from "../../src/config/config"
 
 const [mode, directory, result, sessionID, grantID, shell, descendantFileArg] = process.argv.slice(2)
 
@@ -84,6 +85,9 @@ await Instance.provide({
   ...(mode.startsWith("revoke-") ? { init: InstanceBootstrap } : {}),
   fn: async () => {
     if (mode === "setup" || mode === "setup-installation") {
+      // This fixture validates containment teardown, so opt into the global
+      // sandbox explicitly now that new local installs default to Full access.
+      await Config.setSandbox({ enabled: true })
       const status = await ProjectTrust.status(Instance.project)
       if (!status.canExecuteProjectCode) {
         await ProjectTrust.update(Instance.project, { trusted: true, root: status.root })
