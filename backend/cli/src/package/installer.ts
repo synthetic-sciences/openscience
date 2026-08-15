@@ -645,14 +645,14 @@ export namespace Installer {
   /** Sandboxed argv for a command run against the environment: the same policy
    *  the kernel gets, plus write access to the environment directory and the
    *  shared wheel cache. */
-  async function confined(directory: string, argv: string[]) {
+  async function confined(directory: string, argv: string[], extraReadable: string[] = []) {
     const policy = await Config.trustedSandbox()
     const egress = await EgressRuntime.egressFor(policy)
     // The base interpreter is READ-only on purpose: the install must be able to
     // start Python, not to modify the Python installation it runs on. Stated
     // unconditionally — which backend needs telling is the sandbox's business,
     // not the installer's.
-    const roots = await baseRoots(directory)
+    const roots = [...(await baseRoots(directory)), ...extraReadable]
     return Sandbox.wrapArgv({
       file: argv[0]!,
       args: argv.slice(1),
@@ -702,17 +702,57 @@ export namespace Installer {
     // if bwrap contains agent Python at import time it contains setup.py at
     // install time.
     const policy = input.source ? [] : ["--only-binary", ":all:"]
-    const argv = [
-      interpreter(input.directory),
-      "-m",
-      "pip",
-      "install",
-      "--disable-pip-version-check",
-      ...policy,
-      ...(input.index ? ["--index-url", input.index] : []),
-      ...input.packages,
-    ]
-    const spec = await confined(input.directory, argv)
+    /**
+     * uv on Windows, pip everywhere else.
+     *
+     * Not a preference — a workaround for an upstream defect with a name.
+     * CPython 3.12.4 changed `os.mkdir(mode=0o700)` so `tempfile.mkdtemp()`
+     * creates a directory whose DACL does NOT inherit from its parent. Inside an
+     * AppContainer, access comes from the package SID; a DACL naming only the
+     * owner grants the process nothing. So pip downloads a wheel and then cannot
+     * write into the `pip-unpack-*` directory it just made:
+     *
+     *     [Errno 13] Permission denied: '...\pip-unpack-xxxx\six-1.17.0-...whl.metadata'
+     *
+     * See python/cpython#134587. Two fixes are open upstream and unreleased.
+     * uv is Rust and never calls CPython's tempfile, so it is unaffected.
+     *
+     * Windows ONLY, deliberately. Linux and macOS install correctly today and
+     * are verified doing so on every push; switching their installer inside a
+     * fix for someone else's Windows bug would change working, security-relevant
+     * code for no reason. uv and pip can also resolve the same requirement to
+     * different closures, and the environment manifest records what landed, so
+     * the difference is captured rather than hidden.
+     *
+     * uv is not optional on Windows anyway: it is how a grantable interpreter
+     * gets there at all, which `blocked()` already tells the user.
+     */
+    const uv = process.platform === "win32" ? which("uv") : undefined
+    const argv = uv
+      ? [
+          uv,
+          "pip",
+          "install",
+          "--python",
+          interpreter(input.directory),
+          ...policy,
+          ...(input.index ? ["--index-url", input.index] : []),
+          ...input.packages,
+        ]
+      : [
+          interpreter(input.directory),
+          "-m",
+          "pip",
+          "install",
+          "--disable-pip-version-check",
+          ...policy,
+          ...(input.index ? ["--index-url", input.index] : []),
+          ...input.packages,
+        ]
+    // The uv binary itself joins the read set when it is the installer: an
+    // AppContainer can execute nothing whose ACL does not name its SID, and uv
+    // lives under the user profile rather than in the environment.
+    const spec = await confined(input.directory, argv, uv ? [uv] : [])
     const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
       // No TMPDIR of our own. It used to be `<env>/.tmp`, pre-created here on the
       // host — and on Windows the sandbox cannot make a pre-existing
@@ -726,7 +766,16 @@ export namespace Installer {
       // `spec.env` carries TMPDIR/TMP/TEMP for the sandbox's own per-spawn temp
       // root, which IS granted and labelled as a root. Letting that through is
       // both the fix and the reason the mechanism exists.
-      env: { ...process.env, ...spec.env, PIP_CACHE_DIR: cache },
+      env: {
+        ...process.env,
+        ...spec.env,
+        PIP_CACHE_DIR: cache,
+        // uv's default cache is under %LOCALAPPDATA%, which the sandbox does not
+        // grant. Point it at the same writable wheel cache pip uses, and refuse
+        // interpreter downloads: the interpreter is chosen before this runs and
+        // silently fetching another would defeat that.
+        ...(uv ? { UV_CACHE_DIR: cache, UV_PYTHON_DOWNLOADS: "never" } : {}),
+      },
       // The environment, not wherever the server happens to be running. A
       // sandboxed child inherits this working directory, and the sandbox is not
       // granted the server's cwd — the same latent fault that killed the egress
@@ -741,26 +790,38 @@ export namespace Installer {
     // Drained as it arrives rather than awaited whole, so a caller can report
     // progress. The full text is still accumulated: `explain()` needs the
     // entire log to find the `fatal error:` line, which is rarely last.
-    const drain = async (stream: ReadableStream<Uint8Array>, report: boolean) => {
+    const drain = async (stream: ReadableStream<Uint8Array>, report: boolean, into: { out: string; err: string }) => {
       const reader = stream.getReader()
       const decoder = new TextDecoder()
-      let text = ""
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         const piece = decoder.decode(value, { stream: true })
-        text += piece
+        // Accumulated where the caller can still read it if the race below
+        // gives up: a partial log explains a hang, a discarded one does not.
+        if (report) into.out += piece
+        else into.err += piece
         if (!report || !input.onProgress) continue
         const status = progressLine(piece)
         if (status) input.onProgress(status)
       }
-      return text
     }
     // pip writes its progress to stdout and its diagnostics to stderr; only the
     // former is worth surfacing as status.
-    const [out, err] = await Promise.all([drain(proc.stdout, true), drain(proc.stderr, false)])
+    const collected = { out: "", err: "" }
+    const finished = Promise.all([drain(proc.stdout, true, collected), drain(proc.stderr, false, collected)])
+    // Wait on the PROCESS, then give the drains a bounded moment to flush.
+    //
+    // Awaiting the drains alone hangs forever on an abort. `signal` kills the
+    // launcher, but the sandboxed child inherits its stdio handles and is not a
+    // child of this process at all — on Windows it is created by CreateProcessW
+    // inside the container — so it keeps the write end of both pipes open and
+    // `reader.read()` never reports done. Measured: a 150s AbortSignal produced
+    // no return at all and the caller sat until its own 300s timeout, twice,
+    // each time discarding the output that would have explained the failure.
     await proc.exited
-    return { ok: proc.exitCode === 0, log: [out, err].filter(Boolean).join("\n") }
+    await Promise.race([finished, Bun.sleep(2_000)])
+    return { ok: proc.exitCode === 0, log: [collected.out, collected.err].filter(Boolean).join("\n") }
   }
 
   /** name → version for everything resolved into the environment, names PEP 503
