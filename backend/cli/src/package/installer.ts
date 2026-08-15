@@ -733,6 +733,12 @@ export namespace Installer {
           uv,
           "pip",
           "install",
+          // Verbose under the sandbox debug flag only. uv reports a failure to
+          // query an interpreter as a bare "Access is denied. (os error 5)",
+          // which names neither the path it opened nor the operation - and
+          // guessing at which of those it was has been the expensive mistake of
+          // this whole feature.
+          ...(process.env["OPENSCIENCE_SANDBOX_DEBUG"] === "1" ? ["-v"] : []),
           "--python",
           interpreter(input.directory),
           ...policy,

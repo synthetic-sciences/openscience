@@ -307,15 +307,21 @@ test.if(windows)(
     // any more. This test reconstructs `Installer.install`, and drifting from
     // it is precisely how the reconstruction stops proving anything.
     await fs.mkdir(cache, { recursive: true })
+    const uv = Bun.which("uv")
+    expect(uv).toBeTruthy()
     const spec = await Sandbox.wrapArgv({
-      file: Installer.interpreter(environment!),
-      args: ["-m", "pip", "install", "--disable-pip-version-check", "--only-binary", ":all:", "six"],
+      file: uv!,
+      // uv, not `python -m pip`: that is what install() runs on Windows now, and
+      // reconstructing it with pip would exercise the exact upstream CPython
+      // defect (python/cpython#134587) the uv path exists to route around — a
+      // test failing for a reason the product deliberately avoids.
+      args: ["pip", "install", "-v", "--python", Installer.interpreter(environment!), "--only-binary", ":all:", "six"],
       workspace: [environment!, cache],
-      ...(home ? { readable: [home] } : {}),
+      readable: [...(home ? [home] : []), uv!],
       options: { ...policy, egress },
     })
     const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
-      env: { ...process.env, ...spec.env, PIP_CACHE_DIR: cache },
+      env: { ...process.env, ...spec.env, UV_CACHE_DIR: cache, UV_PYTHON_DOWNLOADS: "never" },
       cwd: environment!,
       stdout: "pipe",
       stderr: "inherit",
