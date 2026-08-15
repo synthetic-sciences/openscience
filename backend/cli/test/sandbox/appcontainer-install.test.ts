@@ -190,6 +190,49 @@ test.if(windows)(
 )
 
 test.if(windows)(
+  "a process INSIDE the container can execute the environment's interpreter",
+  async () => {
+    // Not the same claim as the test above, which is why this exists.
+    //
+    // `CreateProcessW` opens the image file in the CALLER's context. Our
+    // launcher runs as the user and creates the process INTO the container, so
+    // that spawn proves the LAUNCHER can open the binary — not that the
+    // container can. uv is already inside when it spawns the interpreter to
+    // query it, and that is where it dies:
+    //
+    //     DEBUG Checking for Python interpreter at path `Scripts\python.exe`
+    //     error: Failed to query Python interpreter
+    //       Caused by: Access is denied. (os error 5)
+    //
+    // So: launch a shell in the container and have IT spawn the interpreter.
+    // Red here means execute-from-inside is the missing right and every
+    // "runs inside the container" result above is weaker than it reads.
+    const { Shell } = await import("../../src/shell/shell")
+    const shell = Shell.acceptable()
+    const home = await Installer.base(environment!)
+    const plan = Sandbox.plan({
+      command: `"${Installer.interpreter(environment!)}" -c "print(7)"`,
+      shell,
+      cwd: environment!,
+      workspace: [environment!],
+      ...(home ? { readable: [home] } : {}),
+      options: { enabled: true, network: "deny", onUnavailable: "error", allowWrite: [] },
+    })
+    const proc = Bun.spawn([plan.file, ...(plan.args ?? [])], {
+      env: { ...process.env, ...plan.env },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+    await proc.exited
+    Sandbox.cleanup(plan)
+    console.log(`  exit ${proc.exitCode}\n  stdout: ${out.trim()}\n  stderr: ${err.trim()}`)
+    expect(out).toContain("7")
+  },
+  180_000,
+)
+
+test.if(windows)(
   "bun itself runs inside the container",
   async () => {
     // The shim is `bun <bundle>` in a source checkout, and it dies with
