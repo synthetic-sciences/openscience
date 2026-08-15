@@ -34,6 +34,7 @@ import { ScienceTools } from "./science"
 import { ProvenanceTools } from "./provenance"
 import { NotebookTool, PythonTool } from "./notebook"
 import { RKernelTool, RTool } from "./rkernel"
+import { PackageTool } from "./package"
 import { AtlasTool } from "./atlas"
 import { AtlasRecordTool } from "./atlas-record"
 import { ArtifactSnapshotTool } from "./artifact-snapshot"
@@ -171,6 +172,7 @@ export namespace ToolRegistry {
       AtlasRecordTool,
       PythonTool,
       RTool,
+      PackageTool,
       ArtifactTool,
       ComputeJobTool,
       ...custom.filter((tool) => !compatibility.has(tool.id) && tool.id !== PythonTool.id && tool.id !== RTool.id),

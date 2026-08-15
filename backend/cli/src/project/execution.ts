@@ -32,6 +32,20 @@ export namespace ExecutionAuthority {
   ])
   export type Capability = z.infer<typeof Capability>
 
+  // Not pure in-memory state: `compute/jobs.ts`'s `Job.authority` field
+  // stores a `Decision` verbatim in the on-disk job history (`jobs.json`), so
+  // `sandbox.network` below is a *second* copy of the persisted enum that
+  // `Job.sandbox.network` also carries — widening it (e.g. adding
+  // "allowlist") has the same one-directional compatibility cost: a job
+  // record this binary writes with the new value is rejected by an older
+  // binary reading the same history. The stakes are higher than "that one
+  // record" though — `ComputeJobs`'s `read()` runs `Job.array().safeParse()`
+  // over the *whole file* and throws `ComputeJobsCorruptError` for all of it
+  // on any single unparseable record (`compute/jobs.ts`'s `read()`), moving
+  // the file aside as `.corrupt-<pid>` rather than skipping the bad one. So
+  // one job with `sandbox.network: "allowlist"` written by a newer binary
+  // makes an older binary reject its entire compute job history, not just
+  // fail to display that job.
   export const Decision = z.object({
     allowed: z.boolean(),
     reason: z.enum(["allowed", "project_untrusted", "sandbox_unavailable"]),
@@ -51,11 +65,11 @@ export namespace ExecutionAuthority {
     writable: z.array(z.string()),
     sandbox: z.object({
       enabled: z.boolean(),
-      network: z.enum(["allow", "deny"]),
+      network: z.enum(["deny", "allowlist", "allow"]),
       allowWrite: z.array(z.string()),
       onUnavailable: z.enum(["warn", "error", "allow"]),
       requireProjectTrust: z.boolean().default(false),
-      backend: z.enum(["seatbelt", "bubblewrap", "none"]),
+      backend: z.enum(["seatbelt", "bubblewrap", "appcontainer", "none"]),
       available: z.boolean(),
       enforced: z.boolean(),
     }),

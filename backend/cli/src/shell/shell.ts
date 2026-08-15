@@ -202,6 +202,60 @@ export namespace Shell {
   }
   const BLACKLIST = new Set(["fish", "nu"])
 
+  /**
+   * How to hand a shell exactly one command to run.
+   *
+   * `-c` is not universal, and assuming it was cost a full Windows debugging
+   * cycle. `cmd.exe` takes `/c`; given `-c` it does not error, it starts an
+   * INTERACTIVE shell — so on a real machine every sandboxed command printed the
+   * cmd banner and a prompt, ran nothing, and exited 0. Silent success is the
+   * worst possible failure here, because the sandbox self-test read that banner
+   * as a process token and reported a containment failure that had not happened.
+   *
+   * `session/prompt.ts` has always known this, but its table is declared inside
+   * a function and closes over the command, so it could not be reused and the
+   * sandbox path kept its own wrong copy. This is the single source of truth;
+   * that table stays only because it also sources rc files, which a sandboxed
+   * command must NOT do.
+   */
+  export function invocation(shell: string, command: string): string[] {
+    switch (family(shell)) {
+      case "cmd":
+        // `/d /s /c`, the same shape Node uses for every Windows spawn. `/s`
+        // makes cmd strip exactly the first and last quote of the tail and take
+        // the rest verbatim, which is the only deterministic way to hand it a
+        // command containing quotes; `/d` skips AutoRun registry commands, so a
+        // sandboxed command cannot be prefixed by machine-local configuration.
+        return ["/d", "/s", "/c", command]
+      case "powershell":
+        return ["-NoProfile", "-Command", command]
+      default:
+        return ["-c", command]
+    }
+  }
+
+  /**
+   * Which command language this shell speaks.
+   *
+   * Not just which FLAG it takes. `cmd.exe` has no `printf` and no `cat`, so a
+   * caller composing a command has to know the family too — the sandbox
+   * self-test wrote its probe file with `printf hi > f && cat f`, which on
+   * Windows failed for the plain reason that neither command exists, and read
+   * as the sandbox being unable to write inside its own workspace.
+   *
+   * Split on BOTH separators and drop `.exe` unconditionally, rather than
+   * branching on `process.platform`: that branch would be untestable from a
+   * Linux CI box, which is where this has to be verified since the machine that
+   * exposed the bug is not one the suite can run on. A POSIX file named
+   * literally `cmd.exe` would be read as cmd; that is not a real shell.
+   */
+  export function family(shell: string): "cmd" | "powershell" | "posix" {
+    const name = (shell.split(/[\\/]/).pop() ?? shell).toLowerCase().replace(/\.exe$/, "")
+    if (name === "cmd" || name === "command") return "cmd"
+    if (name === "powershell" || name === "pwsh") return "powershell"
+    return "posix"
+  }
+
   function exists(p: string) {
     try {
       return fs.existsSync(p)

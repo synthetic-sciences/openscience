@@ -20,14 +20,15 @@ import "./sandbox.css"
 
 interface SandboxConfig {
   enabled?: boolean
-  network?: "allow" | "deny"
+  network?: "deny" | "allowlist" | "allow"
+  allowHosts?: string[]
   allowWrite?: string[]
   onUnavailable?: "warn" | "error" | "allow"
   requireProjectTrust?: boolean
 }
 interface Status {
   platform: string
-  backend: "seatbelt" | "bubblewrap" | "none"
+  backend: "seatbelt" | "bubblewrap" | "appcontainer" | "none"
   available: boolean
   readIsolation?: "grant_only" | "unavailable"
   networkIsolation?: "deny_all" | "unavailable"
@@ -37,6 +38,17 @@ interface Status {
 interface Payload {
   config: SandboxConfig
   status: Status
+  /**
+   * An unmet prerequisite, already worded for a human, or null.
+   *
+   * Distinct from `status` on purpose: the backend can be perfectly available
+   * while Python environments are unusable. On Windows an AppContainer can only
+   * be granted access to paths its user owns, so a machine-wide Python cannot be
+   * read by a sandboxed process — containment still works, installs do not.
+   * Without this the panel shows a green backend on a machine where every
+   * install will fail, and the user first learns about it when the agent tries.
+   */
+  blocked: string | null
 }
 interface Check {
   name: string
@@ -55,8 +67,9 @@ type WriteKey = "enabled" | "trust" | "network" | "fallback" | "paths"
 type PendingWrite = { body: SandboxConfig; key: WriteKey; failure: string }
 
 const NETWORK_OPTS = [
-  { value: "allow" as const, label: "Allow" },
-  { value: "deny" as const, label: "Deny" },
+  { value: "deny" as const, label: "Deny — block all network access" },
+  { value: "allowlist" as const, label: "Allowlist — bounded egress (default)" },
+  { value: "allow" as const, label: "Allow — unrestricted egress" },
 ]
 const UNAVAILABLE_OPTS = [
   { value: "warn" as const, label: "Warn & run" },
@@ -77,22 +90,19 @@ const Sandbox: Component = () => {
   const [test, setTest] = createSignal<SelfTest>()
   const [testing, setTesting] = createSignal(false)
   const [newPath, setNewPath] = createSignal("")
-  const [showBackendDetails, setShowBackendDetails] = createSignal(false)
-  const [showPathEditor, setShowPathEditor] = createSignal(false)
-  const [showTestDetails, setShowTestDetails] = createSignal(false)
-  const backendDetailsId = `sandbox-backend-${createUniqueId()}`
-  const pathEditorId = `sandbox-path-${createUniqueId()}`
-  const testDetailsId = `sandbox-test-${createUniqueId()}`
-  const writeQueue: PendingWrite[] = []
-  let writeLoop: Promise<void> | undefined
+  const [newHost, setNewHost] = createSignal("")
 
   const config = (): SandboxConfig =>
-    data()?.config ?? {
-      enabled: false,
-      network: "deny",
-      allowWrite: [],
-      onUnavailable: "error",
-      requireProjectTrust: false,
+    data()?.config ?? { enabled: true, network: "allowlist", allowHosts: [], allowWrite: [], onUnavailable: "error" }
+  const status = () => data()?.status
+
+  const patch = async (body: SandboxConfig, failure: string) => {
+    setBusy(true)
+    try {
+      mutate(await call<Payload>("", { method: "PUT", body: JSON.stringify(body) }))
+    } catch (err) {
+      showToast({ title: failure, description: err instanceof Error ? err.message : String(err) })
+      refetch()
     }
   const status = () => data()?.status
   const unavailable = () => data.loading || !!data.error
@@ -190,30 +200,62 @@ const Sandbox: Component = () => {
   const removePath = (p: string) =>
     patch({ allowWrite: (config().allowWrite ?? []).filter((x) => x !== p) }, "paths", "Couldn't remove the path")
 
+  const addHost = () => {
+    const h = newHost().trim()
+    if (!h) return
+    const next = [...(config().allowHosts ?? [])]
+    if (!next.includes(h)) next.push(h)
+    setNewHost("")
+    patch({ allowHosts: next }, "Couldn't add the host")
+  }
+  const removeHost = (h: string) =>
+    patch({ allowHosts: (config().allowHosts ?? []).filter((x) => x !== h) }, "Couldn't remove the host")
+
   return (
-    <PanelScroll>
-      <div
-        class="settings-preferences-panel settings-preferences-panel--sandbox"
-        aria-busy={saving() ? "true" : undefined}
-      >
-        <PanelHeader
-          title="Sandbox"
-          description="Isolate local terminals, kernels, and shell commands."
-          toolbar={
-            <span class="settings-sandbox-save-state" role="status" aria-live="polite">
-              {saving() ? "Saving…" : ""}
-            </span>
-          }
-        />
-        <PanelBody>
-          <Show when={data.error}>
-            <div class="settings-alert" data-tone="critical" role="alert">
-              <span>Sandbox settings could not be loaded. {String(data.error)}</span>
-              <button
-                type="button"
-                class="settings-inline-action"
-                disabled={data.loading || saving()}
-                onClick={() => void refetch()}
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
+      <div class="settings-page-header">
+        <div class="settings-page-header__inner">
+          <h2 class="text-16-medium text-text-strong">Execution sandbox</h2>
+          <p class="text-13-regular text-text-weak">
+            Permissions decide <em>whether</em> the agent runs a shell command — not what it can reach once it does.
+            OpenScience confines local terminals, kernels, and shell commands by default: writes are limited to
+            authorized project roots and network egress is bounded to an allowlist of approved hosts unless you
+            explicitly widen or restrict the machine-wide policy.
+          </p>
+        </div>
+      </div>
+
+      <div class="settings-page-body">
+        {/* ── Unmet prerequisite ── shown ABOVE availability, because a green
+             backend beside "installs will fail" reads as a contradiction, and
+             this is the one the user has to act on. */}
+        <Show when={data()?.blocked}>
+          {(message) => (
+            <div class="flex items-start gap-2 rounded-[4px] border border-text-warning/30 bg-text-warning/5 px-4 py-3 text-12-regular text-text-warning">
+              <Icon name="stop" />
+              <pre class="whitespace-pre-wrap font-sans">{message()}</pre>
+            </div>
+          )}
+        </Show>
+
+        {/* ── Backend availability ── */}
+        <Show when={status()}>
+          {(s) => (
+            <div
+              class="flex items-center gap-2 rounded-[4px] border px-4 py-3 text-12-regular"
+              classList={{
+                "border-border-weak-base bg-surface-base/40 text-text-weak": s().available,
+                "border-text-warning/30 bg-text-warning/5 text-text-warning": !s().available,
+              }}
+            >
+              <Icon name={s().available ? "check" : "stop"} class={s().available ? "text-text-success" : ""} />
+              <Show
+                when={s().available}
+                fallback={
+                  <span>
+                    No sandbox backend on this machine ({s().platform}) — {s().reason}.
+                  </span>
+                }
               >
                 Retry
               </button>
@@ -326,19 +368,169 @@ const Sandbox: Component = () => {
             </div>
           </Section>
 
-          <Show when={config().enabled !== false}>
-            <Section
-              title="Policy"
-              description="Choose the default autonomy and containment policy for local commands."
-            >
-              <div class="settings-card settings-preferences-card">
-                <div class="settings-row settings-sandbox-control-row">
-                  <div class="settings-row-copy">
-                    <strong>Require project trust</strong>
-                    <span>
-                      {config().requireProjectTrust === true
-                        ? "Every project must be trusted before it can start terminals, kernels, or local jobs."
-                        : "Sandboxed terminals, kernels, and local jobs can run immediately. Remote jobs, kernel environment changes, project extensions, and unsandboxed execution still require trust."}
+        {/* ── Enable ── */}
+        <section class="flex flex-col gap-3">
+          <div class="flex items-center justify-between border border-border-weak-base rounded-[4px] px-4 py-3.5 bg-surface-base/40">
+            <div class="flex flex-col gap-0.5 min-w-0 pr-4">
+              <span class="text-14-medium text-text-strong">Sandbox agent commands</span>
+              <span class="text-12-regular text-text-weak">
+                {config().enabled !== false
+                  ? "On — commands run confined to the workspace."
+                  : "Off — commands run with your full user authority."}
+              </span>
+            </div>
+            <Switch
+              checked={config().enabled !== false}
+              disabled={busy()}
+              onChange={(checked) => patch({ enabled: checked }, "Couldn't update the sandbox setting")}
+            />
+          </div>
+        </section>
+
+        {/* ── Options (only when enabled) ── */}
+        <Show when={config().enabled !== false}>
+          <section class="flex flex-col gap-4">
+            <h3 class="text-13-medium text-text-strong">Policy</h3>
+
+            <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+              <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5 border-b border-border-weak-base">
+                <div class="flex flex-col gap-0.5 min-w-0">
+                  <span class="text-14-medium text-text-strong">Network egress</span>
+                  <span class="text-12-regular text-text-weak">
+                    Allowlist bounds sandboxed commands to approved hosts (default). Allow removes that boundary —
+                    unrestricted egress. Deny blocks the network entirely.
+                  </span>
+                </div>
+                <Select
+                  options={NETWORK_OPTS}
+                  current={NETWORK_OPTS.find((o) => o.value === (config().network ?? "allowlist"))}
+                  value={(o) => o.value}
+                  label={(o) => o.label}
+                  onSelect={(o) => o && patch({ network: o.value }, "Couldn't update network policy")}
+                  variant="secondary"
+                  size="small"
+                  triggerVariant="settings"
+                />
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5">
+                <div class="flex flex-col gap-0.5 min-w-0">
+                  <span class="text-14-medium text-text-strong">When no backend is available</span>
+                  <span class="text-12-regular text-text-weak">
+                    On a machine with no sandbox (e.g. Windows), how to handle a command.
+                  </span>
+                </div>
+                <Select
+                  options={UNAVAILABLE_OPTS}
+                  current={UNAVAILABLE_OPTS.find((o) => o.value === (config().onUnavailable ?? "error"))}
+                  value={(o) => o.value}
+                  label={(o) => o.label}
+                  onSelect={(o) => o && patch({ onUnavailable: o.value }, "Couldn't update fallback behavior")}
+                  variant="secondary"
+                  size="small"
+                  triggerVariant="settings"
+                />
+              </div>
+            </div>
+
+            {/* extra allowed hosts — only meaningful under allowlist */}
+            <Show when={(config().network ?? "allowlist") === "allowlist"}>
+              <div class="flex flex-col gap-2">
+                <span class="text-13-medium text-text-strong">Extra allowed hosts</span>
+                <span class="text-12-regular text-text-weak/70">
+                  Hosts sandboxed commands may reach beyond the built-in research allowlist. A leading dot matches
+                  subdomains, e.g. <code>.internal.example.com</code>.
+                </span>
+                <For each={config().allowHosts ?? []}>
+                  {(h) => (
+                    <div class="flex items-center justify-between border border-border-weak-base rounded-[4px] px-3 py-2 bg-surface-base/40">
+                      <code class="text-12-regular text-text-strong truncate">{h}</code>
+                      <Button size="small" variant="secondary" disabled={busy()} onClick={() => removeHost(h)}>
+                        <Icon name="trash" />
+                      </Button>
+                    </div>
+                  )}
+                </For>
+                <div class="flex items-center gap-2">
+                  <input
+                    class="flex-1 bg-surface-base/40 border border-border-weak-base rounded-[4px] px-3 py-2 text-12-regular text-text-strong outline-none focus:border-border-strong"
+                    placeholder="pypi.example.com"
+                    value={newHost()}
+                    onInput={(e) => setNewHost(e.currentTarget.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addHost()}
+                  />
+                  <Button size="small" variant="secondary" disabled={busy() || !newHost().trim()} onClick={addHost}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </Show>
+
+            {/* extra writable paths */}
+            <div class="flex flex-col gap-2">
+              <span class="text-13-medium text-text-strong">Extra writable paths</span>
+              <span class="text-12-regular text-text-weak/70">
+                Absolute paths — beyond the workspace and temp dirs — the sandbox may write to.
+              </span>
+              <For each={config().allowWrite ?? []}>
+                {(p) => (
+                  <div class="flex items-center justify-between border border-border-weak-base rounded-[4px] px-3 py-2 bg-surface-base/40">
+                    <code class="text-12-regular text-text-strong truncate">{p}</code>
+                    <Button size="small" variant="secondary" disabled={busy()} onClick={() => removePath(p)}>
+                      <Icon name="trash" />
+                    </Button>
+                  </div>
+                )}
+              </For>
+              <div class="flex items-center gap-2">
+                <input
+                  class="flex-1 bg-surface-base/40 border border-border-weak-base rounded-[4px] px-3 py-2 text-12-regular text-text-strong outline-none focus:border-border-strong"
+                  placeholder="/absolute/path"
+                  value={newPath()}
+                  onInput={(e) => setNewPath(e.currentTarget.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addPath()}
+                />
+                <Button size="small" variant="secondary" disabled={busy() || !newPath().trim()} onClick={addPath}>
+                  Add
+                </Button>
+              </div>
+            </div>
+
+            {/* self-test */}
+            <div class="flex flex-col gap-3 border border-border-weak-base rounded-[4px] p-4 bg-surface-base/40">
+              <div class="flex items-center justify-between gap-4">
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-14-medium text-text-strong">Verify containment</span>
+                  <span class="text-12-regular text-text-weak">
+                    Runs real sandboxed commands to prove writes and network are actually confined.
+                  </span>
+                </div>
+                <Button size="small" variant="secondary" disabled={testing() || !status()?.available} onClick={runTest}>
+                  {testing() ? "Testing…" : "Run self-test"}
+                </Button>
+              </div>
+              <Show when={test()}>
+                {(t) => (
+                  <div class="flex flex-col gap-1.5 pt-1">
+                    <For each={t().checks}>
+                      {(c) => (
+                        <div class="flex items-center gap-2 text-12-regular">
+                          <Icon
+                            name={c.skipped ? "dash" : c.pass ? "check" : "close"}
+                            class={c.skipped ? "text-text-weak" : c.pass ? "text-text-success" : "text-text-danger"}
+                          />
+                          <span class="text-text-strong">{c.name}</span>
+                          <Show when={c.detail}>
+                            <span class="text-text-weak/70">— {c.detail}</span>
+                          </Show>
+                        </div>
+                      )}
+                    </For>
+                    <span
+                      class="text-12-medium pt-1"
+                      classList={{ "text-text-success": t().ok, "text-text-danger": !t().ok }}
+                    >
+                      {t().ok ? "Containment verified." : "Containment failed — do not rely on the sandbox."}
                     </span>
                   </div>
                   <Switch

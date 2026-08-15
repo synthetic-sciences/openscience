@@ -141,3 +141,55 @@ test("mergeByokEnv supports the canonical direct-provider set and aliases", () =
   expect(merged.DEEPSEEK_API_KEY).toBe("deepseek-user")
   expect(merged.PERPLEXITY_API_KEY).toBe("perplexity-user")
 })
+
+test("kernel env filtering matches Windows environment keys, which are case-insensitive", () => {
+  // Windows presents these as Path, SystemRoot, windir, ComSpec — never the
+  // uppercase spellings the allowlist was written in. Every comparison here was
+  // exact, so on Windows a kernel launched with NO PATH and NO SystemRoot.
+  // Measured downstream as `CreateProcess ... Win32 203` (ERROR_ENVVAR_NOT_FOUND)
+  // when the AppContainer launcher tried to start the interpreter.
+  const filtered = OpenScience.filterEnvForKernel({
+    Path: "C:\\Python312;C:\\Windows\\system32",
+    SystemRoot: "C:\\Windows",
+    windir: "C:\\Windows",
+    ComSpec: "C:\\Windows\\system32\\cmd.exe",
+    PATHEXT: ".COM;.EXE;.BAT",
+    Tmp: "C:\\Users\\me\\AppData\\Local\\Temp",
+  })
+  expect(filtered["Path"]).toBe("C:\\Python312;C:\\Windows\\system32")
+  expect(filtered["SystemRoot"]).toBe("C:\\Windows")
+  expect(filtered["windir"]).toBe("C:\\Windows")
+  expect(filtered["ComSpec"]).toBe("C:\\Windows\\system32\\cmd.exe")
+  expect(filtered["PATHEXT"]).toBe(".COM;.EXE;.BAT")
+  expect(filtered["Tmp"]).toBe("C:\\Users\\me\\AppData\\Local\\Temp")
+})
+
+test("kernel env filtering still withholds secrets, whatever their casing", () => {
+  // This is a security boundary, and the fix above widened the match. Folding
+  // case must not become a hole: a kernel runs arbitrary user code, so anything
+  // outside the runtime allowlist has to stay on the host regardless of how it
+  // is spelled.
+  const filtered = OpenScience.filterEnvForKernel({
+    PATH: "/usr/bin",
+    OPENROUTER_API_KEY: "thk_managed_openrouter",
+    openrouter_api_key: "thk_lowercase",
+    ANTHROPIC_API_KEY: "sk-ant-secret",
+    AWS_SECRET_ACCESS_KEY: "aws-secret",
+    GITHUB_TOKEN: "ghp_secret",
+    OPENSCIENCE_API_BASE: "https://atlas.test",
+    Path_To_Secrets: "should not pass",
+  })
+  expect(filtered["PATH"]).toBe("/usr/bin")
+  for (const key of [
+    "OPENROUTER_API_KEY",
+    "openrouter_api_key",
+    "ANTHROPIC_API_KEY",
+    "AWS_SECRET_ACCESS_KEY",
+    "GITHUB_TOKEN",
+    "OPENSCIENCE_API_BASE",
+    // Prefix entries without a trailing underscore must stay EXACT matches, or
+    // folding case turns "PATH" into a prefix that swallows unrelated names.
+    "Path_To_Secrets",
+  ])
+    expect(filtered[key]).toBeUndefined()
+})

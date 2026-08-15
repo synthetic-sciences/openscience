@@ -10,6 +10,7 @@ import { OpenScience } from "../openscience"
 import { Shell } from "../shell/shell"
 import { Instance } from "../project/instance"
 import { Sandbox } from "../sandbox/sandbox"
+import { EgressRuntime } from "../sandbox/egress-runtime"
 import { Filesystem } from "../util/filesystem"
 import { FileLease } from "../util/file-lease"
 import { ProvenanceEnvelope } from "../science/provenance/envelope"
@@ -237,6 +238,10 @@ export namespace ComputeJobs {
     recovery_attempts: z.number().int().nonnegative().optional(),
     recovery_retry_at: z.string().optional(),
     session_id: z.string().startsWith("ses_").optional(),
+    // Persists the whole Decision, including its own sandbox.network — a
+    // second copy of the persisted enum below `sandbox.network` carries; see
+    // the comment on ExecutionAuthority.Decision for the downgrade cost of
+    // widening either one.
     authority: ExecutionAuthority.Decision.optional(),
     scope: z
       .object({
@@ -248,8 +253,11 @@ export namespace ComputeJobs {
       .object({
         requested: z.boolean(),
         enforced: z.boolean(),
-        backend: z.enum(["seatbelt", "bubblewrap", "none"]),
-        network: z.enum(["allow", "deny"]),
+        backend: z.enum(["seatbelt", "bubblewrap", "appcontainer", "none"]),
+        // Persisted — widening this costs an older binary its ability to
+        // read a newer record. `authority.sandbox.network` above is the same
+        // enum persisted a second time; see ExecutionAuthority.Decision.
+        network: z.enum(["deny", "allowlist", "allow"]),
         warning: z.string().optional(),
       })
       .optional(),
@@ -335,6 +343,8 @@ export namespace ComputeJobs {
     argv: string[]
     sandbox?: Job["sandbox"]
     temporary?: string
+    /** HTTP_PROXY-shaped route to the egress proxy, when the policy has one. */
+    env?: Record<string, string>
   }
 
   const active = new Map<string, Runtime>()
@@ -1282,6 +1292,25 @@ export namespace ComputeJobs {
     }
   }
 
+  /**
+   * The network policy that actually applies to an SSH transport.
+   *
+   * "allowlist" is relaxed to "allow" because that policy is HTTP-only: it
+   * severs the network namespace and offers one HTTP proxy socket, which ssh
+   * cannot use at all — it does not read HTTP_PROXY and needs ProxyCommand or
+   * SOCKS. Applying it to ssh is not bounded egress, it is denial with a
+   * confusing error, and it buys nothing: the job's command runs on the remote
+   * machine, so the process being confined is a transport rather than the
+   * workload.
+   *
+   * An explicit "deny" is left alone. That is a user saying no network, not a
+   * default they never chose, and honouring it is the difference between
+   * relaxing a default and overriding an instruction.
+   */
+  export function transportNetwork(requested: "deny" | "allowlist" | "allow") {
+    return requested === "allowlist" ? ("allow" as const) : requested
+  }
+
   async function launch(
     job: Job,
     host: Host | undefined,
@@ -1290,14 +1319,43 @@ export namespace ComputeJobs {
   ): Promise<Launch> {
     const spec = command(job, host)
     if (host) {
+      // The ssh CLIENT is what gets wrapped here; the job's command runs on the
+      // remote machine. Two consequences.
+      //
+      // Network containment of this process buys nothing — the code being
+      // confined is a transport, not the workload — and under "allowlist" it
+      // actively breaks the feature: that policy severs the network namespace
+      // and offers one HTTP proxy socket as the only route out, which ssh
+      // cannot use. It reads HTTP_PROXY not at all and needs ProxyCommand or
+      // SOCKS. So an allowlist remote job did not fail closed with a useful
+      // message, it failed with an opaque connection error on the default
+      // policy.
+      //
+      // Filesystem containment still matters and is kept: ssh reads keys and
+      // can write locally. Only the network dimension is relaxed, and the value
+      // reported below is the one actually applied, not the one requested —
+      // reporting "allowlist" for a process running unconfined would be worse
+      // than the original bug.
+      const network = transportNetwork(authority.sandbox.network)
+      const relaxed = { ...authority.sandbox, network }
+      const egress = await EgressRuntime.egressFor(relaxed)
       const planned = Sandbox.wrapArgv({
         file: spec.argv[0]!,
         args: spec.argv.slice(1),
         workspace: authority.writable,
         readable: authority.readable,
         unreadable: OpenScience.kernelSensitivePaths(),
-        options: authority.sandbox,
+        options: { ...relaxed, egress },
       })
+      const note =
+        network === authority.sandbox.network
+          ? planned.warning
+          : [
+              planned.warning,
+              "network left unconfined for the ssh transport: the allowlist proxy is HTTP-only and ssh cannot use it. The job's own command runs on the remote host, outside this sandbox either way.",
+            ]
+              .filter(Boolean)
+              .join(" ")
       return {
         argv: [planned.file, ...planned.args],
         temporary: planned.temporary,
@@ -1305,15 +1363,17 @@ export namespace ComputeJobs {
           requested: authority.sandbox.enabled,
           enforced: planned.sandboxed,
           backend: planned.backend,
-          network: authority.sandbox.network,
-          warning: planned.warning,
+          network,
+          warning: note,
         },
+        env: planned.env,
       }
     }
 
     await fs.mkdir(logsOf(scope.root), { recursive: true })
     await fs.writeFile(exitOf(scope.root, job.id), "", { mode: 0o600 })
     const wrapped = `(${job.command}\n); code=$?; printf %s "$code" > ${quote(exitOf(scope.root, job.id))}; exit "$code"`
+    const egress = await EgressRuntime.egressFor(authority.sandbox)
     const planned = Sandbox.wrapArgv({
       file: Shell.acceptable(),
       args: ["-lc", wrapped],
@@ -1321,7 +1381,7 @@ export namespace ComputeJobs {
       readable: authority.readable,
       extraWritable: [exitOf(scope.root, job.id)],
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: authority.sandbox,
+      options: { ...authority.sandbox, egress },
     })
     return {
       argv: [planned.file, ...planned.args],
@@ -1333,6 +1393,7 @@ export namespace ComputeJobs {
         network: authority.sandbox.network,
         warning: planned.warning,
       },
+      env: planned.env,
     }
   }
 
@@ -1342,13 +1403,14 @@ export namespace ComputeJobs {
     authority: ExecutionAuthority.Decision,
   ): Promise<string | undefined> {
     await currentAuthority(authority)
+    const egress = await EgressRuntime.egressFor(authority.sandbox)
     const planned = Sandbox.wrapArgv({
       file: argv[0]!,
       args: argv.slice(1),
       workspace: authority.writable,
       readable: authority.readable,
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: authority.sandbox,
+      options: { ...authority.sandbox, egress },
     })
     try {
       const proc = Bun.spawn([planned.file, ...planned.args], {

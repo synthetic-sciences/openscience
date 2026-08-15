@@ -137,7 +137,7 @@ describe("kernel runtime presentation", () => {
   })
 
   test("states network reach on its own, with an open network as the notable case", () => {
-    const sandboxed = (network: "deny" | "allow", enforced = true) =>
+    const sandboxed = (network: "deny" | "allowlist" | "allow", enforced = true) =>
       kernel({
         environment: {
           cwd: "/work/project",
@@ -148,8 +148,14 @@ describe("kernel runtime presentation", () => {
 
     expect(kernelNetworkLabel(sandboxed("deny"))).toBe("Network disabled")
     expect(kernelNetworkTone(sandboxed("deny"))).toBe("muted")
+
+    // "allowlist" is bounded egress, not the open network "allow" is — it must
+    // read as neither "disabled" nor plain "allowed".
+    expect(kernelNetworkLabel(sandboxed("allowlist"))).toBe("Network bounded")
+    expect(kernelNetworkTone(sandboxed("allowlist"))).toBe("pending")
+
     expect(kernelNetworkLabel(sandboxed("allow"))).toBe("Network allowed")
-    expect(kernelNetworkTone(sandboxed("allow"))).toBe("pending")
+    expect(kernelNetworkTone(sandboxed("allow"))).toBe("danger")
 
     // A sandbox that was asked for but never took hold does not block anything,
     // whatever its recorded network setting says.

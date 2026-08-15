@@ -1331,14 +1331,18 @@ describe("ComputeJobs Modal governance", () => {
           { root, workspace: tmp.path, modal, credentials, provider },
         ),
     })
-    const delivery = async (attempts = 100): Promise<ComputeJobs.Job> => {
-      const current = await ComputeJobs.get(job.id, { root, workspace: tmp.path })
-      if (current?.lifecycle?.delivery === "failed") return current
-      if (!attempts) throw new Error("Timed out waiting for recoverable Modal Volume")
-      await Bun.sleep(20)
-      return delivery(attempts - 1)
-    }
-    const failed = await delivery()
+    // ComputeJobs.wait, not a hand-rolled poll on the persisted lifecycle. This
+    // is the only pair of tests in the file that rolled its own, and it is the
+    // pair that then calls retry() -- which refuses while a recovery is still
+    // active. `delivery: "failed"` is written by deferModal, but `active` is
+    // cleared in a .finally() AFTER that, so the state a poll can see becomes
+    // true strictly before retry() will accept it. On a loaded CI runner the
+    // gap opened and the run failed with
+    // "Compute job ... already has an active recovery" -- the same race, one test over
+    //
+    // wait() already encodes exactly retry()'s precondition: terminal, not
+    // pending, and not active.
+    const failed = await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 10_000 })
 
     expect(failed.status).toBe("succeeded")
     expect(failed.exit_code).toBe(0)
@@ -2091,5 +2095,37 @@ describe("ComputeJobs project boundaries", () => {
     } finally {
       await fs.rm(outside, { force: true })
     }
+  })
+})
+
+describe("ComputeJobs ssh transport network policy", () => {
+  test("allowlist is relaxed, because the allowlist proxy is HTTP-only", () => {
+    // The bug: under "allowlist" the ssh CLIENT was wrapped in a severed
+    // network namespace whose only exit is an HTTP proxy socket. ssh does not
+    // read HTTP_PROXY and cannot use it, so remote jobs failed with an opaque
+    // connection error on the shipped default policy.
+    expect(ComputeJobs.transportNetwork("allowlist")).toBe("allow")
+  })
+
+  test("an explicit deny is honoured, not overridden", () => {
+    // The line between relaxing a default nobody chose and overriding an
+    // instruction somebody gave. A user who set "deny" means it.
+    expect(ComputeJobs.transportNetwork("deny")).toBe("deny")
+  })
+
+  test("allow is unchanged", () => {
+    expect(ComputeJobs.transportNetwork("allow")).toBe("allow")
+  })
+
+  test("the relaxation is reported, never silent", async () => {
+    // Reporting "allowlist" for a process actually running unconfined would be
+    // worse than the original bug, so the launch path reports the policy it
+    // applied and says why.
+    const source = await Bun.file(new URL("../../src/compute/jobs.ts", import.meta.url).pathname).text()
+    expect(source.includes("network left unconfined for the ssh transport")).toBe(true)
+    // The ssh branch reports the policy it APPLIED. The local-job branch below
+    // it still reports authority.sandbox.network, and correctly so — there the
+    // requested policy is the applied one, and nothing is relaxed.
+    expect(source.includes("const network = transportNetwork(authority.sandbox.network)")).toBe(true)
   })
 })

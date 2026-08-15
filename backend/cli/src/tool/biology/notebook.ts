@@ -8,6 +8,7 @@ import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { ExecutionAuthority } from "@/project/execution"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { AuthorityProcessLedger } from "@/project/authority-process"
@@ -187,6 +188,7 @@ async function getKernel(sessionID: string): Promise<Kernel> {
     })
     // Confine the kernel to the workspace when execution sandboxing is on: it
     // runs arbitrary agent-authored code and shares Bash's threat model.
+    const egress = await EgressRuntime.egressFor(current.sandbox)
     const sandboxed = Sandbox.wrapArgv({
       file: pythonBin,
       args: ["-u", scriptPath],
@@ -194,7 +196,7 @@ async function getKernel(sessionID: string): Promise<Kernel> {
       readable: current.readable,
       extraWritable: [scriptPath, configPath, cachePath],
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: current.sandbox,
+      options: { ...current.sandbox, egress },
     })
     const launch = WindowsJobLauncher.wrap({ file: sandboxed.file, args: sandboxed.args })
     const proc = (() => {
@@ -204,6 +206,7 @@ async function getKernel(sessionID: string): Promise<Kernel> {
           env: {
             ...OpenScience.kernelEnv(process.env),
             ...OpenScience.pythonThreadCapEnv(process.env),
+            ...(sandboxed.env ?? {}),
             ATLAS_CLI_CONFIG_PATH: configPath,
             MPLCONFIGDIR: path.join(cachePath, "matplotlib"),
             XDG_CACHE_HOME: path.join(cachePath, "xdg"),

@@ -114,7 +114,16 @@ const KERNEL_RUNTIME_KEYS = new Set([
   "WINDIR",
   "PATHEXT",
   "COMSPEC",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
 ])
+/** Derived rather than hand-written so the two can never drift. Every prefix in
+ *  SAFE_ENV_PREFIXES is already uppercase, so only this set needs folding. */
+const KERNEL_RUNTIME_UPPER = new Set([...KERNEL_RUNTIME_KEYS].map((key) => key.toUpperCase()))
 const SAFE_SYNCED_KEYS = new Set([
   ...BYOK_LLM_ENV_KEYS,
   ...SYNCED_SERVICE_ENV_KEYS,
@@ -1171,9 +1180,23 @@ export namespace OpenScience {
     const result: Record<string, string> = {}
     for (const [key, value] of Object.entries(env)) {
       if (!value) continue
+      // Case-insensitive, because Windows environment keys are.
+      //
+      // Windows presents these as `Path`, `SystemRoot`, `windir` and `ComSpec`,
+      // and every comparison here was exact — so the allowlist matched none of
+      // them and a kernel on Windows ran with no PATH and no SystemRoot at all.
+      // Measured downstream as `CreateProcess ... Win32 203`
+      // (ERROR_ENVVAR_NOT_FOUND) when launching the interpreter.
+      //
+      // This only ever widens on Windows, where the OS itself treats these
+      // names case-insensitively, so `path` and `PATH` are the same variable
+      // and matching one but not the other was never a security boundary. The
+      // original casing is preserved in the result: the child should see its
+      // environment exactly as we did.
+      const upper = key.toUpperCase()
       const runtime =
-        SAFE_ENV_PREFIXES.some((prefix) => (prefix.endsWith("_") ? key.startsWith(prefix) : key === prefix)) ||
-        KERNEL_RUNTIME_KEYS.has(key)
+        SAFE_ENV_PREFIXES.some((prefix) => (prefix.endsWith("_") ? upper.startsWith(prefix) : upper === prefix)) ||
+        KERNEL_RUNTIME_UPPER.has(upper)
       if (runtime) result[key] = value
     }
     return result

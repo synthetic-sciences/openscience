@@ -8,7 +8,10 @@ import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
 import { SessionFilesystem } from "@/session/filesystem"
+import { Environment } from "@/package/environment"
+import { Installer } from "@/package/installer"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { KernelQueue } from "@/science/kernel/queue"
 import { KernelProcessIdentity } from "@/science/kernel/process"
 import { KernelRuntime } from "@/science/kernel/registry"
@@ -223,7 +226,40 @@ interface RawPayload {
   execution_count: number
 }
 
-async function findPython(override?: string): Promise<{ binary: string; version?: string }> {
+/**
+ * The interpreter a kernel runs. A managed environment's own interpreter wins
+ * when it exists; otherwise the host's.
+ *
+ * The fallback is deliberate. Failing closed on a missing environment would
+ * make a typo'd name indistinguishable from a broken machine — the exact
+ * failure mode this design started from, where a missing pip, a severed
+ * network and a read-only site-packages all surfaced as one opaque error.
+ */
+export async function findPython(
+  override?: string,
+  environment?: string,
+): Promise<{ binary: string; version?: string }> {
+  if (environment) {
+    // Run it, don't just stat it — the same check the PATH candidates below have
+    // always used. A venv's `Scripts\python.exe` on Windows is a REDIRECTOR that
+    // resolves its base interpreter from `pyvenv.cfg` at startup; when that
+    // resolution fails the file still exists, so an existence check hands the
+    // kernel a binary that cannot start. The observable was the redirector's own
+    // message, `No Python at '...'`, surfacing from a kernel-startup failure with
+    // nothing to connect it to the environment that produced it.
+    const bin = Installer.interpreter(environment)
+    if (await Bun.file(bin).exists()) {
+      // try/catch, not just an exit-code check: spawn THROWS on a file that
+      // exists but is not executable (EACCES), so a bare check would replace a
+      // broken environment with a crash. The candidate loop below has always
+      // been wrapped for the same reason.
+      try {
+        const proc = Bun.spawn([bin, "--version"], { stdout: "ignore", stderr: "ignore" })
+        await proc.exited
+        if (proc.exitCode === 0) return { binary: bin }
+      } catch {}
+    }
+  }
   const candidates = override ? [override] : ["python3", "python"]
   for (const bin of candidates) {
     try {
@@ -317,7 +353,8 @@ class PythonKernel implements Kernel {
     this.configPath = configPath
     this.cachePath = cachePath
 
-    const interpreter = await findPython(opts?.binary)
+    const interpreter = await findPython(opts?.binary, opts?.environment)
+    const base = opts?.environment ? await Installer.base(opts.environment) : undefined
     const workspace = opts?.sessionID
       ? await SessionFilesystem.processWriteRoots(opts.sessionID)
       : [Instance.directory, Instance.worktree]
@@ -327,11 +364,24 @@ class PythonKernel implements Kernel {
     // Confine the kernel to the workspace when the execution sandbox is on: the
     // runtime runs arbitrary agent-authored code — the same threat model as the
     // bash tool — so it must not be able to escape the boundary bash respects.
+    const egress = await EgressRuntime.egressFor({
+      enabled: policy.enabled,
+      network: opts?.sandboxNetwork ?? policy.network,
+      allowWrite: [...policy.allowWrite],
+      onUnavailable: policy.onUnavailable,
+    })
     const sandboxed = Sandbox.wrapArgv({
       file: interpreter.binary,
       args: ["-u", scriptPath],
       workspace,
-      readable,
+      // The environment and the interpreter it delegates to are READ-only. A
+      // writable environment would let arbitrary kernel code pip-install into it
+      // over the same allowlisted egress, reopening through the notebook tool the
+      // bypass the bash-tool refusal closes. And a venv is not a complete Python:
+      // its interpreter delegates to the installation named in `pyvenv.cfg`, which
+      // an AppContainer reaches only if granted — without it the redirector reports
+      // `No Python at '...'` for an interpreter that is present and working.
+      readable: [...readable, ...(opts?.environment ? [opts.environment, ...(base ? [base] : [])] : [])],
       extraWritable: [scriptPath, configPath, cachePath, ...(opts?.extraWritable ?? [])],
       unreadable: OpenScience.kernelSensitivePaths(),
       options: {
@@ -339,6 +389,7 @@ class PythonKernel implements Kernel {
         network: opts?.sandboxNetwork ?? policy.network,
         allowWrite: [...policy.allowWrite],
         onUnavailable: policy.onUnavailable,
+        egress,
       },
     })
     const cwd = opts?.cwd ?? (opts?.sessionID ? await SessionFilesystem.workspace(opts.sessionID) : Instance.directory)

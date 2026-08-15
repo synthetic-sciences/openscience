@@ -20,21 +20,68 @@ New local installs default to **Full access** for an immediately working researc
 
 ## Default behavior
 
-The global defaults are:
+- **Writes** are denied everywhere except the workspace (your working directory and its worktree), the system temp dirs, and any extra paths you allow. Everything else on disk is read-only to the agent.
+- **Reads** stay open. The threat model is *tampering and exfiltration*, not hiding your files from a tool that needs to read them.
+- **Network** is bounded by default (`allowlist`): sandboxed commands can reach a fixed set of research hosts (PyPI, NCBI, UniProt, PDB, EBI, and any hosts you add) through a host-side proxy, and nothing else. Set it to `deny` to block network egress entirely, or `allow` to remove the boundary and permit unrestricted egress.
+
+## Backends
+
+| Platform | Backend | Requirement |
+| --- | --- | --- |
+| macOS | Seatbelt (`sandbox-exec`) | Built in. |
+| Linux | bubblewrap (`bwrap`) | Install `bubblewrap`; unprivileged user namespaces must be enabled. |
+| Windows | — | No backend; commands run per `onUnavailable` (see below). |
+
+Check what's available on your machine with `openscience sandbox` or `openscience doctor`.
+
+## The `sandbox` command
+
+```bash
+openscience sandbox                 # status (backend + config)
+openscience sandbox enable          # turn on
+openscience sandbox enable --network deny          # block network egress entirely
+openscience sandbox enable --network allow         # remove the network boundary (unrestricted egress)
+openscience sandbox enable --allow-host pypi.example.com  # extra host reachable under allowlist (repeatable)
+openscience sandbox enable --allow /data/shared    # extra writable path (repeatable)
+openscience sandbox enable --on-unavailable error  # refuse to run where no backend exists
+openscience sandbox disable         # turn off
+openscience sandbox test            # empirical containment self-test
+```
+
+The sandbox is a machine-wide safety setting, so it is always written to your **global** config.
+
+| Flag | Meaning |
+| --- | --- |
+| `--network` | `deny`, `allowlist` (default), or `allow` network egress from sandboxed commands. `allowlist` bounds egress to a fixed set of research hosts plus anything you add with `--allow-host`; `allow` removes that boundary entirely. |
+| `--allow-host` | An extra host the sandbox may reach when `--network` is `allowlist`. Repeatable. |
+| `--allow` | An absolute path, beyond the workspace and temp dirs, the sandbox may write to. Repeatable. |
+| `--on-unavailable` | Behaviour where no backend exists: `warn` (default, runs unsandboxed with a notice), `error` (refuses to run), `allow` (runs unsandboxed silently). |
+
+## From the workspace GUI
+
+Open **Settings → Sandbox**. The panel shows whether a backend is available on this machine, an on/off toggle, the network and fallback policies, an editor for extra writable paths, and a **run self-test** button that shows the same containment checks the CLI does.
+
+## By hand (config)
+
+The sandbox is a `sandbox` block in your **global** `openscience.json` (or an enterprise **managed** config). `openscience sandbox enable` writes it for you. The policy is read **only** from global and managed config — never from a project's `openscience.json` — so opening an untrusted repo cannot weaken or disable your sandbox:
 
 ```jsonc
 {
   "sandbox": {
-    "enabled": false,
-    "network": "deny",
-    "allowWrite": [],
-    "onUnavailable": "error",
-    "requireProjectTrust": false
+    "enabled": true,
+    "network": "allowlist",
+    "allowHosts": ["internal.example.com"],
+    "allowWrite": ["/data/shared"],
+    "onUnavailable": "error"
   }
 }
 ```
 
-With this default, a trusted project runs with the same filesystem and network authority as your user account. Selecting **Approve for me** or **Ask for approval** writes `enabled: true`; with a working native backend, routine commands can then read and write only the active session workspace and explicitly granted paths, and network access is denied, including loopback, LAN, link-local, and metadata endpoints. When containment is requested but no backend is available, `onUnavailable: "error"` refuses to run rather than silently falling back to the host.
+- `enabled` — master switch. Off by default.
+- `network` — `deny`, `allowlist` (default), or `allow`.
+- `allowHosts` — extra hosts sandboxed processes may reach when `network` is `allowlist`. A leading dot matches subdomains, e.g. `.internal.example.com`.
+- `allowWrite` — extra absolute paths the sandbox may write to.
+- `onUnavailable` — `warn` (default) · `error` · `allow`, for machines with no backend.
 
 Set `requireProjectTrust: true` if you want a revoked or root-mismatched project blocked from every local process, even inside a verified sandbox.
 

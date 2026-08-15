@@ -19,8 +19,17 @@ async function pack(dir: string, output: string) {
     proc.exited,
   ])
   if (code !== 0) throw new Error(stderr || stdout)
-  const result = JSON.parse(stdout) as { filename?: string }[]
-  const file = result[0]?.filename
+  // `npm pack --json` changed shape: npm 11 and earlier return an array of
+  // entries, npm 12 returns an object keyed by package name. Indexing [0]
+  // yields undefined on npm 12, so this failed with "did not return a tarball"
+  // on any machine with a current npm while still passing on CI's older one.
+  // Accept both rather than pinning a version — the test is about npm's
+  // package *selection*, not about its output format.
+  const parsed = JSON.parse(stdout) as unknown
+  const entries = (Array.isArray(parsed) ? parsed : Object.values(parsed as Record<string, unknown>)) as {
+    filename?: string
+  }[]
+  const file = entries[0]?.filename
   if (!file) throw new Error(`npm pack did not return a tarball for ${dir}`)
   return path.join(output, file)
 }

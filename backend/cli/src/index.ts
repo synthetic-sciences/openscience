@@ -5,6 +5,13 @@
 // import time with empty env (sync only catches up later in middleware).
 import "./openscience/preload-env"
 
+// MUST be the next import, and must stay above every import below it. The three
+// sandbox re-entry points live in there, and they have to be answered before
+// this module's own import graph is evaluated: `./openscience` and friends
+// bootstrap the user's data directories at module scope, which cannot happen
+// inside an AppContainer. See the file header — it is the bug, not a caution.
+import "./sandbox/fastpath"
+
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
@@ -75,6 +82,14 @@ if (process.argv[2] === GROUP_LAUNCHER_ARG) {
     process.exit(1)
   }
 }
+
+// The sandbox re-entry points (`__egress-shim`, `__appcontainer-detached`,
+// `__appcontainer-launch`) were here, guarded by a comment claiming they ran
+// before any other CLI machinery. They did not: every static import above is
+// evaluated first, and one of them bootstraps the user's data directories at
+// module scope, which an AppContainer cannot do. They now live in
+// `./sandbox/fastpath`, imported at the top of this file so the ordering is
+// enforced by the module graph rather than asserted by a comment.
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {

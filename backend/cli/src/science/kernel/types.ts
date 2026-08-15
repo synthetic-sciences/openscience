@@ -36,8 +36,8 @@ export const KernelEnvironment = z.object({
   sandbox: z.object({
     requested: z.boolean(),
     enforced: z.boolean(),
-    backend: z.enum(["seatbelt", "bubblewrap", "none"]),
-    network: z.enum(["allow", "deny"]),
+    backend: z.enum(["seatbelt", "bubblewrap", "appcontainer", "none"]),
+    network: z.enum(["deny", "allowlist", "allow"]),
     platform: z.string(),
     available: z.boolean(),
     tool: z.string().optional(),
@@ -99,7 +99,7 @@ export interface ExecuteOptions {
  * Kernel managers consume this snapshot instead of re-reading mutable config. */
 export interface KernelSandboxPolicy {
   readonly enabled: boolean
-  readonly network: "allow" | "deny"
+  readonly network: "deny" | "allowlist" | "allow"
   readonly allowWrite: readonly string[]
   readonly onUnavailable: "warn" | "error" | "allow"
 }
@@ -136,6 +136,15 @@ export interface KernelStartOptions {
     /** Exact backend owner used by Linux's pre-exec subreaper gate. */
     linuxOwner?: { pid: number; identity: string }
   }
+  /**
+   * Directory of the managed package environment this kernel binds to.
+   *
+   * A start option, never part of `KernelIdentity`: putting it in the identity
+   * tuple would rekey every persisted record and orphan them. Distinct from
+   * `KernelEnvironment`, which is the kernel's *runtime* context (cwd, sandbox
+   * platform) and has nothing to do with installed packages.
+   */
+  environment?: string
 }
 
 export interface KernelProcess {

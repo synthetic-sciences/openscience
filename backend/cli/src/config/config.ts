@@ -767,9 +767,15 @@ export namespace Config {
           "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Disabled by default; enable it from the composer or Sandbox settings.",
         ),
       network: z
-        .enum(["allow", "deny"])
+        .enum(["deny", "allowlist", "allow"])
         .optional()
-        .describe("Whether sandboxed commands may reach the network. Default: deny."),
+        .describe("Whether sandboxed commands may reach the network. Default: allowlist."),
+      allowHosts: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Extra hosts sandboxed processes may reach when network is 'allowlist'. A leading dot matches subdomains, e.g. '.internal.example.com'.",
+        ),
       allowWrite: z
         .array(z.string())
         .optional()
@@ -1786,8 +1792,17 @@ export namespace Config {
     }
     const policy = { ...(base ?? {}), ...(managed ?? {}) }
     return {
+      // main's default, kept deliberately. This branch had flipped it to true;
+      // main's schema now documents "Disabled by default; enable it from the
+      // composer or Sandbox settings", which is a product decision a rebase has
+      // no business reversing quietly.
       enabled: policy.enabled ?? false,
+      // main's default too. This branch ADDS "allowlist" as a third state but does
+      // not make it the default: a rebase that changes what existing users get,
+      // on top of changing what the sandbox can do, is two changes wearing one
+      // commit. Callers that need it ask for it.
       network: policy.network ?? "deny",
+      allowHosts: policy.allowHosts ?? [],
       allowWrite: policy.allowWrite ?? [],
       onUnavailable: policy.onUnavailable ?? "error",
       requireProjectTrust: policy.requireProjectTrust ?? false,
