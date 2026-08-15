@@ -9,9 +9,7 @@
     "isInDisease": false,
     "isInferred": false,
     "maxDepth": 6,
-    "name": [
-      "M Phase"
-    ],
+    "name": ["M Phase"],
     "releaseDate": "2004-07-06",
     "speciesName": "Homo sapiens",
     "figure": [
@@ -33,14 +31,10 @@
         "isInDisease": false,
         "isInferred": false,
         "maxDepth": 5,
-        "name": [
-          "G2/M Transition"
-        ],
+        "name": ["G2/M Transition"],
         "releaseDate": "2004-07-06",
         "speciesName": "Homo sapiens",
-        "followingEvent": [
-          68886
-        ],
+        "followingEvent": [68886],
         "doi": "10.3180/REACT_2203.2",
         "hasDiagram": false,
         "hasEHLD": false,
@@ -69,14 +63,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Plasmodium falciparum",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -90,14 +80,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Saccharomyces cerevisiae",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -111,14 +97,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Schizosaccharomyces pombe",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -132,14 +114,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Dictyostelium discoideum",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -153,14 +131,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Caenorhabditis elegans",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -174,14 +148,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Drosophila melanogaster",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -195,14 +165,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Gallus gallus",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -216,14 +182,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Xenopus tropicalis",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -237,14 +199,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Danio rerio",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -258,14 +216,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Sus scrofa",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -279,14 +233,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Bos taurus",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -300,14 +250,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Canis familiaris",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -321,14 +267,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Rattus norvegicus",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -342,14 +284,10 @@
         "isInDisease": false,
         "isInferred": true,
         "maxDepth": 6,
-        "name": [
-          "M Phase"
-        ],
+        "name": ["M Phase"],
         "releaseDate": "2026-06-17",
         "speciesName": "Mus musculus",
-        "inferredFrom": [
-          68886
-        ],
+        "inferredFrom": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "schemaClass": "Pathway",
@@ -360,13 +298,7 @@
       {
         "dbId": 48887,
         "displayName": "Homo sapiens",
-        "name": [
-          "Homo sapiens",
-          "H. sapiens",
-          "Hs",
-          "human",
-          "man"
-        ],
+        "name": ["Homo sapiens", "H. sapiens", "Hs", "human", "man"],
         "taxId": "9606",
         "abbreviation": "HSA",
         "className": "Species",
@@ -386,9 +318,7 @@
       "dbId": 9821382,
       "displayName": "five stars",
       "definition": "externally reviewed",
-      "name": [
-        "five stars"
-      ],
+      "name": ["five stars"],
       "className": "ReviewStatus",
       "schemaClass": "ReviewStatus"
     },
@@ -406,14 +336,10 @@
         "isInDisease": false,
         "isInferred": false,
         "maxDepth": 4,
-        "name": [
-          "Mitotic Prophase"
-        ],
+        "name": ["Mitotic Prophase"],
         "releaseDate": "2004-07-06",
         "speciesName": "Homo sapiens",
-        "eventOf": [
-          68886
-        ],
+        "eventOf": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "lastUpdatedDate": "2023-03-29",
@@ -429,14 +355,10 @@
         "isInDisease": false,
         "isInferred": false,
         "maxDepth": 3,
-        "name": [
-          "Mitotic Prometaphase"
-        ],
+        "name": ["Mitotic Prometaphase"],
         "releaseDate": "2004-07-06",
         "speciesName": "Homo sapiens",
-        "eventOf": [
-          68886
-        ],
+        "eventOf": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "lastUpdatedDate": "2019-12-10",
@@ -451,14 +373,10 @@
         "isInDisease": false,
         "isInferred": false,
         "maxDepth": 5,
-        "name": [
-          "Mitotic Metaphase and Anaphase"
-        ],
+        "name": ["Mitotic Metaphase and Anaphase"],
         "releaseDate": "2012-09-18",
         "speciesName": "Homo sapiens",
-        "eventOf": [
-          68886
-        ],
+        "eventOf": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "lastUpdatedDate": "2020-03-16",
@@ -474,15 +392,10 @@
         "isInDisease": false,
         "isInferred": false,
         "maxDepth": 3,
-        "name": [
-          "Mitotic Telophase/Cytokinesis",
-          "cell division"
-        ],
+        "name": ["Mitotic Telophase/Cytokinesis", "cell division"],
         "releaseDate": "2004-07-06",
         "speciesName": "Homo sapiens",
-        "eventOf": [
-          68886
-        ],
+        "eventOf": [68886],
         "hasDiagram": true,
         "hasEHLD": false,
         "lastUpdatedDate": "2023-03-29",

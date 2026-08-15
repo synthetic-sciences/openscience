@@ -59,7 +59,7 @@ function printStatus(config?: Config.Sandbox) {
   if (enabled && !d.available) {
     UI.println("")
     UI.println(
-      `  ${S.TEXT_WARNING_BOLD}Note:${S.TEXT_NORMAL} sandbox is on but no backend exists here — ` +
+      `  ${S.TEXT_WARNING_BOLD}Note:${S.TEXT_NORMAL} sandbox is on but no backend exists here - ` +
         `execution follows the "${config?.onUnavailable ?? "error"}" fallback policy. It takes effect on machines with a backend.`,
     )
   }

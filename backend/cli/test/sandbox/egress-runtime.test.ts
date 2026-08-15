@@ -192,16 +192,21 @@ test("egressFor treats a missing enabled the same way decide() does: off", async
 })
 
 test.skipIf(Sandbox.backend() !== "bubblewrap")(
-  "egressFor treats a missing network the same way buildPolicy() does: allowlist",
+  "egressFor and buildPolicy() agree on what a missing network means",
   async () => {
-    // Old behaviour: a missing `network` read as "not allowlist" here, so
-    // this returned undefined while buildPolicy() (used by the same
-    // options a moment later, in Sandbox.plan/wrapArgv) still defaulted
-    // network to "allowlist" and demanded an egress socket — the exact
-    // "requires an egress socket path" crash, reproduced below without the
-    // fix.
+    // The property, not the value. These two read the same `Options` moments
+    // apart — egressFor decides whether to stand a proxy up, buildPolicy decides
+    // whether to demand one — so a disagreement between their defaults is a
+    // crash: "sandbox network 'allowlist' requires an egress socket path", from
+    // a caller that never mentioned the network at all.
+    //
+    // It has now been wrong in both directions. It read "not allowlist" here
+    // while buildPolicy defaulted to allowlist; then, after this branch aligned
+    // the config default to main's "deny", it read allowlist here while
+    // buildPolicy had moved to deny. The assertion is agreement, so it holds
+    // whichever value the default becomes next.
     const egress = await EgressRuntime.egressFor({ enabled: true })
-    expect(egress).toBeDefined()
+    expect(egress).toBeUndefined()
     expect(() =>
       Sandbox.plan({
         command: "true",

@@ -16,14 +16,8 @@
     "intactNameB": "p05067-pro_0000000092",
     "mutationA": false,
     "mutationB": false,
-    "altIdsA": [
-      "EBI-821758 (intact)",
-      "P05067-PRO_0000000092 (uniprotkb)"
-    ],
-    "altIdsB": [
-      "EBI-821758 (intact)",
-      "P05067-PRO_0000000092 (uniprotkb)"
-    ],
+    "altIdsA": ["EBI-821758 (intact)", "P05067-PRO_0000000092 (uniprotkb)"],
+    "altIdsB": ["EBI-821758 (intact)", "P05067-PRO_0000000092 (uniprotkb)"],
     "aliasesA": [
       "A4 (MI:0302 (gene name synonym))",
       "AD1 (MI:0302 (gene name synonym))",
@@ -63,26 +57,12 @@
     "typeB": "protein",
     "typeMIA": "MI:0326",
     "typeMIB": "MI:0326",
-    "xrefsA": [
-      "EBI-77613 (intact)"
-    ],
-    "xrefsB": [
-      "EBI-77613 (intact)"
-    ],
-    "annotationsA": [
-      "chain-seq-start (672)",
-      "chain-seq-end (713)"
-    ],
-    "annotationsB": [
-      "chain-seq-start (672)",
-      "chain-seq-end (713)"
-    ],
-    "checksumsA": [
-      "crc64 (3AC85563D7858C37)"
-    ],
-    "checksumsB": [
-      "crc64 (3AC85563D7858C37)"
-    ],
+    "xrefsA": ["EBI-77613 (intact)"],
+    "xrefsB": ["EBI-77613 (intact)"],
+    "annotationsA": ["chain-seq-start (672)", "chain-seq-end (713)"],
+    "annotationsB": ["chain-seq-start (672)", "chain-seq-end (713)"],
+    "checksumsA": ["crc64 (3AC85563D7858C37)"],
+    "checksumsB": ["crc64 (3AC85563D7858C37)"],
     "speciesA": "Homo sapiens",
     "speciesB": "Homo sapiens",
     "intraSpecies": "Homo sapiens",
@@ -105,36 +85,18 @@
     "featureCount": 0,
     "stoichiometryA": "0-0",
     "stoichiometryB": "0-0",
-    "identificationMethodsA": [
-      "predetermined"
-    ],
-    "identificationMethodsB": [
-      "predetermined"
-    ],
-    "identificationMethodMIIdentifiersA": [
-      "MI:0396"
-    ],
-    "identificationMethodMIIdentifiersB": [
-      "MI:0396"
-    ],
+    "identificationMethodsA": ["predetermined"],
+    "identificationMethodsB": ["predetermined"],
+    "identificationMethodMIIdentifiersA": ["MI:0396"],
+    "identificationMethodMIIdentifiersB": ["MI:0396"],
     "experimentalPreparationsA": null,
     "experimentalPreparationsB": null,
     "detectionMethod": "tem",
     "detectionMethodMIIdentifier": "MI:0020",
-    "authors": [
-      "Stroud JC.",
-      " Liu C.",
-      " Teng PK.",
-      " Eisenberg D."
-    ],
+    "authors": ["Stroud JC.", " Liu C.", " Teng PK.", " Eisenberg D."],
     "sourceDatabase": "DIP",
-    "identifiers": [
-      "DIP-87859E (dip)",
-      "EBI-15982574 (intact)"
-    ],
-    "confidenceValues": [
-      "intact-miscore:0.99"
-    ],
+    "identifiers": ["DIP-87859E (dip)", "EBI-15982574 (intact)"],
+    "confidenceValues": ["intact-miscore:0.99"],
     "expansionMethod": null,
     "xrefs": [
       "CPX-1062 (complex portal)",
@@ -166,11 +128,7 @@
     "hostOrganism": "In vitro",
     "hostOrganismTaxId": -1,
     "intactMiscore": 0.99,
-    "publicationIdentifiers": [
-      "EBI-15982555 (intact)",
-      "10.1073/pnas.1203193109 (doi)",
-      "22547798 (pubmed)"
-    ],
+    "publicationIdentifiers": ["EBI-15982555 (intact)", "10.1073/pnas.1203193109 (doi)", "22547798 (pubmed)"],
     "publicationAnnotations": [
       "Only protein-protein interactions",
       "Alzheimers - Interactions investigated in the context of Alzheimers disease"
@@ -186,12 +144,8 @@
     "taxIdBStyled": "9606__Homo sapiens__#335e94",
     "typeMIIdentifierStyled": "MI:0407__direct interaction__#43a2ca",
     "detectionMethodMIIdentifierStyled": "MI:0020__tem",
-    "identificationMethodMIAStyled": [
-      "MI:0396__predetermined"
-    ],
-    "identificationMethodMIBStyled": [
-      "MI:0396__predetermined"
-    ],
+    "identificationMethodMIAStyled": ["MI:0396__predetermined"],
+    "identificationMethodMIBStyled": ["MI:0396__predetermined"],
     "typeMIAStyled": "MI:0326__protein__ELLIPSE",
     "typeMIBStyled": "MI:0326__protein__ELLIPSE",
     "hostOrganismTaxIdStyled": "-1__In vitro__#8d6666",

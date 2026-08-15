@@ -182,9 +182,19 @@ test("the installer states what must be readable, never which backend needs tell
   expect(confined).not.toContain("win32")
   expect(installer).not.toContain("baseReadable")
 
+  // And the backend still decides what "readable" costs it. The bubblewrap
+  // branch used to re-bind those paths itself, filtered to /tmp; main's model
+  // binds every readable root explicitly and before the unreadable masks, so
+  // re-binding them afterwards re-exposed masked files. The seam is unchanged —
+  // the installer names paths, the backend decides — only the branch that does
+  // the deciding moved.
   const sandbox = await Bun.file(new URL("../../src/sandbox/sandbox.ts", import.meta.url).pathname).text()
-  const policy = sandbox.slice(sandbox.indexOf("const readBind"), sandbox.indexOf("const readBind") + 400)
-  expect(policy).toContain("/tmp")
+  const build = sandbox.slice(
+    sandbox.indexOf("function buildPolicy"),
+    sandbox.indexOf("export function seatbeltProfile"),
+  )
+  expect(build).toContain("input.readable")
+  expect(build).toContain('input.backend === "appcontainer"')
 })
 
 test("base() still reports the interpreter a venv delegates to", async () => {

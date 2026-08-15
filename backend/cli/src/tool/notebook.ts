@@ -354,7 +354,9 @@ class PythonKernel implements Kernel {
     this.cachePath = cachePath
 
     const interpreter = await findPython(opts?.binary, opts?.environment)
-    const base = opts?.environment ? await Installer.base(opts.environment) : undefined
+    // baseRoots, not base: on POSIX pyvenv.cfg's `home` is <prefix>/bin, so
+    // granting it alone leaves the standard library under <prefix>/lib unreachable.
+    const base = opts?.environment ? await Installer.baseRoots(opts.environment) : []
     const workspace = opts?.sessionID
       ? await SessionFilesystem.processWriteRoots(opts.sessionID)
       : [Instance.directory, Instance.worktree]
@@ -381,7 +383,7 @@ class PythonKernel implements Kernel {
       // its interpreter delegates to the installation named in `pyvenv.cfg`, which
       // an AppContainer reaches only if granted — without it the redirector reports
       // `No Python at '...'` for an interpreter that is present and working.
-      readable: [...readable, ...(opts?.environment ? [opts.environment, ...(base ? [base] : [])] : [])],
+      readable: [...readable, ...(opts?.environment ? [opts.environment, ...base] : [])],
       extraWritable: [scriptPath, configPath, cachePath, ...(opts?.extraWritable ?? [])],
       unreadable: OpenScience.kernelSensitivePaths(),
       options: {

@@ -2119,6 +2119,74 @@ export namespace Sandbox {
           detail: "curl not available — skipped",
         })
       }
+
+      // Windows only, and only because Windows is the one backend where "allow"
+      // can mean anything. seatbelt and bubblewrap deny every socket in every
+      // mode, so asserting that "allow" REACHES the network would demand a
+      // capability those platforms deliberately do not offer. AppContainer
+      // grants internetClient through a hand-marshalled SID_AND_ATTRIBUTES
+      // array, and this is the only check that can tell whether it took effect.
+      if (b === "appcontainer") {
+        const curl = Bun.which("curl")
+        // No output flag at all. Two earlier probes died on one: `-o /dev/null`
+        // made curl try to create C:\dev\null, and `-o NUL` failed INSIDE the
+        // container with exit 23 (CURLE_WRITE_ERROR) — curl had connected and
+        // received the response and could not write it, i.e. the network worked
+        // and the probe did not. Both were reported as network results.
+        const target = "https://example.com"
+        const curlCmd = `curl -m 5 -sf https://example.com`
+        if (!curl) {
+          checks.push({
+            name: "network egress blocked in deny mode",
+            pass: true,
+            skipped: true,
+            detail: "curl not available - skipped",
+          })
+        } else {
+          // The HOST first, unsandboxed. Without it, "the sandbox blocked this"
+          // and "this machine is offline" are indistinguishable and the check
+          // can only ever report an inconclusive skip.
+          const reachable =
+            Bun.spawnSync([curl, "-m", "5", "-sf", target], { stdout: "ignore", stderr: "ignore" }).exitCode === 0
+          /** Only these mean the network itself was refused. curl reports its own
+           *  problems with other codes, and blaming the sandbox for those is how
+           *  the last two probes lied. */
+          const refused = (status: number) => status === 6 || status === 7 || status === 28
+          const allowed = await run(curlCmd, "allow")
+          if (!reachable) {
+            checks.push({
+              name: "network egress blocked in deny mode",
+              pass: true,
+              skipped: true,
+              detail: "this machine has no outbound connectivity - inconclusive",
+            })
+          } else if (allowed.status !== 0 && !refused(allowed.status)) {
+            checks.push({
+              name: "network egress blocked in deny mode",
+              pass: true,
+              skipped: true,
+              detail: `the probe itself failed under allow (curl exit ${allowed.status}${firstLine(allowed.stderr) ? `, ${firstLine(allowed.stderr)}` : ", no stderr"}) - inconclusive`,
+            })
+          } else if (allowed.status !== 0) {
+            checks.push({
+              name: "network egress blocked in deny mode",
+              pass: false,
+              detail: `the host reached ${target} and the sandbox could not: the capability grant is not taking effect (exit ${allowed.status}${firstLine(allowed.stderr) ? `, ${firstLine(allowed.stderr)}` : ", no stderr"})`,
+            })
+          } else {
+            // Both halves, because either alone is satisfiable by a sandbox that
+            // does nothing: "deny blocks" passes on a machine with no network,
+            // and "allow reaches" passes on one with no containment.
+            checks.push({ name: "network egress works in allow mode", pass: true })
+            const denied = await run(curlCmd, "deny")
+            checks.push({
+              name: "network egress blocked in deny mode",
+              pass: denied.status !== 0,
+              detail: denied.status === 0 ? "egress succeeded despite deny" : undefined,
+            })
+          }
+        }
+      }
     } finally {
       try {
         fs.rmSync(outside, { force: true })

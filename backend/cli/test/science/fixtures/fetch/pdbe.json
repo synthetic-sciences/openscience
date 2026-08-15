@@ -7,21 +7,11 @@
     "deposition_date": "20200126",
     "release_date": "20200205",
     "revision_date": "20241120",
-    "experimental_method_class": [
-      "x-ray"
-    ],
-    "experimental_method": [
-      "X-ray diffraction"
-    ],
+    "experimental_method_class": ["x-ray"],
+    "experimental_method": ["X-ray diffraction"],
     "split_entry": [],
     "related_structures": [],
-    "entry_authors": [
-      "Liu, X.",
-      "Zhang, B.",
-      "Jin, Z.",
-      "Yang, H.",
-      "Rao, Z."
-    ],
+    "entry_authors": ["Liu, X.", "Zhang, B.", "Jin, Z.", "Yang, H.", "Rao, Z."],
     "number_of_entities": {
       "water": 1,
       "polypeptide": 2,

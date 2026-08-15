@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { Environment } from "../../src/package/environment"
 import { Installer } from "../../src/package/installer"
 import { Refuse } from "../../src/package/refuse"
@@ -48,9 +48,30 @@ async function approving() {
   }
 }
 
+// A global config write is process-wide and outlives the test that made it, so
+// it has to be undone or it leaks into whichever file bun runs next in this
+// process — see the same note in test/sandbox/egress-runtime.test.ts.
+afterEach(async () => {
+  const { Global } = await import("../../src/global")
+  const { Config } = await import("../../src/config/config")
+  const fs = await import("fs/promises")
+  const path = await import("path")
+  for (const name of ["openscience.jsonc", "openscience.json", "config.json"]) {
+    await fs.rm(path.join(Global.Path.config, name), { force: true }).catch(() => {})
+  }
+  Config.global.reset()
+})
+
 describe.skipIf(skip)("merge gate: a governed install under network allowlist", () => {
   test("the agent's only install route asks for approval and lands the package", async () => {
     await using tmp = await tmpdir({ git: true })
+    const { Config } = await import("../../src/config/config")
+    // Stated, not inherited. This used to read the ambient default and assert it
+    // was "allowlist" — which stopped being true the moment the default became
+    // main's "deny", and would have gone on passing vacuously if the default had
+    // drifted the other way. The gate is "an install works UNDER allowlist", so
+    // the policy is part of the test, not part of the environment.
+    await Config.setSandbox({ enabled: true, network: "allowlist" })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -72,9 +93,11 @@ describe.skipIf(skip)("merge gate: a governed install under network allowlist", 
         const directory = Environment.directory(Instance.project.id, "gate")
         expect((await Installer.verify(directory, ["tqdm"]))["tqdm"]).toMatch(/^\d/)
 
-        // And it happened under the allowlist policy, not with the sandbox off.
-        const policy = await (await import("../../src/config/config")).Config.trustedSandbox()
-        expect(policy.network ?? "allowlist").toBe("allowlist")
+        // And it happened under that policy, with the sandbox on — read back
+        // from the trusted resolver rather than from what was written.
+        const policy = await Config.trustedSandbox()
+        expect(policy.enabled).toBe(true)
+        expect(policy.network).toBe("allowlist")
       },
     })
   }, 600_000)

@@ -14,9 +14,7 @@
     "nomenclaturesymbol": "TP53",
     "nomenclaturename": "tumor protein p53",
     "nomenclaturestatus": "Official",
-    "mim": [
-      "191170"
-    ],
+    "mim": ["191170"],
     "genomicinfo": [
       {
         "chrloc": "17",

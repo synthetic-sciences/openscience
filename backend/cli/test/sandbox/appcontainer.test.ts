@@ -395,10 +395,16 @@ test("allow is not yet a superset of allowlist, and the code says so", async () 
   // under `allow`, the warning must narrow to non-HTTP.
   const source = await Bun.file(new URL("../../src/sandbox/sandbox.ts", import.meta.url).pathname).text()
   expect(source).toContain("THIS WORDING MUST NARROW")
-  // The two guards that make allow a superset elsewhere, asserted so a change to
-  // either is noticed here.
-  expect(source).toContain('if (policy.network !== "allow") args.push("--unshare-net")')
-  expect(source).toContain('if (policy.network !== "allow") lines.push("(deny network*)")')
+  // No longer a superset ANYWHERE, which changes what the follow-up is. main
+  // severs the network on bubblewrap and denies every socket on seatbelt in
+  // every mode, "allow" included, because neither can express "the internet but
+  // never host loopback". So Windows is now the only backend where "allow"
+  // reaches anything at all, and the three platforms disagree about what the
+  // word means. That is the thing to fix — by routing "allow" through the
+  // allowlist proxy with an unrestricted host list — and it is tracked here so
+  // it stays visible rather than becoming folklore.
+  expect(source).toContain('args.push("--unshare-net")')
+  expect(source).toContain("(deny default)")
 })
 
 test("the pipe never blocks the event loop waiting for a client", async () => {

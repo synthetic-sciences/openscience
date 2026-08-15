@@ -62,6 +62,29 @@ export namespace Installer {
    * says so. Without this the redirector reported `No Python at '...'` for an
    * interpreter that was present and working the whole time.
    */
+  /**
+   * Everything about the base installation that must be readable, not just the
+   * directory `pyvenv.cfg` names.
+   *
+   * On POSIX `home` is `<prefix>/bin` — the directory holding the interpreter —
+   * so granting it alone leaves `<prefix>/lib` unreachable, and with it the
+   * entire standard library. A python-build-standalone interpreter then falls
+   * back to its baked-in build prefix and dies before it can report why:
+   *
+   *     sys.path = ['/install/lib/python312.zip', '/install/lib/python3.12', ...]
+   *     Fatal Python error: init_fs_encoding: failed to get the Python codec
+   *     ModuleNotFoundError: No module named 'encodings'
+   *
+   * Invisible while bubblewrap mounted `--ro-bind / /`, because the whole tree
+   * was there whether or not anyone asked. On Windows `home` IS the prefix, so
+   * the parent is added only when the leaf is the POSIX `bin`.
+   */
+  export async function baseRoots(directory: string) {
+    const home = await base(directory)
+    if (!home) return []
+    return path.basename(home) === "bin" ? [home, path.dirname(home)] : [home]
+  }
+
   export async function base(directory: string) {
     const cfg = Bun.file(path.join(directory, "pyvenv.cfg"))
     if (!(await cfg.exists().catch(() => false))) return undefined
@@ -629,12 +652,12 @@ export namespace Installer {
     // start Python, not to modify the Python installation it runs on. Stated
     // unconditionally — which backend needs telling is the sandbox's business,
     // not the installer's.
-    const home = await base(directory)
+    const roots = await baseRoots(directory)
     return Sandbox.wrapArgv({
       file: argv[0]!,
       args: argv.slice(1),
       workspace: [directory, shared()],
-      ...(home ? { readable: [home] } : {}),
+      ...(roots.length ? { readable: roots } : {}),
       options: { ...policy, egress },
     })
   }

@@ -8,9 +8,7 @@
     "loadDate": "26-05-2018",
     "lastUpdate": "26-05-2018",
     "rawExperimentType": "SINGLE_CELL_RNASEQ_MRNA_BASELINE",
-    "technologyType": [
-      "smart-seq2"
-    ],
+    "technologyType": ["smart-seq2"],
     "numberOfAssays": 2942,
     "experimentalFactors": [
       "single cell identifier",
@@ -18,10 +16,7 @@
       "inferred cell type - ontology labels",
       "inferred cell type - authors labels"
     ],
-    "experimentProjects": [
-      "Human Cell Atlas - Data Portal",
-      "Human Cell Atlas"
-    ],
+    "experimentProjects": ["Human Cell Atlas - Data Portal", "Human Cell Atlas"],
     "experimentType": "Baseline"
   }
 }

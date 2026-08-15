@@ -76,15 +76,11 @@
       "volume": "83",
       "issue": "4",
       "pages": "456-64",
-      "lang": [
-        "eng"
-      ],
+      "lang": ["eng"],
       "nlmuniqueid": "0042124",
       "issn": "0020-7136",
       "essn": "",
-      "pubtype": [
-        "Journal Article"
-      ],
+      "pubtype": ["Journal Article"],
       "recordstatus": "PubMed - indexed for MEDLINE",
       "pubstatus": "4",
       "articleids": [
@@ -119,9 +115,7 @@
         }
       ],
       "references": [],
-      "attributes": [
-        "Has Abstract"
-      ],
+      "attributes": ["Has Abstract"],
       "pmcrefcount": "",
       "fulljournalname": "International journal of cancer",
       "elocationid": "",

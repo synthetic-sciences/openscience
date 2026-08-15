@@ -3,9 +3,7 @@
   "payload": {
     "iri": "http://purl.obolibrary.org/obo/CHEBI_15377",
     "lang": "en",
-    "description": [
-      "An oxygen hydride consisting of an oxygen atom that is covalently bonded to two hydrogen atoms"
-    ],
+    "description": ["An oxygen hydride consisting of an oxygen atom that is covalently bonded to two hydrogen atoms"],
     "synonyms": [
       "BOUND WATER",
       "H(2)O",
@@ -30,9 +28,7 @@
       "water"
     ],
     "annotation": {
-      "charge": [
-        0
-      ],
+      "charge": [0],
       "database_cross_reference": [
         "cas:7732-18-5",
         "gmelin:117",
@@ -45,9 +41,7 @@
         "reaxys:3587155",
         "wikipedia.en:Water"
       ],
-      "generalized_empirical_formula": [
-        "H2O"
-      ],
+      "generalized_empirical_formula": ["H2O"],
       "has_alternative_id": [
         "CHEBI:10743",
         "CHEBI:13352",
@@ -60,27 +54,13 @@
         "CHEBI:44819",
         "CHEBI:5585"
       ],
-      "has_obo_namespace": [
-        "chebi_ontology"
-      ],
-      "id": [
-        "CHEBI:15377"
-      ],
-      "inchi_key_string": [
-        "XLYOFNOQVPJJNP-UHFFFAOYSA-N"
-      ],
-      "inchi_string": [
-        "InChI=1S/H2O/h1H2"
-      ],
-      "mass": [
-        "18.015"
-      ],
-      "monoisotopic_mass": [
-        "18.01056"
-      ],
-      "smiles_string": [
-        "[H]O[H]"
-      ]
+      "has_obo_namespace": ["chebi_ontology"],
+      "id": ["CHEBI:15377"],
+      "inchi_key_string": ["XLYOFNOQVPJJNP-UHFFFAOYSA-N"],
+      "inchi_string": ["InChI=1S/H2O/h1H2"],
+      "mass": ["18.015"],
+      "monoisotopic_mass": ["18.01056"],
+      "smiles_string": ["[H]O[H]"]
     },
     "label": "water",
     "ontology_name": "chebi",
@@ -93,9 +73,7 @@
     "is_root": false,
     "short_form": "CHEBI_15377",
     "obo_id": "CHEBI:15377",
-    "in_subset": [
-      "3_STAR"
-    ],
+    "in_subset": ["3_STAR"],
     "obo_definition_citation": null,
     "obo_xref": [
       {

@@ -6,9 +6,7 @@
     "pmid": "37466043",
     "pmcid": "PMC10508479",
     "fullTextIdList": {
-      "fullTextId": [
-        "PMC10508479"
-      ]
+      "fullTextId": ["PMC10508479"]
     },
     "doi": "10.1002/vms3.1202",
     "title": "Interactions of dietary wheat cultivars and NSP-degrading enzyme on productive performance and egg quality traits.",
@@ -82,9 +80,7 @@
       ]
     },
     "dataLinksTagsList": {
-      "dataLinkstag": [
-        "altmetrics"
-      ]
+      "dataLinkstag": ["altmetrics"]
     },
     "journalInfo": {
       "issue": "5",
@@ -111,11 +107,7 @@
     "language": "eng",
     "pubModel": "Print-Electronic",
     "pubTypeList": {
-      "pubType": [
-        "Randomized Controlled Trial, Veterinary",
-        "research-article",
-        "Journal Article"
-      ]
+      "pubType": ["Randomized Controlled Trial, Veterinary", "research-article", "Journal Article"]
     },
     "grantsList": {
       "grant": [
@@ -167,12 +159,7 @@
       ]
     },
     "keywordList": {
-      "keyword": [
-        "Laying hens",
-        "Productive performance",
-        "Wheat cultivars",
-        "Egg Quality Indices"
-      ]
+      "keyword": ["Laying hens", "Productive performance", "Wheat cultivars", "Egg Quality Indices"]
     },
     "subsetList": {
       "subset": [

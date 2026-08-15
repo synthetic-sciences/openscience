@@ -850,9 +850,20 @@ describe("Sandbox network policy", () => {
     expect(args.join(" ")).not.toContain(".sock")
   })
 
-  test("allow neither unshares nor binds", () => {
+  test('"allow" is severed too, because bubblewrap cannot express anything narrower', () => {
+    // This branch let "allow" share the host network namespace. main does not,
+    // and its reasoning holds: bubblewrap cannot say "the internet but never
+    // host loopback" without a separately configured namespace, so sharing
+    // would hand arbitrary agent code every service bound to 127.0.0.1 — the
+    // user's databases, dev servers, agents, and the egress proxy of any other
+    // sandbox on the machine. It fails closed instead.
+    //
+    // The consequence is real and belongs in the open list, not hidden here:
+    // on this backend "allow" reaches nothing, so "allowlist" is the only mode
+    // with a route out, and that route is the audited one.
     const args = Sandbox.bubblewrapArgs({ writable: ["/w"], network: "allow" })
-    expect(args).not.toContain("--unshare-net")
+    expect(args).toContain("--unshare-net")
+    expect(args).not.toContain("/run/os/e.sock")
   })
 
   // The namespace must stay severed — the socket is the ONLY route out. If
@@ -1013,9 +1024,13 @@ describe("Sandbox network policy", () => {
   // silently unreachable on every real Mac. See seatbeltProfile's own doc
   // comment for why network-bind/network-inbound are included even though
   // this sandboxed process is only ever a TCP client, never a listener.
-  test("allowlist with a port emits deny before all three narrow allows, spelled tcp", () => {
+  test("allowlist narrows to exactly one loopback port, under a deny-by-default profile", () => {
+    // main rewrote the profile from `(allow default)` plus targeted denies to
+    // `(deny default)` plus targeted allows, so there is no `(deny network*)`
+    // line to order against any more — the deny is the profile's first rule and
+    // covers every operation that is not explicitly allowed below.
     const profile = Sandbox.seatbeltProfile({ writable: ["/w"], network: "allowlist", port: 54321 })
-    const deny = profile.indexOf("(deny network*)")
+    const deny = profile.indexOf("(deny default)")
     expect(deny).toBeGreaterThan(-1)
     for (const line of [
       '(allow network-bind (local tcp "localhost:54321"))',
@@ -1080,32 +1095,21 @@ describe("Sandbox network policy", () => {
   // Pins the deny/allow branches byte-for-byte: Policy.port only ever
   // affects the "allowlist" branch, so these two must come out exactly as
   // they did before this field existed.
-  test("deny and allow profiles are unaffected by the allowlist port machinery", () => {
-    const deny = Sandbox.seatbeltProfile({ writable: ["/w"], network: "deny" })
-    expect(deny.split("\n")).toEqual([
-      "(version 1)",
-      "(allow default)",
-      "(deny network*)",
-      "(deny file-write*)",
-      '(allow file-write* (subpath "/w"))',
-      '(allow file-write* (subpath "/dev"))',
-    ])
-    const allow = Sandbox.seatbeltProfile({ writable: ["/w"], network: "allow" })
-    expect(allow.split("\n")).toEqual([
-      "(version 1)",
-      "(allow default)",
-      "(deny file-write*)",
-      '(allow file-write* (subpath "/w"))',
-      '(allow file-write* (subpath "/dev"))',
-    ])
+  test("neither deny nor allow gets the allowlist port machinery", () => {
+    // The exact line-by-line profile this used to pin belonged to the old
+    // `(allow default)` shape. main inverted it to `(deny default)` plus
+    // explicit allows, so pinning the whole document again would just re-encode
+    // whatever main happens to emit today. The property that matters is that
+    // the port lines appear for "allowlist" and for nothing else.
+    for (const network of ["deny", "allow"] as const) {
+      const profile = Sandbox.seatbeltProfile({ writable: ["/w"], network })
+      expect(profile).toContain("(deny default)")
+      expect(profile).not.toContain("network-bind")
+      expect(profile).not.toContain("network-inbound")
+      expect(profile).not.toContain("network-outbound")
+    }
   })
-})
 
-describe("Sandbox.backend(platform)", () => {
-  // The injectable seam every darwin-only assertion in this branch depends
-  // on: nobody on this project can install sandbox-exec, so exercising the
-  // seatbelt code paths in plan()/wrapArgv()/EgressRuntime from Linux is
-  // only possible if `platform` overrides the real, probed detection below.
   test("darwin resolves to seatbelt regardless of the machine actually running the test", () => {
     expect(Sandbox.backend("darwin")).toBe("seatbelt")
   })
@@ -1247,7 +1251,24 @@ describe("Sandbox.plan/wrapArgv on darwin (seatbelt)", () => {
       workspace: ["/work/project"],
       options: { enabled: true, network: "allow" as const },
     }
-    expect(Sandbox.plan({ ...base, platform: process.platform })).toEqual(Sandbox.plan(base))
+    // `temporary` excluded: every plan now allocates its own private temp root,
+    // so two plans are never byte-identical by construction. The claim here is
+    // that naming this platform explicitly changes nothing else about the plan.
+    const injected = Sandbox.plan({ ...base, platform: process.platform })
+    const ambient = Sandbox.plan(base)
+    try {
+      const strip = ({ temporary, args, ...rest }: typeof injected) => ({
+        ...rest,
+        // The private temp appears as a bind path AND inside three env
+        // assignments, so substitute it wherever it occurs rather than trying
+        // to recognise each shape.
+        args: args?.map((value) => (temporary ? value.replaceAll(temporary, "<private>") : value)),
+      })
+      expect(strip(injected)).toEqual(strip(ambient))
+    } finally {
+      Sandbox.cleanup(injected)
+      Sandbox.cleanup(ambient)
+    }
   })
 })
 

@@ -798,6 +798,14 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
       async (kernel) => {
         if (stale()) return abort()
         value.environment = kernel.environment ?? null
+        // The managed environment DIRECTORY this kernel was started against, so
+        // `restartEnvironment` can find it after a non-additive install. Distinct
+        // from `environment` above, which is the kernel's runtime context (cwd,
+        // sandbox platform) and has nothing to do with packages — the two are
+        // carried separately precisely so they cannot be confused. Left null
+        // after the rebase, which meant the filter matched nothing and a version
+        // change silently kept a kernel holding stale imports.
+        value.boundEnvironment = options?.environment ?? null
         value.process = kernel.process ?? null
         value.ownershipID = kernel.process?.ownershipID ?? processOwnership.id
         value.authority = current
