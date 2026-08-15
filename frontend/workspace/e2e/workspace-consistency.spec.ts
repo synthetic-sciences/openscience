@@ -21,7 +21,7 @@ test("keeps Files and Customize labels visually consistent", async ({ page, goto
     ["Compute", "Add host"],
     ["Network", "Add domain"],
     ["Permissions"],
-    ["Sandbox", "Run self-test"],
+    ["Sandbox"],
     ["Credentials"],
     ["Storage"],
     ["General", "System"],

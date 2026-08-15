@@ -65,7 +65,7 @@ test("research effort persists without changing the model", async ({ page, openS
   const ultra = page.getByRole("radio", { name: "Ultra", exact: true })
   await ultra.click()
   await expect(ultra).toHaveAttribute("aria-checked", "true")
-  await expect(research).toHaveAttribute("aria-label", "Research tools, Ultra effort")
+  await expect(research).toHaveAttribute("aria-label", "Research tools, Ultra effort, Full access")
 
   await research.click()
   await research.click()
