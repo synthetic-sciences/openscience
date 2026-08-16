@@ -410,7 +410,21 @@ test.if(windows)(
       // reconstructing it with pip would exercise the exact upstream CPython
       // defect (python/cpython#134587) the uv path exists to route around — a
       // test failing for a reason the product deliberately avoids.
-      args: ["pip", "install", "-vv", "--python", Installer.interpreter(environment!), "--only-binary", ":all:", "six"],
+      // The canonical spelling, matching what install() now passes. os.tmpdir()
+      // yields an 8.3 short path on a runner, every path reaching grant() is
+      // canonicalised, and Windows checks the name presented rather than the
+      // file behind it — so handing uv the short form asks it to open a name no
+      // ACE mentions.
+      args: [
+        "pip",
+        "install",
+        "-vv",
+        "--python",
+        (await import("fs")).realpathSync.native(Installer.interpreter(environment!)),
+        "--only-binary",
+        ":all:",
+        "six",
+      ],
       workspace: [environment!, cache],
       readable: [...(home ? [home] : []), uv!],
       options: { ...policy, egress },

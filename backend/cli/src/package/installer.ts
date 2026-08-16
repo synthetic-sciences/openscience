@@ -728,6 +728,20 @@ export namespace Installer {
      * gets there at all, which `blocked()` already tells the user.
      */
     const uv = process.platform === "win32" ? which("uv") : undefined
+    // The CANONICAL spelling, not the one the directory was built from.
+    //
+    // `os.tmpdir()` on Windows can return an 8.3 short path (`C:\Users\RUNNER~1`),
+    // and every path that reaches `grant()` is canonicalised on the way — so the
+    // ACE lands on `C:\Users\runneradmin\...` while uv is handed
+    // `C:\Users\RUNNER~1\...`. Same file, different name, and Windows checks the
+    // name presented rather than the file behind it. This branch has already
+    // paid for that twice: uv's reparse-pointed interpreter directory, and the
+    // shim's lexical path under the data-root symlink.
+    const target = uv ? realpathSync.native(interpreter(input.directory)) : interpreter(input.directory)
+    if (uv && process.env["OPENSCIENCE_SANDBOX_DEBUG"] === "1") {
+      process.stderr.write(`openscience[install] interpreter as built: ${interpreter(input.directory)}\n`)
+      process.stderr.write(`openscience[install] interpreter canonical: ${target}\n`)
+    }
     const argv = uv
       ? [
           uv,
@@ -740,7 +754,7 @@ export namespace Installer {
           // this whole feature.
           ...(process.env["OPENSCIENCE_SANDBOX_DEBUG"] === "1" ? ["-vv"] : []),
           "--python",
-          interpreter(input.directory),
+          target,
           ...policy,
           ...(input.index ? ["--index-url", input.index] : []),
           ...input.packages,
