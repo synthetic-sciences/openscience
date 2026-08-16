@@ -350,7 +350,10 @@ test("uv being installed is not treated as proof of a usable interpreter", async
   // to install uv, did, and hit the identical error.
   const source = await Bun.file(new URL("../../src/package/installer.ts", import.meta.url).pathname).text()
   const body = source.slice(source.indexOf("export async function blocked()"))
-  expect(body).toContain("await managed()")
+  // managedDetail(), not managed(): the check now distinguishes "no usable
+  // interpreter" from "one that will fail to install under the sandbox", and
+  // only the second has a one-command remedy worth printing.
+  expect(body).toContain("await managedDetail()")
   // And the same answer PINS the rebuild, or a rebuild triggered because the old
   // base was ungrantable would let uv pick that same base again.
   const create = source.slice(source.indexOf("export async function create"))
@@ -361,13 +364,17 @@ test("uv being installed is not treated as proof of a usable interpreter", async
   const helper = source.slice(source.indexOf("export async function managed()"))
   // It asks uv what it HAS, and requires one we could actually be granted.
   expect(helper).toContain('"--output-format", "json"')
-  expect(helper).toContain("grantable(candidate)")
+  expect(helper).toContain("grantable(entry.path)")
+  // And it prefers an interpreter without the AppContainer mkdtemp defect.
+  // Choosing 3.12.4+ when an older one is installed builds an environment that
+  // downloads wheels fine and then cannot unpack them.
+  expect(helper).toContain("Number(affected(a)) - Number(affected(b))")
   // Only what uv MANAGES. `uv python list` also reports discovered system
   // interpreters and uv's own trampolines, and both are traps: the system one is
   // the ungrantable case this exists to route around, and pinning --python to a
   // trampoline gives "uv trampoline failed to spawn Python child process".
   expect(helper).toContain('"python", "dir"')
-  expect(helper).toContain("under(absolute(root), candidate)")
+  expect(helper).toContain("under(absolute(root), entry.path)")
 })
 
 test("uv paths are resolved against HOME, not the cwd", async () => {

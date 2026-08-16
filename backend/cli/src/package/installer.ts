@@ -374,6 +374,16 @@ export namespace Installer {
    * Then `grantable()`, which is the actual requirement: the sandbox can only be
    * granted paths the user owns.
    */
+  /** Does this interpreter carry the AppContainer `mkdtemp` defect? Everything
+   *  from CPython 3.12.4 onward does; see `managed()` for what that costs. */
+  const affected = (entry: { version_parts?: { major: number; minor: number; patch: number } }) => {
+    const v = entry.version_parts
+    if (!v) return false
+    if (v.major !== 3) return v.major > 3
+    if (v.minor !== 12) return v.minor > 12
+    return v.patch >= 4
+  }
+
   export async function managed(): Promise<string | undefined> {
     const uv = which("uv")
     if (!uv) return undefined
@@ -383,16 +393,56 @@ export namespace Installer {
       if (!root) return undefined
       const out = await ask(uv, "python", "list", "--only-installed", "--output-format", "json")
       if (!out) return undefined
-      const entries = JSON.parse(out) as Array<{ path?: string; key?: string; symlink?: string | null }>
-      const candidates = entries
-        .map((entry) => entry.path)
-        .filter((candidate): candidate is string => !!candidate)
-        .map(absolute)
-        .filter((candidate) => under(absolute(root), candidate) && grantable(candidate))
-      for (const candidate of candidates) if (await fs.stat(candidate).catch(() => undefined)) return candidate
+      const entries = JSON.parse(out) as Array<{
+        path?: string
+        key?: string
+        symlink?: string | null
+        version_parts?: { major: number; minor: number; patch: number }
+      }>
+      const usable = entries
+        .filter((entry) => !!entry.path)
+        .map((entry) => ({ ...entry, path: absolute(entry.path!) }))
+        .filter((entry) => under(absolute(root), entry.path) && grantable(entry.path))
+      // Unaffected interpreters first. CPython 3.12.4 changed
+      // `os.mkdir(mode=0o700)` so `tempfile.mkdtemp()` creates a directory whose
+      // DACL does not inherit, and an AppContainer process cannot then write into
+      // the directory it just made (python/cpython#134587, fixed upstream but
+      // unreleased). Every release from 3.12.4 onward carries it, so a sandboxed
+      // Windows environment must be built on something older or pip cannot unpack
+      // a wheel it has already downloaded — and neither can agent-authored code
+      // calling mkdtemp.
+      //
+      // Preference, not a filter: an affected interpreter is still returned when
+      // it is all there is, because an UNSANDBOXED run works fine on it. What
+      // must not happen is silently choosing one when a usable alternative is
+      // sitting right there. `blocked()` reports the remaining case.
+      const ordered = [...usable].sort((a, b) => Number(affected(a)) - Number(affected(b)))
+      for (const entry of ordered) if (await fs.stat(entry.path).catch(() => undefined)) return entry.path
       return undefined
     } catch {
       return undefined
+    }
+  }
+
+  /** The managed interpreter that would be chosen, and whether it carries the
+   *  mkdtemp defect. Separate from `managed()` so the common path stays a plain
+   *  string and only the prerequisite check pays for the extra detail. */
+  export async function managedDetail(): Promise<{ path: string; affected: boolean } | undefined> {
+    const chosen = await managed()
+    if (!chosen) return undefined
+    const uv = which("uv")
+    if (!uv) return { path: chosen, affected: false }
+    try {
+      const out = await ask(uv, "python", "list", "--only-installed", "--output-format", "json")
+      if (!out) return { path: chosen, affected: false }
+      const entries = JSON.parse(out) as Array<{
+        path?: string
+        version_parts?: { major: number; minor: number; patch: number }
+      }>
+      const match = entries.find((entry) => entry.path && absolute(entry.path) === chosen)
+      return { path: chosen, affected: match ? affected(match) : false }
+    } catch {
+      return { path: chosen, affected: false }
     }
   }
 
@@ -405,7 +455,24 @@ export namespace Installer {
     // under the user's profile actually helps, so ask for one rather than
     // treating uv's presence as an all-clear — which is precisely the false
     // reassurance this check gave when uv was installed and nothing improved.
-    if (which("uv") && (await managed())) return undefined
+    const detail = which("uv") ? await managedDetail() : undefined
+    if (detail && !detail.affected) return undefined
+    if (detail?.affected) {
+      // A usable interpreter exists, so nothing is "blocked" in the strict
+      // sense — but an install WILL fail on it, several layers from the cause,
+      // and the remedy is one command. Say it here rather than let pip report a
+      // permission error on a wheel it already downloaded.
+      return [
+        `Python environments will fail to install under the sandbox: ${detail.path} is CPython 3.12.4 or newer.`,
+        "Those releases create temp directories an AppContainer cannot write into (python/cpython#134587),",
+        "so pip downloads a wheel and then cannot unpack it. Fixed upstream, not yet released.",
+        "",
+        "Fix:",
+        "  uv python install 3.12.3",
+        "",
+        "Containment is unaffected - shell commands are still confined.",
+      ].join("\n")
+    }
     const chosen = await select()
     if (chosen.binary && grantable(chosen.binary)) return undefined
     return [
