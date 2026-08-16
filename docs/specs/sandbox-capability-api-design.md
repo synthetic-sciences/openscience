@@ -32,12 +32,12 @@ unownable.
 Every expensive failure on this branch is that one mismatch wearing a different
 coat:
 
-| Symptom | Underneath |
-| --- | --- |
-| `0xC0000142` from every sandboxed command | `Shell.acceptable()` picks Git Bash under `C:\Program Files` |
-| `No Python at '…'`, exit 103 | a machine-wide interpreter under `C:\Python312` |
-| `icacls` sent at `C:\Windows\System32` | `readable` means visibility on POSIX, a grant list on Windows |
-| `uv trampoline failed to spawn` | uv's stable interpreter name is a reparse point; only its target was granted |
+| Symptom                                   | Underneath                                                                   |
+| ----------------------------------------- | ---------------------------------------------------------------------------- |
+| `0xC0000142` from every sandboxed command | `Shell.acceptable()` picks Git Bash under `C:\Program Files`                 |
+| `No Python at '…'`, exit 103              | a machine-wide interpreter under `C:\Python312`                              |
+| `icacls` sent at `C:\Windows\System32`    | `readable` means visibility on POSIX, a grant list on Windows                |
+| `uv trampoline failed to spawn`           | uv's stable interpreter name is a reparse point; only its target was granted |
 
 None of them were predicted. Each was diagnosed from a log after a CI round, and
 several were diagnosed **wrongly** first. That is the real cost being designed
@@ -95,9 +95,7 @@ namespace Sandbox {
     canReach(path: string): Reachability
   }
 
-  export type Reachability =
-    | { ok: true; cost: "free" | "grant" }
-    | { ok: false; reason: string; remedy?: string }
+  export type Reachability = { ok: true; cost: "free" | "grant" } | { ok: false; reason: string; remedy?: string }
 
   /** Run a shell command. The sandbox picks the shell. */
   export function command(input: CommandInput): Spec
@@ -116,10 +114,10 @@ of at `0xC0000142`.
 
 `readable` becomes two fields, because it always was two things:
 
-| Field | Meaning | POSIX | Windows |
-| --- | --- | --- | --- |
-| `visible` | must be readable by the process | bind read-only | already reachable, or granted |
-| `granted` | must have an ACE naming this container | no-op | `icacls /grant …:(RX)` |
+| Field     | Meaning                                | POSIX          | Windows                       |
+| --------- | -------------------------------------- | -------------- | ----------------------------- |
+| `visible` | must be readable by the process        | bind read-only | already reachable, or granted |
+| `granted` | must have an ACE naming this container | no-op          | `icacls /grant …:(RX)`        |
 
 The bug this prevents is concrete: main's derived read-roots flowed into
 `readable`, and on Windows that meant `icacls` at every directory on `PATH`,
@@ -140,7 +138,7 @@ A backend implements:
 
 ```ts
 interface Backend {
-  probe(): Capabilities          // measured on this machine
+  probe(): Capabilities // measured on this machine
   spec(policy: Policy, argv: string[]): Spec
   egress(policy: Policy): EgressRoute | undefined
   cleanup(spec: Spec): void
@@ -177,12 +175,12 @@ starts. The old API is deleted when the last caller moves — and if the work
 stops early, it stops by reverting the unmigrated half, not by leaving two APIs
 in place.
 
-| Order | Caller | Why here |
-| --- | --- | --- |
-| 1 | `tool/bash.ts` | The surface where the Git Bash bug actually bites; migrating it *is* the fix |
-| 2 | `tool/notebook.ts`, `tool/rkernel.ts` | Same shape, adds the interpreter-selection path |
-| 3 | `compute/jobs.ts` | Longest-running consumer; exercises cleanup |
-| 4 | `package/installer.ts` | Depends on interpreter selection being inverted first |
+| Order | Caller                                | Why here                                                                     |
+| ----- | ------------------------------------- | ---------------------------------------------------------------------------- |
+| 1     | `tool/bash.ts`                        | The surface where the Git Bash bug actually bites; migrating it _is_ the fix |
+| 2     | `tool/notebook.ts`, `tool/rkernel.ts` | Same shape, adds the interpreter-selection path                              |
+| 3     | `compute/jobs.ts`                     | Longest-running consumer; exercises cleanup                                  |
+| 4     | `package/installer.ts`                | Depends on interpreter selection being inverted first                        |
 
 ## Testing
 
@@ -192,12 +190,12 @@ least one CI round.
 1. **Every test states its policy.** `trustedSandbox()` defaults to
    `enabled: false`, so a test reading ambient config runs unsandboxed and passes
    vacuously. This happened twice, once printing `Successfully installed
-   six-1.17.0` from a job whose entire purpose was the sandboxed path.
+six-1.17.0` from a job whose entire purpose was the sandboxed path.
 2. **Every sandboxed test logs its own setup** — shell, argv, grants — before
    asserting. The one test that logged its shell produced trustworthy results;
    the one that did not produced a confident, wrong conclusion.
 3. **`CreateProcessW` opens the image in the caller's context.** A launcher
-   running as the user spawning a binary *into* the container proves the launcher
+   running as the user spawning a binary _into_ the container proves the launcher
    can open it, not that the container can execute it. Execute-from-inside needs
    its own assertion.
 4. **Never assert a mechanism a test did not isolate.** Two conclusions on this
