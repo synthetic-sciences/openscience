@@ -727,52 +727,37 @@ export namespace Installer {
      * uv is not optional on Windows anyway: it is how a grantable interpreter
      * gets there at all, which `blocked()` already tells the user.
      */
-    const uv = process.platform === "win32" ? which("uv") : undefined
-    // The CANONICAL spelling, not the one the directory was built from.
+    // pip on every platform, including Windows.
     //
-    // `os.tmpdir()` on Windows can return an 8.3 short path (`C:\Users\RUNNER~1`),
-    // and every path that reaches `grant()` is canonicalised on the way — so the
-    // ACE lands on `C:\Users\runneradmin\...` while uv is handed
-    // `C:\Users\RUNNER~1\...`. Same file, different name, and Windows checks the
-    // name presented rather than the file behind it. This branch has already
-    // paid for that twice: uv's reparse-pointed interpreter directory, and the
-    // shim's lexical path under the data-root symlink.
-    const target = uv ? realpathSync.native(interpreter(input.directory)) : interpreter(input.directory)
-    if (uv && process.env["OPENSCIENCE_SANDBOX_DEBUG"] === "1") {
-      process.stderr.write(`openscience[install] interpreter as built: ${interpreter(input.directory)}\n`)
-      process.stderr.write(`openscience[install] interpreter canonical: ${target}\n`)
-    }
-    const argv = uv
-      ? [
-          uv,
-          "pip",
-          "install",
-          // Verbose under the sandbox debug flag only. uv reports a failure to
-          // query an interpreter as a bare "Access is denied. (os error 5)",
-          // which names neither the path it opened nor the operation - and
-          // guessing at which of those it was has been the expensive mistake of
-          // this whole feature.
-          ...(process.env["OPENSCIENCE_SANDBOX_DEBUG"] === "1" ? ["-vv"] : []),
-          "--python",
-          target,
-          ...policy,
-          ...(input.index ? ["--index-url", input.index] : []),
-          ...input.packages,
-        ]
-      : [
-          interpreter(input.directory),
-          "-m",
-          "pip",
-          "install",
-          "--disable-pip-version-check",
-          ...policy,
-          ...(input.index ? ["--index-url", input.index] : []),
-          ...input.packages,
-        ]
-    // The uv binary itself joins the read set when it is the installer: an
-    // AppContainer can execute nothing whose ACL does not name its SID, and uv
-    // lives under the user profile rather than in the environment.
-    const spec = await confined(input.directory, argv, uv ? [uv] : [])
+    // uv was routed in here only to dodge python/cpython#134587 —
+    // `tempfile.mkdtemp()` creating a directory whose DACL does not inherit,
+    // which an AppContainer process cannot then write into. Pinning managed
+    // Windows environments to CPython 3.12.3 removes that bug at the source, so
+    // the reason for uv goes with it. uv still CREATES environments; it just no
+    // longer installs into them.
+    //
+    // It also fixes what uv never could: agent-authored notebook code calling
+    // `tempfile.mkdtemp()` inside the sandbox, which is broken on any
+    // interpreter from 3.12.4 onward.
+    //
+    // And it retires a wall five CI rounds could not get past — uv, running
+    // inside the container, fails to spawn the very interpreter that `cmd.exe`
+    // spawns successfully from inside the same container two tests earlier:
+    //
+    //     Discovery(Query(Io(PermissionDenied), "...\\env\\Scripts\\python.exe", ProvidedPath))
+    //
+    // That is still unexplained. It is no longer on the path.
+    const argv = [
+      interpreter(input.directory),
+      "-m",
+      "pip",
+      "install",
+      "--disable-pip-version-check",
+      ...policy,
+      ...(input.index ? ["--index-url", input.index] : []),
+      ...input.packages,
+    ]
+    const spec = await confined(input.directory, argv)
     const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
       // No TMPDIR of our own. It used to be `<env>/.tmp`, pre-created here on the
       // host — and on Windows the sandbox cannot make a pre-existing
@@ -790,17 +775,6 @@ export namespace Installer {
         ...process.env,
         ...spec.env,
         PIP_CACHE_DIR: cache,
-        // uv's default cache is under %LOCALAPPDATA%, which the sandbox does not
-        // grant. Point it at the same writable wheel cache pip uses, and refuse
-        // interpreter downloads: the interpreter is chosen before this runs and
-        // silently fetching another would defeat that.
-        ...(uv ? { UV_CACHE_DIR: cache, UV_PYTHON_DOWNLOADS: "never" } : {}),
-        // uv is Rust and honours RUST_LOG. `-vv` names the operation but not the
-        // resource: its error attaches the interpreter path as CONTEXT for which
-        // interpreter was being queried, while the Io error underneath may be
-        // about something else entirely — a temp file, a handle. Four hypotheses
-        // about which have now been wrong, so this asks rather than guesses.
-        ...(uv && process.env["OPENSCIENCE_SANDBOX_DEBUG"] === "1" ? { RUST_LOG: "trace", RUST_BACKTRACE: "1" } : {}),
       },
       // The environment, not wherever the server happens to be running. A
       // sandboxed child inherits this working directory, and the sandbox is not

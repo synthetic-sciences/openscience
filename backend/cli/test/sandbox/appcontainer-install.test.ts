@@ -345,38 +345,6 @@ test.if(windows)(
 )
 
 test.if(windows)(
-  "uv itself runs inside the container",
-  async () => {
-    // The baseline the install test lacks. uv fails with "Failed to query Python
-    // interpreter / Access is denied (os error 5)", and that reads the same
-    // whether uv cannot run at all or runs fine and cannot inspect the
-    // interpreter. Those need different fixes, so they need different tests —
-    // the whole reason three earlier discriminators produced wrong conclusions.
-    const uv = Bun.which("uv")
-    expect(uv).toBeTruthy()
-    const spec = await Sandbox.wrapArgv({
-      file: uv!,
-      args: ["--version"],
-      workspace: [environment!],
-      readable: [uv!],
-      options: { enabled: true, network: "deny", onUnavailable: "error", allowWrite: [] },
-    })
-    const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
-      env: { ...process.env, ...spec.env },
-      cwd: environment!,
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
-    await proc.exited
-    console.log(`  uv exit ${proc.exitCode}\n  stdout: ${out.trim()}\n  stderr: ${err.trim()}`)
-    expect(err, `child stderr: ${err.trim()}`).not.toContain("current directory is invalid")
-    expect(out).toContain("uv ")
-  },
-  180_000,
-)
-
-test.if(windows)(
   "pip reaches PyPI through the broker",
   async () => {
     // Spawned here rather than through `Installer.install` for one reason:
@@ -402,41 +370,21 @@ test.if(windows)(
     // any more. This test reconstructs `Installer.install`, and drifting from
     // it is precisely how the reconstruction stops proving anything.
     await fs.mkdir(cache, { recursive: true })
-    const uv = Bun.which("uv")
-    expect(uv).toBeTruthy()
     const spec = await Sandbox.wrapArgv({
-      file: uv!,
-      // uv, not `python -m pip`: that is what install() runs on Windows now, and
-      // reconstructing it with pip would exercise the exact upstream CPython
-      // defect (python/cpython#134587) the uv path exists to route around — a
-      // test failing for a reason the product deliberately avoids.
-      // The canonical spelling, matching what install() now passes. os.tmpdir()
-      // yields an 8.3 short path on a runner, every path reaching grant() is
-      // canonicalised, and Windows checks the name presented rather than the
-      // file behind it — so handing uv the short form asks it to open a name no
-      // ACE mentions.
-      args: [
-        "pip",
-        "install",
-        "-vv",
-        "--python",
-        (await import("fs")).realpathSync.native(Installer.interpreter(environment!)),
-        "--only-binary",
-        ":all:",
-        "six",
-      ],
+      file: Installer.interpreter(environment!),
+      // Back to `python -m pip`, matching install(). uv was only ever here to
+      // dodge the mkdtemp bug; pinning the managed interpreter to 3.12.3 removes
+      // that bug, so the reconstruction follows the product back.
+      args: ["-m", "pip", "install", "--disable-pip-version-check", "--only-binary", ":all:", "six"],
       workspace: [environment!, cache],
-      readable: [...(home ? [home] : []), uv!],
+      ...(home ? { readable: [home] } : {}),
       options: { ...policy, egress },
     })
     const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
       env: {
         ...process.env,
         ...spec.env,
-        UV_CACHE_DIR: cache,
-        UV_PYTHON_DOWNLOADS: "never",
-        RUST_LOG: "trace",
-        RUST_BACKTRACE: "1",
+        PIP_CACHE_DIR: cache,
       },
       cwd: environment!,
       stdout: "pipe",

@@ -219,7 +219,13 @@ jobs:
         run: |
           irm https://astral.sh/uv/install.ps1 | iex
           $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
-          uv python install 3.12
+          # 3.12.3 specifically, not "3.12". CPython 3.12.4 changed
+          # os.mkdir(mode=0o700) so tempfile.mkdtemp() creates a directory whose
+          # DACL does not inherit, and an AppContainer process cannot then write
+          # into the directory it just made (python/cpython#134587, fixed
+          # upstream but unreleased). 3.12.3 is the last release without it, and
+          # pinning here is what lets the install path stay on pip.
+          uv python install 3.12.3
           uv python list --only-installed --output-format json
         shell: pwsh
 
