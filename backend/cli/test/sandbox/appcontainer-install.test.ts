@@ -227,12 +227,25 @@ test.if(windows)(
     })
     const proc = Bun.spawn([plan.file, ...(plan.args ?? [])], {
       env: { ...process.env, ...plan.env },
+      // The spawn's cwd, not just the policy's. CreateProcessW inherits the
+      // launcher's working directory into the container, and this process runs
+      // from the checkout on D:\, which the container is not granted — so cmd
+      // exits 1 with "The current directory is invalid." before reaching Python.
+      // `Sandbox.plan({ cwd })` is policy input; the caller still has to spawn
+      // there, which is what tool/bash.ts does and what this test forgot.
+      cwd: environment!,
       stdout: "pipe",
       stderr: "pipe",
     })
     const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
     await proc.exited
     Sandbox.cleanup(plan)
+    // Assert on the child's OUTPUT before its exit code: three discriminators in
+    // a row have failed for reasons other than their hypothesis, and each time
+    // the child had said so in plain English on stderr while the exit code said
+    // nothing.
+    expect(err, `child stderr: ${err.trim()}`).not.toContain("current directory is invalid")
+    expect(err, `child stderr: ${err.trim()}`).not.toContain("Access is denied")
     console.log(`  exit ${proc.exitCode}\n  stdout: ${out.trim()}\n  stderr: ${err.trim()}`)
     expect(out).toContain("7")
   },
