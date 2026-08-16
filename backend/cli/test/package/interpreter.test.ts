@@ -320,6 +320,38 @@ test("the prerequisite is checked where users actually meet it", async () => {
   expect(panel.indexOf("data()?.blocked")).toBeLessThan(panel.indexOf('title="Protection"'))
 })
 
+test("an environment on an interpreter that cannot install is rebuilt too", async () => {
+  // The ungrantable case below has a sibling that the same check misses. An
+  // environment built on CPython 3.12.4+ has a base under the user profile —
+  // perfectly grantable — so `probe()` reuses it forever, while every install
+  // downloads a wheel and then fails to unpack it (python/cpython#134587).
+  // Without this the only recovery is deleting the directory by hand, which is
+  // not something a user should have to know.
+  const source = await Bun.file(new URL("../../src/package/installer.ts", import.meta.url).pathname).text()
+  const probe = source.slice(
+    source.indexOf("export async function probe"),
+    source.indexOf("export async function create"),
+  )
+  expect(probe).toContain("await baseVersion(directory)")
+  expect(probe).toContain("const stale =")
+  // Windows-and-sandboxed only: the defect is an AppContainer one, and rebuilding
+  // an environment elsewhere would discard a user's packages for nothing.
+  expect(probe).toContain('process.platform === "win32"')
+  expect(probe).toContain("Sandbox.available()")
+})
+
+test("pyvenv.cfg's version is read, whichever key wrote it", async () => {
+  // uv writes `version_info`, CPython's venv writes `version`. Reading only one
+  // makes the staleness check silently inert for environments built by the other
+  // tool — which on Windows is the common case, since uv creates them.
+  const source = await Bun.file(new URL("../../src/package/installer.ts", import.meta.url).pathname).text()
+  const helper = source.slice(
+    source.indexOf("export async function baseVersion"),
+    source.indexOf("export async function base("),
+  )
+  expect(helper).toContain("version_info|version")
+})
+
 test("an environment pinned to an ungrantable base is rebuilt, not reused forever", async () => {
   // The failure that survived installing uv AND a user-owned Python. probe()
   // returns "existing" the moment Scripts/python.exe is there, so it never

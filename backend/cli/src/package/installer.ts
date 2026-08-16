@@ -85,6 +85,28 @@ export namespace Installer {
     return path.basename(home) === "bin" ? [home, path.dirname(home)] : [home]
   }
 
+  /**
+   * The base interpreter's version, per `pyvenv.cfg` — `version_info` as uv
+   * writes it, or `version` as CPython's venv does.
+   *
+   * Read rather than executed: this is on the path of every kernel start, and
+   * spawning an interpreter to learn a number the environment already recorded
+   * is a cost with no answer attached.
+   */
+  export async function baseVersion(directory: string) {
+    const cfg = Bun.file(path.join(directory, "pyvenv.cfg"))
+    if (!(await cfg.exists().catch(() => false))) return undefined
+    const text = await cfg.text().catch(() => "")
+    for (const line of text.split("\n")) {
+      const found = line.match(/^\s*(?:version_info|version)\s*=\s*([\d.]+)/)
+      if (!found?.[1]) continue
+      const [major, minor, patch] = found[1].split(".").map(Number)
+      if (major === undefined || minor === undefined) continue
+      return { major, minor, patch: patch ?? 0 }
+    }
+    return undefined
+  }
+
   export async function base(directory: string) {
     const cfg = Bun.file(path.join(directory, "pyvenv.cfg"))
     if (!(await cfg.exists().catch(() => false))) return undefined
@@ -516,7 +538,16 @@ export namespace Installer {
       // has a pyvenv.cfg, so the next tool builds a fresh environment on a base
       // that works.
       const home = await base(directory)
-      if (!home || grantable(home) || !Sandbox.available()) return { kind: "existing", binary: interpreter(directory) }
+      // Rebuilt for a second reason now: an environment whose base carries the
+      // AppContainer mkdtemp defect can never install under the sandbox, and its
+      // base is perfectly GRANTABLE, so the check above would reuse it forever.
+      // The symptom is a wheel that downloads and then cannot be unpacked, with
+      // no route to recovery short of deleting the directory by hand — which is
+      // not something a user should have to know to do.
+      const stale =
+        process.platform === "win32" && Sandbox.available() && affected({ version_parts: await baseVersion(directory) })
+      if (!stale && (!home || grantable(home) || !Sandbox.available()))
+        return { kind: "existing", binary: interpreter(directory) }
     }
 
     const uv = available ? available.uv : (which("uv") ?? undefined)
