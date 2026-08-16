@@ -430,7 +430,14 @@ test.if(windows)(
       options: { ...policy, egress },
     })
     const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
-      env: { ...process.env, ...spec.env, UV_CACHE_DIR: cache, UV_PYTHON_DOWNLOADS: "never" },
+      env: {
+        ...process.env,
+        ...spec.env,
+        UV_CACHE_DIR: cache,
+        UV_PYTHON_DOWNLOADS: "never",
+        RUST_LOG: "trace",
+        RUST_BACKTRACE: "1",
+      },
       cwd: environment!,
       stdout: "pipe",
       stderr: "inherit",

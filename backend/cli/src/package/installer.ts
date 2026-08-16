@@ -795,6 +795,12 @@ export namespace Installer {
         // interpreter downloads: the interpreter is chosen before this runs and
         // silently fetching another would defeat that.
         ...(uv ? { UV_CACHE_DIR: cache, UV_PYTHON_DOWNLOADS: "never" } : {}),
+        // uv is Rust and honours RUST_LOG. `-vv` names the operation but not the
+        // resource: its error attaches the interpreter path as CONTEXT for which
+        // interpreter was being queried, while the Io error underneath may be
+        // about something else entirely — a temp file, a handle. Four hypotheses
+        // about which have now been wrong, so this asks rather than guesses.
+        ...(uv && process.env["OPENSCIENCE_SANDBOX_DEBUG"] === "1" ? { RUST_LOG: "trace", RUST_BACKTRACE: "1" } : {}),
       },
       // The environment, not wherever the server happens to be running. A
       // sandboxed child inherits this working directory, and the sandbox is not
