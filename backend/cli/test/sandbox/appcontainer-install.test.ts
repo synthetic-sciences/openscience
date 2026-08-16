@@ -345,6 +345,38 @@ test.if(windows)(
 )
 
 test.if(windows)(
+  "uv itself runs inside the container",
+  async () => {
+    // The baseline the install test lacks. uv fails with "Failed to query Python
+    // interpreter / Access is denied (os error 5)", and that reads the same
+    // whether uv cannot run at all or runs fine and cannot inspect the
+    // interpreter. Those need different fixes, so they need different tests —
+    // the whole reason three earlier discriminators produced wrong conclusions.
+    const uv = Bun.which("uv")
+    expect(uv).toBeTruthy()
+    const spec = await Sandbox.wrapArgv({
+      file: uv!,
+      args: ["--version"],
+      workspace: [environment!],
+      readable: [uv!],
+      options: { enabled: true, network: "deny", onUnavailable: "error", allowWrite: [] },
+    })
+    const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
+      env: { ...process.env, ...spec.env },
+      cwd: environment!,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+    await proc.exited
+    console.log(`  uv exit ${proc.exitCode}\n  stdout: ${out.trim()}\n  stderr: ${err.trim()}`)
+    expect(err, `child stderr: ${err.trim()}`).not.toContain("current directory is invalid")
+    expect(out).toContain("uv ")
+  },
+  180_000,
+)
+
+test.if(windows)(
   "pip reaches PyPI through the broker",
   async () => {
     // Spawned here rather than through `Installer.install` for one reason:
@@ -378,7 +410,7 @@ test.if(windows)(
       // reconstructing it with pip would exercise the exact upstream CPython
       // defect (python/cpython#134587) the uv path exists to route around — a
       // test failing for a reason the product deliberately avoids.
-      args: ["pip", "install", "-v", "--python", Installer.interpreter(environment!), "--only-binary", ":all:", "six"],
+      args: ["pip", "install", "-vv", "--python", Installer.interpreter(environment!), "--only-binary", ":all:", "six"],
       workspace: [environment!, cache],
       readable: [...(home ? [home] : []), uv!],
       options: { ...policy, egress },

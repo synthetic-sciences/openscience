@@ -738,7 +738,7 @@ export namespace Installer {
           // which names neither the path it opened nor the operation - and
           // guessing at which of those it was has been the expensive mistake of
           // this whole feature.
-          ...(process.env["OPENSCIENCE_SANDBOX_DEBUG"] === "1" ? ["-v"] : []),
+          ...(process.env["OPENSCIENCE_SANDBOX_DEBUG"] === "1" ? ["-vv"] : []),
           "--python",
           interpreter(input.directory),
           ...policy,
