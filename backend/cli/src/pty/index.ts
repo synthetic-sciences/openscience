@@ -12,6 +12,7 @@ import { ExecutionAuthority } from "@/project/execution"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { AuthorityProcessLedger } from "@/project/authority-process"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { OpenScience } from "@/openscience"
 import { terminalArgs, terminalEnv } from "./environment"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
@@ -121,15 +122,21 @@ export namespace Pty {
       // Interactive PTY output is not a redaction boundary. Keep provider/cloud
       // credentials on the host; terminals receive runtime discovery only.
       const source = OpenScience.kernelEnv(process.env)
-      const env = terminalEnv(source, Instance.project.id, input.sessionID, command)
+      const egress = await EgressRuntime.egressFor(authority.sandbox)
       const sandbox = Sandbox.wrapArgv({
         file: command,
         args,
         workspace: authority.writable,
         readable: authority.readable,
         unreadable: OpenScience.kernelSensitivePaths(),
-        options: authority.sandbox,
+        options: { ...authority.sandbox, egress },
       })
+      // After wrapArgv, not before: sandbox.env carries the proxy variables the
+      // loopback shim needs, and they must survive terminalEnv's own shaping.
+      const env = {
+        ...terminalEnv(source, Instance.project.id, input.sessionID, command),
+        ...(sandbox.env ?? {}),
+      }
       const launch = WindowsJobLauncher.wrap({ file: sandbox.file, args: sandbox.args })
       log.info("creating session", { id, cmd: command, args, cwd })
 

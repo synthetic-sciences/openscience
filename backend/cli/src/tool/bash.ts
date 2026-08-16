@@ -16,7 +16,9 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 import { OpenScience } from "@/openscience"
+import { Refuse } from "@/package/refuse"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Filesystem } from "@/util/filesystem"
 import { Provenance } from "@/science/provenance/store"
@@ -134,6 +136,12 @@ const parser = lazy(async () => {
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
+  // Chosen once, at tool definition, from the machine's preference. The
+  // per-call shell is re-resolved below against the authority's policy, because
+  // a shell the sandbox cannot execute is worse than a less pleasant one: on
+  // Windows `Shell.acceptable()` returns Git Bash under `C:\Program Files`,
+  // which no ACE can reach, and every sandboxed command dies at 0xC0000142
+  // before running.
   const shell = Shell.acceptable()
   log.info("bash tool using shell", { shell })
 
@@ -197,6 +205,12 @@ export const BashTool = Tool.define("bash", async () => {
           }
           command.push(child.text)
         }
+
+        // Before any ctx.ask, before the sandbox is composed, before anything
+        // runs: refusing after prompting would ask the user to approve a
+        // command that is then refused anyway.
+        const refusal = Refuse.installer(command)
+        if (refusal) throw new Error(refusal)
 
         // not an exhaustive list, but covers most common cases
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
@@ -304,16 +318,28 @@ export const BashTool = Tool.define("bash", async () => {
         }
         // Build the wrapper only after the final authority check, while trust
         // and filesystem mutations are excluded through durable registration.
+        // The egress route is resolved here for the same reason: it is part of
+        // the authority this launch runs with, not of the decision to launch.
+        const egress = await EgressRuntime.egressFor(current.sandbox)
+        // The sandbox picks the shell when it is going to confine one. Under no
+        // sandbox this is the machine's preference unchanged; under one on
+        // Windows it is a System32 shell, because the preferred one lives where
+        // no ACE can be added and the container cannot load it.
+        const usable = Sandbox.shell({ ...current.sandbox, egress })
         const sandbox = Sandbox.plan({
           command: params.command,
-          shell,
+          shell: usable,
           cwd,
           workspace: current.writable,
           readable: [...readable],
           unreadable: OpenScience.kernelSensitivePaths(),
-          options: current.sandbox,
+          options: { ...current.sandbox, egress },
         })
-        return OpenScience.withSubprocessEnv(process.env, async (env) => {
+        // sandbox.env carries the HTTP_PROXY-shaped route to the egress proxy.
+        // Merged over the subprocess env rather than into it, so a stray
+        // inherited proxy variable cannot outrank the one the sandbox minted.
+        return OpenScience.withSubprocessEnv(process.env, async (base) => {
+          const env = { ...base, ...(sandbox.env ?? {}) }
           let child: ReturnType<typeof spawn>
           const wrapped = await CommandRuntime.wrap({
             file: sandbox.file,

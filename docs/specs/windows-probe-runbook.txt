@@ -1,0 +1,221 @@
+OPENSCIENCE - WINDOWS PROBE RUNBOOK
+===================================================================
+Everything to run on Windows, in order, with what each answer means.
+Total time: about 5 minutes.
+
+Files on this Desktop:
+  windows-appcontainer-probe.ps1   the probe
+  probe runbook.txt                this file
+
+-------------------------------------------------------------------
+BEFORE YOU START
+-------------------------------------------------------------------
+
+Open a NORMAL PowerShell window. Not "Run as administrator".
+
+This matters. The entire Windows design rests on the claim that
+OpenScience never needs admin rights - an app that runs AI-authored
+code asking for elevation is indistinguishable from malware at the
+UAC prompt. A probe run elevated answers a question nobody asked.
+The script checks and warns you if you get it wrong.
+
+-------------------------------------------------------------------
+STEP 1 - THE PROBE            (~15 seconds, the important one)
+-------------------------------------------------------------------
+
+    cd $env:USERPROFILE\Desktop
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\windows-appcontainer-probe.ps1
+
+It cleans up after itself: the AppContainer profile and temp
+directory are removed on exit. Nothing is installed. The only
+network access attempted is one outbound connection that is
+EXPECTED TO FAIL.
+
+WHAT TO SEND BACK
+  The script now writes  Desktop\probe-report.json
+  Send that FILE, not the console text.
+
+  Why: the first run was reported by pasting the console output,
+  and the terminal had truncated it from the top. The block that
+  scrolled away was the environment-survival data - the one thing
+  that run was needed for.
+
+WHAT I AM LOOKING FOR THIS TIME
+
+  1. envSurvival.OS_PROBE_MARK   and   envSurvival.HTTP_PROXY
+
+     This is the open question. It decides how the Windows shim
+     gets pointed at the broker.
+
+     "survived" / "http://127.0.0.1:9/"
+         -> ordinary environment variables cross into the
+            container. The shim can be steered by HTTP_PROXY,
+            exactly as on Linux and macOS. One code path.
+
+     empty / missing
+         -> Windows strips them. The shim needs pip.ini or an
+            explicit --proxy argument instead, and Windows gets
+            its own configuration path.
+
+     We already know TEMP and TMP do NOT survive - Windows
+     overrides them at process start. The question is whether
+     that applies to everything or only to the path variables
+     Windows reserves per package.
+
+  2. Anything that changed since the last run. Same machine, same
+     script, so a difference is a finding in itself.
+
+-------------------------------------------------------------------
+STEP 2 - THE BINARY                     (~1 minute)
+-------------------------------------------------------------------
+
+Never reported from the last session. A 163 MB cross-compiled
+binary was placed on this machine and there is still no evidence
+it runs - it could not be executed from Linux.
+
+    openscience --version
+
+  EXPECT: 0.0.0-feat/kernel-package-install-<timestamp>
+
+  If "openscience" is not found, or it errors before printing,
+  try the binary directly:
+
+    & "$env:APPDATA\npm\node_modules\@synsci\openscience-windows-x64\bin\openscience.exe" --version
+
+  Direct path works, "openscience" does not
+      -> the npm wrapper is stale (it is version 1.3.3 while the
+         binary is 2.0.x). Fixable, and not a code problem.
+
+  Direct path also fails
+      -> the cross-compile is bad. That is a real finding and the
+         more useful one.
+
+Then:
+
+    openscience sandbox status
+    openscience sandbox test
+
+  EXPECT: "No sandbox backend available", with a reason, then
+  "Nothing to test here."
+
+  This is CORRECT today, not a bug. Sandbox.backend() returns
+  "none" on Windows and will keep doing so until the AppContainer
+  launcher exists. Claiming a sandbox that cannot be applied would
+  be worse than refusing.
+
+  Send the exact reason string.
+
+-------------------------------------------------------------------
+STEP 3 - WHAT A USER ACTUALLY HITS      (~2 minutes)
+-------------------------------------------------------------------
+
+Start a session and ask for a package:
+
+    "install tqdm and show me a progress bar"
+
+  EXPECT: package_install refuses, because there is no sandbox
+  backend on Windows and the policy is onUnavailable: "error".
+
+  What I care about is HOW it fails:
+      a clear "sandbox unavailable on this platform"  -> fine
+      an opaque crash or a confusing stack trace      -> a real
+      bug, and worth fixing before this merges. That opaque-error
+      failure mode is exactly where this whole line of work
+      started.
+
+Then the half that should work anywhere:
+
+    "run pip install numpy in the terminal"
+
+  EXPECT: refused, naming package_install.
+
+  This refusal is platform-independent - a tree-sitter parse and
+  a pure matcher, no sandbox involved. If it works here, one piece
+  of the merge gate is genuinely portable.
+
+  NOTE: ask the AGENT to do it. Typing pip install yourself in a
+  terminal is NOT refused, and that is deliberate: the refusal
+  governs the agent, not you. It exists so the agent cannot walk
+  around the approval card, not to police your own machine.
+
+-------------------------------------------------------------------
+WHAT IS ALREADY SETTLED - DO NOT RE-TEST
+-------------------------------------------------------------------
+
+From the first probe run, on this machine, unelevated, with
+MpsSvc running and all three firewall profiles enabled:
+
+  CreateAppContainerProfile unelevated ................ works
+  loopback bind + listen inside the container ......... works
+  loopback across TWO processes, same package SID ..... works
+      8192 bytes echoed, content verified, real peer
+  named pipe ACL'd to the package SID ................. works
+      64 KiB each way, host agreed on the byte count
+  outbound to 1.1.1.1:443 with zero capabilities ...... denied
+  reaching a listener on the HOST loopback ............ denied
+  DNS inside the container ............................ denied
+  reading or writing the user profile ................. denied
+  wheel-shaped filesystem work (tree + 1 MiB) ......... works
+  the package's own %TEMP%, with no grant from us ..... writable
+
+Those denials are trustworthy because the run carried controls:
+a default-DACL pipe that was refused, System32 still readable,
+host DNS working, and a check that this machine's two existing
+loopback exemptions belong to other software rather than to us.
+
+That result overturned the design's central claim, in the useful
+direction. The spec said an AppContainer had no loopback, so no
+shim could exist and Windows had to be capability-mediated. It
+was wrong. Windows can be socket-transparent like the other two
+platforms:
+
+    pip --(loopback, cross-process)--> shim
+        --(named pipe)--> broker --> network
+
+-------------------------------------------------------------------
+STILL UNMEASURED, IF YOU HAVE TIME
+-------------------------------------------------------------------
+
+  - Whether a broker can spawn the shim INTO AN ALREADY-RUNNING
+    container, rather than both being launched together as the
+    probe does. That is the production arrangement and the probe
+    does not reproduce it.
+
+  - Behaviour under a third-party endpoint agent. This machine
+    ran Windows Defender with MpsSvc healthy. AppContainer network
+    isolation is a WFP policy; a product that displaces or
+    augments those filters could change the denials, and a denial
+    that is really someone else's filter is not the design
+    working.
+
+-------------------------------------------------------------------
+IF SOMETHING GOES WRONG
+-------------------------------------------------------------------
+
+Script will not parse / errors on a line that looks fine
+    Almost certainly an encoding problem. The file must be pure
+    ASCII: PowerShell 5.1 reads a BOM-less .ps1 as ANSI, and a
+    UTF-8 em dash decodes into bytes its tokenizer treats as a
+    string delimiter - failing hundreds of lines from the real
+    cause. The shipped copy is ASCII; do not paste typographic
+    dashes or curly quotes into it.
+
+CreateAppContainerProfile fails
+    That is question 1 answered NO and the design's foundation
+    does not hold. The script stops there and says so. Send the
+    output - everything downstream is moot.
+
+The child never starts
+    A stock powershell.exe cannot run in an empty AppContainer,
+    which means the design needs a purpose-built child binary
+    rather than reusing an interpreter. Useful to know early.
+
+Anything reports YES that should be NO
+    Read section 0 of the output FIRST. With MpsSvc stopped or
+    third-party filtering in place, a network result is a fact
+    about the machine rather than about the design. If
+    enforcement was healthy, it is the most important line in
+    the run.
+
+Leave the profile behind for inspection:
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\windows-appcontainer-probe.ps1 -Keep

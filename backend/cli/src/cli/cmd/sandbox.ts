@@ -17,32 +17,62 @@ function printStatus(config?: Config.Sandbox) {
   const enabled = config?.enabled === true
 
   UI.println(`${S.TEXT_NORMAL_BOLD}Execution sandbox${S.TEXT_NORMAL}`)
+  // Three states, not two. "enabled" describes the CONFIG; whether anything is
+  // actually confined depends on a backend existing. Keying the sentence off
+  // `enabled` alone told a Windows user "agent shell commands are confined to
+  // the workspace" on a machine where `Sandbox.backend()` is "none" and nothing
+  // confines anything — a false statement about a security property, which is
+  // the worst kind of wrong thing for this command to print.
+  // Then it printed "are confined to the workspace" on a Windows run whose
+  // `sandbox test` failed containment in the very next command. A backend being
+  // AVAILABLE is not the same as it working, and this command does not run the
+  // commands that would tell the difference — so it now reports what it actually
+  // knows (which backend is applied) and names the command that can prove it.
+  const effect = !enabled
+    ? "run with full user authority"
+    : d.available
+      ? `are launched through ${d.tool ?? d.backend} - run 'openscience sandbox test' to verify containment`
+      : "are NOT confined here: no backend on this platform"
+  // Print `effect`, not a second sentence written beside it. The comment above
+  // is the whole reason this variable exists — three states, and never claiming
+  // containment the machine does not have — and the line below said "are
+  // confined to approved paths" whenever `enabled`, which is the two-state
+  // sentence `effect` was written to replace. `effect` was computed and
+  // discarded, so the bug it fixed was still on screen.
   UI.println(
     `  status    ${enabled ? `${S.TEXT_SUCCESS_BOLD}enabled` : `${S.TEXT_DIM}disabled`}${S.TEXT_NORMAL}` +
-      `${S.TEXT_DIM}  (agent shell commands${
-        enabled ? " are confined to approved paths" : " require project trust before using full user authority"
-      })${S.TEXT_NORMAL}`,
+      `${S.TEXT_DIM}  (agent shell commands ${effect})${S.TEXT_NORMAL}`,
   )
   UI.println(`  platform  ${d.platform}`)
   UI.println(
     `  backend   ${
       d.available
         ? `${S.TEXT_SUCCESS}${d.backend}${S.TEXT_NORMAL} ${S.TEXT_DIM}(${d.tool})${S.TEXT_NORMAL}`
-        : `${S.TEXT_WARNING}unavailable${S.TEXT_NORMAL} ${S.TEXT_DIM}— ${d.reason}${S.TEXT_NORMAL}`
+        : `${S.TEXT_WARNING}unavailable${S.TEXT_NORMAL} ${S.TEXT_DIM}- ${d.reason}${S.TEXT_NORMAL}`
     }`,
   )
   if (enabled) {
-    UI.println(`  network   ${config?.network ?? "deny"}`)
+    // "allow" is not what it says on bubblewrap or seatbelt: both deny every
+    // socket in every mode, because neither can grant outbound access without
+    // also exposing everything bound to 127.0.0.1. Printing the configured word
+    // alone made this command state a capability the machine does not have.
+    const net = config?.network ?? "deny"
+    const hollow = net === "allow" && (d.backend === "bubblewrap" || d.backend === "seatbelt")
+    UI.println(
+      `  network   ${net}` +
+        (hollow ? `${S.TEXT_DIM}  (this backend denies all sockets - use 'allowlist')${S.TEXT_NORMAL}` : ""),
+    )
     UI.println(
       `  project trust   ${config?.requireProjectTrust ? "required for all execution" : "routine sandboxed work allowed"}`,
     )
     UI.println(`  on missing backend   ${config?.onUnavailable ?? "error"}`)
     if (config?.allowWrite?.length) UI.println(`  extra writable   ${config.allowWrite.join(", ")}`)
+    if (config?.allowHosts?.length) UI.println(`  extra hosts   ${config.allowHosts.join(", ")}`)
   }
   if (enabled && !d.available) {
     UI.println("")
     UI.println(
-      `  ${S.TEXT_WARNING_BOLD}Note:${S.TEXT_NORMAL} sandbox is on but no backend exists here — ` +
+      `  ${S.TEXT_WARNING_BOLD}Note:${S.TEXT_NORMAL} sandbox is on but no backend exists here - ` +
         `execution follows the "${config?.onUnavailable ?? "error"}" fallback policy. It takes effect on machines with a backend.`,
     )
   }
@@ -53,6 +83,21 @@ async function showStatus() {
     directory: process.cwd(),
     async fn() {
       printStatus(await effectiveSandbox())
+      // A prerequisite the user cannot discover from anything else. On Windows
+      // an AppContainer can only be granted access to paths its user owns, so a
+      // machine-wide Python is unusable by a sandboxed process however healthy
+      // it is — and the only symptom otherwise is an install failing much later
+      // with an error about the interpreter rather than about ownership.
+      //
+      // Printed only when it applies, and worded so nobody reads it as
+      // "containment is broken": it is not, and a user who turns the sandbox
+      // off over this would lose confinement they still have.
+      const { Installer } = await import("../../package/installer")
+      const blocked = await Installer.blocked().catch(() => undefined)
+      if (blocked) {
+        UI.empty()
+        for (const line of blocked.split("\n")) UI.println(line ? `  ${S.TEXT_WARNING}${line}${S.TEXT_NORMAL}` : "")
+      }
     },
   })
 }
@@ -72,13 +117,18 @@ const EnableCommand = cmd({
   builder: (yargs: Argv) =>
     yargs
       .option("network", {
-        choices: ["allow", "deny"] as const,
-        describe: "allow or deny network egress from sandboxed commands (default: deny)",
+        choices: ["deny", "allowlist", "allow"] as const,
+        describe: "network egress from sandboxed commands: deny (default), allowlist, or allow",
       })
       .option("allow", {
         type: "string",
         array: true,
         describe: "extra absolute path the sandbox may write to (repeatable)",
+      })
+      .option("allow-host", {
+        type: "string",
+        array: true,
+        describe: "extra host the sandbox may reach when network is 'allowlist' (repeatable)",
       })
       .option("on-unavailable", {
         choices: ["warn", "error", "allow"] as const,
@@ -93,11 +143,17 @@ const EnableCommand = cmd({
       directory: process.cwd(),
       async fn() {
         const patch: Partial<Config.Sandbox> = { enabled: true }
-        if (args.network) patch.network = args.network as "allow" | "deny"
+        if (args.network) patch.network = args.network
         if (args["on-unavailable"]) patch.onUnavailable = args["on-unavailable"] as "warn" | "error" | "allow"
         if (typeof args["require-project-trust"] === "boolean") {
           patch.requireProjectTrust = args["require-project-trust"]
         }
+        // Declared as an option, described in help, and read by nothing: the
+        // flag parsed fine and the hosts never reached the config, so a user
+        // who ran `sandbox enable --network allowlist --allow-host files.pythonhosted.org`
+        // saw success and then a blocked request to exactly that host.
+        const hosts = args["allow-host"] as string[] | undefined
+        if (hosts?.length) patch.allowHosts = hosts.map((value) => value.trim()).filter(Boolean)
         const allow = args.allow as string[] | undefined
         if (allow?.length) {
           patch.allowWrite = allow.map((value) => {
@@ -143,7 +199,7 @@ const TestCommand = cmd({
     const result = await Sandbox.selfTest()
     if (!result.available) {
       const d = Sandbox.describe()
-      UI.println(`${S.TEXT_WARNING}No sandbox backend available${S.TEXT_NORMAL} — ${d.reason}.`)
+      UI.println(`${S.TEXT_WARNING}No sandbox backend available${S.TEXT_NORMAL} - ${d.reason}.`)
       UI.println(`${S.TEXT_DIM}Nothing to test here.${S.TEXT_NORMAL}`)
       return
     }
@@ -151,6 +207,11 @@ const TestCommand = cmd({
       `${S.TEXT_NORMAL_BOLD}Sandbox self-test${S.TEXT_NORMAL} ${S.TEXT_DIM}(${result.backend})${S.TEXT_NORMAL}`,
     )
     for (const c of result.checks) {
+      // The glyphs below are only reachable when a backend EXISTS, so they
+      // cannot print on Windows today, where the command exits above. Anything
+      // printed on a backend-less machine must stay ASCII: a Windows console
+      // decodes our UTF-8 as its OEM code page, and an em dash arrived as
+      // "\u0393\u00c7\u00f6" in a real run. Keep that rule if a Windows backend lands.
       const mark = c.skipped ? `${S.TEXT_DIM}– skip` : c.pass ? `${S.TEXT_SUCCESS}✓ pass` : `${S.TEXT_DANGER}✗ FAIL`
       UI.println(`  ${mark}${S.TEXT_NORMAL}  ${c.name}${c.detail ? ` ${S.TEXT_DIM}(${c.detail})${S.TEXT_NORMAL}` : ""}`)
     }
@@ -158,7 +219,7 @@ const TestCommand = cmd({
     UI.println(
       result.ok
         ? `${S.TEXT_SUCCESS_BOLD}Containment verified.${S.TEXT_NORMAL}`
-        : `${S.TEXT_DANGER_BOLD}Containment FAILED — do not rely on the sandbox until this passes.${S.TEXT_NORMAL}`,
+        : `${S.TEXT_DANGER_BOLD}Containment FAILED - do not rely on the sandbox until this passes.${S.TEXT_NORMAL}`,
     )
   },
 })

@@ -4,15 +4,20 @@ import { spawn, type ChildProcess } from "child_process"
 import path from "path"
 import os from "os"
 import { accessSync, constants, mkdirSync, statSync, unlinkSync } from "fs"
+import fs from "fs/promises"
 import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
 import { SessionFilesystem } from "@/session/filesystem"
+import { Environment } from "@/package/environment"
+import { Installer } from "@/package/installer"
 import { Sandbox } from "@/sandbox/sandbox"
+import { EgressRuntime } from "@/sandbox/egress-runtime"
 import { KernelQueue } from "@/science/kernel/queue"
 import { KernelProcessIdentity } from "@/science/kernel/process"
 import { KernelRuntime } from "@/science/kernel/registry"
 import { KernelEnvironmentMutation } from "@/science/kernel/environment-mutation"
+import { KernelEnvironmentName, normalizeKernelEnvironmentName } from "@/science/kernel/interpreter"
 import { AtlasEnvironment } from "@/science/kernel/types"
 import type {
   Kernel,
@@ -267,11 +272,19 @@ class RKernel implements Kernel {
     // Confine the kernel to the workspace when the execution sandbox is on: the R
     // kernel runs arbitrary agent-authored code — the same threat model as the
     // bash tool — so it must respect the same boundary.
+    // The managed R environment this kernel binds to, if any. `package_install`
+    // installs into `<env>/rlibs` and binds it through `R_LIBS_USER`; nothing
+    // here ever set that, so packages the user had just approved and installed
+    // were invisible to `r_execute` — `library(x)` failed immediately after a
+    // successful install. It has to be granted to the sandbox as well, or the
+    // bind points at a directory the confined process cannot read.
+    const library = opts?.environment ? Installer.rlibrary(opts.environment) : undefined
+
     const sandboxed = Sandbox.wrapArgv({
       file: interpreter.binary,
       args: ["--vanilla", scriptPath],
       workspace,
-      readable,
+      readable: [...readable, ...(opts?.environment ? [opts.environment] : [])],
       extraWritable: [scriptPath, configPath, ...(opts?.extraWritable ?? [])],
       unreadable: OpenScience.kernelSensitivePaths(),
       options: {
@@ -311,7 +324,28 @@ class RKernel implements Kernel {
         env: {
           ...OpenScience.kernelEnv(process.env),
           ...(opts?.env ?? {}),
+          // The proxy variables for the egress shim. `Sandbox.Wrapped.env` is
+          // documented as "the caller must set" and its type comment names the
+          // notebook/R kernels as its consumers — and both dropped it, so a
+          // kernel under `network: "allowlist"` ran with no proxy configured
+          // and every outbound call from notebook code failed against a
+          // loopback socket nothing had told it about. The shell path passes
+          // this through; the kernels are the reason it exists.
+          //
+          // After `opts.env` so a caller cannot shadow it, before our own
+          // config keys, which do not collide.
+          ...(sandboxed.env ?? {}),
           ATLAS_CLI_CONFIG_PATH: configPath,
+          // Both libraries, not one. `rRuntime()` puts the in-kernel mutation
+          // library on `opts.env.R_LIBS_USER`; the managed environment's is a
+          // different directory entirely. Overwriting either way loses half the
+          // packages, so they are joined — managed first, so a package the user
+          // explicitly installed wins over one a mutation pulled in.
+          //
+          // `install.packages` picks the first WRITABLE entry of `.libPaths()`,
+          // and the managed one is granted read-only, so leading with it does
+          // not redirect in-kernel installs.
+          ...(library ? { R_LIBS_USER: [library, opts?.env?.R_LIBS_USER].filter(Boolean).join(path.delimiter) } : {}),
         },
         stdio: ["pipe", "pipe", "pipe"],
         // Own process group so killing the kernel reaps its worker children (#102).
@@ -601,6 +635,9 @@ const RFields = {
     .max(1024)
     .optional()
     .describe("Script path associated with this execution, when applicable"),
+  environment: KernelEnvironmentName.optional().describe(
+    "Optional project R environment provisioned by package_install. Omit it or use 'default' for the host runtime.",
+  ),
   timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
 }
 
@@ -635,11 +672,18 @@ type RInput = z.infer<typeof RKernelParameters>
 
 async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: boolean) {
   const name = compatibilityNamed ? (params.kernel ?? "agent") : "r"
+  // `environment` was declared on the tool's schema, described to the agent as
+  // "provisioned by package_install", and then read by nothing: every call got
+  // the host runtime. Wired the same way the Python tool wires its own — the
+  // name is part of the kernel identity, so two environments get two kernels
+  // rather than one kernel silently shared between them.
+  const environment = normalizeKernelEnvironmentName(params.environment, "r")
   const identity = {
     projectID: Instance.project.id,
     sessionID: ctx.sessionID,
     name,
     language: "r" as const,
+    environmentName: environment === "r" ? undefined : environment,
   }
   if (params.action === "stop") {
     ctx.metadata({
@@ -664,11 +708,11 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
   const retryInput = { ...params, code: params.code! }
   await ToolRetryGuard.assertKernel(ctx, {
     language: "r",
-    environment: "r",
+    environment,
     source: params.source,
     code: params.code!,
   })
-  const mutation = KernelEnvironmentMutation.detect({ language: "r", environment: "r", code: params.code! })
+  const mutation = KernelEnvironmentMutation.detect({ language: "r", environment, code: params.code! })
   ctx.metadata({
     title,
     metadata: {
@@ -710,6 +754,37 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
     })
   }
 
+  // `rRuntime()` describes the host runtime. A named environment adds the
+  // managed directory, which is what `start()` turns into an R_LIBS_USER entry
+  // and a sandbox grant.
+  // A name with no environment behind it fails, rather than quietly running the
+  // host runtime with an R_LIBS_USER pointing at nothing — which would report a
+  // missing package as if it had never been installed, and send the agent off
+  // reinstalling it into the environment it was already in. The Python side
+  // fails the same way, for the same reason.
+  if (environment !== "r") {
+    const lib = Installer.rlibrary(Environment.directory(Instance.project.id, environment))
+    const exists = await fs.stat(lib).then(
+      () => true,
+      () => false,
+    )
+    if (!exists) {
+      throw new Error(
+        `R environment '${environment}' was not found. Expected a package library at ${lib}. ` +
+          "Install into it with package_install (language: 'r'), or omit environment for the host runtime.",
+      )
+    }
+  }
+
+  const start =
+    environment === "r"
+      ? KernelEnvironmentMutation.rRuntime(!!mutation)
+      : {
+          ...KernelEnvironmentMutation.rRuntime(!!mutation),
+          environmentName: environment,
+          environment: Environment.directory(Instance.project.id, environment),
+        }
+
   let result: ExecuteResult
   try {
     result = await KernelRuntime.execute(
@@ -720,7 +795,7 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
         signal: ctx.abort,
         origin: { messageID: ctx.messageID, callID: ctx.callID, title, source: params.source },
       },
-      KernelEnvironmentMutation.rRuntime(!!mutation),
+      start,
     )
   } catch (error) {
     if (mutation) await KernelRuntime.release(identity).catch(() => undefined)

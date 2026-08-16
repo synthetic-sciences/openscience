@@ -2,13 +2,7 @@
   "id": "10.1038/nature12373",
   "payload": {
     "indexed": {
-      "date-parts": [
-        [
-          2026,
-          7,
-          25
-        ]
-      ],
+      "date-parts": [[2026, 7, 25]],
       "date-time": "2026-07-25T06:56:20Z",
       "timestamp": 1784962580403,
       "version": "3.55.0"
@@ -19,13 +13,7 @@
     "license": [
       {
         "start": {
-          "date-parts": [
-            [
-              2013,
-              7,
-              31
-            ]
-          ],
+          "date-parts": [[2013, 7, 31]],
           "date-time": "2013-07-31T00:00:00Z",
           "timestamp": 1375228800000
         },
@@ -38,36 +26,21 @@
       "domain": [],
       "crossmark-restriction": false
     },
-    "short-container-title": [
-      "Nature"
-    ],
+    "short-container-title": ["Nature"],
     "published-print": {
-      "date-parts": [
-        [
-          2013,
-          8
-        ]
-      ]
+      "date-parts": [[2013, 8]]
     },
     "DOI": "10.1038/nature12373",
     "type": "journal-article",
     "created": {
-      "date-parts": [
-        [
-          2013,
-          7,
-          30
-        ]
-      ],
+      "date-parts": [[2013, 7, 30]],
       "date-time": "2013-07-30T12:59:50Z",
       "timestamp": 1375189190000
     },
     "page": "54-58",
     "source": "Crossref",
     "is-referenced-by-count": 1792,
-    "title": [
-      "Nanometre-scale thermometry in a living cell"
-    ],
+    "title": ["Nanometre-scale thermometry in a living cell"],
     "prefix": "10.1038",
     "volume": "500",
     "author": [
@@ -170,13 +143,7 @@
     ],
     "member": "297",
     "published-online": {
-      "date-parts": [
-        [
-          2013,
-          7,
-          31
-        ]
-      ]
+      "date-parts": [[2013, 7, 31]]
     },
     "reference": [
       {
@@ -503,9 +470,7 @@
         "journal-title": "Cancer Res."
       }
     ],
-    "container-title": [
-      "Nature"
-    ],
+    "container-title": ["Nature"],
     "original-title": [],
     "language": "en",
     "link": [
@@ -529,13 +494,7 @@
       }
     ],
     "deposited": {
-      "date-parts": [
-        [
-          2023,
-          5,
-          18
-        ]
-      ],
+      "date-parts": [[2023, 5, 18]],
       "date-time": "2023-05-18T18:13:47Z",
       "timestamp": 1684433627000
     },
@@ -548,35 +507,19 @@
     "subtitle": [],
     "short-title": [],
     "issued": {
-      "date-parts": [
-        [
-          2013,
-          7,
-          31
-        ]
-      ]
+      "date-parts": [[2013, 7, 31]]
     },
     "references-count": 30,
     "journal-issue": {
       "issue": "7460",
       "published-print": {
-        "date-parts": [
-          [
-            2013,
-            8
-          ]
-        ]
+        "date-parts": [[2013, 8]]
       }
     },
-    "alternative-id": [
-      "BFnature12373"
-    ],
+    "alternative-id": ["BFnature12373"],
     "URL": "https://doi.org/10.1038/nature12373",
     "relation": {},
-    "ISSN": [
-      "0028-0836",
-      "1476-4687"
-    ],
+    "ISSN": ["0028-0836", "1476-4687"],
     "issn-type": [
       {
         "value": "0028-0836",
@@ -589,13 +532,7 @@
     ],
     "subject": [],
     "published": {
-      "date-parts": [
-        [
-          2013,
-          7,
-          31
-        ]
-      ]
+      "date-parts": [[2013, 7, 31]]
     }
   }
 }

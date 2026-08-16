@@ -155,6 +155,32 @@ export namespace KernelProcessIdentity {
     throw new Error("Kernel manager returned a process without trusted durable containment registration")
   }
 
+  /** The start token for a pid, or undefined where the platform cannot supply
+   *  one. Exported so callers holding a persisted pid — an installer claim, say
+   *  — can capture the same value `capture()` stores for a kernel. */
+  export function startToken(pid: number) {
+    return token(pid)
+  }
+
+  /**
+   * Liveness for a bare pid + token pair, the shape a persisted record has
+   * after a restart when no `ChildProcess` survives.
+   *
+   * Applies the same fallback rule as `matches`: when no token was captured —
+   * Windows, or a read that failed — liveness alone is sufficient. Demanding a
+   * token match there would report every Windows process as dead, which for
+   * the installer claim would mark every environment permanently suspect.
+   */
+  export function running(pid: number, value?: string) {
+    try {
+      process.kill(pid, 0)
+    } catch {
+      return false
+    }
+    if (!value) return true
+    return token(pid) === value
+  }
+
   export function matches(proc: ChildProcess, identity?: KernelProcess) {
     if (!identity || proc.pid !== identity.pid || proc.exitCode !== null) return false
     try {

@@ -53,10 +53,7 @@
           "raw_pages": "5328-41",
           "medline_journal": "J Biol Chem",
           "ISO_journal": "J. Biol. Chem.",
-          "authors": [
-            "McMullen BA",
-            "Fujikawa K."
-          ],
+          "authors": ["McMullen BA", "Fujikawa K."],
           "DOI_URL": "http://intl.jbc.org/cgi/content/abstract/260/9/5328"
         },
         "PUB00003400": {
@@ -70,10 +67,7 @@
           "raw_pages": "358-69",
           "medline_journal": "J Mol Evol",
           "ISO_journal": "J. Mol. Evol.",
-          "authors": [
-            "Castellino FJ",
-            "Beals JM."
-          ],
+          "authors": ["Castellino FJ", "Beals JM."],
           "DOI_URL": "http://dx.doi.org/10.1007/BF02101155"
         },
         "PUB00001541": {
@@ -87,13 +81,7 @@
           "raw_pages": "131-6",
           "medline_journal": "FEBS Lett",
           "ISO_journal": "FEBS Lett.",
-          "authors": [
-            "Patthy L",
-            "Trexler M",
-            "Vali Z",
-            "Banyai L",
-            "Varadi A."
-          ],
+          "authors": ["Patthy L", "Trexler M", "Vali Z", "Banyai L", "Varadi A."],
           "DOI_URL": "http://dx.doi.org/10.1016/0014-5793(84)80473-1"
         },
         "PUB00001620": {
@@ -107,11 +95,7 @@
           "raw_pages": "146-8",
           "medline_journal": "FEBS Lett",
           "ISO_journal": "FEBS Lett.",
-          "authors": [
-            "Ikeo K",
-            "Takahashi K",
-            "Gojobori T."
-          ],
+          "authors": ["Ikeo K", "Takahashi K", "Gojobori T."],
           "DOI_URL": "http://dx.doi.org/10.1016/0014-5793(91)80036-3"
         },
         "PUB00000803": {
@@ -125,9 +109,7 @@
           "raw_pages": "657-63",
           "medline_journal": "Cell",
           "ISO_journal": "Cell",
-          "authors": [
-            "Patthy L."
-          ],
+          "authors": ["Patthy L."],
           "DOI_URL": "http://dx.doi.org/10.1016/S0092-8674(85)80046-5"
         },
         "PUB00003257": {
@@ -141,10 +123,7 @@
           "raw_pages": "541-52",
           "medline_journal": "J Mol Biol",
           "ISO_journal": "J. Mol. Biol.",
-          "authors": [
-            "Atkinson RA",
-            "Williams RJ."
-          ],
+          "authors": ["Atkinson RA", "Williams RJ."],
           "DOI_URL": "http://dx.doi.org/10.1016/0022-2836(90)90330-O"
         }
       },

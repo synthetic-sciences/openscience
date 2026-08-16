@@ -28,11 +28,11 @@ export interface ExecutionDecision {
   writable: string[]
   sandbox: {
     enabled: boolean
-    network: "allow" | "deny"
+    network: "deny" | "allowlist" | "allow"
     allowWrite: string[]
     onUnavailable: "warn" | "error" | "allow"
     requireProjectTrust?: boolean
-    backend: "seatbelt" | "bubblewrap" | "none"
+    backend: "seatbelt" | "bubblewrap" | "appcontainer" | "none"
     available: boolean
     enforced: boolean
   }

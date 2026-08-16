@@ -9,6 +9,7 @@ import { Config } from "../config/config"
 import { Skill } from "../skill"
 import { PermissionNext } from "../permission/next"
 import { ComputePrompt } from "../compute/prompt"
+import { PackagePrompt } from "../package/prompt"
 
 export namespace SystemPrompt {
   export function instructions() {
@@ -21,6 +22,22 @@ export namespace SystemPrompt {
 
   export async function compute(value?: unknown) {
     return [await ComputePrompt.system(value)]
+  }
+
+  /**
+   * Governed package installation. Injected unconditionally, for the same
+   * reason `compute()` is: it has to pre-empt every skill, reference file and
+   * third-party document that says `pip install`.
+   *
+   * 199 of the 293 shipped `SKILL.md` files mention `pip install`. Editing them
+   * would be neither necessary nor sufficient — reference files are never
+   * intercepted by the skill tool, and skills cloned from GitHub are not this
+   * repo's to edit. A block on every request reaches all of them.
+   */
+  export async function packages(projectID?: string) {
+    // Defaults to the live project so the injection site stays a bare call;
+    // tests pass an explicit id (or omit it for the empty rendering).
+    return [await PackagePrompt.system(projectID ?? Instance.project.id)]
   }
 
   /** When the user message begins with `/<name>` matching an installed

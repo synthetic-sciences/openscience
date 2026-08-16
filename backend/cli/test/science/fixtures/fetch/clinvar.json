@@ -29,9 +29,7 @@
         ],
         "variation_name": "NM_001065.4(TNFRSF1A):c.295T>A (p.Cys99Ser)",
         "cdna_change": "c.295T>A",
-        "aliases": [
-          "C70S"
-        ],
+        "aliases": ["C70S"],
         "variation_loc": [
           {
             "status": "current",
@@ -77,13 +75,8 @@
       }
     ],
     "supporting_submissions": {
-      "scv": [
-        "SCV000116051",
-        "SCV000033385"
-      ],
-      "rcv": [
-        "RCV000013138"
-      ]
+      "scv": ["SCV000116051", "SCV000033385"],
+      "rcv": ["RCV000013138"]
     },
     "germline_classification": {
       "description": "Pathogenic",
@@ -142,11 +135,7 @@
         "source": "submitted"
       }
     ],
-    "molecular_consequence_list": [
-      "missense variant",
-      "5 prime UTR variant",
-      "non-coding transcript variant"
-    ],
+    "molecular_consequence_list": ["missense variant", "5 prime UTR variant", "non-coding transcript variant"],
     "protein_change": "C99S",
     "fda_recognized_database": ""
   }

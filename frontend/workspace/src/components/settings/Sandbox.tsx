@@ -20,14 +20,15 @@ import "./sandbox.css"
 
 interface SandboxConfig {
   enabled?: boolean
-  network?: "allow" | "deny"
+  network?: "deny" | "allowlist" | "allow"
+  allowHosts?: string[]
   allowWrite?: string[]
   onUnavailable?: "warn" | "error" | "allow"
   requireProjectTrust?: boolean
 }
 interface Status {
   platform: string
-  backend: "seatbelt" | "bubblewrap" | "none"
+  backend: "seatbelt" | "bubblewrap" | "appcontainer" | "none"
   available: boolean
   readIsolation?: "grant_only" | "unavailable"
   networkIsolation?: "deny_all" | "unavailable"
@@ -37,6 +38,15 @@ interface Status {
 interface Payload {
   config: SandboxConfig
   status: Status
+  /**
+   * Why Python environments cannot be provisioned on this machine, or null.
+   *
+   * Distinct from `status` on purpose: the backend can be perfectly available
+   * and containment perfectly sound while installs still cannot run, because
+   * Windows only lets you grant paths you own. Without this the panel shows a
+   * green backend on a machine where every install fails.
+   */
+  blocked?: string | null
 }
 interface Check {
   name: string
@@ -54,9 +64,17 @@ interface SelfTest {
 type WriteKey = "enabled" | "trust" | "network" | "fallback" | "paths"
 type PendingWrite = { body: SandboxConfig; key: WriteKey; failure: string }
 
+// "Allow" is not unrestricted, and two of the three backends cannot make it so:
+// bubblewrap cannot grant outbound access without also exposing everything bound
+// to 127.0.0.1, and SBPL's `remote ip` filter accepts only `*` and `localhost`.
+// Both deny every socket instead. A label promising unrestricted egress
+// described a capability the machine does not have, and the only symptom was an
+// agent that could not reach the network with nothing tying it back to this
+// setting. "Allowlist" is the state that actually carries traffic.
 const NETWORK_OPTS = [
-  { value: "allow" as const, label: "Allow" },
   { value: "deny" as const, label: "Deny" },
+  { value: "allowlist" as const, label: "Allowlist" },
+  { value: "allow" as const, label: "Allow" },
 ]
 const UNAVAILABLE_OPTS = [
   { value: "warn" as const, label: "Warn & run" },
@@ -219,6 +237,22 @@ const Sandbox: Component = () => {
               </button>
             </div>
           </Show>
+          {/*
+            A prerequisite, not a status, and it goes ABOVE everything else on
+            purpose. On Windows an AppContainer can only be granted paths its
+            user owns, so a machine-wide Python is unusable by a sandboxed
+            process however healthy it is — and the only other symptom is an
+            install failing much later with an error about the interpreter
+            rather than about ownership. A green backend sitting next to
+            "installs will fail" reads as a contradiction, so this comes first.
+            Nobody runs `sandbox status` voluntarily; they meet this here or
+            when the agent tries to install something.
+          */}
+          <Show when={data()?.blocked}>
+            <div class="settings-callout settings-callout-warning">
+              <For each={(data()?.blocked ?? "").split("\n")}>{(line) => <p>{line}</p>}</For>
+            </div>
+          </Show>
           <Section
             title="Protection"
             description="Permissions approve a command; the sandbox limits what it can reach."
@@ -359,7 +393,9 @@ const Sandbox: Component = () => {
                     <span>
                       {networkDenyEnforced()
                         ? "This backend always denies network access, including loopback, LAN, link-local, and metadata endpoints."
-                        : "Allow permits outbound network access while loopback remains blocked."}
+                        : effectiveNetwork() === "allow" && data()?.status?.backend !== "appcontainer"
+                          ? 'On this platform "Allow" reaches nothing — the sandbox denies every socket, because it cannot grant outbound access without also exposing everything bound to 127.0.0.1. Use "Allowlist" and name the hosts you need.'
+                          : "Allowlist routes egress through an audited proxy limited to the hosts you name. Allow permits outbound access where the platform can express it; loopback stays blocked."}
                     </span>
                   </div>
                   <Select

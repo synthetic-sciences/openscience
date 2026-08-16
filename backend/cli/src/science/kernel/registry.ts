@@ -69,6 +69,17 @@ type Entry = {
   incarnation: number | null
   executionCount: number
   environment: KernelEnvironment | null
+  /**
+   * Directory of the managed package environment this kernel is bound to, or
+   * null for the host interpreter.
+   *
+   * Deliberately NOT the field above: `environment` is a `KernelEnvironment`,
+   * the kernel's runtime context (cwd, sandbox platform). Merging the two would
+   * bind kernels to the wrong thing. Deliberately not part of `KernelIdentity`
+   * either — that tuple is hashed into the storage key, so adding to it would
+   * orphan every persisted record.
+   */
+  boundEnvironment: string | null
   startedAt: number | null
   lastActivityAt: number | null
   authority: ExecutionAuthority.Decision | null
@@ -247,6 +258,7 @@ function restore(value: z.infer<typeof Persisted>) {
     incarnation: value.incarnation,
     executionCount: value.execution_count,
     environment: null,
+    boundEnvironment: null,
     startedAt: null,
     lastActivityAt: value.last_activity_at,
     authority: null,
@@ -292,6 +304,7 @@ const record = (identity: KernelIdentity) => {
     incarnation: null,
     executionCount: 0,
     environment: null,
+    boundEnvironment: null,
     startedAt: null,
     lastActivityAt: null,
     authority: null,
@@ -785,6 +798,14 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
       async (kernel) => {
         if (stale()) return abort()
         value.environment = kernel.environment ?? null
+        // The managed environment DIRECTORY this kernel was started against, so
+        // `restartEnvironment` can find it after a non-additive install. Distinct
+        // from `environment` above, which is the kernel's runtime context (cwd,
+        // sandbox platform) and has nothing to do with packages — the two are
+        // carried separately precisely so they cannot be confused. Left null
+        // after the rebase, which meant the filter matched nothing and a version
+        // change silently kept a kernel holding stale imports.
+        value.boundEnvironment = options?.environment ?? null
         value.process = kernel.process ?? null
         value.ownershipID = kernel.process?.ownershipID ?? processOwnership.id
         value.authority = current
@@ -1163,6 +1184,36 @@ export namespace KernelRuntime {
     const identity = records().entries.get(id)?.identity ?? records().starts.get(id)?.identity
     if (!identity || identity.projectID !== projectID || identity.sessionID !== sessionID) return
     return identity
+  }
+
+  /**
+   * Restart every kernel bound to a package environment, leaving every other
+   * kernel untouched. Called only for a non-additive change: a module already
+   * loaded into a live interpreter stays at its old version in memory while the
+   * files on disk say otherwise, and a silently stale module is worse than an
+   * obvious restart.
+   *
+   * NOT to be confused with the entry's existing `environment` field, which is
+   * a `KernelEnvironment` — the kernel's runtime context (cwd, sandbox
+   * platform) and nothing to do with installed packages. The package binding is
+   * carried separately as `boundEnvironment` precisely to keep the two apart.
+   *
+   * `environment` is the environment *directory*, which is what a kernel binds
+   * to — the caller resolves the name through `Environment.directory` so this
+   * never has to know the project layout.
+   *
+   * Releasing rather than restarting in place is deliberate: kernels are lazy,
+   * so the next cell boots a fresh one against the new interpreter. Eagerly
+   * respawning here would pay the startup cost for kernels the session may
+   * never touch again.
+   */
+  export async function restartEnvironment(projectID: string, environment: string) {
+    const values = Array.from(records().entries.values()).filter(
+      (value) => value.identity.projectID === projectID && value.boundEnvironment === environment,
+    )
+    // Sequential, not Promise.all: `release` mutates the shared records map,
+    // and the set is small by construction — one project's live kernels.
+    for (const value of values) await release(value.identity)
   }
 
   export async function release(identity: KernelIdentity) {

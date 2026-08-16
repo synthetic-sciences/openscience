@@ -135,8 +135,24 @@ export function GenericTool(props: {
   const glyph = () => (props.status === "error" ? "✗" : props.status === "completed" ? "✓" : "…")
   const subtitle = () => {
     const input = props.input ?? {}
+    // `progress` first, and only while the call is still running: a tool with
+    // no dedicated renderer otherwise shows its name and an ellipsis for the
+    // whole call. `package_install` sat at "Package Install …" for 1m37s
+    // installing pytorch, with pip reporting size and phase the whole time.
+    // `metadata` is re-read as the tool streams, so this updates live; `input`
+    // is fixed at call time and cannot.
+    const progress = props.metadata?.progress
+    if (props.status !== "completed" && props.status !== "error" && typeof progress === "string" && progress) {
+      return progress
+    }
     const first = input.command ?? input.description ?? input.query ?? input.path ?? input.pattern
-    return typeof first === "string" ? first : undefined
+    if (typeof first === "string") return first
+    // A list of names is as good a summary as a command string, and every
+    // fallback above happens to be scalar. Without this the most informative
+    // thing about the call — what it is installing — is on screen nowhere.
+    const list = input.packages
+    if (Array.isArray(list) && list.every((v) => typeof v === "string") && list.length) return list.join(", ")
+    return undefined
   }
   return (
     <BasicTool

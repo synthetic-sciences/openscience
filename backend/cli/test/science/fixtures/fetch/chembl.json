@@ -1,13 +1,7 @@
 {
   "id": "CHEMBL25",
   "payload": {
-    "atc_classifications": [
-      "B01AC06",
-      "N02BA01",
-      "N02BA51",
-      "A01AD05",
-      "N02BA71"
-    ],
+    "atc_classifications": ["B01AC06", "N02BA01", "N02BA51", "A01AD05", "N02BA71"],
     "availability_type": 2,
     "biotherapeutic": null,
     "black_box_warning": 0,

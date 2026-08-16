@@ -385,7 +385,7 @@ describe("/notebook routes", () => {
             requested: expect.any(Boolean),
             enforced: expect.any(Boolean),
             backend: expect.any(String),
-            network: expect.stringMatching(/^(allow|deny)$/),
+            network: expect.stringMatching(/^(allow|allowlist|deny)$/),
             platform: process.platform,
           },
         })
@@ -572,7 +572,10 @@ describe("/notebook routes", () => {
         const waitForStarting = async (attempt = 0): Promise<void> => {
           const result = (await (await status()).json()) as { state?: string }
           if (result.state === "starting") return
-          if (attempt >= 100) throw new Error("kernel did not start")
+          // 500 * 10ms = 5s: covers the loopback shim's own up-to-3s readiness
+          // wait under sandbox network "allowlist" (the default), plus normal
+          // interpreter startup, with margin. See sandbox.ts's shimScript.
+          if (attempt >= 500) throw new Error("kernel did not start")
           await Bun.sleep(10)
           return waitForStarting(attempt + 1)
         }
@@ -971,7 +974,10 @@ describe("/notebook routes", () => {
         const waitForStarting = async (attempt = 0): Promise<void> => {
           const result = (await (await status()).json()) as { state?: string }
           if (result.state === "starting") return
-          if (attempt >= 100) throw new Error("kernel did not start")
+          // 500 * 10ms = 5s: covers the loopback shim's own up-to-3s readiness
+          // wait under sandbox network "allowlist" (the default), plus normal
+          // interpreter startup, with margin. See sandbox.ts's shimScript.
+          if (attempt >= 500) throw new Error("kernel did not start")
           await Bun.sleep(10)
           return waitForStarting(attempt + 1)
         }
@@ -1038,7 +1044,8 @@ describe("/notebook routes", () => {
         const waitForRunning = async (attempt = 0): Promise<void> => {
           const response = (await (await status()).json()) as { state?: string }
           if (response.state === "running") return
-          if (attempt >= 100) throw new Error("kernel did not start running")
+          // See the "kernel did not start" budget above for why 500 * 10ms.
+          if (attempt >= 500) throw new Error("kernel did not start running")
           await Bun.sleep(10)
           return waitForRunning(attempt + 1)
         }
@@ -1109,7 +1116,8 @@ describe("/notebook routes", () => {
             await app.request(`/kernels?sessionID=${encodeURIComponent(session.id)}`)
           ).json()) as typeof kernels
           if (current.kernels.find((value) => value.id === kernel.id)?.state === "running") return
-          if (attempt >= 100) throw new Error("kernel did not start running")
+          // See the "kernel did not start" budget above for why 500 * 10ms.
+          if (attempt >= 500) throw new Error("kernel did not start running")
           await Bun.sleep(10)
           return waitForRunning(attempt + 1)
         }

@@ -23,20 +23,14 @@
         "id": "https://openalex.org/S1983995261",
         "display_name": "PeerJ",
         "issn_l": "2167-8359",
-        "issn": [
-          "2167-8359"
-        ],
+        "issn": ["2167-8359"],
         "is_oa": true,
         "is_in_doaj": true,
         "is_core": true,
         "host_organization": "https://openalex.org/P4310320104",
         "host_organization_name": "PeerJ, Inc.",
-        "host_organization_lineage": [
-          "https://openalex.org/P4310320104"
-        ],
-        "host_organization_lineage_names": [
-          "PeerJ, Inc."
-        ],
+        "host_organization_lineage": ["https://openalex.org/P4310320104"],
+        "host_organization_lineage_names": ["PeerJ, Inc."],
         "type": "journal"
       },
       "license": "cc-by",
@@ -48,12 +42,7 @@
       "raw_type": "journal-article"
     },
     "type": "book-chapter",
-    "indexed_in": [
-      "crossref",
-      "datacite",
-      "doaj",
-      "pubmed"
-    ],
+    "indexed_in": ["crossref", "datacite", "doaj", "pubmed"],
     "open_access": {
       "is_oa": true,
       "oa_status": "gold",
@@ -75,9 +64,7 @@
             "ror": "https://ror.org/02nr0ka47",
             "country_code": "CA",
             "type": "nonprofit",
-            "lineage": [
-              "https://openalex.org/I4200000001"
-            ]
+            "lineage": ["https://openalex.org/I4200000001"]
           },
           {
             "id": "https://openalex.org/I4210166736",
@@ -85,28 +72,18 @@
             "ror": "https://ror.org/05ppvf150",
             "country_code": "US",
             "type": "company",
-            "lineage": [
-              "https://openalex.org/I4210166736"
-            ]
+            "lineage": ["https://openalex.org/I4210166736"]
           }
         ],
-        "countries": [
-          "CA",
-          "US"
-        ],
+        "countries": ["CA", "US"],
         "is_corresponding": false,
         "raw_author_name": "Heather Piwowar",
-        "raw_affiliation_strings": [
-          "Impactstory, Sanford, NC, USA"
-        ],
+        "raw_affiliation_strings": ["Impactstory, Sanford, NC, USA"],
         "raw_orcid": null,
         "affiliations": [
           {
             "raw_affiliation_string": "Impactstory, Sanford, NC, USA",
-            "institution_ids": [
-              "https://openalex.org/I4200000001",
-              "https://openalex.org/I4210166736"
-            ]
+            "institution_ids": ["https://openalex.org/I4200000001", "https://openalex.org/I4210166736"]
           }
         ]
       },
@@ -124,9 +101,7 @@
             "ror": "https://ror.org/02nr0ka47",
             "country_code": "CA",
             "type": "nonprofit",
-            "lineage": [
-              "https://openalex.org/I4200000001"
-            ]
+            "lineage": ["https://openalex.org/I4200000001"]
           },
           {
             "id": "https://openalex.org/I4210166736",
@@ -134,28 +109,18 @@
             "ror": "https://ror.org/05ppvf150",
             "country_code": "US",
             "type": "company",
-            "lineage": [
-              "https://openalex.org/I4210166736"
-            ]
+            "lineage": ["https://openalex.org/I4210166736"]
           }
         ],
-        "countries": [
-          "CA",
-          "US"
-        ],
+        "countries": ["CA", "US"],
         "is_corresponding": false,
         "raw_author_name": "Jason Priem",
-        "raw_affiliation_strings": [
-          "Impactstory, Sanford, NC, USA"
-        ],
+        "raw_affiliation_strings": ["Impactstory, Sanford, NC, USA"],
         "raw_orcid": null,
         "affiliations": [
           {
             "raw_affiliation_string": "Impactstory, Sanford, NC, USA",
-            "institution_ids": [
-              "https://openalex.org/I4200000001",
-              "https://openalex.org/I4210166736"
-            ]
+            "institution_ids": ["https://openalex.org/I4200000001", "https://openalex.org/I4210166736"]
           }
         ]
       },
@@ -173,10 +138,7 @@
             "ror": "https://ror.org/002rjbv21",
             "country_code": "CA",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I159129438",
-              "https://openalex.org/I49663120"
-            ]
+            "lineage": ["https://openalex.org/I159129438", "https://openalex.org/I49663120"]
           },
           {
             "id": "https://openalex.org/I70931966",
@@ -184,14 +146,10 @@
             "ror": "https://ror.org/0161xgx34",
             "country_code": "CA",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I70931966"
-            ]
+            "lineage": ["https://openalex.org/I70931966"]
           }
         ],
-        "countries": [
-          "CA"
-        ],
+        "countries": ["CA"],
         "is_corresponding": false,
         "raw_author_name": "Vincent Larivière",
         "raw_affiliation_strings": [
@@ -202,15 +160,11 @@
         "affiliations": [
           {
             "raw_affiliation_string": "Observatoire des Sciences et des Technologies (OST), Centre Interuniversitaire de Recherche sur la Science et la Technologie (CIRST), Université du Québec à Montréal, Montréal, QC, Canada",
-            "institution_ids": [
-              "https://openalex.org/I159129438"
-            ]
+            "institution_ids": ["https://openalex.org/I159129438"]
           },
           {
             "raw_affiliation_string": "École de bibliothéconomie et des sciences de l’information, Université de Montréal, Montréal, QC, Canada",
-            "institution_ids": [
-              "https://openalex.org/I70931966"
-            ]
+            "institution_ids": ["https://openalex.org/I70931966"]
           }
         ]
       },
@@ -228,9 +182,7 @@
             "ror": "https://ror.org/0213rcc28",
             "country_code": "CA",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I18014758"
-            ]
+            "lineage": ["https://openalex.org/I18014758"]
           },
           {
             "id": "https://openalex.org/I4387153203",
@@ -238,15 +190,10 @@
             "ror": "https://ror.org/05ek4tb53",
             "country_code": null,
             "type": "other",
-            "lineage": [
-              "https://openalex.org/I18014758",
-              "https://openalex.org/I4387153203"
-            ]
+            "lineage": ["https://openalex.org/I18014758", "https://openalex.org/I4387153203"]
           }
         ],
-        "countries": [
-          "CA"
-        ],
+        "countries": ["CA"],
         "is_corresponding": false,
         "raw_author_name": "Juan Pablo Alperin",
         "raw_affiliation_strings": [
@@ -257,15 +204,11 @@
         "affiliations": [
           {
             "raw_affiliation_string": "Canadian Institute for Studies in Publishing, Simon Fraser University, Vancouver, BC, Canada",
-            "institution_ids": [
-              "https://openalex.org/I18014758"
-            ]
+            "institution_ids": ["https://openalex.org/I18014758"]
           },
           {
             "raw_affiliation_string": "Public Knowledge Project, Canada",
-            "institution_ids": [
-              "https://openalex.org/I4387153203"
-            ]
+            "institution_ids": ["https://openalex.org/I4387153203"]
           }
         ]
       },
@@ -283,26 +226,18 @@
             "ror": "https://ror.org/0213rcc28",
             "country_code": "CA",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I18014758"
-            ]
+            "lineage": ["https://openalex.org/I18014758"]
           }
         ],
-        "countries": [
-          "CA"
-        ],
+        "countries": ["CA"],
         "is_corresponding": false,
         "raw_author_name": "Lisa Matthias",
-        "raw_affiliation_strings": [
-          "Scholarly Communications Lab, Simon Fraser University, Vancouver, Canada"
-        ],
+        "raw_affiliation_strings": ["Scholarly Communications Lab, Simon Fraser University, Vancouver, Canada"],
         "raw_orcid": null,
         "affiliations": [
           {
             "raw_affiliation_string": "Scholarly Communications Lab, Simon Fraser University, Vancouver, Canada",
-            "institution_ids": [
-              "https://openalex.org/I18014758"
-            ]
+            "institution_ids": ["https://openalex.org/I18014758"]
           }
         ]
       },
@@ -320,9 +255,7 @@
             "ror": "https://ror.org/00cvxb145",
             "country_code": "US",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I201448701"
-            ]
+            "lineage": ["https://openalex.org/I201448701"]
           },
           {
             "id": "https://openalex.org/I58610484",
@@ -330,20 +263,13 @@
             "ror": "https://ror.org/02jqc0m91",
             "country_code": "US",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I58610484"
-            ]
+            "lineage": ["https://openalex.org/I58610484"]
           }
         ],
-        "countries": [
-          "US"
-        ],
+        "countries": ["US"],
         "is_corresponding": false,
         "raw_author_name": "Bree Norlander",
-        "raw_affiliation_strings": [
-          "FlourishOA, USA",
-          "Information School, University of Washington, Seattle, USA"
-        ],
+        "raw_affiliation_strings": ["FlourishOA, USA", "Information School, University of Washington, Seattle, USA"],
         "raw_orcid": null,
         "affiliations": [
           {
@@ -352,10 +278,7 @@
           },
           {
             "raw_affiliation_string": "Information School, University of Washington, Seattle, USA",
-            "institution_ids": [
-              "https://openalex.org/I201448701",
-              "https://openalex.org/I58610484"
-            ]
+            "institution_ids": ["https://openalex.org/I201448701", "https://openalex.org/I58610484"]
           }
         ]
       },
@@ -373,9 +296,7 @@
             "ror": "https://ror.org/00cvxb145",
             "country_code": "US",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I201448701"
-            ]
+            "lineage": ["https://openalex.org/I201448701"]
           },
           {
             "id": "https://openalex.org/I58610484",
@@ -383,20 +304,13 @@
             "ror": "https://ror.org/02jqc0m91",
             "country_code": "US",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I58610484"
-            ]
+            "lineage": ["https://openalex.org/I58610484"]
           }
         ],
-        "countries": [
-          "US"
-        ],
+        "countries": ["US"],
         "is_corresponding": false,
         "raw_author_name": "Ashley Farley",
-        "raw_affiliation_strings": [
-          "FlourishOA, USA",
-          "Information School, University of Washington, Seattle, USA"
-        ],
+        "raw_affiliation_strings": ["FlourishOA, USA", "Information School, University of Washington, Seattle, USA"],
         "raw_orcid": null,
         "affiliations": [
           {
@@ -405,10 +319,7 @@
           },
           {
             "raw_affiliation_string": "Information School, University of Washington, Seattle, USA",
-            "institution_ids": [
-              "https://openalex.org/I201448701",
-              "https://openalex.org/I58610484"
-            ]
+            "institution_ids": ["https://openalex.org/I201448701", "https://openalex.org/I58610484"]
           }
         ]
       },
@@ -426,9 +337,7 @@
             "ror": "https://ror.org/00cvxb145",
             "country_code": "US",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I201448701"
-            ]
+            "lineage": ["https://openalex.org/I201448701"]
           },
           {
             "id": "https://openalex.org/I58610484",
@@ -436,27 +345,18 @@
             "ror": "https://ror.org/02jqc0m91",
             "country_code": "US",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I58610484"
-            ]
+            "lineage": ["https://openalex.org/I58610484"]
           }
         ],
-        "countries": [
-          "US"
-        ],
+        "countries": ["US"],
         "is_corresponding": false,
         "raw_author_name": "Jevin West",
-        "raw_affiliation_strings": [
-          "Information School, University of Washington, Seattle, USA"
-        ],
+        "raw_affiliation_strings": ["Information School, University of Washington, Seattle, USA"],
         "raw_orcid": null,
         "affiliations": [
           {
             "raw_affiliation_string": "Information School, University of Washington, Seattle, USA",
-            "institution_ids": [
-              "https://openalex.org/I201448701",
-              "https://openalex.org/I58610484"
-            ]
+            "institution_ids": ["https://openalex.org/I201448701", "https://openalex.org/I58610484"]
           }
         ]
       },
@@ -474,9 +374,7 @@
             "ror": "https://ror.org/03c4mmv16",
             "country_code": "CA",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I153718931"
-            ]
+            "lineage": ["https://openalex.org/I153718931"]
           },
           {
             "id": "https://openalex.org/I159129438",
@@ -484,15 +382,10 @@
             "ror": "https://ror.org/002rjbv21",
             "country_code": "CA",
             "type": "education",
-            "lineage": [
-              "https://openalex.org/I159129438",
-              "https://openalex.org/I49663120"
-            ]
+            "lineage": ["https://openalex.org/I159129438", "https://openalex.org/I49663120"]
           }
         ],
-        "countries": [
-          "CA"
-        ],
+        "countries": ["CA"],
         "is_corresponding": false,
         "raw_author_name": "Stefanie Haustein",
         "raw_affiliation_strings": [
@@ -503,15 +396,11 @@
         "affiliations": [
           {
             "raw_affiliation_string": "Observatoire des Sciences et des Technologies (OST), Centre Interuniversitaire de Recherche sur la Science et la Technologie (CIRST), Université du Québec à Montréal, Montréal, QC, Canada",
-            "institution_ids": [
-              "https://openalex.org/I159129438"
-            ]
+            "institution_ids": ["https://openalex.org/I159129438"]
           },
           {
             "raw_affiliation_string": "School of Information Studies, University of Ottawa, Ottawa, ON, Canada",
-            "institution_ids": [
-              "https://openalex.org/I153718931"
-            ]
+            "institution_ids": ["https://openalex.org/I153718931"]
           }
         ]
       }
@@ -851,20 +740,14 @@
           "id": "https://openalex.org/S1983995261",
           "display_name": "PeerJ",
           "issn_l": "2167-8359",
-          "issn": [
-            "2167-8359"
-          ],
+          "issn": ["2167-8359"],
           "is_oa": true,
           "is_in_doaj": true,
           "is_core": true,
           "host_organization": "https://openalex.org/P4310320104",
           "host_organization_name": "PeerJ, Inc.",
-          "host_organization_lineage": [
-            "https://openalex.org/P4310320104"
-          ],
-          "host_organization_lineage_names": [
-            "PeerJ, Inc."
-          ],
+          "host_organization_lineage": ["https://openalex.org/P4310320104"],
+          "host_organization_lineage_names": ["PeerJ, Inc."],
           "type": "journal"
         },
         "license": "cc-by",
@@ -890,9 +773,7 @@
           "is_core": false,
           "host_organization": "https://openalex.org/I1299303238",
           "host_organization_name": "National Institutes of Health",
-          "host_organization_lineage": [
-            "https://openalex.org/I1299303238"
-          ],
+          "host_organization_lineage": ["https://openalex.org/I1299303238"],
           "host_organization_lineage_names": [],
           "type": "repository"
         },
@@ -919,9 +800,7 @@
           "is_core": false,
           "host_organization": "https://openalex.org/I114395901",
           "host_organization_name": "University of Nebraska–Lincoln",
-          "host_organization_lineage": [
-            "https://openalex.org/I114395901"
-          ],
+          "host_organization_lineage": ["https://openalex.org/I114395901"],
           "host_organization_lineage_names": [],
           "type": "repository"
         },
@@ -948,9 +827,7 @@
           "is_core": false,
           "host_organization": "https://openalex.org/I1294671590",
           "host_organization_name": "Centre National de la Recherche Scientifique",
-          "host_organization_lineage": [
-            "https://openalex.org/I1294671590"
-          ],
+          "host_organization_lineage": ["https://openalex.org/I1294671590"],
           "host_organization_lineage_names": [],
           "type": "repository"
         },
@@ -1004,9 +881,7 @@
           "is_core": false,
           "host_organization": "https://openalex.org/I1303153112",
           "host_organization_name": "European Bioinformatics Institute",
-          "host_organization_lineage": [
-            "https://openalex.org/I1303153112"
-          ],
+          "host_organization_lineage": ["https://openalex.org/I1303153112"],
           "host_organization_lineage_names": [],
           "type": "repository"
         },
@@ -1033,9 +908,7 @@
           "is_core": false,
           "host_organization": "https://openalex.org/I70931966",
           "host_organization_name": "Université de Montréal",
-          "host_organization_lineage": [
-            "https://openalex.org/I70931966"
-          ],
+          "host_organization_lineage": ["https://openalex.org/I70931966"],
           "host_organization_lineage_names": [],
           "type": "repository"
         },
@@ -1062,9 +935,7 @@
           "is_core": false,
           "host_organization": "https://openalex.org/I18014758",
           "host_organization_name": "Simon Fraser University",
-          "host_organization_lineage": [
-            "https://openalex.org/I18014758"
-          ],
+          "host_organization_lineage": ["https://openalex.org/I18014758"],
           "host_organization_lineage_names": [],
           "type": "repository"
         },
@@ -1091,9 +962,7 @@
           "is_core": false,
           "host_organization": "https://openalex.org/I67311998",
           "host_organization_name": "European Organization for Nuclear Research",
-          "host_organization_lineage": [
-            "https://openalex.org/I67311998"
-          ],
+          "host_organization_lineage": ["https://openalex.org/I67311998"],
           "host_organization_lineage_names": [],
           "type": "repository"
         },
@@ -1115,20 +984,14 @@
         "id": "https://openalex.org/S1983995261",
         "display_name": "PeerJ",
         "issn_l": "2167-8359",
-        "issn": [
-          "2167-8359"
-        ],
+        "issn": ["2167-8359"],
         "is_oa": true,
         "is_in_doaj": true,
         "is_core": true,
         "host_organization": "https://openalex.org/P4310320104",
         "host_organization_name": "PeerJ, Inc.",
-        "host_organization_lineage": [
-          "https://openalex.org/P4310320104"
-        ],
-        "host_organization_lineage_names": [
-          "PeerJ, Inc."
-        ],
+        "host_organization_lineage": ["https://openalex.org/P4310320104"],
+        "host_organization_lineage_names": ["PeerJ, Inc."],
         "type": "journal"
       },
       "license": "cc-by",
@@ -1217,598 +1080,173 @@
       "https://openalex.org/W2608652318"
     ],
     "abstract_inverted_index": {
-      "67": [
-        43
-      ],
-      "Despite": [
-        0
-      ],
-      "growing": [
-        1
-      ],
-      "interest": [
-        2
-      ],
-      "in": [
-        3,
-        57,
-        73,
-        110,
-        122
-      ],
-      "Open": [
-        4,
-        201
-      ],
-      "Access": [
-        5
-      ],
-      "(OA)": [
-        6
-      ],
-      "to": [
-        7,
-        54,
-        252
-      ],
-      "scholarly": [
-        8,
-        105
-      ],
-      "literature,": [
-        9
-      ],
-      "there": [
-        10
-      ],
-      "is": [
-        11,
-        107,
-        116,
-        176
-      ],
-      "an": [
-        12,
-        34,
-        85,
-        185,
-        199,
-        231
-      ],
-      "unmet": [
-        13
-      ],
-      "need": [
-        14,
-        31
-      ],
-      "for": [
-        15,
-        42,
-        174,
-        219
-      ],
-      "large-scale,": [
-        16
-      ],
-      "up-to-date,": [
-        17
-      ],
-      "and": [
-        18,
-        24,
-        77,
-        112,
-        124,
-        144,
-        221,
-        237,
-        256
-      ],
-      "reproducible": [
-        19
-      ],
-      "studies": [
-        20
-      ],
-      "assessing": [
-        21
-      ],
-      "the": [
-        22,
-        104,
-        134,
-        145,
-        170,
-        195,
-        206,
-        213,
-        245
-      ],
-      "prevalence": [
-        23
-      ],
-      "characteristics": [
-        25
-      ],
-      "of": [
-        26,
-        51,
-        75,
-        83,
-        103,
-        137,
-        141,
-        163,
-        209
-      ],
-      "OA.": [
-        27,
-        168,
-        239
-      ],
-      "We": [
-        28,
-        46,
-        97,
-        203,
-        240
-      ],
-      "address": [
-        29
-      ],
-      "this": [
-        30,
-        114,
-        142
-      ],
-      "using": [
-        32,
-        95,
-        244
-      ],
-      "oaDOI,": [
-        33
-      ],
-      "open": [
-        35
-      ],
-      "online": [
-        36
-      ],
-      "service": [
-        37
-      ],
-      "that": [
-        38,
-        89,
-        99,
-        113,
-        147,
-        155
-      ],
-      "determines": [
-        39
-      ],
-      "OA": [
-        40,
-        56,
-        93,
-        108,
-        138,
-        159,
-        175,
-        210,
-        223,
-        254
-      ],
-      "status": [
-        41
-      ],
-      "million": [
-        44
-      ],
-      "articles.": [
-        45
-      ],
-      "use": [
-        47
-      ],
-      "three": [
-        48,
-        58
-      ],
-      "samples,": [
-        49
-      ],
-      "each": [
-        50
-      ],
-      "100,000": [
-        52
-      ],
-      "articles,": [
-        53,
-        152,
-        211
-      ],
-      "investigate": [
-        55
-      ],
-      "populations:": [
-        59
-      ],
-      "(1)": [
-        60
-      ],
-      "all": [
-        61
-      ],
-      "journal": [
-        62,
-        70
-      ],
-      "articles": [
-        63,
-        71,
-        79,
-        94,
-        164,
-        191,
-        224
-      ],
-      "assigned": [
-        64
-      ],
-      "a": [
-        65,
-        250
-      ],
-      "Crossref": [
-        66
-      ],
-      "DOI,": [
-        67
-      ],
-      "(2)": [
-        68
-      ],
-      "recent": [
-        69,
-        128
-      ],
-      "indexed": [
-        72
-      ],
-      "Web": [
-        74
-      ],
-      "Science,": [
-        76
-      ],
-      "(3)": [
-        78
-      ],
-      "viewed": [
-        80
-      ],
-      "by": [
-        81,
-        120,
-        235
-      ],
-      "users": [
-        82,
-        91,
-        157
-      ],
-      "Unpaywall,": [
-        84
-      ],
-      "open-source": [
-        86
-      ],
-      "browser": [
-        87
-      ],
-      "extension": [
-        88
-      ],
-      "lets": [
-        90
-      ],
-      "find": [
-        92,
-        154
-      ],
-      "oaDOI.": [
-        96
-      ],
-      "estimate": [
-        98
-      ],
-      "at": [
-        100
-      ],
-      "least": [
-        101
-      ],
-      "28%": [
-        102
-      ],
-      "literature": [
-        106
-      ],
-      "(19M": [
-        109
-      ],
-      "total)": [
-        111
-      ],
-      "proportion": [
-        115
-      ],
-      "growing,": [
-        117
-      ],
-      "driven": [
-        118,
-        233
-      ],
-      "particularly": [
-        119
-      ],
-      "growth": [
-        121
-      ],
-      "Gold": [
-        123
-      ],
-      "Hybrid.": [
-        125
-      ],
-      "The": [
-        126
-      ],
-      "most": [
-        127,
-        171
-      ],
-      "year": [
-        129
-      ],
-      "analyzed": [
-        130
-      ],
-      "(2015)": [
-        131
-      ],
-      "also": [
-        132,
-        204
-      ],
-      "has": [
-        133
-      ],
-      "highest": [
-        135
-      ],
-      "percentage": [
-        136
-      ],
-      "(45%).": [
-        139
-      ],
-      "Because": [
-        140
-      ],
-      "growth,": [
-        143
-      ],
-      "fact": [
-        146
-      ],
-      "readers": [
-        148
-      ],
-      "disproportionately": [
-        149
-      ],
-      "access": [
-        150
-      ],
-      "newer": [
-        151
-      ],
-      "we": [
-        153,
-        188
-      ],
-      "Unpaywall": [
-        156
-      ],
-      "encounter": [
-        158
-      ],
-      "quite": [
-        160
-      ],
-      "frequently:": [
-        161
-      ],
-      "47%": [
-        162
-      ],
-      "they": [
-        165
-      ],
-      "view": [
-        166
-      ],
-      "are": [
-        167
-      ],
-      "Notably,": [
-        169
-      ],
-      "common": [
-        172
-      ],
-      "mechanism": [
-        173
-      ],
-      "not": [
-        177
-      ],
-      "Gold,": [
-        178
-      ],
-      "Green,": [
-        179
-      ],
-      "or": [
-        180
-      ],
-      "Hybrid": [
-        181,
-        238
-      ],
-      "OA,": [
-        182
-      ],
-      "but": [
-        183
-      ],
-      "rather": [
-        184
-      ],
-      "under-discussed": [
-        186
-      ],
-      "category": [
-        187
-      ],
-      "dub": [
-        189
-      ],
-      "Bronze:": [
-        190
-      ],
-      "made": [
-        192
-      ],
-      "free-to-read": [
-        193
-      ],
-      "on": [
-        194
-      ],
-      "publisher": [
-        196
-      ],
-      "website,": [
-        197
-      ],
-      "without": [
-        198
-      ],
-      "explicit": [
-        200
-      ],
-      "license.": [
-        202
-      ],
-      "examine": [
-        205
-      ],
-      "citation": [
-        207,
-        216
-      ],
-      "impact": [
-        208
-      ],
-      "corroborating": [
-        212
-      ],
-      "so-called": [
-        214
-      ],
-      "open-access": [
-        215
-      ],
-      "advantage:": [
-        217
-      ],
-      "accounting": [
-        218
-      ],
-      "age": [
-        220
-      ],
-      "discipline,": [
-        222
-      ],
-      "receive": [
-        225
-      ],
-      "18%": [
-        226
-      ],
-      "more": [
-        227
-      ],
-      "citations": [
-        228
-      ],
-      "than": [
-        229
-      ],
-      "average,": [
-        230
-      ],
-      "effect": [
-        232
-      ],
-      "primarily": [
-        234
-      ],
-      "Green": [
-        236
-      ],
-      "encourage": [
-        241
-      ],
-      "further": [
-        242
-      ],
-      "research": [
-        243
-      ],
-      "free": [
-        246
-      ],
-      "oaDOI": [
-        247
-      ],
-      "service,": [
-        248
-      ],
-      "as": [
-        249
-      ],
-      "way": [
-        251
-      ],
-      "inform": [
-        253
-      ],
-      "policy": [
-        255
-      ],
-      "practice.": [
-        257
-      ]
+      "67": [43],
+      "Despite": [0],
+      "growing": [1],
+      "interest": [2],
+      "in": [3, 57, 73, 110, 122],
+      "Open": [4, 201],
+      "Access": [5],
+      "(OA)": [6],
+      "to": [7, 54, 252],
+      "scholarly": [8, 105],
+      "literature,": [9],
+      "there": [10],
+      "is": [11, 107, 116, 176],
+      "an": [12, 34, 85, 185, 199, 231],
+      "unmet": [13],
+      "need": [14, 31],
+      "for": [15, 42, 174, 219],
+      "large-scale,": [16],
+      "up-to-date,": [17],
+      "and": [18, 24, 77, 112, 124, 144, 221, 237, 256],
+      "reproducible": [19],
+      "studies": [20],
+      "assessing": [21],
+      "the": [22, 104, 134, 145, 170, 195, 206, 213, 245],
+      "prevalence": [23],
+      "characteristics": [25],
+      "of": [26, 51, 75, 83, 103, 137, 141, 163, 209],
+      "OA.": [27, 168, 239],
+      "We": [28, 46, 97, 203, 240],
+      "address": [29],
+      "this": [30, 114, 142],
+      "using": [32, 95, 244],
+      "oaDOI,": [33],
+      "open": [35],
+      "online": [36],
+      "service": [37],
+      "that": [38, 89, 99, 113, 147, 155],
+      "determines": [39],
+      "OA": [40, 56, 93, 108, 138, 159, 175, 210, 223, 254],
+      "status": [41],
+      "million": [44],
+      "articles.": [45],
+      "use": [47],
+      "three": [48, 58],
+      "samples,": [49],
+      "each": [50],
+      "100,000": [52],
+      "articles,": [53, 152, 211],
+      "investigate": [55],
+      "populations:": [59],
+      "(1)": [60],
+      "all": [61],
+      "journal": [62, 70],
+      "articles": [63, 71, 79, 94, 164, 191, 224],
+      "assigned": [64],
+      "a": [65, 250],
+      "Crossref": [66],
+      "DOI,": [67],
+      "(2)": [68],
+      "recent": [69, 128],
+      "indexed": [72],
+      "Web": [74],
+      "Science,": [76],
+      "(3)": [78],
+      "viewed": [80],
+      "by": [81, 120, 235],
+      "users": [82, 91, 157],
+      "Unpaywall,": [84],
+      "open-source": [86],
+      "browser": [87],
+      "extension": [88],
+      "lets": [90],
+      "find": [92, 154],
+      "oaDOI.": [96],
+      "estimate": [98],
+      "at": [100],
+      "least": [101],
+      "28%": [102],
+      "literature": [106],
+      "(19M": [109],
+      "total)": [111],
+      "proportion": [115],
+      "growing,": [117],
+      "driven": [118, 233],
+      "particularly": [119],
+      "growth": [121],
+      "Gold": [123],
+      "Hybrid.": [125],
+      "The": [126],
+      "most": [127, 171],
+      "year": [129],
+      "analyzed": [130],
+      "(2015)": [131],
+      "also": [132, 204],
+      "has": [133],
+      "highest": [135],
+      "percentage": [136],
+      "(45%).": [139],
+      "Because": [140],
+      "growth,": [143],
+      "fact": [146],
+      "readers": [148],
+      "disproportionately": [149],
+      "access": [150],
+      "newer": [151],
+      "we": [153, 188],
+      "Unpaywall": [156],
+      "encounter": [158],
+      "quite": [160],
+      "frequently:": [161],
+      "47%": [162],
+      "they": [165],
+      "view": [166],
+      "are": [167],
+      "Notably,": [169],
+      "common": [172],
+      "mechanism": [173],
+      "not": [177],
+      "Gold,": [178],
+      "Green,": [179],
+      "or": [180],
+      "Hybrid": [181, 238],
+      "OA,": [182],
+      "but": [183],
+      "rather": [184],
+      "under-discussed": [186],
+      "category": [187],
+      "dub": [189],
+      "Bronze:": [190],
+      "made": [192],
+      "free-to-read": [193],
+      "on": [194],
+      "publisher": [196],
+      "website,": [197],
+      "without": [198],
+      "explicit": [200],
+      "license.": [202],
+      "examine": [205],
+      "citation": [207, 216],
+      "impact": [208],
+      "corroborating": [212],
+      "so-called": [214],
+      "open-access": [215],
+      "advantage:": [217],
+      "accounting": [218],
+      "age": [220],
+      "discipline,": [222],
+      "receive": [225],
+      "18%": [226],
+      "more": [227],
+      "citations": [228],
+      "than": [229],
+      "average,": [230],
+      "effect": [232],
+      "primarily": [234],
+      "Green": [236],
+      "encourage": [241],
+      "further": [242],
+      "research": [243],
+      "free": [246],
+      "oaDOI": [247],
+      "service,": [248],
+      "as": [249],
+      "way": [251],
+      "inform": [253],
+      "policy": [255],
+      "practice.": [257]
     },
     "counts_by_year": [
       {

@@ -2,15 +2,10 @@
   "id": "ENSG00000141510",
   "payload": {
     "Gene": "TP53",
-    "Gene synonym": [
-      "LFS1",
-      "p53"
-    ],
+    "Gene synonym": ["LFS1", "p53"],
     "Ensembl": "ENSG00000141510",
     "Gene description": "Tumor protein p53",
-    "Uniprot": [
-      "P04637"
-    ],
+    "Uniprot": ["P04637"],
     "Chromosome": "17",
     "Position": "7661779-7687538",
     "Protein class": [
@@ -32,17 +27,8 @@
       "Transcription",
       "Transcription regulation"
     ],
-    "Molecular function": [
-      "Activator",
-      "DNA-binding",
-      "Repressor"
-    ],
-    "Disease involvement": [
-      "Cancer-related genes",
-      "Disease variant",
-      "Li-Fraumeni syndrome",
-      "Tumor suppressor"
-    ],
+    "Molecular function": ["Activator", "DNA-binding", "Repressor"],
+    "Disease involvement": ["Cancer-related genes", "Disease variant", "Li-Fraumeni syndrome", "Tumor suppressor"],
     "Evidence": "Evidence at protein level",
     "HPA evidence": "Evidence at protein level",
     "UniProt evidence": "Evidence at protein level",
@@ -85,9 +71,7 @@
     "RNA cell line distribution": "Detected in all",
     "RNA cell line specificity score": null,
     "RNA cell line specific nTPM": null,
-    "RNA tissue cell type enrichment": [
-      "Stomach - Mitotic cells (Stomach)"
-    ],
+    "RNA tissue cell type enrichment": ["Stomach - Mitotic cells (Stomach)"],
     "RNA mouse brain regional specificity": "Low region specificity",
     "RNA mouse brain regional distribution": "Detected in all",
     "RNA mouse brain regional specificity score": null,
@@ -104,22 +88,11 @@
     "Protein tissue distribution": "Not detected",
     "Protein tissue specificity score": null,
     "Protein tissue specific Intensity": null,
-    "Antibody": [
-      "CAB002973",
-      "CAB039238",
-      "CAB039239",
-      "HPA051244",
-      "HPA063532",
-      "CAB072876"
-    ],
+    "Antibody": ["CAB002973", "CAB039238", "CAB039239", "HPA051244", "HPA063532", "CAB072876"],
     "Reliability (IH)": "Enhanced",
     "Reliability (Mouse Brain)": null,
     "Reliability (IF)": "Enhanced",
-    "Subcellular location": [
-      "Nucleoplasm",
-      "Vesicles",
-      "Cytosol"
-    ],
+    "Subcellular location": ["Nucleoplasm", "Vesicles", "Cytosol"],
     "Secretome location": null,
     "Secretome function": null,
     "CCD Protein": "Yes",
@@ -132,13 +105,8 @@
     "Cell line expression cluster": "Cluster 42: Non-specific - Unknown function",
     "Single cell expression cluster": "Cluster 65: Non-specific - Cell growth & division",
     "Interactions": 998,
-    "Subcellular main location": [
-      "Nucleoplasm"
-    ],
-    "Subcellular additional location": [
-      "Vesicles",
-      "Cytosol"
-    ],
+    "Subcellular main location": ["Nucleoplasm"],
+    "Subcellular additional location": ["Vesicles", "Cytosol"],
     "Antibody RRID": {
       "CAB002973": null,
       "CAB039238": null,

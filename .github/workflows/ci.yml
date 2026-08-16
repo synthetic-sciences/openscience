@@ -88,6 +88,173 @@ jobs:
         shell: bash
         working-directory: backend/cli
 
+  # Task 7 gave macOS a seatbelt profile for network:"allowlist" — an SBPL
+  # profile plus an authenticated loopback proxy, built and unit-tested
+  # entirely from Linux with the platform injected, because no Mac exists on
+  # this project. `sandbox-exec` (macOS) and `bwrap --unshare-net` (Linux)
+  # are unrelated OS-level mechanisms underneath the same `Sandbox` API, so a
+  # green Linux run says nothing about whether seatbelt actually confines a
+  # real process the way the profile text claims — only this leg's macOS run
+  # does. See test/sandbox/egress-live-seatbelt.test.ts's doc comment for
+  # exactly what a red run here would mean.
+  sandbox:
+    name: Sandbox (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # Raised from 20: test/package/ now runs real pip installs through the
+    # sandbox against real pypi, which the sandbox suite alone never did.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      # Same step the `test` job already has. The sandbox job never needed it
+      # until test/package/ joined it: those tests create a real project with
+      # `tmpdir({ git: true })`, and `git commit` exits 128 on a runner with no
+      # global identity configured.
+      - name: Configure git for tests
+        run: |
+          git config --global user.email "ci@openscience.dev"
+          git config --global user.name "OpenScience CI"
+          git config --global init.defaultBranch main
+      - name: Install and verify Linux sandbox
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+          # Ubuntu 24.04's host-wide AppArmor policy blocks unprivileged user
+          # namespaces on the hosted runner before bubblewrap can apply our
+          # stricter per-process profile. This runner is disposable; enable
+          # user namespaces for the job, then prove the sandbox can start.
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
+      # R is the one backend with no verification anywhere: no runner has
+      # Rscript by default, and neither does any development machine on this
+      # project, so its two live tests skip everywhere and it ships on faith.
+      # r-base-core is the minimal package that provides Rscript. Linux only —
+      # `brew install r` on the macOS leg costs several minutes for a backend
+      # whose only platform-specific surface (the sandbox wrapper) is already
+      # covered there by the Python tests.
+      - name: Install R so the R installer tests actually run
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install --yes --no-install-recommends r-base-core
+          Rscript -e 'cat("Rscript", as.character(getRversion()), "\n")'
+      # test/package/ carries the merge gate: a governed install under
+      # network "allowlist", plus the assertion that the shell route to the
+      # same install is refused. Both legs run it, so the gate is a fact on
+      # Linux and macOS rather than a claim about one of them.
+      - run: bun test test/sandbox/ test/package/
+        shell: bash
+        working-directory: backend/cli
+
+  # Windows is deliberately NOT in the matrix above. That job's `test/package/`
+  # leg is the merge gate — a governed install under network "allowlist" — and
+  # allowlist egress does not exist on Windows yet: the container holds zero
+  # capabilities, so it has no network by construction, and nothing serves the
+  # broker pipe the spec carries. Adding windows-latest there would be red for a
+  # feature that was never built, which teaches a reader nothing.
+  #
+  # What this job DOES cover is the part that was only ever verified by hand:
+  # `test/sandbox/appcontainer-live.test.ts` runs a real CreateProcessW with real
+  # SECURITY_CAPABILITIES and asserts the child is confined. Everything else in
+  # test/sandbox/ exercises the Windows branch from Linux with the platform
+  # injected, which proves what we compose and nothing about what Windows does
+  # with it. That gap cost roughly ten manual round trips on a contributor's own
+  # machine, one command at a time, for bugs that were not exotic: `-c` where cmd
+  # wanted `/c`, `printf` in a shell with no printf, CommandLineToArgvW quoting
+  # handed to the one program that does not parse it that way. Each would have
+  # been red here within minutes.
+  #
+  # Widen this to test/package/ once the named-pipe broker lands.
+  sandbox-windows:
+    name: Sandbox (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - run: >-
+          bun test
+          test/process/darwin-responsibility.test.ts
+          test/credentials/process-ledger.test.ts
+          test/project/authority-process-ledger.test.ts
+        shell: bash
+        working-directory: backend/cli
+
+      - name: Configure git for tests
+        run: |
+          git config --global user.email "ci@openscience.dev"
+          git config --global user.name "OpenScience CI"
+          git config --global init.defaultBranch main
+        shell: bash
+      # OPENSCIENCE_SANDBOX_DEBUG makes the launcher dump what it hands the
+      # kernel — the SID, the attribute list, the whole STARTUPINFOEX with cb and
+      # lpAttributeList broken out. On a machine no one can log into, a failure
+      # that only says "expected true" is worth almost nothing.
+      # Just the live file. The rest of test/sandbox/ asserts POSIX composition
+      # -- seatbelt profile text, bubblewrap argv, `/tmp` paths that path.resolve
+      # turns into `C:\tmp` here -- and several tests read source through
+      # `new URL(...).pathname`, which yields `/D:/a/...` on Windows. Those are
+      # Linux/macOS concerns that happen to live in the same directory; running
+      # them here would produce 30-odd red results that say nothing about
+      # Windows. Widen deliberately, not by directory.
+      - run: bun test test/sandbox/appcontainer-live.test.ts test/sandbox/appcontainer-transport.test.ts
+        shell: bash
+        working-directory: backend/cli
+        env:
+          OPENSCIENCE_SANDBOX_DEBUG: "1"
+
+      # A base interpreter the runner's own user owns. The whole Windows
+      # difficulty is that an AppContainer can only be granted paths its user
+      # owns, and every Python preinstalled on a GitHub runner is machine-wide —
+      # so without this step the install test would exercise the one
+      # configuration that is known not to work, and prove nothing about the one
+      # users are told to set up.
+      - name: Install uv and a user-owned Python
+        run: |
+          irm https://astral.sh/uv/install.ps1 | iex
+          $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+          # 3.12.3 specifically, not "3.12". CPython 3.12.4 changed
+          # os.mkdir(mode=0o700) so tempfile.mkdtemp() creates a directory whose
+          # DACL does not inherit, and an AppContainer process cannot then write
+          # into the directory it just made (python/cpython#134587, fixed
+          # upstream but unreleased). 3.12.3 is the last release without it, and
+          # pinning here is what lets the install path stay on pip.
+          uv python install 3.12.3
+          uv python list --only-installed --output-format json
+        shell: pwsh
+
+      # The seven hops between "a process starts in a container" and "a package
+      # is importable": interpreter choice, venv creation, the base pin, the ACL
+      # grant, the launcher spawning its base, pip, and the pipe->broker->proxy
+      # chain. None of it was covered, so all of it was found one round trip at
+      # a time on a contributor's own machine.
+      # The sandbox re-enters this binary twice — as the launcher and as the
+      # egress shim — and in a source checkout neither is what ships. The shim
+      # especially: `bun <bundle>` dies inside the container with `error loading
+      # current directory`, while `bun --version` in the same container with the
+      # same working directory exits 0. That difference is a property of a dev
+      # artifact users never run, so the test drives the compiled binary.
+      - name: Compile the binary the sandbox re-enters
+        run: bun build --compile ./src/index.ts --outfile "$RUNNER_TEMP/openscience-self.exe"
+        shell: bash
+        working-directory: backend/cli
+
+      - name: Package install, end to end
+        run: |
+          $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+          bun test test/sandbox/appcontainer-install.test.ts
+        shell: pwsh
+        working-directory: backend/cli
+        env:
+          OPENSCIENCE_SANDBOX_DEBUG: "1"
+          OPENSCIENCE_SELF_BINARY: ${{ runner.temp }}\openscience-self.exe
+
   test:
     name: Test
     runs-on: ubuntu-latest

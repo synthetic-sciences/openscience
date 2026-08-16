@@ -104,7 +104,8 @@ Sandbox policy is read only from global and managed configuration. A project's `
 | Key | Meaning | Default |
 | --- | --- | --- |
 | `enabled` | Request the native sandbox for local execution. | `false` |
-| `network` | Requested network policy. Current native backends enforce deny-all. | `"deny"` |
+| `network` | Requested network policy: `"deny"`, `"allowlist"`, or `"allow"`. See below. | `"deny"` |
+| `allowHosts` | Extra hosts reachable under `"allowlist"`, beyond the package indexes. | `[]` |
 | `allowWrite` | Extra absolute writable roots beyond session grants. | `[]` |
 | `onUnavailable` | `"error"`, `"warn"`, or `"allow"` when no backend can run. | `"error"` |
 | `requireProjectTrust` | Block all execution until the project is explicitly trusted. | `false` |
@@ -116,6 +117,10 @@ Sandbox policy is read only from global and managed configuration. A project's `
 The sandbox applies to spawned commands, including shell utilities, compilers, package managers, notebook kernels, and local detached jobs. It is a real OS boundary, but it is not a VM:
 
 - Only explicitly granted filesystem roots are mounted or allowed. Files already readable inside those roots remain readable to the command.
+- `"allowlist"` is the only policy that carries traffic on macOS and Linux. It routes egress through a proxy that runs outside the sandbox, enforces the host list, and records what was requested. On Linux the sandbox has no network device at all — a bind-mounted unix socket to that proxy is the single route out; on macOS the profile narrows `network-outbound` to the proxy's loopback port and nothing else.
+- `"allow"` reaches nothing on those two backends. Neither can grant outbound access without also exposing every service bound to `127.0.0.1` — bubblewrap cannot express "the internet but never loopback" without a separately configured network namespace, and SBPL's `remote ip` filter accepts only `*` and `localhost`, so an allow-with-private-denies profile would leave LAN, link-local and cloud-metadata endpoints reachable. Both deny every socket instead, and the CLI and settings panel say so when you select it. On Windows, AppContainer capability SIDs do grant real outbound access, so `"allow"` means what it says there and only there.
+- On Windows, sandboxed Python cannot use `tempfile.mkdtemp()`. CPython 3.12.4 changed `os.mkdir(mode=0o700)` so the directory it creates no longer inherits its parent's ACL, and inside an AppContainer access comes from the package SID — so the process cannot write into the directory it just made. This affects any interpreter from 3.12.4 onward, including code you or the agent write in a notebook; it is [python/cpython#134587](https://github.com/python/cpython/issues/134587) and is fixed upstream but not yet released. Package installs are unaffected because they use uv on Windows, which does not go through CPython's `tempfile`.
+- Because of that, Windows installs resolve through uv while macOS and Linux use pip. The two can pick different versions for the same requirement, so an environment built on Windows may not match one built elsewhere for the same request. The environment manifest records exactly what landed, so each is reproducible on its own machine.
 - Current macOS and Linux backends deny IP networking rather than trying to distinguish safe public destinations from loopback or private services.
 - Host-brokered tools such as WebFetch apply their own URL, size, and destination controls outside the command sandbox.
 - Linux requires a working bubblewrap/user-namespace setup. Windows currently has no filesystem sandbox backend.
