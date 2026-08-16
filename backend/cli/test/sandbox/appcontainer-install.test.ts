@@ -207,9 +207,16 @@ test.if(windows)(
     // So: launch a shell in the container and have IT spawn the interpreter.
     // Red here means execute-from-inside is the missing right and every
     // "runs inside the container" result above is weaker than it reads.
-    const { Shell } = await import("../../src/shell/shell")
-    const shell = Shell.acceptable()
+    // cmd.exe explicitly, NOT Shell.acceptable(). On a GitHub runner that
+    // resolves to Git Bash under `C:\Program Files`, which the container cannot
+    // be granted — Windows only lets you grant paths you own. bash then fails
+    // its own DLL init with 0xC0000142 before reaching the interpreter, and the
+    // first version of this test read that as "the container cannot execute
+    // Python". It could not execute BASH. cmd.exe lives in System32 and starts
+    // in the container, as `a trivial command survives the container at all`
+    // already shows.
     const home = await Installer.base(environment!)
+    const shell = `${process.env["SystemRoot"] ?? "C:\\Windows"}\\system32\\cmd.exe`
     const plan = Sandbox.plan({
       command: `"${Installer.interpreter(environment!)}" -c "print(7)"`,
       shell,
