@@ -136,6 +136,12 @@ const parser = lazy(async () => {
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
+  // Chosen once, at tool definition, from the machine's preference. The
+  // per-call shell is re-resolved below against the authority's policy, because
+  // a shell the sandbox cannot execute is worse than a less pleasant one: on
+  // Windows `Shell.acceptable()` returns Git Bash under `C:\Program Files`,
+  // which no ACE can reach, and every sandboxed command dies at 0xC0000142
+  // before running.
   const shell = Shell.acceptable()
   log.info("bash tool using shell", { shell })
 
@@ -315,9 +321,14 @@ export const BashTool = Tool.define("bash", async () => {
         // The egress route is resolved here for the same reason: it is part of
         // the authority this launch runs with, not of the decision to launch.
         const egress = await EgressRuntime.egressFor(current.sandbox)
+        // The sandbox picks the shell when it is going to confine one. Under no
+        // sandbox this is the machine's preference unchanged; under one on
+        // Windows it is a System32 shell, because the preferred one lives where
+        // no ACE can be added and the container cannot load it.
+        const usable = Sandbox.shell({ ...current.sandbox, egress })
         const sandbox = Sandbox.plan({
           command: params.command,
-          shell,
+          shell: usable,
           cwd,
           workspace: current.writable,
           readable: [...readable],

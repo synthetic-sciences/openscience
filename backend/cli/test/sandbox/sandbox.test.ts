@@ -5,6 +5,7 @@ import os from "os"
 import path from "path"
 import { ProcessIdentity } from "../../src/process/process-identity"
 import { Sandbox } from "../../src/sandbox/sandbox"
+import { Shell } from "../../src/shell/shell"
 import { SHIM_READY_MARKER } from "../../src/sandbox/egress-shim-marker"
 import { tmpdir } from "../fixture/fixture"
 
@@ -1958,4 +1959,43 @@ test("the one thing Windows cannot deliver is said once, with the remedy", () =>
   // Once per process, like warned.unavailable.
   const second = Sandbox.plan({ ...base, options: { enabled: true, network: "allow" } })
   expect(second.warning).toBeUndefined()
+})
+
+describe("the sandbox chooses a shell it can execute", () => {
+  // CI has never caught this. That job step runs under `shell: bash`, which sets
+  // $SHELL, so `Shell.acceptable()` returns it and never reaches the fallback
+  // that finds Git Bash. On a developer's Windows machine with Git installed and
+  // no $SHELL, the fallback wins and every sandboxed command dies at 0xC0000142
+  // — bash failing to load msys-2.0.dll from a directory no ACE can reach.
+  // These assert against an injected win32 so the property holds from any host.
+
+  test("Program Files is unreachable, System32 and the profile are not", () => {
+    const root = process.env["SystemRoot"] ?? "C:\\Windows"
+    expect(Sandbox.reachable("C:\\Program Files\\Git\\bin\\bash.exe", "win32")).toBe(false)
+    // pwsh 7 installs here too. Same trap, newer binary.
+    expect(Sandbox.reachable("C:\\Program Files\\PowerShell\\7\\pwsh.exe", "win32")).toBe(false)
+    // System32 already ships an ALL APPLICATION PACKAGES ACE so AppContainers
+    // can load system DLLs — nothing for us to grant.
+    expect(Sandbox.reachable(`${root}\\System32\\cmd.exe`, "win32")).toBe(true)
+    // Everything is reachable in a namespace; only Windows has this problem.
+    expect(Sandbox.reachable("C:\\Program Files\\Git\\bin\\bash.exe", "linux")).toBe(true)
+  })
+
+  test("a confined run gets a System32 shell, never one under Program Files", () => {
+    const chosen = Sandbox.shell({ enabled: true }, "win32")
+    expect(chosen.toLowerCase()).toContain("system32")
+    expect(chosen.toLowerCase()).not.toContain("program files")
+    // And whatever it picks, the invocation table knows how to drive it —
+    // cmd takes /d /s /c and PowerShell takes -NoProfile -Command, and handing
+    // either the other's flags runs nothing while exiting 0.
+    const args = Shell.invocation(chosen, "echo hi")
+    expect(args.length).toBeGreaterThan(0)
+    expect(args).not.toContain("-c")
+  })
+
+  test("an unconfined run keeps the machine's own preference", () => {
+    // Losing Git Bash when nothing is being confined would be a regression for
+    // every Windows user who never turns the sandbox on.
+    expect(Sandbox.shell({ enabled: false }, "win32")).toBe(Shell.acceptable())
+  })
 })

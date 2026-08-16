@@ -293,6 +293,71 @@ export namespace Sandbox {
     return backend() !== "none"
   }
 
+  /**
+   * Can the sandbox reach this path at all — not "should it", but "is it
+   * possible on this machine"?
+   *
+   * On POSIX, yes: a namespace can bind anything. On Windows, access comes from
+   * an ACE naming the container's package SID, and `icacls` can only modify an
+   * ACL you OWN — so a path under `C:\Program Files` is unreachable no matter
+   * the policy, without elevation this product does not ask for. The one
+   * exception is the System32 subtree, which Windows already ships with an
+   * `ALL APPLICATION PACKAGES` ACE so that AppContainers can load system DLLs
+   * and run system binaries.
+   *
+   * Distinct from `Installer.grantable`, which asks whether WE can write a new
+   * ACE (ownership only). This asks whether the container can reach the path at
+   * all, which includes ACEs that are already there.
+   */
+  export function reachable(target: string, platform: NodeJS.Platform = process.platform): boolean {
+    if (platform !== "win32") return true
+    const root = process.env["SystemRoot"] ?? "C:\\Windows"
+    const system = path.win32.join(root, "System32").toLowerCase()
+    const value = target.toLowerCase()
+    if (value.startsWith(system + path.win32.sep) || value === system) return true
+    const home = (process.env["USERPROFILE"] ?? os.homedir()).toLowerCase()
+    return !!home && value.startsWith(home + path.win32.sep)
+  }
+
+  /**
+   * A shell the sandbox can actually execute.
+   *
+   * `Shell.acceptable()` answers a different question — the nicest shell on this
+   * machine — and on Windows with Git installed that is
+   * `C:\Program Files\Git\bin\bash.exe`, an MSYS2 program under a directory no
+   * ACE can be added to. The container cannot load `msys-2.0.dll`, so bash dies
+   * at `0xC0000142` (STATUS_DLL_INIT_FAILED) before running anything, and every
+   * sandboxed command fails for a reason that names neither the shell nor the
+   * sandbox.
+   *
+   * So the sandbox picks. Windows PowerShell 5.1 first — it lives in System32,
+   * which already carries the ACE, and `Shell.invocation` already knows to drive
+   * it with `-NoProfile -Command`. NOT `pwsh.exe`: PowerShell 7 installs under
+   * `C:\Program Files` and is exactly the same trap.
+   *
+   * When nothing is being confined, the host's own preference is returned
+   * unchanged — an unsandboxed run has no reason to lose Git Bash.
+   */
+  export function shell(options?: Options, platform: NodeJS.Platform = process.platform): string {
+    const chosen = Shell.acceptable()
+    if (!resolved(options).enabled || backend(platform) === "none") return chosen
+    if (reachable(chosen, platform)) return chosen
+    if (platform === "win32") {
+      const root = process.env["SystemRoot"] ?? "C:\\Windows"
+      const candidates = [
+        path.win32.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+        path.win32.join(root, "System32", "cmd.exe"),
+      ]
+      const usable = candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[1]!
+      if (!warned.shell) {
+        warned.shell = true
+        log.warn("sandbox cannot execute the preferred shell; using a system one", { chosen, usable })
+      }
+      return usable
+    }
+    return chosen
+  }
+
   /** Backend + platform summary for status output (CLI `doctor`, GUI panel). */
   export function describe(): {
     platform: NodeJS.Platform
@@ -1569,7 +1634,7 @@ export namespace Sandbox {
   }
 
   // Warn only once per process so every command doesn't repeat the same notice.
-  const warned = { unavailable: false, loopback: false, allow: false }
+  const warned = { unavailable: false, loopback: false, allow: false, shell: false }
 
   /**
    * Forget which one-time warnings have been issued.
@@ -1584,6 +1649,7 @@ export namespace Sandbox {
     warned.unavailable = false
     warned.loopback = false
     warned.allow = false
+    warned.shell = false
   }
 
   /**
@@ -2018,7 +2084,10 @@ export namespace Sandbox {
     const b = backend()
     if (b === "none") return { backend: b, available: false, checks: [], ok: false }
 
-    const shell = Shell.acceptable()
+    // The sandbox's own choice, not the machine's: this probe must exercise the
+    // shell a sandboxed command will actually get, or it verifies a path users
+    // never take.
+    const shell = Sandbox.shell({ enabled: true })
     const work = fs.mkdtempSync(path.join(os.tmpdir(), "openscience-sbx-"))
     const outside = path.join(os.homedir(), `.openscience-sbx-escape-${process.pid}`)
     const outsideRead = path.join(os.tmpdir(), `.openscience-sbx-sibling-${process.pid}`)
