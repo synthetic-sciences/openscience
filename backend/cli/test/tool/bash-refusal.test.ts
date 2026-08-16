@@ -177,4 +177,37 @@ test("sandbox status does not claim containment it has not verified", async () =
   expect(code).not.toContain('"are confined to the workspace"')
   expect(code).toContain("are launched through")
   expect(code).toContain("sandbox test")
+  // And it must be PRINTED, not merely computed. `effect` was built with all
+  // three states and then never interpolated, while the status line beside it
+  // kept saying "are confined to approved paths" whenever the sandbox was
+  // enabled — the two-state claim `effect` exists to replace. Every assertion
+  // above passed the whole time, because they only proved the string was in the
+  // file.
+  expect(code).toContain("${effect}")
+  expect(code).not.toContain('" are confined to approved paths"')
+})
+
+test("every option `sandbox enable` declares is actually read", () => {
+  // `--allow-host` was declared, documented in `--help`, and read by nothing.
+  // It parsed cleanly and the hosts never reached the config, so
+  // `sandbox enable --network allowlist --allow-host files.pythonhosted.org`
+  // reported success and was then followed by a blocked request to exactly that
+  // host — the failure looks like the allowlist not working rather than like a
+  // dropped flag.
+  //
+  // Generic on purpose: the next option added gets this for free, which is the
+  // only reason a test this shape is worth having over one assertion.
+  const source = require("fs").readFileSync(
+    new URL("../../src/cli/cmd/sandbox.ts", import.meta.url).pathname,
+    "utf8",
+  ) as string
+  const enable = source.slice(source.indexOf("const EnableCommand"), source.indexOf("const DisableCommand"))
+  const declared = [...enable.matchAll(/\.option\("([^"]+)"/g)].map((m) => m[1]!)
+  expect(declared).toContain("allow-host")
+  const handler = enable.slice(enable.indexOf("handler:"))
+  for (const option of declared) {
+    // Either bracket access (`args["allow-host"]`) or dotted (`args.allow`).
+    const used = handler.includes(`args["${option}"]`) || new RegExp(`args\\.${option}\\b`).test(handler)
+    expect(used, `sandbox enable declares --${option} but never reads it`).toBe(true)
+  }
 })

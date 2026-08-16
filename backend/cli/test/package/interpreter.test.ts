@@ -445,3 +445,43 @@ test("a working environment is not refused over a machine-wide prerequisite", as
   expect(body).toContain("if (!usable) {")
   expect(body.indexOf('tool.kind === "existing"')).toBeLessThan(body.indexOf("Installer.blocked()"))
 })
+
+/**
+ * The naming agreement between `package_install` and the kernels.
+ *
+ * `package_install`'s schema defaults `environment` to "default" and the tool
+ * used the value raw, so a default install provisioned `envs/<project>/default`.
+ * A kernel called with no environment normalises to the language name and looked
+ * in `envs/<project>/python`. Both sides behaved exactly as documented and the
+ * package was invisible: install reported success, the manifest was written, and
+ * the next `import` failed. Nothing in either file was wrong on its own, which is
+ * why this is pinned as a property of the pair rather than of either side.
+ */
+import { normalizeKernelEnvironmentName } from "../../src/science/kernel/interpreter"
+
+test.each([
+  [undefined, "python"],
+  ["default", "python"],
+  ["DEFAULT", "python"],
+  ["torch", "torch"],
+])("python: %s resolves to %s", (input, expected) => {
+  expect(normalizeKernelEnvironmentName(input, "python")).toBe(expected)
+  // The language argument defaults to python, so the old call sites are unmoved.
+  if (input !== undefined) expect(normalizeKernelEnvironmentName(input)).toBe(expected)
+})
+
+test.each([
+  [undefined, "r"],
+  ["default", "r"],
+  ["bioc", "bioc"],
+])("r: %s resolves to %s", (input, expected) => {
+  expect(normalizeKernelEnvironmentName(input, "r")).toBe(expected)
+})
+
+test("the default install directory is the one a default kernel looks in", () => {
+  // Spelled out rather than asserted through Environment.directory, so the test
+  // fails if either side starts resolving "default" differently again.
+  expect(normalizeKernelEnvironmentName("default", "python")).toBe(normalizeKernelEnvironmentName(undefined, "python"))
+  expect(normalizeKernelEnvironmentName("default", "r")).toBe(normalizeKernelEnvironmentName(undefined, "r"))
+  expect(normalizeKernelEnvironmentName("default", "python")).not.toBe("default")
+})

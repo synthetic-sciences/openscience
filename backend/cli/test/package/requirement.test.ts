@@ -144,3 +144,31 @@ test("a credentialled index and a differently-credentialled one produce the same
   })
   expect(a).toBe(b)
 })
+
+// R names are not Python names. `data.table` normalised to `data-table` put a
+// package CRAN has never heard of on the approval card, and matched grants
+// against it — while the index shown was pypi.org for an install that only ever
+// contacts CRAN. The card is the thing the user reads before approving, so it
+// has to name what will actually happen.
+test("R package names survive the card unnormalised", () => {
+  expect(
+    Requirement.pattern({
+      packages: ["data.table", "BiocManager"],
+      environment: "default",
+      index: "cran.r-project.org",
+      language: "r",
+    }),
+  ).toBe("install BiocManager data.table \u2192 default [cran.r-project.org]")
+})
+
+test("Python normalisation is unchanged by the language parameter", () => {
+  const implicit = Requirement.pattern({ packages: ["Foo.Bar"], environment: "default", index: "pypi.org/simple" })
+  const explicit = Requirement.pattern({
+    packages: ["Foo.Bar"],
+    environment: "default",
+    index: "pypi.org/simple",
+    language: "python",
+  })
+  expect(implicit).toBe(explicit)
+  expect(implicit).toContain("foo-bar")
+})

@@ -228,7 +228,15 @@ export namespace Installer {
   export function grantable(candidate: string) {
     if (process.platform !== "win32") return true
     const home = process.env["USERPROFILE"] ?? os.homedir()
-    return !!home && candidate.toLowerCase().startsWith(home.toLowerCase())
+    if (!home) return false
+    // Compare path components, not characters. A bare `startsWith` accepts
+    // `C:\Users\bobby` for a home of `C:\Users\bob` — a sibling profile the
+    // user does not own, which is exactly the case this predicate exists to
+    // reject. Anchoring on the separator is what makes it a containment test
+    // rather than a string prefix test.
+    const root = home.toLowerCase().replace(/[\\/]+$/, "")
+    const value = candidate.toLowerCase()
+    return value === root || value.startsWith(`${root}\\`) || value.startsWith(`${root}/`)
   }
 
   export function reject(report: Report): string | undefined {
@@ -924,18 +932,42 @@ export namespace Installer {
 
   /** name → version for everything resolved into the environment, names PEP 503
    *  normalised so they compare against parsed requirements. */
+  /**
+   * Run one of this environment's own read-only introspection commands, inside
+   * the same sandbox the install ran in.
+   *
+   * These used to spawn `interpreter(directory)` directly on the host. That is
+   * arbitrary host code execution with the user's full authority, on the success
+   * path of every install: CPython executes every `.pth` file and any
+   * `sitecustomize.py` in site-packages at interpreter startup, before `pip` is
+   * even imported — so a typosquatted wheel the sandbox had just safely unpacked
+   * ran unconfined the moment we asked what landed. The module header claims the
+   * install runs in the same sandbox as the kernel; verification has to as well.
+   *
+   * Nothing here writes, so the environment is granted read access and the
+   * network is left at whatever the policy says — these commands never need it.
+   */
+  async function introspect(directory: string, argv: string[]) {
+    const spec = await confined(directory, argv)
+    const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
+      env: { ...process.env, ...spec.env },
+      cwd: directory,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const text = await new Response(proc.stdout).text()
+    await proc.exited
+    Sandbox.cleanup(spec)
+    return text
+  }
+
   export async function freeze(directory: string) {
     // `--local` matters now that environments inherit system site-packages:
     // without it this reports every host package too, which would make `total`
     // meaningless, bury the requested names in the agent's inventory, and turn
     // `additive()` into a comparison against the machine rather than against
     // the environment. What this environment OWNS is the question being asked.
-    const proc = Bun.spawn([interpreter(directory), "-m", "pip", "list", "--local", "--format=json"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const text = await new Response(proc.stdout).text()
-    await proc.exited
+    const text = await introspect(directory, [interpreter(directory), "-m", "pip", "list", "--local", "--format=json"])
     const parsed = (() => {
       try {
         return JSON.parse(text) as { name: string; version: string }[]
@@ -963,12 +995,7 @@ export namespace Installer {
    * the rule exists to prevent.
    */
   export async function resolved(directory: string) {
-    const proc = Bun.spawn([interpreter(directory), "-m", "pip", "list", "--format=json"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const text = await new Response(proc.stdout).text()
-    await proc.exited
+    const text = await introspect(directory, [interpreter(directory), "-m", "pip", "list", "--format=json"])
     const parsed = (() => {
       try {
         return JSON.parse(text) as { name: string; version: string }[]
@@ -1009,12 +1036,7 @@ export namespace Installer {
       "        pass",
       "print(json.dumps(out))",
     ].join("\n")
-    const proc = Bun.spawn([interpreter(directory), "-c", script, JSON.stringify(packages)], {
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const text = await new Response(proc.stdout).text()
-    await proc.exited
+    const text = await introspect(directory, [interpreter(directory), "-c", script, JSON.stringify(packages)])
     try {
       return JSON.parse(text) as Record<string, string>
     } catch {

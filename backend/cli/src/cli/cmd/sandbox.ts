@@ -33,11 +33,15 @@ function printStatus(config?: Config.Sandbox) {
     : d.available
       ? `are launched through ${d.tool ?? d.backend} - run 'openscience sandbox test' to verify containment`
       : "are NOT confined here: no backend on this platform"
+  // Print `effect`, not a second sentence written beside it. The comment above
+  // is the whole reason this variable exists — three states, and never claiming
+  // containment the machine does not have — and the line below said "are
+  // confined to approved paths" whenever `enabled`, which is the two-state
+  // sentence `effect` was written to replace. `effect` was computed and
+  // discarded, so the bug it fixed was still on screen.
   UI.println(
     `  status    ${enabled ? `${S.TEXT_SUCCESS_BOLD}enabled` : `${S.TEXT_DIM}disabled`}${S.TEXT_NORMAL}` +
-      `${S.TEXT_DIM}  (agent shell commands${
-        enabled ? " are confined to approved paths" : " require project trust before using full user authority"
-      })${S.TEXT_NORMAL}`,
+      `${S.TEXT_DIM}  (agent shell commands ${effect})${S.TEXT_NORMAL}`,
   )
   UI.println(`  platform  ${d.platform}`)
   UI.println(
@@ -144,6 +148,12 @@ const EnableCommand = cmd({
         if (typeof args["require-project-trust"] === "boolean") {
           patch.requireProjectTrust = args["require-project-trust"]
         }
+        // Declared as an option, described in help, and read by nothing: the
+        // flag parsed fine and the hosts never reached the config, so a user
+        // who ran `sandbox enable --network allowlist --allow-host files.pythonhosted.org`
+        // saw success and then a blocked request to exactly that host.
+        const hosts = args["allow-host"] as string[] | undefined
+        if (hosts?.length) patch.allowHosts = hosts.map((value) => value.trim()).filter(Boolean)
         const allow = args.allow as string[] | undefined
         if (allow?.length) {
           patch.allowWrite = allow.map((value) => {

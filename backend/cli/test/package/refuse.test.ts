@@ -40,6 +40,46 @@ test.each([
   expect(Refuse.installer(line.split(" "))).toBeUndefined()
 })
 
+// The four entry points the matcher missed while `prompt.ts` told the agent all
+// of them were refused. Each installs into an environment the tool does not own,
+// with no approval card and no manifest entry.
+test.each([
+  // uv, beyond `uv pip`.
+  ["uv add tqdm", "tqdm"],
+  ["uv remove tqdm", "tqdm"],
+  ["uv sync", undefined],
+  // pipx: not `pip` followed by digits, so the old pattern let it through.
+  ["pipx install black", "black"],
+  // R — the one language this feature added installs for, and the one the
+  // matcher had no branch for at all. The call sits inside a script argument
+  // rather than an argv position.
+  ['Rscript -e install.packages("data.table")', undefined],
+  ['R -e BiocManager::install("limma")', undefined],
+  ['Rscript -e remotes::install_github("r-lib/fs")', undefined],
+  ["R CMD INSTALL ./pkg", "./pkg"],
+])("refuses %s", (line, named) => {
+  const message = Refuse.installer(line.split(" "))
+  expect(message).toContain("package_install")
+  if (named) expect(message).toContain(named)
+})
+
+// The negative half. A refusal that fires on read-only or unrelated work is a
+// worse failure than one that misses: it blocks real work and teaches the agent
+// the tool is unreliable.
+test.each([
+  ["uv run script.py"],
+  ["uv venv"],
+  ["uv lock"],
+  ["uv python list"],
+  ["Rscript analysis.R"],
+  ["R --version"],
+  ["Rscript -e library(data.table)"],
+  ["R CMD build ./pkg"],
+  ["pipx list"],
+])("allows %s", (line) => {
+  expect(Refuse.installer(line.split(" "))).toBeUndefined()
+})
+
 test("the message names the tool and the reason, not just a denial", () => {
   const message = Refuse.installer(["pip", "install", "numpy"])!
   expect(message).toContain("package_install")

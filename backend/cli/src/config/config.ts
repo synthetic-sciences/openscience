@@ -769,7 +769,9 @@ export namespace Config {
       network: z
         .enum(["deny", "allowlist", "allow"])
         .optional()
-        .describe("Whether sandboxed commands may reach the network. Default: allowlist."),
+        .describe(
+          "Whether sandboxed commands may reach the network. Default: deny — 'allowlist' permits the package indexes and hosts in allowHosts, 'allow' permits everything.",
+        ),
       allowHosts: z
         .array(z.string())
         .optional()

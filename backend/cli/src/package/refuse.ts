@@ -73,14 +73,27 @@ export namespace Refuse {
       return message(operands(command.slice(4)))
     }
 
-    // `uv pip install ...`
-    if (name === "uv" && command[1] === "pip") {
-      if (!mutating.has(command[2] ?? "")) return undefined
-      return message(operands(command.slice(3)))
+    // `uv pip install ...`, and also `uv add` / `uv sync` / `uv remove`, which
+    // mutate a project environment without going through `uv pip` at all. The
+    // previous shape only matched `command[1] === "pip"`, so `uv add tqdm`
+    // installed into an ungoverned environment with no approval card and no
+    // manifest entry — while the contract injected into every request says uv is
+    // refused. Under `network: "allowlist"` the shell now has a working route to
+    // pypi.org, which is exactly what makes that gap reachable.
+    if (name === "uv") {
+      if (command[1] === "pip") {
+        if (!mutating.has(command[2] ?? "")) return undefined
+        return message(operands(command.slice(3)))
+      }
+      if (command[1] === "sync") return message([])
+      if (!mutating.has(command[1] ?? "")) return undefined
+      return message(operands(command.slice(2)))
     }
 
-    // `pip install ...`, `pip3 install ...`, `/work/venv/bin/pip install ...`
-    if (/^pip[0-9.]*$/.test(name)) {
+    // `pip install ...`, `pip3 install ...`, `/work/venv/bin/pip install ...`,
+    // and `pipx install ...` — pipx is a distinct tool that the old pattern
+    // missed because `pipx` is not `pip` followed by digits or dots.
+    if (/^pipx?[0-9.]*$/.test(name)) {
       if (!mutating.has(command[1] ?? "")) return undefined
       return message(operands(command.slice(2)))
     }
@@ -95,6 +108,24 @@ export namespace Refuse {
     if (name === "poetry") {
       if (!mutating.has(command[1] ?? "")) return undefined
       return message(operands(command.slice(2)))
+    }
+
+    // R. There was no branch at all, while `package/prompt.ts` tells the agent
+    // `install.packages()` is refused here — so the one language whose installs
+    // this feature added support for was the one the refusal did not cover.
+    //
+    // `Rscript -e 'install.packages("data.table")'` and `R -e ...`: the call is
+    // inside a script argument rather than an argv position, so match on the
+    // text. `R CMD INSTALL <path>` is the other entry point.
+    if (name === "Rscript" || name === "R") {
+      if (command[1] === "CMD" && command[2] === "INSTALL") return message(operands(command.slice(3)))
+      const script = command.join(" ")
+      if (
+        /\b(install\.packages|(remotes|devtools|pak)::(install|pkg_install)\w*|BiocManager::install)\s*\(/.test(script)
+      ) {
+        return message([])
+      }
+      return undefined
     }
 
     return undefined

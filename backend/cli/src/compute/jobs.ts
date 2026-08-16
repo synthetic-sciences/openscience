@@ -2292,7 +2292,13 @@ export namespace ComputeJobs {
           })
           const proc = spawn(wrapped.file, wrapped.args, {
             cwd: host ? authority.workspace : job.cwd,
-            env,
+            // `launch.env` carries the proxy route to the egress shim. Both
+            // builders above set it from `planned.env` and this — the only
+            // spawn that consumes a launch — read `argv` and nothing else, so a
+            // compute job under `network: "allowlist"` ran with no proxy and
+            // every outbound request failed. Last, so the route cannot be
+            // shadowed by the inherited environment it is meant to override.
+            env: { ...env, ...launch.env },
             detached,
             windowsHide: true,
             stdio: ["ignore", output.fd, output.fd],

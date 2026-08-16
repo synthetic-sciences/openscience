@@ -284,7 +284,60 @@ export namespace AppContainer {
    * is partly ungrantable should still launch and fail visibly at the write,
    * not vanish behind a launcher error.
    */
+  /**
+   * How many live runs are holding each granted path, keyed `sid\0target`.
+   *
+   * A profile — and so a package SID — is derived from the workspace, so two
+   * concurrent runs in one project share both the SID and the grants. `revoke`
+   * was unconditional, which made the first run to finish restore the label and
+   * strip the ACE under a second that was still using it: the survivor lost
+   * write access to its own workspace partway through, reported as a permission
+   * error from whatever it happened to be doing. The agent reaches this
+   * routinely — a bash command and a kernel cell overlap all the time.
+   *
+   * In-process only, which covers that case because both runs are this process.
+   * Two separate `openscience` processes on one workspace still race, and fixing
+   * that needs an on-disk lock rather than a map; the grant is idempotent and
+   * re-applied per run, so the failure there is a transient loss rather than a
+   * permanent one.
+   */
+  const held = new Map<string, number>()
+  const key = (sid: string, target: string) => `${sid}\u0000${target}`
+
+  /**
+   * The refcount itself, separated from the `icacls` calls it gates.
+   *
+   * The bookkeeping is the part that can be wrong and the part that has no
+   * platform in it; the effect is Windows-only and needs a real ACL. Splitting
+   * them means the concurrency rule is testable from any host, which matters
+   * because the Windows CI job runs one command at a time and would never
+   * exercise an overlap.
+   */
+  export const Grants = {
+    /** Claim `targets` for one run. Distinct targets only — a path in both the
+     *  writable and readable lists is one claim, not two. */
+    acquire(sid: string, targets: string[]) {
+      for (const target of new Set(targets)) held.set(key(sid, target), (held.get(key(sid, target)) ?? 0) + 1)
+    },
+    /** Release one run's claim; returns the targets no other run still holds,
+     *  which are the only ones safe to restore. */
+    release(sid: string, targets: string[]) {
+      const releasable = new Set<string>()
+      for (const target of new Set(targets)) {
+        const remaining = (held.get(key(sid, target)) ?? 1) - 1
+        if (remaining > 0) {
+          held.set(key(sid, target), remaining)
+          continue
+        }
+        held.delete(key(sid, target))
+        releasable.add(target)
+      }
+      return releasable
+    },
+  }
+
   export function grant(sid: string, writable: string[], readable: string[] = []) {
+    Grants.acquire(sid, [...writable, ...readable])
     const failures: string[] = []
     const unreachable: string[] = []
     // Under OPENSCIENCE_SANDBOX_DEBUG, every ACL change is echoed with its exit
@@ -421,6 +474,15 @@ export namespace AppContainer {
    */
   export function revoke(sid: string, writable: string[], readable: string[] = []) {
     const failures: string[] = []
+    // Drop this run's claim, and restore only what no other live run still
+    // holds. Decremented once per DISTINCT target, matching `grant`, then both
+    // lists are filtered by the result — so a path in both keeps its label
+    // restore and its ACE removal together. An unknown key counts as the last
+    // holder, so a caller that revokes without having granted through here
+    // still cleans up.
+    const releasable = Grants.release(sid, [...writable, ...readable])
+    writable = writable.filter((target) => releasable.has(target))
+    readable = readable.filter((target) => releasable.has(target))
     const icacls = (target: string, args: string[]) => {
       const proc = Bun.spawnSync(["icacls.exe", target, ...args, "/Q"], { stdout: "ignore", stderr: "pipe" })
       if (proc.exitCode !== 0) failures.push(`${target}: ${proc.stderr.toString().trim() || `exit ${proc.exitCode}`}`)
@@ -591,6 +653,12 @@ export namespace AppContainer {
       socket?: import("bun").Socket<undefined>
       /** Bytes from the proxy waiting for a WriteFile. */
       pending: Uint8Array[]
+      /** Bytes read from the pipe before the proxy dial completed. The dial is
+       *  async and the client writes its first request immediately, so without
+       *  this they were read and dropped — `socket?.write` on an undefined
+       *  socket is a silent no-op, and the request that vanished was the CONNECT
+       *  line the whole tunnel is built from. */
+      outbound: Uint8Array[]
       closing: boolean
     }
     const links = new Set<Link>()
@@ -606,6 +674,7 @@ export namespace AppContainer {
       read: new Uint32Array(1),
       wrote: new Uint32Array(1),
       pending: [],
+      outbound: [],
       closing: false,
     })
 
@@ -645,6 +714,8 @@ export namespace AppContainer {
         (socket) => {
           if (stopped || link.closing) return socket.end()
           link.socket = socket
+          // Anything read while the dial was in flight, in arrival order.
+          for (const chunk of link.outbound.splice(0)) socket.write(chunk)
         },
         (error: Error) => {
           report(`broker could not reach the proxy at ${input.hostname}:${input.port}: ${error.message}`)
@@ -675,7 +746,9 @@ export namespace AppContainer {
           null,
         )
         if (ok && link.read[0]) {
-          link.socket?.write(link.buffer.slice(0, link.read[0]!))
+          const chunk = link.buffer.slice(0, link.read[0]!)
+          if (link.socket) link.socket.write(chunk)
+          else link.outbound.push(chunk)
           moved = true
         } else if (!ok && kernel.GetLastError() === ERROR_BROKEN_PIPE) {
           drop(link)
@@ -693,6 +766,23 @@ export namespace AppContainer {
               break
             }
             report(`broker WriteFile failed: Win32 ${why}`)
+            // Put it back. Every non-fatal failure here is transient (a full
+            // pipe buffer), and discarding the chunk corrupts the stream rather
+            // than slowing it down.
+            link.pending.unshift(chunk)
+            break
+          }
+          // A short write is NORMAL on this handle, not an error. The pipe is
+          // PIPE_NOWAIT, where WriteFile documents returning TRUE having written
+          // fewer bytes than asked — zero of them when the buffer is full. The
+          // count was written to `link.wrote` and never read, so a busy pipe
+          // silently truncated whatever the proxy sent: a body short its tail,
+          // or a response head cut mid-header, both of which read downstream as
+          // a corrupt server rather than as backpressure.
+          const written = link.wrote[0] ?? 0
+          if (written < chunk.length) {
+            link.pending.unshift(chunk.slice(written))
+            if (written) moved = true
             break
           }
           moved = true

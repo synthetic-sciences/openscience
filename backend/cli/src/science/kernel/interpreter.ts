@@ -13,9 +13,21 @@ export const KernelEnvironmentName = z
   .max(64)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use a simple environment name without path separators")
 
-export function normalizeKernelEnvironmentName(input?: string) {
-  const value = KernelEnvironmentName.parse(input ?? "python")
-  return value.toLowerCase() === "default" ? "python" : value
+/**
+ * The one place "default" is resolved, so every caller agrees on which
+ * directory a name means.
+ *
+ * `language` exists because the answer differs by language and getting it wrong
+ * is silent: `package_install` took `params.environment` raw, so its schema
+ * default of "default" provisioned `envs/<project>/default`, while a kernel
+ * called with no environment normalised to "python" and looked in
+ * `envs/<project>/python`. The install reported success, the manifest was
+ * written, and the very next `import` failed — with both sides behaving exactly
+ * as documented. R needs "r" for the same reason.
+ */
+export function normalizeKernelEnvironmentName(input?: string, language: "python" | "r" = "python") {
+  const value = KernelEnvironmentName.parse(input ?? language)
+  return value.toLowerCase() === "default" ? language : value
 }
 
 export class KernelEnvironmentUnavailable extends Error {

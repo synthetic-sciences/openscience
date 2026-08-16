@@ -449,7 +449,32 @@ export namespace Egress {
           .slice(1)
           .filter((line) => !/^proxy-/i.test(line))
           .filter((line) => !/^host:/i.test(line))
-        const rewritten = [`${method} ${origin} ${version}`, `Host: ${url!.host}`, ...headers].join("\r\n")
+          // Dropped so the `Connection: close` below is the only one.
+          .filter((line) => !/^connection:/i.test(line))
+        // One request per connection on the plain-HTTP path, enforced upstream.
+        //
+        // `phase` becomes "linked" and never returns to "head", so every later
+        // byte from this client is forwarded verbatim to THIS request's upstream
+        // — with no allowlist check, no absolute-form rewrite, and the client's
+        // own Host header intact. HTTP clients reuse a proxy connection across
+        // origins (urllib3 keys its pool on the proxy, not the origin), so a
+        // second request for a different host would be shipped to the first
+        // host's socket and the audit log would record one ALLOW covering
+        // traffic that never went there.
+        //
+        // Asking the origin to close is what makes reuse impossible: the client
+        // must dial again, and the next request goes through the full parse and
+        // `allowed()` check. The alternative — parsing successive request heads
+        // here — needs Content-Length and chunked body framing AND a fresh
+        // upstream dial whenever the authority changes, which is a proxy
+        // implementation rather than a fix. CONNECT is untouched: a tunnel is
+        // opaque by definition and its authority was checked once, correctly.
+        const rewritten = [
+          `${method} ${origin} ${version}`,
+          `Host: ${url!.host}`,
+          "Connection: close",
+          ...headers,
+        ].join("\r\n")
         toUpstream.send(latin1(`${rewritten}\r\n\r\n${rest}`))
       },
       drain(client) {

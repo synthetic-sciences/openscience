@@ -425,6 +425,17 @@ class PythonKernel implements Kernel {
           ...OpenScience.kernelEnv(process.env),
           ...OpenScience.pythonThreadCapEnv(process.env),
           ...(opts?.env ?? {}),
+          // The proxy variables for the egress shim. `Sandbox.Wrapped.env` is
+          // documented as "the caller must set" and its type comment names the
+          // notebook/R kernels as its consumers — and both dropped it, so a
+          // kernel under `network: "allowlist"` ran with no proxy configured
+          // and every outbound call from notebook code failed against a
+          // loopback socket nothing had told it about. The shell path passes
+          // this through; the kernels are the reason it exists.
+          //
+          // After `opts.env` so a caller cannot shadow it, before our own
+          // config keys, which do not collide.
+          ...(sandboxed.env ?? {}),
           ATLAS_CLI_CONFIG_PATH: configPath,
           MPLCONFIGDIR: path.join(cachePath, "matplotlib"),
           XDG_CACHE_HOME: path.join(cachePath, "xdg"),

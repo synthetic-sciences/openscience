@@ -71,9 +71,51 @@ export namespace InstallerR {
       stderr: "pipe",
       signal: input.signal,
     })
-    const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+    // Wait on the PROCESS, then give the readers a bounded moment. Awaiting the
+    // readers first hangs forever on abort: `signal` kills the launcher, but the
+    // sandboxed child is not a child of this process and keeps the write ends of
+    // both pipes open, so `read()` never reports done. Identical to the fix on
+    // the Python side; R kept the original shape, so a cancelled R install never
+    // returned and held its environment lock for the process lifetime.
+    const collected = { out: "", err: "" }
+    const drain = async (stream: ReadableStream<Uint8Array>, key: "out" | "err") => {
+      const reader = stream.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        collected[key] += decoder.decode(value, { stream: true })
+      }
+    }
+    const finished = Promise.all([drain(proc.stdout, "out"), drain(proc.stderr, "err")])
     await proc.exited
-    return { ok: proc.exitCode === 0, log: [out, err].filter(Boolean).join("\n") }
+    await Promise.race([finished, Bun.sleep(2_000)])
+    return { ok: proc.exitCode === 0, log: [collected.out, collected.err].filter(Boolean).join("\n") }
+  }
+
+  /**
+   * Run a read-only R introspection script inside the same sandbox the install
+   * ran in.
+   *
+   * `Rscript` sources `.Rprofile` and `Renviron` from the library path at
+   * startup, so asking an environment what it contains used to execute whatever
+   * a freshly installed package left there — unconfined, with the user's full
+   * authority, on the success path of every install. Same defect as the Python
+   * side's freeze/resolved/verify.
+   */
+  async function introspect(directory: string, script: string) {
+    const lib = Installer.rlibrary(directory)
+    const spec = await confined(directory, ["Rscript", "-e", script])
+    const proc = Bun.spawn([spec.file, ...(spec.args ?? [])], {
+      env: { ...process.env, ...spec.env, R_LIBS_USER: lib },
+      cwd: directory,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const text = await new Response(proc.stdout).text()
+    await proc.exited
+    Sandbox.cleanup(spec)
+    return text
   }
 
   /** name → version for everything in the environment's library. */
@@ -83,13 +125,7 @@ export namespace InstallerR {
       `ip <- installed.packages(lib.loc = ${JSON.stringify(lib)})`,
       `if (nrow(ip)) cat(paste(rownames(ip), ip[, "Version"], sep = "\\t", collapse = "\\n"))`,
     ].join("\n")
-    const proc = Bun.spawn(["Rscript", "-e", script], {
-      env: { ...process.env, R_LIBS_USER: lib },
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const text = await new Response(proc.stdout).text()
-    await proc.exited
+    const text = await introspect(directory, script)
     const out: Record<string, string> = {}
     for (const line of text.split("\n")) {
       const [name, version] = line.split("\t")
@@ -103,18 +139,13 @@ export namespace InstallerR {
    *  Python, and needed for the same reason: the restart decision is about what
    *  the kernel sees, not what the environment owns. */
   export async function resolved(directory: string) {
-    const lib = Installer.rlibrary(directory)
+    // No `lib.loc` — the point of this one is everything the kernel can load,
+    // and `introspect` already pins R_LIBS_USER to the environment's library.
     const script = [
       `ip <- installed.packages()`,
       `if (nrow(ip)) cat(paste(rownames(ip), ip[, "Version"], sep = "\t", collapse = "\n"))`,
     ].join("\n")
-    const proc = Bun.spawn(["Rscript", "-e", script], {
-      env: { ...process.env, R_LIBS_USER: lib },
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const text = await new Response(proc.stdout).text()
-    await proc.exited
+    const text = await introspect(directory, script)
     const out: Record<string, string> = {}
     for (const line of text.split("\n")) {
       const [name, version] = line.split("\t")

@@ -5,13 +5,24 @@ import { InstallerR } from "../package/installer-r"
 import { Requirement } from "../package/requirement"
 import { Instance } from "../project/instance"
 import { KernelProcessIdentity } from "../science/kernel/process"
+import { normalizeKernelEnvironmentName } from "../science/kernel/interpreter"
 import { KernelRuntime } from "../science/kernel/registry"
 import { Tool } from "./tool"
 
-/** The public index, shown on the card and matched by the permission system.
- *  Redacted through `Requirement.redact` so a credentialled mirror never puts
- *  a secret on the card and never fragments a standing grant. */
-const DEFAULT_INDEX = Requirement.redact("https://pypi.org/simple")
+/** Where Python packages actually come from. Passed to pip as `--index-url`,
+ *  so the card's claim and the install's behaviour cannot diverge.
+ *
+ *  They did diverge: the card said `pypi.org/simple` and the installer was
+ *  handed `index: ""`, which omits the flag and lets pip fall back to whatever
+ *  `pip.conf` or `PIP_INDEX_URL` names. The user approved a source that was
+ *  then not the one used — and under `network: "allowlist"` a different index
+ *  surfaces as a connection failure rather than as the mismatch it is. */
+const PYPI = "https://pypi.org/simple"
+
+/** The index shown on the card and matched by the permission system. Redacted
+ *  through `Requirement.redact` so a credentialled mirror never puts a secret
+ *  on the card and never fragments a standing grant. */
+const DEFAULT_INDEX = Requirement.redact(PYPI)
 
 export const PackageTool = Tool.define("package_install", {
   description: [
@@ -80,7 +91,11 @@ export const PackageTool = Tool.define("package_install", {
     // refused an install into it and told to go set up the tool they already
     // have — which is what happened when a parsing bug hid uv's interpreters.
     const project = Instance.project.id
-    const name = params.environment
+    const language = params.language ?? "python"
+    // Normalised, not raw. `environment` defaults to "default" in the schema
+    // while kernels resolve "default" to the language name, so the raw value
+    // installed into a directory no kernel would ever look in.
+    const name = normalizeKernelEnvironmentName(params.environment, language)
     const directory = Environment.directory(project, name)
     const usable = await Installer.probe(directory)
       .then((tool) => tool.kind === "existing")
@@ -95,7 +110,7 @@ export const PackageTool = Tool.define("package_install", {
     // Parsed for its names only. Resolution happens after approval — the card
     // shows the request, so approving two names must not silently approve the
     // closure they pull in.
-    const language = params.language ?? "python"
+    //
     // R package names are case-sensitive and `.` is meaningful (`data.table`),
     // so the PEP 503 normalisation Requirement.parse applies is wrong for them:
     // it would turn data.table into data-table and never match what CRAN
@@ -141,10 +156,18 @@ export const PackageTool = Tool.define("package_install", {
       }
     }
 
+    // The card must name the index the packages will come from — CRAN for R,
+    // and the language split has to reach `pattern` too. Without it, an R
+    // install rendered `install data-table -> default [pypi.org/simple]`: the
+    // name PEP 503-normalised into one CRAN will never match, and an index the
+    // install never contacts. The normalisation was already handled correctly
+    // for `parsed` a few lines up; `pattern` re-parsed and undid it.
+    const shown = language === "r" ? Requirement.redact(InstallerR.REPO) : DEFAULT_INDEX
     const pattern = Requirement.pattern({
       packages: params.packages,
       environment: name,
-      index: DEFAULT_INDEX,
+      index: shown,
+      language,
     })
 
     ctx.metadata({ title: `Install · ${name}`, metadata: { environment: name, packages: params.packages } })
@@ -158,7 +181,7 @@ export const PackageTool = Tool.define("package_install", {
       permission: "package_install",
       patterns: [pattern],
       always: ["install*"],
-      metadata: { environment: name, packages: params.packages, index: DEFAULT_INDEX },
+      metadata: { environment: name, packages: params.packages, index: shown },
     })
 
     // Dispatch without waiting. The lock is still taken, so a second install
@@ -235,7 +258,7 @@ export const PackageTool = Tool.define("package_install", {
         : await Installer.install({
             directory,
             packages: params.packages,
-            index: "",
+            index: PYPI,
             source: params.source,
             signal: ctx.abort,
             onProgress: progress,

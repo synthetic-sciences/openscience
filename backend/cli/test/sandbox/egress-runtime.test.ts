@@ -486,3 +486,48 @@ test.skipIf(!Bun.which("python3"))(
     }
   },
 )
+
+test.skipIf(!Bun.which("curl"))(
+  "a second plain-HTTP request on a reused proxy connection is allowlist-checked, not tunnelled to the first host",
+  async () => {
+    // The bypass this closes. After a plain-HTTP request the connection became
+    // `linked` and every later byte was forwarded verbatim to THAT request's
+    // upstream — no `allowed()` check, no absolute-form rewrite, and the
+    // client's own Host header intact. HTTP clients reuse a proxy connection
+    // across origins (urllib3 keys its pool on the proxy, not the origin), so
+    // one allowed request bought an unchecked channel for every request after
+    // it, and the audit log recorded a single ALLOW covering all of them.
+    //
+    // Driven with a real curl, which reuses the connection across both URLs in
+    // one invocation. `127.0.0.1` is allowed and `localhost` is not, so the two
+    // requests differ only in the authority the proxy is meant to check.
+    const origin = Bun.serve({ port: 0, fetch: () => new Response("ok") })
+    try {
+      await Config.setSandbox({ allowHosts: ["127.0.0.1"] })
+      const running = await EgressRuntime.ensure("darwin")
+      const proxy = planProxyUrl(`${running.port}:${running.secret}`)
+      const { stdout } = await runCapture([
+        "curl",
+        "-sS",
+        "-m",
+        "5",
+        "-o",
+        "-",
+        "-w",
+        "\n[%{http_code}]",
+        "-x",
+        proxy,
+        `http://127.0.0.1:${origin.port}/`,
+        `http://localhost:${origin.port}/`,
+      ])
+      // The allowed one still works — this must not be a fix that breaks the
+      // ordinary path.
+      expect(stdout).toContain("ok")
+      expect(stdout).toContain("[200]")
+      // And the disallowed one is refused rather than delivered.
+      expect(stdout).toContain("[403]")
+    } finally {
+      origin.stop(true)
+    }
+  },
+)

@@ -609,3 +609,54 @@ test("the broker's read buffer is allocated once per link and held", async () =>
   expect(instance).toContain("buffer: new Uint8Array(65536)")
   expect(body).toContain("ffi.ptr(link.buffer)")
 })
+
+/**
+ * Grant refcounting.
+ *
+ * A package SID is derived from the workspace, so two runs in one project share
+ * one SID and one set of grants — and `revoke` restored them unconditionally.
+ * The first run to finish put the workspace's mandatory label back to Medium and
+ * stripped the ACE while a second was still running inside it, which surfaced as
+ * the survivor losing write access to its own workspace partway through. The
+ * agent overlaps a bash command and a kernel cell routinely, so this was reached
+ * by ordinary use rather than by a corner case.
+ *
+ * Tested through the bookkeeping rather than through `grant`/`revoke`, whose
+ * effect is an `icacls` call that only exists on Windows. The rule is the part
+ * with no platform in it.
+ */
+const sid = "S-1-15-2-test"
+
+test("the last run to finish is the one that restores a shared grant", () => {
+  const paths = ["C:\\work"]
+  AppContainer.Grants.acquire(sid, paths)
+  AppContainer.Grants.acquire(sid, paths)
+  // First run finishes while the second is still inside the workspace.
+  expect([...AppContainer.Grants.release(sid, paths)]).toEqual([])
+  expect([...AppContainer.Grants.release(sid, paths)]).toEqual(paths)
+})
+
+test("a path in both the writable and readable lists is one claim, not two", () => {
+  // The workspace is granted read AND write. Counted twice on acquire, it would
+  // need two releases to come back — so a single run would exit leaving its
+  // workspace labelled Low, permanently writable by any low-integrity process.
+  const workspace = "C:\\both"
+  AppContainer.Grants.acquire(sid, [workspace, workspace])
+  expect([...AppContainer.Grants.release(sid, [workspace, workspace])]).toEqual([workspace])
+})
+
+test("releasing something never acquired still cleans up", () => {
+  // Failing closed in the safe direction: an unknown key counts as the last
+  // holder, so a caller that revokes without having granted through here does
+  // not leave a Low label behind.
+  expect([...AppContainer.Grants.release(sid, ["C:\\never-granted"])]).toEqual(["C:\\never-granted"])
+})
+
+test("grants are scoped per SID", () => {
+  const path = "C:\\shared-path"
+  AppContainer.Grants.acquire("S-1-15-2-a", [path])
+  AppContainer.Grants.acquire("S-1-15-2-b", [path])
+  // Different profiles, different ACEs — one finishing must not hold the other's.
+  expect([...AppContainer.Grants.release("S-1-15-2-a", [path])]).toEqual([path])
+  expect([...AppContainer.Grants.release("S-1-15-2-b", [path])]).toEqual([path])
+})

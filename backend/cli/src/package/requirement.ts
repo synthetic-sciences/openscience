@@ -108,8 +108,18 @@ export namespace Requirement {
    * resolution happens after approval — the card shows the request, so pinning
    * a version must not fragment a grant the user already gave.
    */
-  export function pattern(input: { packages: string[]; environment: string; index: string }) {
-    const names = input.packages.map((p) => parse(p).name).toSorted()
+  export function pattern(input: {
+    packages: string[]
+    environment: string
+    index: string
+    /** Defaults to python. R names are case-sensitive and `.` is meaningful
+     *  (`data.table`), so PEP 503 normalisation must not touch them — it would
+     *  print, and match on, a name CRAN has never heard of. */
+    language?: "python" | "r"
+  }) {
+    const names = (
+      input.language === "r" ? input.packages.map((p) => p.trim()) : input.packages.map((p) => parse(p).name)
+    ).toSorted()
     return `install ${names.join(" ")} → ${input.environment} [${input.index}]`
   }
 }
