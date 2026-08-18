@@ -1,6 +1,5 @@
 import { describe, test, expect, afterAll } from "bun:test"
 import { Truncate } from "../../src/tool/truncation"
-import { Identifier } from "../../src/id/id"
 import fs from "fs/promises"
 import path from "path"
 
@@ -137,15 +136,15 @@ describe("Truncate", () => {
 
       // Create an old file (10 days ago)
       const oldTimestamp = Date.now() - 10 * DAY_MS
-      const oldId = Identifier.create("tool", false, oldTimestamp)
-      oldFile = path.join(Truncate.DIR, oldId)
+      oldFile = path.join(Truncate.DIR, `tool_old-${crypto.randomUUID()}`)
       await Bun.write(Bun.file(oldFile), "old content")
+      await fs.utimes(oldFile, oldTimestamp / 1000, oldTimestamp / 1000)
 
       // Create a recent file (3 days ago)
       const recentTimestamp = Date.now() - 3 * DAY_MS
-      const recentId = Identifier.create("tool", false, recentTimestamp)
-      recentFile = path.join(Truncate.DIR, recentId)
+      recentFile = path.join(Truncate.DIR, `tool_recent-${crypto.randomUUID()}`)
       await Bun.write(Bun.file(recentFile), "recent content")
+      await fs.utimes(recentFile, recentTimestamp / 1000, recentTimestamp / 1000)
 
       await Truncate.cleanup()
 
