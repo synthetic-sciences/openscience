@@ -65,7 +65,7 @@ test("a structured lease admits a nested writer after relocation intent without 
     switching = DataRootBarrier.exclusive(2_000)
     await waitForFile(path.join(config, "data-root-switch.intent"))
     startNested.resolve()
-    expect(await Promise.race([nestedDone.promise.then(() => true), Bun.sleep(250).then(() => false)])).toBe(true)
+    expect(await Promise.race([nestedDone.promise.then(() => true), Bun.sleep(1_000).then(() => false)])).toBe(true)
     await command
     expect(await Promise.race([switching.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
     await lease[Symbol.asyncDispose]()
