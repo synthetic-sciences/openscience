@@ -42,11 +42,20 @@ const trace = {
   reviewerFindings: [],
   failures: [],
   retries: [],
+  harness: [
+    {
+      profile: "research",
+      provider: "e2e",
+      model: "echo",
+      fingerprint: "f".repeat(64),
+    },
+  ],
   privacy: {
     local: true as const,
     atlasRequired: false as const,
     hiddenReasoningStored: false as const,
     toolOutputsCopied: false as const,
+    promptContentStored: false as const,
   },
 }
 
@@ -78,6 +87,12 @@ describe("launch capture", () => {
     expect(review.dimensions.task_completion.score).toBeNull()
     expect(review.hardGates.no_p0_p1.status).toBe("not_evaluated")
     expect(captured.result.observables.tokens.total).toBe(20)
+    expect(captured.result.observables.harness).toEqual({
+      records: 1,
+      fingerprints: ["f".repeat(64)],
+      profiles: ["research"],
+      models: ["e2e/echo"],
+    })
     expect(captured.result.completion.observableComplete).toBe(true)
     expect(summarize([captured.result]).observableCompletionRate).toBe(1)
   })

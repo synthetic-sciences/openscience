@@ -8,6 +8,7 @@ tooling/sdk/openapi.json
 backend/cli/src/provider/models-snapshot.ts
 # build output
 dist/
+evals/harness/runs/
 # prettier's mdx parser is deprecated and can mangle JSX-in-markdown
 *.mdx
 # curated skill content consumed verbatim by agents

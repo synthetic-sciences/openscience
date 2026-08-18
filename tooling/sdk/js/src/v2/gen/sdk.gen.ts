@@ -159,6 +159,7 @@ import type {
   PermissionRuleset,
   PermissionStandingListResponses,
   PermissionStandingRevokeResponses,
+  PostSettingsLocalContextResponses,
   PostSettingsLocalModelsResponses,
   PostSettingsLocalResponses,
   PostSettingsLocalStartResponses,
@@ -3064,7 +3065,7 @@ export class Session extends HeyApiClient {
   /**
    * Get local harness trace
    *
-   * Build one local, Atlas-independent trace of observable inference, tool, child-agent, search, kernel, compute, approval, artifact, review, failure, retry, cost, and timing records. Hidden reasoning and copied tool outputs are excluded.
+   * Build one local, Atlas-independent trace of observable inference, harness composition fingerprints, tool, child-agent, search, kernel, compute, approval, artifact, review, failure, retry, cost, and timing records. Hidden reasoning, prompt content, and copied tool outputs are excluded.
    */
   public trace<ThrowOnError extends boolean = false>(
     parameters: {
@@ -7409,6 +7410,38 @@ export class OpenScienceClient extends HeyApiClient {
     })
   }
 
+  public postSettingsLocalContext<ThrowOnError extends boolean = false>(
+    parameters?: {
+      url?: string
+      model?: string
+      context?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "url" },
+            { in: "body", key: "model" },
+            { in: "body", key: "context" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PostSettingsLocalContextResponses, unknown, ThrowOnError>({
+      url: "/settings/local/context",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   public postSettingsLocal<ThrowOnError extends boolean = false>(
     parameters?: {
       url?: string
@@ -7416,6 +7449,9 @@ export class OpenScienceClient extends HeyApiClient {
       name?: string
       key?: string
       models?: Array<string>
+      contextLimit?: number
+      runtime?: "ollama"
+      merge?: boolean
       setDefault?: boolean
     },
     options?: Options<never, ThrowOnError>,
@@ -7430,6 +7466,9 @@ export class OpenScienceClient extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "key" },
             { in: "body", key: "models" },
+            { in: "body", key: "contextLimit" },
+            { in: "body", key: "runtime" },
+            { in: "body", key: "merge" },
             { in: "body", key: "setDefault" },
           ],
         },

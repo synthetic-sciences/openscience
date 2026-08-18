@@ -7838,6 +7838,21 @@ export type PostSettingsLocalModelsResponses = {
   200: unknown
 }
 
+export type PostSettingsLocalContextData = {
+  body?: {
+    url: string
+    model: string
+    context: number
+  }
+  path?: never
+  query?: never
+  url: "/settings/local/context"
+}
+
+export type PostSettingsLocalContextResponses = {
+  200: unknown
+}
+
 export type PostSettingsLocalData = {
   body?: {
     url: string
@@ -7845,6 +7860,9 @@ export type PostSettingsLocalData = {
     name?: string
     key?: string
     models: Array<string>
+    contextLimit?: number
+    runtime?: "ollama"
+    merge?: boolean
     setDefault?: boolean
   }
   path?: never
@@ -9231,11 +9249,29 @@ export type SessionTraceResponses = {
       delayMs: number
       createdAt: number
     }>
+    harness: Array<{
+      version: 1
+      profile: string
+      mode: "subagent" | "primary" | "all"
+      provider: string
+      model: string
+      systemHash: string
+      instructionsHash?: string
+      tools: Array<{
+        name: string
+        descriptionHash: string
+        schemaHash: string
+      }>
+      fingerprint: string
+      messageID: string
+      createdAt: number
+    }>
     privacy: {
       local: true
       atlasRequired: false
       hiddenReasoningStored: false
       toolOutputsCopied: false
+      promptContentStored: false
     }
   }
 }

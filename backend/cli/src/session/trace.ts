@@ -218,11 +218,13 @@ export namespace SessionTrace {
     reviewerFindings: z.array(Finding),
     failures: z.array(Failure),
     retries: z.array(SessionTraceStore.Retry),
+    harness: z.array(SessionTraceStore.Harness),
     privacy: z.object({
       local: z.literal(true),
       atlasRequired: z.literal(false),
       hiddenReasoningStored: z.literal(false),
       toolOutputsCopied: z.literal(false),
+      promptContentStored: z.literal(false),
     }),
   })
   export type Info = z.infer<typeof Info>
@@ -649,11 +651,13 @@ export namespace SessionTrace {
       reviewerFindings,
       failures,
       retries: stored.retries,
+      harness: stored.harness,
       privacy: {
         local: true,
         atlasRequired: false,
         hiddenReasoningStored: false,
         toolOutputsCopied: false,
+        promptContentStored: false,
       },
     })
   }

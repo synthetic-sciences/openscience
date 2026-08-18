@@ -111,11 +111,13 @@ const trace: SessionTraceResponse = {
       createdAt: 4_000,
     },
   ],
+  harness: [],
   privacy: {
     local: true,
     atlasRequired: false,
     hiddenReasoningStored: false,
     toolOutputsCopied: false,
+    promptContentStored: false,
   },
 }
 

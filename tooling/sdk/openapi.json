@@ -17954,6 +17954,48 @@
         ]
       }
     },
+    "/settings/local/context": {
+      "post": {
+        "operationId": "postSettingsLocalContext",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "context": {
+                    "type": "integer",
+                    "minimum": 1024,
+                    "maximum": 2097152
+                  }
+                },
+                "required": [
+                  "url",
+                  "model",
+                  "context"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {}
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.postSettingsLocalContext({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/local": {
       "post": {
         "operationId": "postSettingsLocal",
@@ -17981,6 +18023,20 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "contextLimit": {
+                    "type": "integer",
+                    "minimum": 1024,
+                    "maximum": 2097152
+                  },
+                  "runtime": {
+                    "type": "string",
+                    "enum": [
+                      "ollama"
+                    ]
+                  },
+                  "merge": {
+                    "type": "boolean"
                   },
                   "setDefault": {
                     "type": "boolean"
@@ -20556,7 +20612,7 @@
         "tags": [
           "Session"
         ],
-        "description": "Build one local, Atlas-independent trace of observable inference, tool, child-agent, search, kernel, compute, approval, artifact, review, failure, retry, cost, and timing records. Hidden reasoning and copied tool outputs are excluded.",
+        "description": "Build one local, Atlas-independent trace of observable inference, harness composition fingerprints, tool, child-agent, search, kernel, compute, approval, artifact, review, failure, retry, cost, and timing records. Hidden reasoning, prompt content, and copied tool outputs are excluded.",
         "responses": {
           "200": {
             "description": "Local observable session trace",
@@ -21540,6 +21596,89 @@
                         ]
                       }
                     },
+                    "harness": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "const": 1
+                          },
+                          "profile": {
+                            "type": "string"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "subagent",
+                              "primary",
+                              "all"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "systemHash": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "instructionsHash": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "descriptionHash": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "schemaHash": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "descriptionHash",
+                                "schemaHash"
+                              ]
+                            }
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "messageID": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "profile",
+                          "mode",
+                          "provider",
+                          "model",
+                          "systemHash",
+                          "tools",
+                          "fingerprint",
+                          "messageID",
+                          "createdAt"
+                        ]
+                      }
+                    },
                     "privacy": {
                       "type": "object",
                       "properties": {
@@ -21558,13 +21697,18 @@
                         "toolOutputsCopied": {
                           "type": "boolean",
                           "const": false
+                        },
+                        "promptContentStored": {
+                          "type": "boolean",
+                          "const": false
                         }
                       },
                       "required": [
                         "local",
                         "atlasRequired",
                         "hiddenReasoningStored",
-                        "toolOutputsCopied"
+                        "toolOutputsCopied",
+                        "promptContentStored"
                       ]
                     }
                   },
@@ -21585,6 +21729,7 @@
                     "reviewerFindings",
                     "failures",
                     "retries",
+                    "harness",
                     "privacy"
                   ]
                 }
@@ -43840,6 +43985,40 @@
           "success"
         ]
       },
+      "Event.server.connected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.connected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.installation.updated": {
         "type": "object",
         "properties": {
@@ -44043,40 +44222,6 @@
             "required": [
               "status"
             ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
-      "Event.server.connected": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "server.connected"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
-      "Event.global.disposed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "global.disposed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
           }
         },
         "required": [
@@ -47195,6 +47340,12 @@
       "Event": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
+          },
+          {
             "$ref": "#/components/schemas/Event.installation.updated"
           },
           {
@@ -47208,12 +47359,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.project.trust.changed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.server.connected"
-          },
-          {
-            "$ref": "#/components/schemas/Event.global.disposed"
           },
           {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"

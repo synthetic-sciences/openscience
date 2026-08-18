@@ -3,6 +3,7 @@ import path from "node:path"
 import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import { Log } from "@/util/log"
+import { SessionHarness } from "./harness"
 import z from "zod"
 
 export namespace SessionTraceStore {
@@ -34,13 +35,20 @@ export namespace SessionTraceStore {
   })
   export type Retry = z.infer<typeof Retry>
 
+  export const Harness = SessionHarness.Snapshot.extend({
+    messageID: z.string(),
+    createdAt: z.number(),
+  })
+  export type Harness = z.infer<typeof Harness>
+
   const State = z.object({
     approvals: z.record(z.string(), Approval).default({}),
     retries: z.array(Retry).default([]),
+    harness: z.array(Harness).default([]),
   })
   export type State = z.infer<typeof State>
 
-  const empty = (): State => ({ approvals: {}, retries: [] })
+  const empty = (): State => ({ approvals: {}, retries: [], harness: [] })
   const file = (sessionID: string) => path.join(Global.Path.data, "trace", `${encodeURIComponent(sessionID)}.json`)
 
   async function update(sessionID: string, fn: (state: State) => State) {
@@ -109,6 +117,21 @@ export namespace SessionTraceStore {
       createdAt: Date.now(),
     }
     return update(input.sessionID, (state) => ({ ...state, retries: [...state.retries, item] }))
+  }
+
+  export function recordHarness(input: { sessionID: string; messageID: string; snapshot: SessionHarness.Snapshot }) {
+    const item: Harness = {
+      ...input.snapshot,
+      messageID: input.messageID,
+      createdAt: Date.now(),
+    }
+    return update(input.sessionID, (state) => {
+      const duplicate = state.harness.some(
+        (entry) => entry.messageID === item.messageID && entry.fingerprint === item.fingerprint,
+      )
+      if (duplicate) return state
+      return { ...state, harness: [...state.harness, item] }
+    })
   }
 
   export async function remove(sessionID: string) {

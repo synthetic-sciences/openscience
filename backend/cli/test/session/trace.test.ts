@@ -5,6 +5,7 @@ import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionTrace } from "../../src/session/trace"
 import { SessionTraceStore } from "../../src/session/trace-store"
 import { LLM } from "../../src/session/llm"
+import { SessionHarness } from "../../src/session/harness"
 import { tmpdir } from "../fixture/fixture"
 
 test("builds one local observable harness trace without reasoning or copied outputs", async () => {
@@ -241,6 +242,21 @@ test("builds one local observable harness trace without reasoning or copied outp
         message: "provider overloaded",
         delayMs: 50,
       })
+      await SessionTraceStore.recordHarness({
+        sessionID: session.id,
+        messageID: user.id,
+        snapshot: SessionHarness.Snapshot.parse({
+          version: 1,
+          profile: "research",
+          mode: "primary",
+          provider: "openai-codex",
+          model: "gpt-5",
+          systemHash: "a".repeat(64),
+          instructionsHash: "b".repeat(64),
+          tools: [{ name: "bash", descriptionHash: "c".repeat(64), schemaHash: "d".repeat(64) }],
+          fingerprint: "e".repeat(64),
+        }),
+      })
 
       const trace = await SessionTrace.build(session.id)
       expect(trace.summary).toMatchObject({
@@ -293,13 +309,20 @@ test("builds one local observable harness trace without reasoning or copied outp
         atlasRequired: false,
         hiddenReasoningStored: false,
         toolOutputsCopied: false,
+        promptContentStored: false,
+      })
+      expect(trace.harness[0]).toMatchObject({
+        messageID: user.id,
+        profile: "research",
+        provider: "openai-codex",
+        fingerprint: "e".repeat(64),
       })
       expect(JSON.stringify(trace)).not.toContain("search output that the trace must not copy")
       expect(trace.turns[0].timeToFirstUsefulOutputMs).toBe(100)
       expect(SessionTrace.Info.parse(trace)).toEqual(trace)
 
       await Session.remove(session.id)
-      expect(await SessionTraceStore.read(session.id)).toEqual({ approvals: {}, retries: [] })
+      expect(await SessionTraceStore.read(session.id)).toEqual({ approvals: {}, retries: [], harness: [] })
     },
   })
 })

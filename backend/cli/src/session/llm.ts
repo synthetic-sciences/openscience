@@ -22,6 +22,8 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { SessionHarness } from "./harness"
+import { SessionTraceStore } from "./trace-store"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -190,6 +192,23 @@ export namespace LLM {
         execute: async () => ({ output: "", title: "", metadata: {} }),
       })
     }
+
+    await SessionHarness.snapshot({
+      agent: input.agent,
+      provider: routed.providerID,
+      model: routed.id,
+      system,
+      instructions: typeof params.options.instructions === "string" ? params.options.instructions : undefined,
+      tools,
+    })
+      .then((snapshot) =>
+        SessionTraceStore.recordHarness({
+          sessionID: input.sessionID,
+          messageID: input.user.id,
+          snapshot,
+        }),
+      )
+      .catch((error) => l.warn("failed to record harness fingerprint", { error }))
 
     return streamText({
       onError(error) {

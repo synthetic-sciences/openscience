@@ -100,11 +100,18 @@ type Trace = {
   reviewerFindings: Array<{ relation?: "refutes" | "supports"; severity?: string }>
   failures: unknown[]
   retries: unknown[]
+  harness?: Array<{
+    profile: string
+    provider: string
+    model: string
+    fingerprint: string
+  }>
   privacy: {
     local: true
     atlasRequired: false
     hiddenReasoningStored: false
     toolOutputsCopied: false
+    promptContentStored?: false
   }
 }
 
@@ -239,6 +246,12 @@ function observables(trace: Trace) {
     tokens: {
       total: totalTokens(trace),
       ...trace.summary.tokens,
+    },
+    harness: {
+      records: trace.harness?.length ?? 0,
+      fingerprints: [...new Set(trace.harness?.map((item) => item.fingerprint) ?? [])],
+      profiles: [...new Set(trace.harness?.map((item) => item.profile) ?? [])],
+      models: [...new Set(trace.harness?.map((item) => `${item.provider}/${item.model}`) ?? [])],
     },
     privacy: trace.privacy,
   }
