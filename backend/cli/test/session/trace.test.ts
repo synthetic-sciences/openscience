@@ -242,20 +242,31 @@ test("builds one local observable harness trace without reasoning or copied outp
         message: "provider overloaded",
         delayMs: 50,
       })
+      const manifest = {
+        version: 1 as const,
+        profile: "research",
+        mode: "primary" as const,
+        provider: "openai-codex",
+        model: "gpt-5",
+        systemHash: "a".repeat(64),
+        instructionsHash: "b".repeat(64),
+        tools: [...new Set(tools.map((item) => item.tool))]
+          .toSorted()
+          .map((name) => ({ name, descriptionHash: "c".repeat(64), schemaHash: "d".repeat(64) })),
+      }
       await SessionTraceStore.recordHarness({
         sessionID: session.id,
-        messageID: user.id,
-        snapshot: SessionHarness.Snapshot.parse({
-          version: 1,
-          profile: "research",
-          mode: "primary",
-          provider: "openai-codex",
-          model: "gpt-5",
-          systemHash: "a".repeat(64),
-          instructionsHash: "b".repeat(64),
-          tools: [{ name: "bash", descriptionHash: "c".repeat(64), schemaHash: "d".repeat(64) }],
-          fingerprint: "e".repeat(64),
-        }),
+        messageID: assistant.id,
+        parentMessageID: user.id,
+        attempt: 1,
+        snapshot: SessionHarness.Snapshot.parse({ ...manifest, fingerprint: SessionHarness.hash(manifest) }),
+      })
+      await SessionTraceStore.recordHarness({
+        sessionID: session.id,
+        messageID: assistant.id,
+        parentMessageID: user.id,
+        attempt: 2,
+        snapshot: SessionHarness.Snapshot.parse({ ...manifest, fingerprint: SessionHarness.hash(manifest) }),
       })
 
       const trace = await SessionTrace.build(session.id)
@@ -311,12 +322,17 @@ test("builds one local observable harness trace without reasoning or copied outp
         toolOutputsCopied: false,
         promptContentStored: false,
       })
+      expect(trace.harness).toHaveLength(2)
       expect(trace.harness[0]).toMatchObject({
-        messageID: user.id,
+        messageID: assistant.id,
+        parentMessageID: user.id,
+        attempt: 1,
         profile: "research",
         provider: "openai-codex",
-        fingerprint: "e".repeat(64),
       })
+      expect(trace.harness.map((item) => item.attempt)).toEqual([1, 2])
+      expect(trace.harnessReport).toMatchObject({ records: 2, stable: true, valid: true })
+      expect(trace.harnessReport.checks.every((item) => item.status === "pass")).toBe(true)
       expect(JSON.stringify(trace)).not.toContain("search output that the trace must not copy")
       expect(trace.turns[0].timeToFirstUsefulOutputMs).toBe(100)
       expect(SessionTrace.Info.parse(trace)).toEqual(trace)

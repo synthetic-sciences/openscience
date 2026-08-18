@@ -5,6 +5,7 @@ import { SearchDedupe } from "./search-dedupe"
 import { SessionStatus } from "./status"
 import { observableToolFailure, observableToolStatus } from "./tool-outcome"
 import { SessionTraceStore } from "./trace-store"
+import { SessionHarness } from "./harness"
 import z from "zod"
 
 export namespace SessionTrace {
@@ -219,6 +220,7 @@ export namespace SessionTrace {
     failures: z.array(Failure),
     retries: z.array(SessionTraceStore.Retry),
     harness: z.array(SessionTraceStore.Harness),
+    harnessReport: SessionHarness.Report,
     privacy: z.object({
       local: z.literal(true),
       atlasRequired: z.literal(false),
@@ -610,6 +612,25 @@ export namespace SessionTrace {
       })),
     ]
     const approvals = Object.values(stored.approvals).toSorted((a, b) => a.requestedAt - b.requestedAt)
+    const harnessReport = SessionHarness.analyze({
+      records: stored.harness,
+      inference: inference.map((item) => ({
+        messageID: item.messageID,
+        parentMessageID: item.parentMessageID,
+        provider: item.provider,
+        model: item.model,
+        attempt: stored.retries
+          .filter((retry) => retry.messageID === item.messageID)
+          .reduce((attempt, retry) => Math.max(attempt, retry.attempt + 1), 1),
+      })),
+      tools: tools.map((item) => ({
+        id: item.id,
+        messageID: item.messageID,
+        name: item.name,
+        inputHash: item.inputHash,
+        status: item.status,
+      })),
+    })
     return Info.parse({
       version: 1,
       session: {
@@ -652,6 +673,7 @@ export namespace SessionTrace {
       failures,
       retries: stored.retries,
       harness: stored.harness,
+      harnessReport,
       privacy: {
         local: true,
         atlasRequired: false,

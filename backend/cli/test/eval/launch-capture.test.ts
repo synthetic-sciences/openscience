@@ -50,6 +50,17 @@ const trace = {
       fingerprint: "f".repeat(64),
     },
   ],
+  harnessReport: {
+    stable: true,
+    valid: true,
+    trajectoryHash: "a".repeat(64),
+    transitions: [],
+    checks: [
+      { id: "composition_integrity", status: "pass" as const, affected: [] },
+      { id: "inference_attribution", status: "pass" as const, affected: [] },
+      { id: "tool_attribution", status: "pass" as const, affected: [] },
+    ],
+  },
   privacy: {
     local: true as const,
     atlasRequired: false as const,
@@ -92,6 +103,11 @@ describe("launch capture", () => {
       fingerprints: ["f".repeat(64)],
       profiles: ["research"],
       models: ["e2e/echo"],
+      stable: true,
+      valid: true,
+      trajectoryHash: "a".repeat(64),
+      transitions: 0,
+      failedChecks: [],
     })
     expect(captured.result.completion.observableComplete).toBe(true)
     expect(summarize([captured.result]).observableCompletionRate).toBe(1)

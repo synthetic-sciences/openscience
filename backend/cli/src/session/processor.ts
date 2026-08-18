@@ -380,6 +380,7 @@ export namespace SessionProcessor {
             const stream = await Provider.withRequestContext(requestContext, () =>
               LLM.stream({
                 ...streamInput,
+                trace: { messageID: input.assistantMessage.id, attempt: attempt + 1 },
                 onReasoningEffortResolved: async (effort) => {
                   if (input.assistantMessage.reasoningEffort === effort) return
                   input.assistantMessage.reasoningEffort = effort

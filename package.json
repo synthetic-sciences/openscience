@@ -13,7 +13,6 @@
     "eval:launch:validate": "bun evals/launch/validate.ts",
     "eval:launch:capture": "bun evals/launch/capture.ts capture",
     "eval:launch:summary": "bun evals/launch/capture.ts summary",
-    "eval:harness": "bun evals/harness/run.ts",
     "build": "bun run --cwd backend/cli build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -20612,7 +20612,7 @@
         "tags": [
           "Session"
         ],
-        "description": "Build one local, Atlas-independent trace of observable inference, harness composition fingerprints, tool, child-agent, search, kernel, compute, approval, artifact, review, failure, retry, cost, and timing records. Hidden reasoning, prompt content, and copied tool outputs are excluded.",
+        "description": "Build one local, Atlas-independent trace with effective harness manifests, composition transitions, attribution invariants, deterministic trajectory fingerprints, inference, tools, child agents, compute, artifacts, failures, costs, and timing. Hidden reasoning, prompt content, and copied tool outputs are excluded.",
         "responses": {
           "200": {
             "description": "Local observable session trace",
@@ -21661,8 +21661,18 @@
                           "messageID": {
                             "type": "string"
                           },
+                          "parentMessageID": {
+                            "type": "string"
+                          },
+                          "attempt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
                           "createdAt": {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -21675,9 +21685,130 @@
                           "tools",
                           "fingerprint",
                           "messageID",
+                          "parentMessageID",
+                          "attempt",
                           "createdAt"
                         ]
                       }
+                    },
+                    "harnessReport": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "records": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "fingerprints": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "stable": {
+                          "type": "boolean"
+                        },
+                        "trajectoryHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "transitions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "fromMessageID": {
+                                "type": "string"
+                              },
+                              "toMessageID": {
+                                "type": "string"
+                              },
+                              "fromFingerprint": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "toFingerprint": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "changes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "profile",
+                                    "mode",
+                                    "provider",
+                                    "model",
+                                    "system",
+                                    "instructions",
+                                    "tools"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "fromMessageID",
+                              "toMessageID",
+                              "fromFingerprint",
+                              "toFingerprint",
+                              "changes"
+                            ]
+                          }
+                        },
+                        "checks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "composition_integrity",
+                                  "inference_attribution",
+                                  "tool_attribution"
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pass",
+                                  "fail"
+                                ]
+                              },
+                              "affected": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status",
+                              "affected"
+                            ]
+                          }
+                        },
+                        "valid": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "records",
+                        "fingerprints",
+                        "stable",
+                        "trajectoryHash",
+                        "transitions",
+                        "checks",
+                        "valid"
+                      ]
                     },
                     "privacy": {
                       "type": "object",
@@ -21730,6 +21861,7 @@
                     "failures",
                     "retries",
                     "harness",
+                    "harnessReport",
                     "privacy"
                   ]
                 }

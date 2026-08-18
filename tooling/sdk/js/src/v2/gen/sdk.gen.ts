@@ -3065,7 +3065,7 @@ export class Session extends HeyApiClient {
   /**
    * Get local harness trace
    *
-   * Build one local, Atlas-independent trace of observable inference, harness composition fingerprints, tool, child-agent, search, kernel, compute, approval, artifact, review, failure, retry, cost, and timing records. Hidden reasoning, prompt content, and copied tool outputs are excluded.
+   * Build one local, Atlas-independent trace with effective harness manifests, composition transitions, attribution invariants, deterministic trajectory fingerprints, inference, tools, child agents, compute, artifacts, failures, costs, and timing. Hidden reasoning, prompt content, and copied tool outputs are excluded.
    */
   public trace<ThrowOnError extends boolean = false>(
     parameters: {

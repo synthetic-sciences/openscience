@@ -112,6 +112,20 @@ const trace: SessionTraceResponse = {
     },
   ],
   harness: [],
+  harnessReport: {
+    version: 1,
+    records: 0,
+    fingerprints: [],
+    stable: true,
+    trajectoryHash: "0".repeat(64),
+    transitions: [],
+    checks: [
+      { id: "composition_integrity", status: "pass", affected: [] },
+      { id: "inference_attribution", status: "pass", affected: [] },
+      { id: "tool_attribution", status: "pass", affected: [] },
+    ],
+    valid: true,
+  },
   privacy: {
     local: true,
     atlasRequired: false,

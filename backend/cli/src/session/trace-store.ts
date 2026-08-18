@@ -35,10 +35,7 @@ export namespace SessionTraceStore {
   })
   export type Retry = z.infer<typeof Retry>
 
-  export const Harness = SessionHarness.Snapshot.extend({
-    messageID: z.string(),
-    createdAt: z.number(),
-  })
+  export const Harness = SessionHarness.Entry
   export type Harness = z.infer<typeof Harness>
 
   const State = z.object({
@@ -119,19 +116,21 @@ export namespace SessionTraceStore {
     return update(input.sessionID, (state) => ({ ...state, retries: [...state.retries, item] }))
   }
 
-  export function recordHarness(input: { sessionID: string; messageID: string; snapshot: SessionHarness.Snapshot }) {
-    const item: Harness = {
+  export function recordHarness(input: {
+    sessionID: string
+    messageID: string
+    parentMessageID: string
+    attempt: number
+    snapshot: SessionHarness.Snapshot
+  }) {
+    const item = Harness.parse({
       ...input.snapshot,
       messageID: input.messageID,
+      parentMessageID: input.parentMessageID,
+      attempt: input.attempt,
       createdAt: Date.now(),
-    }
-    return update(input.sessionID, (state) => {
-      const duplicate = state.harness.some(
-        (entry) => entry.messageID === item.messageID && entry.fingerprint === item.fingerprint,
-      )
-      if (duplicate) return state
-      return { ...state, harness: [...state.harness, item] }
     })
+    return update(input.sessionID, (state) => ({ ...state, harness: [...state.harness, item] }))
   }
 
   export async function remove(sessionID: string) {

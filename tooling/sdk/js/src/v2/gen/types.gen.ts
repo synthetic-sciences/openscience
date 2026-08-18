@@ -9264,8 +9264,30 @@ export type SessionTraceResponses = {
       }>
       fingerprint: string
       messageID: string
+      parentMessageID: string
+      attempt: number
       createdAt: number
     }>
+    harnessReport: {
+      version: 1
+      records: number
+      fingerprints: Array<string>
+      stable: boolean
+      trajectoryHash: string
+      transitions: Array<{
+        fromMessageID: string
+        toMessageID: string
+        fromFingerprint: string
+        toFingerprint: string
+        changes: Array<"profile" | "mode" | "provider" | "model" | "system" | "instructions" | "tools">
+      }>
+      checks: Array<{
+        id: "composition_integrity" | "inference_attribution" | "tool_attribution"
+        status: "pass" | "fail"
+        affected: Array<string>
+      }>
+      valid: boolean
+    }
     privacy: {
       local: true
       atlasRequired: false
