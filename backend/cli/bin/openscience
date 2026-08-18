@@ -35,6 +35,28 @@ function detectMusl(platform = os.platform()) {
   }
 }
 
+function cpuSupportsAvx2(platform = os.platform(), arch = os.arch(), linuxInfo) {
+  if (arch !== "x64") return undefined
+  if (platform === "linux") {
+    const info = (() => {
+      if (linuxInfo !== undefined) return linuxInfo
+      try {
+        return fs.readFileSync("/proc/cpuinfo", "utf8")
+      } catch {
+        return undefined
+      }
+    })()
+    if (!info) return undefined
+    const flags = /^(?:flags|features)\s*:\s*(.+)$/im.exec(info)?.[1]
+    if (!flags) return undefined
+    return flags.toLowerCase().split(/\s+/).includes("avx2")
+  }
+  if (platform !== "darwin") return undefined
+  const result = childProcess.spawnSync("sysctl", ["-n", "machdep.cpu.leaf7_features"], { encoding: "utf8" })
+  if (result.status !== 0) return undefined
+  return result.stdout.toLowerCase().split(/\s+/).includes("avx2")
+}
+
 function expectedPlatformPackages(platform, arch, musl) {
   const suffix = musl ? "-musl" : ""
   const name = `openscience-${platform}-${arch}${suffix}`
@@ -104,7 +126,8 @@ function run(target) {
     console.error(
       `openscience was terminated by ${result.signal}. The prebuilt native binary may be ` +
         `incompatible with this host (platform ${os.platform()}, arch ${os.arch()}). ` +
-        `Some ARM64 hosts (e.g. 64KB page-size kernels) cannot run the prebuilt binary. ` +
+        `Some ARM64 hosts (e.g. 64KB page-size kernels) and x86-64 hosts without AVX2 ` +
+        `cannot run the optimized prebuilt binary. ` +
         `Try reinstalling, set OPENSCIENCE_BIN_PATH to a compatible binary, or report at ` +
         `https://github.com/synthetic-sciences/openscience/issues`,
     )
@@ -128,17 +151,20 @@ function isBinary(p) {
 }
 
 // Rank matching platform packages instead of trusting readdir order (which
-// is filesystem-dependent): right libc first, exact name before suffixed
-// variants like -baseline, wrong libc only as a last resort.
-function variantRank(prefix, entry, preferMusl) {
+// is filesystem-dependent): right libc first, then the CPU-compatible build,
+// with wrong-libc packages only as a last resort.
+function variantRank(prefix, entry, preferMusl, preferBaseline = false) {
   const entryMusl = entry.includes("-musl")
   if (entryMusl !== preferMusl) return 0
-  return entry === prefix || entry === prefix + "-musl" ? 2 : 1
+  const entryBaseline = entry.includes("-baseline")
+  return entryBaseline === preferBaseline ? 2 : 1
 }
-function matchingVariants(prefix, entries, preferMusl) {
+function matchingVariants(prefix, entries, preferMusl, preferBaseline = false) {
   return entries
     .filter((entry) => entry.startsWith(prefix))
-    .sort((a, b) => variantRank(prefix, b, preferMusl) - variantRank(prefix, a, preferMusl))
+    .sort(
+      (a, b) => variantRank(prefix, b, preferMusl, preferBaseline) - variantRank(prefix, a, preferMusl, preferBaseline),
+    )
 }
 
 function main() {
@@ -158,6 +184,7 @@ function main() {
   const base = "openscience-" + platform + "-" + arch
   const scopedBase = "openscience-" + platform + "-" + arch
   const musl = detectMusl()
+  const baseline = cpuSupportsAvx2(os.platform(), os.arch()) === false
 
   // Search this install's node_modules for the matching platform package.
   // This must come before ~/.openscience or Homebrew fallbacks; otherwise an npm
@@ -168,7 +195,7 @@ function main() {
     if (fs.existsSync(modules)) {
       try {
         const entries = fs.readdirSync(modules)
-        for (const entry of matchingVariants(base, entries, musl)) {
+        for (const entry of matchingVariants(base, entries, musl, baseline)) {
           const candidate = path.join(modules, entry, "bin", binary)
           if (isBinary(candidate)) run(candidate)
         }
@@ -176,7 +203,7 @@ function main() {
         const scoped = path.join(modules, "@synsci")
         if (fs.existsSync(scoped)) {
           const scopedEntries = fs.readdirSync(scoped)
-          for (const entry of matchingVariants(scopedBase, scopedEntries, musl)) {
+          for (const entry of matchingVariants(scopedBase, scopedEntries, musl, baseline)) {
             const candidate = path.join(scoped, entry, "bin", binary)
             if (isBinary(candidate)) run(candidate)
           }
@@ -201,6 +228,7 @@ function main() {
 }
 
 module.exports = {
+  cpuSupportsAvx2,
   detectMusl,
   exitCodeForResult,
   expectedPlatformPackages,

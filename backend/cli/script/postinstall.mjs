@@ -57,6 +57,28 @@ function detectMusl(platform) {
   }
 }
 
+function cpuSupportsAvx2(platform, arch, linuxInfo) {
+  if (arch !== "x64") return undefined
+  if (platform === "linux") {
+    const info = (() => {
+      if (linuxInfo !== undefined) return linuxInfo
+      try {
+        return fs.readFileSync("/proc/cpuinfo", "utf8")
+      } catch {
+        return undefined
+      }
+    })()
+    if (!info) return undefined
+    const flags = /^(?:flags|features)\s*:\s*(.+)$/im.exec(info)?.[1]
+    if (!flags) return undefined
+    return flags.toLowerCase().split(/\s+/).includes("avx2")
+  }
+  if (platform !== "darwin") return undefined
+  const result = childProcess.spawnSync("sysctl", ["-n", "machdep.cpu.leaf7_features"], { encoding: "utf8" })
+  if (result.status !== 0) return undefined
+  return result.stdout.toLowerCase().split(/\s+/).includes("avx2")
+}
+
 function linuxKernelProblem(platform, release = os.release()) {
   if (platform !== "linux") return undefined
   const match = /^(\d+)\.(\d+)/.exec(release)
@@ -84,11 +106,19 @@ function linuxArm64PageSizeProblem(platform, arch, detectedPageSize) {
   ].join("; ")
 }
 
-function platformPackageNames(platform, arch, musl = detectMusl(platform)) {
+function platformPackageNames(
+  platform,
+  arch,
+  musl = detectMusl(platform),
+  preferBaseline = cpuSupportsAvx2(platform, arch) === false,
+) {
   const base = `openscience-${platform}-${arch}`
   const variants = musl ? [`${base}-musl`] : [base]
   if (arch === "x64") variants.push(musl ? `${base}-baseline-musl` : `${base}-baseline`)
-  return variants.flatMap((name) => [`@synsci/${name}`, name])
+  const ranked = preferBaseline
+    ? variants.sort((a, b) => Number(b.includes("-baseline")) - Number(a.includes("-baseline")))
+    : variants
+  return ranked.flatMap((name) => [`@synsci/${name}`, name])
 }
 
 function findBinary() {
@@ -186,6 +216,7 @@ function main() {
 }
 
 export {
+  cpuSupportsAvx2,
   detectMusl,
   detectPlatformAndArch,
   findBinary,

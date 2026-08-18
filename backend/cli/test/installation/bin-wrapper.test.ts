@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRequire } from "module"
 import {
+  cpuSupportsAvx2 as postinstallCpuSupportsAvx2,
   linuxArm64PageSizeProblem as postinstallPageSizeProblem,
   linuxKernelProblem as postinstallKernelProblem,
   platformPackageNames,
@@ -8,11 +9,12 @@ import {
 
 const require = createRequire(import.meta.url)
 const wrapper = require("../../bin/openscience") as {
+  cpuSupportsAvx2(platform: string, arch: string, linuxInfo?: string): boolean | undefined
   exitCodeForResult(result: { status: number | null; signal: NodeJS.Signals | null }): number
   expectedPlatformPackages(platform: string, arch: string, musl: boolean): string[]
   linuxArm64PageSizeProblem(platform: string, arch: string, pageSize?: string): string | undefined
   linuxKernelProblem(platform: string, release: string): string | undefined
-  matchingVariants(prefix: string, entries: string[], preferMusl: boolean): string[]
+  matchingVariants(prefix: string, entries: string[], preferMusl: boolean, preferBaseline?: boolean): string[]
   parseKernelVersion(release: string): { major: number; minor: number } | undefined
 }
 
@@ -58,6 +60,31 @@ describe("npm bin wrapper", () => {
     expect(wrapper.matchingVariants("openscience-linux-x64", entries, true).slice(0, 2)).toEqual([
       "openscience-linux-x64-musl",
       "openscience-linux-x64-baseline-musl",
+    ])
+  })
+
+  test("prefers the baseline binary when x86-64 lacks AVX2", () => {
+    const modern = "processor: 0\nflags: fpu sse4_2 avx avx2 bmi2\n"
+    const legacy = "processor: 0\nflags: fpu sse4_2\n"
+    expect(wrapper.cpuSupportsAvx2("linux", "x64", modern)).toBe(true)
+    expect(wrapper.cpuSupportsAvx2("linux", "x64", legacy)).toBe(false)
+    expect(wrapper.cpuSupportsAvx2("linux", "arm64", legacy)).toBeUndefined()
+    expect(postinstallCpuSupportsAvx2("linux", "x64", modern)).toBe(true)
+    expect(postinstallCpuSupportsAvx2("linux", "x64", legacy)).toBe(false)
+
+    const entries = [
+      "openscience-linux-x64-baseline-musl",
+      "openscience-linux-x64-baseline",
+      "openscience-linux-x64-musl",
+      "openscience-linux-x64",
+    ]
+    expect(wrapper.matchingVariants("openscience-linux-x64", entries, false, true).slice(0, 2)).toEqual([
+      "openscience-linux-x64-baseline",
+      "openscience-linux-x64",
+    ])
+    expect(platformPackageNames("linux", "x64", false, true).slice(0, 2)).toEqual([
+      "@synsci/openscience-linux-x64-baseline",
+      "openscience-linux-x64-baseline",
     ])
   })
 
