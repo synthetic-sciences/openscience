@@ -102,8 +102,23 @@ jobs:
           git config --global init.defaultBranch main
       - name: Install and verify Linux sandbox and SSH fixture
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes bubblewrap openssh-server
+          # GitHub's Ubuntu image lists the Azure archive before the public
+          # archive. Drop the Azure entry only when the public fallback is
+          # present so a stalled regional mirror cannot consume this job's
+          # entire timeout before the test suite starts.
+          if [[ -f /etc/apt/apt-mirrors.txt ]] && grep -Eq '^https?://archive\.ubuntu\.com/' /etc/apt/apt-mirrors.txt; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
+          sudo apt-get \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=20 \
+            -o Acquire::https::Timeout=20 \
+            update
+          sudo apt-get \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=20 \
+            -o Acquire::https::Timeout=20 \
+            install --yes bubblewrap openssh-server
           # Ubuntu 24.04's host-wide AppArmor policy blocks unprivileged user
           # namespaces on the hosted runner before bubblewrap can apply our
           # stricter per-process profile. This runner is disposable; enable
