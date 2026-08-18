@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import z from "zod"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
@@ -42,6 +43,22 @@ describe("tool registry agent boundaries", () => {
 
         const legacy = await ToolRegistry.resolve("modal", undefined, agent)
         expect(legacy?.id).toBe("modal")
+      },
+    })
+  })
+
+  test("keeps every research tool object-rooted for strict providers", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const agent = await Agent.get("research")
+        const tools = await ToolRegistry.tools({ providerID: "deepseek", modelID: "deepseek-chat" }, agent)
+
+        for (const tool of tools) {
+          const schema = z.toJSONSchema(tool.parameters) as { type?: string }
+          expect(schema.type, tool.id).toBe("object")
+        }
       },
     })
   })

@@ -75,7 +75,7 @@ const ComputeWorkload = z
   })
   .strict()
 
-export const ComputeJobParameters = z
+const ComputeJobActionParameters = z
   .discriminatedUnion("action", [
     z
       .object({ action: action("targets") })
@@ -120,6 +120,44 @@ export const ComputeJobParameters = z
       .strict()
       .describe(ACTION_EXAMPLES.release),
   ])
+  .describe(`Select one action with the required action discriminator.\n${ACTION_HELP}`)
+
+/**
+ * Model-facing tool schemas must have an object at the JSON Schema root.
+ * Strict OpenAI-compatible providers reject a top-level anyOf before the model
+ * can make a tool call. Keep the conditional action contract as the runtime
+ * validator while advertising one ordinary object with every possible field.
+ */
+export const ComputeJobParameters = z
+  .object({
+    action: z.enum(COMPUTE_ACTIONS).describe(`Select one action.\n${ACTION_HELP}`),
+    name: ComputeWorkload.shape.name.optional(),
+    purpose: ComputeWorkload.shape.purpose.optional(),
+    command: ComputeWorkload.shape.command.optional(),
+    cwd: ComputeWorkload.shape.cwd,
+    target: ComputeWorkload.shape.target.optional(),
+    resources: ComputeWorkload.shape.resources,
+    modules: ComputeWorkload.shape.modules,
+    container: ComputeWorkload.shape.container,
+    artifacts: ComputeWorkload.shape.artifacts,
+    checkpoint: ComputeWorkload.shape.checkpoint,
+    uploads: ComputeWorkload.shape.uploads,
+    packages: ComputeWorkload.shape.packages,
+    image: ComputeWorkload.shape.image,
+    gpu: ComputeWorkload.shape.gpu,
+    status: JobBroker.Status.optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+    job_id: z.string().trim().min(1).optional(),
+    bytes: z.number().int().min(1).max(256_000).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const parsed = ComputeJobActionParameters.safeParse(value)
+    if (parsed.success) return
+    for (const issue of parsed.error.issues) {
+      ctx.addIssue({ code: "custom", path: issue.path, message: issue.message })
+    }
+  })
   .describe(`Select one action with the required action discriminator.\n${ACTION_HELP}`)
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -178,7 +216,7 @@ function formatValidationError(error: z.ZodError, input: unknown) {
   ].join("\n\n")
 }
 
-type Input = z.infer<typeof ComputeJobParameters>
+type Input = z.infer<typeof ComputeJobActionParameters>
 type Metadata = {
   compute_job: {
     action: Input["action"]
@@ -290,7 +328,8 @@ export function createComputeJobTool(base?: JobBroker.Options) {
     parameters: ComputeJobParameters,
     normalizeInput,
     formatValidationError,
-    async execute(input: Input, ctx) {
+    async execute(value, ctx) {
+      const input: Input = ComputeJobActionParameters.parse(value)
       if (input.action === "targets") {
         const resolved = await options(ctx.sessionID, base)
         const output = {

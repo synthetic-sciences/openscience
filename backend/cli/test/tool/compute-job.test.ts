@@ -24,15 +24,15 @@ const context = (sessionID: string, asked: Asked[]) => ({
   },
 })
 
-test("advertises the canonical action-discriminated compute schema", () => {
+test("advertises an object-rooted compute schema for strict providers", () => {
   const schema = z.toJSONSchema(ComputeJobParameters) as {
+    type: string
     description?: string
-    anyOf: Array<{
-      properties: Record<string, { const?: string; description?: string; anyOf?: Array<{ type?: string }> }>
-      required: string[]
-    }>
+    properties: Record<string, { enum?: string[]; description?: string; anyOf?: Array<{ type?: string }> }>
+    required: string[]
   }
-  expect(schema.anyOf.map((variant) => variant.properties.action.const)).toEqual([
+  expect(schema.type).toBe("object")
+  expect(schema.properties.action.enum).toEqual([
     "targets",
     "plan",
     "start",
@@ -45,11 +45,12 @@ test("advertises the canonical action-discriminated compute schema", () => {
     "release",
   ])
   expect(JSON.stringify(schema)).not.toContain('"operation"')
-  const plan = schema.anyOf[1]
-  expect(plan.required).toEqual(["name", "purpose", "command", "target", "action"])
-  expect(plan.properties.target.anyOf?.every((target) => target.type === "object")).toBe(true)
+  expect(schema.required).toEqual(["action"])
+  expect(schema.properties.target.anyOf?.every((target) => target.type === "object")).toBe(true)
   expect(schema.description).toContain('{"action":"targets"}')
-  expect(plan.properties.target.description).toContain("never a quoted JSON string")
+  expect(schema.properties.target.description).toContain("never a quoted JSON string")
+  expect(ComputeJobParameters.safeParse({ action: "plan" }).success).toBe(false)
+  expect(ComputeJobParameters.safeParse({ action: "targets", job_id: "wrong-action" }).success).toBe(false)
 })
 
 test("normalizes only unambiguous action aliases and valid JSON-object targets", async () => {

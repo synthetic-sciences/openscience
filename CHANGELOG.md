@@ -30,6 +30,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Made every built-in research tool advertise an object-rooted JSON Schema so
+  strict OpenAI-compatible providers such as DeepSeek and Kimi accept tool-enabled requests.
 - Made the research harness normalize WebFetch download destinations, authorize
   Explore retrieval consistently, apply multi-file patches transactionally,
   resolve the default Python environment, enforce image limits by the active
