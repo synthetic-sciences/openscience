@@ -30,6 +30,7 @@ export type SettingsSection = "inference" | "capabilities" | "runtime" | "app"
 // removed, or left without the shared layout audit silently.
 export const SETTINGS_PANEL_IDS = [
   "models",
+  "local-models",
   "skills",
   "connectors",
   "compute",
@@ -66,6 +67,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     section: "inference",
     component: lazy(() => import("./Models")),
   },
+  {
+    id: "local-models",
+    title: "Local models",
+    icon: "cpu",
+    section: "inference",
+    component: lazy(() => import("./LocalModels")),
+  },
   // ── Capabilities ──
   {
     id: "skills",
@@ -81,8 +89,6 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     section: "capabilities",
     component: lazy(() => import("./Connectors")),
   },
-  // Local models remain implemented but hidden until chat, tool-call, and
-  // streaming behavior pass a full runtime smoke.
   // ── Runtime ──
   {
     id: "compute",

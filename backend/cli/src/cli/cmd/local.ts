@@ -23,6 +23,8 @@ export interface LocalSetupInput {
   project?: boolean
   /** Set the first added model as the default. */
   setDefault?: boolean
+  /** Create Ollama aliases with this real num_ctx value. */
+  context?: number
 }
 
 /** Derive a stable provider id from a base URL (host+port), e.g.
@@ -175,18 +177,34 @@ export async function runLocalModelSetup(input: LocalSetupInput = {}): Promise<s
       }
 
       const id = input.id ?? presetId ?? deriveId(baseURL)
+      const ollama = presetId === "ollama" || id === "ollama" || LocalProvider.isOllamaBaseURL(baseURL)
+      const context = input.context
+      if (context && !ollama) {
+        prompts.log.error("--context is supported only for a local Ollama endpoint.")
+        return null
+      }
+      const registered = context
+        ? await Promise.all(selected.map((model) => LocalProvider.createOllamaContextModel(baseURL, model, context)))
+        : selected
       const name = presetId
         ? `${LocalProvider.PRESETS.find((p) => p.id === presetId)!.name} (local)`
         : `Local (${new URL(baseURL).host})`
 
-      const block = LocalProvider.buildProviderConfig({ name, baseURL, apiKey, models: selected })
+      const block = LocalProvider.buildProviderConfig({
+        name,
+        baseURL,
+        apiKey,
+        models: registered,
+        contextLimit: context,
+        runtime: ollama ? "ollama" : undefined,
+      })
       await Config.setProvider(id, block as any, input.project ? "project" : "global")
 
       const scopeLabel = input.project ? "this project's openscience.json" : "your global config"
-      prompts.log.success(`Added ${selected.length} model(s) under provider "${id}" to ${scopeLabel}.`)
+      prompts.log.success(`Added ${registered.length} model(s) under provider "${id}" to ${scopeLabel}.`)
 
       // Offer to set a default so `openscience run` uses it immediately.
-      const firstModel = `${id}/${selected[0]}`
+      const firstModel = `${id}/${registered[0]}`
       const makeDefault =
         input.setDefault ??
         (interactive
@@ -228,6 +246,10 @@ const AddCommand = cmd({
       .option("model", { type: "string", array: true, describe: "model id(s) to register (repeatable)" })
       .option("id", { type: "string", describe: "provider id to register under" })
       .option("key", { type: "string", describe: "api key, if the endpoint needs one" })
+      .option("context", {
+        type: "number",
+        describe: "Ollama context window in tokens; creates a tuned local model alias",
+      })
       .option("project", { type: "boolean", describe: "write to the project config instead of global" })
       .option("default", { type: "boolean", describe: "set the first model as the default" }),
   handler: async (args) => {
@@ -239,6 +261,7 @@ const AddCommand = cmd({
       key: args.key as string | undefined,
       project: args.project as boolean | undefined,
       setDefault: args.default as boolean | undefined,
+      context: args.context as number | undefined,
     })
   },
 })

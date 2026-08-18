@@ -11,15 +11,18 @@ describe("launch settings truth pass", () => {
     expect(DEFAULT_PANEL).toBe("models")
   })
 
-  test("keeps local models, memory, and specialist internals out of Customize for now", () => {
+  test("exposes verified local models while keeping removed internals out of Customize", () => {
     const ids = SETTINGS_PANELS.map((item) => item.id as string)
 
-    expect(ids).not.toContain("local-models")
+    expect(ids).toContain("local-models")
     expect(ids).not.toContain("memory")
     expect(ids).not.toContain("specialists")
     expect(source("LocalModels.tsx")).toContain("const LocalModels: Component = () =>")
+    expect(source("LocalModels.tsx")).toContain('"/context"')
+    expect(source("LocalModels.tsx")).toContain("num_ctx")
     expect(ids).toEqual([
       "models",
+      "local-models",
       "skills",
       "connectors",
       "compute",
@@ -37,7 +40,7 @@ describe("launch settings truth pass", () => {
     const ids = SETTINGS_PANELS.map((item) => item.id)
 
     expect(ids).toContain("skills")
-    expect(ids.indexOf("skills")).toBe(ids.indexOf("models") + 1)
+    expect(ids.indexOf("skills")).toBe(ids.indexOf("local-models") + 1)
     expect(panel.title).toBe("Skills")
     expect(panel.section).toBe("capabilities")
     expect(panel.icon).toBe("flask")

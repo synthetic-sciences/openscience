@@ -10,13 +10,18 @@ const app = LocalModelsRoutes()
 // global fetch (which would race with other test files) or the network.
 let server: ReturnType<typeof Bun.serve>
 let mockBase = ""
+const created: unknown[] = []
 beforeAll(() => {
   server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
-    fetch(req) {
+    async fetch(req) {
       const url = new URL(req.url)
       if (url.pathname === "/v1/models") return Response.json({ data: [{ id: "llama3.1" }, { id: "qwen2.5" }] })
+      if (url.pathname === "/api/create") {
+        created.push(await req.json())
+        return Response.json({ status: "success" })
+      }
       return new Response("not found", { status: 404 })
     },
   })
@@ -137,6 +142,23 @@ describe("/settings/local routes", () => {
     const body = (await res.json()) as { models: string[]; error?: string }
     expect(body.models).toEqual([])
     expect(body.error).toBeTruthy()
+  })
+
+  test("POST /context creates a tuned Ollama alias with the requested num_ctx", async () => {
+    const res = await app.request("/context", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: mockBase, model: "llama3.1", context: 32_768 }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { model: string; source: string; context: number }
+    expect(body).toEqual({ model: "openscience/llama3.1-ctx-32768", source: "llama3.1", context: 32_768 })
+    expect(created.at(-1)).toEqual({
+      model: "openscience/llama3.1-ctx-32768",
+      from: "llama3.1",
+      parameters: { num_ctx: 32_768 },
+      stream: false,
+    })
   })
 
   test("GET /status reports the auto-startable runtimes with boolean flags", async () => {

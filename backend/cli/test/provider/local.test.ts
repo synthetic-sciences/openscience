@@ -26,6 +26,46 @@ describe("LocalProvider.modelsEndpoint", () => {
   })
 })
 
+describe("LocalProvider Ollama context tuning", () => {
+  test("creates a real num_ctx model alias through Ollama's native API", async () => {
+    const requests: unknown[] = []
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname !== "/api/create") return new Response("not found", { status: 404 })
+        requests.push(await request.json())
+        return Response.json({ status: "success" })
+      },
+    })
+    try {
+      const baseURL = `http://127.0.0.1:${server.port}/v1`
+      const model = await LocalProvider.createOllamaContextModel(baseURL, "qwen3:8b", 65_536)
+      expect(model).toBe("openscience/qwen3-8b-ctx-65536")
+      expect(requests).toEqual([
+        {
+          model,
+          from: "qwen3:8b",
+          parameters: { num_ctx: 65_536 },
+          stream: false,
+        },
+      ])
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("rejects remote endpoints and invalid context sizes before calling Ollama", async () => {
+    await expect(LocalProvider.createOllamaContextModel("https://example.com/v1", "qwen3", 32_768)).rejects.toThrow(
+      "local Ollama endpoint",
+    )
+    await expect(LocalProvider.createOllamaContextModel("http://localhost:11434/v1", "qwen3", 512)).rejects.toThrow(
+      "between 1024 and 2097152",
+    )
+  })
+})
+
 describe("LocalProvider.parseModelsResponse", () => {
   test("parses the OpenAI {object:list,data:[{id}]} shape, sorted + deduped", () => {
     const body = { object: "list", data: [{ id: "qwen2.5" }, { id: "llama3.1" }, { id: "llama3.1" }] }
@@ -72,6 +112,18 @@ describe("LocalProvider.buildProviderConfig", () => {
       models: ["m"],
     }) as any
     expect(block.options.apiKey).toBe("sk-local")
+  })
+
+  test("records the tuned context and runtime for every Ollama alias", () => {
+    const block = LocalProvider.buildProviderConfig({
+      name: "Ollama (local)",
+      baseURL: "http://localhost:11434/v1",
+      models: ["openscience/qwen3-8b-ctx-65536"],
+      contextLimit: 65_536,
+      runtime: "ollama",
+    }) as any
+    expect(block.options.localRuntime).toBe("ollama")
+    expect(block.models["openscience/qwen3-8b-ctx-65536"].limit.context).toBe(65_536)
   })
 })
 

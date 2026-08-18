@@ -133,6 +133,63 @@ export namespace LocalProvider {
     return baseURL.replace(/\/+$/, "") + "/models"
   }
 
+  export function isLocalBaseURL(baseURL: string): boolean {
+    try {
+      const url = new URL(normalizeBaseURL(baseURL))
+      const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "")
+      return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1"
+    } catch {
+      return false
+    }
+  }
+
+  export function isOllamaBaseURL(baseURL: string): boolean {
+    if (!isLocalBaseURL(baseURL)) return false
+    return new URL(normalizeBaseURL(baseURL)).port === "11434"
+  }
+
+  export function ollamaContextModelName(model: string, context: number): string {
+    const name = model
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+    if (!name) throw new Error("Ollama model name is empty")
+    return `openscience/${name}-ctx-${context}`
+  }
+
+  /**
+   * Ollama's OpenAI-compatible endpoint cannot change num_ctx per request.
+   * Create the documented lightweight model alias through the native API, then
+   * keep using the OpenAI-compatible endpoint for normal tool-enabled turns.
+   */
+  export async function createOllamaContextModel(
+    baseURL: string,
+    model: string,
+    context: number,
+    fetchImpl: typeof fetch = fetch,
+  ): Promise<string> {
+    if (!Number.isInteger(context) || context < 1_024 || context > 2_097_152) {
+      throw new Error("Ollama context must be an integer between 1024 and 2097152 tokens")
+    }
+    if (!isLocalBaseURL(baseURL)) {
+      throw new Error("Context tuning is available only for a local Ollama endpoint")
+    }
+    const url = new URL(normalizeBaseURL(baseURL))
+    const name = ollamaContextModelName(model, context)
+    const response = await fetchImpl(`${url.origin}/api/create`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: name, from: model, parameters: { num_ctx: context }, stream: false }),
+      signal: AbortSignal.timeout(120_000),
+    })
+    if (!response.ok) {
+      const detail = (await response.text()).trim()
+      throw new Error(`Ollama could not create ${name}: HTTP ${response.status}${detail ? ` ${detail}` : ""}`)
+    }
+    return name
+  }
+
   /** Parse an OpenAI-compatible `GET /v1/models` body into sorted model ids.
    *  Tolerates the `{ object: "list", data: [{ id }] }` shape and, defensively,
    *  a bare array or Ollama's `{ models: [{ name }] }` native shape. */
@@ -215,6 +272,7 @@ export namespace LocalProvider {
     /** Per-model context window; local models vary widely, 32k is a safe default. */
     contextLimit?: number
     outputLimit?: number
+    runtime?: string
   }): Record<string, unknown> {
     const models: Record<string, unknown> = {}
     for (const id of input.models) {
@@ -231,7 +289,11 @@ export namespace LocalProvider {
       name: input.name,
       npm: NPM,
       api: input.baseURL,
-      options: { baseURL: input.baseURL, apiKey: input.apiKey || DEFAULT_API_KEY },
+      options: {
+        baseURL: input.baseURL,
+        apiKey: input.apiKey || DEFAULT_API_KEY,
+        ...(input.runtime ? { localRuntime: input.runtime } : {}),
+      },
       models,
     }
   }

@@ -246,6 +246,9 @@ async function configuredLocals() {
       name: p?.name ?? id,
       baseURL: (p?.options?.baseURL ?? p?.api) as string,
       models: Object.keys(p?.models ?? {}),
+      runtime:
+        p?.options?.localRuntime ??
+        (id === "ollama" || LocalProvider.isOllamaBaseURL(p?.options?.baseURL ?? p?.api) ? "ollama" : undefined),
     }))
 }
 
@@ -338,6 +341,29 @@ export const LocalModelsRoutes = lazy(() =>
       }
     })
 
+    // Create an Ollama alias with a real num_ctx setting. Ollama deliberately
+    // does not expose context sizing through its OpenAI-compatible endpoint.
+    .post(
+      "/context",
+      validator(
+        "json",
+        z.object({
+          url: z.string(),
+          model: z.string().trim().min(1),
+          context: z.number().int().min(1_024).max(2_097_152),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        try {
+          const model = await LocalProvider.createOllamaContextModel(body.url, body.model, body.context)
+          return c.json({ model, source: body.model, context: body.context })
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 400)
+        }
+      },
+    )
+
     // Register (or update) a local provider block.
     .post(
       "/",
@@ -349,6 +375,9 @@ export const LocalModelsRoutes = lazy(() =>
           name: z.string().optional(),
           key: z.string().optional(),
           models: z.array(z.string()).min(1),
+          contextLimit: z.number().int().min(1_024).max(2_097_152).optional(),
+          runtime: z.enum(["ollama"]).optional(),
+          merge: z.boolean().optional(),
           setDefault: z.boolean().optional(),
         }),
       ),
@@ -365,8 +394,19 @@ export const LocalModelsRoutes = lazy(() =>
           baseURL,
           apiKey: body.key,
           models: body.models,
+          contextLimit: body.contextLimit,
+          runtime: body.runtime,
         })
-        await Config.setProvider(id, block as any, "global")
+        const previous = body.merge ? (await Config.getGlobal()).provider?.[id] : undefined
+        const provider = previous
+          ? {
+              ...previous,
+              ...block,
+              options: { ...previous.options, ...(block as any).options },
+              models: { ...previous.models, ...(block as any).models },
+            }
+          : block
+        await Config.setProvider(id, provider as any, "global")
         if (body.setDefault) await Config.updateGlobal({ model: `${id}/${body.models[0]}` })
         Provider.invalidate()
         log.info("registered local provider", { id, baseURL, models: body.models.length })

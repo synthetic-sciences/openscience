@@ -4,6 +4,7 @@ import { SETTINGS_PANELS, SETTINGS_PANEL_IDS, SETTINGS_SECTIONS } from "./regist
 const root = new URL("./", import.meta.url)
 const modules: Record<(typeof SETTINGS_PANEL_IDS)[number], string> = {
   models: "Models",
+  "local-models": "LocalModels",
   skills: "Skills",
   connectors: "Connectors",
   compute: "Compute",

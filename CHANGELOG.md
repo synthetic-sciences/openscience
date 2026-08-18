@@ -10,6 +10,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Added
 
+- Added a visible local-model settings surface and real Ollama context-window
+  controls that create tuned `num_ctx` aliases through Ollama's native API.
 - Added a conversation-first Research harness with bounded Normal and Ultra
   delegation, persistent Python and R analysis, governed remote compute, and a
   reproducible trajectory dashboard for harness evaluation.
