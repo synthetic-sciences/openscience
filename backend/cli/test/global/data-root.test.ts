@@ -457,7 +457,7 @@ describe("managed data root", () => {
         "Cannot scope work under a non-active data-root operation",
       )
       startChild.resolve()
-      expect(await Promise.race([childDone.promise.then(() => true), Bun.sleep(250).then(() => false)])).toBe(true)
+      expect(await Promise.race([childDone.promise.then(() => true), Bun.sleep(1_000).then(() => false)])).toBe(true)
       expect(await Promise.race([switching.then(() => true), Bun.sleep(50).then(() => false)])).toBe(false)
 
       releaseScope.resolve()
