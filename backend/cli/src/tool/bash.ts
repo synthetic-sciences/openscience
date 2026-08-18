@@ -305,7 +305,7 @@ export const BashTool = Tool.define("bash", async () => {
         // Build the wrapper only after the final authority check, while trust
         // and filesystem mutations are excluded through durable registration.
         const sandbox = Sandbox.plan({
-          command: params.command,
+          command: Shell.pipefail(shell, params.command),
           shell,
           cwd,
           workspace: current.writable,
@@ -314,6 +314,7 @@ export const BashTool = Tool.define("bash", async () => {
           options: current.sandbox,
         })
         return OpenScience.withSubprocessEnv(process.env, async (env) => {
+          const cache = sandbox.sandboxed ? Sandbox.cacheEnvironment(current.workspace) : {}
           let child: ReturnType<typeof spawn>
           const wrapped = await CommandRuntime.wrap({
             file: sandbox.file,
@@ -324,7 +325,7 @@ export const BashTool = Tool.define("bash", async () => {
             child = spawn(wrapped.file, wrapped.args, {
               shell: wrapped.spawnShell,
               cwd,
-              env,
+              env: { ...env, ...cache },
               stdio: ["ignore", "pipe", "pipe"],
               detached: process.platform !== "win32",
             })

@@ -338,6 +338,7 @@ export namespace SessionPrompt {
     // threshold. Prevents an infinite compaction loop when fixed system+tool+
     // summary overhead alone already exceeds the 0.75 threshold.
     let compactionArmed = true
+    let outputContinuations = 0
     const workspace = await SessionFilesystem.workspace(sessionID)
     // Text doom-loop guard (#176): weak/local models sometimes emit a near-identical
     // "continuity summary" turn over and over instead of converging on an answer.
@@ -448,6 +449,45 @@ export namespace SessionPrompt {
       // context forever (the #176 doom loop). See MessageV2.isContinuingTurn.
       const lastAssistantHasTool = lastAssistantMsg?.parts.some((p) => p.type === "tool") ?? false
       const continuing = MessageV2.isContinuingTurn(lastAssistant?.finish, lastAssistantHasTool)
+      const recovery = MessageV2.outputRecovery({
+        finish: lastAssistant?.finish,
+        unanswered: !!lastAssistant && lastUser.id < lastAssistant.id,
+        bare: bareMode,
+        attempts: outputContinuations,
+      })
+      if (recovery !== "none") {
+        if (recovery === "fail") {
+          await failTooLarge(
+            "The model repeatedly reached its maximum output before completing the task. Continue in a new turn with smaller file edits or a narrower request.",
+          )
+          break
+        }
+        outputContinuations++
+        const resume: MessageV2.User = {
+          id: await MessageV2.nextMessageID(sessionID),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: lastUser.agent,
+          model: lastUser.model,
+          effort: MessageV2.resolveResearchEffort(lastUser.effort),
+        }
+        await Session.updateMessage(resume)
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: resume.id,
+          sessionID,
+          type: "text",
+          synthetic: true,
+          text: [
+            "Your previous response reached the output limit before the task completed.",
+            "Continue from the existing work without repeating it. Write requested files in smaller chunks,",
+            "run the saved workflow, inspect its outputs, and finish with the verified result.",
+          ].join(" "),
+        } satisfies MessageV2.TextPart)
+        continue
+      }
+      if (lastAssistant?.finish !== "length") outputContinuations = 0
       if (lastAssistant?.finish && (!continuing || bareMode) && lastUser.id < lastAssistant.id) {
         log.info("exiting loop", { sessionID, bareMode })
         break

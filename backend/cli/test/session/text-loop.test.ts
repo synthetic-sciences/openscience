@@ -84,3 +84,17 @@ describe("MessageV2.isContinuingTurn", () => {
     expect(MessageV2.isContinuing("unknown")).toBe(true)
   })
 })
+
+describe("MessageV2.outputRecovery", () => {
+  test("continues a truncated active task twice, then fails loudly", () => {
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 0 })).toBe("continue")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 1 })).toBe("continue")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 2 })).toBe("fail")
+  })
+
+  test("does not resume completed, answered, or bare turns", () => {
+    expect(MessageV2.outputRecovery({ finish: "stop", unanswered: true, bare: false, attempts: 0 })).toBe("none")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: false, bare: false, attempts: 0 })).toBe("none")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: true, attempts: 0 })).toBe("none")
+  })
+})

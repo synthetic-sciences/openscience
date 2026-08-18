@@ -26,6 +26,17 @@ async function executeWithoutCleanup(plan: Sandbox.Plan, cwd: string) {
   return { exit, stdout, stderr }
 }
 
+describe("Sandbox.cacheEnvironment", () => {
+  test("keeps scientific caches inside the writable session workspace", () => {
+    const workspace = path.join(path.parse(process.cwd()).root, "work", "session")
+    const env = Sandbox.cacheEnvironment(workspace)
+    expect(Object.values(env).every((value) => value.startsWith(workspace + path.sep))).toBe(true)
+    expect(env.MPLCONFIGDIR).toBe(path.join(workspace, ".openscience", "cache", "matplotlib"))
+    expect(env.UV_CACHE_DIR).toBe(path.join(workspace, ".openscience", "cache", "uv"))
+    expect(env.PIP_CACHE_DIR).toBe(path.join(workspace, ".openscience", "cache", "pip"))
+  })
+})
+
 describe("Sandbox.seatbeltProfile", () => {
   test("denies writes by default and re-allows the workspace", () => {
     const profile = Sandbox.seatbeltProfile({ writable: ["/work/project"], network: true })

@@ -23,6 +23,8 @@ verify, and save useful outputs with the smallest sufficient evidence.
 - Use persistent Python/R for analysis and shell for builds, tests, files, and scripts. State is
   working memory, not reproducibility: save inputs, parameters, and outputs; clean-rerun material
   results when practical.
+- Work in the session workspace, the sole guaranteed writable directory. Never use global temp or
+  write beside a read-only input.
 - Load a narrow domain skill when its procedure or references materially help. Biology, physics,
   ML, statistics, literature review, and writing are skills, not separate user-facing agents.
 - Diagnose a failed action before retrying it. Do not loop on the same call.
@@ -31,14 +33,10 @@ verify, and save useful outputs with the smallest sufficient evidence.
 
 ## Effort and delegation
 
-- The current Research effort is Normal or Ultra. Both can delegate optional independent work.
-- Normal is focused and may dispatch at most two Task calls total per user turn; Ultra may
-  dispatch at most four. Continuations count. In both modes, default to zero children and keep
-  fan-out shallow.
+- Normal may dispatch two Task calls per turn and Ultra four. Continuations count; default to zero children.
 - Delegate by work type—Explore, Execute, or Review—not by scientific persona.
-- Task calls block the lead until they return. Dispatch genuinely independent children together
-  when parallelism is worthwhile; do not delegate sequential critical-path work the lead can do
-  faster. The lead owns synthesis and must not let optional failures block a usable answer.
+- Dispatch independent children together, never sequential critical-path work. The lead owns
+  synthesis and optional failures cannot block a usable answer.
 
 ## Trust and spend
 

@@ -13,6 +13,10 @@ describe("openscience run research contract", () => {
 
   test("offers every approval scope in the terminal", () => {
     expect(source).toContain('{ value: "once", label: "Allow once" }')
+    expect(source).toContain('{ value: "reject-continue", label: "Reject and continue" }')
+    expect(source).toContain("sdk.permission.reply({")
+    expect(source).not.toContain("sdk.permission.respond({")
+    expect(source).toContain("if (errorMsg || rejected) process.exit(1)")
     expect(source).toContain('{ value: "session", label: "This conversation" }')
     expect(source).toContain('{ value: "project", label: "This project" }')
     expect(source).toContain('{ value: "always", label: "Global" }')

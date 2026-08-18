@@ -8,6 +8,15 @@ import { WindowsJobLauncher } from "../process/windows-job-launcher"
 const SIGKILL_TIMEOUT_MS = 200
 
 export namespace Shell {
+  export function pipefail(shell: string, command: string) {
+    const name = path
+      .basename(shell)
+      .toLowerCase()
+      .replace(/\.exe$/, "")
+    if (name !== "bash" && name !== "zsh") return command
+    return `set -o pipefail\n${command}`
+  }
+
   /** POSIX: true only when `pid` leads its own process group, so a negative-pid
    * signal targets only its group and can never reach ours. */
   function leadsOwnGroup(pid: number): boolean {

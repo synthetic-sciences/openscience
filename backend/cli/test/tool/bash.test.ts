@@ -7,6 +7,7 @@ import { executionSession, tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
 import { SessionFilesystem } from "../../src/session/filesystem"
+import { Shell } from "../../src/shell/shell"
 
 async function context() {
   const session = await executionSession()
@@ -39,6 +40,24 @@ describe("tool.bash", () => {
         )
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("test")
+      },
+    })
+  })
+
+  test("reports an upstream pipeline failure", async () => {
+    if (!/^(bash|zsh)(\.exe)?$/i.test(path.basename(Shell.acceptable()))) return
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "false | true",
+            description: "Checks pipeline failure status",
+          },
+          await context(),
+        )
+        expect(result.metadata.exit).not.toBe(0)
       },
     })
   })

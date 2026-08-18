@@ -5,13 +5,9 @@ record is local, deterministic, and safe to compare across research runs. It exi
 a practical scientific question: did a result change because the research method improved, or
 because the model, prompt, instructions, or available tools changed underneath it?
 
-The design adopts two useful ideas from DeepSeek Harness without importing its runtime:
-
-- model-visible execution must be attributable to durable state;
-- runtime invariants should be replayable from that state rather than inferred from logs.
-
-OpenScience keeps its existing session, tool, provider, permission, and artifact systems. It
-does not load DeepSeek plugins or require the DeepSeek CLI.
+The design keeps model-visible execution attributable to durable state and replays runtime
+invariants from that state instead of inferring them from logs. It uses OpenScience's existing
+session, tool, provider, permission, and artifact systems without a second orchestration runtime.
 
 ## Effective composition
 
@@ -77,6 +73,18 @@ two different fingerprints imply meaningfully different conclusions.
 The frozen launch evaluator captures the manifest report beside costs, timing, artifacts,
 approvals, failures, and reviewer findings. Evaluation remains evidence-based and separately
 reviewed; the harness never grades its own scientific output.
+
+## Runtime completion invariants
+
+Research runs also fail closed around completion:
+
+- a genuine model output-limit finish receives at most two durable continuation turns before the
+  session reports an error instead of silently accepting partial work;
+- terminal permission prompts distinguish a denied action that should be worked around from a
+  rejection that makes the run unsuccessful;
+- sandboxed scientific tools keep caches beneath the writable session workspace; and
+- Bash and Zsh pipelines use `pipefail`, so a failed analysis cannot be hidden by `tail`, `tee`, or
+  another successful downstream formatter.
 
 ## Non-goals
 

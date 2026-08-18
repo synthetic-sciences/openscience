@@ -230,6 +230,23 @@ export namespace Sandbox {
     return ["/usr/bin/env", `TMPDIR=${temporary}`, `TMP=${temporary}`, `TEMP=${temporary}`, ...argv]
   }
 
+  /** Stable writable cache roots for scientific tools launched through the
+   * shell. The OS sandbox intentionally leaves the user's home read-only;
+   * without these overrides matplotlib, pip, uv, numba, and joblib either
+   * warn, rebuild caches for every command, or fail before useful work starts. */
+  export function cacheEnvironment(workspace: string) {
+    const cache = path.join(workspace, ".openscience", "cache")
+    return {
+      MPLCONFIGDIR: path.join(cache, "matplotlib"),
+      XDG_CACHE_HOME: path.join(cache, "xdg"),
+      NUMBA_CACHE_DIR: path.join(cache, "numba"),
+      JOBLIB_TEMP_FOLDER: path.join(cache, "joblib"),
+      PIP_CACHE_DIR: path.join(cache, "pip"),
+      UV_CACHE_DIR: path.join(cache, "uv"),
+      PYTHONPYCACHEPREFIX: path.join(cache, "pycache"),
+    }
+  }
+
   /** Canonicalize an existing path or a nonexistent tail below its nearest
    * existing ancestor. Relative paths and broken symlink ancestors are
    * ambiguous policy inputs and are dropped fail-closed. */
@@ -391,6 +408,7 @@ export namespace Sandbox {
       "/Library/Developer/CommandLineTools",
       "/Library/Frameworks",
       "/private/etc/ssl",
+      path.join(os.homedir(), ".local", "share", "uv", "python"),
       ...runtimeMimeTypeFiles(),
     ]) {
       if (fs.existsSync(value)) add(value)

@@ -616,10 +616,10 @@ export namespace SessionProcessor {
                   // before a tool call, leaving a pending tool part). isContinuing()
                   // excludes "length", so the block above skips it. Treat it as a
                   // context overflow: compact history and re-run the SAME user message
-                  // against the summary, instead of exiting the loop as if the agent
-                  // was done (which strands the pending tool part → "Tool execution
-                  // aborted"). A genuine max-output truncation (small input) has
-                  // isOverflow=false and still falls through unchanged.
+                  // against the summary. A genuine max-output truncation (small input)
+                  // has isOverflow=false; the outer prompt loop recovers it with a
+                  // bounded synthetic continuation so partial file writes are not
+                  // mistaken for task completion.
                   if (
                     !input.assistantMessage.summary &&
                     value.finishReason === "length" &&

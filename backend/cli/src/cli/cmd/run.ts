@@ -161,6 +161,7 @@ export const RunCommand = cmd({
 
       const events = await sdk.event.subscribe()
       let errorMsg: string | undefined
+      let rejected = false
 
       // Track per-part text already written so we can stream append-only
       // deltas to stdout instead of waiting for part.time.end.
@@ -247,20 +248,30 @@ export const RunCommand = cmd({
                 { value: "session", label: "This conversation" },
                 { value: "project", label: "This project" },
                 { value: "always", label: "Global" },
-                { value: "reject", label: "Reject" },
+                { value: "reject-continue", label: "Reject and continue" },
+                { value: "reject", label: "Reject and stop" },
               ],
               initialValue: "once",
             }).catch(() => "reject")
+            if (result === "reject-continue") {
+              await sdk.permission.reply({
+                requestID: permission.id,
+                reply: "reject",
+                message:
+                  "Continue without this action. Stay within the existing permissions and use the session workspace.",
+              })
+              continue
+            }
             const response = (result.toString().includes("cancel") ? "reject" : result) as
               | "once"
               | "session"
               | "project"
               | "always"
               | "reject"
-            await sdk.permission.respond({
-              sessionID,
-              permissionID: permission.id,
-              response,
+            if (response === "reject") rejected = true
+            await sdk.permission.reply({
+              requestID: permission.id,
+              reply: response,
             })
           }
         }
@@ -313,7 +324,7 @@ export const RunCommand = cmd({
       }
 
       await eventProcessor
-      if (errorMsg) process.exit(1)
+      if (errorMsg || rejected) process.exit(1)
     }
 
     if (args.attach) {

@@ -31,6 +31,12 @@ function fakeProcess(pid: number) {
   } as unknown as ChildProcess
 }
 
+test("pipefail makes Bash and Zsh pipelines report upstream failures", () => {
+  expect(Shell.pipefail("/bin/bash", "false | true")).toBe("set -o pipefail\nfalse | true")
+  expect(Shell.pipefail("/bin/zsh", "false | true")).toBe("set -o pipefail\nfalse | true")
+  expect(Shell.pipefail("cmd.exe", "false | true")).toBe("false | true")
+})
+
 test("killTreeSync uses blocking taskkill on Windows", () => {
   const proc = fakeProcess(4321)
   const taskkill = spyOn(childProcess, "spawnSync").mockImplementation(
