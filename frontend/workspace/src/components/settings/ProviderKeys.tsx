@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createMemo, createSignal } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { Select } from "@synsci/ui/select"
@@ -69,7 +69,6 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
   const [provider, setProvider] = createSignal<string>(MODEL_PROVIDERS[0].id)
   const [key, setKey] = createSignal("")
   const [saving, setSaving] = createSignal(false)
-  const [syncing, setSyncing] = createSignal(false)
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const connected = createMemo(() =>
     providers
@@ -93,22 +92,6 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
         ),
       )
   }
-  const refreshDashboard = () => {
-    if (syncing()) return
-    setSyncing(true)
-    void sdk.client.global
-      .sync()
-      .then(() => sync.refreshProviders())
-      .catch((error) => props.onError?.(reason(error)))
-      .finally(() => setSyncing(false))
-  }
-
-  onMount(() => {
-    refreshDashboard()
-    window.addEventListener("focus", refreshDashboard)
-  })
-  onCleanup(() => window.removeEventListener("focus", refreshDashboard))
-
   const save = async () => {
     const value = key().trim()
     if (!value || saving()) return

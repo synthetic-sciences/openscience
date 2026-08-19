@@ -183,6 +183,8 @@ interface SyncResponse {
   }
 }
 
+export type AccountProfile = SyncResponse["user"]
+
 /**
  * Returns an actionable one-liner for a disconnected provider based on the
  * reason code returned by the backend sync endpoint.
@@ -374,6 +376,29 @@ export namespace OpenScience {
       })
       return null
     }
+  }
+
+  /**
+   * Read the account summary without applying the credential payload returned
+   * by Atlas. Settings uses this for display only. Calling syncServices() from
+   * a GET handler published a credential revision and disposed every active
+   * project instance merely because General was opened.
+   */
+  export async function getProfile(): Promise<AccountProfile | null> {
+    const session = await getSession()
+    if (!session) return null
+    return atlasFetch(`${API_BASE}/api/cli/sync`, {
+      headers: { Authorization: `Bearer ${session.api_key}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) return null
+        const data = (await response.json()) as SyncResponse
+        return data.user
+      })
+      .catch((error) => {
+        log.warn("account profile read failed", { error: error instanceof Error ? error.message : String(error) })
+        return null
+      })
   }
 
   async function writeSession(session: OpenScienceSession) {

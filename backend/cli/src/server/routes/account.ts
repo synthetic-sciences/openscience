@@ -81,14 +81,14 @@ export const AccountRoutes = lazy(() =>
       }),
       async (c) => {
         const session = await OpenScience.getSession()
-        const sync = session ? await OpenScience.syncServices() : null
-        // -1 is the wire encoding for "unknown" (schema: number)
-        const balance = (session ? await OpenScience.getBalance() : null) ?? -1
-        const billing = session ? await OpenScience.getBillingMode() : null
+        const [user, balance, billing] = session
+          ? await Promise.all([OpenScience.getProfile(), OpenScience.getBalance(), OpenScience.getBillingMode()])
+          : [null, null, null]
         return c.json({
           session: !!session,
-          user: sync?.user,
-          balance_usd: balance,
+          user: user ?? (session?.user_id ? { user_id: session.user_id } : undefined),
+          // -1 is the wire encoding for "unknown" (schema: number)
+          balance_usd: balance ?? -1,
           billing_mode: billing,
         })
       },
