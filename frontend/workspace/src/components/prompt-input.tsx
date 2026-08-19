@@ -2821,24 +2821,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </Switch>
           </div>
           <div class="workspace-composer__actions flex items-center gap-3" role="group" aria-label="Model and send">
-            <ModelSettingsPopover />
-            <Show when={fastMode()}>
-              {(mode) => (
-                <Tooltip placement="top" value={mode().active ? "Disable fast mode" : "Enable fast mode"}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    class="workspace-composer__fast-mode"
-                    data-active={mode().active ? "true" : undefined}
-                    aria-label={mode().active ? "Disable fast mode" : "Enable fast mode"}
-                    aria-pressed={mode().active}
-                    onClick={toggleFastMode}
-                  >
-                    <Icon name="bolt" size="small" />
-                  </Button>
-                </Tooltip>
-              )}
-            </Show>
+            <div class="workspace-composer__model-actions">
+              <Show when={fastMode()}>
+                {(mode) => (
+                  <Tooltip placement="top" value={mode().active ? "Disable fast mode" : "Enable fast mode"}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      class="workspace-composer__fast-mode"
+                      data-active={mode().active ? "true" : undefined}
+                      aria-label={mode().active ? "Disable fast mode" : "Enable fast mode"}
+                      aria-pressed={mode().active}
+                      onClick={toggleFastMode}
+                    >
+                      <Icon name="bolt" size="small" />
+                    </Button>
+                  </Tooltip>
+                )}
+              </Show>
+              <ModelSettingsPopover />
+            </div>
             <Tooltip
               placement="top"
               inactive={!prompt.dirty() && !working()}

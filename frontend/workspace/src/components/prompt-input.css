@@ -411,6 +411,13 @@ form.workspace-composer .workspace-composer__actions {
   gap: 4px;
 }
 
+form.workspace-composer .workspace-composer__model-actions {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 form.workspace-composer .workspace-composer__attach {
   width: 32px;
   height: 32px;

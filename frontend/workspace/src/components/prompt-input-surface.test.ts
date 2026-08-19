@@ -201,8 +201,13 @@ describe("composer control consolidation", () => {
     expect(source).toContain("logicalModelKey(model.provider.id, model.id) === key")
     expect(source).toContain('Object.keys(model.modes ?? {}).includes("fast")')
     expect(source).toContain('class="workspace-composer__fast-mode"')
+    expect(source).toContain('class="workspace-composer__model-actions"')
+    expect(source.indexOf('class="workspace-composer__fast-mode"')).toBeLessThan(
+      source.indexOf("<ModelSettingsPopover />"),
+    )
     expect(source).toContain("aria-pressed={mode().active}")
     expect(source).toContain('<Icon name="bolt" size="small" />')
+    expect(componentCss).toContain(".workspace-composer__model-actions")
     expect(componentCss).toContain("width: 28px")
     expect(componentCss).toContain('workspace-composer__fast-mode[data-active="true"]')
   })
