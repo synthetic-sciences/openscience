@@ -15,8 +15,8 @@ import {
   inferenceSource,
   inferenceSourceLabel,
   logicalModelKey,
+  modelContext,
   modelDisplayName,
-  modelSummary,
 } from "@/context/model-catalog"
 import { DialogSettings } from "./dialog-settings"
 import { modelGroup, modelGroupLabel, modelGroupLabelRank } from "./model-groups"
@@ -243,6 +243,10 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const routeChoice = createMemo(() => choices().find((choice) => choice.key === routeTarget()))
   const choiceName = (choice: ReturnType<typeof choices>[number]) =>
     modelDisplayName(choice.model.name, choice.model.provider.id, choice.model.id)
+  // groupModelRoutes puts the exact active route first, so each logical model
+  // reports the access the user is actually using. Alternate routes remain in
+  // the arrow menu instead of making the compact row read like three models.
+  const access = (choice: ReturnType<typeof choices>[number]) => routeAccess(choice.model)
   const visibleGroups = createMemo(() => (catalogReady() ? takeCatalogGroups(groups(), catalogLimit()) : []))
   const currentChoiceKey = createMemo(() => {
     const model = current()
@@ -496,7 +500,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                         const model = choice.model
                         const selected = () =>
                           choice.routes.some((route) => current() && exact(route) === exact(current()!))
-                        const provider = () => displayProviderForModel(model.provider, model.id).name
                         return (
                           <button
                             type="button"
@@ -508,9 +511,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                             aria-checked={selected()}
                             aria-haspopup={choice.routes.length > 1 ? "menu" : undefined}
                             tabindex={quickTab() === choice.key ? 0 : -1}
-                            aria-label={`${choiceName(choice)}, ${routeLabel(model)}${
-                              choice.routes.length > 1 ? `, ${choice.routes.length} access options` : ""
-                            }`}
+                            aria-label={`${choiceName(choice)}, ${access(choice)}`}
                             class={row}
                             onFocus={() => setQuickFocus(choice.key)}
                             onClick={() => selectChoice(choice, "root")}
@@ -518,16 +519,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                             <span class="model-settings-model">
                               <span class="model-settings-model-heading">
                                 <strong>{choiceName(choice)}</strong>
-                                <span class="model-settings-provider">
-                                  <Show
-                                    when={providerIcon(displayProviderForModel(model.provider, model.id).id)}
-                                    fallback={<span aria-hidden="true">{provider().charAt(0).toUpperCase()}</span>}
-                                  >
-                                    {(icon) => <ProviderIcon id={icon()} aria-hidden="true" />}
-                                  </Show>
-                                  {provider()} · {routeAccess(model)}
-                                  {choice.routes.length > 1 ? ` · ${choice.routes.length} access` : ""}
-                                </span>
+                                <span class="model-settings-quick-access">({access(choice)})</span>
                               </span>
                             </span>
                             <Show
@@ -617,6 +609,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                                 <For each={group[1]}>
                                   {(choice) => {
                                     const model = choice.model
+                                    const provider = () => displayProviderForModel(model.provider, model.id)
                                     const selected = () =>
                                       choice.routes.some((route) => current() && exact(route) === exact(current()!))
                                     return (
@@ -630,9 +623,9 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                                         aria-checked={selected()}
                                         aria-haspopup={choice.routes.length > 1 ? "menu" : undefined}
                                         tabindex={catalogTab() === choice.key ? 0 : -1}
-                                        aria-label={`${choiceName(choice)}, ${routeLabel(model)}${
-                                          choice.routes.length > 1 ? `, ${choice.routes.length} access options` : ""
-                                        }`}
+                                        aria-label={`${choiceName(choice)}, ${provider().name}, ${modelContext(
+                                          model.limit.context,
+                                        )} context, ${access(choice)}`}
                                         class={row}
                                         onFocus={() => setCatalogFocus(choice.key)}
                                         onClick={() => selectChoice(choice, "models")}
@@ -640,14 +633,20 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                                         <span class="model-settings-model">
                                           <strong>{choiceName(choice)}</strong>
                                           <small>
-                                            {modelSummary({
-                                              reasoning: model.capabilities.reasoning,
-                                              context: model.limit.context,
-                                              provider: routeLabel(model),
-                                            })}
-                                            {choice.routes.length > 1
-                                              ? ` · ${choice.routes.length} access options`
-                                              : ""}
+                                            <span class="model-settings-provider">
+                                              <Show
+                                                when={providerIcon(provider().id)}
+                                                fallback={
+                                                  <span aria-hidden="true">
+                                                    {provider().name.charAt(0).toUpperCase()}
+                                                  </span>
+                                                }
+                                              >
+                                                {(icon) => <ProviderIcon id={icon()} aria-hidden="true" />}
+                                              </Show>
+                                              {provider().name}
+                                            </span>
+                                            {` · ${modelContext(model.limit.context)} context · (${access(choice)})`}
                                           </small>
                                         </span>
                                         <Show

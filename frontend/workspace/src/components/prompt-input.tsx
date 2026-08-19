@@ -463,7 +463,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     queueMicrotask(() => fileInputRef.click())
   }
 
+  const resetResearchTools = () => {
+    for (const choice of researchToolsRef?.querySelectorAll<HTMLDetailsElement>(
+      ".workspace-composer__research-choice[open]",
+    ) ?? []) {
+      choice.open = false
+    }
+    setReviewerQuery("")
+    setReviewerRoute("")
+  }
+
   const closeResearchTools = () => {
+    resetResearchTools()
     if (researchToolsRef) researchToolsRef.open = false
   }
 
@@ -2403,6 +2414,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <details
                   ref={(element) => (researchToolsRef = element)}
                   class="workspace-composer__research-tools"
+                  onToggle={(event) => {
+                    if (event.currentTarget.open) return
+                    resetResearchTools()
+                  }}
                   onKeyDown={(event) => {
                     if (event.key !== "Escape") return
                     event.preventDefault()

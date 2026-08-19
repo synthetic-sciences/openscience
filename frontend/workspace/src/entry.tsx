@@ -7,9 +7,39 @@ import { dict as zh } from "@/i18n/zh"
 import { openscienceFetch } from "@/utils/openscience-fetch"
 import { URLS } from "@/config/urls"
 import { openNativeDirectoryPicker } from "@/utils/native-picker"
+import { normalizeServerUrl } from "@/context/server"
+import { resolveDefaultServerUrl, resolveServerRoute } from "@/config/server-url"
 import pkg from "../package.json"
 
 const DEFAULT_SERVER_URL_KEY = "openscience.settings.dat:defaultServerUrl"
+
+const stored = () => {
+  if (typeof localStorage === "undefined") return
+  try {
+    return normalizeServerUrl(localStorage.getItem(DEFAULT_SERVER_URL_KEY) ?? "")
+  } catch {
+    return
+  }
+}
+
+const configured = () => {
+  const direct = normalizeServerUrl(import.meta.env.VITE_OPENSCIENCE_SERVER_URL ?? "")
+  if (direct) return direct
+  const host = import.meta.env.VITE_OPENSCIENCE_SERVER_HOST
+  const port = import.meta.env.VITE_OPENSCIENCE_SERVER_PORT
+  if (!host && !port) return
+  return normalizeServerUrl(`http://${host ?? "localhost"}:${port ?? "4096"}`)
+}
+
+const server = () =>
+  resolveDefaultServerUrl({
+    stored: stored(),
+    configured: configured(),
+    hostname: location.hostname,
+    origin: window.location.origin,
+    hostedDomain: URLS.host,
+    dev: import.meta.env.DEV,
+  })
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -71,19 +101,13 @@ const platform: Platform = {
   openDirectoryPickerDialog: (options) => openNativeDirectoryPicker(options, openscienceFetch),
   checkUpdate: async (options) => {
     const query = options?.refresh ? "?refresh=1" : ""
-    const response = await openscienceFetch(`/settings/updates${query}`, { headers: { Accept: "application/json" } })
+    const url = resolveServerRoute(`/settings/updates${query}`, server(), window.location.origin)
+    const response = await openscienceFetch(url, { headers: { Accept: "application/json" } })
     if (!response.ok) throw new Error(`Update check failed (${response.status})`)
     const result = (await response.json()) as { updateAvailable: boolean; latest?: string }
     return { updateAvailable: result.updateAvailable, version: result.latest }
   },
-  getDefaultServerUrl: () => {
-    if (typeof localStorage === "undefined") return null
-    try {
-      return localStorage.getItem(DEFAULT_SERVER_URL_KEY)
-    } catch {
-      return null
-    }
-  },
+  getDefaultServerUrl: () => stored() ?? null,
   setDefaultServerUrl: (url) => {
     if (typeof localStorage === "undefined") return
     try {

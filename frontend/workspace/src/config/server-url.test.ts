@@ -44,4 +44,10 @@ describe("resolveServerRoute", () => {
       resolveServerRoute("/api/atlas/project?directory=%2Ftmp%2Fresearch", "http://127.0.0.1:4100", base.origin),
     ).toBe("http://127.0.0.1:4100/api/atlas/project?directory=%2Ftmp%2Fresearch")
   })
+
+  test("sends update checks to the selected OpenScience server", () => {
+    expect(resolveServerRoute("/settings/updates?refresh=1", "http://127.0.0.1:4096", base.origin)).toBe(
+      "http://127.0.0.1:4096/settings/updates?refresh=1",
+    )
+  })
 })

@@ -364,7 +364,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
                 : "Open a project or run an available action."}
             </Kobalte.Description>
 
-            <div class="command-palette__search" data-searching={searching() ? "true" : undefined}>
+            <div class="command-palette__search" data-focus-frame data-searching={searching() ? "true" : undefined}>
               <span class="command-palette__search-icon" aria-hidden="true">
                 <IconSearch size={16} strokeWidth={1.5} />
               </span>

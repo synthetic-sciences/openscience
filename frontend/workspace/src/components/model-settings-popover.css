@@ -194,6 +194,17 @@
   white-space: nowrap;
 }
 
+.model-settings-quick-access {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--model-control-muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .model-settings-provider {
   flex: 0 0 auto;
   display: inline-flex;
@@ -227,6 +238,10 @@
   font-size: 11px;
   font-weight: var(--font-weight-regular);
   line-height: 15px;
+}
+
+.model-settings-model small .model-settings-provider {
+  display: inline-flex;
 }
 
 .model-settings-more {
