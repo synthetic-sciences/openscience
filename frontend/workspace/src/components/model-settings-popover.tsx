@@ -15,7 +15,6 @@ import {
   inferenceSource,
   inferenceSourceLabel,
   logicalModelKey,
-  modelContext,
   modelDisplayName,
   modelSummary,
 } from "@/context/model-catalog"
@@ -153,20 +152,6 @@ export const ModelOptionList: Component<ModelOptionListProps> = (props) => {
     </div>
   )
 }
-
-export const ModelEffortTrigger: Component<{ value: string; expanded?: boolean; onOpen: () => void }> = (props) => (
-  <button
-    type="button"
-    data-model-effort-chip
-    aria-label={`Thinking effort: ${props.value}`}
-    aria-haspopup="menu"
-    aria-expanded={props.expanded ?? false}
-    onClick={props.onOpen}
-  >
-    <strong>{props.value}</strong>
-    <Icon name="chevron-down" size="small" aria-hidden="true" />
-  </button>
-)
 
 export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (props) => {
   const local = useLocal()
@@ -383,8 +368,8 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
     if (updates.length > 0) setNotice(updates.join(" "))
     if (value.reset.effort) local.model.variant.set(value.reset.effort)
     if (value.reset.speed) local.model.tier.set(value.reset.speed)
-    if (view() === "effort" && !value.effort) setView("root")
-    if (view() === "speed" && !value.speed) setView("root")
+    if (view() === "effort" && !value.effort) setView("models")
+    if (view() === "speed" && !value.speed) setView("models")
   })
 
   const focus = (selector: string, reset = false) =>
@@ -396,11 +381,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const show = (next: "effort" | "speed") => {
     setView(next)
     focus(`[data-model-option="${next}"][aria-checked="true"]`)
-  }
-
-  const root = (next: "effort" | "speed") => {
-    setView("root")
-    focus(`[data-model-menu-row="${next}"]`, true)
   }
 
   const exact = (model: NonNullable<ReturnType<typeof current>>) => `${model.provider.id}/${model.id}`
@@ -507,18 +487,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
             <Icon name="sliders" />
           </Show>
         </Kobalte.Trigger>
-        <Show when={props.trigger !== "icon" && control().effort}>
-          {(effort) => (
-            <ModelEffortTrigger
-              value={effort().value}
-              expanded={open() && view() === "effort"}
-              onOpen={() => {
-                setOpen(true)
-                show("effort")
-              }}
-            />
-          )}
-        </Show>
       </div>
       <Kobalte.Portal>
         <div data-mobile-model-settings-overlay onPointerDown={close} />
@@ -592,10 +560,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                                   {choice.routes.length > 1 ? ` · ${choice.routes.length} access` : ""}
                                 </span>
                               </span>
-                              <small>
-                                {model.capabilities.reasoning ? "Reasoning · " : ""}
-                                {modelContext(model.limit.context)} context
-                              </small>
                             </span>
                             <Show
                               when={choice.routes.length > 1}
@@ -630,53 +594,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                       ›
                     </span>
                   </button>
-                  <div class="model-settings-divider" />
-
-                  <Show when={control().effort}>
-                    {(effort) => (
-                      <button
-                        type="button"
-                        data-model-menu-item
-                        data-model-menu-row="effort"
-                        class={row}
-                        aria-controls="model-effort-options"
-                        aria-expanded={view() === "effort"}
-                        onClick={() => show("effort")}
-                      >
-                        <span class="model-settings-setting">
-                          <span data-model-menu-label>Thinking effort</span>
-                          <small>Choose how deeply the model reasons.</small>
-                        </span>
-                        <span data-model-menu-value class="flex min-w-0 items-center">
-                          <span class="truncate">{effort().value}</span>
-                          <span aria-hidden="true">›</span>
-                        </span>
-                      </button>
-                    )}
-                  </Show>
-
-                  <Show when={control().speed}>
-                    {(speed) => (
-                      <button
-                        type="button"
-                        data-model-menu-item
-                        data-model-menu-row="speed"
-                        class={row}
-                        aria-controls="model-speed-options"
-                        aria-expanded={view() === "speed"}
-                        onClick={() => show("speed")}
-                      >
-                        <span class="model-settings-setting">
-                          <span data-model-menu-label>{speed().label}</span>
-                          <small>Choose the provider's latency tier.</small>
-                        </span>
-                        <span data-model-menu-value class="flex min-w-0 items-center">
-                          <span class="truncate">{speed().value}</span>
-                          <span aria-hidden="true">›</span>
-                        </span>
-                      </button>
-                    )}
-                  </Show>
                 </div>
               </Match>
 
@@ -784,6 +701,50 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                     </Show>
                   </div>
                   <div class="model-settings-divider" />
+                  <p class="model-settings-heading">Request options</p>
+                  <Show when={control().effort}>
+                    {(effort) => (
+                      <button
+                        type="button"
+                        data-model-menu-item
+                        data-model-menu-row="effort"
+                        class={row}
+                        aria-controls="model-effort-options"
+                        onClick={() => show("effort")}
+                      >
+                        <span class="model-settings-setting">
+                          <span data-model-menu-label>Thinking effort</span>
+                          <small>Applies to this model's next request.</small>
+                        </span>
+                        <span data-model-menu-value class="flex min-w-0 items-center">
+                          <span class="truncate">{effort().value}</span>
+                          <span aria-hidden="true">›</span>
+                        </span>
+                      </button>
+                    )}
+                  </Show>
+                  <Show when={control().speed}>
+                    {(speed) => (
+                      <button
+                        type="button"
+                        data-model-menu-item
+                        data-model-menu-row="speed"
+                        class={row}
+                        aria-controls="model-speed-options"
+                        onClick={() => show("speed")}
+                      >
+                        <span class="model-settings-setting">
+                          <span data-model-menu-label>{speed().label}</span>
+                          <small>Choose the provider latency tier.</small>
+                        </span>
+                        <span data-model-menu-value class="flex min-w-0 items-center">
+                          <span class="truncate">{speed().value}</span>
+                          <span aria-hidden="true">›</span>
+                        </span>
+                      </button>
+                    )}
+                  </Show>
+                  <div class="model-settings-divider" />
                   <button type="button" data-model-menu-item class={`${row} model-settings-manage`} onClick={manage}>
                     <span class="model-settings-setting">
                       <span data-model-menu-label>Manage models</span>
@@ -836,7 +797,10 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                     current={effort().current.id}
                     options={effort().options}
                     onSelect={local.model.variant.set}
-                    onBack={() => root("effort")}
+                    onBack={() => {
+                      setView("models")
+                      focus('[data-model-menu-row="effort"]', true)
+                    }}
                     onDone={close}
                   />
                 )}
@@ -851,7 +815,10 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                     current={speed().current.id}
                     options={speed().options}
                     onSelect={local.model.tier.set}
-                    onBack={() => root("speed")}
+                    onBack={() => {
+                      setView("models")
+                      focus('[data-model-menu-row="speed"]', true)
+                    }}
                     onDone={close}
                   />
                 )}

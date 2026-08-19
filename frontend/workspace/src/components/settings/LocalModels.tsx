@@ -2,13 +2,15 @@
 // endpoint running on this machine. The server (routes/settings/local.ts) does
 // the localhost probing/listing the browser can't do cross-origin, and writes
 // the provider config block.
-import { Component, For, Show, createResource, createSignal } from "solid-js"
+import { Component, For, Show, createMemo, createResource, createSignal } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
+import { prepareOllamaModels } from "./local-model-selection"
 import { PanelBody, PanelHeader, PanelScroll } from "./_shared"
 
 interface Detected {
@@ -35,8 +37,11 @@ interface Runtime {
   serveHint: string
 }
 
+type Source = Pick<Detected, "id" | "name" | "baseURL" | "models">
+
 const LocalModels: Component = () => {
   const sdk = useGlobalSDK()
+  const sync = useGlobalSync()
   const platform = usePlatform()
   const fetchFn = platform.fetch ?? fetch
 
@@ -65,6 +70,9 @@ const LocalModels: Component = () => {
   )
   const [status, { refetch: refetchStatus }] = createResource(() =>
     call<{ runtimes: Runtime[] }>("/status").then((r) => r.runtimes),
+  )
+  const discoveries = createMemo(
+    () => detected()?.filter((item) => !status()?.some((runtime) => runtime.id === item.id && runtime.running)) ?? [],
   )
   const refetch = () => {
     refetchDetected()
@@ -99,38 +107,70 @@ const LocalModels: Component = () => {
     if (ollama && (!Number.isInteger(tokens) || tokens < 1_024 || tokens > 2_097_152)) {
       throw new Error("Context must be an integer between 1,024 and 2,097,152 tokens.")
     }
-    const models = ollama
-      ? await Promise.all(
-          input.models.map((model) =>
-            call<{ model: string }>("/context", {
-              method: "POST",
-              body: JSON.stringify({ url: input.url, model, context: tokens }),
-            }).then((result) => result.model),
-          ),
+    const prepared = ollama
+      ? await prepareOllamaModels(input.models, (model) =>
+          call<{ model: string }>("/context", {
+            method: "POST",
+            body: JSON.stringify({ url: input.url, model, context: tokens }),
+          }).then((result) => result.model),
         )
-      : input.models
-    return call("", {
+      : { models: input.models, tuned: true }
+    const result = await call<{ id: string; baseURL: string; models: string[] }>("", {
       method: "POST",
       body: JSON.stringify({
         url: input.url,
         id: input.id,
         name: input.name,
         key: input.key,
-        models,
+        models: prepared.models,
         contextLimit: ollama ? tokens : undefined,
         runtime: ollama ? "ollama" : undefined,
+        merge: true,
       }),
     })
+    return { ...result, tuned: prepared.tuned }
   }
 
-  const addRuntime = (d: Detected) =>
-    guard(
-      () => register({ url: d.baseURL, id: d.id, name: `${d.name} (local)`, models: d.models }),
-      "Failed to add local models",
-    )
+  const [choice, setChoice] = createSignal<Source>()
+  const [chosen, setChosen] = createSignal<Set<string>>(new Set<string>())
+  const choose = (source: Source) => {
+    setChoice(source)
+    setChosen(new Set<string>())
+  }
+  const toggleChoice = (model: string) => {
+    const next = new Set(chosen())
+    next.has(model) ? next.delete(model) : next.add(model)
+    setChosen(next)
+  }
+  const addChoice = () =>
+    guard(async () => {
+      const source = choice()
+      if (!source) return
+      const models = source.models.filter((model) => chosen().has(model))
+      if (!models.length) throw new Error("Select at least one model.")
+      const result = await register({
+        url: source.baseURL,
+        id: source.id,
+        name: `${source.name} (local)`,
+        models,
+      })
+      await sync.refreshProviders()
+      showToast({
+        variant: "success",
+        title: models.length === 1 ? "Model added" : "Models added",
+        description: result.tuned
+          ? `Added ${models.length} to the end of the Models catalog.`
+          : `Added ${models.length} to the end of the Models catalog. Restart the local server to enable custom Ollama context tuning.`,
+      })
+      setChoice(undefined)
+      setChosen(new Set<string>())
+    }, "Failed to add local models")
 
   const removeProvider = (id: string) =>
-    guard(() => call(`/${encodeURIComponent(id)}`, { method: "DELETE" }), "Failed to remove provider")
+    guard(async () => {
+      await call(`/${encodeURIComponent(id)}`, { method: "DELETE" })
+      await sync.refreshProviders()
+    }, "Failed to remove provider")
 
   // ── Start a runtime for the user (host it) ──
   const [starting, setStarting] = createSignal<string>()
@@ -148,8 +188,8 @@ const LocalModels: Component = () => {
         showToast({ title: `${rt.name} isn't installed`, description: `Install it, then start it here.` })
         window.open(r.install ?? rt.install, "_blank", "noopener")
       } else if (r.running && r.models?.length) {
-        await register({ url: rt.baseURL, id: rt.id, name: `${rt.name} (local)`, models: r.models })
-        showToast({ title: `${rt.name} is running`, description: `Added ${r.models.length} model(s).` })
+        choose({ ...rt, models: r.models })
+        showToast({ title: `${rt.name} is running`, description: "Choose which models to add." })
       } else if (r.running) {
         showToast({ title: `${rt.name} is running`, description: "No models yet — pull one below, then rescan." })
       } else {
@@ -161,12 +201,6 @@ const LocalModels: Component = () => {
     }
     setStarting(undefined)
   }
-
-  const addRunning = (rt: Runtime) =>
-    guard(
-      () => register({ url: rt.baseURL ?? "", id: rt.id, name: `${rt.name} (local)`, models: rt.models }),
-      "Failed to add models",
-    )
 
   // ── Pull a model ──
   const [pullName, setPullName] = createSignal("")
@@ -182,6 +216,37 @@ const LocalModels: Component = () => {
   const [found, setFound] = createSignal<string[]>([])
   const [selected, setSelected] = createSignal<Set<string>>(new Set<string>())
   const [listedUrl, setListedUrl] = createSignal("")
+  const [sshHost, setSshHost] = createSignal("")
+  const [sshRemotePort, setSshRemotePort] = createSignal("11434")
+  const [sshLocalPort, setSshLocalPort] = createSignal("12434")
+  const [sshKey, setSshKey] = createSignal("")
+
+  const connectSSH = () =>
+    guard(async () => {
+      const remotePort = Number(sshRemotePort())
+      const localPort = Number(sshLocalPort())
+      if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65_535) {
+        throw new Error("Remote port must be between 1 and 65,535.")
+      }
+      if (!Number.isInteger(localPort) || localPort < 1_024 || localPort > 65_535) {
+        throw new Error("Local port must be between 1,024 and 65,535.")
+      }
+      const result = await call<{ models: string[] }>("/ssh", {
+        method: "POST",
+        body: JSON.stringify({
+          host: sshHost().trim(),
+          remotePort,
+          localPort,
+          key: sshKey().trim() || undefined,
+        }),
+      })
+      await sync.refreshProviders()
+      showToast({
+        variant: "success",
+        title: "SSH models connected",
+        description: `Added ${result.models.length} model(s) through the encrypted tunnel.`,
+      })
+    }, "Couldn't connect the SSH model host")
 
   const listCustom = () =>
     guard(async () => {
@@ -208,6 +273,12 @@ const LocalModels: Component = () => {
       const models = [...selected()]
       if (!models.length) throw new Error("Select at least one model.")
       await register({ url: url().trim(), key: key().trim() || undefined, models })
+      await sync.refreshProviders()
+      showToast({
+        variant: "success",
+        title: models.length === 1 ? "Model added" : "Models added",
+        description: `Added ${models.length} to the end of the Models catalog.`,
+      })
       setUrl("")
       setKey("")
       setFound([])
@@ -218,8 +289,8 @@ const LocalModels: Component = () => {
   return (
     <PanelScroll>
       <PanelHeader
-        title="Local models"
-        description="Run Ollama, LM Studio, llama.cpp, vLLM, or another OpenAI-compatible endpoint on this machine."
+        title="Local and self-hosted models"
+        description="Run models on this machine or connect an OpenAI-compatible server on your own GPU."
       />
       <PanelBody>
         <div class="flex flex-col gap-8">
@@ -302,9 +373,9 @@ const LocalModels: Component = () => {
                         size="small"
                         variant="primary"
                         disabled={busy() || rt.models.length === 0}
-                        onClick={() => addRunning(rt)}
+                        onClick={() => choose(rt)}
                       >
-                        Add {rt.models.length}
+                        Choose models
                       </Button>
                     </Show>
                   </Show>
@@ -352,7 +423,7 @@ const LocalModels: Component = () => {
               </Button>
             </div>
             <Show
-              when={(detected()?.length ?? 0) > 0}
+              when={discoveries().length > 0}
               fallback={
                 <p class="text-12-regular text-text-weak/70">
                   Nothing running yet. Start a server (e.g. <code>ollama serve</code>) and select Rescan, or add a
@@ -360,7 +431,7 @@ const LocalModels: Component = () => {
                 </p>
               }
             >
-              <For each={detected()}>
+              <For each={discoveries()}>
                 {(d) => (
                   <div class="flex items-center justify-between rounded-sm border border-border-weak-base bg-surface-base p-3">
                     <div class="flex flex-col gap-0.5">
@@ -371,8 +442,8 @@ const LocalModels: Component = () => {
                         {d.baseURL} · {d.models.length} model(s)
                       </span>
                     </div>
-                    <Button size="small" variant="primary" disabled={busy()} onClick={() => addRuntime(d)}>
-                      Add {d.models.length}
+                    <Button size="small" variant="primary" disabled={busy()} onClick={() => choose(d)}>
+                      Choose models
                     </Button>
                   </div>
                 )}
@@ -380,9 +451,125 @@ const LocalModels: Component = () => {
             </Show>
           </section>
 
+          <Show when={choice()}>
+            {(source) => (
+              <section
+                class="flex flex-col gap-3 rounded-md border border-border-strong-base bg-surface-base p-4"
+                aria-label={`Choose ${source().name} models`}
+              >
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="flex flex-col gap-0.5">
+                    <h3 class="text-13-medium text-text-strong">Choose {source().name} models</h3>
+                    <p class="text-11-regular text-text-weak">Only the models you select will appear in Models.</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <Button
+                      size="small"
+                      variant="ghost"
+                      disabled={chosen().size === source().models.length}
+                      onClick={() => setChosen(new Set(source().models))}
+                    >
+                      Select all
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="ghost"
+                      disabled={chosen().size === 0}
+                      onClick={() => setChosen(new Set<string>())}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+                <div class="max-h-52 overflow-y-auto rounded-sm border border-border-weak-base p-2">
+                  <For each={source().models}>
+                    {(model) => (
+                      <label class="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-13-regular text-text-strong hover:bg-surface-raised-base">
+                        <input type="checkbox" checked={chosen().has(model)} onChange={() => toggleChoice(model)} />
+                        <span class="min-w-0 truncate font-mono text-12-regular">{model}</span>
+                      </label>
+                    )}
+                  </For>
+                </div>
+                <div class="flex justify-end gap-2">
+                  <Button size="small" variant="secondary" disabled={busy()} onClick={() => setChoice(undefined)}>
+                    Cancel
+                  </Button>
+                  <Button size="small" variant="primary" disabled={busy() || chosen().size === 0} onClick={addChoice}>
+                    Add {chosen().size} selected
+                  </Button>
+                </div>
+              </section>
+            )}
+          </Show>
+
+          <section class="flex flex-col gap-3">
+            <div class="flex flex-col gap-1">
+              <h3 class="text-13-medium text-text-strong">Connect over SSH</h3>
+              <p class="text-12-regular text-text-weak/70">
+                Open an encrypted local-forward to a model server running on a remote GPU. The host must already work
+                with your normal SSH config and keys.
+              </p>
+            </div>
+            <div class="grid grid-cols-1 gap-2 rounded-md border border-border-weak-base bg-surface-base p-3 sm:grid-cols-2">
+              <label class="flex flex-col gap-1 sm:col-span-2">
+                <span class="text-11-medium text-text-weak">SSH host</span>
+                <input
+                  class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
+                  placeholder="research-gpu or user@gpu.example.org"
+                  value={sshHost()}
+                  onInput={(event) => setSshHost(event.currentTarget.value)}
+                />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-11-medium text-text-weak">Remote model port</span>
+                <input
+                  class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong"
+                  type="number"
+                  min="1"
+                  max="65535"
+                  value={sshRemotePort()}
+                  onInput={(event) => setSshRemotePort(event.currentTarget.value)}
+                />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-11-medium text-text-weak">Local tunnel port</span>
+                <input
+                  class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong"
+                  type="number"
+                  min="1024"
+                  max="65535"
+                  value={sshLocalPort()}
+                  onInput={(event) => setSshLocalPort(event.currentTarget.value)}
+                />
+              </label>
+              <label class="flex flex-col gap-1 sm:col-span-2">
+                <span class="text-11-medium text-text-weak">Endpoint key (optional)</span>
+                <input
+                  class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="Only if the remote model server requires one"
+                  value={sshKey()}
+                  onInput={(event) => setSshKey(event.currentTarget.value)}
+                />
+              </label>
+              <div class="sm:col-span-2">
+                <Button size="small" variant="primary" disabled={busy() || !sshHost().trim()} onClick={connectSSH}>
+                  Connect models
+                </Button>
+              </div>
+            </div>
+          </section>
+
           {/* ── Custom endpoint ── */}
           <section class="flex flex-col gap-3">
-            <h3 class="text-13-medium text-text-strong">Custom endpoint</h3>
+            <div class="flex flex-col gap-1">
+              <h3 class="text-13-medium text-text-strong">Direct endpoint</h3>
+              <p class="text-12-regular text-text-weak/70">
+                Connect a local, LAN, VPN, or HTTPS OpenAI-compatible endpoint directly.
+              </p>
+            </div>
             <div class="flex flex-col gap-2">
               <input
                 class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
@@ -427,7 +614,7 @@ const LocalModels: Component = () => {
             <h3 class="text-13-medium text-text-strong">Configured</h3>
             <Show
               when={(configured()?.length ?? 0) > 0}
-              fallback={<p class="text-12-regular text-text-weak/70">No local providers yet.</p>}
+              fallback={<p class="text-12-regular text-text-weak/70">No local or self-hosted providers yet.</p>}
             >
               <For each={configured()}>
                 {(p) => (
@@ -436,6 +623,7 @@ const LocalModels: Component = () => {
                       <span class="text-13-medium text-text-strong">{p.id}</span>
                       <span class="text-11-regular text-text-weak">
                         {p.baseURL} · {p.models.length} model(s)
+                        <Show when={p.runtime?.startsWith("ssh:")}> · SSH tunnel</Show>
                       </span>
                     </div>
                     <Button

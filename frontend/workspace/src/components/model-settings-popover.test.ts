@@ -209,24 +209,6 @@ describe("model option keyboard navigation", () => {
     expect(document.activeElement).not.toBe(back)
   })
 
-  test("keeps the direct model-effort control visible at Standard", async () => {
-    let opened = 0
-    const host = mount(() =>
-      web.createComponent(subject.ModelEffortTrigger, {
-        value: "Standard",
-        expanded: false,
-        onOpen: () => opened++,
-      }),
-    )
-    const trigger = host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")
-
-    expect(trigger?.textContent).toBe("Standard")
-    expect(trigger?.getAttribute("aria-label")).toBe("Thinking effort: Standard")
-    expect(trigger?.querySelector('[data-component="icon"]')).not.toBeNull()
-    trigger?.click()
-    expect(opened).toBe(1)
-  })
-
   test("selects an exact access route from one logical model row", () => {
     const selected = { value: "openai/gpt-5.6-sol" }
     let done = 0

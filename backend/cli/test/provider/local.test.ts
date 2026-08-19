@@ -125,6 +125,17 @@ describe("LocalProvider.buildProviderConfig", () => {
     expect(block.options.localRuntime).toBe("ollama")
     expect(block.models["openscience/qwen3-8b-ctx-65536"].limit.context).toBe(65_536)
   })
+
+  test("marks explicitly registered remote endpoints as self-hosted", () => {
+    const block = LocalProvider.buildProviderConfig({
+      name: "Research GPU",
+      baseURL: "https://gpu.example.org/v1",
+      models: ["lab-model"],
+      selfHosted: true,
+    }) as { options: Record<string, unknown> }
+
+    expect(block.options.selfHosted).toBe(true)
+  })
 })
 
 describe("LocalProvider.listModels (injected fetch — no global mutation)", () => {

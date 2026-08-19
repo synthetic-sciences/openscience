@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { settingsApi } from "./api"
+import { SettingsApiError, settingsApi } from "./api"
 
 const base = "http://x"
 const path = "/settings/local"
@@ -36,6 +36,23 @@ describe("settingsApi", () => {
     const fetchFn = (async () => new Response("boom", { status: 500 })) as unknown as typeof fetch
 
     await expect(settingsApi(base, fetchFn, path)).rejects.toThrow(/boom|500/)
+  })
+
+  test("turns a JSON route error into a readable typed error", async () => {
+    const fetchFn = (async () =>
+      Response.json(
+        { error: "not_found", path: "/settings/local/context" },
+        { status: 404 },
+      )) as unknown as typeof fetch
+
+    const error = await settingsApi(base, fetchFn, path).catch((value: unknown) => value)
+
+    expect(error).toBeInstanceOf(SettingsApiError)
+    if (!(error instanceof SettingsApiError)) throw error
+    expect(error.status).toBe(404)
+    expect(error.code).toBe("not_found")
+    expect(error.message).toBe("Route not found: /settings/local/context")
+    expect(error.message).not.toContain("{")
   })
 
   test("removes a trailing slash from a mounted route root", async () => {

@@ -41,6 +41,12 @@ const title = (value: string) =>
 export function modelGroup(model: GroupModel, pinned = false): ModelGroup {
   if (pinned) return "pinned"
   if (model.provider.id === "openai-codex") return "codex"
+  if (
+    ["ollama", "lmstudio", "llamacpp", "vllm", "jan"].includes(model.provider.id) ||
+    model.provider.id.startsWith("local-") ||
+    model.provider.id.startsWith("ssh-")
+  )
+    return "provider:Local models"
 
   const key = canonicalKey(model.provider.id, model.id)
   if (key.startsWith("openai/")) return "openai"

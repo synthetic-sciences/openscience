@@ -62,7 +62,7 @@ declare global {
 export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
-      <ThemeProvider lockedTheme="openscience">
+      <ThemeProvider defaultTheme="openscience">
         <LanguageProvider>
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>

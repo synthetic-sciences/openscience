@@ -30,6 +30,22 @@ import { createListeners } from "./listeners"
 // compiling — it's dead code under the new AtlasApp entry but is still
 // imported transitively from app.tsx tooling.
 type InitError = { code: string; message?: string; cause?: unknown }
+
+export function syncErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message
+  if (typeof error === "string" && error.trim()) return error
+  if (!error || typeof error !== "object") return "The server returned an unexpected response."
+
+  const value = error as Record<string, unknown>
+  for (const key of ["message", "detail", "error", "data", "cause"] as const) {
+    const candidate = value[key]
+    if (candidate === error || candidate === undefined || candidate === null) continue
+    const message = syncErrorMessage(candidate)
+    if (message !== "The server returned an unexpected response.") return message
+  }
+  if (typeof value.status === "number") return `Request failed with status ${value.status}.`
+  return "The server returned an unexpected response."
+}
 import {
   batch,
   createContext,
@@ -589,7 +605,10 @@ function createGlobalSync() {
         if (name === "AbortError" || name === "TimeoutError" || /\babort|cancell?ed/i.test(String(err?.message ?? "")))
           return
         const project = getFilename(directory)
-        showToast({ title: language.t("toast.session.listFailed.title", { project }), description: err.message })
+        showToast({
+          title: language.t("toast.session.listFailed.title", { project }),
+          description: syncErrorMessage(err),
+        })
       })
 
     sessionLoads.set(key, promise)
@@ -630,7 +649,7 @@ function createGlobalSync() {
       } catch (err) {
         console.error("Failed to bootstrap instance", err)
         const project = getFilename(directory)
-        const message = err instanceof Error ? err.message : String(err)
+        const message = syncErrorMessage(err)
         showToast({ title: `Failed to reload ${project}`, description: message })
         setStore("status", "partial")
         return

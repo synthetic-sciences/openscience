@@ -1,4 +1,4 @@
-import { Component, For, createMemo, onCleanup, type JSX } from "solid-js"
+import { Component, For, Show, createMemo, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
@@ -48,9 +48,27 @@ export const AppearanceSections: Component = () => {
     demoSoundState = { cleanup: undefined, timeout: undefined }
   })
 
-  const [store, setStore] = createStore({
+  const [store, setStore] = createStore<{
+    checking: boolean
+    installing: boolean
+    available?: string
+  }>({
     checking: false,
+    installing: false,
   })
+
+  const install = () => {
+    if (!platform.update || !platform.restart || store.installing) return
+    setStore("installing", true)
+    void platform
+      .update()
+      .then(() => platform.restart!())
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+        setStore("installing", false)
+      })
+  }
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -60,6 +78,7 @@ export const AppearanceSections: Component = () => {
       .checkUpdate({ refresh: true })
       .then((result) => {
         if (!result.updateAvailable) {
+          setStore("available", undefined)
           showToast({
             variant: "success",
             icon: "circle-check",
@@ -68,6 +87,8 @@ export const AppearanceSections: Component = () => {
           })
           return
         }
+
+        setStore("available", result.version ?? "Update available")
 
         const actions =
           platform.update && platform.restart
@@ -119,12 +140,34 @@ export const AppearanceSections: Component = () => {
     { value: "dark", label: language.t("theme.scheme.dark") },
   ])
 
+  const themeOptions = createMemo(() =>
+    Object.values(theme.themes())
+      .map((item) => ({ value: item.id, label: item.name }))
+      .sort((a, b) =>
+        a.value === "openscience" ? -1 : b.value === "openscience" ? 1 : a.label.localeCompare(b.label),
+      ),
+  )
+
   const soundOptions = [...SOUND_OPTIONS]
 
   return (
     <>
       <SettingsSection title={language.t("settings.general.section.appearance")}>
         <div class="settings-card">
+          <SettingsRow title="Theme" description="Choose a complete color system for the workspace.">
+            <Select
+              aria-label="Theme"
+              options={themeOptions()}
+              current={themeOptions().find((option) => option.value === theme.themeId())}
+              value={(option) => option.value}
+              label={(option) => option.label}
+              onSelect={(option) => option && theme.setTheme(option.value)}
+              variant="secondary"
+              size="small"
+              triggerVariant="settings"
+            />
+          </SettingsRow>
+
           <SettingsRow
             title={language.t("settings.general.row.appearance.title")}
             description={language.t("settings.general.row.appearance.description")}
@@ -367,11 +410,23 @@ export const AppearanceSections: Component = () => {
             title={language.t("settings.updates.row.check.title")}
             description={language.t("settings.updates.row.check.description")}
           >
-            <Button size="small" variant="secondary" disabled={store.checking || !platform.checkUpdate} onClick={check}>
-              {store.checking
-                ? language.t("settings.updates.action.checking")
-                : language.t("settings.updates.action.checkNow")}
-            </Button>
+            <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
+              <Show when={store.available && platform.update && platform.restart}>
+                <Button size="small" variant="primary" disabled={store.installing} onClick={install}>
+                  {store.installing ? "Installing…" : `Install ${store.available}`}
+                </Button>
+              </Show>
+              <Button
+                size="small"
+                variant="secondary"
+                disabled={store.checking || !platform.checkUpdate}
+                onClick={check}
+              >
+                {store.checking
+                  ? language.t("settings.updates.action.checking")
+                  : language.t("settings.updates.action.checkNow")}
+              </Button>
+            </div>
           </SettingsRow>
         </div>
       </SettingsSection>

@@ -18,7 +18,6 @@ import { SessionFilesystem } from "../session/filesystem"
 import { ProjectTrust } from "./trust"
 import { Pty } from "../pty"
 import { KernelRuntime } from "@/science/kernel/registry"
-import { GlobalBus } from "@/bus/global"
 import { AuthoritySignal } from "./authority-signal"
 import { CommandRuntime } from "@/science/command/registry"
 import { AuthorityProcessLedger } from "./authority-process"
@@ -29,6 +28,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { RuntimeEvents } from "@/runtime/events"
 import { SessionPrompt } from "@/session/prompt"
 import { BiologyKernelLifecycle } from "@/tool/biology/kernel-lifecycle"
+import { subscribeFilesystemEvents } from "./filesystem-event-sync"
 
 async function invalidateProjectTokenCache(projectID: string) {
   const { Provider } = await import("@/provider/provider")
@@ -103,11 +103,10 @@ const filesystemSync = Instance.state(
         fn: async () => stopFilesystem(payload.data.sessionID, payload.data.grant.scope),
       }).catch((error) => Log.Default.error("failed to apply filesystem authority change", { error, directory }))
     }
-    GlobalBus.on("event", handler)
-    return handler
+    return subscribeFilesystemEvents(handler)
   },
-  async (handler) => {
-    GlobalBus.off("event", handler)
+  async (release) => {
+    release()
   },
 )
 

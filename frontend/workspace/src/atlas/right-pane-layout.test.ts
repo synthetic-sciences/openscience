@@ -31,12 +31,12 @@ describe("context pane layout", () => {
   })
 
   test("can divide the available workspace evenly without crushing conversation", () => {
-    expect(MIN_CONVERSATION_WIDTH).toBe(360)
+    expect(MIN_CONVERSATION_WIDTH).toBe(420)
     expect(equalPaneWidth(1200)).toBe(600)
-    expect(equalPaneWidth(1600)).toBe(800)
+    expect(equalPaneWidth(1600)).toBe(MAX_PANE_WIDTH)
     expect(equalPaneWidth(620)).toBe(MIN_PANE_WIDTH)
-    expect(maxPaneWidthForWorkspace(1200)).toBe(840)
-    expect(paneWidthForWorkspace(900, 1200)).toBe(840)
+    expect(maxPaneWidthForWorkspace(1200)).toBe(MAX_PANE_WIDTH)
+    expect(paneWidthForWorkspace(900, 1200)).toBe(MAX_PANE_WIDTH)
   })
 
   test("keeps a true side pane at the reference desktop viewport without crushing the conversation", () => {

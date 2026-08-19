@@ -41,3 +41,6 @@ __pycache__/
 # Internal planning docs (specs/plans) stay local, not in the repo
 docs/superpowers/
 legacy-chat-ui/
+
+# Local design references and PDF screenshot exports
+.ui-reference/

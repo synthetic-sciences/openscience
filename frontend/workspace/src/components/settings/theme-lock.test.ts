@@ -6,15 +6,14 @@ const preload = await Bun.file(new URL("../../../public/openscience-theme-preloa
 const theme = await Bun.file(new URL("../../../../ui/src/theme/context.tsx", import.meta.url)).text()
 const index = await Bun.file(new URL("../../../index.html", import.meta.url)).text()
 
-describe("canonical OpenScience theme", () => {
-  test("pins the product palette while preserving the selected display mode", () => {
-    expect(app).toContain('<ThemeProvider lockedTheme="openscience">')
+describe("OpenScience theme gallery", () => {
+  test("starts with the product palette while preserving saved themes and display mode", () => {
+    expect(app).toContain('<ThemeProvider defaultTheme="openscience">')
     expect(app).not.toContain('lockedScheme="light"')
-    expect(preload).toContain('var themeId = "openscience"')
+    expect(preload).toContain('localStorage.getItem("openscience-theme-id") || "openscience"')
     expect(preload).toContain('"openscience-theme-css-" + themeId + "-" + mode')
-    expect(preload).not.toContain('localStorage.getItem("openscience-theme-id")')
     expect(preload).toContain('localStorage.getItem("openscience-color-scheme") || "dark"')
-    expect(index).toContain('<meta name="theme-color" content="#26241f" />')
+    expect(index).toContain('<meta name="theme-color" content="#17191c" />')
     expect(preload).toContain('scheme === "system" && matchMedia("(prefers-color-scheme: dark)").matches')
     expect(preload).not.toContain('localStorage.setItem("openscience-color-scheme", mode)')
     expect(preload).toContain("css.match(/--background-base:")
@@ -28,14 +27,14 @@ describe("canonical OpenScience theme", () => {
     expect(theme).toContain("if (lockedScheme && scheme !== lockedScheme) return")
   })
 
-  test("offers a compact mode control without restoring theme selection", () => {
+  test("offers theme and display-mode controls", () => {
     expect(general).toContain("theme.setColorScheme(option.value)")
     expect(general).toContain('role="group"')
     expect(general).toContain("aria-pressed={theme.colorScheme() === option.value}")
     expect(general).toContain('class="h-8 min-w-[56px]')
     expect(general).toContain("duration-150")
     expect(general).not.toContain("themeSwatches")
-    expect(general).not.toContain("theme.setTheme(")
-    expect(general).not.toContain("settings.general.row.theme.title")
+    expect(general).toContain("theme.setTheme(option.value)")
+    expect(general).toContain('aria-label="Theme"')
   })
 })

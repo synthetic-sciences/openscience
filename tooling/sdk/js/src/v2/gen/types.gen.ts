@@ -7843,6 +7843,23 @@ export type PostSettingsLocalModelsResponses = {
   200: unknown
 }
 
+export type PostSettingsLocalSshData = {
+  body?: {
+    host: string
+    remotePort?: number
+    localPort?: number
+    key?: string
+    name?: string
+  }
+  path?: never
+  query?: never
+  url: "/settings/local/ssh"
+}
+
+export type PostSettingsLocalSshResponses = {
+  200: unknown
+}
+
 export type PostSettingsLocalContextData = {
   body?: {
     url: string

@@ -33,7 +33,7 @@ describe("model control surface", () => {
     expect(tooltip).toContain("props.model.name")
   })
 
-  test("exposes one compact model trigger with independently selectable thinking effort", () => {
+  test("keeps the root model trigger compact and moves request options into More models", () => {
     const composer = source("./prompt-input.tsx")
     expect(existsSync(path("./model-settings-popover.tsx"))).toBe(true)
     const settings = source("./model-settings-popover.tsx")
@@ -47,9 +47,7 @@ describe("model control surface", () => {
     expect(settings).toContain("control().trigger")
     expect(settings).toContain("local.model.variant.list()")
     expect(settings).toContain('data-model-menu-row="effort"')
-    expect(settings).toContain("data-model-effort-chip")
     expect(settings).toContain("data-model-control-group")
-    expect(settings).toContain("aria-label={`Thinking effort: ${props.value}`}")
     expect(settings).not.toContain("<span>Model effort</span>")
     expect(settings).toContain("control().effort")
     expect(settings).not.toContain('effort.current.id === "standard"')
@@ -102,17 +100,12 @@ describe("model control surface", () => {
     expect(styles).not.toContain("text-transform:")
 
     const triggerRule = styles.match(/\[data-model-settings-trigger-style="label"\]\s*\{([^}]*)\}/s)?.[1] ?? ""
-    const effortRule = styles.match(/\[data-model-effort-chip\]\s*\{([^}]*)\}/s)?.[1] ?? ""
     expect(triggerRule).toContain("border: 0")
     expect(triggerRule).toContain("gap: 3px")
     expect(triggerRule).toContain("padding: 0 7px")
     expect(triggerRule).toContain("font-size: 12px")
     expect(triggerRule).toContain("line-height: 1")
-    expect(effortRule).toContain("border: 0")
-    expect(effortRule).toContain("padding: 0 6px 0 8px")
-    expect(effortRule).toContain("font-family: var(--font-family-sans)")
-    expect(effortRule).toContain("font-size: 12px")
-    expect(effortRule).toContain("line-height: 1")
+    expect(settings).not.toContain("data-model-effort-chip")
 
     const rowRule = styles.match(/\[data-model-settings-popover\] \.model-settings-row\s*\{([^}]*)\}/s)?.[1] ?? ""
     expect(rowRule).toContain("gap: 8px")
@@ -130,7 +123,7 @@ describe("model control surface", () => {
 
     expect(model).toBeGreaterThan(-1)
     expect(quick).toBeGreaterThan(-1)
-    expect(effort).toBeGreaterThan(model)
+    expect(effort).toBeGreaterThan(settings.indexOf('view() === "models"'))
     expect(speed).toBeGreaterThan(effort)
   })
 })

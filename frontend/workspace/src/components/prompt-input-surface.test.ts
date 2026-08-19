@@ -58,9 +58,7 @@ describe("floating prompt surface", () => {
     expect(source).toContain('role="group"')
     expect(source).toContain('aria-label="Composer tools"')
     expect(source).toContain('aria-label="Model and send"')
-    expect(source).toContain(
-      "aria-label={`Research tools, ${researchEffortLabel(effort())} effort, ${researchAccessLabel()}`}",
-    )
+    expect(source).toContain("aria-label={`Research tools, ${researchAccessLabel()}`}")
     expect(popover).toContain("aria-label={`Model: ${control().trigger}`}")
     expect(source).not.toContain('aria-label="Research capabilities"')
     expect(source).not.toContain("workspace-composer__overflow")
@@ -133,7 +131,9 @@ describe("floating prompt surface", () => {
     expect(restore).toBeGreaterThan(submit)
     expect(source.slice(restore, missingWorktree)).toContain("restoreInput()")
     expect(source.slice(missingWorktree, missingSession)).toContain("restoreBootstrap()")
-    expect(source.slice(missingSession, source.indexOf("setEffort", missingSession))).toContain("restoreBootstrap()")
+    expect(source.slice(missingSession, source.indexOf("props.onSubmit?.()", missingSession))).toContain(
+      "restoreBootstrap()",
+    )
   })
 
   test("uses draft-safe rollback for every post-dispatch failure path", () => {
@@ -163,19 +163,14 @@ describe("composer control consolidation", () => {
     expect(source).toContain('const isNewSession = !params.id || params.id === "new"')
   })
 
-  test("shows one persistent Normal or Ultra research-effort control inside Research tools", () => {
-    expect(source).toContain('Persist.workspace(sdk.scope, "research-effort", ["research-effort.v1"])')
-    expect(source).toContain('data-research-effort="normal"')
-    expect(source).toContain('data-research-effort="ultra"')
-    expect(source).toContain('aria-checked={effort() === "normal"}')
-    expect(source).toContain('aria-checked={effort() === "ultra"}')
-    expect(source).toContain("onKeyDown={navigateResearchEffort}")
+  test("removes research effort choices from Research tools", () => {
+    expect(source).not.toContain('Persist.workspace(sdk.scope, "research-effort"')
+    expect(source).not.toContain("data-research-effort")
+    expect(source).not.toContain("Ultra")
     expect(source).toContain('class="workspace-composer__research-tools-separator"')
-    expect(source).toContain("<strong>{researchEffortLabel(effort())}</strong>")
+    expect(source).toContain("<strong>{researchAccessLabel()}</strong>")
     expect(source).not.toContain('class="workspace-composer__effort"')
-    expect(source).not.toContain("onClick={toggleEffort}")
-    expect(componentCss).toContain('.workspace-composer__research-effort-options > button[aria-checked="true"]')
-    expect(componentCss).not.toContain(".workspace-composer__effort")
+    expect(componentCss).not.toContain("workspace-composer__research-effort")
   })
 
   test("offers three real action-approval modes inside Research tools", () => {
@@ -191,27 +186,24 @@ describe("composer control consolidation", () => {
     expect(componentCss).toContain('button[data-tone="warning"][aria-checked="true"]')
   })
 
-  test("sends the selected research effort through the SDK prompt", () => {
-    expect(source).toContain("const researchEffort = effort()")
+  test("sends the standard research effort through the SDK prompt", () => {
+    expect(source).toContain('const researchEffort = "normal" as const')
     expect(source).toContain("effort: researchEffort")
     expect(source).toContain("await client.session.prompt(request)")
   })
 
-  test("restores compact Compute access without restoring specialist or reviewer machinery", () => {
-    expect(source).not.toContain("loadCapabilities")
-    expect(source).not.toContain("toggleDelegation")
-    expect(source).not.toContain("toggleReview")
-    expect(source).not.toContain("Reviewer model")
-    expect(source).not.toContain("delegation:")
-    expect(source).not.toContain("capabilitySpecialist")
+  test("offers real delegation and reviewer controls alongside compact Compute access", () => {
+    expect(source).toContain('settings<CapabilityPreferences>("/settings/preferences")')
+    expect(source).toContain('settings<ReviewPreferences>("/settings/review")')
+    expect(source).toContain("Reviewer model")
+    expect(source).toContain("Auto-review")
+    expect(source).toContain("delegatedSpecialist(")
     expect(source).not.toContain("Compute providers")
     expect(source).toContain('uiStore.openContext("kernels")')
-    expect(source).toContain('<DialogSettings initial="skills" />')
-    expect(source).toContain('<DialogSettings initial="connectors" />')
     expect(source).toContain("Python, R, local and remote jobs")
     expect(source).toContain("Compute activity")
-    expect(source).toContain("Manage skills")
-    expect(source).toContain("Manage connectors")
+    expect(source).not.toContain("Manage skills")
+    expect(source).not.toContain("Manage connectors")
     expect(source).not.toContain("workspace-composer__research-tools-divider")
     expect(source).not.toContain('"/settings/compute/provider/modal/enabled"')
     expect(source).toContain("<ModelSettingsPopover />")

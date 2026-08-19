@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { LocalModelsRoutes, LocalRuntime } from "../../src/server/routes/settings/local"
+import { LocalModelsRoutes, LocalRuntime, sshTunnelArgs } from "../../src/server/routes/settings/local"
 
 const app = LocalModelsRoutes()
 
@@ -30,6 +30,35 @@ beforeAll(() => {
 afterAll(() => server?.stop(true))
 
 describe("/settings/local routes", () => {
+  test("builds an argument-only SSH local-forward without a shell", () => {
+    expect(sshTunnelArgs({ host: "research-gpu", remotePort: 11434, localPort: 12434 })).toEqual([
+      "-N",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ExitOnForwardFailure=yes",
+      "-o",
+      "ConnectTimeout=10",
+      "-o",
+      "ServerAliveInterval=30",
+      "-o",
+      "ServerAliveCountMax=3",
+      "-L",
+      "127.0.0.1:12434:127.0.0.1:11434",
+      "research-gpu",
+    ])
+  })
+
+  test("rejects SSH option injection before spawning a client", async () => {
+    const response = await app.request("/ssh", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ host: "-oProxyCommand=bad", remotePort: 11434, localPort: 12434 }),
+    })
+
+    expect(response.status).toBe(400)
+  })
+
   test("local runtimes receive configuration without host credentials or control-plane state", () => {
     const env = LocalRuntime.environment({
       PATH: "/usr/bin:/bin",

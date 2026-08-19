@@ -93,7 +93,7 @@ test("renders registered commands instead of maintaining a shadow action list", 
 
 test("registers route-owned actions and removes the dead file.open palette path", () => {
   expect(home).toContain('id: "project.create"')
-  expect(home).toContain('id: "project.import"')
+  expect(home).not.toContain('id: "project.import"')
   expect(home).toContain('id: "server.switch"')
   expect(session).toContain('id: "session.new"')
   expect(session).toContain('id: "project.files"')

@@ -3,12 +3,7 @@
   display: none;
 }
 
-:where(
-  [data-model-control-group],
-  [data-model-settings-trigger],
-  [data-model-settings-popover],
-  [data-model-effort-chip]
-) {
+:where([data-model-control-group], [data-model-settings-trigger], [data-model-settings-popover]) {
   --model-control-surface: var(--surface-raised-stronger-non-alpha);
   --model-control-raised: var(--surface-raised-strong);
   --model-control-hover: var(--surface-raised-strong-hover);
@@ -83,68 +78,14 @@
   white-space: nowrap;
 }
 
-[data-model-effort-chip] {
-  position: relative;
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 0 6px 0 8px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--model-control-text);
-  font: inherit;
-  font-family: var(--font-family-sans);
-  font-size: 12px;
-  font-weight: var(--font-weight-regular);
-  line-height: 1;
-  letter-spacing: -0.011em;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-[data-model-effort-chip]::before {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 1px;
-  background: var(--model-control-border);
-  content: "";
-}
-
-[data-model-effort-chip] [data-component="icon"] {
-  color: var(--model-control-muted);
-}
-
-[data-model-effort-chip] strong {
-  color: var(--model-control-text);
-  font: inherit;
-  font-weight: var(--font-weight-medium);
-}
-
 @media (pointer: coarse) {
   [data-model-control-group="label"] {
     height: 44px;
   }
 
-  [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"],
-  [data-model-effort-chip] {
+  [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"] {
     min-height: 44px;
   }
-}
-
-[data-model-effort-chip]:hover,
-[data-model-effort-chip]:focus-visible {
-  background: var(--model-control-hover);
-  color: var(--model-control-text);
-}
-
-[data-model-effort-chip]:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 1px;
 }
 
 [data-model-settings-popover] {

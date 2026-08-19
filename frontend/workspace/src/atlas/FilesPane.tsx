@@ -128,11 +128,6 @@ async function grantAccess(transport: Transport, identity: FilesystemIdentity, i
   }).then(json)
 }
 
-async function revokeAccess(transport: Transport, identity: FilesystemIdentity, grantID: string) {
-  const url = `/session/${encodeURIComponent(identity.sessionID)}/filesystem/${encodeURIComponent(grantID)}`
-  return transport(url, { method: "DELETE" }).then(json)
-}
-
 /** Rename lives in a dialog because a 150px card is not a text field. */
 function RenameArtifact(props: {
   artifact: StoredArtifact
@@ -695,35 +690,6 @@ export function FilesPane(
       })
   }
 
-  // A grant is a durable, possibly installation-wide, possibly writable hole
-  // in the filesystem boundary. Minting one from the pane without a way to
-  // take it back is a one-way door, so revoking lives next to the source it
-  // revokes.
-  const revoke = (target: PaneSource) => {
-    const current = identity()
-    if (!current || busy()) return
-    setBusy(true)
-    revokeAccess(transport, current, target.id)
-      .then(() => refetchSnapshot())
-      .then(() => {
-        // The revoked source is gone from the next snapshot; if it was the
-        // one being browsed, fall back to the default rather than listing a
-        // folder the session no longer has access to. Revoking any *other*
-        // grant leaves the browsed folder alone — resetting the path there
-        // would throw the user back to the root of a folder nothing happened to.
-        if (picked() === target.id) {
-          choose(undefined)
-          setPath([])
-        }
-        setBusy(false)
-        setError("")
-      })
-      .catch((cause) => {
-        setBusy(false)
-        setError(errorMessage(cause))
-      })
-  }
-
   const restore = (artifact: StoredArtifact) => {
     if (busy()) return
     setBusy(true)
@@ -761,7 +727,6 @@ export function FilesPane(
               setError("")
               setListingError("")
             }}
-            onRevoke={revoke}
             onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "project" })}
           />
 

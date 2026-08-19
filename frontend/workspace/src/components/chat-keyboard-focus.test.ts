@@ -15,10 +15,10 @@ test("chat and composer controls retain the shared visible keyboard focus ring",
   )
 })
 
-test("the browser shell uses the warm dark palette as its pre-script fallback", () => {
+test("the browser shell uses the neutral dark palette as its pre-script fallback", () => {
   const html = shell()
 
-  expect(html).toContain('<meta name="theme-color" content="#26241f" />')
+  expect(html).toContain('<meta name="theme-color" content="#17191c" />')
   expect(html).not.toContain('media="(prefers-color-scheme: dark)"')
-  expect(html).not.toContain('content="#171717"')
+  expect(html).not.toContain('content="#26241f"')
 })

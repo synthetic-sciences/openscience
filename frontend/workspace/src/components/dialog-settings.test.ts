@@ -108,7 +108,7 @@ test("settings follow the userinterface interaction and spacing rules", () => {
   expect(dialog).toContain("--settings-space-7: 48px")
   expect(dialog).toContain("background 140ms ease")
   expect(dialog).toContain("transform 120ms ease")
-  expect(switchCss).toContain("transform 150ms ease")
+  expect(switchCss).toContain("transform 180ms var(--ease-standard)")
   expect(dialog).toMatch(
     /\.settings-dialog :where\(button, input, select, textarea\):focus-visible\s*\{[^}]*transition-duration: 0ms/s,
   )

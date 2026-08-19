@@ -273,6 +273,7 @@ export namespace LocalProvider {
     contextLimit?: number
     outputLimit?: number
     runtime?: string
+    selfHosted?: boolean
   }): Record<string, unknown> {
     const models: Record<string, unknown> = {}
     for (const id of input.models) {
@@ -293,6 +294,7 @@ export namespace LocalProvider {
         baseURL: input.baseURL,
         apiKey: input.apiKey || DEFAULT_API_KEY,
         ...(input.runtime ? { localRuntime: input.runtime } : {}),
+        ...(input.selfHosted ? { selfHosted: true } : {}),
       },
       models,
     }

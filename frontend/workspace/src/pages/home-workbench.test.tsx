@@ -60,7 +60,6 @@ const props = {
   onPin: (_project: { id: string }) => {},
   onRemove: (_project: { id: string }) => {},
   onCreate: () => {},
-  onImport: () => {},
   onRetry: () => {},
   onSettings: () => {},
   onServer: () => {},
@@ -99,7 +98,7 @@ describe("ProjectsWorkbench", () => {
     expect(search?.closest(".science-home__toolbar")).toBeTruthy()
     expect(host.querySelector(".science-home__bar input")).toBeNull()
     expect(host.querySelector('button[aria-label="New project"]')).toBeTruthy()
-    expect(host.querySelector('button[aria-label="Import existing folder"]')).toBeTruthy()
+    expect(host.querySelector('button[aria-label="Import existing folder"]')).toBeNull()
     expect(host.querySelector('button[aria-label*="Switch to"]')).toBeNull()
     expect(host.querySelector('button[aria-label="Settings"]')).toBeTruthy()
     expect(host.querySelector('button[aria-label="Local server"]')).toBeTruthy()
@@ -166,12 +165,11 @@ describe("ProjectsWorkbench", () => {
         state: "empty",
         projects: [],
         onCreate: () => calls.push("create"),
-        onImport: () => calls.push("import"),
       }),
     )
     empty.querySelector<HTMLButtonElement>('button[aria-label="New project"]')?.click()
-    empty.querySelector<HTMLButtonElement>('button[aria-label="Import existing folder"]')?.click()
     expect(empty.querySelector(".science-home__state")?.textContent).toContain("No projects yet")
+    expect(empty.querySelector('[aria-label="Import existing folder"]')).toBeNull()
     cleanups.pop()?.()
     empty.remove()
 
@@ -188,15 +186,15 @@ describe("ProjectsWorkbench", () => {
       .find((button) => button.textContent?.includes("Clear search"))
       ?.click()
 
-    expect(calls).toEqual(["create", "import", "query:"])
+    expect(calls).toEqual(["create", "query:"])
   })
 
   test("keeps the widened, readable, responsive sizing contract", async () => {
     const css = await Bun.file(style).text()
 
-    expect(css).toContain("width: min(100%, 1100px)")
+    expect(css).toContain("width: min(100%, 1040px)")
     expect(css).toContain("font-size: 29px")
-    expect(css).toContain("min-height: 66px")
+    expect(css).toContain("min-height: 64px")
     expect(css).toContain("font-size: 14.5px")
     expect(css).toContain("@media (max-width: 760px)")
     expect(css).toContain("@media (max-width: 520px)")

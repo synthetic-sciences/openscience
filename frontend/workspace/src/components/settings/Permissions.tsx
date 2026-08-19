@@ -29,6 +29,15 @@ interface StandingApproval {
   created: number
 }
 
+interface FolderGrant {
+  id: string
+  path: string
+  access: "read" | "write"
+  scope: "once" | "session" | "project" | "installation"
+  source: "permission" | "api"
+  time: { created: number }
+}
+
 const Permissions: Component = () => {
   const params = useParams()
   const sdk = useGlobalSDK()
@@ -60,6 +69,22 @@ const Permissions: Component = () => {
     },
   )
 
+  const [folders, folderControls] = createResource(
+    () => {
+      const value = route()
+      const sessionID = params.id
+      if (!value || !sessionID || sessionID === "new") return
+      return { sessionID, directory: value.directory }
+    },
+    async (input) => {
+      const response = await sdk.client.session.filesystem.list(input)
+      return (response.data?.grants ?? []).filter(
+        (grant): grant is FolderGrant =>
+          (grant.source === "permission" || grant.source === "api") && !grant.time.consumed && !grant.time.revoked,
+      )
+    },
+  )
+
   const revoke = async (approval: StandingApproval) => {
     const directory = route()?.directory
     if (!directory) return
@@ -75,6 +100,30 @@ const Permissions: Component = () => {
   }
 
   const when = (created: number) => new Date(created).toLocaleDateString()
+
+  const revokeFolder = async (grant: FolderGrant) => {
+    const value = route()
+    const sessionID = params.id
+    if (!value || !sessionID || busy()) return
+    const confirmed = await confirmDialog(dialog, {
+      title: `Revoke access to ${grant.path}?`,
+      message: "OpenScience will stop affected kernels so the folder cannot remain mounted with stale access.",
+      confirmLabel: "Revoke folder access",
+      danger: true,
+    })
+    if (!confirmed) return
+    setBusy(true)
+    await sdk.client.session.filesystem
+      .revoke({ sessionID, grantID: grant.id, directory: value.directory })
+      .then(() => folderControls.refetch())
+      .catch((error) =>
+        showToast({
+          title: "Failed to revoke folder access",
+          description: error instanceof Error ? error.message : String(error),
+        }),
+      )
+      .finally(() => setBusy(false))
+  }
 
   const updateTrust = async (trusted: boolean) => {
     const value = route()
@@ -171,6 +220,77 @@ const Permissions: Component = () => {
                         {trust()?.canExecuteProjectCode ? "Revoke trust" : "Trust project"}
                       </Button>
                     </div>
+                  </Show>
+                </Show>
+              </div>
+            </Section>
+          </Show>
+
+          <Show when={route() && params.id && params.id !== "new"}>
+            <Section
+              title="Connected folders"
+              description="Review durable read-only and read-write access from the active research session."
+            >
+              <div class="settings-card settings-preferences-card">
+                <Show
+                  when={!folders.loading}
+                  fallback={<div class="settings-panel-loading-copy">Loading connected folders…</div>}
+                >
+                  <Show
+                    when={!folders.error}
+                    fallback={
+                      <div class="settings-row settings-preference-row" role="alert">
+                        <span class="min-w-0 flex-1 text-12-regular text-text-danger">
+                          Connected folders could not be loaded.
+                        </span>
+                        <Button size="small" variant="ghost" onClick={() => void folderControls.refetch()}>
+                          Retry
+                        </Button>
+                      </div>
+                    }
+                  >
+                    <Show
+                      when={(folders() ?? []).length > 0}
+                      fallback={
+                        <div class="settings-row settings-preference-row">
+                          <span class="settings-preference-icon" aria-hidden="true">
+                            <Icon name="folder" size="small" />
+                          </span>
+                          <span class="min-w-0 flex-1 text-12-regular text-text-weak">
+                            No connected folders in this session.
+                          </span>
+                        </div>
+                      }
+                    >
+                      <For each={folders()}>
+                        {(grant) => (
+                          <div class="settings-row settings-preference-row justify-between">
+                            <span class="settings-preference-icon" aria-hidden="true">
+                              <Icon name="folder" size="small" />
+                            </span>
+                            <div class="settings-row-copy">
+                              <strong class="break-all">{grant.path}</strong>
+                              <span class="text-11-regular text-text-weak">
+                                {grant.access === "write" ? "Read & write" : "Read only"} ·{" "}
+                                {grant.scope === "installation"
+                                  ? "Every project"
+                                  : grant.scope === "project"
+                                    ? "This project"
+                                    : "This session"}
+                              </span>
+                            </div>
+                            <Button
+                              size="small"
+                              variant="ghost"
+                              disabled={busy()}
+                              onClick={() => void revokeFolder(grant)}
+                            >
+                              Revoke
+                            </Button>
+                          </div>
+                        )}
+                      </For>
+                    </Show>
                   </Show>
                 </Show>
               </div>

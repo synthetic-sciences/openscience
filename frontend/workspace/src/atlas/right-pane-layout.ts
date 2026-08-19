@@ -1,9 +1,9 @@
 export const MIN_PANE_WIDTH = 320
-export const MAX_PANE_WIDTH = 960
+export const MAX_PANE_WIDTH = 720
 export const DEFAULT_PANE_WIDTH = 400
 export const INLINE_PANE_BREAKPOINT = 1100
 export const INLINE_PANE_CHROME = 568
-export const MIN_CONVERSATION_WIDTH = 360
+export const MIN_CONVERSATION_WIDTH = 420
 
 export function paneWidthKey(project: string) {
   return `openscience-context-width-v6:${encodeURIComponent(project)}`

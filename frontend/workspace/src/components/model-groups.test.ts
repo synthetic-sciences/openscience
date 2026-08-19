@@ -37,4 +37,13 @@ describe("model groups", () => {
     expect(modelGroupRank(group)).toBe(0)
     expect(modelGroupLabelRank("Quick access")).toBe(0)
   })
+
+  test("keeps local and self-hosted models together at the end of the catalog", () => {
+    const ollama = modelGroup(model("llama3.2", "ollama"))
+    const ssh = modelGroup(model("deepseek-r1", "ssh-research-gpu-11434"))
+
+    expect(modelGroupLabel(ollama)).toBe("Local Models")
+    expect(ssh).toBe(ollama)
+    expect(modelGroupRank(ollama)).toBe(MODEL_GROUPS.length)
+  })
 })

@@ -19,17 +19,17 @@ const MODES: { value: Mode; title: string; body: string }[] = [
   {
     value: "managed",
     title: "Managed",
-    body: "Use prepaid OpenScience credits. No provider key is required.",
+    body: "Use your OpenScience balance. No provider key is required.",
   },
   {
     value: "byok",
-    title: "Own keys",
-    body: "Use the provider keys and subscriptions connected below.",
+    title: "BYOK",
+    body: "Use only the provider keys and subscriptions connected below.",
   },
   {
     value: null,
     title: "Automatic",
-    body: "Choose from the credential backing each model request.",
+    body: "Use the selected model's available access route.",
   },
 ]
 

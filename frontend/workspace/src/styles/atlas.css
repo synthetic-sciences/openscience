@@ -1,7 +1,7 @@
 /* ==========================================================
    OpenScience scientific workbench
 
-   Warm, quiet research surfaces with Inter Variable typography,
+   Quiet neutral research surfaces with Inter Variable typography,
    generous reading space, and floating contextual controls.
    ========================================================== */
 
@@ -79,24 +79,24 @@
   --space-7: 48px;
   --space-8: 64px;
 
-  /* Warm-neutral, layered elevation for workspace surfaces. These are kept
+  /* Neutral, layered elevation for workspace surfaces. These are kept
      distinct from shared --shadow-* primitives and adapt through color-scheme
      without falling back to visually harsh pure-black shadows. */
   --atlas-shadow-xs:
-    0 1px 2px -1px light-dark(hsl(28 18% 14% / 0.12), hsl(24 14% 4% / 0.34)),
-    0 1px 3px light-dark(hsl(28 18% 14% / 0.06), hsl(24 14% 4% / 0.22));
+    0 1px 2px -1px light-dark(hsl(220 8% 14% / 0.12), hsl(220 8% 4% / 0.34)),
+    0 1px 3px light-dark(hsl(220 8% 14% / 0.06), hsl(220 8% 4% / 0.22));
   --atlas-shadow-sm:
-    0 1px 2px -1px light-dark(hsl(28 18% 14% / 0.1), hsl(24 14% 4% / 0.32)),
-    0 8px 22px -10px light-dark(hsl(28 18% 14% / 0.16), hsl(24 14% 4% / 0.42)),
-    0 16px 36px -22px light-dark(hsl(28 18% 14% / 0.1), hsl(24 14% 4% / 0.3));
+    0 1px 2px -1px light-dark(hsl(220 8% 14% / 0.1), hsl(220 8% 4% / 0.32)),
+    0 8px 22px -10px light-dark(hsl(220 8% 14% / 0.16), hsl(220 8% 4% / 0.42)),
+    0 16px 36px -22px light-dark(hsl(220 8% 14% / 0.1), hsl(220 8% 4% / 0.3));
   --atlas-shadow-md:
-    0 2px 5px -2px light-dark(hsl(28 18% 14% / 0.12), hsl(24 14% 4% / 0.34)),
-    0 14px 36px -14px light-dark(hsl(28 18% 14% / 0.18), hsl(24 14% 4% / 0.48)),
-    0 28px 60px -28px light-dark(hsl(28 18% 14% / 0.12), hsl(24 14% 4% / 0.34));
+    0 2px 5px -2px light-dark(hsl(220 8% 14% / 0.12), hsl(220 8% 4% / 0.34)),
+    0 14px 36px -14px light-dark(hsl(220 8% 14% / 0.18), hsl(220 8% 4% / 0.48)),
+    0 28px 60px -28px light-dark(hsl(220 8% 14% / 0.12), hsl(220 8% 4% / 0.34));
   --atlas-shadow-float:
-    0 2px 5px -2px light-dark(hsl(28 18% 14% / 0.12), hsl(24 14% 4% / 0.36)),
-    0 16px 40px -16px light-dark(hsl(28 18% 14% / 0.2), hsl(24 14% 4% / 0.5)),
-    0 32px 84px -28px light-dark(hsl(28 18% 14% / 0.14), hsl(24 14% 4% / 0.38)),
+    0 2px 5px -2px light-dark(hsl(220 8% 14% / 0.12), hsl(220 8% 4% / 0.36)),
+    0 16px 40px -16px light-dark(hsl(220 8% 14% / 0.2), hsl(220 8% 4% / 0.5)),
+    0 32px 84px -28px light-dark(hsl(220 8% 14% / 0.14), hsl(220 8% 4% / 0.38)),
     inset 0 1px 0 light-dark(hsl(0 0% 100% / 0.6), hsl(0 0% 100% / 0.04));
 
   --text-2xs: 11px;

@@ -147,7 +147,7 @@
 }
 
 .science-home__content {
-  width: min(100%, 1100px);
+  width: min(100%, 1040px);
   margin: 0 auto;
 }
 
@@ -198,7 +198,7 @@
 }
 
 .science-home__toolbar {
-  margin: 28px 0 12px;
+  margin: 32px 0 14px;
 }
 
 .science-home__search {
@@ -265,7 +265,7 @@
 
 .science-home__projects {
   margin: 0;
-  padding: 5px 0;
+  padding: 6px;
   overflow: hidden;
   list-style: none;
 }
@@ -276,15 +276,16 @@
 }
 
 .science-home__projects li + li {
-  border-top: 1px solid var(--color-border);
+  margin-top: 2px;
 }
 
 .science-home__project-row {
   display: grid;
-  min-height: 66px;
+  min-height: 64px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
-  padding: 5px 8px;
+  padding: 4px 6px;
+  border-radius: var(--atlas-radius-xs);
   transition: background 140ms var(--agent-ease);
 }
 

@@ -15,7 +15,7 @@ describe("workspace design foundation", () => {
     expect(css).toContain("--atlas-radius-md: 12px")
     expect(css).toContain("--atlas-shadow-xs:")
     expect(css).toContain("--atlas-shadow-float:")
-    expect(css).toContain("light-dark(hsl(28 18% 14%")
+    expect(css).toContain("light-dark(hsl(220 8% 14%")
     expect(css).not.toContain("var(--radius)")
     expect(css).not.toContain("var(--shadow-float)")
     expect(filePreview).not.toContain("var(--radius)")

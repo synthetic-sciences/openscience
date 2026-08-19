@@ -877,24 +877,19 @@ describe("files pane", () => {
     expect(changed).toBeGreaterThan(0)
   })
 
-  test("revokes a connected grant from the source menu and drops it from the snapshot", async () => {
+  test("keeps grant revocation out of the working-files source menu", async () => {
     const calls: Array<{ path: string; method?: string }> = []
-    const store = { granted: true }
     const host = mount(() =>
       subject.FilesPane({
         session: SESSION,
         directory: DIRECTORY,
         request: async (path, init) => {
           calls.push({ path, method: init?.method })
-          if (path.startsWith(`/session/${SESSION}/filesystem/`)) {
-            store.granted = false
-            return listing([])
-          }
           if (path === `/session/${SESSION}/filesystem`)
-            return new Response(
-              JSON.stringify(snapshot(store.granted ? [grant("fsg_1", "/home/keertan/data/pdebench", "write")] : [])),
-              { status: 200, headers: { "Content-Type": "application/json" } },
-            )
+            return new Response(JSON.stringify(snapshot([grant("fsg_1", "/home/keertan/data/pdebench", "write")])), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
           return listing([])
         },
       }),
@@ -904,15 +899,8 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
     expect(host.querySelector('[data-source-item="fsg_1"]')?.textContent).toContain("pdebench")
 
-    host.querySelector<HTMLElement>('[data-source-revoke="fsg_1"]')?.click()
-    await settle()
-
-    expect(calls).toContainEqual({ path: `/session/${SESSION}/filesystem/fsg_1`, method: "DELETE" })
-
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-
-    expect(host.querySelector('[data-source-item="fsg_1"]')).toBeNull()
-    expect(host.querySelector('[data-source-item="project"]')).not.toBeNull()
+    expect(host.querySelector('[data-source-revoke="fsg_1"]')).toBeNull()
+    expect(calls.some((call) => call.method === "DELETE")).toBe(false)
   })
 
   test("connects a folder from the source menu with an explicit write choice", async () => {

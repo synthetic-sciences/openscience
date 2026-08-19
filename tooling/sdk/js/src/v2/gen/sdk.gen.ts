@@ -162,6 +162,7 @@ import type {
   PostSettingsLocalContextResponses,
   PostSettingsLocalModelsResponses,
   PostSettingsLocalResponses,
+  PostSettingsLocalSshResponses,
   PostSettingsLocalStartResponses,
   ProjectCurrentResponses,
   ProjectExecutionErrors,
@@ -7400,6 +7401,42 @@ export class OpenScienceClient extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<PostSettingsLocalModelsResponses, unknown, ThrowOnError>({
       url: "/settings/local/models",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public postSettingsLocalSsh<ThrowOnError extends boolean = false>(
+    parameters?: {
+      host?: string
+      remotePort?: number
+      localPort?: number
+      key?: string
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "host" },
+            { in: "body", key: "remotePort" },
+            { in: "body", key: "localPort" },
+            { in: "body", key: "key" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PostSettingsLocalSshResponses, unknown, ThrowOnError>({
+      url: "/settings/local/ssh",
       ...options,
       ...params,
       headers: {

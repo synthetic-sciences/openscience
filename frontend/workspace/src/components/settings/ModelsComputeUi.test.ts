@@ -101,7 +101,7 @@ describe("models and compute settings UI contract", () => {
     expect(models).toContain("--models-control-height: 32px")
     expect(models).toContain("background: var(--settings-primary)")
     expect(dialog).toContain("--switch-active-color: var(--settings-toggle-active)")
-    expect(switchCss).toContain("width: 30px")
+    expect(switchCss).toContain("width: 34px")
     expect(models).not.toContain('[data-slot="switch-control"]')
     expect(models).toContain("outline-color: var(--border-focus)")
     expect(models).toContain("background: var(--settings-surface-muted)")

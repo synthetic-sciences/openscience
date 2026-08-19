@@ -57,11 +57,11 @@
   --tracking-tight: var(--letter-spacing-tight);
   --tracking-tightest: var(--letter-spacing-tightest);
 
-  --radius-xs: 0.25rem; /* 4px — unified control tier (buttons/tabs/selectors) */
-  --radius-sm: 0.25rem; /* 4px */
-  --radius-md: 0.25rem; /* 4px */
-  --radius-lg: 0.375rem; /* 6px — cards */
-  --radius-xl: 0.5rem; /* 8px — dialogs */
+  --radius-xs: 0.5rem; /* 8px — controls */
+  --radius-sm: 0.625rem; /* 10px — compact surfaces */
+  --radius-md: 0.75rem; /* 12px — cards and popovers */
+  --radius-lg: 1rem; /* 16px — composers */
+  --radius-xl: 1.25rem; /* 20px — dialogs */
 
   --shadow-xs: var(--shadow-xs);
   --shadow-md: var(--shadow-md);

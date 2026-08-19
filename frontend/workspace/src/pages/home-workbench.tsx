@@ -1,16 +1,7 @@
 import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { DateTime } from "luxon"
 import { AppHeader } from "@/atlas/AppHeader"
-import {
-  IconFolderAdd,
-  IconPin,
-  IconPinFilled,
-  IconPlus,
-  IconSearch,
-  IconSettings,
-  IconTrash,
-  IconX,
-} from "@/atlas/shared/Icon"
+import { IconPin, IconPinFilled, IconPlus, IconSearch, IconSettings, IconTrash, IconX } from "@/atlas/shared/Icon"
 import { Wordmark } from "@/atlas/Wordmark"
 import { projectName, type LauncherState, type PreparedProject } from "./home-projects"
 import { preloadSession } from "./session-loader"
@@ -35,7 +26,6 @@ export function ProjectsWorkbench(props: {
   onPin: (project: HomeProject) => void
   onRemove: (project: HomeProject) => void
   onCreate: () => void
-  onImport: () => void
   onRetry: () => void
   onSettings: () => void
   onServer: () => void
@@ -102,15 +92,6 @@ export function ProjectsWorkbench(props: {
               <p>Research workspaces, sessions, and files in one place.</p>
             </div>
             <div class="science-home__heading-actions">
-              <button
-                class="science-home__button"
-                type="button"
-                aria-label="Import existing folder"
-                onClick={props.onImport}
-              >
-                <IconFolderAdd size={15} strokeWidth={1.45} />
-                Import folder
-              </button>
               <button
                 class="science-home__button science-home__button--primary"
                 type="button"
@@ -180,7 +161,7 @@ export function ProjectsWorkbench(props: {
               <section class="science-home__state science-home__state--empty">
                 <div>
                   <strong>No projects yet</strong>
-                  <span>Start a new project or import a folder to bring your research together.</span>
+                  <span>Start a new project to bring your research, sources, and compute together.</span>
                 </div>
               </section>
             </Match>

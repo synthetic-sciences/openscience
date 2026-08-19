@@ -20,6 +20,25 @@ import { FileLease } from "../../../util/file-lease"
 
 const log = Log.create({ service: "settings-local" })
 
+export function sshTunnelArgs(input: { host: string; remotePort: number; localPort: number }) {
+  return [
+    "-N",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ExitOnForwardFailure=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "ServerAliveInterval=30",
+    "-o",
+    "ServerAliveCountMax=3",
+    "-L",
+    `127.0.0.1:${input.localPort}:127.0.0.1:${input.remotePort}`,
+    input.host,
+  ]
+}
+
 export namespace LocalRuntime {
   const RUNTIME_ENV = new Set([
     "PATH",
@@ -53,6 +72,7 @@ export namespace LocalRuntime {
     "OLLAMA_MAX_QUEUE",
     "OLLAMA_SCHED_SPREAD",
     "OLLAMA_LLM_LIBRARY",
+    "SSH_AUTH_SOCK",
   ])
 
   interface Managed {
@@ -236,11 +256,18 @@ export namespace LocalRuntime {
   }
 }
 
-/** Provider ids in config whose baseURL points at the local machine. */
+/** Provider ids explicitly registered through the local/self-hosted surface. */
 async function configuredLocals() {
-  const config = await Config.get().catch(() => ({}) as any)
+  // This surface writes provider blocks globally, and settings requests are not
+  // tied to a project Instance. Reading Config.get() here silently returned an
+  // empty list whenever no project context was active, even after a successful
+  // add. Read the same global scope that POST/DELETE mutate.
+  const config = await Config.getGlobal().catch(() => ({}) as any)
   return Object.entries(config.provider ?? {})
-    .filter(([, p]: [string, any]) => Provider.isLocalBaseURL(p?.options?.baseURL ?? p?.api))
+    .filter(
+      ([, p]: [string, any]) =>
+        Provider.isLocalBaseURL(p?.options?.baseURL ?? p?.api) || p?.options?.selfHosted === true,
+    )
     .map(([id, p]: [string, any]) => ({
       id,
       name: p?.name ?? id,
@@ -341,6 +368,63 @@ export const LocalModelsRoutes = lazy(() =>
       }
     })
 
+    // Keep an SSH local-forward under OpenScience ownership and register the
+    // remote OpenAI-compatible endpoint through its loopback side. SSH config,
+    // keys, agents, and known_hosts remain owned by the user's normal client.
+    .post(
+      "/ssh",
+      validator(
+        "json",
+        z.object({
+          host: z
+            .string()
+            .trim()
+            .min(1)
+            .regex(/^[a-z0-9][a-z0-9._@:%+-]*$/i, "Use a host or user@host from your SSH config"),
+          remotePort: z.number().int().min(1).max(65_535).default(11_434),
+          localPort: z.number().int().min(1_024).max(65_535).default(12_434),
+          key: z.string().optional(),
+          name: z.string().trim().min(1).max(80).optional(),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        const executable = Bun.which("ssh")
+        if (!executable) return c.json({ error: "OpenSSH is not installed on this machine." }, 400)
+
+        const runtime = `ssh:${body.host}:${body.remotePort}:${body.localPort}`
+        const baseURL = `http://127.0.0.1:${body.localPort}/v1`
+        try {
+          const started = await LocalRuntime.start({
+            id: runtime,
+            file: executable,
+            args: sshTunnelArgs(body),
+            probe: () =>
+              LocalProvider.probe(baseURL, body.key, 1_500).then((models) =>
+                models && models.length > 0 ? models : null,
+              ),
+            timeoutMs: 18_000,
+          })
+          const id = `ssh-${body.host}-${body.remotePort}`.replace(/[^a-z0-9-]/gi, "-").toLowerCase()
+          const block = LocalProvider.buildProviderConfig({
+            name: body.name || `SSH (${body.host})`,
+            baseURL,
+            apiKey: body.key,
+            models: started.value,
+            runtime,
+            selfHosted: true,
+          })
+          await Config.setProvider(id, block as any, "global")
+          Provider.invalidate()
+          log.info("registered SSH model provider", { id, host: body.host, models: started.value.length })
+          return c.json({ id, baseURL, models: started.value, tunnel: runtime })
+        } catch (error) {
+          await LocalRuntime.stop(runtime).catch(() => undefined)
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 400)
+        }
+      },
+    )
+
     // Create an Ollama alias with a real num_ctx setting. Ollama deliberately
     // does not expose context sizing through its OpenAI-compatible endpoint.
     .post(
@@ -396,6 +480,7 @@ export const LocalModelsRoutes = lazy(() =>
           models: body.models,
           contextLimit: body.contextLimit,
           runtime: body.runtime,
+          selfHosted: true,
         })
         const previous = body.merge ? (await Config.getGlobal()).provider?.[id] : undefined
         const provider = previous
@@ -417,6 +502,11 @@ export const LocalModelsRoutes = lazy(() =>
     // Remove a local provider.
     .delete("/:id", async (c) => {
       const id = c.req.param("id")
+      const config = await Config.getGlobal().catch(() => ({}) as any)
+      const runtime = config.provider?.[id]?.options?.localRuntime
+      if (typeof runtime === "string" && runtime.startsWith("ssh:")) {
+        await LocalRuntime.stop(runtime).catch(() => undefined)
+      }
       await Config.removeProvider(id, "global").catch(() => {})
       await Config.removeProvider(id, "project").catch(() => {})
       Provider.invalidate()
