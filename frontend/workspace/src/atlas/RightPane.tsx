@@ -385,13 +385,7 @@ export function RightPane(
             aria-hidden={narrow() ? "true" : undefined}
             hidden={narrow() || expanded()}
             class="research-inspector__resize"
-          >
-            <span class="research-inspector__resize-grip" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-          </div>
+          />
           <div class="research-inspector__header">
             <Show
               when={uiStore.workTabs().length > 0}

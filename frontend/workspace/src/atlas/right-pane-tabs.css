@@ -52,7 +52,7 @@
   -webkit-backdrop-filter: blur(3px);
 }
 
-/* Keep the hit target forgiving while making the draggable edge discoverable. */
+/* Keep the hit target forgiving without adding a detached control to the edge. */
 .research-inspector__resize {
   position: absolute;
   top: 0;
@@ -75,47 +75,10 @@
   transition: background-color 140ms var(--agent-ease);
 }
 
-.research-inspector__resize-grip {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 12px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 3px;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-bg-subtle);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  transition:
-    background-color 140ms var(--agent-ease),
-    border-color 140ms var(--agent-ease),
-    transform 120ms var(--agent-ease);
-}
-
-.research-inspector__resize-grip > span {
-  width: 2px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--color-text-faint);
-}
-
 .research-inspector__resize:hover::before,
 .research-inspector__resize:focus-visible::before,
 .research-inspector__resize:active::before {
   background: var(--color-border-strong);
-}
-
-.research-inspector__resize:hover .research-inspector__resize-grip,
-.research-inspector__resize:focus-visible .research-inspector__resize-grip,
-.research-inspector__resize:active .research-inspector__resize-grip {
-  border-color: var(--color-border-strong);
-  background: var(--surface-base-hover);
-  transform: translate(-50%, -50%) scale(1.04);
 }
 
 .research-inspector__resize:focus-visible {

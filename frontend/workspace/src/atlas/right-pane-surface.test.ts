@@ -66,7 +66,7 @@ test("resize separator exposes keyboard and range semantics", () => {
   expect(source).toContain("aria-valuenow={paneWidth()}")
   expect(source).toContain("onDblClick={splitEvenly}")
   expect(source).toContain('title="Drag to resize. Double-click to split evenly."')
-  expect(source).toContain('class="research-inspector__resize-grip"')
+  expect(source).not.toContain('class="research-inspector__resize-grip"')
   expect(source).toContain('aria-label="Split workspace evenly"')
   expect(source).toContain("new ResizeObserver(measure)")
   expect(source).toContain("setWorkspace(parent.clientWidth || window.innerWidth)")
