@@ -26,6 +26,9 @@ export const Preferences = z.object({
   // The session trace is an advanced observability surface. Keep the regular
   // workspace quiet unless the user explicitly enables it in General.
   show_trace: z.boolean().default(false),
+  // Local providers remain configured and usable when hidden; this controls
+  // only whether they appear in the Settings → Models catalog.
+  show_local_models: z.boolean().default(true),
   // Atlas is opt-in navigation. The switch controls only whether its local
   // project surface is shown; it never changes or deletes graph data.
   atlas_enabled: z.boolean().default(false),

@@ -4,6 +4,7 @@ import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useModels, type ModelKey } from "@/context/models"
+import { productPreferences } from "@/context/product-preferences"
 import {
   displayProviderForModel,
   groupModelRoutes,
@@ -51,6 +52,7 @@ type Option = {
   visible: boolean
   reasoning: boolean
   context: number
+  local: boolean
   value: string
 }
 
@@ -148,6 +150,7 @@ export default function Models() {
         const display = displayProviderForModel(item.provider, item.id)
         const routes = choice.routes.map(routeOption)
         const access = [...new Set(routes.map((route) => route.access))].join(" + ")
+        const local = choice.routes.some((route) => modelGroup(route) === "provider:Local models")
         return {
           group: modelGroup(item, pinned),
           key,
@@ -158,6 +161,7 @@ export default function Models() {
           visible: choice.routes.some((route) => models.visible({ providerID: route.provider.id, modelID: route.id })),
           reasoning: item.capabilities.reasoning,
           context: item.limit.context,
+          local,
           provider: display.name,
           providerLogo: display.id,
           access,
@@ -171,6 +175,7 @@ export default function Models() {
   const filtered = createMemo(() => {
     const terms = query().trim().toLowerCase().split(/\s+/).filter(Boolean)
     return options().filter((model) => {
+      if (!productPreferences.localModels() && model.local) return false
       if (scope() === "reasoning" && !model.reasoning) return false
       if (scope() === "latest" && !model.latest) return false
       if (scope() === "long" && model.context < 500_000) return false

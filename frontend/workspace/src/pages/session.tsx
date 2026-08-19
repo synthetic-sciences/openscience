@@ -154,13 +154,13 @@ export default function Page(): JSX.Element {
     on(
       () => server.url,
       (url) => {
-        productPreferences.sync({ show_trace: false, atlas_enabled: false })
+        productPreferences.sync({ show_trace: false, atlas_enabled: false, show_local_models: true })
         if (!url) return
         const endpoint = `${url.replace(/\/$/, "")}/settings/preferences`
         void (platform.fetch ?? fetch)(endpoint)
           .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Preferences unavailable"))))
           .then((preferences) => productPreferences.sync(preferences as ProductPreferences))
-          .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: false }))
+          .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: false, show_local_models: true }))
       },
     ),
   )

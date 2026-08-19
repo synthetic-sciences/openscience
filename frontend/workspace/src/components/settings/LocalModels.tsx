@@ -2,15 +2,17 @@
 // endpoint running on this machine. The server (routes/settings/local.ts) does
 // the localhost probing/listing the browser can't do cross-origin, and writes
 // the provider config block.
-import { Component, For, Show, createMemo, createResource, createSignal } from "solid-js"
+import { Component, For, Show, createEffect, createMemo, createResource, createSignal } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
+import { Switch } from "@synsci/ui/switch"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
+import { productPreferences } from "@/context/product-preferences"
 import { settingsApi } from "./api"
-import { prepareOllamaModels } from "./local-model-selection"
+import { prepareOllamaModels, selectableLocalModels } from "./local-model-selection"
 import { PanelBody, PanelHeader, PanelScroll } from "./_shared"
 
 interface Detected {
@@ -71,6 +73,13 @@ const LocalModels: Component = () => {
   const [status, { refetch: refetchStatus }] = createResource(() =>
     call<{ runtimes: Runtime[] }>("/status").then((r) => r.runtimes),
   )
+  const [preferences, { mutate: setPreferences }] = createResource(() =>
+    settingsApi<{ show_local_models: boolean }>(sdk.url, fetchFn, "/settings/preferences"),
+  )
+  createEffect(() => {
+    const value = preferences()?.show_local_models
+    if (value !== undefined) productPreferences.sync({ show_local_models: value })
+  })
   const discoveries = createMemo(
     () => detected()?.filter((item) => !status()?.some((runtime) => runtime.id === item.id && runtime.running)) ?? [],
   )
@@ -114,7 +123,7 @@ const LocalModels: Component = () => {
             body: JSON.stringify({ url: input.url, model, context: tokens }),
           }).then((result) => result.model),
         )
-      : { models: input.models, tuned: true }
+      : { models: input.models, aliases: {}, tuned: true }
     const result = await call<{ id: string; baseURL: string; models: string[] }>("", {
       method: "POST",
       body: JSON.stringify({
@@ -123,6 +132,7 @@ const LocalModels: Component = () => {
         name: input.name,
         key: input.key,
         models: prepared.models,
+        aliases: prepared.aliases,
         contextLimit: ollama ? tokens : undefined,
         runtime: ollama ? "ollama" : undefined,
         merge: true,
@@ -134,7 +144,7 @@ const LocalModels: Component = () => {
   const [choice, setChoice] = createSignal<Source>()
   const [chosen, setChosen] = createSignal<Set<string>>(new Set<string>())
   const choose = (source: Source) => {
-    setChoice(source)
+    setChoice({ ...source, models: selectableLocalModels(source.models) })
     setChosen(new Set<string>())
   }
   const toggleChoice = (model: string) => {
@@ -171,6 +181,30 @@ const LocalModels: Component = () => {
       await call(`/${encodeURIComponent(id)}`, { method: "DELETE" })
       await sync.refreshProviders()
     }, "Failed to remove provider")
+
+  const [visibilityBusy, setVisibilityBusy] = createSignal(false)
+  const setVisibility = (visible: boolean) => {
+    if (visibilityBusy()) return
+    const previous = productPreferences.localModels()
+    productPreferences.sync({ show_local_models: visible })
+    setVisibilityBusy(true)
+    void settingsApi<{ show_local_models: boolean }>(sdk.url, fetchFn, "/settings/preferences", {
+      method: "PATCH",
+      body: JSON.stringify({ show_local_models: visible }),
+    })
+      .then((value) => {
+        setPreferences(value)
+        productPreferences.sync(value)
+      })
+      .catch((error) => {
+        productPreferences.sync({ show_local_models: previous })
+        showToast({
+          title: "Couldn't update model visibility",
+          description: error instanceof Error ? error.message : String(error),
+        })
+      })
+      .finally(() => setVisibilityBusy(false))
+  }
 
   // ── Start a runtime for the user (host it) ──
   const [starting, setStarting] = createSignal<string>()
@@ -294,37 +328,31 @@ const LocalModels: Component = () => {
       />
       <PanelBody>
         <div class="flex flex-col gap-8">
+          <section class="flex flex-col gap-3">
+            <div class="flex items-center justify-between gap-4 rounded-sm border border-border-weak-base bg-surface-base p-3">
+              <div class="flex min-w-0 flex-col gap-0.5">
+                <span class="text-13-medium text-text-strong">Show local models in Models</span>
+                <span class="text-11-regular text-text-weak">
+                  Keep locally hosted models visible or temporarily hide them from the Models catalog.
+                </span>
+              </div>
+              <Switch
+                hideLabel
+                checked={productPreferences.localModels()}
+                disabled={visibilityBusy() || preferences.loading}
+                onChange={setVisibility}
+              >
+                Show local models in Models
+              </Switch>
+            </div>
+          </section>
+
           {/* ── Run locally (host it for the user) ── */}
           <section class="flex flex-col gap-3">
             <h3 class="text-13-medium text-text-strong">Run a model locally</h3>
             <p class="text-12-regular text-text-weak/70">
               Let OpenScience start and host a runtime for you — no terminal needed.
             </p>
-            <div class="flex flex-col gap-2 rounded-sm border border-border-weak-base bg-surface-base p-3">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="flex min-w-0 flex-col gap-0.5">
-                  <span class="text-13-medium text-text-strong">Ollama context window</span>
-                  <span class="text-11-regular text-text-weak">Applied when an Ollama model is added.</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <input
-                    class="w-32 rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-right font-mono text-13-regular text-text-strong"
-                    type="number"
-                    min="1024"
-                    max="2097152"
-                    step="1024"
-                    aria-label="Ollama context window in tokens"
-                    value={context()}
-                    onInput={(event) => setContext(event.currentTarget.value)}
-                  />
-                  <span class="text-11-regular text-text-weak">tokens</span>
-                </div>
-              </div>
-              <p class="text-11-regular text-text-weak/70">
-                OpenScience creates a lightweight tuned alias, so Ollama applies the real <code>num_ctx</code> value.
-                Larger windows use more memory.
-              </p>
-            </div>
             <For each={status()}>
               {(rt) => (
                 <div class="flex items-center justify-between rounded-sm border border-border-weak-base bg-surface-base p-3">
@@ -491,6 +519,33 @@ const LocalModels: Component = () => {
                     )}
                   </For>
                 </div>
+                <Show when={isOllama(source().id, source().baseURL)}>
+                  <div class="flex flex-col gap-2 rounded-sm border border-border-weak-base bg-surface-raised-base p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                      <div class="flex min-w-0 flex-col gap-0.5">
+                        <span class="text-12-medium text-text-strong">Context window</span>
+                        <span class="text-11-regular text-text-weak">Applied to the models selected above.</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <input
+                          class="w-32 rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-right font-mono text-13-regular text-text-strong"
+                          type="number"
+                          min="1024"
+                          max="2097152"
+                          step="1024"
+                          aria-label="Ollama context window in tokens"
+                          value={context()}
+                          onInput={(event) => setContext(event.currentTarget.value)}
+                        />
+                        <span class="text-11-regular text-text-weak">tokens</span>
+                      </div>
+                    </div>
+                    <p class="text-11-regular text-text-weak/70">
+                      Larger windows use more memory. OpenScience keeps the tuned runtime alias out of the Models
+                      catalog and shows the original model name.
+                    </p>
+                  </div>
+                </Show>
                 <div class="flex justify-end gap-2">
                   <Button size="small" variant="secondary" disabled={busy()} onClick={() => setChoice(undefined)}>
                     Cancel

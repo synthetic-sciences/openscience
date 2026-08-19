@@ -339,15 +339,17 @@ export const GlobalRoutes = lazy(() =>
       }),
       async (c) => {
         const result = await OpenScience.syncServices()
-        Provider.invalidate()
-        await Instance.disposeAll()
-        GlobalBus.emit("event", {
-          directory: "global",
-          payload: {
-            type: GlobalDisposedEvent.type,
-            properties: {},
-          },
-        })
+        if (result) {
+          Provider.invalidate()
+          await Instance.disposeAll()
+          GlobalBus.emit("event", {
+            directory: "global",
+            payload: {
+              type: GlobalDisposedEvent.type,
+              properties: {},
+            },
+          })
+        }
         return c.json({
           user: result?.user,
           credentials: result?.credentials ?? 0,

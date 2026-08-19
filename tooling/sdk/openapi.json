@@ -17744,6 +17744,10 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "show_local_models": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "atlas_enabled": {
                       "default": false,
                       "type": "boolean"
@@ -17814,6 +17818,10 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "show_local_models": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "atlas_enabled": {
                       "default": false,
                       "type": "boolean"
@@ -17870,6 +17878,10 @@
                   },
                   "show_trace": {
                     "default": false,
+                    "type": "boolean"
+                  },
+                  "show_local_models": {
+                    "default": true,
                     "type": "boolean"
                   },
                   "atlas_enabled": {
@@ -18089,6 +18101,15 @@
                     "minItems": 1,
                     "type": "array",
                     "items": {
+                      "type": "string"
+                    }
+                  },
+                  "aliases": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
                       "type": "string"
                     }
                   },
@@ -50305,6 +50326,7 @@
             "type": "string",
             "enum": [
               "env",
+              "synced",
               "config",
               "custom",
               "api",

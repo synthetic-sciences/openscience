@@ -245,12 +245,13 @@ describe("frontier model canonicalization", () => {
     expect(isChatModel({ id: "nomic-embed-text", provider: { id: "openrouter" } })).toBe(false)
   })
 
-  test("managed OpenRouter credentials are not presented as user provider setup", () => {
+  test("only saved or dashboard-synced credentials are presented as connections", () => {
     expect(isUserProviderConnection({ providerID: "openrouter", source: "config", billing: "managed" })).toBe(false)
     expect(isUserProviderConnection({ providerID: "openrouter", source: "env", billing: null })).toBe(false)
     expect(isUserProviderConnection({ providerID: "openrouter", source: "api", billing: "managed" })).toBe(true)
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "config", billing: "byok" })).toBe(true)
-    expect(isUserProviderConnection({ providerID: "anthropic", source: "env", billing: "managed" })).toBe(true)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "synced", billing: "byok" })).toBe(true)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "config", billing: "byok" })).toBe(false)
+    expect(isUserProviderConnection({ providerID: "anthropic", source: "env", billing: "managed" })).toBe(false)
   })
 
   // The backend now reports the Atlas-proxied route as source "managed", which
@@ -260,8 +261,7 @@ describe("frontier model canonicalization", () => {
   test("a route the Atlas proxy carries is not the reader's own connection", () => {
     expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: "managed" })).toBe(false)
     expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: null })).toBe(false)
-    // ...unless they explicitly chose Own keys, where the panel is the point.
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: "byok" })).toBe(true)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: "byok" })).toBe(false)
   })
 
   test("stable Anthropic aliases win over dated duplicates", () => {

@@ -46,7 +46,10 @@ export function terminalEnv(
 
 export function terminalArgs(command: string) {
   const shell = shellName(command)
-  if (shell === "zsh") return ["-d", "-f", "-i"]
+  // Sandboxed zsh cannot own the host PTY's foreground process group. Disable
+  // job control before interactive startup so it does not print a false
+  // `can't set tty pgrp` warning; foreground commands remain fully interactive.
+  if (shell === "zsh") return ["-d", "-f", "+m", "-i"]
   if (shell === "bash") return ["--noprofile", "--norc", "-i"]
   if (shell === "fish") return ["--no-config", "--interactive"]
   if (shell === "sh" || shell === "dash" || shell === "ksh") return ["-i"]

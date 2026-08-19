@@ -52,7 +52,7 @@ test("project terminals show the current workspace folder in common shell prompt
 })
 
 test("interactive shells start clean without restored sessions or user bootstrap output", () => {
-  expect(terminalArgs("/bin/zsh")).toEqual(["-d", "-f", "-i"])
+  expect(terminalArgs("/bin/zsh")).toEqual(["-d", "-f", "+m", "-i"])
   expect(terminalArgs("/bin/bash")).toEqual(["--noprofile", "--norc", "-i"])
   expect(terminalArgs("/usr/local/bin/fish")).toEqual(["--no-config", "--interactive"])
   expect(terminalArgs("/bin/dash")).toEqual(["-i"])

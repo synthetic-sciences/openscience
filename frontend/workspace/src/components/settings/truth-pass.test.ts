@@ -19,7 +19,8 @@ describe("launch settings truth pass", () => {
     expect(ids).not.toContain("specialists")
     expect(source("LocalModels.tsx")).toContain("const LocalModels: Component = () =>")
     expect(source("LocalModels.tsx")).toContain('"/context"')
-    expect(source("LocalModels.tsx")).toContain("num_ctx")
+    expect(source("LocalModels.tsx")).toContain("contextLimit: ollama ? tokens")
+    expect(source("LocalModels.tsx")).toContain("keeps the tuned runtime alias out of the Models")
     expect(ids).toEqual([
       "models",
       "local-models",

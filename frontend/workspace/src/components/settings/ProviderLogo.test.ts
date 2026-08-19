@@ -29,6 +29,10 @@ describe("provider logos", () => {
       expect(providerLogoSource(id).kind).not.toBe("fallback")
   })
 
+  test("uses the Ollama mark instead of a fallback initial", () => {
+    expect(providerLogoSource("ollama")).toEqual({ kind: "vector", id: "ollama" })
+  })
+
   test("covers every built-in compute and integration credential", () => {
     for (const id of CREDENTIALS) expect(providerLogoSource(id).kind).not.toBe("fallback")
   })

@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { Select } from "@synsci/ui/select"
@@ -29,6 +29,12 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
     removable: false,
     note: "set in your .env or shell",
     title: "API key supplied by an environment variable; remove it where it is defined",
+  },
+  synced: {
+    label: "dashboard",
+    removable: false,
+    note: "synced from your OpenScience account",
+    title: "Provider key connected in the OpenScience account dashboard",
   },
   config: {
     label: "config",
@@ -63,6 +69,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
   const [provider, setProvider] = createSignal<string>(MODEL_PROVIDERS[0].id)
   const [key, setKey] = createSignal("")
   const [saving, setSaving] = createSignal(false)
+  const [syncing, setSyncing] = createSignal(false)
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const connected = createMemo(() =>
     providers
@@ -86,6 +93,21 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
         ),
       )
   }
+  const refreshDashboard = () => {
+    if (syncing()) return
+    setSyncing(true)
+    void sdk.client.global
+      .sync()
+      .then(() => sync.refreshProviders())
+      .catch((error) => props.onError?.(reason(error)))
+      .finally(() => setSyncing(false))
+  }
+
+  onMount(() => {
+    refreshDashboard()
+    window.addEventListener("focus", refreshDashboard)
+  })
+  onCleanup(() => window.removeEventListener("focus", refreshDashboard))
 
   const save = async () => {
     const value = key().trim()

@@ -15,6 +15,7 @@ import { Sandbox } from "@/sandbox/sandbox"
 import { OpenScience } from "@/openscience"
 import { terminalArgs, terminalEnv } from "./environment"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -117,7 +118,11 @@ export namespace Pty {
         sessionID: input.sessionID,
         capability: "terminal",
       })
-      const cwd = authority.workspace
+      const project = authority.directory ?? Instance.directory
+      // Local projects grant their real worktree as a writable root, so an
+      // interactive terminal should open where the user expects. Hosted or
+      // otherwise isolated sessions retain their private session workspace.
+      const cwd = authority.writable.some((root) => Filesystem.contains(root, project)) ? project : authority.workspace
       // Interactive PTY output is not a redaction boundary. Keep provider/cloud
       // credentials on the host; terminals receive runtime discovery only.
       const source = OpenScience.kernelEnv(process.env)

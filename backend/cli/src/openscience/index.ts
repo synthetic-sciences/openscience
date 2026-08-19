@@ -544,6 +544,13 @@ export namespace OpenScience {
     }
   }
 
+  /** Whether one live environment slot came from the latest account sync.
+   * Provider discovery uses this to keep dashboard credentials distinct from
+   * unrelated variables inherited from the launching shell. */
+  export function isSyncedEnv(key: string, value: string): boolean {
+    return syncedSecretValues.get(key) === value
+  }
+
   /** Clear the api_key this CLI seeded into the bundled atlas CLI's config
    *  (see ensureAtlasCliConfig). Only removes the key when it is the one the
    *  session seeded (or, with no readable session, when the profile points at

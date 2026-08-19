@@ -25,7 +25,7 @@ export namespace Inference {
   export function classify(input: {
     providerID: string
     billing?: "managed" | "byok" | null
-    providerSource?: "env" | "config" | "custom" | "api" | "managed"
+    providerSource?: "env" | "synced" | "config" | "custom" | "api" | "managed"
     baseURL?: string
     auth?: Auth.Info["type"]
   }): Source {
@@ -40,7 +40,12 @@ export namespace Inference {
     // proxy — provider.source already says "managed" (provider.ts's openrouter
     // loader), so trust it here too instead of falling through to "unknown".
     if (input.providerSource === "managed") return "managed"
-    if (input.providerSource === "env" || input.providerSource === "config" || input.providerSource === "api") {
+    if (
+      input.providerSource === "env" ||
+      input.providerSource === "synced" ||
+      input.providerSource === "config" ||
+      input.providerSource === "api"
+    ) {
       return "byok"
     }
     return "unknown"

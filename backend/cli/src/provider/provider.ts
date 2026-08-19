@@ -1292,7 +1292,7 @@ export namespace Provider {
     .object({
       id: z.string(),
       name: z.string(),
-      source: z.enum(["env", "config", "custom", "api", "managed"]),
+      source: z.enum(["env", "synced", "config", "custom", "api", "managed"]),
       env: z.string().array(),
       key: z.string().optional(),
       options: z.record(z.string(), z.any()),
@@ -1786,11 +1786,11 @@ export namespace Provider {
     const env = Env.all()
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
-      const apiKey = provider.env.map((item) => env[item]).find(Boolean)
-      if (!apiKey) continue
+      const credential = provider.env.map((name) => ({ name, value: env[name] })).find((item) => item.value)
+      if (!credential?.value) continue
       mergeProvider(providerID, {
-        source: "env",
-        key: provider.env.length === 1 ? apiKey : undefined,
+        source: OpenScience.isSyncedEnv(credential.name, credential.value) ? "synced" : "env",
+        key: provider.env.length === 1 ? credential.value : undefined,
       })
     }
 

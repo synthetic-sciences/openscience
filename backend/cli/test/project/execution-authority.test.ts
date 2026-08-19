@@ -313,7 +313,7 @@ test("trusted terminal derives its process contract from the owning session", as
           title: "Authority terminal",
           projectID: Instance.project.id,
           sessionID: session.id,
-          cwd: await SessionFilesystem.workspace(session.id),
+          cwd: tmp.path,
           authority: {
             allowed: true,
             capability: "terminal",

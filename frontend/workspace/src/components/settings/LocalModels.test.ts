@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { SettingsApiError } from "./api"
-import { prepareOllamaModels } from "./local-model-selection"
+import { prepareOllamaModels, selectableLocalModels } from "./local-model-selection"
 
 describe("local model selection", () => {
   test("prepares selected Ollama models without changing their order", async () => {
@@ -11,7 +11,12 @@ describe("local model selection", () => {
     })
 
     expect(result).toEqual({
-      models: ["openscience/qwen", "openscience/deepseek", "openscience/llama"],
+      models: ["qwen", "deepseek", "llama"],
+      aliases: {
+        qwen: "openscience/qwen",
+        deepseek: "openscience/deepseek",
+        llama: "openscience/llama",
+      },
       tuned: true,
     })
     expect(seen).toEqual(["qwen", "deepseek", "llama"])
@@ -22,7 +27,7 @@ describe("local model selection", () => {
       throw new SettingsApiError("Route not found: /settings/local/context", 404, "not_found")
     })
 
-    expect(result).toEqual({ models: ["qwen", "deepseek"], tuned: false })
+    expect(result).toEqual({ models: ["qwen", "deepseek"], aliases: {}, tuned: false })
   })
 
   test("does not hide a genuine Ollama failure", async () => {
@@ -31,5 +36,16 @@ describe("local model selection", () => {
         throw new SettingsApiError("Ollama ran out of memory", 400)
       }),
     ).rejects.toThrow("Ollama ran out of memory")
+  })
+
+  test("keeps generated context aliases out of the model chooser", () => {
+    expect(
+      selectableLocalModels([
+        "llama3.2:latest",
+        "openscience/llama3.2-latest-ctx-32768:latest",
+        "qwen2.5:32b",
+        "openscience/qwen2.5-32b-ctx-46080",
+      ]),
+    ).toEqual(["llama3.2:latest", "qwen2.5:32b"])
   })
 })

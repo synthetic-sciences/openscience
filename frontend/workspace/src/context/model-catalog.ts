@@ -93,7 +93,7 @@ export type InferenceSource = "managed" | "byok" | "chatgpt"
 /** Factual access route for a connected provider; ambiguous routes stay unlabeled. */
 export function inferenceSource(input: {
   providerID: string
-  credential: "env" | "config" | "custom" | "api" | "managed"
+  credential: "env" | "synced" | "config" | "custom" | "api" | "managed"
   billing?: "managed" | "byok" | null
 }): InferenceSource | undefined {
   if (input.providerID.startsWith("synsci")) return "managed"
@@ -101,7 +101,7 @@ export function inferenceSource(input: {
   if (input.credential === "managed") return "managed"
   if (input.credential === "api") return "byok"
   if (input.providerID === "openrouter") return input.billing === "byok" ? "byok" : undefined
-  if (input.credential === "env" || input.credential === "config") return "byok"
+  if (input.credential === "env" || input.credential === "synced" || input.credential === "config") return "byok"
   return undefined
 }
 
@@ -287,17 +287,14 @@ export function isChatModel(model: CatalogModel): boolean {
 
 export function isUserProviderConnection(input: {
   providerID: string
-  source?: "env" | "config" | "custom" | "api" | "managed"
+  source?: "env" | "synced" | "config" | "custom" | "api" | "managed"
   billing?: "managed" | "byok" | null
 }): boolean {
-  if (input.providerID !== "openrouter") return true
-  // "managed" means the Atlas proxy is carrying this route. That is not a
-  // connection the reader set up, so it has no place in a panel about their own
-  // keys — it falls through to the billing check and is filtered out. Which
-  // credential is paying remains an account-level concern rather than being
-  // repeated beside every model name in the composer.
-  if (input.source === "api") return true
-  return input.billing === "byok"
+  // Connected rows are account-backed credentials or keys explicitly saved in
+  // this UI. Ambient shell variables and project/config providers can still be
+  // used for inference, but they are not integrations and must not masquerade
+  // as account state here.
+  return input.source === "api" || input.source === "synced"
 }
 
 export function foldedRouteMode(model: ModelKey, target: CatalogModel): string | undefined {

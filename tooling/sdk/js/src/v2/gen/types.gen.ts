@@ -2130,7 +2130,7 @@ export type Model = {
 export type Provider = {
   id: string
   name: string
-  source: "env" | "config" | "custom" | "api" | "managed"
+  source: "env" | "synced" | "config" | "custom" | "api" | "managed"
   env: Array<string>
   key?: string
   options: {
@@ -7775,6 +7775,7 @@ export type SettingsPreferencesGetResponses = {
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
     show_trace?: boolean
+    show_local_models?: boolean
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
@@ -7789,6 +7790,7 @@ export type SettingsPreferencesUpdateData = {
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
     show_trace?: boolean
+    show_local_models?: boolean
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
@@ -7807,6 +7809,7 @@ export type SettingsPreferencesUpdateResponses = {
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
     show_trace?: boolean
+    show_local_models?: boolean
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
@@ -7882,6 +7885,9 @@ export type PostSettingsLocalData = {
     name?: string
     key?: string
     models: Array<string>
+    aliases?: {
+      [key: string]: string
+    }
     contextLimit?: number
     runtime?: "ollama"
     merge?: boolean

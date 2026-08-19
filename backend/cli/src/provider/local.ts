@@ -269,6 +269,8 @@ export namespace LocalProvider {
     baseURL: string
     apiKey?: string
     models: string[]
+    /** Friendly catalog id -> runtime API id (used for hidden Ollama context aliases). */
+    modelAliases?: Record<string, string>
     /** Per-model context window; local models vary widely, 32k is a safe default. */
     contextLimit?: number
     outputLimit?: number
@@ -278,6 +280,7 @@ export namespace LocalProvider {
     const models: Record<string, unknown> = {}
     for (const id of input.models) {
       models[id] = {
+        ...(input.modelAliases?.[id] ? { id: input.modelAliases[id] } : {}),
         name: id,
         tool_call: true,
         reasoning: false,
