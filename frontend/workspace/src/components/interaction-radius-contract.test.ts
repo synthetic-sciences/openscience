@@ -41,8 +41,8 @@ describe("live interaction radius contract", () => {
     expect(files.settings).toContain(
       '[data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"]',
     )
-    expect(files.settings).toContain("border-radius: var(--radius-md);")
-    expect(files.settings).not.toContain("border-radius: var(--radius-md) !important")
+    expect(files.settings).toContain("border-radius: var(--radius-lg);")
+    expect(files.settings).not.toContain("border-radius: var(--radius-lg) !important")
     expect(files.models).toContain('.model-picker-sheet [data-component="button"].model-picker-sheet__manage')
     expect(files.servers).toContain("margin: 0;")
     expect(files.servers).not.toContain("margin: 0 !important")

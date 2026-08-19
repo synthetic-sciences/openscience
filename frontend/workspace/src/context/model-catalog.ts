@@ -107,7 +107,7 @@ export function inferenceSource(input: {
 
 export function inferenceSourceLabel(source: InferenceSource | undefined, fallback = "Provider") {
   if (source === "managed") return "Managed"
-  if (source === "byok") return "API key"
+  if (source === "byok") return "BYOK"
   if (source === "chatgpt") return "ChatGPT"
   return fallback
 }

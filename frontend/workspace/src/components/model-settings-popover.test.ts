@@ -46,7 +46,7 @@ const press = async (target: HTMLElement, key: string) => {
 }
 
 describe("inference source classification", () => {
-  test("labels only what the client can prove and omits ambiguous routes", () => {
+  test("labels provider routes by the access the user controls", () => {
     expect(subject.inferenceSource({ providerID: "synsci", credential: "custom" })).toBe("managed")
     expect(subject.inferenceSource({ providerID: "synsci-demo", credential: "env" })).toBe("managed")
     expect(subject.inferenceSource({ providerID: "openai-codex", credential: "custom" })).toBe("chatgpt")
@@ -55,7 +55,7 @@ describe("inference source classification", () => {
     expect(subject.inferenceSource({ providerID: "xai", credential: "config" })).toBe("byok")
     // Own gateway key in the local auth store is decisive: own key wins server-side.
     expect(subject.inferenceSource({ providerID: "openrouter", credential: "api" })).toBe("byok")
-    // A gateway env credential can be an own key or the synced managed token — no claim.
+    // A gateway env credential can be an own key or the synced managed token.
     expect(subject.inferenceSource({ providerID: "openrouter", credential: "env" })).toBeUndefined()
     expect(subject.inferenceSource({ providerID: "openrouter", credential: "env", billing: "managed" })).toBeUndefined()
     // Explicit byok billing drops managed credentials server-side, so a surviving gateway is the user's own.
@@ -73,7 +73,7 @@ describe("inference source classification", () => {
 
   test("labels model access without changing provider routing ids", () => {
     expect(subject.inferenceSourceLabel("chatgpt")).toBe("ChatGPT")
-    expect(subject.inferenceSourceLabel("byok")).toBe("API key")
+    expect(subject.inferenceSourceLabel("byok")).toBe("BYOK")
     expect(subject.inferenceSourceLabel("managed")).toBe("Managed")
     expect(subject.inferenceSourceLabel(undefined, "Local runtime")).toBe("Local runtime")
   })
@@ -219,7 +219,7 @@ describe("model option keyboard navigation", () => {
         title: "GPT-5.6 Sol access",
         current: selected.value,
         options: [
-          { id: "openai/gpt-5.6-sol", label: "OpenAI · API key" },
+          { id: "openai/gpt-5.6-sol", label: "OpenAI · BYOK" },
           { id: "openai-codex/gpt-5.6-sol", label: "OpenAI · ChatGPT" },
         ],
         onSelect: (value) => (selected.value = value),

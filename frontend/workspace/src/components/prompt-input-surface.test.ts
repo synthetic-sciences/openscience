@@ -188,7 +188,20 @@ describe("composer control consolidation", () => {
     expect(source).not.toContain('class="workspace-composer__effort"')
     expect(componentCss).not.toContain("workspace-composer__research-effort")
     expect(componentCss).toContain("left: calc(100% + 12px)")
+    expect(componentCss).toContain("bottom: -4px")
+    expect(componentCss).not.toContain("top: -4px")
     expect(componentCss).toContain("width: min(252px, calc(100vw - 24px))")
+  })
+
+  test("shows one tiny fast toggle whenever a connected route supports it", () => {
+    expect(source).toContain("const fastMode = createMemo")
+    expect(source).toContain("logicalModelKey(model.provider.id, model.id) === key")
+    expect(source).toContain('Object.keys(model.modes ?? {}).includes("fast")')
+    expect(source).toContain('class="workspace-composer__fast-mode"')
+    expect(source).toContain("aria-pressed={mode().active}")
+    expect(source).toContain('<Icon name="bolt" size="small" />')
+    expect(componentCss).toContain("width: 28px")
+    expect(componentCss).toContain('workspace-composer__fast-mode[data-active="true"]')
   })
 
   test("offers three real action-approval modes inside Research tools", () => {
@@ -223,6 +236,11 @@ describe("composer control consolidation", () => {
     expect(source).toContain('role="radiogroup"')
     expect(source).toContain("Route to the best match")
     expect(source).toContain("Use the response model")
+    expect(source).toContain('placeholder="Find a reviewer model"')
+    expect(source).toContain("reviewerChoices()")
+    expect(source).toContain("reviewerSources()")
+    expect(source).toContain("...visible")
+    expect(componentCss).toContain("width: min(288px, calc(100vw - 24px))")
     expect(source).not.toContain('<select aria-label="Reviewer model"')
     expect(source).not.toContain("Research workflow")
     expect(source).not.toContain("Saved locally")

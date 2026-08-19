@@ -176,7 +176,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
         credential: model.provider.source,
         billing: sync.data.config.billing?.llm,
       }),
-      model.provider.name,
+      model.provider.id === "openrouter" ? "Automatic" : model.provider.name,
     )
   const recent = createMemo(() =>
     local.model.recent().filter((model): model is NonNullable<typeof model> => Boolean(model)),
@@ -480,7 +480,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
             <IconButton type="button" icon="close" variant="ghost" aria-label="Close model options" onClick={close} />
           </header>
           <div class="mobile-model-settings__body" data-model-settings-layout>
-            <Show when={!mobile() || view() === "root"}>
+            <Show when={view() === "root"}>
               <div class="model-settings-primary">
                 <div data-model-menu-scope class="flex flex-col">
                   <div

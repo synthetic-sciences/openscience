@@ -44,7 +44,25 @@ describe("model control presentation", () => {
 
   test("makes standard effort explicit without changing the provider-native value", () => {
     expect(effortOption("standard")).toEqual({ id: "standard", label: "Standard" })
+    expect(effortOption("none")).toEqual({ id: "none", label: "Standard" })
     expect(effortOption("xhigh")).toEqual({ id: "xhigh", label: "Extra high" })
+  })
+
+  test("collapses provider none and standard effort into one visible choice", () => {
+    const control = modelControl({
+      name: "Reasoning model",
+      variants: ["none", "standard", "low", "high"],
+      modes: [],
+      currentEffort: "none",
+    })
+
+    expect(control.effort?.options).toEqual([
+      { id: "standard", label: "Standard" },
+      { id: "low", label: "Low" },
+      { id: "high", label: "High" },
+    ])
+    expect(control.effort?.current).toEqual({ id: "standard", label: "Standard" })
+    expect(control.reset).toEqual({ effort: "standard" })
   })
 
   test("labels service modes without remapping their request values", () => {

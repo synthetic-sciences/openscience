@@ -39,7 +39,7 @@
 [data-model-control-group="label"] {
   height: 32px;
   overflow: hidden;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: var(--model-control-raised);
 }
 
@@ -95,7 +95,7 @@
   overflow: hidden;
   padding: 6px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--model-control-surface);
   background-clip: padding-box;
   box-shadow: var(--model-control-shadow);
@@ -106,7 +106,7 @@
   min-height: 34px;
   gap: 8px;
   padding: 0 7px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   color: var(--model-control-text);
   font-size: 12px;
   line-height: 16px;
@@ -254,7 +254,7 @@
   margin: 2px 6px 5px;
   padding: 0 9px;
   border: 1px solid var(--model-control-border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: var(--model-control-raised);
   color: var(--model-control-faint);
 }
@@ -361,35 +361,20 @@
 
 @media (min-width: 720px) {
   [data-model-settings-popover]:not([data-model-settings-view="root"]) {
-    width: min(584px, calc(100vw - 24px));
-    max-height: none;
-    overflow: visible;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
+    width: min(320px, calc(100vw - 24px));
   }
 
   [data-model-settings-popover]:not([data-model-settings-view="root"]) [data-model-settings-layout] {
-    display: grid;
-    grid-template-columns: minmax(0, 272px) minmax(0, 304px);
-    align-items: end;
-    gap: 8px;
+    display: block;
   }
 
-  [data-model-settings-popover]:not([data-model-settings-view="root"]) .model-settings-primary,
   [data-model-settings-popover]:not([data-model-settings-view="root"]) .model-settings-secondary {
+    min-height: 0;
     overflow: hidden;
-    padding: 6px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: var(--model-control-surface);
-    background-clip: padding-box;
-    box-shadow: var(--model-control-shadow);
   }
 
   [data-model-settings-view="models"] .model-settings-secondary {
-    height: min(72dvh, 440px);
+    height: min(68dvh, 420px);
     display: flex;
     flex-direction: column;
   }

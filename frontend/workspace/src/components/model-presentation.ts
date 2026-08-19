@@ -27,12 +27,17 @@ const label = (id: string) => {
 const unique = (values: string[]) => [...new Set(values.filter((value) => value.trim().length > 0))]
 
 const selected = (options: Array<{ id: string; label: string }>, value?: string) =>
-  options.find((option) => option.id === value) ?? options.find((option) => option.id === "standard") ?? options[0]
+  options.find((option) => option.id === value) ??
+  (value === "none" || value === "standard"
+    ? options.find((option) => option.id === "standard" || option.id === "none")
+    : undefined) ??
+  options.find((option) => option.id === "standard" || option.id === "none") ??
+  options[0]
 
 export function effortOption(id: string) {
   return {
     id,
-    label: id === "standard" ? "Standard" : label(id),
+    label: id === "standard" || id === "none" ? "Standard" : label(id),
   }
 }
 
@@ -44,7 +49,8 @@ export function serviceOption(id: string) {
 }
 
 export function modelControl(input: ModelControlInput) {
-  const efforts = unique(input.variants).map(effortOption)
+  const variants = unique(input.variants)
+  const efforts = variants.filter((id) => id !== "none" || !variants.includes("standard")).map(effortOption)
   const services = unique(input.modes).map(serviceOption)
   const currentEffort = selected(efforts, input.currentEffort)
   const currentSpeed = selected(services, input.currentSpeed)

@@ -48,6 +48,14 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { useLanguage } from "@/context/language"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
+import {
+  displayProviderForModel,
+  groupModelRoutes,
+  inferenceSource,
+  inferenceSourceLabel,
+  logicalModelKey,
+  modelDisplayName,
+} from "@/context/model-catalog"
 import { createOpenScienceClient, type Message, type Part } from "@synsci/sdk/v2/client"
 import { Binary } from "@synsci/util/binary"
 import { showToast } from "@synsci/ui/toast"
@@ -200,18 +208,69 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const specialists = createMemo(() =>
     sync.data.agent.filter((agent) => agent.mode === "subagent" && isCoreSpecialist(agent.name)),
   )
+  const [reviewerQuery, setReviewerQuery] = createSignal("")
+  const [reviewerRoute, setReviewerRoute] = createSignal("")
   const reviewerModels = createMemo(() => {
-    const models = [local.model.current(), ...local.model.pinned(), ...local.model.recent()].filter(
+    const visible = local.model
+      .list()
+      .filter(
+        (model) =>
+          local.model.pin.has({ providerID: model.provider.id, modelID: model.id }) ||
+          local.model.visible({ providerID: model.provider.id, modelID: model.id }),
+      )
+    const models = [local.model.current(), ...local.model.pinned(), ...local.model.recent(), ...visible].filter(
       (model) => model !== undefined,
     )
     return [...new Map(models.map((model) => [`${model.provider.id}/${model.id}`, model])).values()]
   })
+  const reviewerSources = createMemo(
+    () =>
+      new Map(
+        reviewerModels().map((model) => {
+          const provider = displayProviderForModel(model.provider, model.id)
+          const source = inferenceSourceLabel(
+            inferenceSource({
+              providerID: model.provider.id,
+              credential: model.provider.source,
+              billing: sync.data.config.billing?.llm,
+            }),
+            model.provider.id === "openrouter" ? "Automatic" : model.provider.name,
+          )
+          return [`${model.provider.id}/${model.id}`, `${provider.name} · ${source}`] as const
+        }),
+      ),
+  )
+  const reviewerGroups = createMemo(() => {
+    const current = local.model.current()
+    return groupModelRoutes({
+      models: reviewerModels(),
+      current: review()?.model ?? (current ? { providerID: current.provider.id, modelID: current.id } : undefined),
+      recent: [],
+    })
+  })
+  const reviewerChoices = createMemo(() => {
+    const query = reviewerQuery().trim().toLowerCase()
+    if (!query) return reviewerGroups()
+    return reviewerGroups().filter((choice) =>
+      choice.routes.some((model) =>
+        `${model.name} ${reviewerSources().get(`${model.provider.id}/${model.id}`) ?? ""}`
+          .toLowerCase()
+          .includes(query),
+      ),
+    )
+  })
+  const reviewerRouteChoice = createMemo(() => reviewerGroups().find((choice) => choice.key === reviewerRoute()))
+  const reviewerChoiceName = (choice: ReturnType<typeof reviewerGroups>[number]) =>
+    modelDisplayName(choice.model.name, choice.model.provider.id, choice.model.id)
   const reviewerModel = createMemo(() => {
     const selected = review()?.model
     if (!selected) return
     return reviewerModels().find((model) => model.provider.id === selected.providerID && model.id === selected.modelID)
   })
-  const reviewerLabel = createMemo(() => reviewerModel()?.name ?? review()?.model?.modelID ?? "Default")
+  const reviewerLabel = createMemo(() => {
+    const model = reviewerModel()
+    return model ? modelDisplayName(model.name, model.provider.id, model.id) : (review()?.model?.modelID ?? "Default")
+  })
   const specialistSelection = createMemo(() => {
     const selected = capabilities()?.delegation_specialist
     return selected ? specialistLabel(selected) : "Automatic"
@@ -226,6 +285,43 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       advanced: [],
     }),
   )
+  const fastMode = createMemo(() => {
+    const current = local.model.current()
+    if (!current) return
+    const key = logicalModelKey(current.provider.id, current.id)
+    const routes = local.model
+      .list()
+      .filter(
+        (model) =>
+          logicalModelKey(model.provider.id, model.id) === key &&
+          Object.keys(model.modes ?? {}).includes("fast") &&
+          (local.model.pin.has({ providerID: model.provider.id, modelID: model.id }) ||
+            local.model.visible({ providerID: model.provider.id, modelID: model.id })),
+      )
+    const route =
+      routes.find((model) => model.provider.id === current.provider.id && model.id === current.id) ?? routes[0]
+    if (!route) return
+    return {
+      active:
+        route.provider.id === current.provider.id && route.id === current.id && local.model.tier.current() === "fast",
+      route,
+    }
+  })
+  const toggleFastMode = () => {
+    const mode = fastMode()
+    if (!mode) return
+    if (mode.active) {
+      local.model.tier.set("standard")
+      return
+    }
+    const current = local.model.current()
+    if (current?.provider.id === mode.route.provider.id && current.id === mode.route.id) {
+      local.model.tier.set("fast")
+      return
+    }
+    local.model.set({ providerID: mode.route.provider.id, modelID: mode.route.id }, { recent: true })
+    queueMicrotask(() => local.model.tier.set("fast"))
+  }
   createEffect(() => {
     const value = controls()
     if (value.reset.effort) local.model.variant.set(value.reset.effort)
@@ -2439,71 +2535,162 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           Auto-review
                         </Toggle>
                       </div>
-                      <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
+                      <details
+                        class="workspace-composer__research-choice"
+                        data-research-control="reviewer"
+                        onToggle={(event) => {
+                          toggleResearchChoice(event)
+                          if (!event.currentTarget.open) return
+                          setReviewerQuery("")
+                          setReviewerRoute("")
+                        }}
+                      >
                         <summary aria-label={`Reviewer model, ${reviewerLabel()}`}>
                           <span>Reviewer model</span>
                           <strong>{reviewerLabel()}</strong>
                           <Icon name="chevron-right" size="small" />
                         </summary>
-                        <div
-                          class="workspace-composer__research-choice-menu"
-                          role="radiogroup"
-                          aria-label="Reviewer model"
-                          onKeyDown={navigateResearchChoices}
-                        >
-                          <button
-                            type="button"
-                            role="radio"
-                            aria-checked={!review()?.model}
-                            tabindex={!review()?.model ? 0 : -1}
-                            onClick={(event) => {
-                              saveReview({ model: null })
-                              event.currentTarget.closest("details")?.removeAttribute("open")
-                            }}
-                          >
-                            <span>
-                              <strong>Default</strong>
-                              <small>Use the response model</small>
-                            </span>
-                            <Show when={!review()?.model}>
-                              <Icon name="check" size="small" />
-                            </Show>
-                          </button>
-                          <For each={reviewerModels()}>
-                            {(model) => (
-                              <button
-                                type="button"
-                                role="radio"
-                                aria-checked={
-                                  review()?.model?.providerID === model.provider.id &&
-                                  review()?.model?.modelID === model.id
-                                }
-                                tabindex={
-                                  review()?.model?.providerID === model.provider.id &&
-                                  review()?.model?.modelID === model.id
-                                    ? 0
-                                    : -1
-                                }
-                                onClick={(event) => {
-                                  saveReview({ model: { providerID: model.provider.id, modelID: model.id } })
-                                  event.currentTarget.closest("details")?.removeAttribute("open")
-                                }}
-                              >
-                                <span>
-                                  <strong>{model.name}</strong>
-                                  <small>{model.provider.name}</small>
-                                </span>
-                                <Show
-                                  when={
-                                    review()?.model?.providerID === model.provider.id &&
-                                    review()?.model?.modelID === model.id
-                                  }
+                        <div class="workspace-composer__research-choice-menu workspace-composer__reviewer-menu">
+                          <Show
+                            when={reviewerRouteChoice()}
+                            fallback={
+                              <>
+                                <label class="workspace-composer__reviewer-search">
+                                  <Icon name="magnifying-glass" size="small" aria-hidden="true" />
+                                  <input
+                                    type="search"
+                                    value={reviewerQuery()}
+                                    onInput={(event) => setReviewerQuery(event.currentTarget.value)}
+                                    placeholder="Find a reviewer model"
+                                    aria-label="Find a reviewer model"
+                                  />
+                                </label>
+                                <div
+                                  class="workspace-composer__reviewer-options"
+                                  role="radiogroup"
+                                  aria-label="Reviewer model"
+                                  onKeyDown={navigateResearchChoices}
                                 >
-                                  <Icon name="check" size="small" />
-                                </Show>
-                              </button>
+                                  <button
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={!review()?.model}
+                                    tabindex={!review()?.model ? 0 : -1}
+                                    onClick={(event) => {
+                                      saveReview({ model: null })
+                                      event.currentTarget.closest("details")?.removeAttribute("open")
+                                    }}
+                                  >
+                                    <span>
+                                      <strong>Default</strong>
+                                      <small>Use the response model</small>
+                                    </span>
+                                    <Show when={!review()?.model}>
+                                      <Icon name="check" size="small" />
+                                    </Show>
+                                  </button>
+                                  <For each={reviewerChoices()}>
+                                    {(choice) => {
+                                      const selected = () =>
+                                        choice.routes.some(
+                                          (model) =>
+                                            review()?.model?.providerID === model.provider.id &&
+                                            review()?.model?.modelID === model.id,
+                                        )
+                                      return (
+                                        <button
+                                          type="button"
+                                          role="radio"
+                                          aria-checked={selected()}
+                                          aria-haspopup={choice.routes.length > 1 ? "menu" : undefined}
+                                          tabindex={selected() ? 0 : -1}
+                                          onClick={(event) => {
+                                            if (choice.routes.length > 1) {
+                                              setReviewerRoute(choice.key)
+                                              return
+                                            }
+                                            const model = choice.model
+                                            saveReview({ model: { providerID: model.provider.id, modelID: model.id } })
+                                            event.currentTarget.closest("details")?.removeAttribute("open")
+                                          }}
+                                        >
+                                          <span>
+                                            <strong>{reviewerChoiceName(choice)}</strong>
+                                            <small>
+                                              {reviewerSources().get(`${choice.model.provider.id}/${choice.model.id}`)}
+                                              {choice.routes.length > 1 ? ` · ${choice.routes.length} access` : ""}
+                                            </small>
+                                          </span>
+                                          <Show
+                                            when={choice.routes.length > 1}
+                                            fallback={
+                                              <Show when={selected()}>
+                                                <Icon name="check" size="small" />
+                                              </Show>
+                                            }
+                                          >
+                                            <Icon name="chevron-right" size="small" />
+                                          </Show>
+                                        </button>
+                                      )
+                                    }}
+                                  </For>
+                                  <Show when={reviewerChoices().length === 0}>
+                                    <p class="workspace-composer__reviewer-empty">No matching models</p>
+                                  </Show>
+                                </div>
+                              </>
+                            }
+                          >
+                            {(choice) => (
+                              <>
+                                <button
+                                  type="button"
+                                  class="workspace-composer__reviewer-back"
+                                  onClick={() => setReviewerRoute("")}
+                                >
+                                  <Icon name="chevron-left" size="small" aria-hidden="true" />
+                                  <span>
+                                    <strong>{reviewerChoiceName(choice())}</strong>
+                                    <small>Choose access</small>
+                                  </span>
+                                </button>
+                                <div
+                                  class="workspace-composer__reviewer-options"
+                                  role="radiogroup"
+                                  aria-label={`${reviewerChoiceName(choice())} access`}
+                                  onKeyDown={navigateResearchChoices}
+                                >
+                                  <For each={choice().routes}>
+                                    {(model) => {
+                                      const selected = () =>
+                                        review()?.model?.providerID === model.provider.id &&
+                                        review()?.model?.modelID === model.id
+                                      return (
+                                        <button
+                                          type="button"
+                                          role="radio"
+                                          aria-checked={selected()}
+                                          tabindex={selected() ? 0 : -1}
+                                          onClick={(event) => {
+                                            saveReview({ model: { providerID: model.provider.id, modelID: model.id } })
+                                            event.currentTarget.closest("details")?.removeAttribute("open")
+                                          }}
+                                        >
+                                          <span>
+                                            <strong>{reviewerSources().get(`${model.provider.id}/${model.id}`)}</strong>
+                                          </span>
+                                          <Show when={selected()}>
+                                            <Icon name="check" size="small" />
+                                          </Show>
+                                        </button>
+                                      )
+                                    }}
+                                  </For>
+                                </div>
+                              </>
                             )}
-                          </For>
+                          </Show>
                         </div>
                       </details>
                       <div class="workspace-composer__research-divider" />
@@ -2625,6 +2812,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
           <div class="workspace-composer__actions flex items-center gap-3" role="group" aria-label="Model and send">
             <ModelSettingsPopover />
+            <Show when={fastMode()}>
+              {(mode) => (
+                <Tooltip placement="top" value={mode().active ? "Disable fast mode" : "Enable fast mode"}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    class="workspace-composer__fast-mode"
+                    data-active={mode().active ? "true" : undefined}
+                    aria-label={mode().active ? "Disable fast mode" : "Enable fast mode"}
+                    aria-pressed={mode().active}
+                    onClick={toggleFastMode}
+                  >
+                    <Icon name="bolt" size="small" />
+                  </Button>
+                </Tooltip>
+              )}
+            </Show>
             <Tooltip
               placement="top"
               inactive={!prompt.dirty() && !working()}
