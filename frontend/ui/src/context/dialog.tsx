@@ -8,6 +8,7 @@ import {
   type Owner,
   type ParentProps,
   runWithOwner,
+  Suspense,
   useContext,
   type JSX,
 } from "solid-js"
@@ -110,7 +111,7 @@ function init() {
           >
             <Kobalte.Portal>
               <Kobalte.Overlay data-component="dialog-overlay" onClick={close} />
-              {element()}
+              <Suspense fallback={null}>{element()}</Suspense>
             </Kobalte.Portal>
           </Kobalte>
         )

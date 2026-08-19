@@ -59,8 +59,8 @@ describe("artifact grid styles", () => {
     const styles = css()
 
     expect(styles).toMatch(/\.files-browser\s*\{[^}]*margin: 0;[^}]*border: 0;[^}]*border-radius: 0/s)
-    expect(styles).toMatch(/\.files-browser__header\s*\{[^}]*padding: 8px 12px 6px;[^}]*border: 0/s)
-    expect(styles).toMatch(/\.artifact-surface\s*\{[^}]*padding: 4px 12px 12px/s)
+    expect(styles).toMatch(/\.files-browser__header\s*\{[^}]*padding: 6px 10px 4px;[^}]*border: 0/s)
+    expect(styles).toMatch(/\.artifact-surface\s*\{[^}]*padding: 2px 10px 10px/s)
     expect(styles).toMatch(/\.remote-view\s*\{[^}]*margin: 0;[^}]*border: 0;[^}]*border-radius: 0/s)
   })
 
@@ -69,12 +69,12 @@ describe("artifact grid styles", () => {
 
     expect(styles).toMatch(/\.files-browser__toolbar\s*\{[^}]*display: flex;[^}]*min-width: 0/s)
     expect(styles).toMatch(/\.files-browser__toolbar \.files-source\s*\{[^}]*max-width: min\(48cqi, 210px\)/s)
-    expect(styles).toMatch(/\.files-search\s*\{[^}]*flex: 1 1 160px;[^}]*min-height: 32px/s)
+    expect(styles).toMatch(/\.files-search\s*\{[^}]*flex: 1 1 160px;[^}]*min-height: 30px/s)
     expect(styles).toMatch(
-      /\.artifact-grid\s*\{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(min\(136px, 100%\), 1fr\)\)/s,
+      /\.artifact-grid\s*\{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(min\(128px, 100%\), 1fr\)\)/s,
     )
     expect(styles).toMatch(
-      /\.artifact-card\[data-layout="grid"\] \.artifact-card__name\s*\{[^}]*overflow-wrap: anywhere;[^}]*-webkit-line-clamp: 3/s,
+      /\.artifact-card\[data-layout="grid"\] \.artifact-card__name\s*\{[^}]*overflow-wrap: anywhere;[^}]*-webkit-line-clamp: 2/s,
     )
   })
 

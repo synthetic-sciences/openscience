@@ -307,17 +307,14 @@ export function RightPane(
     frame.pane = element
     const parent = element.parentElement
     if (!parent) return
-    const main = element.previousElementSibling
-    const measure = () => {
-      const center = main instanceof HTMLElement ? main.clientWidth + element.clientWidth : 0
-      setWorkspace(center || parent.clientWidth || window.innerWidth)
-    }
+    // The parent is the actual split boundary. Adding the two children feeds
+    // overflow back into the resize limit, so a wide pane can grow the value
+    // used to clamp itself and push the inspector beyond the viewport.
+    const measure = () => setWorkspace(parent.clientWidth || window.innerWidth)
     measure()
     if (typeof ResizeObserver === "undefined") return
     frame.observer = new ResizeObserver(measure)
     frame.observer.observe(parent)
-    frame.observer.observe(element)
-    if (main instanceof HTMLElement) frame.observer.observe(main)
   }
 
   const onHandlePointerDown = (event: PointerEvent) => {
@@ -384,10 +381,17 @@ export function RightPane(
             on:pointerup={onHandlePointerUp}
             on:pointercancel={onHandlePointerUp}
             onDblClick={splitEvenly}
+            title="Drag to resize. Double-click to split evenly."
             aria-hidden={narrow() ? "true" : undefined}
             hidden={narrow() || expanded()}
             class="research-inspector__resize"
-          />
+          >
+            <span class="research-inspector__resize-grip" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
           <div class="research-inspector__header">
             <Show
               when={uiStore.workTabs().length > 0}

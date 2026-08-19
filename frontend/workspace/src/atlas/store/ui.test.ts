@@ -263,7 +263,7 @@ describe("context pane state", () => {
   })
 
   test("closes artifact context when its active artifact disappears", () => {
-    const state = createContextState()
+    const state = createContextState({ storage: memoryStorage() })
 
     state.openContext("artifact")
     expect(state.open()).toBe(true)
@@ -275,6 +275,19 @@ describe("context pane state", () => {
 
     expect(state.context()).toBe("artifact")
     expect(state.open()).toBe(false)
+  })
+
+  test("returns to an existing tool tab when artifact ownership disappears", () => {
+    const state = createContextState({ storage: memoryStorage() })
+
+    state.openContext("files")
+    state.openContext("artifact")
+    state.syncArtifact(false)
+
+    expect(state.workTabs().map((tab) => tab.id)).toEqual(["view:files"])
+    expect(state.activeWorkTab()).toBe("view:files")
+    expect(state.context()).toBe("files")
+    expect(state.open()).toBe(true)
   })
 
   test("exposes contextual visibility alongside the legacy pane accessor", () => {
@@ -320,7 +333,12 @@ describe("open-file tabs", () => {
     first.openContext("kernels")
     first.openFile("/root", "results.csv")
 
-    expect(first.workTabs().map((tab) => tab.id)).toEqual(["view:files", "file:%2Froot:results.csv"])
+    expect(first.workTabs().map((tab) => tab.id)).toEqual([
+      "view:terminal",
+      "view:kernels",
+      "view:files",
+      "file:%2Froot:results.csv",
+    ])
     expect(first.activeWorkTab()).toBe("file:%2Froot:results.csv")
 
     const restored = createContextState({ storage })
@@ -330,17 +348,25 @@ describe("open-file tabs", () => {
     expect(restored.file()?.path).toBe("results.csv")
   })
 
-  test("switching tool panels replaces the last panel and closing it removes the pane", () => {
-    const state = createContextState({ storage: memoryStorage() })
+  test("keeps tool panels as tabs and returns to a neighbor when one closes", () => {
+    const storage = memoryStorage()
+    const state = createContextState({ storage })
     state.activateScope("project-a", "session-a")
     state.openContext("files")
     state.openContext("terminal")
     state.openContext("kernels")
 
-    expect(state.workTabs().map((tab) => tab.id)).toEqual(["view:kernels"])
+    expect(state.workTabs().map((tab) => tab.id)).toEqual(["view:files", "view:terminal", "view:kernels"])
     state.closeWorkTab()
-    expect(state.workTabs()).toHaveLength(0)
-    expect(state.open()).toBe(false)
+    expect(state.workTabs().map((tab) => tab.id)).toEqual(["view:files", "view:terminal"])
+    expect(state.activeWorkTab()).toBe("view:terminal")
+    expect(state.context()).toBe("terminal")
+    expect(state.open()).toBe(true)
+
+    const restored = createContextState({ storage })
+    restored.activateScope("project-a", "session-a")
+    expect(restored.workTabs().map((tab) => tab.id)).toEqual(["view:files", "view:terminal"])
+    expect(restored.activeWorkTab()).toBe("view:terminal")
   })
 
   test("work tab activation and reordering are keyboard-strip primitives", () => {

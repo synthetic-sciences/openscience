@@ -235,10 +235,14 @@ function restoreState(value: unknown): ContextState {
         : mode === "artifact"
           ? "artifact"
           : tab
-  // Context tools replace each other. File and saved-artifact tabs remain
-  // mounted, but persisted sessions never restore several tool panes at once.
+  // Keep every contextual surface mounted. Older sessions can be missing the
+  // owning view tab, so add only that tab while preserving the restored strip.
   const workTabs =
-    restoredTabs.length > 0 ? [viewTab(owner), ...restoredTabs.filter((item) => item.kind !== "view")] : fallback
+    restoredTabs.length > 0 && restoredTabs.some((item) => item.id === `view:${owner}`)
+      ? restoredTabs
+      : restoredTabs.length > 0
+        ? [viewTab(owner), ...restoredTabs]
+        : fallback
   const activeWorkTab =
     workTabs.find((item) => item.id === requested)?.id ??
     workTabs.find((item) => item.kind === "file" && file && fileKey(item.file) === fileKey(file))?.id ??
@@ -370,7 +374,7 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
     if (tabs.some((item) => item.id === tab.id)) return tabs
     return [...tabs, tab]
   }
-  const own = (tabs: WorkTab[], next: ContextTab) => [viewTab(next), ...tabs.filter((item) => item.kind !== "view")]
+  const own = (tabs: WorkTab[], next: ContextTab) => ensure(tabs, viewTab(next))
   const closeWorkTab = (id?: string) => {
     const state = current()
     const tabs = state.workTabs ?? []
@@ -395,15 +399,11 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
   const syncArtifact = (active: boolean) => {
     if (active || !current().open || context() !== "artifact") return
     const state = current()
-    update({
-      ...state,
-      mode: "artifact",
-      open: false,
-      workTabs: (state.workTabs ?? []).filter((item) => item.id !== "view:artifact"),
-      activeWorkTab: undefined,
-      file: undefined,
-      saved: undefined,
-    })
+    const tabs = state.workTabs ?? []
+    const index = tabs.findIndex((item) => item.id === "view:artifact")
+    const nextTabs = tabs.filter((item) => item.id !== "view:artifact")
+    const next = nextTabs[index - 1] ?? nextTabs[index] ?? nextTabs[0]
+    update(select(state, nextTabs, next?.id, state.files ?? [], Boolean(next)))
   }
   const openContext = (next: ContextTab) => {
     const state = current()

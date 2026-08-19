@@ -5,6 +5,8 @@ import { SETTINGS_PANELS } from "./settings/registry"
 
 const source = () => readFileSync(fileURLToPath(new URL("./dialog-settings.tsx", import.meta.url)), "utf8")
 const appSource = () => readFileSync(fileURLToPath(new URL("../app.tsx", import.meta.url)), "utf8")
+const dialogSource = () =>
+  readFileSync(fileURLToPath(new URL("../../../ui/src/context/dialog.tsx", import.meta.url)), "utf8")
 const registeredPanelSources = () => {
   const registry = readFileSync(fileURLToPath(new URL("./settings/registry.ts", import.meta.url)), "utf8")
   const modules = [...registry.matchAll(/import\("\.\/([^"\)]+)"\)/g)].map((match) => match[1]!)
@@ -144,6 +146,13 @@ test("settings acknowledge panel navigation before lazy work settles", () => {
   expect(dialog).toContain("requestIdle.call(window, preloadSkills, { timeout: 1_200 })")
   expect(dialog).toContain("onPointerEnter={() => void preloadPanel(panel.id)")
   expect(dialog).toContain("onFocus={() => void preloadPanel(panel.id)")
+})
+
+test("settings lazy panels suspend inside the dialog instead of replacing the workspace", () => {
+  const dialog = dialogSource()
+
+  expect(dialog).toContain("Suspense,")
+  expect(dialog).toContain("<Suspense fallback={null}>{element()}</Suspense>")
 })
 
 test("settings keep a restrained surface stack and aligned panel grid", () => {

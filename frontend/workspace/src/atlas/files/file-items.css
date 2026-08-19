@@ -32,8 +32,9 @@
 .artifact-toolbar__primary {
   display: flex;
   flex: 1;
-  flex-direction: column;
-  gap: 1px;
+  align-items: baseline;
+  flex-direction: row;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -46,7 +47,7 @@
 .artifact-toolbar__hint {
   overflow: hidden;
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -61,17 +62,17 @@
 .artifact-toolbar__controls .artifact-toolbar__prefs {
   width: auto;
   gap: 5px;
-  padding: 0 8px;
+  padding: 0 6px;
   color: var(--color-text-muted);
 }
 
 .artifact-toolbar__controls .artifact-menu--prefs {
-  top: 36px;
-  min-width: 180px;
+  top: 32px;
+  min-width: 164px;
 }
 
 .artifact-menu__section {
-  padding: 7px 9px 3px;
+  padding: 5px 7px 2px;
   color: var(--color-text-faint);
   font-size: 10.5px;
   line-height: 1.35;
@@ -79,7 +80,7 @@
 
 .artifact-menu__separator {
   height: 1px;
-  margin: 4px 8px;
+  margin: 3px 6px;
   background: var(--color-border-weak-base);
 }
 
@@ -180,7 +181,7 @@
 
   .artifact-grid .artifact-card[data-layout="grid"] .artifact-thumb {
     width: 100%;
-    height: 68px;
+    height: 52px;
     border-radius: 0;
   }
 
@@ -196,7 +197,7 @@
 
   .artifact-grid .artifact-card[data-layout="grid"] .artifact-card__label {
     min-width: 0;
-    padding: 7px 8px 8px;
+    padding: 6px 7px 7px;
   }
 
   .artifact-grid .artifact-card[data-layout="grid"] .artifact-card__name {
@@ -211,11 +212,8 @@
   }
 
   .artifact-grid .artifact-card[data-layout="grid"] .artifact-card__actions {
-    top: 6px;
+    top: 4px;
     right: 2px;
-    opacity: 1;
-    background: var(--color-surface-solid);
-    box-shadow: var(--atlas-shadow-xs);
   }
 
   .artifact-card__sub {

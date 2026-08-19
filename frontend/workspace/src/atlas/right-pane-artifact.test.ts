@@ -33,6 +33,7 @@ afterAll(() => server.close())
 // asserts against a state it actually established, rather than against
 // whatever the previous file happened to leave behind.
 const reset = () => {
+  state.uiStore.workTabs().forEach((tab) => state.uiStore.closeWorkTab(tab.id))
   state.uiStore.closeContext()
   state.uiStore.setRightPaneMode("tools")
   state.uiStore.setRightPaneTab("canvas")
@@ -45,9 +46,7 @@ afterEach(() => {
   document.body.replaceChildren()
   const active = artifacts.artifactContext.active()
   if (active) artifacts.artifactContext.clear(active.id)
-  state.uiStore.closeContext()
-  state.uiStore.setRightPaneMode("tools")
-  state.uiStore.setRightPaneTab("canvas")
+  reset()
 })
 
 const mount = (view: () => JSX.Element) => {

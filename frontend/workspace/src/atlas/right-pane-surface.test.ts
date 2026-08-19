@@ -65,8 +65,23 @@ test("resize separator exposes keyboard and range semantics", () => {
   expect(source).toContain("aria-valuemax={limit()}")
   expect(source).toContain("aria-valuenow={paneWidth()}")
   expect(source).toContain("onDblClick={splitEvenly}")
+  expect(source).toContain('title="Drag to resize. Double-click to split evenly."')
+  expect(source).toContain('class="research-inspector__resize-grip"')
   expect(source).toContain('aria-label="Split workspace evenly"')
   expect(source).toContain("new ResizeObserver(measure)")
+  expect(source).toContain("setWorkspace(parent.clientWidth || window.innerWidth)")
+  expect(source).not.toContain("main.clientWidth + element.clientWidth")
+})
+
+test("uses a compact tab strip that reveals close controls only when relevant", () => {
+  const styles = read("./right-pane-tabs.css")
+
+  expect(styles).toMatch(/\.research-inspector__header\s*\{[^}]*height: 40px/s)
+  expect(styles).toMatch(/\.inspector-tab-pair\s*\{[^}]*max-width: 180px;[^}]*min-height: 30px/s)
+  expect(styles).toMatch(/\.inspector-tab-pair \.inspector-tab__close\s*\{[^}]*width: 0;[^}]*min-width: 0/s)
+  expect(styles).toMatch(
+    /\.inspector-tab-pair\[data-active="true"\] \.inspector-tab__close\s*\{[^}]*width: 28px;[^}]*min-width: 28px/s,
+  )
 })
 
 test("uses an inline desktop pane and a full-width narrow overlay, never a pane stacked below chat", () => {
