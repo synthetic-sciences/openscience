@@ -14,14 +14,13 @@ import { AuthorityProcessLedger } from "@/project/authority-process"
 import { Sandbox } from "@/sandbox/sandbox"
 import { OpenScience } from "@/openscience"
 import { terminalArgs, terminalEnv } from "./environment"
+import { Replay } from "./replay"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 import { Filesystem } from "@/util/filesystem"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
-
-  const BUFFER_LIMIT = 1024 * 1024 * 2
-  const BUFFER_CHUNK = 64 * 1024
+  const REPLAY_REQUEST = "\0"
 
   const pty = lazy(async () => {
     const { spawn } = await import("bun-pty")
@@ -75,7 +74,7 @@ export namespace Pty {
     info: Info
     process: IPty
     buffer: string
-    subscribers: Set<WSContext>
+    subscribers: Map<WSContext, boolean>
   }
 
   const state = Instance.state(
@@ -91,7 +90,7 @@ export namespace Pty {
       // are already gone when revoke resolves.
       await Promise.all([...projects].map((projectID) => AuthorityProcessLedger.revoke({ kind: "pty", projectID })))
       for (const session of sessions.values()) {
-        for (const ws of session.subscribers) {
+        for (const ws of session.subscribers.keys()) {
           ws.close()
         }
       }
@@ -157,23 +156,18 @@ export namespace Pty {
       ptyProcess.onData((data) => {
         const active = session
         if (!active) {
-          earlyBuffer += data
-          if (earlyBuffer.length > BUFFER_LIMIT) earlyBuffer = earlyBuffer.slice(-BUFFER_LIMIT)
+          earlyBuffer = Replay.append(earlyBuffer, data)
           return
         }
-        let open = false
-        for (const ws of active.subscribers) {
+        active.buffer = Replay.append(active.buffer, data)
+        for (const [ws, ready] of active.subscribers) {
           if (ws.readyState !== 1) {
             active.subscribers.delete(ws)
             continue
           }
-          open = true
+          if (!ready) continue
           ws.send(data)
         }
-        if (open) return
-        active.buffer += data
-        if (active.buffer.length <= BUFFER_LIMIT) return
-        active.buffer = active.buffer.slice(-BUFFER_LIMIT)
       })
       ptyProcess.onExit(({ exitCode }) => {
         Sandbox.cleanup(sandbox)
@@ -183,7 +177,7 @@ export namespace Pty {
         }
         log.info("session exited", { id, exitCode })
         session.info.status = "exited"
-        for (const ws of session.subscribers) ws.close()
+        for (const ws of session.subscribers.keys()) ws.close()
         session.subscribers.clear()
         void Bus.publish(Event.Exited, { id, exitCode })
         state().delete(id)
@@ -235,7 +229,7 @@ export namespace Pty {
         info,
         process: ptyProcess,
         buffer: earlyBuffer,
-        subscribers: new Set(),
+        subscribers: new Map(),
       }
       state().set(id, session)
       void Bus.publish(Event.Created, { info })
@@ -261,7 +255,7 @@ export namespace Pty {
     if (!session) return
     log.info("removing session", { id })
     await AuthorityProcessLedger.revoke({ id, kind: "pty" })
-    for (const ws of session.subscribers) {
+    for (const ws of session.subscribers.keys()) {
       ws.close()
     }
     state().delete(id)
@@ -300,24 +294,31 @@ export namespace Pty {
       return
     }
     log.info("client connected to session", { id })
-    session.subscribers.add(ws)
-    if (session.buffer) {
-      const buffer = session.buffer.length <= BUFFER_LIMIT ? session.buffer : session.buffer.slice(-BUFFER_LIMIT)
-      session.buffer = ""
-      try {
-        for (let i = 0; i < buffer.length; i += BUFFER_CHUNK) {
-          ws.send(buffer.slice(i, i + BUFFER_CHUNK))
-        }
-      } catch {
-        session.subscribers.delete(ws)
-        session.buffer = buffer
-        ws.close()
-        return
-      }
-    }
+    session.subscribers.set(ws, false)
     return {
       onMessage: (message: string | ArrayBuffer) => {
-        session.process.write(String(message))
+        const data = String(message)
+        if (session.subscribers.get(ws) !== true) {
+          const buffer = session.buffer
+          if (ws.readyState !== 1) return
+          session.subscribers.set(ws, true)
+          if (buffer) {
+            try {
+              for (const chunk of Replay.chunks(buffer)) ws.send(chunk)
+            } catch {
+              session.subscribers.delete(ws)
+              ws.close()
+              return
+            }
+          }
+          if (data === REPLAY_REQUEST) return
+        }
+        try {
+          session.process.write(data)
+        } catch {
+          session.subscribers.delete(ws)
+          ws.close()
+        }
       },
       onClose: () => {
         log.info("client disconnected from session", { id })

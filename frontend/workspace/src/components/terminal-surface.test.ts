@@ -14,7 +14,7 @@ describe("contextual project terminal", () => {
     expect(terminalEndpointAvailable("not a URL")).toBe(false)
   })
 
-  test("keeps the terminal mounted while its right-pane tab is open", async () => {
+  test("parks the terminal after first use instead of rebuilding it across pane actions", async () => {
     const [pane, surface, action] = await Promise.all([
       read("../atlas/RightPane.tsx"),
       read("../atlas/TerminalSurface.tsx"),
@@ -23,8 +23,9 @@ describe("contextual project terminal", () => {
 
     expect(pane).toContain('terminal: "Terminal"')
     expect(pane).toContain('context() === "terminal"')
-    expect(pane).toContain("<Show when={terminal()}>")
-    expect(pane).toContain('<TerminalSurface active={context() === "terminal"} />')
+    expect(pane).toContain("<Show when={terminalSeen()}>")
+    expect(pane).toContain("const terminalVisible = () =>")
+    expect(pane).toContain("<TerminalSurface active={terminalVisible()} />")
     expect(pane).not.toContain('<Match when={context() === "terminal"}>')
     expect(action).toContain('ariaLabel="Open project terminal"')
     expect(action).toContain('props.onContext("terminal")')
@@ -73,12 +74,25 @@ describe("contextual project terminal", () => {
     expect(session).toContain('if (context !== "terminal") return')
     expect(session).toContain("void ensureSession()")
     expect(terminal).toContain("sdk.request.url(`/pty/${local.pty.id}/connect`)")
+    expect(terminal.indexOf("t.open(container)")).toBeLessThan(terminal.indexOf("const socket = new WebSocket(url)"))
+    expect(terminal.indexOf('socket.addEventListener("open", handleOpen)')).toBeLessThan(
+      terminal.indexOf("const onResize = t.onResize"),
+    )
+    expect(terminal).toContain('const REPLAY_REQUEST = "\\0"')
+    expect(terminal).toContain("socket.send(REPLAY_REQUEST)")
+    expect(terminal).not.toContain("SerializeAddon")
+    expect(terminal).not.toContain("t.write(local.pty.buffer")
+    expect(terminal).toContain("buffer: undefined")
     expect(terminal).toContain("onOpenSearch")
     expect(terminal).toContain("export const preloadTerminal")
     expect(terminal).toContain("void write(t.getSelection())")
     expect(terminal).toContain("t.selectAll()")
     expect(terminal).toContain("const fitTerminal = () =>")
     expect(terminal).toContain("if (!fit || local.active === false) return")
+    expect(terminal).toContain("const paintTerminal = () =>")
+    expect(terminal).toContain("t.renderer.render(t.wasmTerm, true, t.getViewportY(), t)")
+    expect(terminal).toContain("const replay = { painted: false }")
+    expect(terminal).toContain("if (replay.painted) return")
     expect(terminal).toContain("handleResize = fitTerminal")
     expect(terminal).toContain("fitFrame = requestAnimationFrame")
   })

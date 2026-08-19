@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 
 const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8")
 
-test("closed right pane renders no collapsed launcher and retains open file editors without showing the pane", () => {
+test("closed right pane renders no collapsed launcher and retains stateful surfaces without showing the pane", () => {
   const source = read("./RightPane.tsx")
   const styles = read("./right-pane-tabs.css")
 
@@ -13,8 +13,9 @@ test("closed right pane renders no collapsed launcher and retains open file edit
   expect(styles).toContain('.right-pane-gate[data-open="false"]')
   expect(styles).toContain("display: none")
   expect(source).not.toContain("CollapsedRail")
-  expect(source).toContain("<Show when={terminal()}>")
-  expect(source).toContain('<TerminalSurface active={context() === "terminal"} />')
+  expect(source).toContain("const retained = () => terminal() ||")
+  expect(source).toContain("<Show when={terminalSeen()}>")
+  expect(source).toContain("<TerminalSurface active={terminalVisible()} />")
   expect(source).not.toContain('<Match when={context() === "terminal"}>')
   expect(source).not.toContain("<TerminalTab")
   expect(source).not.toContain("panel settings")

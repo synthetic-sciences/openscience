@@ -55,7 +55,12 @@ const labels: Record<ContextTab, string> = {
 
 export function RightPaneGate(props: { children: JSX.Element }): JSX.Element {
   createEffect(() => uiStore.syncArtifact(Boolean(artifactContext.active())))
-  const retained = () => uiStore.workTabs().some((tab) => tab.kind === "file")
+  const [terminal, setTerminal] = createSignal(uiStore.rightPaneOpen() && uiStore.context() === "terminal")
+  createEffect(() => {
+    if (!uiStore.rightPaneOpen() || uiStore.context() !== "terminal") return
+    setTerminal(true)
+  })
+  const retained = () => terminal() || uiStore.workTabs().some((tab) => tab.kind === "file")
   return (
     <Show when={uiStore.rightPaneOpen() || retained()}>
       <div class="right-pane-gate" data-open={uiStore.rightPaneOpen() ? "true" : "false"}>
@@ -242,6 +247,11 @@ export function RightPane(
     uiStore.workTabs().filter((tab): tab is Extract<WorkTab, { kind: "file" }> => tab.kind === "file"),
   )
   const terminal = () => uiStore.workTabs().some((tab) => tab.kind === "view" && tab.context === "terminal")
+  const [terminalSeen, setTerminalSeen] = createSignal(terminal())
+  createEffect(() => {
+    if (terminal()) setTerminalSeen(true)
+  })
+  const terminalVisible = () => uiStore.rightPaneOpen() && terminal() && context() === "terminal"
   const selectedFile = (tab: Extract<WorkTab, { kind: "file" }>) => {
     const current = uiStore.file()
     return current?.directory === tab.file.directory && current.path === tab.file.path
@@ -494,20 +504,20 @@ export function RightPane(
                 <FilesPane />
               </div>
             </Show>
-            <Show when={terminal()}>
+            <Show when={terminalSeen()}>
               <div
                 data-component="terminal-context"
-                aria-hidden={context() === "terminal" ? undefined : "true"}
-                hidden={context() !== "terminal"}
+                aria-hidden={terminalVisible() ? undefined : "true"}
+                hidden={!terminalVisible()}
                 style={{
                   flex: 1,
                   "min-height": 0,
                   "min-width": 0,
-                  display: context() === "terminal" ? "flex" : "none",
+                  display: terminalVisible() ? "flex" : "none",
                   "flex-direction": "column",
                 }}
               >
-                <TerminalSurface active={context() === "terminal"} />
+                <TerminalSurface active={terminalVisible()} />
               </div>
             </Show>
             <Switch>

@@ -2,7 +2,6 @@ import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
-import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
 import { connectionError } from "./terminal-error"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@synsci/ui/theme"
@@ -31,6 +30,8 @@ export type TerminalController = {
   clearSelection: () => void
   search: (query: string, direction?: "next" | "previous") => TerminalSearchResult
 }
+
+const REPLAY_REQUEST = "\0"
 
 let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty }> | undefined
 
@@ -90,7 +91,6 @@ export const Terminal = (props: TerminalProps) => {
     "onOpenSearch",
   ])
   let term: Term | undefined
-  let serializeAddon: SerializeAddon | undefined
   let fitAddon: FitAddon | undefined
   let fitFrame: number | undefined
   let fitTimer: number | undefined
@@ -119,12 +119,20 @@ export const Terminal = (props: TerminalProps) => {
     if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
     fitFrame = requestAnimationFrame(() => {
       fitFrame = undefined
+      paintTerminal()
       if (fitTimer !== undefined) window.clearTimeout(fitTimer)
       fitTimer = window.setTimeout(() => {
         fitTimer = undefined
         fit.fit()
+        paintTerminal()
       }, 75)
     })
+  }
+
+  const paintTerminal = () => {
+    const t = term
+    if (!t?.renderer || !t.wasmTerm) return
+    t.renderer.render(t.wasmTerm, true, t.getViewportY(), t)
   }
 
   const getTerminalColors = (): TerminalColors => {
@@ -186,7 +194,10 @@ export const Terminal = (props: TerminalProps) => {
   createEffect(() => {
     if (!local.active || !term) return
     fitTerminal()
-    queueMicrotask(focusTerminal)
+    queueMicrotask(() => {
+      paintTerminal()
+      focusTerminal()
+    })
   })
 
   onMount(() => {
@@ -199,15 +210,6 @@ export const Terminal = (props: TerminalProps) => {
 
       const once = { value: false }
 
-      const url = new URL(sdk.request.url(`/pty/${local.pty.id}/connect`))
-      const socket = new WebSocket(url)
-      cleanups.push(() => {
-        if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close()
-      })
-      if (disposed) {
-        cleanup()
-        return
-      }
       const t = new mod.Terminal({
         cursorBlink: true,
         cursorStyle: "bar",
@@ -343,12 +345,9 @@ export const Terminal = (props: TerminalProps) => {
       })
 
       const fit = new mod.FitAddon()
-      const serializer = new SerializeAddon()
       cleanups.push(() => (fit as unknown as { dispose?: VoidFunction }).dispose?.())
-      t.loadAddon(serializer)
       t.loadAddon(fit)
       fitAddon = fit
-      serializeAddon = serializer
 
       t.open(container)
       container.addEventListener("pointerdown", handlePointerDown)
@@ -376,17 +375,61 @@ export const Terminal = (props: TerminalProps) => {
 
       if (local.active !== false) focusTerminal()
 
-      if (local.pty.buffer) {
-        if (local.pty.rows && local.pty.cols) {
-          t.resize(local.pty.cols, local.pty.rows)
-        }
-        t.write(local.pty.buffer, () => {
-          if (local.pty.scrollY) {
-            t.scrollToLine(local.pty.scrollY)
-          }
+      if (local.pty.rows && local.pty.cols) t.resize(local.pty.cols, local.pty.rows)
+
+      const replay = { painted: false }
+      const handleMessage = (event: MessageEvent) => {
+        t.write(event.data, () => {
+          if (replay.painted) return
+          replay.painted = true
           fitTerminal()
+          paintTerminal()
         })
       }
+      const url = new URL(sdk.request.url(`/pty/${local.pty.id}/connect`))
+      const socket = new WebSocket(url)
+      const handleOpen = () => {
+        local.onConnect?.()
+        fitTerminal()
+        socket.send(REPLAY_REQUEST)
+        sdk.client.pty
+          .update({
+            ptyID: local.pty.id,
+            size: {
+              cols: t.cols,
+              rows: t.rows,
+            },
+          })
+          .catch(() => {})
+      }
+      const handleError = (error: Event) => {
+        if (disposed) return
+        if (once.value) return
+        once.value = true
+        console.error("WebSocket error:", error)
+        local.onConnectError?.(connectionError(error))
+      }
+      const handleClose = (event: CloseEvent) => {
+        if (disposed) return
+        // Normal closure (code 1000) means PTY process exited - server event handles cleanup
+        // For other codes (network issues, server restart), trigger error handler
+        if (event.code !== 1000) {
+          if (once.value) return
+          once.value = true
+          local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
+        }
+      }
+      socket.addEventListener("open", handleOpen)
+      socket.addEventListener("message", handleMessage)
+      socket.addEventListener("error", handleError)
+      socket.addEventListener("close", handleClose)
+      cleanups.push(() => {
+        socket.removeEventListener("open", handleOpen)
+        socket.removeEventListener("message", handleMessage)
+        socket.removeEventListener("error", handleError)
+        socket.removeEventListener("close", handleClose)
+        if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close()
+      })
 
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {
@@ -422,51 +465,6 @@ export const Terminal = (props: TerminalProps) => {
       // t.onScroll((ydisp) => {
       // console.log("Scroll position:", ydisp)
       // })
-
-      const handleOpen = () => {
-        local.onConnect?.()
-        fitTerminal()
-        sdk.client.pty
-          .update({
-            ptyID: local.pty.id,
-            size: {
-              cols: t.cols,
-              rows: t.rows,
-            },
-          })
-          .catch(() => {})
-      }
-      socket.addEventListener("open", handleOpen)
-      cleanups.push(() => socket.removeEventListener("open", handleOpen))
-
-      const handleMessage = (event: MessageEvent) => {
-        t.write(event.data)
-      }
-      socket.addEventListener("message", handleMessage)
-      cleanups.push(() => socket.removeEventListener("message", handleMessage))
-
-      const handleError = (error: Event) => {
-        if (disposed) return
-        if (once.value) return
-        once.value = true
-        console.error("WebSocket error:", error)
-        local.onConnectError?.(connectionError(error))
-      }
-      socket.addEventListener("error", handleError)
-      cleanups.push(() => socket.removeEventListener("error", handleError))
-
-      const handleClose = (event: CloseEvent) => {
-        if (disposed) return
-        // Normal closure (code 1000) means PTY process exited - server event handles cleanup
-        // For other codes (network issues, server restart), trigger error handler
-        if (event.code !== 1000) {
-          if (once.value) return
-          once.value = true
-          local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
-        }
-      }
-      socket.addEventListener("close", handleClose)
-      cleanups.push(() => socket.removeEventListener("close", handleClose))
     }
 
     void run().catch((err) => {
@@ -485,20 +483,13 @@ export const Terminal = (props: TerminalProps) => {
     if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
     if (fitTimer !== undefined) window.clearTimeout(fitTimer)
     const t = term
-    if (serializeAddon && props.onCleanup && t) {
-      const buffer = (() => {
-        try {
-          return serializeAddon.serialize()
-        } catch {
-          return ""
-        }
-      })()
+    if (props.onCleanup && t) {
       props.onCleanup({
         ...local.pty,
-        buffer,
+        buffer: undefined,
         rows: t.rows,
         cols: t.cols,
-        scrollY: t.getViewportY(),
+        scrollY: undefined,
       })
     }
 

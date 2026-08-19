@@ -77,6 +77,22 @@ test("keeps the Files pane absent until it is opened, then mounts it contextuall
   expect(host.querySelector('[aria-label="Research inspector"]')).not.toBeNull()
 })
 
+test("parks a previously opened terminal when its parent tab closes", async () => {
+  const host = mountGate()
+
+  state.uiStore.openContext("terminal")
+  await Promise.resolve()
+  const inspector = host.querySelector('[aria-label="Research inspector"]')
+  expect(inspector).not.toBeNull()
+
+  state.uiStore.closeWorkTab("view:terminal")
+  await Promise.resolve()
+
+  expect(state.uiStore.open()).toBe(false)
+  expect(host.querySelector('[aria-label="Research inspector"]')).toBe(inspector)
+  expect(inspector?.parentElement?.dataset.open).toBe("false")
+})
+
 test("closes the mounted Details pane when its artifact ownership clears", async () => {
   const current = artifacts.createArtifactContext({ directory: "/project", path: "results.csv" })
   const host = mountGate()
