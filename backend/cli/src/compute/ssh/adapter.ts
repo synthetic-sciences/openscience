@@ -60,6 +60,7 @@ import hashlib
 import json
 import os
 import pathlib
+import shutil
 import signal
 import subprocess
 import sys
@@ -72,6 +73,15 @@ cancelled = False
 forced = False
 primary = 0
 code = None
+lease_path = root / "ownership.lease"
+lease_fd = -1
+lease_tool = ""
+lease_cache = []
+lease_checked = 0.0
+member_cache = []
+member_checked = 0.0
+tag_cache = []
+tag_checked = 0.0
 
 def atomic(name, value):
     target = root / name
@@ -104,6 +114,8 @@ def darwin_symbols():
         library.responsibility_get_pid_responsible_for_pid.restype = ctypes.c_int
         library.responsibility_get_uniqueid_responsible_for_pid.argtypes = [ctypes.c_int]
         library.responsibility_get_uniqueid_responsible_for_pid.restype = ctypes.c_uint64
+        library.proc_listpids.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
+        library.proc_listpids.restype = ctypes.c_int
         library.posix_spawnattr_init.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
         library.posix_spawnattr_init.restype = ctypes.c_int
         library.posix_spawnattr_setflags.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_short]
@@ -134,6 +146,21 @@ def darwin_unique(pid):
         return int(library.responsibility_get_uniqueid_responsible_for_pid(int(pid)))
     except (OverflowError, ValueError):
         return 0
+
+def darwin_pids(library):
+    for _ in range(4):
+        needed = library.proc_listpids(1, 0, None, 0)
+        if needed <= 0:
+            return []
+        size = needed + max(16384, needed // 2)
+        buffer = ctypes.create_string_buffer(size)
+        copied = library.proc_listpids(1, 0, buffer, size)
+        if copied <= 0:
+            return []
+        if copied < size:
+            values = (ctypes.c_int * (copied // ctypes.sizeof(ctypes.c_int))).from_buffer(buffer)
+            return [int(pid) for pid in values if pid > 0]
+    return []
 
 def darwin_exec_root(library):
     attributes = ctypes.c_void_p()
@@ -172,22 +199,39 @@ def darwin_responsibility():
     darwin_owner = owner
     return True
 
-def darwin_members():
+def darwin_members(refresh=False):
+    global member_cache, member_checked
     if not darwin_owner:
         return []
-    result = subprocess.run(["ps", "-axo", "pid="], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    if result.returncode != 0:
+    now = time.monotonic()
+    if not refresh and now - member_checked < 0.5:
+        return member_cache
+    library = darwin_symbols()
+    if library is None:
         return []
     found = []
-    for value in result.stdout.split():
-        if value.isdigit():
-            pid = int(value)
-            if pid != os.getpid() and darwin_unique(pid) == darwin_owner:
-                found.append(pid)
-    return found
+    for pid in darwin_pids(library):
+        if pid != os.getpid() and int(library.responsibility_get_pid_responsible_for_pid(pid)) == os.getpid():
+            found.append(pid)
+    member_checked = now
+    member_cache = found
+    return member_cache
 
 def darwin_owns(pid):
-    return not darwin_owner or darwin_unique(pid) == darwin_owner
+    library = darwin_symbols()
+    return not darwin_owner or bool(library and int(library.responsibility_get_pid_responsible_for_pid(pid)) == os.getpid())
+
+def leased(refresh=False):
+    global lease_cache, lease_checked
+    if not lease_tool or lease_fd < 0:
+        return []
+    now = time.monotonic()
+    if not refresh and now - lease_checked < 2.0:
+        return lease_cache
+    result = subprocess.run([lease_tool, "-t", str(lease_path)], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    lease_checked = now
+    lease_cache = [int(value) for value in result.stdout.split() if value.isdigit() and int(value) != os.getpid()] if result.returncode in (0, 1) else []
+    return lease_cache
 
 def subreaper():
     if not sys.platform.startswith("linux"):
@@ -221,7 +265,11 @@ def children(pid):
         pending.extend(table.get(child, []))
     return found
 
-def tagged():
+def tagged(refresh=False):
+    global tag_cache, tag_checked
+    now = time.monotonic()
+    if not refresh and now - tag_checked < 0.5:
+        return tag_cache
     token = "OPENSCIENCE_JOB_ID=" + hashlib.sha256(str(root).encode()).hexdigest()
     result = subprocess.run(["ps", "eww", "-axo", "pid=,command="], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     if result.returncode != 0:
@@ -231,7 +279,9 @@ def tagged():
         fields = line.strip().split(None, 1)
         if len(fields) == 2 and fields[0].isdigit() and token in fields[1]:
             found.append(int(fields[0]))
-    return found
+    tag_checked = now
+    tag_cache = found
+    return tag_cache
 
 def cgroup_members():
     if not unit or not pathlib.Path("/sys/fs/cgroup").is_dir():
@@ -259,15 +309,19 @@ def members():
 def scoped():
     return os.getpid() in cgroup_members()
 
-def owned():
-    return sorted(set(children(os.getpid()) + members() + tagged() + darwin_members()))
+def owned(refresh=False):
+    if darwin_owner and not refresh:
+        return sorted(set(leased()))
+    base = children(os.getpid()) + members() + tagged(refresh) + darwin_members(refresh)
+    return sorted(set(base + leased(refresh or cancelled or not base)))
 
 def send(sig):
-    targets = owned()
+    holders = set(leased(True))
+    targets = sorted(set(owned(True) + list(holders)))
     group_owned = False
     for pid in targets:
         try:
-            if os.getpgid(pid) == primary and darwin_owns(pid):
+            if os.getpgid(pid) == primary and (darwin_owns(pid) or pid in holders):
                 group_owned = True
                 break
         except (ProcessLookupError, PermissionError):
@@ -282,7 +336,7 @@ def send(sig):
     for pid in reversed(targets):
         if pid == os.getpid():
             continue
-        if not darwin_owns(pid):
+        if not darwin_owns(pid) and pid not in holders:
             continue
         try:
             os.kill(pid, sig)
@@ -320,20 +374,31 @@ if hasattr(signal, "SIGUSR1"):
 responsible = darwin_responsibility()
 adopts = subreaper()
 scope = scoped()
+if responsible:
+    lease_tool = shutil.which("lsof") or ("/usr/sbin/lsof" if pathlib.Path("/usr/sbin/lsof").is_file() else "")
+    if lease_tool:
+        lease_fd = os.open(lease_path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
+        os.set_inheritable(lease_fd, True)
 containment = "darwin-responsibility" if responsible else "linux-subreaper" if adopts else "systemd-scope" if scope else ""
+if responsible and (not lease_tool or lease_fd < 0):
+    containment = ""
 if not containment:
-    atomic("containment-error", "Direct SSH dispatch requires a verified Linux subreaper, systemd scope, or macOS responsibility root")
+    atomic("containment-error", "Direct SSH dispatch requires a verified Linux subreaper, systemd scope, or macOS responsibility root with descriptor tracking")
     raise SystemExit(125)
 atomic("runtime.json", json.dumps({"pid": os.getpid(), "identity": identity(os.getpid()), "unit": unit, "subreaper": adopts, "responsibility": darwin_owner, "containment": containment}, separators=(",", ":")))
 environment = dict(os.environ)
 environment["OPENSCIENCE_JOB_ID"] = hashlib.sha256(str(root).encode()).hexdigest()
-process = subprocess.Popen(["bash", str(script)], cwd=str(root / "work"), stdin=subprocess.DEVNULL, env=environment, start_new_session=True, close_fds=True)
+process = subprocess.Popen(["bash", str(script)], cwd=str(root / "work"), stdin=subprocess.DEVNULL, env=environment, start_new_session=True, close_fds=True, pass_fds=(lease_fd,) if lease_fd >= 0 else ())
 primary = process.pid
 started = None
 
 while True:
     live = reap()
-    extra = owned()
+    # The cheap descriptor lease is sufficient while the payload leader is
+    # alive. At either lifecycle boundary, refresh the complete containment
+    # membership so a descendant that deliberately closed the inherited lease
+    # cannot escape cleanup.
+    extra = owned(True) if cancelled or not live else []
     if cancelled:
         if started is None:
             started = time.monotonic()
@@ -341,12 +406,12 @@ while True:
         if not live and not extra:
             atomic("cancelled", "1")
             raise SystemExit(0)
-        time.sleep(0.02)
+        time.sleep(0.25)
         continue
     if not live and not extra:
         atomic("exit", code if code is not None else 1)
         raise SystemExit(code if code is not None else 1)
-    time.sleep(0.02)
+    time.sleep(0.25)
 `
 
   const BROKER = String.raw`import hashlib, json, os, pathlib, secrets, stat, sys
@@ -461,6 +526,7 @@ finally:
 `
 
   const CONTROL = String.raw`#!/usr/bin/env python3
+import ctypes
 import glob
 import hashlib
 import json
@@ -516,6 +582,65 @@ def runtime():
         return value
     except (FileNotFoundError, json.JSONDecodeError):
         return None
+
+def force_responsibility(value):
+    owner = value.get("responsibility") if value else 0
+    if sys.platform != "darwin" or not isinstance(owner, int) or owner <= 0:
+        return False
+    try:
+        library = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+        library.responsibility_get_uniqueid_responsible_for_pid.argtypes = [ctypes.c_int]
+        library.responsibility_get_uniqueid_responsible_for_pid.restype = ctypes.c_uint64
+        library.responsibility_get_pid_responsible_for_pid.argtypes = [ctypes.c_int]
+        library.responsibility_get_pid_responsible_for_pid.restype = ctypes.c_int
+        library.proc_listpids.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
+        library.proc_listpids.restype = ctypes.c_int
+    except (AttributeError, OSError):
+        return False
+    root_pid = value.get("pid")
+    if not isinstance(root_pid, int) or root_pid <= 0:
+        return False
+    empty = 0
+    for _ in range(100):
+        members = None
+        for _ in range(4):
+            needed = library.proc_listpids(1, 0, None, 0)
+            if needed <= 0:
+                break
+            size = needed + max(16384, needed // 2)
+            buffer = ctypes.create_string_buffer(size)
+            copied = library.proc_listpids(1, 0, buffer, size)
+            if copied <= 0:
+                break
+            if copied >= size:
+                continue
+            values = (ctypes.c_int * (copied // ctypes.sizeof(ctypes.c_int))).from_buffer(buffer)
+            members = [
+                int(pid)
+                for pid in values
+                if pid > 0 and pid != os.getpid() and pid != root_pid
+                and int(library.responsibility_get_pid_responsible_for_pid(pid)) == root_pid
+            ]
+            break
+        if members is None:
+            time.sleep(0.02)
+            continue
+        for pid in members:
+            try:
+                if int(library.responsibility_get_pid_responsible_for_pid(pid)) == root_pid:
+                    os.kill(pid, signal.SIGKILL)
+            except (OverflowError, ProcessLookupError, PermissionError, ValueError):
+                pass
+        empty = empty + 1 if not members else 0
+        if empty >= 3:
+            try:
+                if int(library.responsibility_get_uniqueid_responsible_for_pid(root_pid)) == owner:
+                    os.kill(root_pid, signal.SIGKILL)
+                return True
+            except (OverflowError, ProcessLookupError, PermissionError, ValueError):
+                return False
+        time.sleep(0.02)
+    return False
 
 def alive(value):
     return bool(value and value.get("identity") and identity(value["pid"]) == value["identity"])
@@ -824,6 +949,8 @@ def cancel(token, identifier):
                 os.kill(pid, signal.SIGUSR1)
             if attempt == 100 and not alive(value) and not scope_empty(value):
                 subprocess.run(["systemctl", "--user", "kill", "--signal=KILL", "--kill-whom=all", value["unit"]], stderr=subprocess.DEVNULL)
+            if attempt == 200 and alive(value):
+                force_responsibility(value)
             time.sleep(0.02)
         value = runtime()
         if (not (root / "cancelled").exists() and alive(value)) or alive(value) or not scope_empty(value):

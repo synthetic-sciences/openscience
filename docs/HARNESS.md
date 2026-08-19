@@ -55,8 +55,7 @@ When consecutive manifests differ, the trace records which dimensions changed:
 - tool contracts.
 
 A stable report used one effective composition. A non-stable report is not automatically bad,
-but benchmark comparisons can identify it as a potential confounder instead of treating all
-turns as equivalent.
+but it remains visible as a potential confounder instead of treating all turns as equivalent.
 
 ## Trajectory fingerprint
 
@@ -67,12 +66,6 @@ Message IDs, timestamps, prompt content, hidden reasoning, and tool output conte
 The fingerprint is useful for detecting exact harness-and-tool trajectory matches, regression
 fixtures, and repeated failures. It is not a scientific quality score and does not claim that
 two different fingerprints imply meaningfully different conclusions.
-
-## Evaluation use
-
-The frozen launch evaluator captures the manifest report beside costs, timing, artifacts,
-approvals, failures, and reviewer findings. Evaluation remains evidence-based and separately
-reviewed; the harness never grades its own scientific output.
 
 ## Runtime completion invariants
 

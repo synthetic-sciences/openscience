@@ -233,7 +233,10 @@ export namespace DarwinResponsibilityLauncher {
         if (failure) throw failure
         return code
       }
-      await Bun.sleep(20)
+      // Process identity checks cross into libproc and are relatively costly
+      // on Darwin. A one-second owner-death bound keeps teardown responsive
+      // without making every idle notebook kernel burn measurable CPU.
+      await Bun.sleep(1_000)
     }
   }
 

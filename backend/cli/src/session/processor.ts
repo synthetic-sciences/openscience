@@ -15,11 +15,12 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
-import { OpenScience, InsufficientCreditsError } from "@/openscience"
+import { OpenScience } from "@/openscience"
 import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource, llmBillingMode } from "./billing-gate"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { ToolRetryGuard } from "./tool-retry-guard"
+import { SessionResearch } from "./research"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -293,6 +294,7 @@ export namespace SessionProcessor {
     let attempt = 0
     let needsCompaction = false
     let overflow = false
+    let creditDecision: "allow" | "finalize" | "block" | undefined
 
     const toolOutcomes = createToolOutcomeCoordinator({
       abort: input.abort,
@@ -360,12 +362,15 @@ export namespace SessionProcessor {
             // out of credits. Hard-blocking here strands a user whose session lapsed.
             if (requiresWalletBalance(credentialSource)) {
               const balance = await OpenScience.getBalance()
-              if (balance !== null && balance <= 0) {
+              if (balance !== null) {
+                creditDecision ??= await SessionResearch.preflight(input.sessionID, balance)
+              }
+              if (balance !== null && (balance <= 0 || creditDecision === "block")) {
                 // Drop the 30s cache so a top-up is visible on the next
                 // attempt instead of blocking until the TTL expires.
                 OpenScience.invalidateBalance()
                 throw new Error(
-                  "Your Credits balance is empty. Top up at app.syntheticsciences.ai/billing, or switch LLM spend to BYOK in Settings → Spend - BYOK uses your own key and is never billed.",
+                  "Your managed Credits balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Top up at app.syntheticsciences.ai/billing, or switch LLM spend to BYOK in Settings → Spend.",
                 )
               }
             }
@@ -377,9 +382,19 @@ export namespace SessionProcessor {
             }
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            const request =
+              creditDecision === "finalize"
+                ? {
+                    ...streamInput,
+                    system: [
+                      ...streamInput.system,
+                      "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now.",
+                    ],
+                  }
+                : streamInput
             const stream = await Provider.withRequestContext(requestContext, () =>
               LLM.stream({
-                ...streamInput,
+                ...request,
                 trace: { messageID: input.assistantMessage.id, attempt: attempt + 1 },
                 onReasoningEffortResolved: async (effort) => {
                   if (input.assistantMessage.reasoningEffort === effort) return
@@ -572,11 +587,20 @@ export namespace SessionProcessor {
                       })
                   if (usageResult && "modelBlocked" in usageResult) {
                     log.warn("model blocked by server — halting session", { model: input.model.id })
-                    // Hard stop. The user is out of credits (managed
-                    // mode) or has no active atlas subscription. The
-                    // current step's response is already in their
-                    // context; we just don't kick off the next loop.
-                    throw new InsufficientCreditsError()
+                    // The provider step is already complete and may contain the
+                    // only copy of a terminal research result. Preserve it and
+                    // stop the outer loop instead of replacing it with a 402.
+                    await SessionResearch.exhaust(input.sessionID)
+                    blocked = true
+                    await Session.updatePart({
+                      id: Identifier.ascending("part"),
+                      messageID: input.assistantMessage.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: "Managed billing stopped this run after the provider step. The response, Results, and checkpoints above are preserved. Resume after topping up Credits or switching LLM spend to BYOK; the research trace shows any remaining completion gates.",
+                      time: { start: Date.now(), end: Date.now() },
+                    } satisfies MessageV2.TextPart)
                   }
 
                   if (snapshot) {

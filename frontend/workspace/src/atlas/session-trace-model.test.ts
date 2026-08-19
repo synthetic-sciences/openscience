@@ -5,6 +5,8 @@ import {
   formatDuration,
   fallbackObservableKernels,
   recentObservableResearch,
+  resultPolyline,
+  resultTrend,
   traceActivity,
   traceCounts,
   traceMetrics,
@@ -126,6 +128,15 @@ const trace: SessionTraceResponse = {
     ],
     valid: true,
   },
+  research: {
+    configured: false,
+    status: "unconfigured",
+    readiness: 0,
+    gates: [],
+    missing: [],
+    openFindings: 0,
+    failedCandidates: 0,
+  },
   privacy: {
     local: true,
     atlasRequired: false,
@@ -164,6 +175,58 @@ describe("session trace presentation", () => {
     expect(JSON.stringify(activity)).not.toContain("/data")
     expect(JSON.stringify(activity)).not.toContain("patterns")
     expect(JSON.stringify(activity)).not.toContain("output")
+  })
+
+  test("builds an observable result chart from saved Results, checks, and surfaced risks", () => {
+    const result = {
+      ...trace,
+      artifacts: [
+        {
+          toolID: "artifact",
+          messageID: "message",
+          action: "save_file" as const,
+          path: "metrics.json",
+          durable: true,
+          completedAt: 4_000,
+        },
+      ],
+      research: {
+        configured: true,
+        status: "running" as const,
+        readiness: 55,
+        gates: [],
+        missing: ["report.md"],
+        openFindings: 0,
+        failedCandidates: 1,
+        contract: {
+          version: 1 as const,
+          objective: "Compare calibrated models",
+          domain: "statistics" as const,
+          template: "empirical" as const,
+          stages: [],
+          deliverables: [],
+          checks: [{ id: "clean-run", label: "Clean run", status: "passed" as const, updatedAt: 5_000 }],
+          failures: [
+            {
+              id: "candidate",
+              stage: "fit",
+              candidate: "unstable optimizer",
+              message: "diverged",
+              recordedAt: 6_000,
+            },
+          ],
+          budget: { updatedAt: 3_000 },
+          createdAt: 1_000,
+          updatedAt: 6_000,
+        },
+      },
+    } satisfies SessionTraceResponse
+    const points = resultTrend(result)
+
+    expect(points.at(-1)).toMatchObject({ verified: 2, risks: 1 })
+    expect(points.map((point) => point.x)).toEqual([...points.map((point) => point.x)].toSorted((a, b) => a - b))
+    expect(resultPolyline(points, "verified")).toContain(",8.00")
+    expect(resultPolyline(points, "risks")).not.toContain("NaN")
   })
 
   test("projects only recent delegated, search, browser, and external research activity", () => {

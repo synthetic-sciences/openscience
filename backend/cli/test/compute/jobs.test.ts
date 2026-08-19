@@ -313,7 +313,7 @@ printf '%s\\n' '{"exists":true}'
     } finally {
       process.env.PATH = previousPath
     }
-  })
+  }, 15_000)
 
   test("rejects an SSH launch that fails before its first durable transport handoff", async () => {
     await using tmp = await tmpdir()
@@ -382,7 +382,7 @@ sleep 30
       if (previousFailure === undefined) delete process.env.OPENSCIENCE_SSH_TEST_REGISTRATION_FAILURE
       else process.env.OPENSCIENCE_SSH_TEST_REGISTRATION_FAILURE = previousFailure
     }
-  })
+  }, 15_000)
 })
 
 describe("ComputeJobs persistence", () => {
@@ -534,6 +534,7 @@ describe("ComputeJobs local lifecycle", () => {
     })
     expect(finished.status).toBe("succeeded")
     expect(finished.exit_code).toBe(0)
+    expect(Date.parse(finished.last_activity_at ?? "")).toBeGreaterThanOrEqual(Date.parse(finished.created_at))
     expect(finished.lifecycle).toMatchObject({
       execution: "succeeded",
       delivery: "none",

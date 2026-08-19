@@ -138,7 +138,7 @@ export type EventSessionFilesystemChanged = {
       path: string
       access: "read" | "write"
       scope: "once" | "session" | "project" | "installation"
-      source: "workspace" | "permission" | "api" | "tool"
+      source: "workspace" | "permission" | "api" | "tool" | "handoff"
       time: {
         created: number
         consumed?: number
@@ -3901,6 +3901,7 @@ export type SettingsComputeJobsListResponses = {
     status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
     created_at: string
     started_at?: string
+    last_activity_at?: string
     completed_at?: string
     exit_code?: number | null
     pid?: number
@@ -4650,6 +4651,7 @@ export type SettingsComputeJobsStartResponses = {
     status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
     created_at: string
     started_at?: string
+    last_activity_at?: string
     completed_at?: string
     exit_code?: number | null
     pid?: number
@@ -5598,6 +5600,7 @@ export type SettingsComputeJobsRetryResponses = {
     status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
     created_at: string
     started_at?: string
+    last_activity_at?: string
     completed_at?: string
     exit_code?: number | null
     pid?: number
@@ -6318,6 +6321,7 @@ export type SettingsComputeJobsReleaseResponses = {
     status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
     created_at: string
     started_at?: string
+    last_activity_at?: string
     completed_at?: string
     exit_code?: number | null
     pid?: number
@@ -7034,6 +7038,7 @@ export type SettingsComputeJobsCancelResponses = {
     status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
     created_at: string
     started_at?: string
+    last_activity_at?: string
     completed_at?: string
     exit_code?: number | null
     pid?: number
@@ -9180,6 +9185,7 @@ export type SessionTraceResponses = {
       status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
       createdAt: string
       startedAt?: string
+      lastActivityAt?: string
       completedAt?: string
       durationMs?: number
       exitCode?: number | null
@@ -9220,6 +9226,9 @@ export type SessionTraceResponses = {
       action: "save_file"
       artifactID?: string
       versionID?: string
+      path?: string
+      kind?: string
+      sha256?: string
       durable: boolean
       completedAt?: number
     }>
@@ -9233,6 +9242,7 @@ export type SessionTraceResponses = {
       claim?: string
       issue?: string
       evidence?: string
+      status?: "open" | "addressed" | "confirmed"
       completedAt?: number
     }>
     failures: Array<{
@@ -9288,6 +9298,78 @@ export type SessionTraceResponses = {
       }>
       valid: boolean
     }
+    research: {
+      configured: boolean
+      status: "unconfigured" | "running" | "blocked" | "ready"
+      readiness: number
+      gates: Array<{
+        id: "stages" | "deliverables" | "checks" | "review" | "runtime"
+        label: string
+        status: "passed" | "pending" | "failed"
+        complete: number
+        total: number
+        detail: string
+      }>
+      missing: Array<string>
+      openFindings: number
+      failedCandidates: number
+      contract?: {
+        version: 1
+        objective: string
+        /**
+         * Primary workflow domain. Use weather for forecast postprocessing or meteorology, posttrain for fine-tuning/alignment/checkpoint training, evidence for literature synthesis, and ml for other machine-learning experiments.
+         */
+        domain:
+          | "general"
+          | "statistics"
+          | "biology"
+          | "physics"
+          | "chemistry"
+          | "ml"
+          | "weather"
+          | "posttrain"
+          | "evidence"
+        template: "minimal" | "empirical" | "evidence"
+        stages: Array<{
+          id: string
+          label: string
+          status?: "pending" | "running" | "completed" | "blocked"
+          detail?: string
+          updatedAt: number
+        }>
+        deliverables: Array<{
+          path: string
+          label: string
+          required?: boolean
+        }>
+        checks: Array<{
+          id: string
+          label: string
+          status: "pending" | "passed" | "failed"
+          evidence?: string
+          detail?: string
+          updatedAt: number
+        }>
+        failures: Array<{
+          id: string
+          stage: string
+          candidate: string
+          message: string
+          disposition?: string
+          recordedAt: number
+        }>
+        budget: {
+          reserveUsd?: number
+          finalizationCalls?: number
+          finalizing?: boolean
+          exhausted?: boolean
+          lastBalanceUsd?: number
+          updatedAt: number
+        }
+        createdAt: number
+        updatedAt: number
+      }
+    }
     privacy: {
       local: true
       atlasRequired: false
@@ -9339,7 +9421,7 @@ export type SessionFilesystemListResponses = {
       path: string
       access: "read" | "write"
       scope: "once" | "session" | "project" | "installation"
-      source: "workspace" | "permission" | "api" | "tool"
+      source: "workspace" | "permission" | "api" | "tool" | "handoff"
       time: {
         created: number
         consumed?: number
@@ -9408,7 +9490,7 @@ export type SessionFilesystemGrantResponses = {
     path: string
     access: "read" | "write"
     scope: "once" | "session" | "project" | "installation"
-    source: "workspace" | "permission" | "api" | "tool"
+    source: "workspace" | "permission" | "api" | "tool" | "handoff"
     time: {
       created: number
       consumed?: number
@@ -9453,7 +9535,7 @@ export type SessionFilesystemRevokeResponses = {
     path: string
     access: "read" | "write"
     scope: "once" | "session" | "project" | "installation"
-    source: "workspace" | "permission" | "api" | "tool"
+    source: "workspace" | "permission" | "api" | "tool" | "handoff"
     time: {
       created: number
       consumed?: number

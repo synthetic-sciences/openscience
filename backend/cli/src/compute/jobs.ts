@@ -218,6 +218,7 @@ export namespace ComputeJobs {
     status: Status,
     created_at: z.string(),
     started_at: z.string().optional(),
+    last_activity_at: z.string().optional(),
     completed_at: z.string().optional(),
     exit_code: z.number().int().nullable().optional(),
     pid: z.number().int().positive().optional(),
@@ -510,6 +511,12 @@ export namespace ComputeJobs {
       await fs.unlink(temp).catch(() => undefined)
       throw error
     })
+  }
+
+  async function observe(root: string, job: Job): Promise<Job> {
+    const stat = await fs.stat(path.join(logsOf(root), `${job.id}.log`)).catch(() => undefined)
+    const activity = stat?.mtime.toISOString() ?? job.completed_at ?? job.started_at ?? job.created_at
+    return Job.parse({ ...job, last_activity_at: activity })
   }
 
   async function event(root: string, id: string, value: string) {
@@ -3194,14 +3201,14 @@ export namespace ComputeJobs {
   export async function list(options: Options = {}): Promise<Job[]> {
     const scope = await scoped(options)
     await sync(scope, options)
-    return (await read(scope.root)).toSorted(
-      (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id),
-    )
+    const jobs = await Promise.all((await read(scope.root)).map((job) => observe(scope.root, job)))
+    return jobs.toSorted((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id))
   }
 
   export async function get(id: string, options: Options = {}): Promise<Job | undefined> {
     const scope = await scoped(options)
-    return (await read(scope.root)).find((job) => job.id === id)
+    const job = (await read(scope.root)).find((item) => item.id === id)
+    return job ? observe(scope.root, job) : undefined
   }
 
   export async function log(id: string, options: Options & { bytes?: number } = {}): Promise<string> {

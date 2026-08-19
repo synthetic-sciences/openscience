@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Instance } from "../../../src/project/instance"
-import { KernelEnvironmentMutation } from "../../../src/science/kernel/environment-mutation"
+import { KernelEnvironmentMutation, rankPython } from "../../../src/science/kernel/environment-mutation"
 import { KernelRuntime, type KernelIdentity } from "../../../src/science/kernel/registry"
 import { PythonTool } from "../../../src/tool/notebook"
 import { RTool } from "../../../src/tool/rkernel"
@@ -64,6 +64,31 @@ test("recognizes pip flags without backtracking on adversarial separators", () =
       code: `pip ${"--pip ".repeat(50_000)}ordinary_code`,
     }),
   ).toBeUndefined()
+})
+
+test("prefers an installed scientific stack over a newer sparse Python", () => {
+  expect(
+    rankPython([
+      {
+        binary: "/python-3.14",
+        major: 3,
+        minor: 14,
+        packages: { numpy: true, scipy: true, sklearn: false },
+      },
+      {
+        binary: "/python-3.12",
+        major: 3,
+        minor: 12,
+        packages: { numpy: true, scipy: true, sklearn: true },
+      },
+    ]),
+  ).toBe("/python-3.12")
+  expect(
+    rankPython([
+      { binary: "/python-3.11", major: 3, minor: 11, packages: { numpy: true } },
+      { binary: "/python-3.13", major: 3, minor: 13, packages: { numpy: true } },
+    ]),
+  ).toBe("/python-3.13")
 })
 
 test("an approved Python environment change restarts only the affected warm process", async () => {

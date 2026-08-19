@@ -55,6 +55,18 @@ describe("tool.bash sandbox integration", () => {
           expect(inside.metadata.exit).toBe(0)
           expect(fs.existsSync(path.join(workspace, "inside.txt"))).toBe(true)
 
+          if (Bun.which("python3")) {
+            const python = await bash.execute(
+              {
+                command: `python -c "import encodings; print('runtime-ok')"`,
+                description: "check canonical Python runtime",
+              },
+              ctx,
+            )
+            expect(python.metadata.exit).toBe(0)
+            expect(python.output).toContain("runtime-ok")
+          }
+
           const escape = await bash.execute(
             { command: `printf x > "${outside}"`, description: "write outside workspace" },
             ctx,
@@ -68,5 +80,5 @@ describe("tool.bash sandbox integration", () => {
       // don't leak "sandbox on" into any test that runs after this one
       fs.rmSync(managedFile, { force: true })
     }
-  })
+  }, 15_000)
 })

@@ -156,7 +156,7 @@ test("untrusted projects run routine terminals, shells, and kernels only in an e
       }
     },
   })
-})
+}, 20_000)
 
 test("non-routine remote execution still requires explicit project trust", async () => {
   await using tmp = await tmpdir({ git: true })

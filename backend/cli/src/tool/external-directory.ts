@@ -41,8 +41,12 @@ export async function assertExternalDirectory(
       ? await SessionFilesystem.ownsToolOutput({ sessionID: ctx.sessionID, path: canonical })
       : false
   const access = options?.access ?? "read"
+  const granted =
+    !internal && !owned && ctx.sessionID.startsWith("ses_")
+      ? await SessionFilesystem.allows({ sessionID: ctx.sessionID, path: canonical, access })
+      : false
 
-  if (!internal && !owned) {
+  if (!internal && !owned && !granted) {
     const kind = options?.kind ?? "file"
     const parentDir = kind === "directory" ? canonical : path.dirname(canonical)
     const glob = path.join(parentDir, "*")

@@ -38,6 +38,13 @@ export type ObservableKernelActivity = {
   status: "pending" | "running" | "completed" | "error"
 }
 
+export type ResultTrendPoint = {
+  at: number
+  x: number
+  verified: number
+  risks: number
+}
+
 const childLabel = (value: string) => {
   const normalized = value.trim().toLowerCase()
   if (normalized === "explore") return "Exploration task"
@@ -271,6 +278,55 @@ export function traceCounts(trace: SessionTraceResponse) {
   ]
 }
 
+/** A deterministic result-progress series built only from observable records. */
+export function resultTrend(trace: SessionTraceResponse): ResultTrendPoint[] {
+  const contract = trace.research.contract
+  const events = [
+    ...trace.artifacts.map((item) => ({
+      at: item.completedAt ?? trace.session.updatedAt,
+      verified: 1,
+      risks: 0,
+    })),
+    ...(contract?.checks ?? []).map((item) => ({
+      at: item.updatedAt,
+      verified: item.status === "passed" ? 1 : 0,
+      risks: item.status === "failed" ? 1 : 0,
+    })),
+    ...(contract?.failures ?? []).map((item) => ({ at: item.recordedAt, verified: 0, risks: 1 })),
+    ...trace.reviewerFindings.map((item) => ({
+      at: item.completedAt ?? trace.session.updatedAt,
+      verified: item.relation === "supports" || item.status === "confirmed" ? 1 : 0,
+      risks:
+        item.relation === "refutes" &&
+        item.status !== "confirmed" &&
+        (item.severity === "blocking" || item.severity === "major")
+          ? 1
+          : 0,
+    })),
+    ...trace.failures.map((item) => ({ at: item.createdAt, verified: 0, risks: 1 })),
+  ].toSorted((a, b) => a.at - b.at)
+  const timed = [{ at: trace.session.createdAt, verified: 0, risks: 0 }, ...events]
+  const start = timed[0].at
+  const end = Math.max(trace.session.updatedAt, timed.at(-1)?.at ?? start, start + 1)
+  return timed.reduce<ResultTrendPoint[]>((points, event) => {
+    const previous = points.at(-1)
+    return [
+      ...points,
+      {
+        at: event.at,
+        x: ((event.at - start) / (end - start)) * 100,
+        verified: (previous?.verified ?? 0) + event.verified,
+        risks: (previous?.risks ?? 0) + event.risks,
+      },
+    ]
+  }, [])
+}
+
+export function resultPolyline(points: ResultTrendPoint[], key: "verified" | "risks") {
+  const peak = Math.max(1, ...points.flatMap((point) => [point.verified, point.risks]))
+  return points.map((point) => `${point.x.toFixed(2)},${(42 - (point[key] / peak) * 34).toFixed(2)}`).join(" ")
+}
+
 export function traceActivity(trace: SessionTraceResponse): TraceActivity[] {
   const inference = trace.inference.map((item) => ({
     id: `model:${item.messageID}`,
@@ -326,7 +382,14 @@ export function traceActivity(trace: SessionTraceResponse): TraceActivity[] {
     at: Date.parse(item.createdAt),
     kind: "job" as const,
     label: item.name,
-    detail: `${item.targetLabel} · ${item.artifactCount} artifacts · ${formatDuration(item.durationMs)}`,
+    detail: [
+      item.targetLabel,
+      `${item.artifactCount} artifacts`,
+      formatDuration(item.durationMs),
+      item.lastActivityAt ? `last output ${formatClock(Date.parse(item.lastActivityAt))}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · "),
     status: item.status,
   }))
   const approvals = trace.approvals.map((item) => ({
@@ -350,8 +413,11 @@ export function traceActivity(trace: SessionTraceResponse): TraceActivity[] {
     at: item.completedAt ?? trace.session.updatedAt,
     kind: "review" as const,
     label: item.issue || item.claim || "Reviewer finding",
-    detail: [item.severity, item.relation, item.target].filter(Boolean).join(" · ") || "reviewed",
-    status: item.severity === "blocking" || item.severity === "major" ? "error" : "completed",
+    detail: [item.severity, item.relation, item.status, item.target].filter(Boolean).join(" · ") || "reviewed",
+    status:
+      (item.severity === "blocking" || item.severity === "major") && item.status !== "confirmed"
+        ? "error"
+        : "completed",
   }))
   const failures = trace.failures.map((item) => ({
     id: `failure:${item.kind}:${item.id}`,

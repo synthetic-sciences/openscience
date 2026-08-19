@@ -24,6 +24,15 @@ describe("reviewer workflow truth pass", () => {
     expect(session).not.toContain("workspace-header__review")
   })
 
+  test("the generated Result trace exposes a direct independent review action", () => {
+    const trace = read("atlas/SessionTraceSurface.tsx")
+
+    expect(trace).toContain("Generated research result")
+    expect(trace).toContain("Run independent review")
+    expect(trace).toContain("sdk.client.session.review")
+    expect(trace).toContain("Research readiness gates")
+  })
+
   test("no surface prefills chat to spawn the reviewer", () => {
     for (const file of sources(root)) {
       const text = readFileSync(file, "utf8")

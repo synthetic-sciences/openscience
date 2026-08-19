@@ -13,6 +13,62 @@ import type { PermissionNext } from "../../src/permission/next"
 import { tmpdir } from "../fixture/fixture"
 
 describe("Task tool-output handoff", () => {
+  test("grants a direct child read-only access to parent artifacts only", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        const child = await Session.create({ parentID: parent.id })
+        const sibling = await Session.create({})
+        const parentFile = path.join(await SessionFilesystem.workspace(parent.id), "result.json")
+        const siblingFile = path.join(await SessionFilesystem.workspace(sibling.id), "private.json")
+        await Bun.write(parentFile, "parent evidence")
+        await Bun.write(siblingFile, "sibling evidence")
+
+        try {
+          const grant = await SessionFilesystem.grantTaskHandoff({
+            parentSessionID: parent.id,
+            childSessionID: child.id,
+          })
+          expect(grant).toMatchObject({ path: path.dirname(parentFile), access: "read", source: "handoff" })
+          await expect(
+            SessionFilesystem.authorize({ sessionID: child.id, path: parentFile, access: "read" }),
+          ).resolves.toBeDefined()
+          await expect(
+            SessionFilesystem.authorize({ sessionID: child.id, path: parentFile, access: "write" }),
+          ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+          await expect(
+            SessionFilesystem.authorize({ sessionID: child.id, path: siblingFile, access: "read" }),
+          ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+          expect(await SessionFilesystem.processReadRoots(child.id)).toContain(path.dirname(parentFile))
+          expect(await SessionFilesystem.processWriteRoots(child.id)).not.toContain(path.dirname(parentFile))
+
+          const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+          const ctx = {
+            sessionID: child.id,
+            messageID: "msg_handoff",
+            callID: "call_handoff",
+            agent: "reviewer",
+            abort: AbortSignal.any([]),
+            messages: [],
+            metadata: () => {},
+            ask: async (request: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+              requests.push(request)
+            },
+          }
+          expect((await (await ReadTool.init()).execute({ filePath: parentFile }, ctx)).output).toContain(
+            "parent evidence",
+          )
+          expect(requests.some((request) => request.permission === "external_directory")).toBe(false)
+        } finally {
+          await Promise.all([Session.remove(child.id), Session.remove(sibling.id)])
+          await Session.remove(parent.id)
+        }
+      },
+    })
+  })
+
   test("copies exact broker outputs into child scratch for Read and Grep", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

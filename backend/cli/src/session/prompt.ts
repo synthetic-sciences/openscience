@@ -64,6 +64,7 @@ import { ExecutionAuthority } from "@/project/execution"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { Sandbox } from "@/sandbox/sandbox"
 import { BashTool } from "@/tool/bash"
+import { SessionResearch } from "./research"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -339,6 +340,10 @@ export namespace SessionPrompt {
     // summary overhead alone already exceeds the 0.75 threshold.
     let compactionArmed = true
     let outputContinuations = 0
+    let contractContinuations = 0
+    let reviewContinuations = 0
+    let summaryContinuations = 0
+    const reviewLimit = 2
     const workspace = await SessionFilesystem.workspace(sessionID)
     // Text doom-loop guard (#176): weak/local models sometimes emit a near-identical
     // "continuity summary" turn over and over instead of converging on an answer.
@@ -489,6 +494,109 @@ export namespace SessionPrompt {
       }
       if (lastAssistant?.finish !== "length") outputContinuations = 0
       if (lastAssistant?.finish && (!continuing || bareMode) && lastUser.id < lastAssistant.id) {
+        const contract = await SessionResearch.read(sessionID)
+        if (contract) {
+          const trace = await import("./trace").then((mod) => mod.SessionTrace.build(sessionID))
+          const pending = trace.research.gates.filter((gate) => gate.id !== "runtime" && gate.status !== "passed")
+          const findings = trace.reviewerFindings.filter(
+            (finding) => finding.relation === "refutes" && finding.status !== "confirmed",
+          )
+          const reviewing = lastUser.agent === "reviewer" || lastUser.agent === "artifact-reviewer"
+          const owner = msgs.findLast(
+            (message): message is MessageV2.WithParts & { info: MessageV2.User } =>
+              message.info.role === "user" &&
+              message.info.agent !== "reviewer" &&
+              message.info.agent !== "artifact-reviewer",
+          )
+          if (reviewing && owner && summaryContinuations < reviewLimit && !bareMode) {
+            summaryContinuations++
+            const resume: MessageV2.User = {
+              id: await MessageV2.nextMessageID(sessionID),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: owner.info.agent,
+              model: owner.info.model,
+              effort: MessageV2.resolveResearchEffort(owner.info.effort),
+            }
+            await Session.updateMessage(resume)
+            await Session.updatePart({
+              id: Identifier.ascending("part"),
+              messageID: resume.id,
+              sessionID,
+              type: "text",
+              synthetic: true,
+              text: pending.length
+                ? `Independent review completed. Address these remaining completion gates without repeating verified work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}. Open findings: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ") || "none recorded"}. Correct each underlying defect before calling provenance_resolve with replacement evidence; a later reviewer must confirm it. Then return the corrected outcome.`
+                : findings.length
+                  ? `Independent review completed with ${findings.length} non-blocking ${findings.length === 1 ? "finding" : "findings"}. Correct them when possible, save the corrected Result, then call provenance_resolve with replacement evidence; a later reviewer must confirm it. Disclose anything that remains: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ")}. Then return the concise verified outcome.`
+                  : "Independent review completed with no open findings. Return the concise verified outcome and the saved Results.",
+            } satisfies MessageV2.TextPart)
+            continue
+          }
+          const review = pending.find((gate) => gate.id === "review")
+          const other = pending.filter((gate) => gate.id !== "review")
+          if (review && other.length === 0 && reviewContinuations < reviewLimit && !bareMode) {
+            reviewContinuations++
+            const packet = await import("./review").then((mod) => mod.SessionReview.prepare(sessionID))
+            const resume: MessageV2.User = {
+              id: await MessageV2.nextMessageID(sessionID),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: packet.agent,
+              model: lastUser.model,
+              effort: MessageV2.resolveResearchEffort(lastUser.effort),
+            }
+            await Session.updateMessage(resume)
+            await Session.updatePart({
+              id: Identifier.ascending("part"),
+              messageID: resume.id,
+              sessionID,
+              type: "text",
+              synthetic: true,
+              text: packet.text,
+            } satisfies MessageV2.TextPart)
+            continue
+          }
+          if (pending.length && contractContinuations < 1 && !bareMode) {
+            contractContinuations++
+            const resume: MessageV2.User = {
+              id: await MessageV2.nextMessageID(sessionID),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: lastUser.agent,
+              model: lastUser.model,
+              effort: MessageV2.resolveResearchEffort(lastUser.effort),
+            }
+            await Session.updateMessage(resume)
+            await Session.updatePart({
+              id: Identifier.ascending("part"),
+              messageID: resume.id,
+              sessionID,
+              type: "text",
+              synthetic: true,
+              text: [
+                "The durable research completion contract is not satisfied yet.",
+                `Resolve these gates without repeating completed work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}.`,
+                "Save every required Result, record deterministic checks and failed candidates truthfully, then return the verified outcome.",
+              ].join(" "),
+            } satisfies MessageV2.TextPart)
+            continue
+          }
+          if (pending.length) {
+            await Session.updatePart({
+              id: Identifier.ascending("part"),
+              messageID: lastAssistant.id,
+              sessionID,
+              type: "text",
+              synthetic: true,
+              text: `OpenScience stopped with an incomplete research contract: ${pending.map((gate) => gate.detail).join("; ")}. Existing Results and checkpoints remain available for resume.`,
+              time: { start: Date.now(), end: Date.now() },
+            } satisfies MessageV2.TextPart)
+          }
+        }
         log.info("exiting loop", { sessionID, bareMode })
         break
       }
@@ -904,11 +1012,13 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      const contract = await SessionResearch.prompt(sessionID)
       const system = [
         ...(await SystemPrompt.environment(model, sessionID)),
         ...(await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
         ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
+        ...(contract ? [contract] : []),
       ]
 
       // P0.1 telemetry: record what the working context is made of, by content type,

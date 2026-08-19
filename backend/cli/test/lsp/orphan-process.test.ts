@@ -244,10 +244,12 @@ if (mode === "owner") {
 
       owner.kill("SIGKILL")
       await owner.exited
-      await Bun.sleep(100)
+      // The Darwin responsibility supervisor checks its exact server identity
+      // once per second to keep idle kernels effectively CPU-free.
+      await Bun.sleep(process.platform === "darwin" ? 1_500 : 100)
       // macOS responsibility supervision and Linux bubblewrap's parent-death
-      // namespace reap immediately. A fresh server still verifies and clears
-      // the durable ledger record below.
+      // namespace reap within their documented bounds. A fresh server still
+      // verifies and clears the durable ledger record below.
       const survivesOwner = process.platform !== "darwin" && !(process.platform === "linux" && registered.sandboxed)
       expect(await CredentialProcessLedger.owns(registered.pid, registered.identity)).toBe(survivesOwner)
       expect(await CredentialProcessLedger.owns(registered.descendant.pid, registered.descendant.identity)).toBe(

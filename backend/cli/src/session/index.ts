@@ -26,6 +26,7 @@ import { Project } from "@/project/project"
 import { NamedError } from "@synsci/util/error"
 import { SessionFilesystem } from "./filesystem"
 import { SessionTraceStore } from "./trace-store"
+import { SessionResearch } from "./research"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { FileLease } from "@/util/file-lease"
 
@@ -476,6 +477,7 @@ export namespace Session {
           await Storage.remove(msg)
         }
         await SessionTraceStore.remove(sessionID)
+        await SessionResearch.remove(sessionID)
         await Storage.remove(deletionKey(project.id, sessionID))
       } catch (e) {
         log.error(e)

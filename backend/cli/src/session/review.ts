@@ -3,6 +3,7 @@ import { ArtifactStore } from "@/artifact/store"
 import { PermissionNext } from "@/permission/next"
 import { Instance } from "@/project/instance"
 import { Provenance } from "@/science/provenance/store"
+import { Review as ProvenanceReview } from "@/science/provenance/review"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -57,8 +58,11 @@ export namespace SessionReview {
   }
 
   async function context(sessionID: string) {
-    const todos = await Todo.get(sessionID).catch(() => [])
-    const artifacts = await File.artifacts({ sessionID }).catch(() => [])
+    const [todos, artifacts, findings] = await Promise.all([
+      Todo.get(sessionID).catch(() => []),
+      File.artifacts({ sessionID }).catch(() => []),
+      ProvenanceReview.list({ projectID: Instance.project.id, directory: Instance.directory }).catch(() => []),
+    ])
     const lines = ["Run an independent review of the work in this conversation.", ""]
     if (todos.length) {
       lines.push("Plan state:")
@@ -71,6 +75,23 @@ export namespace SessionReview {
         lines.push(`- ${artifact.path} (${artifact.kind}, ${artifact.size} bytes)`)
       }
       lines.push("")
+    }
+    const current = findings.filter(
+      (entry) =>
+        entry.verdict === "refutes" &&
+        entry.status !== "confirmed" &&
+        ((entry.finding.meta as Record<string, unknown> | undefined)?.sessionID === sessionID ||
+          (entry.targetNode?.meta as Record<string, unknown> | undefined)?.sessionID === sessionID),
+    )
+    if (current.length) {
+      lines.push("Open or addressed findings requiring independent disposition:")
+      for (const entry of current) {
+        lines.push(`- [${entry.status ?? "open"}] ${entry.finding.id} against ${entry.target}: ${entry.finding.label}`)
+      }
+      lines.push(
+        "For an addressed finding, inspect the correction evidence. If it resolves the defect, record a supports verdict against the original target and pass the exact original id in provenance_review's finding field; otherwise record the remaining defect.",
+        "",
+      )
     }
     lines.push(
       "Trace lineage with provenance_query and record each finding with provenance_review linked to the exact node.",
@@ -163,10 +184,16 @@ export namespace SessionReview {
     return { agent: "artifact-reviewer", text: artifactContext(bound), target: bound }
   }
 
+  /** Prepare a first-class reviewer turn, including the narrow provenance
+   * permissions required by a session-level audit. */
+  export async function prepare(sessionID: string, target?: Target) {
+    if (!target) await grant(sessionID)
+    return packet(sessionID, target)
+  }
+
   /** Kick off a reviewer pass. Resolves once the turn is queued, not finished. */
   export async function start(sessionID: string, target?: Target): Promise<Bound | undefined> {
-    if (!target) await grant(sessionID)
-    const review = await packet(sessionID, target)
+    const review = await prepare(sessionID, target)
     const settings = await ReviewSettings.get().catch(() => undefined)
     const effort = await Session.messages({ sessionID })
       .then((messages) => {

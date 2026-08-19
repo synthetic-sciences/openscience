@@ -323,6 +323,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           permission: childPermissionRules(config.experimental?.primary_tools),
         })
       })
+      await SessionFilesystem.grantTaskHandoff({
+        parentSessionID: ctx.sessionID,
+        childSessionID: session.id,
+      })
       const budgetStartedAt = Date.now()
       const budgetDeadlineAt = budgetStartedAt + budgetMs
       const budgetAbort = AbortSignal.timeout(budgetMs)

@@ -46,6 +46,8 @@ export namespace Review {
     finding: Finding
     /** "refutes" flags a problem (default); "supports" records a verified-sound check. */
     verdict?: "refutes" | "supports"
+    /** Exact addressed finding this later supporting review confirms. */
+    confirms?: string
     /** Who recorded it (agent name). */
     reviewer?: string
     sessionID?: string
@@ -59,6 +61,27 @@ export namespace Review {
     if (!(await Provenance.find(input, input.target))) {
       throw new Error(`Provenance node ${input.target} is not part of this project`)
     }
+    if (input.confirms) {
+      if (relation !== "supports") throw new Error("Only a supporting review can confirm an addressed finding")
+      if (!input.reviewer || !["reviewer", "artifact-reviewer", "review"].includes(input.reviewer)) {
+        throw new Error("Only an independent reviewer can confirm an addressed finding")
+      }
+      const original = await Provenance.find(input, input.confirms)
+      const detail = original?.meta as Record<string, unknown> | undefined
+      if (!original || detail?.review !== true || detail.verdict !== "refutes" || detail.target !== input.target) {
+        throw new Error(`Finding ${input.confirms} is not a refutation against target ${input.target}`)
+      }
+      const graph = await Provenance.project(input)
+      const addressed = graph.nodes.some(
+        (candidate) =>
+          (candidate.meta as Record<string, unknown> | undefined)?.resolution === true &&
+          (candidate.meta as Record<string, unknown> | undefined)?.finding === input.confirms &&
+          graph.edges.some(
+            (edge) => edge.from === candidate.id && edge.to === input.confirms && edge.relation === "supports",
+          ),
+      )
+      if (!addressed) throw new Error(`Finding ${input.confirms} has not been addressed yet`)
+    }
     const node = await Provenance.recordOwned(input, {
       kind: "claim",
       label: `review (${input.finding.severity}): ${input.finding.issue}`.slice(0, 140),
@@ -70,6 +93,7 @@ export namespace Review {
         severity: input.finding.severity,
         evidence: input.finding.evidence,
         verdict: relation,
+        ...(input.confirms ? { confirms: input.confirms } : {}),
         reviewer: input.reviewer ?? "reviewer",
         sessionID: input.sessionID,
         ...(input.messageID !== undefined ? { messageID: input.messageID } : {}),
@@ -79,6 +103,9 @@ export namespace Review {
       },
     })
     await Provenance.linkOwned(input, { from: node.id, to: input.target, relation })
+    if (input.confirms) {
+      await Provenance.linkOwned(input, { from: node.id, to: input.confirms, relation: "supports" })
+    }
     return { node, relation }
   }
 
@@ -110,6 +137,7 @@ export namespace Review {
   export interface Entry {
     finding: Node
     target: string
+    targetNode?: Node
     verdict: "refutes" | "supports"
     status?: Status
     resolution?: { actor: string; reason: string; recordedAt: string }
@@ -154,30 +182,52 @@ export namespace Review {
   export async function list(input: ProjectScope): Promise<Entry[]> {
     const graph = await Provenance.project(input)
     const meta = (node: Node) => (node.meta ?? {}) as Record<string, unknown>
-    const findings = graph.nodes.filter((node) => meta(node).review === true)
+    const nodes = new Map(graph.nodes.map((node) => [node.id, node]))
+    const findings = graph.nodes.filter((node) => {
+      const detail = meta(node)
+      const target = typeof detail.target === "string" ? detail.target : ""
+      const verdict = detail.verdict === "supports" ? "supports" : "refutes"
+      return (
+        detail.review === true &&
+        !!target &&
+        graph.edges.some((edge) => edge.from === node.id && edge.to === target && edge.relation === verdict)
+      )
+    })
     const resolutions = graph.nodes.filter((node) => meta(node).resolution === true)
 
     return findings.map((finding) => {
       const detail = meta(finding)
       const target = typeof detail.target === "string" ? detail.target : ""
       const verdict = detail.verdict === "supports" ? ("supports" as const) : ("refutes" as const)
-      if (verdict === "supports") return { finding, target, verdict }
+      const targetNode = nodes.get(target)
+      if (verdict === "supports") return { finding, target, targetNode, verdict }
 
       const resolution = resolutions
-        .filter((node) => meta(node).finding === finding.id)
+        .filter(
+          (node) =>
+            meta(node).finding === finding.id &&
+            graph.edges.some((edge) => edge.from === node.id && edge.to === finding.id && edge.relation === "supports"),
+        )
         .toSorted((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0]
-      if (!resolution) return { finding, target, verdict, status: "open" as const }
+      if (!resolution) return { finding, target, targetNode, verdict, status: "open" as const }
 
       const confirmed = findings.some(
         (other) =>
           meta(other).target === target &&
           meta(other).verdict === "supports" &&
-          other.recordedAt > resolution.recordedAt,
+          meta(other).confirms === finding.id &&
+          graph.edges.some(
+            (edge) => edge.from === other.id && edge.to === finding.id && edge.relation === "supports",
+          ) &&
+          // record() refuses confirmations until a resolution exists, so an
+          // equal millisecond timestamp is still causally later.
+          other.recordedAt >= resolution.recordedAt,
       )
       const detailed = meta(resolution)
       return {
         finding,
         target,
+        targetNode,
         verdict,
         status: confirmed ? ("confirmed" as const) : ("addressed" as const),
         resolution: {

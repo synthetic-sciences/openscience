@@ -100,25 +100,11 @@ type Trace = {
   reviewerFindings: Array<{ relation?: "refutes" | "supports"; severity?: string }>
   failures: unknown[]
   retries: unknown[]
-  harness?: Array<{
-    profile: string
-    provider: string
-    model: string
-    fingerprint: string
-  }>
-  harnessReport?: {
-    stable: boolean
-    valid: boolean
-    trajectoryHash: string
-    transitions: Array<{ changes: string[] }>
-    checks: Array<{ id: string; status: "pass" | "fail"; affected: string[] }>
-  }
   privacy: {
     local: true
     atlasRequired: false
     hiddenReasoningStored: false
     toolOutputsCopied: false
-    promptContentStored?: false
   }
 }
 
@@ -253,17 +239,6 @@ function observables(trace: Trace) {
     tokens: {
       total: totalTokens(trace),
       ...trace.summary.tokens,
-    },
-    harness: {
-      records: trace.harness?.length ?? 0,
-      fingerprints: [...new Set(trace.harness?.map((item) => item.fingerprint) ?? [])],
-      profiles: [...new Set(trace.harness?.map((item) => item.profile) ?? [])],
-      models: [...new Set(trace.harness?.map((item) => `${item.provider}/${item.model}`) ?? [])],
-      stable: trace.harnessReport?.stable,
-      valid: trace.harnessReport?.valid,
-      trajectoryHash: trace.harnessReport?.trajectoryHash,
-      transitions: trace.harnessReport?.transitions.length ?? 0,
-      failedChecks: trace.harnessReport?.checks.filter((item) => item.status === "fail").map((item) => item.id) ?? [],
     },
     privacy: trace.privacy,
   }

@@ -226,8 +226,30 @@ export namespace Sandbox {
     for (const temporary of [...temporaryRoots]) cleanup({ temporary })
   })
 
-  function withTempEnvironment(argv: string[], temporary: string) {
-    return ["/usr/bin/env", `TMPDIR=${temporary}`, `TMP=${temporary}`, `TEMP=${temporary}`, ...argv]
+  function withTempEnvironment(argv: string[], temporary: string, runtime?: { python?: string; path?: string }) {
+    const bin = (() => {
+      if (!runtime?.python) return
+      const value = path.join(temporary, "runtime", "bin")
+      fs.mkdirSync(value, { recursive: true })
+      for (const name of process.platform === "win32" ? ["python.exe", "python3.exe"] : ["python", "python3"]) {
+        const link = path.join(value, name)
+        try {
+          fs.symlinkSync(runtime.python, link, process.platform === "win32" ? "file" : undefined)
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+        }
+      }
+      return value
+    })()
+    const inherited = runtime?.path ?? process.env.PATH
+    return [
+      "/usr/bin/env",
+      `TMPDIR=${temporary}`,
+      `TMP=${temporary}`,
+      `TEMP=${temporary}`,
+      ...(bin ? [`PATH=${[bin, inherited].filter(Boolean).join(path.delimiter)}`] : []),
+      ...argv,
+    ]
   }
 
   /** Stable writable cache roots for scientific tools launched through the
@@ -391,7 +413,7 @@ export namespace Sandbox {
           return
         }
       }
-      for (const root of ["/opt/conda", "/opt/rocm", "/opt/cuda", "/opt/nvidia"]) {
+      for (const root of ["/opt/conda", "/opt/anaconda3", "/opt/miniconda3", "/opt/rocm", "/opt/cuda", "/opt/nvidia"]) {
         if (value === root || value.startsWith(root + path.sep)) {
           add(root)
           return
@@ -761,6 +783,8 @@ export namespace Sandbox {
     readable?: string[]
     /** Exact host credential files to mask from the process. */
     unreadable?: string[]
+    /** Canonical local runtime used by both persistent kernels and shell reruns. */
+    runtime?: { python?: string; path?: string }
     options?: Options
   }): Plan {
     const { backend: b, warning } = decide(input.options)
@@ -774,10 +798,10 @@ export namespace Sandbox {
         temporary,
         readable: input.readable,
         unreadable: input.unreadable,
-        entrypoints: [input.shell],
+        entrypoints: [input.shell, input.runtime?.python].filter((value): value is string => !!value),
         options: input.options!,
       })
-      const s = specForArgv(withTempEnvironment([input.shell, "-c", input.command], temporary), policy)!
+      const s = specForArgv(withTempEnvironment([input.shell, "-c", input.command], temporary, input.runtime), policy)!
       log.info("sandboxing command", { backend: b, network: policy.network, writable: policy.writable.length })
       return { file: s.file, args: s.args, useShell: false, sandboxed: true, backend: b, temporary, warning }
     } catch (error) {

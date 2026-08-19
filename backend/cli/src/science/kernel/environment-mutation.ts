@@ -3,8 +3,103 @@ import { Instance } from "@/project/instance"
 import { pythonEnvironment } from "@/science/kernel/interpreter"
 import type { KernelStartOptions } from "@/science/kernel/types"
 import { createHash } from "node:crypto"
-import { mkdirSync } from "node:fs"
+import { constants, mkdirSync } from "node:fs"
+import { access, readdir, realpath } from "node:fs/promises"
 import path from "node:path"
+import z from "zod"
+
+const PythonProbe = z.object({
+  binary: z.string(),
+  major: z.number().int().nonnegative(),
+  minor: z.number().int().nonnegative(),
+  packages: z.record(z.string(), z.boolean()),
+})
+
+type PythonProbe = z.infer<typeof PythonProbe>
+
+const PYTHON_PACKAGES = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "matplotlib",
+  "sklearn",
+  "statsmodels",
+  "xarray",
+  "torch",
+  "Bio",
+  "rdkit",
+] as const
+
+const pythonCache: { value?: Promise<string | undefined> } = {}
+
+/** Prefer the broadest already-installed scientific stack, then the newest
+ * stable interpreter. This avoids selecting a bleeding-edge PATH Python that
+ * cannot run the packages already available in another trusted installation. */
+export function rankPython(probes: PythonProbe[]) {
+  return probes.toSorted((a, b) => {
+    const count = (probe: PythonProbe) => Object.values(probe.packages).filter(Boolean).length
+    const stable = (probe: PythonProbe) => (probe.major === 3 && probe.minor <= 13 ? 1 : 0)
+    return count(b) - count(a) || stable(b) - stable(a) || b.major - a.major || b.minor - a.minor
+  })[0]?.binary
+}
+
+async function pythonCandidates() {
+  const names = process.platform === "win32" ? ["python.exe"] : ["python3", "python"]
+  const versions =
+    process.platform === "darwin"
+      ? await readdir("/Library/Frameworks/Python.framework/Versions", { withFileTypes: true }).catch(() => [])
+      : []
+  const dirs = [
+    ...(process.env.PATH ?? "").split(path.delimiter),
+    ...versions
+      .filter((item) => item.isDirectory())
+      .map((item) => `/Library/Frameworks/Python.framework/Versions/${item.name}/bin`),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/opt/anaconda3/bin",
+    "/opt/miniconda3/bin",
+  ].filter(Boolean)
+  const files = [...new Set(dirs.flatMap((dir) => names.map((name) => path.join(dir, name))))]
+  const resolved = await Promise.all(
+    files.map((file) =>
+      access(file, process.platform === "win32" ? constants.F_OK : constants.X_OK)
+        .then(() => realpath(file))
+        .catch(() => undefined),
+    ),
+  )
+  return [...new Set(resolved.filter((file): file is string => !!file))]
+}
+
+async function pythonProbe(binary: string): Promise<PythonProbe | undefined> {
+  const code = [
+    "import importlib.util, json, sys",
+    `names = ${JSON.stringify(PYTHON_PACKAGES)}`,
+    'print(json.dumps({"major": sys.version_info.major, "minor": sys.version_info.minor, "packages": {name: importlib.util.find_spec(name) is not None for name in names}}))',
+  ].join("\n")
+  const proc = Bun.spawn([binary, "-I", "-c", code], { stdout: "pipe", stderr: "ignore" })
+  const timer = setTimeout(() => proc.kill(), 3_000)
+  const output = await new Response(proc.stdout)
+    .text()
+    .then((text) => JSON.parse(text) as unknown)
+    .catch(() => undefined)
+  const exit = await proc.exited.catch(() => -1)
+  clearTimeout(timer)
+  if (exit !== 0) return
+  const parsed = PythonProbe.safeParse({ ...(typeof output === "object" && output ? output : {}), binary })
+  if (!parsed.success) return
+  return parsed.data
+}
+
+async function hostPython() {
+  const select = async () => {
+    const candidates = await pythonCandidates()
+    const probes = await Promise.all(candidates.map(pythonProbe))
+    return rankPython(probes.filter((probe): probe is PythonProbe => !!probe)) ?? candidates[0]
+  }
+  const pending = pythonCache.value ?? select()
+  pythonCache.value = pending
+  return pending
+}
 
 export namespace KernelEnvironmentMutation {
   export type Language = "python" | "r"
@@ -118,6 +213,7 @@ export namespace KernelEnvironmentMutation {
    * package root; a selected virtual environment owns its package directory. */
   export async function pythonRuntime(environment: string, allowMutation = false): Promise<KernelStartOptions> {
     const runtime = await pythonEnvironment(Instance.directory, environment)
+    const binary = runtime.binary ?? (await hostPython())
     const virtualEnvironment = runtime.env?.VIRTUAL_ENV
     if (virtualEnvironment) {
       return {
@@ -130,6 +226,7 @@ export namespace KernelEnvironmentMutation {
     if (allowMutation) mkdirSync(packages, { recursive: true })
     return {
       ...runtime,
+      binary,
       env: {
         ...(runtime.env ?? {}),
         PIP_TARGET: packages,

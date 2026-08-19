@@ -21,6 +21,7 @@ describe("tool registry agent boundaries", () => {
           expect(ids).not.toContain("notebook")
           expect(ids).not.toContain("rkernel")
           expect(ids).toContain("compute_job")
+          expect(ids).toContain("research_contract")
           expect(ids).not.toContain("modal")
           expect(ids).not.toContain("query_uniprot")
         }
@@ -75,6 +76,7 @@ describe("tool registry agent boundaries", () => {
         expect(ids).toContain("python")
         expect(ids).toContain("r")
         expect(ids).toContain("query_uniprot")
+        expect(ids).toContain("research_contract")
       },
     })
   })

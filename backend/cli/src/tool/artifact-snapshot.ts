@@ -3,6 +3,7 @@ import { ArtifactStore } from "@/artifact/store"
 import { Identifier } from "@/id/id"
 import { Instance } from "@/project/instance"
 import { Provenance } from "@/science/provenance/store"
+import { Session } from "@/session"
 import { Tool } from "./tool"
 
 const DEFAULT_BYTES = 64 * 1024
@@ -25,6 +26,7 @@ export const ArtifactSnapshotTool = Tool.define("artifact_snapshot", {
     "The target fixes the artifact id, version id, byte count, MIME type, and SHA-256.",
     "Text can be paged by byte offset. Images and PDFs up to 32 MiB are returned as exact-byte attachments.",
     "This tool never reads the live source path and never changes the artifact or workspace.",
+    "A delegated read-only reviewer may inspect immutable versions owned by its direct parent session.",
   ].join("\n"),
   parameters: z.object({
     target: z.string().describe("Exact artifact-version provenance node id supplied in the review brief"),
@@ -37,13 +39,20 @@ export const ArtifactSnapshotTool = Tool.define("artifact_snapshot", {
     const artifactID = node?.meta?.artifactID
     const versionID = node?.meta?.versionID
     const expected = node?.meta?.sha256
+    const owner = node?.meta?.sessionID
+    const session =
+      owner !== ctx.sessionID &&
+      (ctx.agent === "reviewer" || ctx.agent === "artifact-reviewer" || ctx.agent === "review")
+        ? await Session.get(ctx.sessionID).catch(() => undefined)
+        : undefined
+    const delegated = typeof owner === "string" && session?.parentID === owner
     if (
       node?.kind !== "artifact" ||
       node.meta?.artifactStore !== true ||
       typeof artifactID !== "string" ||
       typeof versionID !== "string" ||
       typeof expected !== "string" ||
-      node.meta.sessionID !== ctx.sessionID
+      (owner !== ctx.sessionID && !delegated)
     ) {
       throw new Error(`Provenance node ${params.target} is not an immutable artifact-store version for this session`)
     }

@@ -4611,6 +4611,9 @@
                       "started_at": {
                         "type": "string"
                       },
+                      "last_activity_at": {
+                        "type": "string"
+                      },
                       "completed_at": {
                         "type": "string"
                       },
@@ -7013,6 +7016,9 @@
                       "type": "string"
                     },
                     "started_at": {
+                      "type": "string"
+                    },
+                    "last_activity_at": {
                       "type": "string"
                     },
                     "completed_at": {
@@ -10352,6 +10358,9 @@
                     "started_at": {
                       "type": "string"
                     },
+                    "last_activity_at": {
+                      "type": "string"
+                    },
                     "completed_at": {
                       "type": "string"
                     },
@@ -12785,6 +12794,9 @@
                     "started_at": {
                       "type": "string"
                     },
+                    "last_activity_at": {
+                      "type": "string"
+                    },
                     "completed_at": {
                       "type": "string"
                     },
@@ -15216,6 +15228,9 @@
                       "type": "string"
                     },
                     "started_at": {
+                      "type": "string"
+                    },
+                    "last_activity_at": {
                       "type": "string"
                     },
                     "completed_at": {
@@ -21280,6 +21295,9 @@
                           "startedAt": {
                             "type": "string"
                           },
+                          "lastActivityAt": {
+                            "type": "string"
+                          },
                           "completedAt": {
                             "type": "string"
                           },
@@ -21463,6 +21481,15 @@
                           "versionID": {
                             "type": "string"
                           },
+                          "path": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          },
                           "durable": {
                             "type": "boolean"
                           },
@@ -21519,6 +21546,14 @@
                           },
                           "evidence": {
                             "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "addressed",
+                              "confirmed"
+                            ]
                           },
                           "completedAt": {
                             "type": "number"
@@ -21810,6 +21845,340 @@
                         "valid"
                       ]
                     },
+                    "research": {
+                      "type": "object",
+                      "properties": {
+                        "configured": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "unconfigured",
+                            "running",
+                            "blocked",
+                            "ready"
+                          ]
+                        },
+                        "readiness": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "gates": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "stages",
+                                  "deliverables",
+                                  "checks",
+                                  "review",
+                                  "runtime"
+                                ]
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "passed",
+                                  "pending",
+                                  "failed"
+                                ]
+                              },
+                              "complete": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "total": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "detail": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "status",
+                              "complete",
+                              "total",
+                              "detail"
+                            ]
+                          }
+                        },
+                        "missing": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "openFindings": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "failedCandidates": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "contract": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "objective": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "domain": {
+                              "description": "Primary workflow domain. Use weather for forecast postprocessing or meteorology, posttrain for fine-tuning/alignment/checkpoint training, evidence for literature synthesis, and ml for other machine-learning experiments.",
+                              "type": "string",
+                              "enum": [
+                                "general",
+                                "statistics",
+                                "biology",
+                                "physics",
+                                "chemistry",
+                                "ml",
+                                "weather",
+                                "posttrain",
+                                "evidence"
+                              ]
+                            },
+                            "template": {
+                              "type": "string",
+                              "enum": [
+                                "minimal",
+                                "empirical",
+                                "evidence"
+                              ]
+                            },
+                            "stages": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "status": {
+                                    "default": "pending",
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "running",
+                                      "completed",
+                                      "blocked"
+                                    ]
+                                  },
+                                  "detail": {
+                                    "type": "string",
+                                    "maxLength": 1000
+                                  },
+                                  "updatedAt": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "updatedAt"
+                                ]
+                              }
+                            },
+                            "deliverables": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1000
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "required": {
+                                    "default": true,
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "label"
+                                ]
+                              }
+                            },
+                            "checks": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "passed",
+                                      "failed"
+                                    ]
+                                  },
+                                  "evidence": {
+                                    "type": "string",
+                                    "maxLength": 2000
+                                  },
+                                  "detail": {
+                                    "type": "string",
+                                    "maxLength": 1000
+                                  },
+                                  "updatedAt": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "status",
+                                  "updatedAt"
+                                ]
+                              }
+                            },
+                            "failures": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "stage": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "candidate": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "message": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4000
+                                  },
+                                  "disposition": {
+                                    "type": "string",
+                                    "maxLength": 1000
+                                  },
+                                  "recordedAt": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "stage",
+                                  "candidate",
+                                  "message",
+                                  "recordedAt"
+                                ]
+                              }
+                            },
+                            "budget": {
+                              "type": "object",
+                              "properties": {
+                                "reserveUsd": {
+                                  "default": 1,
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 100
+                                },
+                                "finalizationCalls": {
+                                  "default": 0,
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "finalizing": {
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "exhausted": {
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "lastBalanceUsd": {
+                                  "type": "number"
+                                },
+                                "updatedAt": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "updatedAt"
+                              ]
+                            },
+                            "createdAt": {
+                              "type": "number"
+                            },
+                            "updatedAt": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "objective",
+                            "domain",
+                            "template",
+                            "stages",
+                            "deliverables",
+                            "checks",
+                            "failures",
+                            "budget",
+                            "createdAt",
+                            "updatedAt"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "configured",
+                        "status",
+                        "readiness",
+                        "gates",
+                        "missing",
+                        "openFindings",
+                        "failedCandidates"
+                      ]
+                    },
                     "privacy": {
                       "type": "object",
                       "properties": {
@@ -21862,6 +22231,7 @@
                     "retries",
                     "harness",
                     "harnessReport",
+                    "research",
                     "privacy"
                   ]
                 }
@@ -21980,7 +22350,8 @@
                               "workspace",
                               "permission",
                               "api",
-                              "tool"
+                              "tool",
+                              "handoff"
                             ]
                           },
                           "time": {
@@ -22210,7 +22581,8 @@
                         "workspace",
                         "permission",
                         "api",
-                        "tool"
+                        "tool",
+                        "handoff"
                       ]
                     },
                     "time": {
@@ -22377,7 +22749,8 @@
                         "workspace",
                         "permission",
                         "api",
-                        "tool"
+                        "tool",
+                        "handoff"
                       ]
                     },
                     "time": {
@@ -44495,7 +44868,8 @@
                       "workspace",
                       "permission",
                       "api",
-                      "tool"
+                      "tool",
+                      "handoff"
                     ]
                   },
                   "time": {

@@ -46,7 +46,8 @@ When the review brief names one `artifact-version:` target:
 ## CRITICAL: Evidence-Grounded, Not Opinion
 - Every finding MUST cite specific evidence: a file path + line, a value, a tool-output id, a
   provenance node id, or a source passage. A finding without evidence is an opinion — discard it.
-- Trace numbers through the provenance DAG. Use `provenance_query` (no id) to list nodes, and
+- Trace numbers through the provenance DAG. Use `provenance_query` (no id) to list nodes from
+  the current review session, and
   `provenance_query` with a node id to walk an artifact's lineage back to the run that produced
   it and the inputs it consumed. A number is "traceable" only if you can name the run/artifact
   node or the script output file it came from.
@@ -172,4 +173,7 @@ its claim, a figure whose stats don't match its data), the verdict is FLAGGED.]
    sound so the primary agent knows the scope of the review and which parts are solid.
 7. **Stay in your lane.** You audit — you don't rewrite the artifact or redesign the research.
    Cite the defect and its evidence; the primary agent fixes it.
+8. **Confirm the exact fix.** When rechecking an addressed finding, pass that original finding id
+   in `provenance_review.finding` with a `supports` verdict against the original target. An unrelated
+   passing check does not close the defect.
 </system-reminder>

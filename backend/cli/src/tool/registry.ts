@@ -39,6 +39,7 @@ import { AtlasRecordTool } from "./atlas-record"
 import { ArtifactSnapshotTool } from "./artifact-snapshot"
 import { ModalTool } from "./modal"
 import { ComputeJobTool } from "./compute-job"
+import { ResearchContractTool } from "./research-contract"
 import { State } from "@/project/state"
 import { ProjectTrust } from "@/project/trust"
 import { AuthoritySignal } from "@/project/authority-signal"
@@ -172,6 +173,7 @@ export namespace ToolRegistry {
       PythonTool,
       RTool,
       ArtifactTool,
+      ResearchContractTool,
       ComputeJobTool,
       ...custom.filter((tool) => !compatibility.has(tool.id) && tool.id !== PythonTool.id && tool.id !== RTool.id),
     ]
@@ -234,6 +236,10 @@ export namespace ToolRegistry {
           }
 
           if (t.id === "compute_job") {
+            return !!agent?.name && COMPUTE_AGENTS.includes(agent.name)
+          }
+
+          if (t.id === "research_contract") {
             return !!agent?.name && COMPUTE_AGENTS.includes(agent.name)
           }
 

@@ -6,6 +6,9 @@ import { SessionTrace } from "../../src/session/trace"
 import { SessionTraceStore } from "../../src/session/trace-store"
 import { LLM } from "../../src/session/llm"
 import { SessionHarness } from "../../src/session/harness"
+import { SessionResearch } from "../../src/session/research"
+import { Provenance } from "../../src/science/provenance/store"
+import { Review } from "../../src/science/provenance/review"
 import { tmpdir } from "../fixture/fixture"
 
 test("builds one local observable harness trace without reasoning or copied outputs", async () => {
@@ -268,6 +271,12 @@ test("builds one local observable harness trace without reasoning or copied outp
         attempt: 2,
         snapshot: SessionHarness.Snapshot.parse({ ...manifest, fingerprint: SessionHarness.hash(manifest) }),
       })
+      await SessionResearch.define(session.id, {
+        objective: "Produce a checked observable result",
+        domain: "general",
+        template: "minimal",
+        deliverables: [{ path: "result.csv", label: "Result table", required: true }],
+      })
 
       const trace = await SessionTrace.build(session.id)
       expect(trace.summary).toMatchObject({
@@ -309,7 +318,11 @@ test("builds one local observable harness trace without reasoning or copied outp
           }),
         ]),
       )
-      expect(trace.artifacts[0]).toMatchObject({ artifactID: "artifact_1", versionID: "version_1" })
+      expect(trace.artifacts[0]).toMatchObject({
+        artifactID: "artifact_1",
+        versionID: "version_1",
+        path: "result.csv",
+      })
       expect(trace.reviewerFindings[0]).toMatchObject({
         claim: "accuracy is 99%",
         issue: "untraceable-number",
@@ -333,12 +346,141 @@ test("builds one local observable harness trace without reasoning or copied outp
       expect(trace.harness.map((item) => item.attempt)).toEqual([1, 2])
       expect(trace.harnessReport).toMatchObject({ records: 2, stable: true, valid: true })
       expect(trace.harnessReport.checks.every((item) => item.status === "pass")).toBe(true)
+      expect(trace.research).toMatchObject({ configured: true, status: "blocked", missing: [] })
+      expect(trace.research.gates.find((gate) => gate.id === "review")?.status).toBe("failed")
+      expect(trace.research.gates.find((gate) => gate.id === "runtime")?.status).toBe("failed")
       expect(JSON.stringify(trace)).not.toContain("search output that the trace must not copy")
       expect(trace.turns[0].timeToFirstUsefulOutputMs).toBe(100)
       expect(SessionTrace.Info.parse(trace)).toEqual(trace)
 
       await Session.remove(session.id)
       expect(await SessionTraceStore.read(session.id)).toEqual({ approvals: {}, retries: [], harness: [] })
+      expect(await SessionResearch.read(session.id)).toBeUndefined()
+    },
+  })
+})
+
+test("parent readiness includes findings recorded by a delegated reviewer", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parent = await Session.create({ title: "Research owner" })
+      const child = await Session.create({ parentID: parent.id, title: "Independent review" })
+      const scope = { projectID: Instance.project.id, directory: Instance.directory }
+      await SessionResearch.define(parent.id, {
+        objective: "Produce an independently reviewed result",
+        domain: "general",
+        template: "minimal",
+        deliverables: [{ path: "result.csv", label: "Result table", required: true }],
+      })
+      await Provenance.recordOwned(scope, {
+        id: "delegated_target",
+        kind: "artifact",
+        label: "Parent result",
+        meta: { sessionID: parent.id },
+      })
+      const finding = await Review.record({
+        ...scope,
+        target: "delegated_target",
+        finding: { claim: "headline", issue: "unsupported", severity: "major", evidence: "result.csv:2" },
+        reviewer: "reviewer",
+        sessionID: child.id,
+        messageID: "msg_child_review",
+        callID: "call_child_review",
+      })
+
+      const open = await SessionTrace.build(parent.id)
+      expect(open.reviewerFindings).toHaveLength(1)
+      expect(open.reviewerFindings[0]).toMatchObject({ id: finding.node.id, status: "open", severity: "major" })
+      expect(open.research.gates.find((gate) => gate.id === "review")?.status).toBe("failed")
+
+      await Review.resolve({
+        ...scope,
+        finding: finding.node.id,
+        actor: "research",
+        reason: "Recomputed and replaced the unsupported headline result",
+        sessionID: parent.id,
+      })
+      await Review.record({
+        ...scope,
+        target: "delegated_target",
+        confirms: finding.node.id,
+        finding: { claim: "headline", issue: "verified", severity: "info", evidence: "result.csv:2" },
+        verdict: "supports",
+        reviewer: "reviewer",
+        sessionID: child.id,
+      })
+
+      const confirmed = await SessionTrace.build(parent.id)
+      expect(confirmed.reviewerFindings.find((item) => item.id === finding.node.id)?.status).toBe("confirmed")
+      expect(confirmed.research.gates.find((gate) => gate.id === "review")?.status).toBe("passed")
+      await Session.remove(parent.id)
+    },
+  })
+})
+
+test("a completed delegated review satisfies the review gate without findings", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "Clean delegated review" })
+      const started = Date.now()
+      const user: MessageV2.User = {
+        id: "msg_clean_review_user",
+        sessionID: session.id,
+        role: "user",
+        effort: "normal",
+        time: { created: started },
+        agent: "research",
+        model: { providerID: "openai-codex", modelID: "gpt-5" },
+      }
+      const assistant: MessageV2.Assistant = {
+        id: "msg_clean_review_assistant",
+        sessionID: session.id,
+        role: "assistant",
+        time: { created: started + 10, completed: started + 100 },
+        parentID: user.id,
+        modelID: "gpt-5",
+        providerID: "openai-codex",
+        mode: "research",
+        agent: "research",
+        path: { cwd: tmp.path, root: tmp.path },
+        cost: 0,
+        tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: "stop",
+      }
+      await Session.updateMessage(user)
+      await Session.updateMessage(assistant)
+      await Session.updatePart({
+        id: "part_clean_review",
+        sessionID: session.id,
+        messageID: assistant.id,
+        type: "tool",
+        callID: "call_clean_review",
+        tool: "task",
+        state: {
+          status: "completed",
+          input: { subagent_type: "review", description: "Review all result artifacts" },
+          output: "No substantive findings.",
+          title: "Independent review",
+          metadata: { sessionId: "ses_clean_review", outcome: "completed" },
+          time: { start: started + 20, end: started + 90 },
+        },
+      })
+      await SessionResearch.define(session.id, {
+        objective: "Produce an independently reviewed result",
+        domain: "general",
+        template: "minimal",
+        deliverables: [],
+      })
+
+      const trace = await SessionTrace.build(session.id)
+      expect(trace.children[0]).toMatchObject({ agent: "review", status: "completed" })
+      expect(trace.reviewerFindings).toHaveLength(0)
+      expect(trace.research.gates.find((gate) => gate.id === "review")?.status).toBe("passed")
+      await Session.remove(session.id)
     },
   })
 })

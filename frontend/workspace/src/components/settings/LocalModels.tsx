@@ -229,7 +229,7 @@ const LocalModels: Component = () => {
             <p class="text-12-regular text-text-weak/70">
               Let OpenScience start and host a runtime for you — no terminal needed.
             </p>
-            <div class="flex flex-col gap-2 border border-border-weak-base rounded-[4px] p-3 bg-surface-base/40">
+            <div class="flex flex-col gap-2 rounded-sm border border-border-weak-base bg-surface-base p-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="flex min-w-0 flex-col gap-0.5">
                   <span class="text-13-medium text-text-strong">Ollama context window</span>
@@ -237,7 +237,7 @@ const LocalModels: Component = () => {
                 </div>
                 <div class="flex items-center gap-2">
                   <input
-                    class="w-32 rounded-[4px] border border-border-weak-base bg-surface-base px-3 py-2 text-right font-mono text-13-regular text-text-strong"
+                    class="w-32 rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-right font-mono text-13-regular text-text-strong"
                     type="number"
                     min="1024"
                     max="2097152"
@@ -256,7 +256,7 @@ const LocalModels: Component = () => {
             </div>
             <For each={status()}>
               {(rt) => (
-                <div class="flex items-center justify-between border border-border-weak-base rounded-[4px] p-3 bg-surface-base/40">
+                <div class="flex items-center justify-between rounded-sm border border-border-weak-base bg-surface-base p-3">
                   <div class="flex flex-col gap-0.5">
                     <span class="text-13-medium text-text-strong flex items-center gap-1.5">
                       <Show when={rt.running}>
@@ -321,7 +321,7 @@ const LocalModels: Component = () => {
             </p>
             <div class="flex gap-2">
               <input
-                class="flex-1 rounded-[4px] border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
+                class="flex-1 rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
                 placeholder="llama3.1  ·  qwen2.5-coder  ·  phi3"
                 value={pullName()}
                 onInput={(e) => setPullName(e.currentTarget.value)}
@@ -362,7 +362,7 @@ const LocalModels: Component = () => {
             >
               <For each={detected()}>
                 {(d) => (
-                  <div class="flex items-center justify-between border border-border-weak-base rounded-[4px] p-3 bg-surface-base/40">
+                  <div class="flex items-center justify-between rounded-sm border border-border-weak-base bg-surface-base p-3">
                     <div class="flex flex-col gap-0.5">
                       <span class="text-13-medium text-text-strong flex items-center gap-1.5">
                         <Icon name="check" class="text-text-success" /> {d.name}
@@ -385,13 +385,13 @@ const LocalModels: Component = () => {
             <h3 class="text-13-medium text-text-strong">Custom endpoint</h3>
             <div class="flex flex-col gap-2">
               <input
-                class="w-full rounded-[4px] border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
+                class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
                 placeholder="http://localhost:11434/v1"
                 value={url()}
                 onInput={(e) => setUrl(e.currentTarget.value)}
               />
               <input
-                class="w-full rounded-[4px] border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
+                class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
                 placeholder="API key (optional — most local servers need none)"
                 value={key()}
                 onInput={(e) => setKey(e.currentTarget.value)}
@@ -408,7 +408,7 @@ const LocalModels: Component = () => {
               </div>
             </div>
             <Show when={found().length > 0}>
-              <div class="flex flex-col gap-1 border border-border-weak-base rounded-[4px] p-2 bg-surface-base/40">
+              <div class="flex flex-col gap-1 rounded-sm border border-border-weak-base bg-surface-base p-2">
                 <span class="text-11-regular text-text-weak px-1">{listedUrl()}</span>
                 <For each={found()}>
                   {(m) => (
@@ -431,7 +431,7 @@ const LocalModels: Component = () => {
             >
               <For each={configured()}>
                 {(p) => (
-                  <div class="flex items-center justify-between border border-border-weak-base rounded-[4px] p-3 bg-surface-base/40">
+                  <div class="flex items-center justify-between rounded-sm border border-border-weak-base bg-surface-base p-3">
                     <div class="flex flex-col gap-0.5">
                       <span class="text-13-medium text-text-strong">{p.id}</span>
                       <span class="text-11-regular text-text-weak">
