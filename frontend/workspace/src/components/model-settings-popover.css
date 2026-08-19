@@ -90,7 +90,7 @@
 
 [data-model-settings-popover] {
   box-sizing: border-box;
-  width: min(320px, calc(100vw - 24px));
+  width: min(280px, calc(100vw - 24px));
   max-height: min(72dvh, 440px);
   overflow: hidden;
   padding: 6px;
@@ -103,7 +103,7 @@
 }
 
 [data-model-settings-popover] .model-settings-row {
-  min-height: 36px;
+  min-height: 34px;
   gap: 8px;
   padding: 0 7px;
   border-radius: var(--radius-xs);
@@ -113,8 +113,8 @@
 }
 
 [data-model-settings-popover] .model-settings-row:has(.model-settings-setting) {
-  min-height: 40px;
-  padding-block: 5px;
+  min-height: 36px;
+  padding-block: 3px;
 }
 
 [data-model-settings-popover] .model-settings-row:hover,
@@ -143,7 +143,7 @@
 }
 
 .model-settings-heading {
-  padding: 5px 7px 3px;
+  padding: 2px 7px;
   color: var(--model-control-faint);
   font-size: 11px;
   font-weight: var(--font-weight-regular);
@@ -152,8 +152,8 @@
 }
 
 [data-model-settings-popover] [data-model-quick] {
-  min-height: 40px;
-  padding-block: 5px;
+  min-height: 34px;
+  padding-block: 3px;
 }
 
 .model-settings-model {
@@ -241,21 +241,13 @@
   overflow: hidden;
 }
 
-[data-model-settings-view="models"] {
-  height: min(72dvh, 440px);
-  display: flex;
-  flex-direction: column;
-}
-
-[data-model-settings-view="models"] .mobile-model-settings__body {
-  min-height: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
+.model-settings-primary,
+.model-settings-secondary {
+  min-width: 0;
 }
 
 .model-settings-search {
-  min-height: 34px;
+  min-height: 32px;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -299,10 +291,10 @@
 }
 
 [data-model-settings-popover] [data-model-catalog-item] {
-  min-height: 42px;
-  padding-block: 5px;
+  min-height: 38px;
+  padding-block: 4px;
   content-visibility: auto;
-  contain-intrinsic-size: auto 42px;
+  contain-intrinsic-size: auto 38px;
 }
 
 .model-settings-empty {
@@ -325,7 +317,7 @@
 }
 
 .model-settings-manage {
-  flex: 0 0 40px;
+  flex: 0 0 36px;
   background: var(--model-control-surface);
 }
 
@@ -365,6 +357,42 @@
 .model-settings-check {
   flex: 0 0 auto;
   color: var(--text-interactive-base);
+}
+
+@media (min-width: 720px) {
+  [data-model-settings-popover]:not([data-model-settings-view="root"]) {
+    width: min(584px, calc(100vw - 24px));
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  [data-model-settings-popover]:not([data-model-settings-view="root"]) [data-model-settings-layout] {
+    display: grid;
+    grid-template-columns: minmax(0, 272px) minmax(0, 304px);
+    align-items: end;
+    gap: 8px;
+  }
+
+  [data-model-settings-popover]:not([data-model-settings-view="root"]) .model-settings-primary,
+  [data-model-settings-popover]:not([data-model-settings-view="root"]) .model-settings-secondary {
+    overflow: hidden;
+    padding: 6px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--model-control-surface);
+    background-clip: padding-box;
+    box-shadow: var(--model-control-shadow);
+  }
+
+  [data-model-settings-view="models"] .model-settings-secondary {
+    height: min(72dvh, 440px);
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 719px) {

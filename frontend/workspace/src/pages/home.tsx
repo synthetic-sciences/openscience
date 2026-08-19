@@ -25,6 +25,7 @@ import { useServer } from "@/context/server"
 import { ProjectsWorkbench, type HomeProject } from "./home-workbench"
 import { filterProjects, launcherState, prepareProjects, projectName, type ProjectRecord } from "./home-projects"
 import { projectHref } from "@/utils/project-route"
+import { NativeDirectoryPickerUnavailable } from "@/utils/native-picker"
 
 export { ProjectsWorkbench, type HomeProject }
 
@@ -107,9 +108,21 @@ export default function Home(): JSX.Element {
 
   async function chooseProjectSources() {
     if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog({ title: "Add source folders", multiple: true })
-      mergeSources(result)
-      return
+      const result = await platform
+        .openDirectoryPickerDialog({ title: "Add source folders", multiple: true, serverUrl: sdk.url })
+        .catch((error) => {
+          if (!(error instanceof NativeDirectoryPickerUnavailable)) {
+            showToast({
+              title: "The system folder picker could not open",
+              description: error instanceof Error ? error.message : String(error),
+            })
+          }
+          return undefined
+        })
+      if (result !== undefined) {
+        mergeSources(result)
+        return
+      }
     }
 
     const selection = { result: null as string | string[] | null }

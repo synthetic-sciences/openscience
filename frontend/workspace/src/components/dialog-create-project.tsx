@@ -51,7 +51,7 @@ export function DialogCreateProject(props: {
   return (
     <Dialog
       title="Create project"
-      description="Name the workspace and optionally connect folders that belong to this research."
+      description="Name the workspace and optionally connect folders now or later."
       class="project-create-dialog"
       fit
       transition
@@ -88,7 +88,7 @@ export function DialogCreateProject(props: {
           <section class="project-create__sources" aria-labelledby="source-folders-heading">
             <div class="project-create__section-heading">
               <h2 id="source-folders-heading">Source folders</h2>
-              <p>Optional. OpenScience can read and edit connected folders from this project.</p>
+              <p>Optional folders this project can access.</p>
             </div>
 
             <Show
@@ -105,7 +105,7 @@ export function DialogCreateProject(props: {
                   </span>
                   <span class="project-create__source-empty-copy">
                     <strong>Add source folders</strong>
-                    <span>Connect up to 10 folders to this workspace</span>
+                    <span>Choose with Finder or File Explorer</span>
                   </span>
                 </button>
               }
@@ -140,7 +140,7 @@ export function DialogCreateProject(props: {
                   onClick={props.onChooseSources}
                 >
                   <IconPlus size={13} strokeWidth={1.7} />
-                  Add another folder
+                  Add folders
                 </button>
               </div>
             </Show>

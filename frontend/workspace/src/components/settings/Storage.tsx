@@ -67,7 +67,7 @@ export const Storage: Component = () => {
     setStatus(undefined)
     if (!platform.openDirectoryPickerDialog) return
     const picked = await platform
-      .openDirectoryPickerDialog({ title: "Choose a new OpenScience data location" })
+      .openDirectoryPickerDialog({ title: "Choose a new OpenScience data location", serverUrl: sdk.url })
       .catch(() => null)
     const selected = Array.isArray(picked) ? picked[0] : picked
     if (selected) setTarget(selected)

@@ -1,5 +1,5 @@
 [data-component="dialog"] [data-slot="dialog-content"].project-create-dialog {
-  width: min(100%, 34rem);
+  width: min(100%, 30rem);
   min-height: 0;
   max-height: min(calc(100dvh - 2rem), 42rem);
   align-self: center;
@@ -7,7 +7,7 @@
 }
 
 .project-create-dialog [data-slot="dialog-header"] {
-  padding: 1.35rem 1.5rem 0.55rem;
+  padding: 1.1rem 1.25rem 0.4rem;
 }
 
 .project-create-dialog [data-slot="dialog-title"] {
@@ -21,7 +21,7 @@
 .project-create-dialog [data-slot="dialog-description"] {
   max-width: 58ch;
   margin: 0 !important;
-  padding: 0 3.5rem 1.25rem 1.5rem;
+  padding: 0 3.25rem 1rem 1.25rem;
   color: var(--text-weak);
   font-size: 0.8125rem;
   line-height: 1.5;
@@ -41,15 +41,15 @@
 .project-create__body {
   display: flex;
   flex-direction: column;
-  gap: 1.4rem;
-  padding: 0 1.5rem 1.5rem;
+  gap: 1.05rem;
+  padding: 0 1.25rem 1.25rem;
 }
 
 .project-create__field,
 .project-create__sources {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
 .project-create__label,
@@ -75,7 +75,7 @@
 
 .project-create__input-frame {
   display: flex;
-  height: 2.75rem;
+  height: 2.5rem;
   align-items: center;
   gap: 0.65rem;
   overflow: hidden;
@@ -131,12 +131,12 @@
   all: unset;
   box-sizing: border-box;
   display: grid;
-  min-height: 4.25rem;
+  min-height: 3.5rem;
   cursor: pointer;
   grid-template-columns: 2rem minmax(0, 1fr);
   align-items: center;
   gap: 0.7rem;
-  padding: 0.75rem 0.9rem;
+  padding: 0.6rem 0.75rem;
   border: 1px solid var(--border-base);
   border-radius: var(--radius-md);
   background: transparent;
@@ -287,7 +287,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
-  padding: 0.875rem 1.5rem 1rem;
+  padding: 0.75rem 1.25rem 0.85rem;
   border-top: 1px solid var(--border-base);
 }
 

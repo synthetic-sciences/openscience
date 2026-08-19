@@ -10,7 +10,7 @@
  *
  * Routes (all under `/api/resolve-folder`):
  *   GET  /probe              — can we list ~/Desktop? (mac FDA check)
- *   GET  /dialog             — open OS-native folder dialog (mac only)
+ *   GET  /dialog             — open the host OS folder dialog
  *   POST /validate           — { path } → resolved absolute path
  *   POST /                   — { name, hint?, children? } → best candidate
  */
@@ -78,8 +78,8 @@ async function listDirectory(dir: string): Promise<ListResult> {
         .map((n) => ({ name: n.name, absolute: path.join(dir, n.name) })),
       childNames: new Set(data.map((n) => n.name)),
     }
-  } catch (e: any) {
-    return { ok: false, error: String(e?.message ?? e) }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
 }
 
@@ -159,6 +159,59 @@ function run(command: string, args: string[]): Promise<string> {
   })
 }
 
+function title(input: string | undefined) {
+  const value = input
+    ?.trim()
+    .replace(/[\r\n\t]/g, " ")
+    .slice(0, 120)
+  return value || "Choose a folder"
+}
+
+function apple(input: string) {
+  return input.replaceAll("\\", "\\\\").replaceAll('"', '\\"')
+}
+
+function powershell(input: string) {
+  return input.replaceAll("'", "''")
+}
+
+async function openNativeFolders(input: { title: string; multiple: boolean }) {
+  if (process.platform === "darwin") {
+    const command = input.multiple
+      ? `set picked to choose folder with prompt "${apple(input.title)}" with multiple selections allowed`
+      : `set picked to {choose folder with prompt "${apple(input.title)}"}`
+    const script = [
+      command,
+      'set collected to ""',
+      "repeat with folderRef in picked",
+      "set collected to collected & POSIX path of folderRef & linefeed",
+      "end repeat",
+      "return collected",
+    ]
+    return run(
+      "osascript",
+      script.flatMap((line) => ["-e", line]),
+    )
+  }
+
+  if (process.platform === "win32") {
+    const root = process.env.SystemRoot || "C:\\Windows"
+    const command = path.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+    const script = [
+      "Add-Type -AssemblyName System.Windows.Forms",
+      "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog",
+      `$dialog.Description = '${powershell(input.title)}'`,
+      "$dialog.ShowNewFolderButton = $true",
+      "if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 0 }",
+      "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()",
+      "Write-Output $dialog.SelectedPath",
+    ].join("; ")
+    return run(command, ["-NoProfile", "-Sta", "-Command", script])
+  }
+
+  return
+}
+
 export const FolderResolveRoutes = lazy(() =>
   new Hono()
     .get("/probe", async (c) => {
@@ -169,23 +222,23 @@ export const FolderResolveRoutes = lazy(() =>
       })
     })
     .get("/dialog", async (c) => {
-      // Only macOS gets a reliable scriptable native dialog. Linux/Windows
-      // fall through to the in-app FolderPicker the SPA renders next.
-      if (process.platform !== "darwin") {
+      const prompt = title(c.req.query("title"))
+      const multiple = c.req.query("multiple") === "true"
+      if (process.platform !== "darwin" && process.platform !== "win32") {
         return c.json({ unsupported: true, message: `native dialog unsupported on ${process.platform}` }, 501)
       }
       try {
-        const script = ['set picked to choose folder with prompt "Open project folder"', "POSIX path of picked"]
-        const out = await run(
-          "osascript",
-          script.flatMap((s) => ["-e", s]),
-        )
-        const folder = out.trim().replace(/\/+$/, "")
-        return c.json({ paths: folder ? [folder] : [] })
-      } catch (e: any) {
-        const message = String(e?.message ?? e)
+        const out = await openNativeFolders({ title: prompt, multiple })
+        const paths = (out ?? "")
+          .split(/\r?\n/)
+          .map((folder) => folder.trim().replace(/[\\/]+$/, ""))
+          .filter(Boolean)
+        return c.json({ paths })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
         const cancelled = /User canceled|cancelled/i.test(message)
-        return c.json({ error: cancelled ? "cancelled" : message }, (cancelled ? 499 : 500) as any)
+        if (cancelled) return c.json({ error: "cancelled" })
+        return c.json({ error: message }, 500)
       }
     })
     .post("/validate", async (c) => {

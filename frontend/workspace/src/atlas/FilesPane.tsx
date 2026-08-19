@@ -15,6 +15,8 @@ import { useParams } from "@solidjs/router"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { SourceMenu } from "@/atlas/files/SourceMenu"
 import { ArtifactGrid } from "@/atlas/files/ArtifactGrid"
 import { FileTable, type FileRow } from "@/atlas/files/FileTable"
@@ -38,6 +40,7 @@ import {
   type FilesystemSnapshot,
 } from "@/atlas/file-sources"
 import "@/atlas/files/FilesPane.css"
+import { NativeDirectoryPickerUnavailable } from "@/utils/native-picker"
 
 export type Transport = (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
 
@@ -201,6 +204,8 @@ export function FilesPane(
   const sync = standalone ? undefined : useSync()
   const params = standalone ? ({} as ReturnType<typeof useParams>) : useParams()
   const dialog = standalone ? undefined : useDialog()
+  const platform = standalone ? undefined : usePlatform()
+  const server = standalone ? undefined : useServer()
   const transport: Transport = props.request ?? sdk!.request
 
   const projectRoot = () =>
@@ -652,7 +657,22 @@ export function FilesPane(
   // The picker walks the real filesystem and hands back an absolute path. It
   // needs the dialog host, so outside a provider the typed path stays the
   // only route in — which is also what keeps this form testable.
-  const browse = () => {
+  const browse = async () => {
+    if (platform?.openDirectoryPickerDialog && server?.isLocal()) {
+      const result = await platform
+        .openDirectoryPickerDialog({ title: "Connect a folder", serverUrl: sdk?.url })
+        .catch((error) => {
+          if (!(error instanceof NativeDirectoryPickerUnavailable)) {
+            setError(`The system folder picker could not open. ${concise(error)}`)
+          }
+          return undefined
+        })
+      if (result !== undefined) {
+        const picked = Array.isArray(result) ? result[0] : result
+        if (picked) setConnect("path", picked)
+        return
+      }
+    }
     dialog?.show(() => (
       <FolderPicker
         kind="folder"

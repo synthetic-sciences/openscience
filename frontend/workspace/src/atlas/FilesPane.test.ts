@@ -1206,6 +1206,7 @@ describe("files pane", () => {
     const source = readFileSync(fileURLToPath(new URL("./FilesPane.tsx", import.meta.url)), "utf8")
 
     expect(source).toContain('import { FolderPicker } from "@/atlas/FolderPicker"')
+    expect(source).toContain("platform?.openDirectoryPickerDialog")
     expect(source).toContain("dialog?.show(")
     expect(source).toContain("<FolderPicker")
     expect(source).toContain('kind="folder"')

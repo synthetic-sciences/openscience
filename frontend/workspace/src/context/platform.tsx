@@ -27,7 +27,11 @@ export type Platform = {
   notify(title: string, description?: string, href?: string): Promise<void>
 
   /** Open directory picker dialog (native on Tauri, server-backed on web) */
-  openDirectoryPickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
+  openDirectoryPickerDialog?(opts?: {
+    title?: string
+    multiple?: boolean
+    serverUrl?: string
+  }): Promise<string | string[] | null>
 
   /** Open native file picker dialog (Tauri only) */
   openFilePickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>

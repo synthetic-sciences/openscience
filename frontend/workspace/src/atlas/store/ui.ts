@@ -225,8 +225,20 @@ function restoreState(value: unknown): ContextState {
     ...(row.open === true || file || files.length > 0 ? [viewTab(mode === "artifact" ? "artifact" : tab)] : []),
     ...files.map(fileTab),
   ]
-  const workTabs = restoredTabs.length > 0 ? restoredTabs : fallback
   const requested = typeof row.activeWorkTab === "string" ? row.activeWorkTab : undefined
+  const requestedTab = restoredTabs.find((item) => item.id === requested)
+  const owner =
+    requestedTab?.kind === "view"
+      ? requestedTab.context
+      : requestedTab
+        ? "files"
+        : mode === "artifact"
+          ? "artifact"
+          : tab
+  // Context tools replace each other. File and saved-artifact tabs remain
+  // mounted, but persisted sessions never restore several tool panes at once.
+  const workTabs =
+    restoredTabs.length > 0 ? [viewTab(owner), ...restoredTabs.filter((item) => item.kind !== "view")] : fallback
   const activeWorkTab =
     workTabs.find((item) => item.id === requested)?.id ??
     workTabs.find((item) => item.kind === "file" && file && fileKey(item.file) === fileKey(file))?.id ??
@@ -358,6 +370,7 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
     if (tabs.some((item) => item.id === tab.id)) return tabs
     return [...tabs, tab]
   }
+  const own = (tabs: WorkTab[], next: ContextTab) => [viewTab(next), ...tabs.filter((item) => item.kind !== "view")]
   const closeWorkTab = (id?: string) => {
     const state = current()
     const tabs = state.workTabs ?? []
@@ -394,7 +407,7 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
   }
   const openContext = (next: ContextTab) => {
     const state = current()
-    const tabs = ensure(state.workTabs ?? [], viewTab(next))
+    const tabs = own(state.workTabs ?? [], next)
     const id = `view:${next}`
     if (next === "files" && (state.file || state.saved)) {
       update(select(state, tabs, id))
@@ -414,7 +427,7 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
     const files = known ? existing : [...existing, file]
     // Never evict an open editor implicitly. Its draft lives in the mounted
     // FileView, so the user closes tabs explicitly after saving or confirming.
-    const tabs = ensure(ensure(state.workTabs ?? [], viewTab("files")), fileTab(file))
+    const tabs = ensure(own(state.workTabs ?? [], "files"), fileTab(file))
     update(select(state, tabs, fileTab(file).id, files))
   }
   const closeFile = (path?: string) => {
@@ -429,7 +442,7 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
   const openSaved = (artifact: StoredArtifact) => {
     const state = current()
     const tab = savedTab(artifact)
-    const tabs = ensure(ensure(state.workTabs ?? [], viewTab("files")), tab)
+    const tabs = ensure(own(state.workTabs ?? [], "files"), tab)
     update(select(state, tabs, tab.id))
   }
   const updateSaved = (artifact: StoredArtifact) => {

@@ -33,7 +33,7 @@ describe("model control surface", () => {
     expect(tooltip).toContain("props.model.name")
   })
 
-  test("keeps the root model trigger compact and moves request options into More models", () => {
+  test("keeps the root model trigger compact and moves request options into All models", () => {
     const composer = source("./prompt-input.tsx")
     expect(existsSync(path("./model-settings-popover.tsx"))).toBe(true)
     const settings = source("./model-settings-popover.tsx")
@@ -76,8 +76,8 @@ describe("model control surface", () => {
     expect(settings).not.toContain("Balanced research, coding, and tool use")
     expect(settings).not.toContain("Deep analysis and scientific review")
     expect(settings).not.toContain("Long-context research and synthesis")
-    expect(settings).toContain("More models")
-    expect(settings).toContain("Suggested models")
+    expect(settings).toContain("All models")
+    expect(settings).toContain('<p class="model-settings-heading">Models</p>')
     expect(settings).toContain("curateQuickModels")
     expect(settings).toContain("<ProviderIcon")
     expect(settings).not.toContain("RECOMMENDED_MODELS")
@@ -85,7 +85,8 @@ describe("model control surface", () => {
     expect(settings).toContain("Manage models")
     expect(settings).not.toContain("data-model-source-label")
     expect(settings).toContain("data-model-menu-value")
-    expect(styles).toContain("width: min(320px, calc(100vw - 24px))")
+    expect(styles).toContain("width: min(280px, calc(100vw - 24px))")
+    expect(styles).toContain("grid-template-columns: minmax(0, 272px) minmax(0, 304px)")
     expect(styles).toContain("overflow-y: auto")
     expect(styles).toContain("min-height: 58px")
     expect(styles).toContain("font-size: 14px")
@@ -112,7 +113,7 @@ describe("model control surface", () => {
     expect(rowRule).toContain("padding: 0 7px")
     expect(rowRule).toContain("font-size: 12px")
     expect(rowRule).toContain("line-height: 16px")
-    expect(styles).toContain("min-height: 40px")
+    expect(styles).toContain("min-height: 36px")
     expect(styles).toContain("font-size: 11px")
     expect(styles).toContain("line-height: 15px")
 

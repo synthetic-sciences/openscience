@@ -25,7 +25,7 @@ type QuickModelInput<T extends QuickModel> = {
  * diverse. No provider or model is invented by the client.
  */
 export function curateQuickModels<T extends QuickModel>(input: QuickModelInput<T>) {
-  const limit = input.limit ?? 4
+  const limit = input.limit ?? 3
   const selected: T[] = []
   const keys = new Set<string>()
   const labs = new Set<string>()

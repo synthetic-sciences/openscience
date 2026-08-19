@@ -311,7 +311,7 @@ describe("evidence surface removal", () => {
 })
 
 describe("open-file tabs", () => {
-  test("keeps collection and file tabs in one restorable work strip", () => {
+  test("keeps one collection and file tabs in one restorable work strip", () => {
     const storage = memoryStorage()
     const first = createContextState({ storage })
     first.activateScope("project-a", "session-a")
@@ -320,12 +320,7 @@ describe("open-file tabs", () => {
     first.openContext("kernels")
     first.openFile("/root", "results.csv")
 
-    expect(first.workTabs().map((tab) => tab.id)).toEqual([
-      "view:terminal",
-      "view:kernels",
-      "view:files",
-      "file:%2Froot:results.csv",
-    ])
+    expect(first.workTabs().map((tab) => tab.id)).toEqual(["view:files", "file:%2Froot:results.csv"])
     expect(first.activeWorkTab()).toBe("file:%2Froot:results.csv")
 
     const restored = createContextState({ storage })
@@ -335,21 +330,14 @@ describe("open-file tabs", () => {
     expect(restored.file()?.path).toBe("results.csv")
   })
 
-  test("closing the active work tab focuses its neighbor and the final close removes the pane", () => {
+  test("switching tool panels replaces the last panel and closing it removes the pane", () => {
     const state = createContextState({ storage: memoryStorage() })
     state.activateScope("project-a", "session-a")
     state.openContext("files")
     state.openContext("terminal")
     state.openContext("kernels")
 
-    state.closeWorkTab()
-    expect(state.context()).toBe("terminal")
-    expect(state.open()).toBe(true)
-
-    state.closeWorkTab()
-    expect(state.context()).toBe("files")
-    expect(state.open()).toBe(true)
-
+    expect(state.workTabs().map((tab) => tab.id)).toEqual(["view:kernels"])
     state.closeWorkTab()
     expect(state.workTabs()).toHaveLength(0)
     expect(state.open()).toBe(false)
@@ -358,16 +346,15 @@ describe("open-file tabs", () => {
   test("work tab activation and reordering are keyboard-strip primitives", () => {
     const state = createContextState({ storage: memoryStorage() })
     state.activateScope("project-a", "session-a")
-    state.openContext("files")
-    state.openContext("terminal")
-    state.openContext("kernels")
+    state.openFile("/root", "a.md")
+    state.openFile("/root", "b.md")
 
-    state.moveWorkTab("view:kernels", 0)
-    expect(state.workTabs().map((tab) => tab.id)).toEqual(["view:kernels", "view:files", "view:terminal"])
+    state.moveWorkTab("file:%2Froot:b.md", 1)
+    expect(state.workTabs().map((tab) => tab.id)).toEqual(["view:files", "file:%2Froot:b.md", "file:%2Froot:a.md"])
 
-    state.activateWorkTab("view:files")
+    state.activateWorkTab("file:%2Froot:a.md")
     expect(state.context()).toBe("files")
-    expect(state.activeWorkTab()).toBe("view:files")
+    expect(state.activeWorkTab()).toBe("file:%2Froot:a.md")
   })
 
   test("opening files accumulates tabs, activates the newest, and dedupes", () => {

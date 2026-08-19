@@ -510,9 +510,9 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
             {notice()}
           </p>
 
-          <div class="mobile-model-settings__body">
-            <Switch>
-              <Match when={view() === "root"}>
+          <div class="mobile-model-settings__body" data-model-settings-layout>
+            <Show when={!mobile() || view() === "root"}>
+              <div class="model-settings-primary">
                 <div data-model-menu-scope class="flex flex-col">
                   <div
                     class="model-settings-models"
@@ -521,7 +521,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                     aria-orientation="vertical"
                     onKeyDown={focusModelRadio}
                   >
-                    <p class="model-settings-heading">Suggested models</p>
+                    <p class="model-settings-heading">Models</p>
                     <For each={quick()}>
                       {(choice) => {
                         const model = choice.model
@@ -587,243 +587,265 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                     onClick={choose}
                   >
                     <span class="model-settings-setting">
-                      <span data-model-menu-label>More models</span>
-                      <small>Browse models from your connected providers.</small>
+                      <span data-model-menu-label>All models</span>
+                      <small>Choose any available model.</small>
                     </span>
                     <span aria-hidden="true" data-model-menu-value>
                       ›
                     </span>
                   </button>
-                </div>
-              </Match>
-
-              <Match when={view() === "models"}>
-                <div data-model-menu-scope class="model-settings-browser">
-                  <button
-                    type="button"
-                    data-model-menu-back="models"
-                    class={`${row} justify-start`}
-                    onClick={() => setView("root")}
-                  >
-                    <span aria-hidden="true">‹</span>
-                    <span data-model-menu-label>Models</span>
-                  </button>
-                  <div class="model-settings-divider" />
-                  <label class="model-settings-search">
-                    <Icon name="magnifying-glass" size="small" aria-hidden="true" />
-                    <input
-                      data-model-catalog-search
-                      type="search"
-                      value={query()}
-                      onInput={(event) => searchCatalog(event.currentTarget.value)}
-                      placeholder="Find a model or provider"
-                      aria-label="Find a model or provider"
-                    />
-                  </label>
-                  <div
-                    class="model-settings-catalog"
-                    role="radiogroup"
-                    aria-label="Available models"
-                    aria-orientation="vertical"
-                    onKeyDown={focusModelRadio}
-                  >
-                    <Show when={catalogReady()} fallback={<p class="model-settings-empty">Loading models…</p>}>
-                      <For each={visibleGroups()}>
-                        {(group) => (
-                          <section class="model-settings-group" aria-label={group[0]}>
-                            <p class="model-settings-heading">{group[0]}</p>
-                            <For each={group[1]}>
-                              {(choice) => {
-                                const model = choice.model
-                                const selected = () =>
-                                  choice.routes.some((route) => current() && exact(route) === exact(current()!))
-                                return (
-                                  <button
-                                    type="button"
-                                    role="radio"
-                                    data-model-menu-item
-                                    data-model-catalog-item
-                                    data-model-choice={choice.key}
-                                    data-model-routes={choice.routes.length}
-                                    aria-checked={selected()}
-                                    aria-haspopup={choice.routes.length > 1 ? "menu" : undefined}
-                                    tabindex={catalogTab() === choice.key ? 0 : -1}
-                                    aria-label={`${choiceName(choice)}, ${routeLabel(model)}${
-                                      choice.routes.length > 1 ? `, ${choice.routes.length} access options` : ""
-                                    }`}
-                                    class={row}
-                                    onFocus={() => setCatalogFocus(choice.key)}
-                                    onClick={() => selectChoice(choice, "models")}
-                                  >
-                                    <span class="model-settings-model">
-                                      <strong>{choiceName(choice)}</strong>
-                                      <small>
-                                        {modelSummary({
-                                          reasoning: model.capabilities.reasoning,
-                                          context: model.limit.context,
-                                          provider: routeLabel(model),
-                                        })}
-                                        {choice.routes.length > 1 ? ` · ${choice.routes.length} access options` : ""}
-                                      </small>
-                                    </span>
-                                    <Show
-                                      when={choice.routes.length > 1}
-                                      fallback={
-                                        <Show when={selected()}>
-                                          <Icon
-                                            name="check"
-                                            size="small"
-                                            class="model-settings-check"
-                                            aria-hidden="true"
-                                          />
-                                        </Show>
-                                      }
-                                    >
-                                      <span aria-hidden="true" data-model-menu-value>
-                                        ›
-                                      </span>
-                                    </Show>
-                                  </button>
-                                )
-                              }}
-                            </For>
-                          </section>
-                        )}
-                      </For>
-                      <Show when={catalog().length === 0}>
-                        <p class="model-settings-empty">No models match “{query()}”.</p>
-                      </Show>
-                      <Show when={catalogLimit() < catalog().length}>
-                        <p class="model-settings-catalog-progress" role="status">
-                          Loading more models…
-                        </p>
-                      </Show>
-                    </Show>
-                  </div>
-                  <div class="model-settings-divider" />
-                  <p class="model-settings-heading">Request options</p>
-                  <Show when={control().effort}>
-                    {(effort) => (
-                      <button
-                        type="button"
-                        data-model-menu-item
-                        data-model-menu-row="effort"
-                        class={row}
-                        aria-controls="model-effort-options"
-                        onClick={() => show("effort")}
-                      >
-                        <span class="model-settings-setting">
-                          <span data-model-menu-label>Thinking effort</span>
-                          <small>Applies to this model's next request.</small>
-                        </span>
-                        <span data-model-menu-value class="flex min-w-0 items-center">
-                          <span class="truncate">{effort().value}</span>
-                          <span aria-hidden="true">›</span>
-                        </span>
-                      </button>
-                    )}
-                  </Show>
-                  <Show when={control().speed}>
-                    {(speed) => (
-                      <button
-                        type="button"
-                        data-model-menu-item
-                        data-model-menu-row="speed"
-                        class={row}
-                        aria-controls="model-speed-options"
-                        onClick={() => show("speed")}
-                      >
-                        <span class="model-settings-setting">
-                          <span data-model-menu-label>{speed().label}</span>
-                          <small>Choose the provider latency tier.</small>
-                        </span>
-                        <span data-model-menu-value class="flex min-w-0 items-center">
-                          <span class="truncate">{speed().value}</span>
-                          <span aria-hidden="true">›</span>
-                        </span>
-                      </button>
-                    )}
-                  </Show>
-                  <div class="model-settings-divider" />
                   <button type="button" data-model-menu-item class={`${row} model-settings-manage`} onClick={manage}>
                     <span class="model-settings-setting">
                       <span data-model-menu-label>Manage models</span>
-                      <small>Choose which connected models appear here.</small>
+                      <small>Choose which models appear here.</small>
                     </span>
                     <span aria-hidden="true" data-model-menu-value>
                       ›
                     </span>
                   </button>
                 </div>
-              </Match>
+              </div>
+            </Show>
 
-              <Match when={view() === "route" && routeChoice()}>
-                {(choice) => {
-                  const selected = () => {
-                    const model = current()
-                    if (!model || logicalModelKey(model.provider.id, model.id) !== choice().key) {
-                      return exact(choice().model)
-                    }
-                    return exact(model)
-                  }
-                  return (
-                    <ModelOptionList
-                      id="model-route-options"
-                      kind="route"
-                      title={`${choiceName(choice())} access`}
-                      current={selected()}
-                      options={choice().routes.map((model) => ({ id: exact(model), label: routeLabel(model) }))}
-                      onSelect={(id) => {
-                        const model = choice().routes.find((route) => exact(route) === id)
-                        if (!model) return
-                        local.model.set({ providerID: model.provider.id, modelID: model.id }, { recent: true })
-                      }}
-                      onBack={() => {
-                        setView(routeReturn())
-                        focus(`[data-model-choice="${choice().key}"]`, true)
-                      }}
-                      onDone={close}
-                    />
-                  )
-                }}
-              </Match>
+            <Show when={view() !== "root"}>
+              <div class="model-settings-secondary">
+                <Switch>
+                  <Match when={view() === "models"}>
+                    <div data-model-menu-scope class="model-settings-browser">
+                      <button
+                        type="button"
+                        data-model-menu-back="models"
+                        class={`${row} justify-start`}
+                        onClick={() => setView("root")}
+                      >
+                        <span aria-hidden="true">‹</span>
+                        <span data-model-menu-label>Models</span>
+                      </button>
+                      <div class="model-settings-divider" />
+                      <label class="model-settings-search">
+                        <Icon name="magnifying-glass" size="small" aria-hidden="true" />
+                        <input
+                          data-model-catalog-search
+                          type="search"
+                          value={query()}
+                          onInput={(event) => searchCatalog(event.currentTarget.value)}
+                          placeholder="Find a model or provider"
+                          aria-label="Find a model or provider"
+                        />
+                      </label>
+                      <div
+                        class="model-settings-catalog"
+                        role="radiogroup"
+                        aria-label="Available models"
+                        aria-orientation="vertical"
+                        onKeyDown={focusModelRadio}
+                      >
+                        <Show when={catalogReady()} fallback={<p class="model-settings-empty">Loading models…</p>}>
+                          <For each={visibleGroups()}>
+                            {(group) => (
+                              <section class="model-settings-group" aria-label={group[0]}>
+                                <p class="model-settings-heading">{group[0]}</p>
+                                <For each={group[1]}>
+                                  {(choice) => {
+                                    const model = choice.model
+                                    const selected = () =>
+                                      choice.routes.some((route) => current() && exact(route) === exact(current()!))
+                                    return (
+                                      <button
+                                        type="button"
+                                        role="radio"
+                                        data-model-menu-item
+                                        data-model-catalog-item
+                                        data-model-choice={choice.key}
+                                        data-model-routes={choice.routes.length}
+                                        aria-checked={selected()}
+                                        aria-haspopup={choice.routes.length > 1 ? "menu" : undefined}
+                                        tabindex={catalogTab() === choice.key ? 0 : -1}
+                                        aria-label={`${choiceName(choice)}, ${routeLabel(model)}${
+                                          choice.routes.length > 1 ? `, ${choice.routes.length} access options` : ""
+                                        }`}
+                                        class={row}
+                                        onFocus={() => setCatalogFocus(choice.key)}
+                                        onClick={() => selectChoice(choice, "models")}
+                                      >
+                                        <span class="model-settings-model">
+                                          <strong>{choiceName(choice)}</strong>
+                                          <small>
+                                            {modelSummary({
+                                              reasoning: model.capabilities.reasoning,
+                                              context: model.limit.context,
+                                              provider: routeLabel(model),
+                                            })}
+                                            {choice.routes.length > 1
+                                              ? ` · ${choice.routes.length} access options`
+                                              : ""}
+                                          </small>
+                                        </span>
+                                        <Show
+                                          when={choice.routes.length > 1}
+                                          fallback={
+                                            <Show when={selected()}>
+                                              <Icon
+                                                name="check"
+                                                size="small"
+                                                class="model-settings-check"
+                                                aria-hidden="true"
+                                              />
+                                            </Show>
+                                          }
+                                        >
+                                          <span aria-hidden="true" data-model-menu-value>
+                                            ›
+                                          </span>
+                                        </Show>
+                                      </button>
+                                    )
+                                  }}
+                                </For>
+                              </section>
+                            )}
+                          </For>
+                          <Show when={catalog().length === 0}>
+                            <p class="model-settings-empty">No models match “{query()}”.</p>
+                          </Show>
+                          <Show when={catalogLimit() < catalog().length}>
+                            <p class="model-settings-catalog-progress" role="status">
+                              Loading more models…
+                            </p>
+                          </Show>
+                        </Show>
+                      </div>
+                      <div class="model-settings-divider" />
+                      <p class="model-settings-heading">Request options</p>
+                      <Show when={control().effort}>
+                        {(effort) => (
+                          <button
+                            type="button"
+                            data-model-menu-item
+                            data-model-menu-row="effort"
+                            class={row}
+                            aria-controls="model-effort-options"
+                            onClick={() => show("effort")}
+                          >
+                            <span class="model-settings-setting">
+                              <span data-model-menu-label>Thinking effort</span>
+                              <small>Applies to this model's next request.</small>
+                            </span>
+                            <span data-model-menu-value class="flex min-w-0 items-center">
+                              <span class="truncate">{effort().value}</span>
+                              <span aria-hidden="true">›</span>
+                            </span>
+                          </button>
+                        )}
+                      </Show>
+                      <Show when={control().speed}>
+                        {(speed) => (
+                          <button
+                            type="button"
+                            data-model-menu-item
+                            data-model-menu-row="speed"
+                            class={row}
+                            aria-controls="model-speed-options"
+                            onClick={() => show("speed")}
+                          >
+                            <span class="model-settings-setting">
+                              <span data-model-menu-label>{speed().label}</span>
+                              <small>Choose the provider latency tier.</small>
+                            </span>
+                            <span data-model-menu-value class="flex min-w-0 items-center">
+                              <span class="truncate">{speed().value}</span>
+                              <span aria-hidden="true">›</span>
+                            </span>
+                          </button>
+                        )}
+                      </Show>
+                      <div class="model-settings-divider" />
+                      <button
+                        type="button"
+                        data-model-menu-item
+                        class={`${row} model-settings-manage`}
+                        onClick={manage}
+                      >
+                        <span class="model-settings-setting">
+                          <span data-model-menu-label>Manage models</span>
+                          <small>Choose which connected models appear here.</small>
+                        </span>
+                        <span aria-hidden="true" data-model-menu-value>
+                          ›
+                        </span>
+                      </button>
+                    </div>
+                  </Match>
 
-              <Match when={view() === "effort" && control().effort}>
-                {(effort) => (
-                  <ModelOptionList
-                    id="model-effort-options"
-                    kind="effort"
-                    title="Thinking effort"
-                    current={effort().current.id}
-                    options={effort().options}
-                    onSelect={local.model.variant.set}
-                    onBack={() => {
-                      setView("models")
-                      focus('[data-model-menu-row="effort"]', true)
+                  <Match when={view() === "route" && routeChoice()}>
+                    {(choice) => {
+                      const selected = () => {
+                        const model = current()
+                        if (!model || logicalModelKey(model.provider.id, model.id) !== choice().key) {
+                          return exact(choice().model)
+                        }
+                        return exact(model)
+                      }
+                      return (
+                        <ModelOptionList
+                          id="model-route-options"
+                          kind="route"
+                          title={`${choiceName(choice())} access`}
+                          current={selected()}
+                          options={choice().routes.map((model) => ({ id: exact(model), label: routeLabel(model) }))}
+                          onSelect={(id) => {
+                            const model = choice().routes.find((route) => exact(route) === id)
+                            if (!model) return
+                            local.model.set({ providerID: model.provider.id, modelID: model.id }, { recent: true })
+                          }}
+                          onBack={() => {
+                            setView(routeReturn())
+                            focus(`[data-model-choice="${choice().key}"]`, true)
+                          }}
+                          onDone={close}
+                        />
+                      )
                     }}
-                    onDone={close}
-                  />
-                )}
-              </Match>
+                  </Match>
 
-              <Match when={view() === "speed" && control().speed}>
-                {(speed) => (
-                  <ModelOptionList
-                    id="model-speed-options"
-                    kind="speed"
-                    title="Speed"
-                    current={speed().current.id}
-                    options={speed().options}
-                    onSelect={local.model.tier.set}
-                    onBack={() => {
-                      setView("models")
-                      focus('[data-model-menu-row="speed"]', true)
-                    }}
-                    onDone={close}
-                  />
-                )}
-              </Match>
-            </Switch>
+                  <Match when={view() === "effort" && control().effort}>
+                    {(effort) => (
+                      <ModelOptionList
+                        id="model-effort-options"
+                        kind="effort"
+                        title="Thinking effort"
+                        current={effort().current.id}
+                        options={effort().options}
+                        onSelect={local.model.variant.set}
+                        onBack={() => {
+                          setView("models")
+                          focus('[data-model-menu-row="effort"]', true)
+                        }}
+                        onDone={close}
+                      />
+                    )}
+                  </Match>
+
+                  <Match when={view() === "speed" && control().speed}>
+                    {(speed) => (
+                      <ModelOptionList
+                        id="model-speed-options"
+                        kind="speed"
+                        title="Speed"
+                        current={speed().current.id}
+                        options={speed().options}
+                        onSelect={local.model.tier.set}
+                        onBack={() => {
+                          setView("models")
+                          focus('[data-model-menu-row="speed"]', true)
+                        }}
+                        onDone={close}
+                      />
+                    )}
+                  </Match>
+                </Switch>
+              </div>
+            </Show>
           </div>
         </Kobalte.Content>
       </Kobalte.Portal>

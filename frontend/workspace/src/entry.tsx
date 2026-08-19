@@ -6,6 +6,7 @@ import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { openscienceFetch } from "@/utils/openscience-fetch"
 import { URLS } from "@/config/urls"
+import { openNativeDirectoryPicker } from "@/utils/native-picker"
 import pkg from "../package.json"
 
 const DEFAULT_SERVER_URL_KEY = "openscience.settings.dat:defaultServerUrl"
@@ -67,6 +68,7 @@ const platform: Platform = {
       })
       .catch(() => undefined)
   },
+  openDirectoryPickerDialog: (options) => openNativeDirectoryPicker(options, openscienceFetch),
   checkUpdate: async (options) => {
     const query = options?.refresh ? "?refresh=1" : ""
     const response = await openscienceFetch(`/settings/updates${query}`, { headers: { Accept: "application/json" } })
