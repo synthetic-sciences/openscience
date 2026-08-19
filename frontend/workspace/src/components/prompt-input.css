@@ -708,10 +708,26 @@ form.workspace-composer .workspace-composer__reviewer-menu {
   overflow: hidden;
 }
 
-form.workspace-composer .workspace-composer__reviewer-back {
-  grid-template-columns: 16px minmax(0, 1fr);
-  justify-items: start;
+form.workspace-composer .workspace-composer__research-choice-menu > button.workspace-composer__reviewer-back {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
   margin-bottom: 3px;
+}
+
+form.workspace-composer
+  .workspace-composer__research-choice-menu
+  > button.workspace-composer__reviewer-back
+  > [data-component="icon"] {
+  flex: 0 0 auto;
+}
+
+form.workspace-composer .workspace-composer__research-choice-menu > button.workspace-composer__reviewer-back > span {
+  min-width: 0;
+  flex: 1;
+  align-items: flex-start;
+  text-align: left;
 }
 
 form.workspace-composer .workspace-composer__reviewer-search {

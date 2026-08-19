@@ -211,16 +211,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [reviewerQuery, setReviewerQuery] = createSignal("")
   const [reviewerRoute, setReviewerRoute] = createSignal("")
   const reviewerModels = createMemo(() => {
-    const visible = local.model
-      .list()
-      .filter(
-        (model) =>
-          local.model.pin.has({ providerID: model.provider.id, modelID: model.id }) ||
-          local.model.visible({ providerID: model.provider.id, modelID: model.id }),
-      )
-    const models = [local.model.current(), ...local.model.pinned(), ...local.model.recent(), ...visible].filter(
-      (model) => model !== undefined,
-    )
+    const models = [
+      local.model.current(),
+      ...local.model.pinned(),
+      ...local.model.recent(),
+      ...local.model.list(),
+    ].filter((model) => model !== undefined)
     return [...new Map(models.map((model) => [`${model.provider.id}/${model.id}`, model])).values()]
   })
   const reviewerSources = createMemo(
