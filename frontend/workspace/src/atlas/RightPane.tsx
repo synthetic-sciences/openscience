@@ -241,6 +241,7 @@ export function RightPane(
   const fileTabs = createMemo(() =>
     uiStore.workTabs().filter((tab): tab is Extract<WorkTab, { kind: "file" }> => tab.kind === "file"),
   )
+  const terminal = () => uiStore.workTabs().some((tab) => tab.kind === "view" && tab.context === "terminal")
   const selectedFile = (tab: Extract<WorkTab, { kind: "file" }>) => {
     const current = uiStore.file()
     return current?.directory === tab.file.directory && current.path === tab.file.path
@@ -493,15 +494,28 @@ export function RightPane(
                 <FilesPane />
               </div>
             </Show>
+            <Show when={terminal()}>
+              <div
+                data-component="terminal-context"
+                aria-hidden={context() === "terminal" ? undefined : "true"}
+                hidden={context() !== "terminal"}
+                style={{
+                  flex: 1,
+                  "min-height": 0,
+                  "min-width": 0,
+                  display: context() === "terminal" ? "flex" : "none",
+                  "flex-direction": "column",
+                }}
+              >
+                <TerminalSurface active={context() === "terminal"} />
+              </div>
+            </Show>
             <Switch>
               <Match when={context() === "artifact" && artifact()}>
                 {(current) => <ArtifactInspector context={current()} />}
               </Match>
               <Match when={context() === "files" && uiStore.saved()}>
                 {(current) => <StoredArtifactView artifact={current()} />}
-              </Match>
-              <Match when={context() === "terminal"}>
-                <TerminalSurface />
               </Match>
               <Match when={context() === "canvas"}>
                 <AtlasCanvas />

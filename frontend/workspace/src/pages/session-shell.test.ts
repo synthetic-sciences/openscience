@@ -284,7 +284,7 @@ describe("focused workspace shell", () => {
     expect(pane).toContain('aria-label="Research inspector"')
     expect(pane).toContain('class="research-inspector__header"')
     expect(pane).toContain('class="research-inspector__context"')
-    expect(pane).toContain("<TerminalSurface />")
+    expect(pane).toContain('<TerminalSurface active={context() === "terminal"} />')
     expect(pane).toContain("narrow() ? void closePane() : void closeWorkTab()")
     expect(pane).toContain("<WorkTabStrip")
     expect(pane).not.toContain('class="research-inspector__tabs"')

@@ -14,7 +14,7 @@ describe("contextual project terminal", () => {
     expect(terminalEndpointAvailable("not a URL")).toBe(false)
   })
 
-  test("mounts the terminal only as a selected right-pane context", async () => {
+  test("keeps the terminal mounted while its right-pane tab is open", async () => {
     const [pane, surface, action] = await Promise.all([
       read("../atlas/RightPane.tsx"),
       read("../atlas/TerminalSurface.tsx"),
@@ -23,7 +23,9 @@ describe("contextual project terminal", () => {
 
     expect(pane).toContain('terminal: "Terminal"')
     expect(pane).toContain('context() === "terminal"')
-    expect(pane).toContain("<TerminalSurface />")
+    expect(pane).toContain("<Show when={terminal()}>")
+    expect(pane).toContain('<TerminalSurface active={context() === "terminal"} />')
+    expect(pane).not.toContain('<Match when={context() === "terminal"}>')
     expect(action).toContain('ariaLabel="Open project terminal"')
     expect(action).toContain('props.onContext("terminal")')
     expect(action).toContain("onWarm={preloadTerminal}")
@@ -34,7 +36,7 @@ describe("contextual project terminal", () => {
     expect(surface).toContain('class="terminal-surface__new"')
     expect(surface).toContain('role="tablist"')
     expect(surface).toContain('role="tabpanel"')
-    expect(surface).toContain("active={active()?.id === pty.id}")
+    expect(surface).toContain("active={props.active !== false && active()?.id === pty.id}")
     expect(surface).toContain("terminal.close(pty.id)")
     expect(surface).toContain(".clone(id)")
     expect(surface).toContain('class="terminal-surface__error"')
@@ -76,6 +78,7 @@ describe("contextual project terminal", () => {
     expect(terminal).toContain("void write(t.getSelection())")
     expect(terminal).toContain("t.selectAll()")
     expect(terminal).toContain("const fitTerminal = () =>")
+    expect(terminal).toContain("if (!fit || local.active === false) return")
     expect(terminal).toContain("handleResize = fitTerminal")
     expect(terminal).toContain("fitFrame = requestAnimationFrame")
   })

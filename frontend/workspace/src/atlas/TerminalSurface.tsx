@@ -19,7 +19,7 @@ import "@/atlas/TerminalSurface.css"
 
 const EMPTY_RESULT: TerminalSearchResult = { current: 0, total: 0 }
 
-export function TerminalSurface(): JSX.Element {
+export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
   preloadTerminal()
   const sdk = useSDK()
   const terminal = useTerminal()
@@ -293,7 +293,7 @@ export function TerminalSurface(): JSX.Element {
                   >
                     <Terminal
                       pty={pty}
-                      active={active()?.id === pty.id}
+                      active={props.active !== false && active()?.id === pty.id}
                       onReady={(controller) => {
                         if (controller) controls.set(pty.id, controller)
                         if (!controller) controls.delete(pty.id)
