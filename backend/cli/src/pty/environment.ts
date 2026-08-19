@@ -27,9 +27,9 @@ export function terminalEnv(
   const shell = shellName(command)
   const prompt: Record<string, string> =
     shell === "zsh"
-      ? { PROMPT: `%n@${host} %1~ %# `, RPROMPT: "", PROMPT_EOL_MARK: "" }
+      ? { PROMPT: `${host} %1~ %# `, RPROMPT: "", PROMPT_EOL_MARK: "" }
       : shell === "bash" || shell === "sh" || shell === "dash" || shell === "ksh"
-        ? { PS1: `\\u@${host} \\W \\$ ` }
+        ? { PS1: `${host} \\W \\$ ` }
         : {}
   return {
     ...env,

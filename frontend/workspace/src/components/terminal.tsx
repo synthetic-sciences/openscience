@@ -90,8 +90,10 @@ export const Terminal = (props: TerminalProps) => {
     "onOpenSearch",
   ])
   let term: Term | undefined
-  let serializeAddon: SerializeAddon
-  let fitAddon: FitAddon
+  let serializeAddon: SerializeAddon | undefined
+  let fitAddon: FitAddon | undefined
+  let fitFrame: number | undefined
+  let fitTimer: number | undefined
   let handleResize: () => void
   let handleTextareaFocus: () => void
   let handleTextareaBlur: () => void
@@ -108,6 +110,21 @@ export const Terminal = (props: TerminalProps) => {
         // ignore
       }
     }
+  }
+
+  const fitTerminal = () => {
+    const fit = fitAddon
+    if (!fit || local.active === false) return
+    fit.fit()
+    if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
+    fitFrame = requestAnimationFrame(() => {
+      fitFrame = undefined
+      if (fitTimer !== undefined) window.clearTimeout(fitTimer)
+      fitTimer = window.setTimeout(() => {
+        fitTimer = undefined
+        fit.fit()
+      }, 75)
+    })
   }
 
   const getTerminalColors = (): TerminalColors => {
@@ -148,6 +165,7 @@ export const Terminal = (props: TerminalProps) => {
     const setOption = (term as unknown as { setOption?: (key: string, value: string) => void }).setOption
     if (!setOption) return
     setOption("fontFamily", font)
+    fitTerminal()
   })
 
   const focusTerminal = () => {
@@ -161,11 +179,13 @@ export const Terminal = (props: TerminalProps) => {
     if (activeElement instanceof HTMLElement && activeElement !== container) {
       activeElement.blur()
     }
+    fitTerminal()
     focusTerminal()
   }
 
   createEffect(() => {
     if (!local.active || !term) return
+    fitTerminal()
     queueMicrotask(focusTerminal)
   })
 
@@ -240,7 +260,10 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const controller: TerminalController = {
-        focus: focusTerminal,
+        focus: () => {
+          fitTerminal()
+          focusTerminal()
+        },
         clearSelection: () => t.clearSelection(),
         search: (query, direction = "next") => {
           const needle = query.toLocaleLowerCase()
@@ -361,14 +384,10 @@ export const Terminal = (props: TerminalProps) => {
           if (local.pty.scrollY) {
             t.scrollToLine(local.pty.scrollY)
           }
-          fitAddon.fit()
+          fitTerminal()
         })
       }
 
-      fit.observeResize()
-      handleResize = () => fit.fit()
-      window.addEventListener("resize", handleResize)
-      cleanups.push(() => window.removeEventListener("resize", handleResize))
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {
           await sdk.client.pty
@@ -383,6 +402,11 @@ export const Terminal = (props: TerminalProps) => {
         }
       })
       cleanups.push(() => (onResize as unknown as { dispose?: VoidFunction }).dispose?.())
+      fit.observeResize()
+      handleResize = fitTerminal
+      window.addEventListener("resize", handleResize)
+      cleanups.push(() => window.removeEventListener("resize", handleResize))
+      fitTerminal()
       const onData = t.onData((data) => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(data)
@@ -401,6 +425,7 @@ export const Terminal = (props: TerminalProps) => {
 
       const handleOpen = () => {
         local.onConnect?.()
+        fitTerminal()
         sdk.client.pty
           .update({
             ptyID: local.pty.id,
@@ -457,6 +482,8 @@ export const Terminal = (props: TerminalProps) => {
 
   onCleanup(() => {
     disposed = true
+    if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
+    if (fitTimer !== undefined) window.clearTimeout(fitTimer)
     const t = term
     if (serializeAddon && props.onCleanup && t) {
       const buffer = (() => {

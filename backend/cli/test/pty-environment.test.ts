@@ -24,7 +24,7 @@ test("project terminals do not inherit the parent macOS terminal session", () =>
   expect(env.SHELL_SESSIONS_DISABLE).toBe("1")
   expect(env.OPENSCIENCE_PROJECT_ID).toBe("project_1")
   expect(env.OPENSCIENCE_SESSION_ID).toBe("ses_1")
-  expect(env.PROMPT).toBe("%n@workstation %1~ %# ")
+  expect(env.PROMPT).toBe("workstation %1~ %# ")
   expect(env.RPROMPT).toBe("")
   expect(env.PROMPT_EOL_MARK).toBe("")
   expect(env.PS1).toBeUndefined()
@@ -37,15 +37,15 @@ test("project terminals do not inherit the parent macOS terminal session", () =>
 
 test("project terminals show the current workspace folder in common shell prompts", () => {
   expect(terminalEnv({}, "project_1", "ses_1", "/bin/zsh", "Aayams-MacBook-Pro-3.local").PROMPT).toBe(
-    "%n@Aayams-MacBook-Pro-3 %1~ %# ",
+    "Aayams-MacBook-Pro-3 %1~ %# ",
   )
   expect(terminalEnv({}, "project_1", "ses_1", "/bin/bash", "Aayams-MacBook-Pro-3.local").PS1).toBe(
-    "\\u@Aayams-MacBook-Pro-3 \\W \\$ ",
+    "Aayams-MacBook-Pro-3 \\W \\$ ",
   )
   expect(terminalEnv({}, "project_1", "ses_1", "nu", "workstation.local").PROMPT).toBeUndefined()
   expect(terminalEnv({}, "project_1", "ses_1", "C:\\Program Files\\Git\\bin\\bash", "workstation.local")).toMatchObject(
     {
-      PS1: "\\u@workstation \\W \\$ ",
+      PS1: "workstation \\W \\$ ",
       BASH_SILENCE_DEPRECATION_WARNING: "1",
     },
   )

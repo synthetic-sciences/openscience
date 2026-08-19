@@ -190,6 +190,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
     return [...new Map(models.map((model) => [`${model.provider.id}/${model.id}`, model])).values()]
   })
+  const reviewerModel = createMemo(() => {
+    const selected = review()?.model
+    if (!selected) return
+    return reviewerModels().find((model) => model.provider.id === selected.providerID && model.id === selected.modelID)
+  })
+  const reviewerLabel = createMemo(() => reviewerModel()?.name ?? review()?.model?.modelID ?? "Default")
+  const specialistSelection = createMemo(() => {
+    const selected = capabilities()?.delegation_specialist
+    return selected ? specialistLabel(selected) : "Automatic"
+  })
 
   const readSandboxSettings = async (init?: RequestInit) => {
     const response = await sdk.request("/settings/sandbox", init)
@@ -334,13 +344,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (researchToolsRef) researchToolsRef.open = false
   }
 
-  const openCompute = () => {
-    closeResearchTools()
-    uiStore.openContext("kernels")
-    queueMicrotask(() => researchToolsRef?.querySelector("summary")?.focus())
-  }
-
-  const navigateResearchAccess = (event: KeyboardEvent) => {
+  const navigateResearchChoices = (event: KeyboardEvent) => {
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
     const target = event.target
     const scope = event.currentTarget
@@ -358,10 +362,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             ? (index + 1) % choices.length
             : (index <= 0 ? choices.length : index) - 1
     const choice = choices[next]
-    const value = choice?.dataset.researchAccess
-    if (!choice || (value !== "ask" && value !== "approve" && value !== "full")) return
+    if (!choice) return
     event.preventDefault()
-    void applyResearchAccess(value, choice)
+    choice.focus()
+    choice.click()
   }
 
   const dismissResearchTools = (event: PointerEvent) => {
@@ -2282,16 +2286,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Icon name="chevron-down" size="small" />
                   </summary>
                   <div class="workspace-composer__research-tools-menu" role="group" aria-label="Research tools">
-                    <section class="workspace-composer__research-preferences" aria-label="Research workflow">
-                      <div class="workspace-composer__research-tools-heading">
-                        <strong>Research workflow</strong>
-                        <span>{capabilities.loading || review.loading ? "Loading…" : "Saved locally"}</span>
-                      </div>
-                      <div class="workspace-composer__research-preference">
-                        <span>
-                          <strong>Delegation</strong>
-                          <small>Hand work to a scientific specialist.</small>
-                        </span>
+                    <section class="workspace-composer__research-controls" aria-label="Research roles">
+                      <div class="workspace-composer__research-control">
+                        <strong>Delegation</strong>
                         <Toggle
                           hideLabel
                           disabled={!capabilities()}
@@ -2301,32 +2298,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           Delegation
                         </Toggle>
                       </div>
-                      <label class="workspace-composer__research-preference">
-                        <span>
-                          <strong>Specialist</strong>
-                          <small>Used when delegation is enabled.</small>
-                        </span>
-                        <select
-                          aria-label="Delegation specialist"
-                          disabled={!capabilities()?.delegation_enabled || specialists().length === 0}
-                          value={capabilities()?.delegation_specialist ?? ""}
-                          onChange={(event) =>
-                            saveCapabilities({ delegation_specialist: event.currentTarget.value || null })
-                          }
-                        >
-                          <option value="">Automatic</option>
-                          <For each={specialists()}>
-                            {(specialist) => (
-                              <option value={specialist.name}>{specialistLabel(specialist.name)}</option>
-                            )}
-                          </For>
-                        </select>
-                      </label>
-                      <div class="workspace-composer__research-preference">
-                        <span>
-                          <strong>Auto-review</strong>
-                          <small>Run an independent reviewer after results.</small>
-                        </span>
+                      <div class="workspace-composer__research-control">
+                        <strong>Auto-review</strong>
                         <Toggle
                           hideLabel
                           disabled={!review()}
@@ -2336,39 +2309,129 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           Auto-review
                         </Toggle>
                       </div>
-                      <label class="workspace-composer__research-preference">
-                        <span>
-                          <strong>Reviewer model</strong>
-                          <small>Independent from the active model.</small>
-                        </span>
-                        <select
+                      <details class="workspace-composer__research-choice">
+                        <summary aria-label={`Reviewer model, ${reviewerLabel()}`}>
+                          <span>Reviewer model</span>
+                          <strong>{reviewerLabel()}</strong>
+                          <Icon name="chevron-right" size="small" />
+                        </summary>
+                        <div
+                          class="workspace-composer__research-choice-menu"
+                          role="radiogroup"
                           aria-label="Reviewer model"
-                          disabled={!review() || reviewerModels().length === 0}
-                          value={review()?.model ? `${review()!.model!.providerID}/${review()!.model!.modelID}` : ""}
-                          onChange={(event) => {
-                            const value = event.currentTarget.value
-                            const model = reviewerModels().find((item) => `${item.provider.id}/${item.id}` === value)
-                            saveReview({
-                              model: model ? { providerID: model.provider.id, modelID: model.id } : null,
-                            })
-                          }}
+                          onKeyDown={navigateResearchChoices}
                         >
-                          <option value="">Use active model</option>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={!review()?.model}
+                            tabindex={!review()?.model ? 0 : -1}
+                            onClick={(event) => {
+                              saveReview({ model: null })
+                              event.currentTarget.closest("details")?.removeAttribute("open")
+                            }}
+                          >
+                            <span>
+                              <strong>Default</strong>
+                              <small>Use the response model</small>
+                            </span>
+                            <Show when={!review()?.model}>
+                              <Icon name="check" size="small" />
+                            </Show>
+                          </button>
                           <For each={reviewerModels()}>
                             {(model) => (
-                              <option value={`${model.provider.id}/${model.id}`}>
-                                {model.name} · {model.provider.name}
-                              </option>
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={
+                                  review()?.model?.providerID === model.provider.id &&
+                                  review()?.model?.modelID === model.id
+                                }
+                                tabindex={
+                                  review()?.model?.providerID === model.provider.id &&
+                                  review()?.model?.modelID === model.id
+                                    ? 0
+                                    : -1
+                                }
+                                onClick={(event) => {
+                                  saveReview({ model: { providerID: model.provider.id, modelID: model.id } })
+                                  event.currentTarget.closest("details")?.removeAttribute("open")
+                                }}
+                              >
+                                <span>
+                                  <strong>{model.name}</strong>
+                                  <small>{model.provider.name}</small>
+                                </span>
+                                <Show
+                                  when={
+                                    review()?.model?.providerID === model.provider.id &&
+                                    review()?.model?.modelID === model.id
+                                  }
+                                >
+                                  <Icon name="check" size="small" />
+                                </Show>
+                              </button>
                             )}
                           </For>
-                        </select>
-                      </label>
-                    </section>
-                    <section class="workspace-composer__research-access" aria-label="Action approval">
-                      <div class="workspace-composer__research-tools-heading">
-                        <strong>Action approval</strong>
-                        <span aria-live="polite">{researchAccessSaving() ? "Saving…" : researchAccessLabel()}</span>
-                      </div>
+                        </div>
+                      </details>
+                      <div class="workspace-composer__research-divider" />
+                      <details class="workspace-composer__research-choice">
+                        <summary aria-label={`Specialist, ${specialistSelection()}`}>
+                          <span>Specialist</span>
+                          <strong>{specialistSelection()}</strong>
+                          <Icon name="chevron-right" size="small" />
+                        </summary>
+                        <div
+                          class="workspace-composer__research-choice-menu"
+                          role="radiogroup"
+                          aria-label="Delegation specialist"
+                          onKeyDown={navigateResearchChoices}
+                        >
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={!capabilities()?.delegation_specialist}
+                            tabindex={!capabilities()?.delegation_specialist ? 0 : -1}
+                            disabled={!capabilities()}
+                            onClick={(event) => {
+                              saveCapabilities({ delegation_specialist: null })
+                              event.currentTarget.closest("details")?.removeAttribute("open")
+                            }}
+                          >
+                            <span>
+                              <strong>Automatic</strong>
+                              <small>Route to the best match</small>
+                            </span>
+                            <Show when={!capabilities()?.delegation_specialist}>
+                              <Icon name="check" size="small" />
+                            </Show>
+                          </button>
+                          <For each={specialists()}>
+                            {(specialist) => (
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={capabilities()?.delegation_specialist === specialist.name}
+                                tabindex={capabilities()?.delegation_specialist === specialist.name ? 0 : -1}
+                                disabled={!capabilities()}
+                                onClick={(event) => {
+                                  saveCapabilities({ delegation_specialist: specialist.name })
+                                  event.currentTarget.closest("details")?.removeAttribute("open")
+                                }}
+                              >
+                                <span>
+                                  <strong>{specialistLabel(specialist.name)}</strong>
+                                </span>
+                                <Show when={capabilities()?.delegation_specialist === specialist.name}>
+                                  <Icon name="check" size="small" />
+                                </Show>
+                              </button>
+                            )}
+                          </For>
+                        </div>
+                      </details>
                       <Show
                         when={!researchAccess.error}
                         fallback={
@@ -2381,57 +2444,50 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </button>
                         }
                       >
-                        <div
-                          class="workspace-composer__research-access-options"
-                          role="radiogroup"
-                          aria-label="How should OpenScience actions be approved?"
-                          aria-busy={researchAccessSaving() ? "true" : undefined}
-                          onKeyDown={navigateResearchAccess}
-                        >
-                          <For each={RESEARCH_ACCESS_OPTIONS}>
-                            {(option) => (
-                              <button
-                                type="button"
-                                role="radio"
-                                data-research-access={option.value}
-                                data-tone={option.value === "full" ? "warning" : undefined}
-                                aria-checked={selectedResearchAccess() === option.value}
-                                tabindex={selectedResearchAccess() === option.value ? 0 : -1}
-                                disabled={researchAccess.loading || researchAccessSaving()}
-                                onClick={(event) => void applyResearchAccess(option.value, event.currentTarget)}
-                              >
-                                <Icon
-                                  name={
-                                    option.value === "ask"
-                                      ? "shield-alert"
-                                      : option.value === "approve"
-                                        ? "shield"
-                                        : "bolt"
-                                  }
-                                  size="small"
-                                />
-                                <span class="workspace-composer__research-access-copy">
-                                  <strong>{option.label}</strong>
-                                  <small>{option.description}</small>
-                                </span>
-                                <Show when={selectedResearchAccess() === option.value}>
-                                  <Icon name="check" size="small" />
-                                </Show>
-                              </button>
-                            )}
-                          </For>
-                        </div>
+                        <details class="workspace-composer__research-choice">
+                          <summary aria-label={`Action approval, ${researchAccessLabel()}`}>
+                            <span>Action approval</span>
+                            <strong aria-live="polite">
+                              {researchAccessSaving() ? "Saving…" : researchAccessLabel()}
+                            </strong>
+                            <Icon name="chevron-right" size="small" />
+                          </summary>
+                          <div
+                            class="workspace-composer__research-choice-menu"
+                            role="radiogroup"
+                            aria-label="How should OpenScience actions be approved?"
+                            aria-busy={researchAccessSaving() ? "true" : undefined}
+                            onKeyDown={navigateResearchChoices}
+                          >
+                            <For each={RESEARCH_ACCESS_OPTIONS}>
+                              {(option) => (
+                                <button
+                                  type="button"
+                                  role="radio"
+                                  data-research-access={option.value}
+                                  data-tone={option.value === "full" ? "warning" : undefined}
+                                  aria-checked={selectedResearchAccess() === option.value}
+                                  tabindex={selectedResearchAccess() === option.value ? 0 : -1}
+                                  disabled={researchAccess.loading || researchAccessSaving()}
+                                  onClick={(event) => {
+                                    void applyResearchAccess(option.value, event.currentTarget)
+                                    event.currentTarget.closest("details")?.removeAttribute("open")
+                                  }}
+                                >
+                                  <span>
+                                    <strong>{option.label}</strong>
+                                    <small>{option.description}</small>
+                                  </span>
+                                  <Show when={selectedResearchAccess() === option.value}>
+                                    <Icon name="check" size="small" />
+                                  </Show>
+                                </button>
+                              )}
+                            </For>
+                          </div>
+                        </details>
                       </Show>
                     </section>
-                    <div class="workspace-composer__research-tools-actions">
-                      <button type="button" onClick={openCompute}>
-                        <span class="workspace-composer__research-tools-copy">
-                          <strong>Compute activity</strong>
-                          <small>Python, R, local and remote jobs</small>
-                        </span>
-                        <Icon name="chevron-right" size="small" />
-                      </button>
-                    </div>
                   </div>
                 </details>
               </Match>

@@ -75,6 +75,9 @@ describe("contextual project terminal", () => {
     expect(terminal).toContain("export const preloadTerminal")
     expect(terminal).toContain("void write(t.getSelection())")
     expect(terminal).toContain("t.selectAll()")
+    expect(terminal).toContain("const fitTerminal = () =>")
+    expect(terminal).toContain("handleResize = fitTerminal")
+    expect(terminal).toContain("fitFrame = requestAnimationFrame")
   })
 
   test("keeps terminal styling local, semantic, and deliberately light", async () => {
