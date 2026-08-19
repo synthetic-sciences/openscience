@@ -58,8 +58,8 @@ describe("floating prompt surface", () => {
     expect(source).toContain('role="group"')
     expect(source).toContain('aria-label="Composer tools"')
     expect(source).toContain('aria-label="Model and send"')
-    expect(source).toContain("aria-label={`Research tools, ${researchAccessLabel()}`}")
-    expect(popover).toContain("aria-label={`Model: ${control().trigger}`}")
+    expect(source).toContain('aria-label="Research tools"')
+    expect(popover).toContain("aria-label={`Model: ${label()}`}")
     expect(source).not.toContain('aria-label="Research capabilities"')
     expect(source).not.toContain("workspace-composer__overflow")
     expect(source).toContain('class="workspace-composer__research-tools"')
@@ -85,6 +85,17 @@ describe("floating prompt surface", () => {
     expect(componentCss).toContain("min-height: 44px")
     expect(componentCss).toContain(".workspace-composer__context-remove::after")
     expect(componentCss).toContain("inset: -6px")
+  })
+
+  test("lets adjacent Research choices float across clipped workspace panes", () => {
+    expect(componentCss).toContain(
+      ".project-workspace-frame:has(form.workspace-composer .workspace-composer__research-tools[open])",
+    )
+    expect(componentCss).toContain(
+      ":is(.project-workspace-frame__route, .atlas-root, .session-workspace, .session-main)",
+    )
+    expect(componentCss).toContain("z-index: 50")
+    expect(componentCss).toContain("overflow: visible")
   })
 
   test("keeps high-frequency keyboard navigation immediate", () => {
@@ -163,14 +174,21 @@ describe("composer control consolidation", () => {
     expect(source).toContain('const isNewSession = !params.id || params.id === "new"')
   })
 
-  test("removes research effort choices from Research tools", () => {
+  test("keeps model-aware effort and speed choices inside compact Research tools", () => {
     expect(source).not.toContain('Persist.workspace(sdk.scope, "research-effort"')
-    expect(source).not.toContain("data-research-effort")
+    expect(source).toContain("data-research-effort={option.id}")
+    expect(source).toContain("data-research-speed={option.id}")
+    expect(source).toContain("local.model.variant.list()")
+    expect(source).toContain("local.model.tier.list()")
+    expect(source).toContain("local.model.variant.set(option.id)")
+    expect(source).toContain("local.model.tier.set(option.id)")
     expect(source).not.toContain("Ultra")
-    expect(source).toContain('class="workspace-composer__research-tools-separator"')
-    expect(source).toContain("<strong>{researchAccessLabel()}</strong>")
+    expect(source).not.toContain('class="workspace-composer__research-tools-separator"')
+    expect(source).not.toContain("<strong>{researchAccessLabel()}</strong>")
     expect(source).not.toContain('class="workspace-composer__effort"')
     expect(componentCss).not.toContain("workspace-composer__research-effort")
+    expect(componentCss).toContain("left: calc(100% + 12px)")
+    expect(componentCss).toContain("width: min(252px, calc(100vw - 24px))")
   })
 
   test("offers three real action-approval modes inside Research tools", () => {

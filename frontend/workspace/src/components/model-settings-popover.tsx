@@ -20,7 +20,6 @@ import {
 } from "@/context/model-catalog"
 import { DialogSettings } from "./dialog-settings"
 import { modelGroup, modelGroupLabel, modelGroupLabelRank } from "./model-groups"
-import { modelControl } from "./model-presentation"
 import { curateQuickModels } from "./model-quick"
 import "./model-settings-popover.css"
 
@@ -159,7 +158,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const dialog = useDialog()
   const mobile = createMediaQuery("(max-width: 719px)")
   const [open, setOpen] = createSignal(false)
-  const [view, setView] = createSignal<"root" | "models" | "effort" | "speed" | "route">("root")
+  const [view, setView] = createSignal<"root" | "models" | "route">("root")
   const [routeTarget, setRouteTarget] = createSignal("")
   const [routeReturn, setRouteReturn] = createSignal<"root" | "models">("root")
   const [query, setQuery] = createSignal("")
@@ -168,7 +167,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const [catalogLimit, setCatalogLimit] = createSignal(CATALOG_FIRST_CHUNK)
   const [quickFocus, setQuickFocus] = createSignal("")
   const [catalogFocus, setCatalogFocus] = createSignal("")
-  const [notice, setNotice] = createSignal("")
   const refs = { content: undefined as HTMLElement | undefined }
   const current = createMemo(() => local.model.current())
   const routeAccess = (model: NonNullable<ReturnType<typeof current>>) =>
@@ -348,40 +346,15 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
     onCleanup(() => window.removeEventListener("keydown", dismiss, true))
   })
 
-  const control = createMemo(() =>
-    modelControl({
-      name: current() ? modelDisplayName(current()!.name, current()!.provider.id, current()!.id) : "Select model",
-      variants: local.model.variant.list(),
-      modes: local.model.tier.list(),
-      currentEffort: local.model.variant.current(),
-      currentSpeed: local.model.tier.current(),
-      advanced: [],
-    }),
+  const label = createMemo(() =>
+    current() ? modelDisplayName(current()!.name, current()!.provider.id, current()!.id) : "Select model",
   )
-  createEffect(() => {
-    const value = control()
-    const updates = [
-      value.reset.effort ? `Effort reset to ${value.effort?.value ?? "Standard"}.` : undefined,
-      value.reset.speed ? `Speed reset to ${value.speed?.value ?? "Standard"}.` : undefined,
-    ].filter((message): message is string => Boolean(message))
-
-    if (updates.length > 0) setNotice(updates.join(" "))
-    if (value.reset.effort) local.model.variant.set(value.reset.effort)
-    if (value.reset.speed) local.model.tier.set(value.reset.speed)
-    if (view() === "effort" && !value.effort) setView("models")
-    if (view() === "speed" && !value.speed) setView("models")
-  })
 
   const focus = (selector: string, reset = false) =>
     queueMicrotask(() => {
       if (reset && refs.content) refs.content.scrollTop = 0
       refs.content?.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true })
     })
-
-  const show = (next: "effort" | "speed") => {
-    setView(next)
-    focus(`[data-model-option="${next}"][aria-checked="true"]`)
-  }
 
   const exact = (model: NonNullable<ReturnType<typeof current>>) => `${model.provider.id}/${model.id}`
   const routeLabel = (model: NonNullable<ReturnType<typeof current>>) => {
@@ -473,13 +446,13 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
               ? "model-settings-trigger--icon size-9 shrink-0"
               : "model-settings-trigger--label min-w-0"
           }
-          aria-label={`Model: ${control().trigger}`}
+          aria-label={`Model: ${label()}`}
         >
           <Show
             when={props.trigger === "icon"}
             fallback={
               <>
-                <span class="truncate">{control().trigger}</span>
+                <span class="truncate">{label()}</span>
                 <Icon name="chevron-down" size="small" class="shrink-0 text-text-weak" />
               </>
             }
@@ -506,10 +479,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
             <Kobalte.Title>Options</Kobalte.Title>
             <IconButton type="button" icon="close" variant="ghost" aria-label="Close model options" onClick={close} />
           </header>
-          <p aria-live="polite" class="sr-only">
-            {notice()}
-          </p>
-
           <div class="mobile-model-settings__body" data-model-settings-layout>
             <Show when={!mobile() || view() === "root"}>
               <div class="model-settings-primary">
@@ -716,50 +685,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                         </Show>
                       </div>
                       <div class="model-settings-divider" />
-                      <p class="model-settings-heading">Request options</p>
-                      <Show when={control().effort}>
-                        {(effort) => (
-                          <button
-                            type="button"
-                            data-model-menu-item
-                            data-model-menu-row="effort"
-                            class={row}
-                            aria-controls="model-effort-options"
-                            onClick={() => show("effort")}
-                          >
-                            <span class="model-settings-setting">
-                              <span data-model-menu-label>Thinking effort</span>
-                              <small>Applies to this model's next request.</small>
-                            </span>
-                            <span data-model-menu-value class="flex min-w-0 items-center">
-                              <span class="truncate">{effort().value}</span>
-                              <span aria-hidden="true">›</span>
-                            </span>
-                          </button>
-                        )}
-                      </Show>
-                      <Show when={control().speed}>
-                        {(speed) => (
-                          <button
-                            type="button"
-                            data-model-menu-item
-                            data-model-menu-row="speed"
-                            class={row}
-                            aria-controls="model-speed-options"
-                            onClick={() => show("speed")}
-                          >
-                            <span class="model-settings-setting">
-                              <span data-model-menu-label>{speed().label}</span>
-                              <small>Choose the provider latency tier.</small>
-                            </span>
-                            <span data-model-menu-value class="flex min-w-0 items-center">
-                              <span class="truncate">{speed().value}</span>
-                              <span aria-hidden="true">›</span>
-                            </span>
-                          </button>
-                        )}
-                      </Show>
-                      <div class="model-settings-divider" />
                       <button
                         type="button"
                         data-model-menu-item
@@ -806,42 +731,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                         />
                       )
                     }}
-                  </Match>
-
-                  <Match when={view() === "effort" && control().effort}>
-                    {(effort) => (
-                      <ModelOptionList
-                        id="model-effort-options"
-                        kind="effort"
-                        title="Thinking effort"
-                        current={effort().current.id}
-                        options={effort().options}
-                        onSelect={local.model.variant.set}
-                        onBack={() => {
-                          setView("models")
-                          focus('[data-model-menu-row="effort"]', true)
-                        }}
-                        onDone={close}
-                      />
-                    )}
-                  </Match>
-
-                  <Match when={view() === "speed" && control().speed}>
-                    {(speed) => (
-                      <ModelOptionList
-                        id="model-speed-options"
-                        kind="speed"
-                        title="Speed"
-                        current={speed().current.id}
-                        options={speed().options}
-                        onSelect={local.model.tier.set}
-                        onBack={() => {
-                          setView("models")
-                          focus('[data-model-menu-row="speed"]', true)
-                        }}
-                        onDone={close}
-                      />
-                    )}
                   </Match>
                 </Switch>
               </div>

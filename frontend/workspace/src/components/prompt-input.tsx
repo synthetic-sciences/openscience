@@ -54,6 +54,7 @@ import { showToast } from "@synsci/ui/toast"
 import { uiStore } from "@/atlas/store/ui"
 import { projectHref, projectPathname } from "@/utils/project-route"
 import { ModelSettingsPopover } from "./model-settings-popover"
+import { modelControl } from "./model-presentation"
 import { DialogSettings } from "./dialog-settings"
 import "./prompt-input.css"
 import {
@@ -110,6 +111,21 @@ interface ResearchAccessSnapshot {
 
 interface SandboxSettingsPayload {
   config: { enabled?: boolean }
+}
+
+const requestDetail = (kind: "effort" | "speed", id: string) => {
+  if (kind === "speed") {
+    if (id === "fast") return "Faster model responses"
+    if (id === "priority") return "Provider priority processing"
+    return "Standard provider latency"
+  }
+  if (id === "max") return "Deepest available analysis"
+  if (id === "xhigh") return "Extensive analysis"
+  if (id === "high") return "Thorough analysis"
+  if (id === "medium") return "Balanced depth and latency"
+  if (id === "low") return "Brief, faster reasoning"
+  if (id === "minimal") return "Minimal reasoning"
+  return "Use the model default"
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -199,6 +215,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const specialistSelection = createMemo(() => {
     const selected = capabilities()?.delegation_specialist
     return selected ? specialistLabel(selected) : "Automatic"
+  })
+  const controls = createMemo(() =>
+    modelControl({
+      name: local.model.current()?.name ?? "Select model",
+      variants: local.model.variant.list(),
+      modes: local.model.tier.list(),
+      currentEffort: local.model.variant.current(),
+      currentSpeed: local.model.tier.current(),
+      advanced: [],
+    }),
+  )
+  createEffect(() => {
+    const value = controls()
+    if (value.reset.effort) local.model.variant.set(value.reset.effort)
+    if (value.reset.speed) local.model.tier.set(value.reset.speed)
   })
 
   const readSandboxSettings = async (init?: RequestInit) => {
@@ -342,6 +373,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const closeResearchTools = () => {
     if (researchToolsRef) researchToolsRef.open = false
+  }
+
+  const toggleResearchChoice = (event: Event) => {
+    const choice = event.currentTarget
+    if (!(choice instanceof HTMLDetailsElement) || !choice.open) return
+    for (const item of researchToolsRef?.querySelectorAll<HTMLDetailsElement>(
+      ".workspace-composer__research-choice[open]",
+    ) ?? []) {
+      if (item !== choice) item.open = false
+    }
   }
 
   const navigateResearchChoices = (event: KeyboardEvent) => {
@@ -2277,16 +2318,105 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     researchToolsRef?.querySelector("summary")?.focus()
                   }}
                 >
-                  <summary aria-label={`Research tools, ${researchAccessLabel()}`}>
+                  <summary aria-label="Research tools">
                     <span class="workspace-composer__research-tools-label">Research</span>
-                    <span class="workspace-composer__research-tools-separator" aria-hidden="true">
-                      ·
-                    </span>
-                    <strong>{researchAccessLabel()}</strong>
                     <Icon name="chevron-down" size="small" />
                   </summary>
                   <div class="workspace-composer__research-tools-menu" role="group" aria-label="Research tools">
                     <section class="workspace-composer__research-controls" aria-label="Research roles">
+                      <Show when={controls().effort}>
+                        {(effort) => (
+                          <details
+                            class="workspace-composer__research-choice"
+                            data-research-control="effort"
+                            onToggle={toggleResearchChoice}
+                          >
+                            <summary aria-label={`Reasoning effort, ${effort().value}`}>
+                              <span>Reasoning effort</span>
+                              <strong>{effort().value}</strong>
+                              <Icon name="chevron-right" size="small" />
+                            </summary>
+                            <div
+                              class="workspace-composer__research-choice-menu"
+                              role="radiogroup"
+                              aria-label="Reasoning effort"
+                              onKeyDown={navigateResearchChoices}
+                            >
+                              <For each={effort().options}>
+                                {(option) => (
+                                  <button
+                                    type="button"
+                                    role="radio"
+                                    data-research-effort={option.id}
+                                    aria-checked={effort().current.id === option.id}
+                                    tabindex={effort().current.id === option.id ? 0 : -1}
+                                    onClick={(event) => {
+                                      local.model.variant.set(option.id)
+                                      event.currentTarget.closest("details")?.removeAttribute("open")
+                                    }}
+                                  >
+                                    <span>
+                                      <strong>{option.label}</strong>
+                                      <small>{requestDetail("effort", option.id)}</small>
+                                    </span>
+                                    <Show when={effort().current.id === option.id}>
+                                      <Icon name="check" size="small" />
+                                    </Show>
+                                  </button>
+                                )}
+                              </For>
+                            </div>
+                          </details>
+                        )}
+                      </Show>
+                      <Show when={controls().speed}>
+                        {(speed) => (
+                          <details
+                            class="workspace-composer__research-choice"
+                            data-research-control="speed"
+                            onToggle={toggleResearchChoice}
+                          >
+                            <summary aria-label={`Speed, ${speed().value}`}>
+                              <span>Speed</span>
+                              <strong>{speed().value}</strong>
+                              <Icon name="chevron-right" size="small" />
+                            </summary>
+                            <div
+                              class="workspace-composer__research-choice-menu"
+                              role="radiogroup"
+                              aria-label="Speed"
+                              onKeyDown={navigateResearchChoices}
+                            >
+                              <For each={speed().options}>
+                                {(option) => (
+                                  <button
+                                    type="button"
+                                    role="radio"
+                                    data-research-speed={option.id}
+                                    aria-checked={speed().current.id === option.id}
+                                    tabindex={speed().current.id === option.id ? 0 : -1}
+                                    onClick={(event) => {
+                                      local.model.tier.set(option.id)
+                                      event.currentTarget.closest("details")?.removeAttribute("open")
+                                    }}
+                                  >
+                                    <span>
+                                      <strong>{option.label}</strong>
+                                      <small>{requestDetail("speed", option.id)}</small>
+                                    </span>
+                                    <Show when={speed().current.id === option.id}>
+                                      <Icon name="check" size="small" />
+                                    </Show>
+                                  </button>
+                                )}
+                              </For>
+                            </div>
+                          </details>
+                        )}
+                      </Show>
+                      <Show when={controls().effort || controls().speed}>
+                        <div class="workspace-composer__research-divider" />
+                      </Show>
                       <div class="workspace-composer__research-control">
                         <strong>Delegation</strong>
                         <Toggle
@@ -2309,7 +2439,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           Auto-review
                         </Toggle>
                       </div>
-                      <details class="workspace-composer__research-choice">
+                      <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
                         <summary aria-label={`Reviewer model, ${reviewerLabel()}`}>
                           <span>Reviewer model</span>
                           <strong>{reviewerLabel()}</strong>
@@ -2377,7 +2507,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </div>
                       </details>
                       <div class="workspace-composer__research-divider" />
-                      <details class="workspace-composer__research-choice">
+                      <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
                         <summary aria-label={`Specialist, ${specialistSelection()}`}>
                           <span>Specialist</span>
                           <strong>{specialistSelection()}</strong>
@@ -2444,7 +2574,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </button>
                         }
                       >
-                        <details class="workspace-composer__research-choice">
+                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
                           <summary aria-label={`Action approval, ${researchAccessLabel()}`}>
                             <span>Action approval</span>
                             <strong aria-live="polite">

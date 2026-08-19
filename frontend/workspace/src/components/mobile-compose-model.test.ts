@@ -45,7 +45,7 @@ describe("mobile compose and model sheets", () => {
     expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto")
     expect(css).toContain("@container conversation (max-width: 540px)")
     expect(css).toMatch(/@container conversation \(max-width: 540px\)[\s\S]*grid-template-columns: minmax\(0, 1fr\);/)
-    expect(css).toContain("width: min(328px, calc(100cqw - 24px))")
+    expect(css).toContain("width: min(252px, calc(100cqw - 24px))")
     expect(css).toContain("overflow: visible")
     expect(css).not.toContain("overflow-x: auto")
     expect(css).toContain(".workspace-composer__research-control")
@@ -60,9 +60,10 @@ describe("mobile compose and model sheets", () => {
   })
 
   test("uses a modal mobile settings surface without changing the desktop popover", async () => {
-    const [settings, css] = await Promise.all([
+    const [settings, css, prompt] = await Promise.all([
       read("./model-settings-popover.tsx"),
       read("./model-settings-popover.css"),
+      read("./prompt-input.tsx"),
     ])
 
     expect(settings).toContain("import { Popover as Kobalte }")
@@ -70,8 +71,10 @@ describe("mobile compose and model sheets", () => {
     expect(settings).toContain('placement="top-end"')
     expect(settings).toContain("data-mobile-model-settings-overlay")
     expect(settings).toContain('aria-label="Close model options"')
-    expect(settings).toContain("local.model.variant.set")
-    expect(settings).toContain("local.model.tier.set")
+    expect(settings).not.toContain("local.model.variant.set")
+    expect(settings).not.toContain("local.model.tier.set")
+    expect(prompt).toContain("local.model.variant.set(option.id)")
+    expect(prompt).toContain("local.model.tier.set(option.id)")
     expect(settings).not.toContain("data-model-effort-chip")
     expect(settings).not.toContain("<span>Model effort</span>")
     expect(settings).toContain("groupModelRoutes")
