@@ -82,6 +82,7 @@ import {
 import { canRestoreFailedSubmission } from "./prompt-submission"
 import {
   RESEARCH_ACCESS_OPTIONS,
+  researchAccessLabel as accessLabel,
   researchAccessMode,
   researchAccessMutations,
   type ResearchAccessMode,
@@ -350,9 +351,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const current = researchAccess()
     return current ? researchAccessMode(current) : "full"
   })
-  const researchAccessLabel = createMemo(
-    () => RESEARCH_ACCESS_OPTIONS.find((option) => option.value === selectedResearchAccess())?.label ?? "Full access",
-  )
+  const researchAccessLabel = createMemo(() => accessLabel(selectedResearchAccess()))
 
   const applyResearchAccess = async (mode: ResearchAccessMode, target: HTMLButtonElement) => {
     target.focus()
@@ -396,11 +395,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (effective !== mode) {
         showToast({
           title: "Access is limited by managed settings",
-          description: `The effective mode remains ${RESEARCH_ACCESS_OPTIONS.find((option) => option.value === effective)?.label}.`,
+          description: `The effective mode remains ${accessLabel(effective)}.`,
         })
         return
       }
-      showToast({ variant: "success", title: `${researchAccessLabel()} enabled` })
+      showToast({ variant: "success", title: `${accessLabel(effective)} enabled` })
     } catch (error) {
       showToast({
         title: "Couldn't update action approval",

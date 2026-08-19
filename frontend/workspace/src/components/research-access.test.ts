@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { researchAccessMode, researchAccessMutations } from "./research-access"
+import { researchAccessLabel, researchAccessMode, researchAccessMutations } from "./research-access"
 
 describe("research access modes", () => {
   test("derives the visible mode from effective trust and sandbox state", () => {
@@ -7,6 +7,12 @@ describe("research access modes", () => {
     expect(researchAccessMode({ trusted: false, sandboxEnabled: false })).toBe("ask")
     expect(researchAccessMode({ trusted: true, sandboxEnabled: true })).toBe("approve")
     expect(researchAccessMode({ trusted: true, sandboxEnabled: false })).toBe("full")
+  })
+
+  test("reports the confirmed mode instead of the stale previous label", () => {
+    expect(researchAccessLabel("ask")).toBe("Ask for approval")
+    expect(researchAccessLabel("approve")).toBe("Approve for me")
+    expect(researchAccessLabel("full")).toBe("Full access")
   })
 
   test("orders mutations so a transition never opens an unintended gap", () => {

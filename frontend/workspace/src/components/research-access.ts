@@ -34,6 +34,10 @@ export function researchAccessMode(state: ResearchAccessState): ResearchAccessMo
   return state.sandboxEnabled ? "approve" : "full"
 }
 
+export function researchAccessLabel(mode: ResearchAccessMode): string {
+  return RESEARCH_ACCESS_OPTIONS.find((option) => option.value === mode)?.label ?? "Full access"
+}
+
 /**
  * Keep every transition fail-closed. Moving toward less access establishes the
  * sandbox before revoking trust; moving to full access establishes trust while

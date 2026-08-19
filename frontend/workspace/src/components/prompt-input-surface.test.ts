@@ -215,6 +215,7 @@ describe("composer control consolidation", () => {
     expect(source).toContain('sdk.request("/settings/sandbox", init)')
     expect(source).toContain('sdk.event.on("project.trust.changed"')
     expect(source).toContain('sdk.event.on("server.instance.disposed"')
+    expect(source).toContain("title: `${accessLabel(effective)} enabled`")
     expect(source).toContain("onKeyDown={navigateResearchChoices}")
     expect(componentCss).toContain(".workspace-composer__research-choice-menu > button")
     expect(componentCss).toContain('button[data-tone="warning"][aria-checked="true"]')
