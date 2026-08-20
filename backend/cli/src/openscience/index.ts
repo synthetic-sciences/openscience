@@ -463,6 +463,7 @@ export namespace OpenScience {
 
   /** TTL gate for the cheap version probe. */
   const VERSION_PROBE_TTL_MS = 10_000
+  let pendingRefresh: Promise<void> | undefined
 
   /**
    * Fire-and-forget BYOK refresh triggered at most once per
@@ -515,6 +516,21 @@ export namespace OpenScience {
         log.warn("background BYOK refresh failed", { error: e instanceof Error ? e.message : String(e) })
       }
     })()
+  }
+
+  /** Start the best-effort version probe without putting its network and disk
+   *  latency on the provider request's critical path. Concurrent sessions share
+   *  the same probe; refreshIfStale's persisted TTL handles later calls. */
+  export function scheduleRefresh(): Promise<void> {
+    if (pendingRefresh) return pendingRefresh
+    const refresh = refreshIfStale().catch((error) => {
+      log.warn("scheduled BYOK refresh failed", { error: error instanceof Error ? error.message : String(error) })
+    })
+    const request = refresh.then(() => {
+      if (pendingRefresh === request) pendingRefresh = undefined
+    })
+    pendingRefresh = request
+    return request
   }
 
   /** Read the on-disk synced-env snapshot (what preload-env.ts replayed into

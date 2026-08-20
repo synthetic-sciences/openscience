@@ -341,8 +341,9 @@ export namespace SessionProcessor {
         shouldBreakOnDeny = shouldBreak
         while (true) {
           try {
-            // Check for dashboard-side BYOK/managed changes before each user message.
-            await OpenScience.refreshIfStale()
+            // Probe dashboard-side BYOK/managed changes for the next request,
+            // without making this provider call wait on the control plane.
+            void OpenScience.scheduleRefresh()
 
             // Classify the credential backing this call. The wallet pre-flight
             // fires ONLY for managed-proxy credentials (a thk_* token / synced
