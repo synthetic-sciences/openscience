@@ -763,7 +763,7 @@ export const GithubRunCommand = cmd({
           const tag = m[0]
           const url = m[1]
           const start = m.index
-          const filename = path.basename(GitHubAttachment.parse(url).pathname)
+          const filename = path.basename(new URL(GitHubAttachment.parse(url)).pathname)
 
           // Download image
           const res = await GitHubAttachment.download(url, appToken)
