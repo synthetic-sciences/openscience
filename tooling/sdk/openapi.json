@@ -424,7 +424,7 @@
       "get": {
         "operationId": "account.session",
         "summary": "Get local session status",
-        "description": "Check whether this OpenScience server has a local Atlas session without contacting Atlas.",
+        "description": "Check whether this OpenScience server has a local Gateway session without contacting Gateway.",
         "responses": {
           "200": {
             "description": "Local session status",
@@ -793,7 +793,7 @@
     "/account/login-key": {
       "post": {
         "operationId": "account.loginKey",
-        "summary": "Sign in with an Atlas API key",
+        "summary": "Sign in with a Gateway API key",
         "responses": {
           "200": {
             "description": "Login result",
@@ -18242,7 +18242,7 @@
                       "type": "object",
                       "properties": {
                         "signedIn": {
-                          "description": "Whether an Atlas session (thk_ key) is available",
+                          "description": "Whether a Gateway session (thk_ key) is available",
                           "type": "boolean"
                         },
                         "balanceUsd": {
@@ -18309,7 +18309,7 @@
                       "type": "object",
                       "properties": {
                         "signedIn": {
-                          "description": "Whether an Atlas session (thk_ key) is available",
+                          "description": "Whether a Gateway session (thk_ key) is available",
                           "type": "boolean"
                         },
                         "balanceUsd": {
@@ -18513,6 +18513,440 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.check({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/research-tools": {
+      "get": {
+        "operationId": "settings.researchTools.get",
+        "summary": "Get plan, research-search, and data-sharing status",
+        "responses": {
+          "200": {
+            "description": "Research tools status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "signedIn": {
+                      "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "status"
+                      ]
+                    },
+                    "search": {
+                      "type": "object",
+                      "properties": {
+                        "route": {
+                          "type": "string",
+                          "enum": [
+                            "managed",
+                            "community"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "available",
+                            "near_limit",
+                            "critical",
+                            "exhausted",
+                            "conditional",
+                            "unavailable"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "limit": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "used": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "remaining": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "resetAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "communityFlagEnabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "route",
+                        "state",
+                        "enabled",
+                        "limit",
+                        "used",
+                        "remaining",
+                        "resetAt",
+                        "communityFlagEnabled"
+                      ]
+                    },
+                    "telemetry": {
+                      "type": "object",
+                      "properties": {
+                        "analyticsEnabled": {
+                          "type": "boolean"
+                        },
+                        "researchContentEnabled": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "default",
+                            "local",
+                            "account"
+                          ]
+                        },
+                        "signedIn": {
+                          "type": "boolean"
+                        },
+                        "consentVersion": {
+                          "type": "string"
+                        },
+                        "pending": {
+                          "type": "boolean"
+                        },
+                        "corrupt": {
+                          "type": "boolean"
+                        },
+                        "deletionAvailable": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "analyticsEnabled",
+                        "researchContentEnabled",
+                        "source",
+                        "signedIn",
+                        "consentVersion",
+                        "pending",
+                        "corrupt",
+                        "deletionAvailable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "signedIn",
+                    "plan",
+                    "search",
+                    "telemetry"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.researchTools.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/research-tools/telemetry": {
+      "put": {
+        "operationId": "settings.researchTools.telemetry.update",
+        "summary": "Update structural usage sharing consent",
+        "responses": {
+          "200": {
+            "description": "Updated research tools status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "signedIn": {
+                      "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "status"
+                      ]
+                    },
+                    "search": {
+                      "type": "object",
+                      "properties": {
+                        "route": {
+                          "type": "string",
+                          "enum": [
+                            "managed",
+                            "community"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "available",
+                            "near_limit",
+                            "critical",
+                            "exhausted",
+                            "conditional",
+                            "unavailable"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "limit": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "used": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "remaining": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "resetAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "communityFlagEnabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "route",
+                        "state",
+                        "enabled",
+                        "limit",
+                        "used",
+                        "remaining",
+                        "resetAt",
+                        "communityFlagEnabled"
+                      ]
+                    },
+                    "telemetry": {
+                      "type": "object",
+                      "properties": {
+                        "analyticsEnabled": {
+                          "type": "boolean"
+                        },
+                        "researchContentEnabled": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "default",
+                            "local",
+                            "account"
+                          ]
+                        },
+                        "signedIn": {
+                          "type": "boolean"
+                        },
+                        "consentVersion": {
+                          "type": "string"
+                        },
+                        "pending": {
+                          "type": "boolean"
+                        },
+                        "corrupt": {
+                          "type": "boolean"
+                        },
+                        "deletionAvailable": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "analyticsEnabled",
+                        "researchContentEnabled",
+                        "source",
+                        "signedIn",
+                        "consentVersion",
+                        "pending",
+                        "corrupt",
+                        "deletionAvailable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "signedIn",
+                    "plan",
+                    "search",
+                    "telemetry"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "analyticsEnabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "analyticsEnabled"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.researchTools.telemetry.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/research-tools/telemetry/account-data": {
+      "delete": {
+        "operationId": "settings.researchTools.telemetry.delete",
+        "summary": "Delete account-linked usage analytics",
+        "responses": {
+          "200": {
+            "description": "Deletion status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.researchTools.telemetry.delete({\n  ...\n})"
           }
         ]
       }
@@ -20701,7 +21135,7 @@
         "tags": [
           "Session"
         ],
-        "description": "Build one local, Atlas-independent trace with effective harness manifests, composition transitions, attribution invariants, deterministic trajectory fingerprints, inference, tools, child agents, compute, artifacts, failures, costs, and timing. Hidden reasoning, prompt content, and copied tool outputs are excluded.",
+        "description": "Build one local, Gateway-independent trace with effective harness manifests, composition transitions, attribution invariants, deterministic trajectory fingerprints, inference, tools, child agents, compute, artifacts, failures, costs, and timing. Hidden reasoning, prompt content, and copied tool outputs are excluded.",
         "responses": {
           "200": {
             "description": "Local observable session trace",
@@ -20806,8 +21240,44 @@
                             "cache"
                           ]
                         },
+                        "inferenceCalls": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
                         "toolCalls": {
                           "type": "number"
+                        },
+                        "toolCallsPerInference": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "toolExecutionMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "toolCriticalPathMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "toolMaxConcurrency": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "toolParallelism": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "toolContractBytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "contractBytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
                         },
                         "childCount": {
                           "type": "number"
@@ -20838,7 +21308,11 @@
                         "startedAt",
                         "cost",
                         "tokens",
+                        "inferenceCalls",
                         "toolCalls",
+                        "toolExecutionMs",
+                        "toolCriticalPathMs",
+                        "toolMaxConcurrency",
                         "childCount",
                         "searchCount",
                         "dedupeHits",
@@ -21739,6 +22213,26 @@
                             "type": "string",
                             "pattern": "^[a-f0-9]{64}$"
                           },
+                          "systemBytes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "instructionsBytes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "toolBytes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "contractBytes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
                           "tools": {
                             "type": "array",
                             "items": {
@@ -21754,6 +22248,16 @@
                                 "schemaHash": {
                                   "type": "string",
                                   "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "descriptionBytes": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "schemaBytes": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
                                 }
                               },
                               "required": [
@@ -22005,6 +22509,57 @@
                           "minimum": 0,
                           "maximum": 9007199254740991
                         },
+                        "strategy": {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "explore",
+                                "refine",
+                                "pivot",
+                                "fuse",
+                                "verify"
+                              ]
+                            },
+                            "stage": {
+                              "type": "string"
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "branches": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "repeatedCandidates": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "guidance": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "attempts",
+                            "branches",
+                            "repeatedCandidates",
+                            "reason",
+                            "guidance"
+                          ]
+                        },
                         "contract": {
                           "type": "object",
                           "properties": {
@@ -22187,6 +22742,62 @@
                                 ]
                               }
                             },
+                            "trials": {
+                              "default": [],
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "stage": {
+                                    "type": "string",
+                                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                                  },
+                                  "branch": {
+                                    "type": "string",
+                                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                                  },
+                                  "candidate": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "advanced",
+                                      "neutral",
+                                      "regressed",
+                                      "failed",
+                                      "inconclusive"
+                                    ]
+                                  },
+                                  "summary": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  },
+                                  "evidence": {
+                                    "type": "string",
+                                    "maxLength": 2000
+                                  },
+                                  "recordedAt": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "stage",
+                                  "branch",
+                                  "candidate",
+                                  "outcome",
+                                  "summary",
+                                  "recordedAt"
+                                ]
+                              }
+                            },
                             "budget": {
                               "type": "object",
                               "properties": {
@@ -22250,7 +22861,8 @@
                         "gates",
                         "missing",
                         "openFindings",
-                        "failedCandidates"
+                        "failedCandidates",
+                        "strategy"
                       ]
                     },
                     "privacy": {
@@ -45400,6 +46012,27 @@
           "properties"
         ]
       },
+      "Event.vcs.branch.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "vcs.branch.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.file.edited": {
         "type": "object",
         "properties": {
@@ -45417,27 +46050,6 @@
             "required": [
               "file"
             ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
-      "Event.vcs.branch.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "vcs.branch.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "branch": {
-                "type": "string"
-              }
-            }
           }
         },
         "required": [
@@ -48367,10 +48979,10 @@
             "$ref": "#/components/schemas/Event.session.filesystem.changed"
           },
           {
-            "$ref": "#/components/schemas/Event.file.edited"
+            "$ref": "#/components/schemas/Event.vcs.branch.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.vcs.branch.updated"
+            "$ref": "#/components/schemas/Event.file.edited"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -49715,7 +50327,7 @@
         "type": "object",
         "properties": {
           "enabled": {
-            "description": "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Disabled by default; enable it from the composer or Sandbox settings.",
+            "description": "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Enabled by default; an explicit false selects full host access.",
             "type": "boolean"
           },
           "network": {
@@ -49889,7 +50501,7 @@
                 ]
               },
               "compute": {
-                "description": "How GPU/compute is paid for. 'managed' runs on Atlas-provisioned compute billed to your wallet (via the bundled atlas CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.",
+                "description": "How GPU/compute is paid for. 'managed' runs on Gateway-provisioned compute billed to your wallet (via the bundled gateway CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.",
                 "type": "string",
                 "enum": [
                   "managed",

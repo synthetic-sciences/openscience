@@ -148,17 +148,17 @@ export type EventSessionFilesystemChanged = {
   }
 }
 
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
 export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
     branch?: string
+  }
+}
+
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
   }
 }
 
@@ -1001,8 +1001,8 @@ export type Event =
   | EventLspUpdated
   | EventFileWatcherUpdated
   | EventSessionFilesystemChanged
-  | EventFileEdited
   | EventVcsBranchUpdated
+  | EventFileEdited
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -1513,24 +1513,7 @@ export type AgentConfig = {
    */
   maxSteps?: number
   permission?: PermissionConfig
-  [key: string]:
-    | unknown
-    | string
-    | number
-    | {
-        [key: string]: boolean
-      }
-    | boolean
-    | "subagent"
-    | "primary"
-    | "all"
-    | {
-        [key: string]: unknown
-      }
-    | string
-    | number
-    | PermissionConfig
-    | undefined
+  [key: string]: unknown
 }
 
 export type ProviderConfig = {
@@ -1631,7 +1614,7 @@ export type ProviderConfig = {
            * Disable this variant for the model
            */
           disabled?: boolean
-          [key: string]: unknown | boolean | undefined
+          [key: string]: unknown
         }
       }
     }
@@ -1661,7 +1644,7 @@ export type ProviderConfig = {
      * Maximum provider inactivity in milliseconds while connecting or waiting for the next response-body chunk. Defaults to 300000 (5 minutes), resets on each body chunk, and does not cap total generation time.
      */
     idleTimeout?: number | false
-    [key: string]: unknown | string | boolean | number | false | number | false | undefined
+    [key: string]: unknown
   }
 }
 
@@ -1744,7 +1727,7 @@ export type LayoutConfig = "auto" | "stretch"
  */
 export type SandboxConfig = {
   /**
-   * Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Disabled by default; enable it from the composer or Sandbox settings.
+   * Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Enabled by default; an explicit false selects full host access.
    */
   enabled?: boolean
   /**
@@ -1836,7 +1819,7 @@ export type Config = {
      */
     llm?: "managed" | "byok" | null
     /**
-     * How GPU/compute is paid for. 'managed' runs on Atlas-provisioned compute billed to your wallet (via the bundled atlas CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.
+     * How GPU/compute is paid for. 'managed' runs on Gateway-provisioned compute billed to your wallet (via the bundled gateway CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.
      */
     compute?: "managed" | "byok"
   }
@@ -7938,7 +7921,7 @@ export type SettingsBillingGetResponses = {
     compute: "managed" | "byok"
     wallet: {
       /**
-       * Whether an Atlas session (thk_ key) is available
+       * Whether a Gateway session (thk_ key) is available
        */
       signedIn: boolean
       /**
@@ -7970,7 +7953,7 @@ export type SettingsBillingUpdateResponses = {
     compute: "managed" | "byok"
     wallet: {
       /**
-       * Whether an Atlas session (thk_ key) is available
+       * Whether a Gateway session (thk_ key) is available
        */
       signedIn: boolean
       /**
@@ -8037,6 +8020,116 @@ export type SettingsUpdatesCheckResponses = {
 }
 
 export type SettingsUpdatesCheckResponse = SettingsUpdatesCheckResponses[keyof SettingsUpdatesCheckResponses]
+
+export type SettingsResearchToolsGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/research-tools"
+}
+
+export type SettingsResearchToolsGetResponses = {
+  /**
+   * Research tools status
+   */
+  200: {
+    signedIn: boolean
+    plan: {
+      id: string
+      label: string
+      status: string | null
+    }
+    search: {
+      route: "managed" | "community"
+      state: "available" | "near_limit" | "critical" | "exhausted" | "conditional" | "unavailable"
+      enabled: boolean
+      limit: number | null
+      used: number | null
+      remaining: number | null
+      resetAt: string | null
+      communityFlagEnabled: boolean
+    }
+    telemetry: {
+      analyticsEnabled: boolean
+      researchContentEnabled: false
+      source: "default" | "local" | "account"
+      signedIn: boolean
+      consentVersion: string
+      pending: boolean
+      corrupt: boolean
+      deletionAvailable: boolean
+    }
+  }
+}
+
+export type SettingsResearchToolsGetResponse =
+  SettingsResearchToolsGetResponses[keyof SettingsResearchToolsGetResponses]
+
+export type SettingsResearchToolsTelemetryUpdateData = {
+  body?: {
+    analyticsEnabled: boolean
+  }
+  path?: never
+  query?: never
+  url: "/settings/research-tools/telemetry"
+}
+
+export type SettingsResearchToolsTelemetryUpdateResponses = {
+  /**
+   * Updated research tools status
+   */
+  200: {
+    signedIn: boolean
+    plan: {
+      id: string
+      label: string
+      status: string | null
+    }
+    search: {
+      route: "managed" | "community"
+      state: "available" | "near_limit" | "critical" | "exhausted" | "conditional" | "unavailable"
+      enabled: boolean
+      limit: number | null
+      used: number | null
+      remaining: number | null
+      resetAt: string | null
+      communityFlagEnabled: boolean
+    }
+    telemetry: {
+      analyticsEnabled: boolean
+      researchContentEnabled: false
+      source: "default" | "local" | "account"
+      signedIn: boolean
+      consentVersion: string
+      pending: boolean
+      corrupt: boolean
+      deletionAvailable: boolean
+    }
+  }
+}
+
+export type SettingsResearchToolsTelemetryUpdateResponse =
+  SettingsResearchToolsTelemetryUpdateResponses[keyof SettingsResearchToolsTelemetryUpdateResponses]
+
+export type SettingsResearchToolsTelemetryDeleteData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/research-tools/telemetry/account-data"
+}
+
+export type SettingsResearchToolsTelemetryDeleteResponses = {
+  /**
+   * Deletion status
+   */
+  200: {
+    ok: boolean
+    message?: string
+  }
+}
+
+export type SettingsResearchToolsTelemetryDeleteResponse =
+  SettingsResearchToolsTelemetryDeleteResponses[keyof SettingsResearchToolsTelemetryDeleteResponses]
 
 export type AuthRemoveData = {
   body?: never
@@ -9081,7 +9174,15 @@ export type SessionTraceResponses = {
           write: number
         }
       }
+      inferenceCalls: number
       toolCalls: number
+      toolCallsPerInference?: number
+      toolExecutionMs: number
+      toolCriticalPathMs: number
+      toolMaxConcurrency: number
+      toolParallelism?: number
+      toolContractBytes?: number
+      contractBytes?: number
       childCount: number
       searchCount: number
       dedupeHits: number
@@ -9293,10 +9394,16 @@ export type SessionTraceResponses = {
       model: string
       systemHash: string
       instructionsHash?: string
+      systemBytes?: number
+      instructionsBytes?: number
+      toolBytes?: number
+      contractBytes?: number
       tools: Array<{
         name: string
         descriptionHash: string
         schemaHash: string
+        descriptionBytes?: number
+        schemaBytes?: number
       }>
       fingerprint: string
       messageID: string
@@ -9339,6 +9446,15 @@ export type SessionTraceResponses = {
       missing: Array<string>
       openFindings: number
       failedCandidates: number
+      strategy: {
+        mode: "explore" | "refine" | "pivot" | "fuse" | "verify"
+        stage?: string
+        attempts: number
+        branches: number
+        repeatedCandidates: Array<string>
+        reason: string
+        guidance: Array<string>
+      }
       contract?: {
         version: 1
         objective: string
@@ -9382,6 +9498,16 @@ export type SessionTraceResponses = {
           candidate: string
           message: string
           disposition?: string
+          recordedAt: number
+        }>
+        trials?: Array<{
+          id: string
+          stage: string
+          branch: string
+          candidate: string
+          outcome: "advanced" | "neutral" | "regressed" | "failed" | "inconclusive"
+          summary: string
+          evidence?: string
           recordedAt: number
         }>
         budget: {

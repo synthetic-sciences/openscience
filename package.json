@@ -45,9 +45,9 @@
       "@solid-primitives/storage": "4.3.3",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.4",
-      "dompurify": "3.4.11",
+      "dompurify": "3.4.14",
       "ai": "5.0.119",
-      "hono": "4.10.7",
+      "hono": "4.12.34",
       "hono-openapi": "1.1.2",
       "fuzzysort": "3.1.0",
       "luxon": "3.6.1",
@@ -66,7 +66,7 @@
       "@solidjs/meta": "0.29.4",
       "@solidjs/router": "0.15.4",
       "@solidjs/start": "2.0.0-alpha.2",
-      "solid-js": "1.9.10",
+      "solid-js": "1.9.15",
       "vite-plugin-solid": "2.11.10"
     }
   },
@@ -74,7 +74,7 @@
     "@tsconfig/bun": "catalog:",
     "husky": "9.1.7",
     "prettier": "3.6.2",
-    "turbo": "2.5.6"
+    "turbo": "2.9.14"
   },
   "dependencies": {
     "@synsci/plugin": "workspace:*",
@@ -99,8 +99,20 @@
     "web-tree-sitter"
   ],
   "overrides": {
+    "@babel/core": "7.29.6",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "body-parser": "2.3.0",
+    "brace-expansion": "5.0.9",
+    "diff": "8.0.4",
+    "esbuild": "0.28.1",
+    "fast-uri": "3.1.5",
+    "js-yaml": "4.3.1",
+    "nanoid": "3.3.18",
+    "postcss": "8.5.23",
+    "socket.io-parser": "4.2.7",
+    "tar": "7.5.21",
+    "undici": "6.28.0",
     "ws": "8.21.0"
   },
   "patchedDependencies": {

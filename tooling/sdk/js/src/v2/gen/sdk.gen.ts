@@ -30,6 +30,7 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  EventSubscribeResponse,
   EventSubscribeResponses,
   ExperimentalResourceListResponses,
   FileAnnotationsCreateResponses,
@@ -95,6 +96,7 @@ import type {
   GlobalConfigUpdateErrors,
   GlobalConfigUpdateResponses,
   GlobalDisposeResponses,
+  GlobalEventResponse,
   GlobalEventResponses,
   GlobalHealthResponses,
   GlobalProjectCreateErrors,
@@ -222,6 +224,7 @@ import type {
   RuntimeReplayErrors,
   RuntimeReplayResponses,
   RuntimeSubscribeErrors,
+  RuntimeSubscribeResponse,
   RuntimeSubscribeResponses,
   SearchQueryResponses,
   SessionAbortErrors,
@@ -325,6 +328,9 @@ import type {
   SettingsNetworkSetResponses,
   SettingsPreferencesGetResponses,
   SettingsPreferencesUpdateResponses,
+  SettingsResearchToolsGetResponses,
+  SettingsResearchToolsTelemetryDeleteResponses,
+  SettingsResearchToolsTelemetryUpdateResponses,
   SettingsReviewGetResponses,
   SettingsReviewSetResponses,
   SettingsSkillsInstallErrors,
@@ -356,10 +362,11 @@ import type {
   WorktreeResetResponses,
 } from "./types.gen.js"
 
-export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<
-  TData,
-  ThrowOnError
-> & {
+export type Options<
+  TData extends TDataShape = TDataShape,
+  ThrowOnError extends boolean = boolean,
+  TResponse = unknown,
+> = Options2<TData, ThrowOnError, TResponse> & {
   /**
    * You can provide a client instance returned by `createClient()` instead of
    * individual options. This might be also useful if you want to implement a
@@ -406,8 +413,8 @@ export class Project extends HeyApiClient {
    * Create an app-managed project with an opaque identity and optional project-scoped access to source locations explicitly selected by the user. Source paths never become the project identity.
    */
   public create<ThrowOnError extends boolean = false>(
-    parameters?: {
-      name?: string
+    parameters: {
+      name: string
       sources?: Array<{
         path: string
         access?: "read" | "write"
@@ -497,7 +504,7 @@ export class Global extends HeyApiClient {
    *
    * Subscribe to global events from the OpenScience system using server-sent events.
    */
-  public event<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+  public event<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError, GlobalEventResponse>) {
     return (options?.client ?? this.client).sse.get<GlobalEventResponses, unknown, ThrowOnError>({
       url: "/global/event",
       ...options,
@@ -522,8 +529,8 @@ export class Global extends HeyApiClient {
    * Overwrite the global config file verbatim (supports removing keys).
    */
   public configRawSet<ThrowOnError extends boolean = false>(
-    parameters?: {
-      content?: string
+    parameters: {
+      content: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -546,8 +553,8 @@ export class Global extends HeyApiClient {
    * Remove a key path from the global config (deep-merge cannot unset).
    */
   public configUnset<ThrowOnError extends boolean = false>(
-    parameters?: {
-      path?: Array<string>
+    parameters: {
+      path: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -633,8 +640,8 @@ export class BillingMode extends HeyApiClient {
    * Set billing mode
    */
   public set<ThrowOnError extends boolean = false>(
-    parameters?: {
-      mode?: "byok" | "managed"
+    parameters: {
+      mode: "byok" | "managed"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -656,7 +663,7 @@ export class Account extends HeyApiClient {
   /**
    * Get local session status
    *
-   * Check whether this OpenScience server has a local Atlas session without contacting Atlas.
+   * Check whether this OpenScience server has a local Gateway session without contacting Gateway.
    */
   public session<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<AccountSessionResponses, unknown, ThrowOnError>({
@@ -698,11 +705,11 @@ export class Account extends HeyApiClient {
   }
 
   /**
-   * Sign in with an Atlas API key
+   * Sign in with a Gateway API key
    */
   public loginKey<ThrowOnError extends boolean = false>(
-    parameters?: {
-      key?: string
+    parameters: {
+      key: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -781,7 +788,7 @@ export class Credentials extends HeyApiClient {
     parameters: {
       id: string
       label?: string
-      fields?: {
+      fields: {
         [key: string]: string
       }
     },
@@ -844,8 +851,8 @@ export class Storage extends HeyApiClient {
    * Take a verified snapshot, drain active writers, atomically switch every running OpenScience process, and retain the source as a safety copy.
    */
   public relocate<ThrowOnError extends boolean = false>(
-    parameters?: {
-      path?: string
+    parameters: {
+      path: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -891,7 +898,7 @@ export class Provider extends HeyApiClient {
   public connect<ThrowOnError extends boolean = false>(
     parameters: {
       id: string
-      key?: string
+      key: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -928,7 +935,7 @@ export class Provider extends HeyApiClient {
   public enabled<ThrowOnError extends boolean = false>(
     parameters: {
       id: string
-      enabled?: boolean
+      enabled: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1114,9 +1121,9 @@ export class Ssh extends HeyApiClient {
    * Add SSH host
    */
   public add<ThrowOnError extends boolean = false>(
-    parameters?: {
-      label?: string
-      host?: string
+    parameters: {
+      label: string
+      host: string
       user?: string
       port?: number
       scheduler?: "none" | "slurm" | "pbs"
@@ -1203,7 +1210,7 @@ export class Ssh extends HeyApiClient {
   public update<ThrowOnError extends boolean = false>(
     parameters: {
       id: string
-      notes?: string
+      notes: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1257,13 +1264,13 @@ export class Jobs extends HeyApiClient {
    * Start a compute job
    */
   public start<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      name?: string
+      name: string
       purpose?: string
-      command?: string
+      command: string
       cwd?: string
-      target?:
+      target:
         | {
             kind: "local"
           }
@@ -1290,7 +1297,7 @@ export class Jobs extends HeyApiClient {
       image?: string
       gpu?: string
       approval?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1340,13 +1347,13 @@ export class Jobs extends HeyApiClient {
    * Prepare an exact remote run plan for approval
    */
   public plan<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      name?: string
+      name: string
       purpose?: string
-      command?: string
+      command: string
       cwd?: string
-      target?:
+      target:
         | {
             kind: "local"
           }
@@ -1373,7 +1380,7 @@ export class Jobs extends HeyApiClient {
       image?: string
       gpu?: string
       approval?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1644,8 +1651,8 @@ export class Review extends HeyApiClient {
    * Update reviewer preferences
    */
   public set<ThrowOnError extends boolean = false>(
-    parameters?: {
-      auto?: boolean
+    parameters: {
+      auto: boolean
       model?: {
         providerID: string
         modelID: string
@@ -1803,6 +1810,58 @@ export class Updates extends HeyApiClient {
   }
 }
 
+export class Telemetry extends HeyApiClient {
+  /**
+   * Update structural usage sharing consent
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      analyticsEnabled: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "analyticsEnabled" }] }])
+    return (options?.client ?? this.client).put<SettingsResearchToolsTelemetryUpdateResponses, unknown, ThrowOnError>({
+      url: "/settings/research-tools/telemetry",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete account-linked usage analytics
+   */
+  public delete<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).delete<
+      SettingsResearchToolsTelemetryDeleteResponses,
+      unknown,
+      ThrowOnError
+    >({ url: "/settings/research-tools/telemetry/account-data", ...options })
+  }
+}
+
+export class ResearchTools extends HeyApiClient {
+  /**
+   * Get plan, research-search, and data-sharing status
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsResearchToolsGetResponses, unknown, ThrowOnError>({
+      url: "/settings/research-tools",
+      ...options,
+    })
+  }
+
+  private _telemetry?: Telemetry
+  get telemetry(): Telemetry {
+    return (this._telemetry ??= new Telemetry({ client: this.client }))
+  }
+}
+
 export class Skills extends HeyApiClient {
   /**
    * Install skill from git
@@ -1810,9 +1869,9 @@ export class Skills extends HeyApiClient {
    * Install skill(s) from a public git repository URL. Runs the local-first fetch and multi-layer security review, writes surviving skills to the installed-skills store, then invalidates the skill cache.
    */
   public install<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      url?: string
+      url: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1870,11 +1929,11 @@ export class Network extends HeyApiClient {
    * Persist the domain allow-list state (enabled groups + custom domains).
    */
   public set<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      allowlistEnabled?: boolean
-      enabled?: Array<string>
-      custom?: Array<string>
+      allowlistEnabled: boolean
+      enabled: Array<string>
+      custom: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1962,6 +2021,11 @@ export class Settings extends HeyApiClient {
   private _updates?: Updates
   get updates(): Updates {
     return (this._updates ??= new Updates({ client: this.client }))
+  }
+
+  private _researchTools?: ResearchTools
+  get researchTools(): ResearchTools {
+    return (this._researchTools ??= new ResearchTools({ client: this.client }))
   }
 
   private _skills?: Skills
@@ -2281,9 +2345,9 @@ export class Pty extends HeyApiClient {
    * Create a new pseudo-terminal (PTY) session for running shell commands and processes.
    */
   public create<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
+      sessionID: string
       title?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -2771,8 +2835,8 @@ export class Filesystem extends HeyApiClient {
     parameters: {
       sessionID: string
       directory?: string
-      path?: string
-      access?: "read" | "write"
+      path: string
+      access: "read" | "write"
       scope?: "once" | "session" | "project" | "installation"
     },
     options?: Options<never, ThrowOnError>,
@@ -3074,7 +3138,7 @@ export class Session extends HeyApiClient {
   /**
    * Get local harness trace
    *
-   * Build one local, Atlas-independent trace with effective harness manifests, composition transitions, attribution invariants, deterministic trajectory fingerprints, inference, tools, child agents, compute, artifacts, failures, costs, and timing. Hidden reasoning, prompt content, and copied tool outputs are excluded.
+   * Build one local, Gateway-independent trace with effective harness manifests, composition transitions, attribution invariants, deterministic trajectory fingerprints, inference, tools, child agents, compute, artifacts, failures, costs, and timing. Hidden reasoning, prompt content, and copied tool outputs are excluded.
    */
   public trace<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3170,8 +3234,8 @@ export class Session extends HeyApiClient {
     parameters: {
       sessionID: string
       directory?: string
-      artifactID?: string
-      versionID?: string
+      artifactID: string
+      versionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3213,9 +3277,9 @@ export class Session extends HeyApiClient {
     parameters: {
       sessionID: string
       directory?: string
-      modelID?: string
-      providerID?: string
-      messageID?: string
+      modelID: string
+      providerID: string
+      messageID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3353,8 +3417,8 @@ export class Session extends HeyApiClient {
     parameters: {
       sessionID: string
       directory?: string
-      providerID?: string
-      modelID?: string
+      providerID: string
+      modelID: string
       auto?: boolean
     },
     options?: Options<never, ThrowOnError>,
@@ -3441,7 +3505,7 @@ export class Session extends HeyApiClient {
       system?: string
       variant?: string
       tier?: string
-      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+      parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3535,7 +3599,7 @@ export class Session extends HeyApiClient {
       system?: string
       variant?: string
       tier?: string
-      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+      parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3585,8 +3649,8 @@ export class Session extends HeyApiClient {
       messageID?: string
       agent?: string
       model?: string
-      arguments?: string
-      command?: string
+      arguments: string
+      command: string
       variant?: string
       tier?: string
       parts?: Array<{
@@ -3640,12 +3704,12 @@ export class Session extends HeyApiClient {
     parameters: {
       sessionID: string
       directory?: string
-      agent?: string
+      agent: string
       model?: {
         providerID: string
         modelID: string
       }
-      command?: string
+      command: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3684,7 +3748,7 @@ export class Session extends HeyApiClient {
     parameters: {
       sessionID: string
       directory?: string
-      messageID?: string
+      messageID: string
       partID?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -3887,7 +3951,7 @@ export class Permission extends HeyApiClient {
       sessionID: string
       permissionID: string
       directory?: string
-      response?: "once" | "session" | "project" | "always" | "reject"
+      response: "once" | "session" | "project" | "always" | "reject"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3925,7 +3989,7 @@ export class Permission extends HeyApiClient {
     parameters: {
       requestID: string
       directory?: string
-      reply?: "once" | "session" | "project" | "always" | "reject"
+      reply: "once" | "session" | "project" | "always" | "reject"
       message?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -3987,11 +4051,11 @@ export class Runtime extends HeyApiClient {
    * Accepts a prompt and returns immediately while the Research agent continues in the background.
    */
   public prompt<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
-      message?: string
-      effort?: "normal" | "ultra"
+      sessionID: string
+      message: string
+      effort: "normal" | "ultra"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4063,7 +4127,7 @@ export class Runtime extends HeyApiClient {
       sessionID: string
       afterSequence?: number
     },
-    options?: Options<never, ThrowOnError>,
+    options?: Options<never, ThrowOnError, RuntimeSubscribeResponse>,
   ) {
     const params = buildClientParams(
       [parameters],
@@ -4146,7 +4210,7 @@ export class Question extends HeyApiClient {
     parameters: {
       requestID: string
       directory?: string
-      answers?: Array<QuestionAnswer>
+      answers: Array<QuestionAnswer>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4215,7 +4279,7 @@ export class Oauth extends HeyApiClient {
     parameters: {
       providerID: string
       directory?: string
-      method?: number
+      method: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4256,7 +4320,7 @@ export class Oauth extends HeyApiClient {
     parameters: {
       providerID: string
       directory?: string
-      method?: number
+      method: number
       code?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -4460,10 +4524,10 @@ export class Trash extends HeyApiClient {
    * Move a local file or folder into recoverable same-volume trash without loading its contents into memory.
    */
   public create<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      path?: string
-      sessionID?: string
+      path: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4500,7 +4564,7 @@ export class Trash extends HeyApiClient {
     parameters: {
       id: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4537,7 +4601,7 @@ export class Trash extends HeyApiClient {
     parameters: {
       id: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4573,10 +4637,10 @@ export class Artifact extends HeyApiClient {
    * Stream a file's exact bytes into the local, immutable, content-addressed artifact store.
    */
   public save<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      path?: string
-      sessionID?: string
+      path: string
+      sessionID: string
       messageID?: string
       summary?: string
     },
@@ -4717,7 +4781,7 @@ export class ArtifactStore extends HeyApiClient {
     parameters: {
       id: string
       directory?: string
-      title?: string
+      title: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4859,10 +4923,10 @@ export class Annotations extends HeyApiClient {
    * Create a durable review thread anchored to an artifact, text range, notebook cell, molecule, or locus.
    */
   public create<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      path?: string
-      body?: string
+      path: string
+      body: string
       author?: string
       anchor?:
         | {
@@ -5061,9 +5125,9 @@ export class Reviews extends HeyApiClient {
    * Check citations, numeric traces, figures, and provenance for the exact Markdown manuscript bytes.
    */
   public run<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      path?: string
+      path: string
       actor?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -5132,9 +5196,9 @@ export class Reviews extends HeyApiClient {
       id: string
       finding: string
       directory?: string
-      status?: "resolved" | "overridden"
-      actor?: string
-      reason?: string
+      status: "resolved" | "overridden"
+      actor: string
+      reason: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5174,7 +5238,7 @@ export class Reviews extends HeyApiClient {
     parameters: {
       id: string
       directory?: string
-      actor?: string
+      actor: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5205,7 +5269,7 @@ export class Reviews extends HeyApiClient {
   }
 }
 
-export class File extends HeyApiClient {
+export class File_ extends HeyApiClient {
   /**
    * List files
    *
@@ -5276,11 +5340,11 @@ export class File extends HeyApiClient {
    * Write the content of a specified file.
    */
   public write<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      path?: string
-      content?: string
-      sessionID?: string
+      path: string
+      content: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5315,11 +5379,11 @@ export class File extends HeyApiClient {
    * Rename a local file or folder without overwriting an existing destination.
    */
   public rename<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      from?: string
-      to?: string
-      sessionID?: string
+      from: string
+      to: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5569,10 +5633,10 @@ export class File extends HeyApiClient {
    * Create a timestamped HTML, PDF, DOCX, LaTeX, or PowerPoint publication artifact locally.
    */
   public publication<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      path?: string
-      format?: "html" | "pdf" | "docx" | "latex" | "pptx"
+      path: string
+      format: "html" | "pdf" | "docx" | "latex" | "pptx"
       readiness?: "draft" | "reviewed"
       review_id?: string
     },
@@ -5657,7 +5721,7 @@ export class Command extends HeyApiClient {
     parameters: {
       commandID: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5767,7 +5831,7 @@ export class Kernels extends HeyApiClient {
     parameters: {
       kernelID: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5802,7 +5866,7 @@ export class Kernels extends HeyApiClient {
     parameters: {
       kernelID: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5837,7 +5901,7 @@ export class Kernels extends HeyApiClient {
     parameters: {
       kernelID: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5901,13 +5965,13 @@ export class Kernels extends HeyApiClient {
    * Run code in a long-lived project-scoped Python or R process. State persists until restart, stop, or idle expiry.
    */
   public execute<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
-      language?: "python" | "r"
+      sessionID: string
+      language: "python" | "r"
       environment?: string
       source?: string
-      code?: string
+      code: string
       timeout?: number
     },
     options?: Options<never, ThrowOnError>,
@@ -5976,10 +6040,10 @@ export class Kernels extends HeyApiClient {
    * Restart a runtime
    */
   public restart<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
-      language?: "python" | "r"
+      sessionID: string
+      language: "python" | "r"
       environment?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -6013,10 +6077,10 @@ export class Kernels extends HeyApiClient {
    * Stop a runtime
    */
   public stop<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
-      language?: "python" | "r"
+      sessionID: string
+      language: "python" | "r"
       environment?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -6052,10 +6116,10 @@ export class Kernels extends HeyApiClient {
    * Stop the running execution while preserving process state when the runtime supports interruption.
    */
   public interrupt<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
-      language?: "python" | "r"
+      sessionID: string
+      language: "python" | "r"
       environment?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -6099,7 +6163,7 @@ export class Command2 extends HeyApiClient {
     parameters: {
       commandID: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6138,7 +6202,7 @@ export class Kernel extends HeyApiClient {
     parameters: {
       kernelID: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6173,7 +6237,7 @@ export class Kernel extends HeyApiClient {
     parameters: {
       kernelID: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6208,7 +6272,7 @@ export class Kernel extends HeyApiClient {
     parameters: {
       kernelID: string
       directory?: string
-      sessionID?: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6347,13 +6411,13 @@ export class Notebook extends HeyApiClient {
    * Execute code in a persistent project-scoped Python or R kernel.
    */
   public execute<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
-      language?: "python" | "r"
+      sessionID: string
+      language: "python" | "r"
       environment?: string
-      id?: string
-      code?: string
+      id: string
+      code: string
       timeout?: number
     },
     options?: Options<never, ThrowOnError>,
@@ -6424,12 +6488,12 @@ export class Notebook extends HeyApiClient {
    * Restart a notebook kernel
    */
   public restart<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
-      language?: "python" | "r"
+      sessionID: string
+      language: "python" | "r"
       environment?: string
-      id?: string
+      id: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6463,12 +6527,12 @@ export class Notebook extends HeyApiClient {
    * Stop a notebook kernel
    */
   public stop<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
-      language?: "python" | "r"
+      sessionID: string
+      language: "python" | "r"
       environment?: string
-      id?: string
+      id: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6504,12 +6568,12 @@ export class Notebook extends HeyApiClient {
    * Stop the running cell while preserving kernel state when the runtime supports interruption.
    */
   public interrupt<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      sessionID?: string
-      language?: "python" | "r"
+      sessionID: string
+      language: "python" | "r"
       environment?: string
-      id?: string
+      id: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6579,8 +6643,8 @@ export class Reviews2 extends HeyApiClient {
     parameters: {
       id: string
       directory?: string
-      actor?: string
-      reason?: string
+      actor: string
+      reason: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6638,10 +6702,10 @@ export class Provenance extends HeyApiClient {
    * Record a project provenance node
    */
   public record<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      kind?: "artifact" | "run" | "source" | "claim"
-      label?: string
+      kind: "artifact" | "run" | "source" | "claim"
+      label: string
       artifact_type?: string
       path?: string
       content_hash?: string
@@ -6693,13 +6757,13 @@ export class Provenance extends HeyApiClient {
    * Record a reviewer finding
    */
   public review<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      target?: string
-      claim?: string
-      issue?: string
-      severity?: "blocking" | "major" | "minor" | "info"
-      evidence?: string
+      target: string
+      claim: string
+      issue: string
+      severity: "blocking" | "major" | "minor" | "info"
+      evidence: string
       verdict?: "refutes" | "supports"
     },
     options?: Options<never, ThrowOnError>,
@@ -6855,7 +6919,7 @@ export class Config3 extends HeyApiClient {
     parameters: {
       name: string
       directory?: string
-      config?: McpLocalConfig | McpRemoteConfig
+      config: McpLocalConfig | McpRemoteConfig
       scope?: "project" | "global"
     },
     options?: Options<never, ThrowOnError>,
@@ -6956,7 +7020,7 @@ export class Auth2 extends HeyApiClient {
     parameters: {
       name: string
       directory?: string
-      code?: string
+      code: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7043,10 +7107,10 @@ export class Mcp extends HeyApiClient {
    * Dynamically add a new Model Context Protocol (MCP) server to the system.
    */
   public add<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      name?: string
-      config?: McpLocalConfig | McpRemoteConfig
+      name: string
+      config: McpLocalConfig | McpRemoteConfig
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7295,7 +7359,7 @@ export class Skill extends HeyApiClient {
     parameters: {
       name: string
       directory?: string
-      content?: string
+      content: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7331,11 +7395,11 @@ export class App extends HeyApiClient {
    * Write a log entry to the server logs with specified level and metadata.
    */
   public log<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
-      service?: string
-      level?: "debug" | "info" | "error" | "warn"
-      message?: string
+      service: string
+      level: "debug" | "info" | "error" | "warn"
+      message: string
       extra?: {
         [key: string]: unknown
       }
@@ -7454,7 +7518,7 @@ export class Formatter extends HeyApiClient {
   }
 }
 
-export class Event extends HeyApiClient {
+export class Event_ extends HeyApiClient {
   /**
    * Subscribe to events
    *
@@ -7464,7 +7528,7 @@ export class Event extends HeyApiClient {
     parameters?: {
       directory?: string
     },
-    options?: Options<never, ThrowOnError>,
+    options?: Options<never, ThrowOnError, EventSubscribeResponse>,
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
     return (options?.client ?? this.client).sse.get<EventSubscribeResponses, unknown, ThrowOnError>({
@@ -7484,8 +7548,8 @@ export class OpenScienceClient extends HeyApiClient {
   }
 
   public postSettingsLocalStart<ThrowOnError extends boolean = false>(
-    parameters?: {
-      id?: string
+    parameters: {
+      id: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7503,8 +7567,8 @@ export class OpenScienceClient extends HeyApiClient {
   }
 
   public postSettingsLocalModels<ThrowOnError extends boolean = false>(
-    parameters?: {
-      url?: string
+    parameters: {
+      url: string
       key?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -7533,8 +7597,8 @@ export class OpenScienceClient extends HeyApiClient {
   }
 
   public postSettingsLocalSsh<ThrowOnError extends boolean = false>(
-    parameters?: {
-      host?: string
+    parameters: {
+      host: string
       remotePort?: number
       localPort?: number
       key?: string
@@ -7569,10 +7633,10 @@ export class OpenScienceClient extends HeyApiClient {
   }
 
   public postSettingsLocalContext<ThrowOnError extends boolean = false>(
-    parameters?: {
-      url?: string
-      model?: string
-      context?: number
+    parameters: {
+      url: string
+      model: string
+      context: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7601,12 +7665,12 @@ export class OpenScienceClient extends HeyApiClient {
   }
 
   public postSettingsLocal<ThrowOnError extends boolean = false>(
-    parameters?: {
-      url?: string
+    parameters: {
+      url: string
       id?: string
       name?: string
       key?: string
-      models?: Array<string>
+      models: Array<string>
       aliases?: {
         [key: string]: string
       }
@@ -7774,9 +7838,9 @@ export class OpenScienceClient extends HeyApiClient {
     return (this._find ??= new Find({ client: this.client }))
   }
 
-  private _file?: File
-  get file(): File {
-    return (this._file ??= new File({ client: this.client }))
+  private _file?: File_
+  get file(): File_ {
+    return (this._file ??= new File_({ client: this.client }))
   }
 
   private _kernels?: Kernels
@@ -7834,8 +7898,8 @@ export class OpenScienceClient extends HeyApiClient {
     return (this._formatter ??= new Formatter({ client: this.client }))
   }
 
-  private _event?: Event
-  get event(): Event {
-    return (this._event ??= new Event({ client: this.client }))
+  private _event?: Event_
+  get event(): Event_ {
+    return (this._event ??= new Event_({ client: this.client }))
   }
 }

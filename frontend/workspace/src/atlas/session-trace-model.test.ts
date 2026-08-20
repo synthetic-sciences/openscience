@@ -12,6 +12,15 @@ import {
   traceMetrics,
 } from "./session-trace-model"
 
+const strategy = {
+  mode: "explore" as const,
+  attempts: 0,
+  branches: 0,
+  repeatedCandidates: [],
+  reason: "No research contract has been defined",
+  guidance: ["Define the research contract before expensive work."],
+}
+
 const trace: SessionTraceResponse = {
   version: 1,
   session: {
@@ -29,7 +38,11 @@ const trace: SessionTraceResponse = {
     totalCompletionTimeMs: 8_000,
     cost: 0.0042,
     tokens: { input: 1_000, output: 200, reasoning: 50, cache: { read: 500, write: 0 } },
+    inferenceCalls: 1,
     toolCalls: 3,
+    toolExecutionMs: 400,
+    toolCriticalPathMs: 400,
+    toolMaxConcurrency: 1,
     childCount: 1,
     searchCount: 2,
     dedupeHits: 1,
@@ -136,6 +149,7 @@ const trace: SessionTraceResponse = {
     missing: [],
     openFindings: 0,
     failedCandidates: 0,
+    strategy,
   },
   privacy: {
     local: true,
@@ -198,6 +212,12 @@ describe("session trace presentation", () => {
         missing: ["report.md"],
         openFindings: 0,
         failedCandidates: 1,
+        strategy: {
+          ...strategy,
+          mode: "verify" as const,
+          reason: "All research stages are marked complete",
+          guidance: ["Run the declared verification checks."],
+        },
         contract: {
           version: 1 as const,
           objective: "Compare calibrated models",
