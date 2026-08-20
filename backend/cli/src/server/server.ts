@@ -7,7 +7,7 @@ import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
 import { serveWebAsset, wantsJson } from "../web/serve"
 import { webAssetContentSecurityPolicy } from "../web/csp"
-import { isAllowedHost, isAllowedOrigin, isCrossOrigin } from "./host-guard"
+import { isAllowedHost, isAllowedOrigin, isCorsPreflight, isCrossOrigin, isDeploymentAuthorized } from "./host-guard"
 import { timingSafeEqual } from "../util/timing-safe"
 import { FolderResolveRoutes } from "./routes/folder-resolve"
 import { AtlasBridgeRoutes } from "./routes/atlas-bridge"
@@ -175,6 +175,25 @@ export namespace Server {
           //    (e.g. a no-cors GET) — is rejected. See isCrossOrigin.
           if (isCrossOrigin(c.req.header("origin"), c.req.header("sec-fetch-site"), _corsWhitelist)) {
             return c.json({ error: "Forbidden origin" }, 403)
+          }
+
+          // 3. Optional defense-in-depth for reverse-proxied and co-located
+          //    deployments. Health remains available to liveness probes and
+          //    real CORS preflights proceed to the CORS middleware; the actual
+          //    request must still authenticate.
+          const health = c.req.path === "/global/health"
+          const preflight = isCorsPreflight(
+            c.req.method,
+            c.req.header("origin"),
+            c.req.header("access-control-request-method"),
+          )
+          if (
+            !health &&
+            !preflight &&
+            !isDeploymentAuthorized(process.env["OPENSCIENCE_AUTH_TOKEN"], c.req.header("authorization"))
+          ) {
+            c.header("WWW-Authenticate", 'Bearer realm="openscience"')
+            return c.json({ error: "Unauthorized" }, 401)
           }
           return next()
         })

@@ -14,6 +14,8 @@ Use **Research tools → Action approval** beneath the composer to switch to **A
 
 Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforces a Host and Origin allowlist to block DNS-rebinding and cross-origin requests. It is not built for remote exposure. If you tunnel or reverse-proxy it yourself, securing that exposure is your responsibility, and anything the server provides in that setup is not a vulnerability.
 
+Self-hosted operators can set `OPENSCIENCE_AUTH_TOKEN` to require `Authorization: Bearer <token>` on network requests as an additional deployment boundary. The health endpoint and browser CORS preflights remain open, and trusted in-process calls are unaffected. A reverse proxy must inject or forward the header on ordinary HTTP, streaming, and WebSocket requests. Leaving the variable unset preserves the local default.
+
 ### Out of scope
 
 | Category                    | Why                                                                  |

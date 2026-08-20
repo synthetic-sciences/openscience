@@ -1,5 +1,7 @@
-// The local openscience server only ever binds to loopback. Two independent checks
-// gate every NETWORK request (in-process callers bypass both via a per-process
+import { timingSafeEqual } from "../util/timing-safe"
+
+// The local openscience server only ever binds to loopback. Independent checks
+// gate every NETWORK request (in-process callers bypass them via a per-process
 // nonce header — see Server.internalFetch):
 //
 //   isAllowedHost   — rejects DNS-rebinding. An attacker page on evil.com that
@@ -74,4 +76,19 @@ export function isCrossOrigin(
 ): boolean {
   if (origin !== undefined) return !isAllowedOrigin(origin, extraWhitelist)
   return secFetchSite === "cross-site"
+}
+
+export function isCorsPreflight(
+  method: string,
+  origin: string | undefined,
+  requestedMethod: string | undefined,
+): boolean {
+  return method === "OPTIONS" && origin !== undefined && requestedMethod !== undefined
+}
+
+/** Verify the optional deployment credential without changing local defaults. */
+export function isDeploymentAuthorized(token: string | undefined, authorization: string | undefined): boolean {
+  if (!token) return true
+  if (!authorization || authorization.slice(0, 7).toLowerCase() !== "bearer ") return false
+  return timingSafeEqual(authorization.slice(7), token)
 }

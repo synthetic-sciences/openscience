@@ -39,6 +39,8 @@ Known credential patterns are redacted from agent output before it lands in a tr
 
 Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforces a Host and Origin allowlist to block DNS-rebinding and cross-origin requests. It is not built for remote exposure — if you tunnel or reverse-proxy it, securing that exposure is on you.
 
+For defense in depth on a shared host or behind a reverse proxy, set `OPENSCIENCE_AUTH_TOKEN`. Every network request must then include `Authorization: Bearer <token>`, except `/global/health` and browser CORS preflights. In-process calls keep working without the token. Make sure the proxy forwards or injects the credential for HTTP, streaming, and WebSocket traffic.
+
 ## What leaves your machine
 
 - Prompts and responses sent to your model provider, governed by that provider's policy.
