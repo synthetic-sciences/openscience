@@ -203,18 +203,9 @@ export namespace DarwinResponsibilityLauncher {
     })
     if (interruptPending) forward("SIGINT")
 
-    let settled = false
-    let code = 1
-    let failure: unknown
-    void result.then(
-      (value) => {
-        settled = true
-        code = value
-      },
-      (error) => {
-        settled = true
-        failure = error
-      },
+    const outcome = result.then(
+      (value) => ({ type: "complete" as const, value }),
+      (error: unknown) => ({ type: "failure" as const, error }),
     )
     while (true) {
       if (DarwinResponsibility.identity(owner) !== ownerIdentity) {
@@ -225,18 +216,26 @@ export namespace DarwinResponsibilityLauncher {
         await reapOwned()
         return teardownSignal === "SIGTERM" ? 143 : 129
       }
-      if (settled) {
+      const event = await Promise.race([
+        outcome,
+        teardownRequested.then((signal) => ({ type: "teardown" as const, signal })),
+        Bun.sleep(1_000).then(() => ({ type: "poll" as const })),
+      ])
+      if (event.type === "teardown") {
+        await reapOwned()
+        return event.signal === "SIGTERM" ? 143 : 129
+      }
+      if (event.type === "complete" || event.type === "failure") {
         // A normal command completion is also a lifecycle boundary. Reap any
         // background or fully reparented members before reporting the command
         // complete, matching the durable ledger's completion contract.
         await reapOwned()
-        if (failure) throw failure
-        return code
+        if (event.type === "failure") throw event.error
+        return event.value
       }
       // Process identity checks cross into libproc and are relatively costly
       // on Darwin. A one-second owner-death bound keeps teardown responsive
       // without making every idle notebook kernel burn measurable CPU.
-      await Bun.sleep(1_000)
     }
   }
 
