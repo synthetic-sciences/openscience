@@ -41,6 +41,7 @@ export namespace LLM {
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
+    direct?: boolean
     trace?: { messageID: string; attempt: number }
     onReasoningEffortResolved?: (effort: string | undefined) => void | Promise<void>
   }
@@ -77,7 +78,11 @@ export namespace LLM {
       [
         // use agent prompt otherwise provider prompt
         // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
+        ...(input.agent.prompt
+          ? [input.agent.prompt]
+          : isCodex
+            ? []
+            : SystemPrompt.provider(input.model, input.direct)),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -123,7 +128,7 @@ export namespace LLM {
       mergeDeep(variant),
     )
     if (isCodex) {
-      options.instructions = SystemPrompt.instructions()
+      options.instructions = SystemPrompt.instructions(input.direct)
     }
 
     const params = await Plugin.trigger(

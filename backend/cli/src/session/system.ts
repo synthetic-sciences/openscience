@@ -4,6 +4,7 @@ import { Instance } from "../project/instance"
 import { SessionFilesystem } from "./filesystem"
 
 import PROMPT_CORE from "./prompt/core.txt"
+import PROMPT_DIRECT from "./prompt/direct.txt"
 import type { Provider } from "@/provider/provider"
 import { Config } from "../config/config"
 import { Skill } from "../skill"
@@ -13,12 +14,13 @@ import { ComputePrompt } from "../compute/prompt"
 export namespace SystemPrompt {
   const skillPrompts = new WeakMap<Skill.Info[], Map<string, string>>()
 
-  export function instructions() {
+  export function instructions(direct = false) {
+    if (direct) return `You are OpenScience.\n\n${PROMPT_DIRECT.trim()}`
     return PROMPT_CORE.trim()
   }
 
-  export function provider(_model: Provider.Model) {
-    return [PROMPT_CORE]
+  export function provider(_model: Provider.Model, direct = false) {
+    return [direct ? instructions(true) : PROMPT_CORE]
   }
 
   export async function compute(value?: unknown) {

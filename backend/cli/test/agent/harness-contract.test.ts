@@ -45,6 +45,16 @@ test("every provider receives one compact product operating contract", () => {
   expect(instructions).not.toContain("project init")
 })
 
+test("direct answers receive a compact truth-preserving core", () => {
+  const instructions = SystemPrompt.instructions(true)
+  expect(SystemPrompt.provider(undefined as never, true)[0]?.trim()).toBe(instructions)
+  expect(instructions.length).toBeLessThan(350)
+  expect(instructions).toContain("You are OpenScience")
+  expect(instructions).toContain("requested format")
+  expect(instructions).toContain("Do not plan, use tools, delegate, search")
+  expect(instructions).toContain("uncertainty")
+})
+
 test("the primary and domain prompts stay adaptive instead of procedural", async () => {
   const [research, direct, ml, biology, physics] = await Promise.all([
     read("agent/prompt/research.txt"),

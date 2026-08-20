@@ -1043,6 +1043,7 @@ export namespace SessionPrompt {
       const result = await processor.process({
         user: lastUser,
         agent,
+        direct: route.direct,
         abort,
         sessionID,
         system,
