@@ -2394,6 +2394,9 @@ export type Command = {
   agent?: string
   model?: string
   mcp?: boolean
+  source?: "builtin" | "project" | "mcp"
+  category?: "session" | "research" | "evidence" | "output" | "project"
+  usage?: string
   menu?: boolean
   template: string
   subtask?: boolean

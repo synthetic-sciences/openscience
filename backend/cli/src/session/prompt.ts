@@ -65,6 +65,13 @@ import { AuthoritySignal } from "@/project/authority-signal"
 import { Sandbox } from "@/sandbox/sandbox"
 import { BashTool } from "@/tool/bash"
 import { SessionResearch } from "./research"
+import { Todo } from "./todo"
+import { File } from "@/file"
+import { ReviewSettings } from "@/settings/review"
+import { RuntimeEvents } from "@/runtime/events"
+import { ComputeJobs } from "@/compute/jobs"
+import { KernelRuntime } from "@/science/kernel/registry"
+import { SessionCheckpoint } from "./checkpoint"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -2258,6 +2265,230 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     return value
   }
 
+  async function commandModel(input: CommandInput) {
+    if (input.model) return Provider.parseModel(input.model)
+    for await (const message of MessageV2.stream(input.sessionID)) {
+      if (message.info.role === "user") return message.info.model
+    }
+    return { providerID: "openscience", modelID: "local" }
+  }
+
+  async function notice(input: CommandInput, text: string): Promise<MessageV2.WithParts> {
+    const model = await commandModel(input)
+    const agent = input.agent ?? (await Agent.defaultAgent())
+    const cwd = await SessionFilesystem.workspace(input.sessionID)
+    const user: MessageV2.User = {
+      id: input.messageID ?? Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      time: { created: Date.now() },
+      role: "user",
+      agent,
+      effort: await lastResearchEffort(input.sessionID),
+      model: { providerID: model.providerID, modelID: model.modelID },
+    }
+    const line = `/${input.command}${input.arguments.trim() ? ` ${input.arguments.trim()}` : ""}`
+    const userPart: MessageV2.TextPart = {
+      id: Identifier.ascending("part"),
+      messageID: user.id,
+      sessionID: input.sessionID,
+      type: "text",
+      text: line,
+      ignored: true,
+      time: { start: Date.now(), end: Date.now() },
+    }
+    await Session.updateMessage(user)
+    await Session.updatePart(userPart)
+
+    const assistant: MessageV2.Assistant = {
+      id: await MessageV2.nextMessageID(input.sessionID),
+      sessionID: input.sessionID,
+      parentID: user.id,
+      role: "assistant",
+      mode: agent,
+      agent,
+      path: { cwd, root: Instance.worktree },
+      time: { created: Date.now(), completed: Date.now() },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      finish: "stop",
+      modelID: model.modelID,
+      providerID: model.providerID,
+    }
+    const part: MessageV2.TextPart = {
+      id: Identifier.ascending("part"),
+      messageID: assistant.id,
+      sessionID: input.sessionID,
+      type: "text",
+      text,
+      synthetic: true,
+      ignored: true,
+      time: { start: Date.now(), end: Date.now() },
+    }
+    await Session.updateMessage(assistant)
+    await Session.updatePart(part)
+    Bus.publish(Command.Event.Executed, {
+      name: input.command,
+      sessionID: input.sessionID,
+      arguments: input.arguments,
+      messageID: assistant.id,
+    })
+    return { info: assistant, parts: [part] }
+  }
+
+  async function status(input: CommandInput) {
+    const [session, messages, todos, artifacts, diff] = await Promise.all([
+      Session.get(input.sessionID),
+      Session.messages({ sessionID: input.sessionID }),
+      Todo.get(input.sessionID),
+      File.artifacts({ sessionID: input.sessionID }).catch(() => []),
+      Session.diff(input.sessionID).catch(() => []),
+    ])
+    const plan = Object.fromEntries(
+      ["in_progress", "pending", "completed", "cancelled"].map((state) => [
+        state,
+        todos.filter((todo) => todo.status === state).length,
+      ]),
+    )
+    const latest = messages.findLast((message) => message.info.role === "user")
+    const model = latest?.info.role === "user" ? `${latest.info.model.providerID}/${latest.info.model.modelID}` : "none"
+    const state = SessionStatus.get(input.sessionID).type
+    const changes = diff.reduce(
+      (total, file) => ({ additions: total.additions + file.additions, deletions: total.deletions + file.deletions }),
+      { additions: 0, deletions: 0 },
+    )
+    return notice(
+      input,
+      [
+        "### Session status",
+        "",
+        `- State: **${state}**`,
+        `- Session: ${session.title}`,
+        `- Plan: ${plan.in_progress ?? 0} active, ${plan.pending ?? 0} pending, ${plan.completed ?? 0} complete`,
+        `- Conversation: ${messages.length} messages`,
+        `- Model: ${model}`,
+        `- Artifacts: ${artifacts.length}`,
+        `- Workspace changes: ${diff.length} files (+${changes.additions} / -${changes.deletions})`,
+        `- Updated: ${new Date(session.time.updated).toISOString()}`,
+      ].join("\n"),
+    )
+  }
+
+  async function goals(input: CommandInput) {
+    const [session, messages, todos, contract] = await Promise.all([
+      Session.get(input.sessionID),
+      Session.messages({ sessionID: input.sessionID }),
+      Todo.get(input.sessionID),
+      SessionResearch.read(input.sessionID),
+    ])
+    const request = messages
+      .filter((message) => message.info.role === "user")
+      .flatMap((message) =>
+        message.parts.flatMap((part) =>
+          part.type === "text" && !part.ignored && !part.synthetic && part.text.trim() ? [part.text.trim()] : [],
+        ),
+      )[0]
+    const objective = (contract?.objective ?? request ?? session.title).slice(0, 2_000)
+    const active = todos.filter((todo) => todo.status === "in_progress")
+    const pending = todos.filter((todo) => todo.status === "pending")
+    const completed = todos.filter((todo) => todo.status === "completed")
+    const next =
+      active[0]?.content ??
+      pending[0]?.content ??
+      contract?.stages.find((stage) => stage.status === "running")?.label ??
+      contract?.stages.find((stage) => stage.status === "pending")?.label ??
+      "Define the next concrete step with `/plan`."
+    const rows = (items: typeof todos, empty: string) =>
+      items.length > 0 ? items.map((todo) => `- ${todo.content}`) : [`- ${empty}`]
+    return notice(
+      input,
+      [
+        "### Goals",
+        "",
+        "**Objective**",
+        objective,
+        "",
+        "**In progress**",
+        ...rows(active, "No active plan item"),
+        "",
+        "**Up next**",
+        ...rows(pending, "No queued plan items"),
+        "",
+        `**Completed** · ${completed.length}/${todos.length}`,
+        ...(contract
+          ? [
+              "",
+              `**Research workflow** · ${contract.stages.filter((stage) => stage.status === "completed").length}/${contract.stages.length} stages complete`,
+              ...contract.stages.map(
+                (stage) =>
+                  `- [${stage.status === "completed" ? "x" : " "}] ${stage.label}${stage.status === "running" ? " (active)" : ""}`,
+              ),
+            ]
+          : []),
+        "",
+        "**Next action**",
+        next,
+      ].join("\n"),
+    )
+  }
+
+  async function context(input: CommandInput) {
+    const messages = await Session.messages({ sessionID: input.sessionID })
+    const composition = MessageV2.composition(messages)
+    const selected = await commandModel(input)
+    const model = await Provider.getModel(selected.providerID, selected.modelID).catch(() => undefined)
+    const capacity = model?.limit.context
+    const percent = capacity ? Math.min(999, Math.round((composition.total / capacity) * 100)) : undefined
+    const summaries = messages.filter((message) => message.info.role === "assistant" && message.info.summary).length
+    return notice(
+      input,
+      [
+        "### Context",
+        "",
+        `- Conversation estimate: **${composition.total.toLocaleString()} tokens**${capacity ? ` / ${capacity.toLocaleString()} (${percent}%)` : ""}`,
+        `- Text: ${composition.text.toLocaleString()}`,
+        `- Reasoning: ${composition.reasoning.toLocaleString()}`,
+        `- Tool results: ${composition.tool.toLocaleString()}`,
+        `- Skills: ${composition.skills.toLocaleString()}`,
+        `- Images: ${composition.images} (${composition.image.toLocaleString()} estimated tokens)`,
+        `- Compaction summaries: ${summaries}`,
+        "",
+        "This is a deterministic conversation estimate. Provider system prompts and final request transforms can add tokens.",
+        ...(percent && percent >= 75 ? ["Use `/compact [focus]` before the next long research phase."] : []),
+      ].join("\n"),
+    )
+  }
+
+  async function stop(input: CommandInput) {
+    const scope = input.arguments.trim().toLowerCase() || "turn"
+    if (!["turn", "compute", "all"].includes(scope)) {
+      return notice(input, "Use `/stop`, `/stop turn`, `/stop compute`, or `/stop all`.")
+    }
+    const turn = scope === "turn" || scope === "all"
+    const compute = scope === "compute" || scope === "all"
+    const controller = turn ? activeController(input.sessionID) : undefined
+    if (turn) {
+      await RuntimeEvents.requestCancel({ sessionID: input.sessionID, source: "user" }).catch((error) =>
+        log.error("failed to record command cancellation", { sessionID: input.sessionID, error }),
+      )
+      if (controller) cancel(input.sessionID, controller)
+    }
+    const jobs = compute ? await ComputeJobs.cancelSession(input.sessionID) : 0
+    if (compute) await KernelRuntime.releaseSession(input.sessionID)
+    const stopped = [
+      ...(turn ? [controller ? "active turn" : "no active turn"] : []),
+      ...(compute ? [`${jobs} compute job${jobs === 1 ? "" : "s"} and session kernels`] : []),
+    ]
+    return notice(input, `Stopped: ${stopped.join(", ")}.`)
+  }
+
+  async function checkpoint(input: CommandInput) {
+    const result = await SessionCheckpoint.create({
+      sessionID: input.sessionID,
+      label: input.arguments.trim() || undefined,
+    })
+    return notice(input, [`Checkpoint saved: \`${result.relative}\``, result.summary].join("\n\n"))
+  }
+
   /**
    * Regular expression to match @ file references in text
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
@@ -2267,6 +2498,13 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
   export async function command(input: CommandInput) {
     log.info("command", input)
     await Session.assertDirectory(input.sessionID)
+
+    const configured = (await Config.get()).command?.[input.command]
+    if (!configured && input.command === Command.Default.GOALS) return goals(input)
+    if (!configured && input.command === Command.Default.STATUS) return status(input)
+    if (!configured && input.command === Command.Default.CONTEXT) return context(input)
+    if (!configured && input.command === Command.Default.STOP) return stop(input)
+    if (!configured && input.command === Command.Default.CHECKPOINT) return checkpoint(input)
 
     // /compact is an action, not a prompt template: enqueue a compaction task
     // and run the loop to process it (same machinery as auto-compaction), then
@@ -2406,6 +2644,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     template = template.trim()
 
     const taskModel = await (async () => {
+      if (command.source === "builtin" && input.command === Command.Default.REVIEW) {
+        const review = await ReviewSettings.get().catch(() => undefined)
+        if (review?.model) return review.model
+      }
       if (command.model) {
         return Provider.parseModel(command.model)
       }

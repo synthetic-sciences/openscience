@@ -637,42 +637,36 @@ export default function Page(): JSX.Element {
         onSelect: () => void restoreRevert(),
       })
     }
-    // /compact — summarize the conversation to free up context. Runs the backend
-    // compaction action (model/agent default to the session's last); it does NOT
-    // prefill text, so it must be a builtin option, not a `sync.data.command`
-    // entry (those prefill). The backend command is deduped out of the prompt
-    // menu's custom list by its `menu` flag.
-    list.push({
-      id: "session.compact",
-      title: "Compact conversation",
-      description: "Summarize the conversation so far to free up context",
+    const failure = (error: unknown) => {
+      if (error && typeof error === "object" && "data" in error) {
+        const data = (error as { data?: { message?: string } }).data
+        if (data?.message) return data.message
+      }
+      if (error instanceof Error) return error.message
+      return "Request failed"
+    }
+    const action = (name: string, title: string, description: string) => ({
+      id: `session.${name}`,
+      title,
+      description,
       category: language.t("command.category.session"),
-      slash: "compact",
+      slash: name,
       onSelect: () => {
-        void sdk.client.session
-          .command({ sessionID: id, command: "compact", arguments: "" } as any)
-          .catch((e: unknown) => {
-            console.error("compact failed", e)
-            toast.error("Could not compact", e instanceof Error ? e.message : String(e))
-          })
+        void sdk.client.session.command({ sessionID: id, command: name, arguments: "" }).catch((error: unknown) => {
+          console.error(`${name} failed`, error)
+          toast.error(`Could not run /${name}`, failure(error))
+        })
       },
     })
-    // /handoff — write a self-contained handoff.md for another agent, then compact.
-    list.push({
-      id: "session.handoff",
-      title: "Write handoff & compact",
-      description: "Write a self-contained handoff.md for another agent, then compact",
-      category: language.t("command.category.session"),
-      slash: "handoff",
-      onSelect: () => {
-        void sdk.client.session
-          .command({ sessionID: id, command: "handoff", arguments: "" } as any)
-          .catch((e: unknown) => {
-            console.error("handoff failed", e)
-            toast.error("Could not write handoff", e instanceof Error ? e.message : String(e))
-          })
-      },
-    })
+    list.push(
+      action("goals", "Goals", "Show the objective, active plan, research progress, and next action"),
+      action("status", "Session status", "Show live plan, artifact, and workspace state"),
+      action("context", "Context usage", "Show context composition, capacity, and compaction state"),
+      action("stop", "Stop active work", "Stop the active response in this session"),
+      action("compact", "Compact conversation", "Summarize the conversation to free up context"),
+      action("handoff", "Write handoff & compact", "Save a resumable handoff, then compact"),
+      action("checkpoint", "Save checkpoint", "Capture a local recovery packet from current session state"),
+    )
     return list
   })
 

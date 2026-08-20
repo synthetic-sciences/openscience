@@ -80,6 +80,7 @@ import {
   type ReviewPreferences,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
+import { slashGroup, slashIcon, slashSource, sortSlash, type SlashCommand } from "./prompt-slash"
 import {
   RESEARCH_ACCESS_OPTIONS,
   researchAccessLabel as accessLabel,
@@ -101,15 +102,6 @@ interface PromptInputProps {
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
-}
-
-interface SlashCommand {
-  id: string
-  trigger: string
-  title: string
-  description?: string
-  keybind?: string
-  type: "builtin" | "custom" | "skill"
 }
 
 interface ResearchAccessSnapshot {
@@ -874,6 +866,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
+    const usage: Record<string, string> = {
+      goals: "/goals",
+      stop: "/stop [turn|compute|all]",
+      compact: "/compact [focus]",
+      handoff: "/handoff [project-relative path]",
+      checkpoint: "/checkpoint [label]",
+    }
     const builtin = command.options
       .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
       .map((opt) => ({
@@ -882,25 +881,34 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         title: opt.title,
         description: opt.description,
         keybind: opt.keybind,
-        type: "builtin" as const,
+        source: "builtin" as const,
+        category: "session" as const,
+        usage: usage[opt.slash!] ?? `/${opt.slash!}`,
+        type: "action" as const,
       }))
 
+    const triggers = new Set(builtin.map((command) => command.trigger))
     const custom = sync.data.command
-      // `menu` commands are executable action commands (e.g. /compact) that must RUN
-      // on select, not prefill text. They're surfaced by their owning context as a
-      // builtin `command.options` entry (with a matching `slash`) and dropped here so
-      // they don't ALSO appear as a prefill-only custom entry. A menu command is
-      // therefore visible only where that builtin is registered — e.g. /compact only
-      // once a session exists (session.tsx registers it under params.id); it is
-      // intentionally absent in the new-session composer, where there's nothing to
-      // compact and a prefilled "/compact " would not execute anyway.
-      .filter((cmd) => !(cmd as { menu?: boolean }).menu)
+      // Existing sessions register menu commands as direct, zero-model actions.
+      // Keep the matching server command only when that action is unavailable so
+      // the complete slash hierarchy remains discoverable on a brand-new session.
+      .filter((command) => !(command as { menu?: boolean }).menu || !triggers.has(command.name))
       .map((cmd) => ({
-        id: `custom.${cmd.name}`,
+        id: `command.${cmd.name}`,
         trigger: cmd.name,
         title: cmd.name,
         description: cmd.description,
-        type: "custom" as const,
+        usage: (cmd as { usage?: string }).usage,
+        source: ((cmd as { source?: "builtin" | "project" | "mcp" }).source ?? (cmd.mcp ? "mcp" : "project")) as
+          | "builtin"
+          | "project"
+          | "mcp",
+        category: ((
+          cmd as {
+            category?: "session" | "research" | "evidence" | "output" | "project"
+          }
+        ).category ?? "project") as "session" | "research" | "evidence" | "output" | "project",
+        type: "command" as const,
       }))
 
     // Surface installed skills as slash entries. Selecting one prefills a
@@ -914,17 +922,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         trigger: s.name,
         title: s.name,
         description: s.description?.slice(0, 120) ?? "",
+        usage: `/${s.name} [request]`,
+        source: "skill" as const,
+        category: "skill" as const,
         type: "skill" as const,
       }))
 
-    return [...custom, ...skills, ...builtin]
+    return [...custom, ...skills, ...builtin].toSorted(sortSlash)
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
     setStore("popover", null)
 
-    if (cmd.type === "custom" || cmd.type === "skill") {
+    if (cmd.type === "command" || cmd.type === "skill") {
       // Both surfaces prefill the literal slash command. The agent reads
       // `/<name>` as a request to invoke the named skill / command.
       const text = `/${cmd.trigger} `
@@ -948,6 +959,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const {
+    grouped: slashGrouped,
     flat: slashFlat,
     active: slashActive,
     setActive: setSlashActive,
@@ -957,7 +969,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
-    filterKeys: ["trigger", "title", "description"],
+    filterKeys: ["trigger", "title", "description", "usage"],
+    groupBy: slashGroup,
+    sortBy: sortSlash,
+    sortGroupsBy: (a, b) => (a.category === "Commands" ? -1 : b.category === "Commands" ? 1 : 0),
     onSelect: handleSlashSelect,
   })
 
@@ -1544,25 +1559,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (text.trim().length === 0 && images.length === 0) return
 
-    const currentModel = local.model.current()
-    const currentAgent = local.agent.current()
-    if (!currentModel || !currentAgent) {
-      showToast({
-        title: language.t("prompt.toast.modelAgentRequired.title"),
-        description: language.t("prompt.toast.modelAgentRequired.description"),
-      })
-      return
-    }
-
-    const model = {
-      modelID: currentModel.id,
-      providerID: currentModel.provider.id,
-    }
-    const agent = currentAgent.name
-    const variant = local.model.variant.prompt()
-    const tier = local.model.tier.prompt()
-    const researchEffort = "normal" as const
-
     const errorMessage = (err: unknown) => {
       if (err && typeof err === "object" && "data" in err) {
         const data = (err as { data?: { message?: string } }).data
@@ -1594,6 +1590,50 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       restoreInput()
       return true
     }
+
+    const [head, ...tail] = text.split(" ")
+    const name = text.startsWith("/") ? head.slice(1) : undefined
+    const command = name ? sync.data.command.find((item) => item.name === name) : undefined
+    const native = command?.source === "builtin" && command.menu
+    const active = info()
+    if (native && active && mode === "normal" && images.length === 0) {
+      setSubmitting(true)
+      clearInput()
+      window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
+      setStore("historyIndex", -1)
+      setStore("savedPrompt", null)
+      props.onSubmit?.()
+      sdk.client.session
+        .command({ sessionID: active.id, command: command.name, arguments: tail.join(" ") })
+        .catch((err) => {
+          showToast({
+            title: language.t("prompt.toast.commandSendFailed.title"),
+            description: errorMessage(err),
+          })
+          restoreInputAfterFailure()
+        })
+      setSubmitting(false)
+      return
+    }
+
+    const currentModel = local.model.current()
+    const currentAgent = local.agent.current()
+    if (!currentModel || !currentAgent) {
+      showToast({
+        title: language.t("prompt.toast.modelAgentRequired.title"),
+        description: language.t("prompt.toast.modelAgentRequired.description"),
+      })
+      return
+    }
+
+    const model = {
+      modelID: currentModel.id,
+      providerID: currentModel.provider.id,
+    }
+    const agent = currentAgent.name
+    const variant = local.model.variant.prompt()
+    const tier = local.model.tier.prompt()
+    const researchEffort = "normal" as const
 
     const restoreBootstrap = () => {
       setSubmitting(false)
@@ -2097,7 +2137,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             if (store.popover === "slash") slashPopoverRef = el
           }}
           class="workspace-composer__suggestions absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left
-                 max-h-80 min-h-10 overflow-auto no-scrollbar flex flex-col"
+                 min-h-10 overflow-auto no-scrollbar flex flex-col"
           onMouseDown={(e) => e.preventDefault()}
         >
           <Switch>
@@ -2155,34 +2195,39 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 when={slashFlat().length > 0}
                 fallback={<div class="text-text-weak px-2 py-1">{language.t("prompt.popover.emptyCommands")}</div>}
               >
-                <For each={slashFlat()}>
-                  {(cmd) => (
-                    <button
-                      data-slash-id={cmd.id}
-                      classList={{
-                        "workspace-composer__suggestion w-full flex items-center justify-between gap-4": true,
-                        "bg-surface-raised-base-hover": slashActive() === cmd.id,
-                      }}
-                      onClick={() => handleSlashSelect(cmd)}
-                      onMouseEnter={() => setSlashActive(cmd.id)}
-                    >
-                      <div class="flex items-center gap-2 min-w-0">
-                        <span class="text-14-regular text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
-                        <Show when={cmd.description}>
-                          <span class="text-14-regular text-text-weak truncate">{cmd.description}</span>
-                        </Show>
-                      </div>
-                      <div class="flex items-center gap-2 shrink-0">
-                        <Show when={cmd.type === "custom"}>
-                          <span class="text-11-regular text-text-weaker px-1.5 py-0.5 bg-surface-base rounded">
-                            {language.t("prompt.slash.badge.custom")}
-                          </span>
-                        </Show>
-                        <Show when={command.keybind(cmd.id)}>
-                          <span class="text-12-regular text-text-weaker">{command.keybind(cmd.id)}</span>
-                        </Show>
-                      </div>
-                    </button>
+                <For each={slashGrouped()}>
+                  {(group) => (
+                    <section class="workspace-composer__slash-group" aria-label={group.category}>
+                      <Show when={group.category === "Skills"}>
+                        <header class="workspace-composer__slash-heading">Skills</header>
+                      </Show>
+                      <For each={group.items}>
+                        {(cmd) => (
+                          <button
+                            data-slash-id={cmd.id}
+                            classList={{
+                              "workspace-composer__suggestion workspace-composer__slash-row w-full": true,
+                              "bg-surface-raised-base-hover": slashActive() === cmd.id,
+                            }}
+                            onClick={() => handleSlashSelect(cmd)}
+                            onMouseEnter={() => setSlashActive(cmd.id)}
+                          >
+                            <span class="workspace-composer__slash-icon">
+                              <Icon name={slashIcon(cmd)} size="small" />
+                            </span>
+                            <span class="workspace-composer__slash-name">/{cmd.trigger}</span>
+                            <span class="workspace-composer__slash-detail truncate">
+                              {cmd.description || cmd.title}
+                            </span>
+                            <Show when={command.keybind(cmd.id) || slashSource(cmd)}>
+                              <span class="workspace-composer__slash-meta">
+                                {command.keybind(cmd.id) || slashSource(cmd)}
+                              </span>
+                            </Show>
+                          </button>
+                        )}
+                      </For>
+                    </section>
                   )}
                 </For>
               </Show>
