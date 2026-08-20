@@ -27,6 +27,7 @@ import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { $ } from "bun"
+import { GitHubAttachment } from "../github-attachment"
 
 type GitHubAuthor = {
   login: string
@@ -762,15 +763,10 @@ export const GithubRunCommand = cmd({
           const tag = m[0]
           const url = m[1]
           const start = m.index
-          const filename = path.basename(url)
+          const filename = path.basename(GitHubAttachment.parse(url).pathname)
 
           // Download image
-          const res = await fetch(url, {
-            headers: {
-              Authorization: `Bearer ${appToken}`,
-              Accept: "application/vnd.github.v3+json",
-            },
-          })
+          const res = await GitHubAttachment.download(url, appToken)
           if (!res.ok) {
             console.error(`Failed to download image: ${url}`)
             continue
