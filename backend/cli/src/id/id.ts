@@ -1,5 +1,5 @@
 import z from "zod"
-import { randomBytes } from "crypto"
+import { randomInt } from "crypto"
 
 export namespace Identifier {
   const prefixes = {
@@ -45,12 +45,7 @@ export namespace Identifier {
 
   function randomBase62(length: number): string {
     const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    let result = ""
-    const bytes = randomBytes(length)
-    for (let i = 0; i < length; i++) {
-      result += chars[bytes[i] % 62]
-    }
-    return result
+    return Array.from({ length }, () => chars[randomInt(chars.length)]).join("")
   }
 
   export function create(prefix: keyof typeof prefixes, descending: boolean, timestamp?: number): string {
