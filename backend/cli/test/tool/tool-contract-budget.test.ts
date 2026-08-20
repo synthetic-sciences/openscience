@@ -28,6 +28,7 @@ test("keeps the research tool contract within its model context budget", async (
       expect(contracts.skill).toBeLessThanOrEqual(1_800)
       expect(contracts.task).toBeLessThanOrEqual(2_500)
       expect(contracts.todowrite).toBeLessThanOrEqual(1_750)
+      expect(contracts.webfetch).toBeLessThanOrEqual(2_500)
     },
   })
 })
