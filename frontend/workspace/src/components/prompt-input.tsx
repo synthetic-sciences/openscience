@@ -80,7 +80,7 @@ import {
   type ReviewPreferences,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
-import { slashGroup, sortSlash, type SlashCommand } from "./prompt-slash"
+import { slashGroup, slashIcon, slashSource, sortSlash, type SlashCommand } from "./prompt-slash"
 import {
   RESEARCH_ACCESS_OPTIONS,
   researchAccessLabel as accessLabel,
@@ -2137,7 +2137,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             if (store.popover === "slash") slashPopoverRef = el
           }}
           class="workspace-composer__suggestions absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left
-                 max-h-80 min-h-10 overflow-auto no-scrollbar flex flex-col"
+                 min-h-10 overflow-auto no-scrollbar flex flex-col"
           onMouseDown={(e) => e.preventDefault()}
         >
           <Switch>
@@ -2198,38 +2198,32 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <For each={slashGrouped()}>
                   {(group) => (
                     <section class="workspace-composer__slash-group" aria-label={group.category}>
-                      <header class="workspace-composer__slash-heading">
-                        <span>{group.category}</span>
-                        <span>{group.items.length}</span>
-                      </header>
+                      <Show when={group.category === "Skills"}>
+                        <header class="workspace-composer__slash-heading">Skills</header>
+                      </Show>
                       <For each={group.items}>
                         {(cmd) => (
                           <button
                             data-slash-id={cmd.id}
                             classList={{
-                              "workspace-composer__suggestion w-full flex items-center justify-between gap-4": true,
+                              "workspace-composer__suggestion workspace-composer__slash-row w-full": true,
                               "bg-surface-raised-base-hover": slashActive() === cmd.id,
                             }}
                             onClick={() => handleSlashSelect(cmd)}
                             onMouseEnter={() => setSlashActive(cmd.id)}
                           >
-                            <div class="workspace-composer__slash-copy min-w-0">
-                              <span class="text-14-medium text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
-                              <Show when={cmd.description || cmd.usage}>
-                                <span class="workspace-composer__slash-detail truncate">
-                                  {cmd.description}
-                                  <Show when={cmd.usage && cmd.usage !== `/${cmd.trigger}`}>
-                                    <span class="workspace-composer__slash-usage">{cmd.usage}</span>
-                                  </Show>
-                                </span>
-                              </Show>
-                            </div>
-                            <div class="flex items-center gap-2 shrink-0">
-                              <span class="workspace-composer__slash-badge">{cmd.source}</span>
-                              <Show when={command.keybind(cmd.id)}>
-                                <span class="text-12-regular text-text-weaker">{command.keybind(cmd.id)}</span>
-                              </Show>
-                            </div>
+                            <span class="workspace-composer__slash-icon">
+                              <Icon name={slashIcon(cmd)} size="small" />
+                            </span>
+                            <span class="workspace-composer__slash-name">/{cmd.trigger}</span>
+                            <span class="workspace-composer__slash-detail truncate">
+                              {cmd.description || cmd.title}
+                            </span>
+                            <Show when={command.keybind(cmd.id) || slashSource(cmd)}>
+                              <span class="workspace-composer__slash-meta">
+                                {command.keybind(cmd.id) || slashSource(cmd)}
+                              </span>
+                            </Show>
                           </button>
                         )}
                       </For>

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { SLASH_CORE, slashGroup, sortSlash, type SlashCommand } from "./prompt-slash"
+import { SLASH_CORE, slashGroup, slashIcon, slashSource, sortSlash, type SlashCommand } from "./prompt-slash"
 
 test("slash menu keeps native research commands discoverable and compact", () => {
   const component = readFileSync(fileURLToPath(new URL("./prompt-input.tsx", import.meta.url)), "utf8")
@@ -19,12 +19,14 @@ test("slash menu keeps native research commands discoverable and compact", () =>
   expect(component).toContain('cmd.type === "command" || cmd.type === "skill"')
   expect(component).toContain('const native = command?.source === "builtin" && command.menu')
   expect(component.indexOf("if (native && active")).toBeLessThan(component.indexOf("const currentModel"))
-  expect(component).toContain("workspace-composer__slash-usage")
-  expect(component).toContain("workspace-composer__slash-badge")
-  expect(styles).toMatch(/\.workspace-composer__slash-copy\s*\{[^}]*display: grid/s)
+  expect(component).toContain("workspace-composer__slash-icon")
+  expect(component).toContain("workspace-composer__slash-meta")
+  expect(component).toContain('when={group.category === "Skills"}')
+  expect(component).not.toContain("workspace-composer__slash-badge")
+  expect(styles).toMatch(/\.workspace-composer__slash-row\s*\{[^}]*display: grid/s)
   expect(styles).toMatch(/\.workspace-composer__slash-group\s*\{[^}]*display: grid/s)
-  expect(styles).toMatch(/\.workspace-composer__slash-heading\s*\{[^}]*font-size: 11px/s)
-  expect(styles).toMatch(/\.workspace-composer__slash-badge\s*\{[^}]*border-radius: 999px/s)
+  expect(styles).toMatch(/\.workspace-composer__slash-heading\s*\{[^}]*font-size: 12px/s)
+  expect(styles).toMatch(/\.workspace-composer__suggestions\s*\{[^}]*border-radius: var\(--radius-xl\)/s)
 })
 
 test("slash hierarchy keeps core commands ahead of a stable skills catalog", () => {
@@ -49,4 +51,8 @@ test("slash hierarchy keeps core commands ahead of a stable skills catalog", () 
   expect(items.slice(0, 4).map((item) => item.trigger)).toEqual([...SLASH_CORE])
   expect(items.slice(0, 4).every((item) => slashGroup(item) === "Commands")).toBe(true)
   expect(items.slice(4).every((item) => slashGroup(item) === "Skills")).toBe(true)
+  expect(items.slice(0, 4).map(slashSource)).toEqual(["", "", "", ""])
+  expect(slashSource(items[4]!)).toBe("Built in")
+  expect(slashSource(items[5]!)).toBe("Skill")
+  expect(items.slice(0, 4).map(slashIcon)).toEqual(["task", "collapse", "eye", "branch"])
 })
