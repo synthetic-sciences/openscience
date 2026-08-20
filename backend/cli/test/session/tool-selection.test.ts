@@ -104,4 +104,61 @@ describe("tool selection", () => {
     expect(ToolSelection.relevant("python", input)).toBe(false)
     expect(ToolSelection.relevant("python", { ...input, tools: { python: true } })).toBe(true)
   })
+
+  test("explicit local read-only inspection advertises only file discovery tools", () => {
+    const message =
+      "Inspect the root package.json and backend/cli/package.json. Report the exact Bun version and test script. Do not modify any files."
+    const tools = [
+      "apply_patch",
+      "artifact",
+      "bash",
+      "context7_query-docs",
+      "glob",
+      "grep",
+      "invalid",
+      "question",
+      "read",
+      "skill",
+      "task",
+      "todowrite",
+      "webfetch",
+    ]
+    expect(tools.filter((tool) => ToolSelection.relevant(tool, { agent: "research", message }))).toEqual([
+      "glob",
+      "grep",
+      "invalid",
+      "read",
+    ])
+    expect(
+      ToolSelection.relevant("bash", {
+        agent: "research",
+        message: "Run the test script, but do not modify any files.",
+      }),
+    ).toBe(true)
+    expect(
+      ToolSelection.relevant("webfetch", {
+        agent: "research",
+        message: "Inspect https://example.com and do not modify any files.",
+      }),
+    ).toBe(true)
+    expect(
+      ToolSelection.relevant("webfetch", {
+        agent: "research",
+        message: "Review package.json for out-of-date dependencies without modifying files.",
+      }),
+    ).toBe(true)
+    expect(
+      ToolSelection.relevant("python", {
+        agent: "research",
+        message: "Inspect dataset.csv and report summary statistics without modifying files.",
+      }),
+    ).toBe(true)
+    expect(
+      ToolSelection.relevant("bash", {
+        agent: "research",
+        message,
+        tools: { bash: true },
+      }),
+    ).toBe(true)
+  })
 })

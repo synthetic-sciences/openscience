@@ -25,6 +25,25 @@ export namespace ToolSelection {
     /\b(?:bioinformatics|biology|cell|chemistry|clinical|data analysis|dataset|evidence|experiment|gene|genomic|hypothesis|literature|machine learning|molecule|neural|paper|physics|protein|research|rna|science|scientific|simulation|statistics?|study)\b/i
   const work =
     /\b(?:analy[sz]e|attached|calculate|cite|create|current|dataset|document|download|fetch|file|find|inspect|latest|load|look up|open|paper|plot|read|review|run|save|search|source|today|verify|write)\b|https?:\/\/|\.[a-z0-9]{1,5}\b/i
+  const browse = new Set(["glob", "grep", "invalid", "read"])
+
+  function inspect(message: string) {
+    const readonly =
+      /\b(?:do not|don't|without)\s+(?:change|creat(?:e|ing)|delet(?:e|ing)|edit(?:ing)?|modif(?:y|ying)|writ(?:e|ing))\b/i
+    const request = /\b(?:compare|explain|inspect|read|report|review|show|summarize)\b/i
+    const local =
+      /\b(?:codebase|file|files|path|repo|repository|source|working tree)\b|(?:^|[\s'"`])[\w./-]+\.[a-z0-9]{1,8}\b/i
+    const broader =
+      /https?:\/\/|\b(?:build|compile|current|execute|git|github|install|latest|look up|out[- ]of[- ]date|pull request|run|search (?:the )?(?:internet|web)|today|up[- ]to[- ]date|use (?:bash|lsp|python|r|shell))\b/i
+    return (
+      message.length <= 1_000 &&
+      readonly.test(message) &&
+      request.test(message) &&
+      local.test(message) &&
+      !broader.test(message) &&
+      !science.test(message)
+    )
+  }
 
   export function enabled(
     tool: string,
@@ -60,9 +79,10 @@ export namespace ToolSelection {
   }
 
   /**
-   * Fresh direct answers carry no implicit tools. Code-only requests drop
-   * research contracts, while ambiguous and mixed work keeps the full registry.
-   * A named tool or capability also stays available.
+   * Fresh direct answers carry no implicit tools. Explicit local read-only
+   * requests keep file discovery only. Code-only requests drop research
+   * contracts, while ambiguous and mixed work keeps the full registry. A named
+   * tool or capability also stays available.
    */
   export function relevant(
     tool: string,
@@ -75,10 +95,11 @@ export namespace ToolSelection {
   ) {
     if (input.tools?.[tool] === true) return true
     if (input.direct) return false
-    if (!domain.has(tool)) return true
     if (input.agent !== "research") return true
 
     const message = input.message?.trim()
+    if (message && inspect(message)) return browse.has(tool)
+    if (!domain.has(tool)) return true
     if (!message || !code.test(message) || science.test(message)) return true
 
     const named = (() => {
