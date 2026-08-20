@@ -787,14 +787,10 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
 const RDefinition: Awaited<ReturnType<Tool.Info<typeof RParameters>["init"]>> = {
   description: [
     "Run R code in one long-lived managed process per conversation. Objects, attached packages, and state persist across calls; child conversations are isolated.",
-    "Treat persistent state as working memory, not reproducibility. For a material result, save the source, declared inputs, parameters, and outputs and clean-rerun when practical.",
-    "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
-    "Set `source` when the execution belongs to a script so Activity can identify that source.",
-    "Use `action: stop` when its in-memory state should be cleared.",
-    "Use instead of `bash Rscript` for analysis — no need to re-source data or reload packages between executions.",
-    "Submit install.packages, renv, pak, BiocManager, removals, and updates as a separate execution. Package/environment changes require explicit approval and automatically restart R after success.",
-    "Print output is captured; base-graphics and ggplot2 plots are captured as inline PNG images where the platform supports it.",
-    "Requires Rscript on PATH; if R is not installed the tool reports a clear install hint.",
+    "State is working memory, not reproducibility; save source, inputs, parameters, and outputs for material results and clean-rerun when practical.",
+    "Set a concise scientific `title` and `source` for script-backed work. Use `action: stop` to clear state.",
+    "Prefer this to `bash Rscript` for analysis. Submit package installs, removals, and updates separately; they require approval and automatically restart R after success.",
+    "Print output is captured; supported base/ggplot2 plots become inline PNGs. Requires Rscript on PATH and reports an install hint when absent.",
   ].join("\n"),
   parameters: RParameters,
   execute: (params, ctx) => executeR(params, ctx, false),
