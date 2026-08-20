@@ -150,9 +150,7 @@ export const BashTool = Tool.define("bash", async () => {
         .string()
         .describe("The working directory to run the command in. Defaults to the session workspace.")
         .optional(),
-      description: z
-        .string()
-        .describe("Clear 5-10 word description of the command's purpose"),
+      description: z.string().describe("Clear 5-10 word description of the command's purpose"),
     }),
     async execute(params, ctx) {
       const authority = await ExecutionAuthority.require({
@@ -377,9 +375,7 @@ export const BashTool = Tool.define("bash", async () => {
             throw error
           }
           const drain = Promise.all(
-            [child.stdout, child.stderr].flatMap((stream) =>
-              stream ? [finished(stream).catch(() => undefined)] : [],
-            ),
+            [child.stdout, child.stderr].flatMap((stream) => (stream ? [finished(stream).catch(() => undefined)] : [])),
           )
           const completion = new Promise<void>((resolve, reject) => {
             child.once("exit", () => {

@@ -94,7 +94,7 @@ test("availableSkills injects call-first routing only for a known slash skill", 
       const upper = await SystemPrompt.availableSkills([], "/SCANPY")
       const unknown = await SystemPrompt.availableSkills([], "/not-a-skill")
       expect(Buffer.byteLength(known)).toBeLessThanOrEqual(700)
-      expect(known).toContain('<slash-skill-invocation>')
+      expect(known).toContain("<slash-skill-invocation>")
       expect(known).toContain('skill({name:"scanpy"})')
       expect(upper).toContain('skill({name:"scanpy"})')
       expect(unknown).not.toContain("slash-skill-invocation")

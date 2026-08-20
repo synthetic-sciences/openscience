@@ -22,9 +22,9 @@ describe("launch evaluation tool routing", () => {
         .filter((flow) => flow.id !== "simple-question")
         .every((flow) => !ToolSelection.direct({ agent: "research", message: flow.prompt, fresh: true })),
     ).toBe(true)
-    expect(Object.values(flows).every((message) => !ToolSelection.direct({ agent: "research", message, fresh: true }))).toBe(
-      true,
-    )
+    expect(
+      Object.values(flows).every((message) => !ToolSelection.direct({ agent: "research", message, fresh: true })),
+    ).toBe(true)
 
     expect(keeps("citation-literature", "science_search")).toBe(true)
     expect(keeps("citation-literature", "provenance_review")).toBe(true)

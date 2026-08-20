@@ -45,9 +45,7 @@ export namespace SystemPrompt {
       if (cache.size > 32) cache.delete(cache.keys().next().value!)
       return value
     }
-    const skills = catalog.filter(
-      (skill) => PermissionNext.evaluate("skill", skill.name, permission).action !== "deny",
-    )
+    const skills = catalog.filter((skill) => PermissionNext.evaluate("skill", skill.name, permission).action !== "deny")
     if (skills.length === 0) {
       return publish(
         [
@@ -70,7 +68,10 @@ export namespace SystemPrompt {
       .map(([category, count]) => `${category} (${count})`)
       .join(", ")
     const total = skills.length === 1 ? "1 skill is" : `${skills.length} skills are`
-    const name = message?.trimStart().match(/^\/([a-z0-9][a-z0-9_-]*)(?:\s|$)/i)?.[1]?.toLowerCase()
+    const name = message
+      ?.trimStart()
+      .match(/^\/([a-z0-9][a-z0-9_-]*)(?:\s|$)/i)?.[1]
+      ?.toLowerCase()
     const stop = new Set([
       "and",
       "answer",
@@ -110,15 +111,16 @@ export namespace SystemPrompt {
             (item) =>
               `- ${item.skill.name}: ${item.skill.description.slice(0, 120)}${item.skill.description.length > 120 ? "..." : ""}`,
           ),
-      ]
-      : []
-    const invoke = name && skills.some((skill) => skill.name === name)
-      ? [
-          "<slash-skill-invocation>",
-          `The user invoked /${name}. First output skill({name:"${name}"}) with no preceding text. After it returns, answer the request; when the message was only /${name}, ask what they want then.`,
-          "</slash-skill-invocation>",
         ]
       : []
+    const invoke =
+      name && skills.some((skill) => skill.name === name)
+        ? [
+            "<slash-skill-invocation>",
+            `The user invoked /${name}. First output skill({name:"${name}"}) with no preceding text. After it returns, answer the request; when the message was only /${name}, ask what they want then.`,
+            "</slash-skill-invocation>",
+          ]
+        : []
 
     return publish(
       [

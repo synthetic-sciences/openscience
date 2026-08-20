@@ -77,7 +77,12 @@ describe("tool selection", () => {
     expect(ToolSelection.direct({ agent: "research", message: "Explain this dataset.", fresh: true })).toBe(false)
     expect(ToolSelection.direct({ agent: "research", message: "Explain how Python works.", fresh: true })).toBe(false)
     expect(
-      ToolSelection.direct({ agent: "research", message: "Why does randomization matter?", fresh: true, attachments: true }),
+      ToolSelection.direct({
+        agent: "research",
+        message: "Why does randomization matter?",
+        fresh: true,
+        attachments: true,
+      }),
     ).toBe(false)
     expect(ToolSelection.direct({ agent: "research", message: "Why does randomization matter?", fresh: false })).toBe(
       false,

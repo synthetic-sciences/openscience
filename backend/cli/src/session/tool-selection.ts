@@ -84,8 +84,10 @@ export namespace ToolSelection {
     const named = (() => {
       if (tool === "python") return /\bpython\b|\bpy(?:thon)? kernel\b|\bnotebook\b/i.test(message)
       if (tool === "r") return /\bR\b|\br (?:kernel|language)\b|\brstudio\b/.test(message)
-      if (tool === "compute_job") return /\b(?:cluster|compute job|gpu|job broker|modal|remote compute|slurm)\b/i.test(message)
-      if (tool === "research_contract") return /\b(?:research contract|research loop|autonomous research)\b/i.test(message)
+      if (tool === "compute_job")
+        return /\b(?:cluster|compute job|gpu|job broker|modal|remote compute|slurm)\b/i.test(message)
+      if (tool === "research_contract")
+        return /\b(?:research contract|research loop|autonomous research)\b/i.test(message)
       if (tool === "atlas" || tool === "atlas_record") return /\batlas\b/i.test(message)
       if (tool.startsWith("provenance_")) return /\b(?:lineage|provenance)\b/i.test(message)
       if (tool.startsWith("science_")) return /\bscientific database\b|\bscience tool\b/i.test(message)

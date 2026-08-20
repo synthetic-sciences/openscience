@@ -69,12 +69,7 @@ const Trial = z
       .string()
       .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/)
       .describe("Approach-family ID; reuse for refinements, change for a new approach."),
-    candidate: z
-      .string()
-      .trim()
-      .min(1)
-      .max(240)
-      .describe("Unique label for the concrete candidate."),
+    candidate: z.string().trim().min(1).max(240).describe("Unique label for the concrete candidate."),
     outcome: SessionResearch.Outcome.describe("Observed result."),
     summary: z.string().trim().min(1).max(2_000).describe("Attempt and observed result."),
     evidence: z
@@ -93,18 +88,8 @@ const Trial = z
 const Learn = z.object({
   action: z.literal("learn"),
   source_trial: z.string().trim().min(1).max(200).describe("Prior material trial ID."),
-  situation: z
-    .string()
-    .trim()
-    .min(1)
-    .max(500)
-    .describe("Reusable project condition, never a scientific conclusion."),
-  guidance: z
-    .string()
-    .trim()
-    .min(1)
-    .max(1_000)
-    .describe("Reusable method guidance to test later."),
+  situation: z.string().trim().min(1).max(500).describe("Reusable project condition, never a scientific conclusion."),
+  guidance: z.string().trim().min(1).max(1_000).describe("Reusable method guidance to test later."),
   evidence: z
     .string()
     .trim()
