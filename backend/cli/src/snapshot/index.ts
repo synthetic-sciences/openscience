@@ -28,11 +28,7 @@ export namespace Snapshot {
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
-    const exists = await fs
-      .stat(git)
-      .then(() => true)
-      .catch(() => false)
-    if (!exists) return
+    if (!(await ready(git))) return
     const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=${prune}`
       .quiet()
       .cwd(Instance.directory)
@@ -75,20 +71,8 @@ export namespace Snapshot {
     if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
-    const git = gitdir()
-    if (await fs.mkdir(git, { recursive: true })) {
-      await $`git init`
-        .env({
-          ...process.env,
-          GIT_DIR: git,
-          GIT_WORK_TREE: Instance.worktree,
-        })
-        .quiet()
-        .nothrow()
-      // Configure git to not convert line endings on Windows
-      await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
-      log.info("initialized")
-    }
+    const git = await repository()
+    if (!git) return
     if (!(await stageAll(git))) return
     const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
       .quiet()
@@ -317,5 +301,36 @@ export namespace Snapshot {
   function gitdir() {
     const project = Instance.project
     return path.join(Global.Path.data, "snapshot", project.id)
+  }
+
+  async function ready(git: string) {
+    const [head, objects, refs] = await Promise.all([
+      fs.stat(path.join(git, "HEAD")).catch(() => undefined),
+      fs.stat(path.join(git, "objects")).catch(() => undefined),
+      fs.stat(path.join(git, "refs")).catch(() => undefined),
+    ])
+    return head?.isFile() === true && objects?.isDirectory() === true && refs?.isDirectory() === true
+  }
+
+  async function repository() {
+    const git = gitdir()
+    if (await ready(git)) return git
+    await fs.mkdir(git, { recursive: true })
+    const result = await $`git init`
+      .env({
+        ...process.env,
+        GIT_DIR: git,
+        GIT_WORK_TREE: Instance.worktree,
+      })
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    if (result.exitCode !== 0) {
+      log.error("initialization failed", { exitCode: result.exitCode, stderr: result.stderr.toString() })
+      return
+    }
+    await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
+    log.info("initialized")
+    return git
   }
 }

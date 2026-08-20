@@ -3,6 +3,9 @@ import { $ } from "bun"
 import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { Global } from "../../src/global"
+import fs from "fs/promises"
+import path from "path"
 
 async function bootstrap() {
   return tmpdir({
@@ -22,6 +25,21 @@ async function bootstrap() {
     },
   })
 }
+
+test("repairs a pre-existing partial snapshot directory", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
+      await fs.mkdir(path.join(git, "objects"), { recursive: true })
+      await Bun.write(path.join(git, "HEAD"), "ref: refs/heads/master\n")
+
+      expect(await Snapshot.track()).toBeTruthy()
+      expect((await fs.stat(path.join(git, "refs"))).isDirectory()).toBe(true)
+    },
+  })
+})
 
 test("tracks deleted files correctly", async () => {
   await using tmp = await bootstrap()
