@@ -78,9 +78,39 @@ export namespace RuntimeEvents {
 
   type Subscriber = (event: Event) => void | Promise<void>
 
+  type ProgressInput = {
+    sessionID: string
+    runID: string
+    type: "message.part.updated"
+    properties: Record<string, unknown> & {
+      part: Record<string, unknown>
+      delta: string
+    }
+  }
+
+  type ProgressEntry = {
+    key: string
+    input: ProgressInput
+    waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }>
+  }
+
+  type Progress = {
+    runID: string
+    first: boolean
+    pending: ProgressEntry[]
+    tail: Promise<void>
+    timer?: ReturnType<typeof setTimeout>
+  }
+
+  /** Keep durable public progress responsive without rewriting the full replay
+   * journal for every provider token. The regular UI bus still receives each
+   * original delta after its durable batch commits. */
+  export const PROGRESS_INTERVAL_MS = 50
+
   const state = Instance.state(() => ({
     active: new Map<string, string>(),
     subscriptions: new Map<string, Set<Subscriber>>(),
+    progress: new Map<string, Progress>(),
   }))
 
   function key(sessionID: string) {
@@ -168,6 +198,132 @@ export namespace RuntimeEvents {
     })
     if (!event) return
     return notify(event)
+  }
+
+  async function appendProgress(input: { sessionID: string; runID: string; entries: ProgressEntry[] }) {
+    const events: Event[] = []
+    await Storage.upsert<Journal>(key(input.sessionID), (current) => {
+      const journal = current ? Journal.parse(current) : empty()
+      if (journal.activeRunID !== input.runID) return journal
+      const next = input.entries.map((entry, index) =>
+        Event.parse({
+          sequence: journal.nextSequence + index,
+          sessionID: input.sessionID,
+          runID: input.runID,
+          type: entry.input.type,
+          properties: entry.input.properties,
+          time: Date.now(),
+        }),
+      )
+      events.push(...next)
+      return {
+        ...journal,
+        nextSequence: journal.nextSequence + next.length,
+        events: [...journal.events, ...next].slice(-RETAINED_EVENTS),
+      }
+    })
+    for (const event of events) await notify(event)
+    return events
+  }
+
+  function progress(sessionID: string, runID: string) {
+    const current = state().progress.get(sessionID)
+    if (current?.runID === runID) return current
+    if (current?.timer) clearTimeout(current.timer)
+    const created: Progress = {
+      runID,
+      first: true,
+      pending: [],
+      tail: Promise.resolve(),
+    }
+    state().progress.set(sessionID, created)
+    return created
+  }
+
+  function queue(stream: Progress, task: () => Promise<unknown>) {
+    const next = stream.tail.then(task).then(() => undefined)
+    stream.tail = next.catch(() => undefined)
+    return next
+  }
+
+  async function flushProgress(sessionID: string) {
+    const stream = state().progress.get(sessionID)
+    if (!stream) return
+    if (stream.timer) clearTimeout(stream.timer)
+    stream.timer = undefined
+    const entries = stream.pending.splice(0)
+    if (!entries.length) return stream.tail
+    return queue(stream, async () => {
+      try {
+        await appendProgress({ sessionID, runID: stream.runID, entries })
+        for (const entry of entries) {
+          for (const waiter of entry.waiters) waiter.resolve()
+        }
+      } catch (error) {
+        for (const entry of entries) {
+          for (const waiter of entry.waiters) waiter.reject(error)
+        }
+        throw error
+      }
+    })
+  }
+
+  function scheduleProgress(input: ProgressInput) {
+    const stream = progress(input.sessionID, input.runID)
+    if (stream.first) {
+      stream.first = false
+      return queue(stream, async () => {
+        await append({ ...input, requireActive: true })
+      })
+    }
+    return new Promise<void>((resolve, reject) => {
+      const part = input.properties.part
+      const key = [part.messageID, part.id, part.type].join(":")
+      const prior = stream.pending.at(-1)
+      if (prior?.key === key) {
+        prior.input = {
+          ...input,
+          properties: {
+            ...input.properties,
+            delta: prior.input.properties.delta + input.properties.delta,
+          },
+        }
+        prior.waiters.push({ resolve, reject })
+      } else {
+        stream.pending.push({ key, input, waiters: [{ resolve, reject }] })
+      }
+      if (stream.timer) return
+      stream.timer = setTimeout(() => {
+        stream.timer = undefined
+        void flushProgress(input.sessionID).catch((error) =>
+          log.error("failed to flush runtime progress", { sessionID: input.sessionID, runID: input.runID, error }),
+        )
+      }, PROGRESS_INTERVAL_MS)
+      ;(stream.timer as { unref?: () => void }).unref?.()
+    })
+  }
+
+  function progressInput(input: {
+    sessionID: string
+    runID: string
+    type: string
+    properties: Record<string, unknown>
+  }): ProgressInput | undefined {
+    if (input.type !== "message.part.updated" || typeof input.properties.delta !== "string") return
+    const part = input.properties.part
+    if (!part || typeof part !== "object" || Array.isArray(part)) return
+    const record = part as Record<string, unknown>
+    if (record.type !== "text" && record.type !== "reasoning") return
+    if (typeof record.id !== "string" || typeof record.messageID !== "string") return
+    return {
+      ...input,
+      type: input.type,
+      properties: {
+        ...input.properties,
+        part: { ...record },
+        delta: input.properties.delta,
+      },
+    }
   }
 
   export async function begin(input: {
@@ -398,6 +554,7 @@ export namespace RuntimeEvents {
     expectedOwner?: Journal["activeOwner"]
     onTerminal?: () => void
   }) {
+    await flushProgress(input.sessionID)
     let event: Event | undefined
     await Storage.upsert<Journal>(key(input.sessionID), (current) => {
       const journal = current ? Journal.parse(current) : empty()
@@ -419,6 +576,7 @@ export namespace RuntimeEvents {
     })
     if (!event) throw new Error("Runtime completion did not produce an event")
     if (state().active.get(input.sessionID) === input.runID) state().active.delete(input.sessionID)
+    state().progress.delete(input.sessionID)
     input.onTerminal?.()
     return notify(event)
   }
@@ -443,16 +601,23 @@ export namespace RuntimeEvents {
     if (!sessionID) return
     const runID = state().active.get(sessionID)
     if (!runID) return
-    await append({
+    const input = {
       sessionID,
       runID,
       type: payload.type,
       properties: properties as Record<string, unknown>,
-      requireActive: true,
+    }
+    const streaming = progressInput(input)
+    if (streaming) return scheduleProgress(streaming)
+    const stream = progress(sessionID, runID)
+    await flushProgress(sessionID)
+    await queue(stream, async () => {
+      await append({ ...input, requireActive: true })
     })
   }
 
   export async function replay(sessionID: string, afterSequence?: number) {
+    await flushProgress(sessionID)
     const journal = await read(sessionID)
     const oldestSequence = journal.events[0]?.sequence ?? journal.nextSequence
     const latestSequence = journal.nextSequence - 1

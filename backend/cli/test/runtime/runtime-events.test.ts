@@ -124,6 +124,62 @@ describe("public runtime event journal", () => {
     })
   })
 
+  test("batches durable streaming progress without dropping ordinary bus deltas", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const parts: string[] = []
+        const unsubscribe = Bus.subscribe(MessageV2.Event.PartUpdated, (event) => {
+          if (event.properties.delta) parts.push(event.properties.delta)
+        })
+        await RuntimeEvents.begin({
+          sessionID: session.id,
+          runID: "run_progress_batch",
+          acceptedAt: 100,
+          effort: "normal",
+        })
+        const publish = (text: string, delta: string) =>
+          Bus.publish(MessageV2.Event.PartUpdated, {
+            part: {
+              id: "prt_progress_batch",
+              sessionID: session.id,
+              messageID: "msg_progress_batch",
+              type: "text",
+              text,
+            },
+            delta,
+          })
+        const writes = [publish("one", "one"), publish("onetwo", "two"), publish("onetwothree", "three")]
+
+        await RuntimeEvents.finish({
+          sessionID: session.id,
+          runID: "run_progress_batch",
+          messageID: "msg_progress_batch",
+        })
+        await Promise.all(writes)
+        unsubscribe()
+
+        expect(parts).toEqual(["one", "two", "three"])
+        expect((await RuntimeEvents.replay(session.id)).events).toMatchObject([
+          { sequence: 1, type: "runtime.accepted" },
+          {
+            sequence: 2,
+            type: "message.part.updated",
+            properties: { part: { text: "one" }, delta: "one" },
+          },
+          {
+            sequence: 3,
+            type: "message.part.updated",
+            properties: { part: { text: "onetwothree" }, delta: "twothree" },
+          },
+          { sequence: 4, type: "runtime.completed" },
+        ])
+      },
+    })
+  })
+
   test("isolates cyclic subscriber rejections from durable capture and healthy subscribers", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
