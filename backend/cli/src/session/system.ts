@@ -29,31 +29,9 @@ export namespace SystemPrompt {
   export function slashSkillDirective(): string[] {
     return [
       `<slash-skill-invocation>
-When the user message begins with /<name> and <name> matches an available
-skill:
-
-1. Your VERY FIRST output token must be the tool call to skill({name: "<name>"}).
-2. Produce ZERO text before the tool call. No "I'll load", no "Loading X",
-   no "Sure, let me consult X first", no acknowledgement of any kind.
-3. After the tool returns, your next user-visible message is your direct
-   response to the user's actual request (which may be implicit in just
-   "/<name>" — in that case ask what they want, but ONLY after the tool
-   returns, never before).
-
-FORBIDDEN outputs before the skill tool call (these are all wrong):
-  ❌ "I'll load the caveman skill as requested."
-  ❌ "Let me consult the caveman skill first."
-  ❌ "Loading caveman..."
-  ❌ "Sure, I'll use that skill."
-
-CORRECT pattern:
-  [no text]
-  → skill({name: "caveman"}) tool call
-  → tool result lands
-  → [now you may speak, using the loaded skill's voice]
-
-If <name> is NOT a known skill, treat the / as literal text and respond
-normally.
+If a user message begins with /<name> and <name> is an available skill, the first output must be
+skill({name:"<name>"}) with no preceding text or acknowledgement. After it returns, answer the request;
+when the message was only /<name>, ask what the user wants then. Treat unknown names as literal text.
 </slash-skill-invocation>`,
     ]
   }

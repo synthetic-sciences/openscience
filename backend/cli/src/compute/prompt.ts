@@ -43,23 +43,23 @@ export namespace ComputePrompt {
       if (!modal.enabled) {
         return "Modal is configured but disabled in OpenScience, so it is not available for new jobs. The user can enable it in Settings > Compute."
       }
-      return "Modal compute is configured and enabled through OpenScience. It is available through the governed `compute_job` JobBroker for explicitly approved jobs in isolated Modal sandboxes."
+      return "Modal compute is configured and enabled through OpenScience for explicitly approved jobs through governed `compute_job` in isolated sandboxes."
     })()
 
     return [
       "<compute-capability>",
       state,
-      "JobBroker compute contract:",
-      "- Questions about whether Modal is available, configured, connected, or enabled are read-only. Answer them only from the capability state above. Never dispatch a job to test availability.",
-      "- Discover targets and plan or start every detached local, SSH, scheduler, or Modal workload through `compute_job`. Its immutable plan card is the approval request for remote work. Do not first present a prose approval card or wait for chat confirmation; a chat reply such as `yes` is not dispatch authorization. Do not dispatch through provider CLIs, SDKs, or separate cloud-compute tools.",
+      "JobBroker rules:",
+      "- Questions about whether Modal is available, configured, connected, or enabled are read-only; answer from the state above. Never dispatch a job to test availability.",
+      "- Plan or start every detached local, SSH, scheduler, or Modal workload through `compute_job`. Its immutable card requests remote approval; prose/chat approval does not: a chat reply such as `yes` is not dispatch authorization. Never use provider CLIs, SDKs, or other cloud tools.",
       "- Do not check for or install the Modal Python package. Never run or recommend `modal run`, `modal setup`, or `pip install modal`.",
-      "- Modal runs through OpenScience's JavaScript control-plane adapter. Credentials are not available in the agent shell.",
-      "- A Modal job command is an ordinary shell command that runs inside the configured sandbox image, such as `python analysis.py`; it is not a Modal CLI launcher or a Modal-decorated Python application.",
-      '- When asked to run work on Modal, prepare ordinary workspace files, then call `compute_job` with target `{ kind: "modal" }`, the command, explicit uploads and artifacts, Python packages, image, GPU, and resource limits. Use GPU `none` for CPU-only work.',
-      `- The configured default is ${timeout} minutes. Use it as the starting point, then choose an explicit \`resources.time_minutes\` that fits the expected workload and include it in the tool call. Do not ask the user to choose unless they specified a time or spending constraint. The approval card shows the resulting \`timeout_minutes\` limit.`,
-      "- Put third-party Python dependencies in the tool's `packages` field, preferably pinned. Do not assume the configured base image contains scientific packages.",
+      "- Modal uses OpenScience's JavaScript adapter. Credentials are not available in the agent shell.",
+      "- A Modal command is an ordinary shell command that runs inside the configured sandbox image, not a Modal CLI launcher or decorated Python app.",
+      '- For Modal, prepare workspace files and call `compute_job` with target `{ kind: "modal" }`, command, explicit uploads and artifacts, `packages`, image, GPU, and limits. Use GPU `none` for CPU-only work.',
+      `- The configured default is ${timeout} minutes. Use it as the starting point; choose an explicit \`resources.time_minutes\` for expected runtime. Ask only about user-specified time/spend constraints. The card shows the resulting \`timeout_minutes\` limit.`,
+      "- Put third-party Python dependencies in the `packages` field, preferably pinned; do not assume the base image includes them.",
       "- Only report dispatch, status, logs, or completion returned by `compute_job`. Do not invent a precise cost or duration estimate.",
-      "- For an existing job, use `compute_job` to list project jobs or inspect status, logs, and delivered artifacts. Read-only inspection must never dispatch a test job. Use its governed cancellation, retry-delivery, or release actions only when the user requests that lifecycle change.",
+      "- For existing jobs, use `compute_job` to list or inspect status, logs, and artifacts. Inspecting never dispatches; cancel, retry delivery, or release only when requested.",
       "</compute-capability>",
     ].join("\n")
   }

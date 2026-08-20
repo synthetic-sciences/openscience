@@ -17,7 +17,6 @@ test("every WebFetch instruction teaches one root-download then sandboxed-move s
   const prompts = await Promise.all([
     read("session/prompt/core.txt"),
     read("agent/prompt/research.txt"),
-    read("tool/task.txt"),
     read("tool/webfetch.txt"),
   ])
   for (const prompt of prompts) {
@@ -44,6 +43,14 @@ test("every provider receives one compact product operating contract", () => {
   expect(instructions).toContain("immutable release")
   expect(instructions).not.toContain("shared keys")
   expect(instructions).not.toContain("project init")
+})
+
+test("slash-skill routing stays compact and preserves call-first behavior", () => {
+  const prompt = SystemPrompt.slashSkillDirective().join("\n")
+  expect(Buffer.byteLength(prompt)).toBeLessThanOrEqual(400)
+  expect(prompt).toContain('skill({name:"<name>"})')
+  expect(prompt).toContain("no preceding text")
+  expect(prompt).toContain("unknown names as literal text")
 })
 
 test("the primary and domain prompts stay adaptive instead of procedural", async () => {
@@ -85,15 +92,11 @@ test("delegation is rare, bounded, and observable", async () => {
   expect(TASK_WALL_CLOCK_MS).toEqual({ normal: 600_000, ultra: 1_200_000 })
   expect(DELEGATION_PROFILES.filter(isComputeDelegationProfile)).toEqual(["execute"])
   expect(["biology", "ml", "physics"].some(isComputeDelegationProfile)).toBe(false)
-  expect(prompt).toContain("default to zero children")
-  expect(prompt).toContain("at most two")
-  expect(prompt).toContain("at most four")
-  expect(prompt).toContain("Task calls total per user turn")
-  expect(prompt).toContain("large or binary scientific data")
-  expect(prompt).toContain("output_path")
-  expect(prompt).not.toContain("data once to the workspace with Shell")
-  expect(prompt).toContain("immutable release")
-  expect(prompt).toContain("failed child")
+  expect(prompt).toContain("Default to no children")
+  expect(prompt).toContain("Normal permits two calls per turn")
+  expect(prompt).toContain("Ultra four")
+  expect(prompt).toContain("continuations count")
+  expect(prompt).toContain("optional failure must not block")
   expect(prompt).not.toContain("trusted")
   expect(source).toContain("durationMs")
   expect(source).toContain("failedToolCalls")

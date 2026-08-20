@@ -37,6 +37,7 @@ test("system prompt describes enabled Modal as OpenScience-managed compute", asy
   expect(section[0]).toContain("configured default is 60 minutes")
   expect(section[0]).toContain("Use it as the starting point")
   expect(section[0]).not.toContain(marker)
+  expect(Buffer.byteLength(section[0]!)).toBeLessThanOrEqual(1_900)
 
   const configured = await SystemPrompt.compute({
     providers: { modal: { enabled: true } },
