@@ -993,6 +993,7 @@ export namespace SessionPrompt {
         messages: msgs,
         request: route.text,
         direct: route.direct,
+        inspection: route.inspection,
       })
 
       if (step === 1) {
@@ -1185,6 +1186,7 @@ export namespace SessionPrompt {
     messages: MessageV2.WithParts[]
     request?: string
     direct: boolean
+    inspection: boolean
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
@@ -1230,7 +1232,7 @@ export namespace SessionPrompt {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
-        description: item.description,
+        description: ToolSelection.description(item.id, item.description, input.inspection),
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           const ctx = context(args, options)

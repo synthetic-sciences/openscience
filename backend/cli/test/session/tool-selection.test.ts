@@ -9,6 +9,15 @@ describe("tool selection", () => {
     expect(ToolSelection.fresh(["user", "assistant", "user"])).toBe(false)
   })
 
+  test("compacts only built-in inspection tool descriptions", () => {
+    const original = "long global description"
+    expect(ToolSelection.description("read", original)).toBe(original)
+    expect(ToolSelection.description("read", original, true)).toContain("absolute path")
+    expect(ToolSelection.description("grep", original, true)).toContain("regular expression")
+    expect(ToolSelection.description("glob", original, true)).toContain("glob pattern")
+    expect(ToolSelection.description("invalid", original, true)).toBe(original)
+  })
+
   const permission = PermissionNext.fromConfig({
     "*": "allow",
     edit: "deny",

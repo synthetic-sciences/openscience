@@ -26,9 +26,19 @@ export namespace ToolSelection {
   const work =
     /\b(?:analy[sz]e|attached|calculate|cite|create|current|dataset|document|download|fetch|file|find|inspect|latest|load|look up|open|paper|plot|read|review|run|save|search|source|today|verify|write)\b|https?:\/\/|\.[a-z0-9]{1,5}\b/i
   const browse = new Set(["glob", "grep", "invalid", "read"])
+  const descriptions: Record<string, string> = {
+    glob: "Find local files by glob pattern. Omit path for the workspace or provide a directory to constrain the search. Returns up to 100 paths.",
+    grep: "Search local file contents with a regular expression. Constrain the directory with path and file globs with include. Returns matching lines with paths and line numbers.",
+    read: "Read a local text, image, or PDF file by absolute path. Use parallel calls for independent files. Set offset and limit only when a bounded line range is sufficient.",
+  }
 
   export function fresh(roles: string[]) {
     return roles.filter((role) => role === "user").length === 1
+  }
+
+  export function description(tool: string, value: string, inspection = false) {
+    if (!inspection) return value
+    return descriptions[tool] ?? value
   }
 
   function inspect(message: string) {
