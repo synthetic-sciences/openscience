@@ -150,9 +150,10 @@ describe("floating prompt surface", () => {
   test("uses draft-safe rollback for every post-dispatch failure path", () => {
     const calls = source.match(/restoreInputAfterFailure\(\)/g) ?? []
 
-    // Shell, custom command, pending-worktree cleanup, and normal prompt
-    // failures all share the same draft-safe rollback.
-    expect(calls).toHaveLength(4)
+    // Native actions, shell, Plan/Goal intent, custom commands,
+    // pending-worktree cleanup, and normal prompts all share the same
+    // draft-safe rollback.
+    expect(calls).toHaveLength(6)
     expect(source).toContain("canRestoreFailedSubmission(prompt.current(), store.mode)")
   })
 

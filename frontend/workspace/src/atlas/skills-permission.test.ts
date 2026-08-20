@@ -1,12 +1,24 @@
 import { describe, expect, test } from "bun:test"
 import {
   commitSkillPermission,
+  enabledSkills,
   restoreExactSkillPermission,
   skillAction,
   skillPermissionChange,
+  visibleSkills,
 } from "./skill-permissions"
 
 describe("skill Settings permission controls", () => {
+  test("native command collisions never become toggleable or duplicate skill entries", () => {
+    const skills = [{ name: "goal" }, { name: "biology" }, { name: "internal", entry: false }, { name: "physics" }]
+    const commands = ["goal", "plan", "compact"]
+
+    expect(visibleSkills(skills, commands).map((skill) => skill.name)).toEqual(["biology", "physics"])
+    expect(enabledSkills(skills, commands, { skill: { biology: "deny" } }).map((skill) => skill.name)).toEqual([
+      "physics",
+    ])
+  })
+
   test("respects a wildcard skill denial and lets an exact override win", () => {
     expect(skillAction({ skill: "deny" }, "literature-review")).toBe("deny")
     expect(skillAction({ skill: { "*": "deny", biology: "allow" } }, "biology")).toBe("allow")

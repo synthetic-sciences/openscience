@@ -74,19 +74,13 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     PLAN: "plan",
-    REVIEW: "review",
-    VERIFY: "verify",
-    GOALS: "goals",
+    GOAL: "goal",
     STATUS: "status",
     CONTEXT: "context",
     STOP: "stop",
     COMPACT: "compact",
     HANDOFF: "handoff",
     CHECKPOINT: "checkpoint",
-    REPRODUCE: "reproduce",
-    COMPARE: "compare",
-    SOURCES: "sources",
-    EXPORT: "export",
   } as const
 
   const compute = async () => {
@@ -101,23 +95,11 @@ export namespace Command {
         description: "create/update AGENTS.md",
         source: "builtin",
         category: "project",
+        usage: "/init",
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", Instance.worktree)
         },
         hints: hints(PROMPT_INITIALIZE),
-      },
-      [Default.REVIEW]: {
-        name: Default.REVIEW,
-        description: "independently review code, results, claims, or an artifact",
-        source: "builtin",
-        category: "research",
-        usage: "/review [scope]",
-        agent: "reviewer",
-        get template() {
-          return workflow(Default.REVIEW)
-        },
-        subtask: false,
-        hints: ["$ARGUMENTS"],
       },
       [Default.PLAN]: {
         name: Default.PLAN,
@@ -132,28 +114,23 @@ export namespace Command {
         subtask: false,
         hints: ["$ARGUMENTS"],
       },
-      [Default.VERIFY]: {
-        name: Default.VERIFY,
-        description: "run the relevant checks and report pass, fail, or not tested",
+      [Default.GOAL]: {
+        name: Default.GOAL,
+        description: "set a persistent objective and begin working toward it",
         source: "builtin",
-        category: "evidence",
-        usage: "/verify [claim, artifact, or test scope]",
+        category: "research",
+        usage: "/goal [objective]",
         get template() {
-          return workflow(Default.VERIFY)
+          return [
+            "The user set a persistent goal for this session.",
+            "Treat the durable research contract as the source of truth, begin pursuing the objective now, and continue until it is complete or genuinely blocked.",
+            "Keep the user informed at meaningful milestones and verify the requested outcome before declaring completion.",
+            "",
+            "Objective:",
+            "$ARGUMENTS",
+          ].join("\n")
         },
         hints: ["$ARGUMENTS"],
-      },
-      [Default.GOALS]: {
-        name: Default.GOALS,
-        description: "show the objective, active plan, research progress, and next action",
-        source: "builtin",
-        category: "session",
-        usage: "/goals",
-        menu: true,
-        get template() {
-          return ""
-        },
-        hints: [],
       },
       [Default.STATUS]: {
         name: Default.STATUS,
@@ -228,50 +205,6 @@ export namespace Command {
           return ""
         },
         hints: [],
-      },
-      [Default.REPRODUCE]: {
-        name: Default.REPRODUCE,
-        description: "reproduce a result with exact inputs, environment, and evidence",
-        source: "builtin",
-        category: "evidence",
-        usage: "/reproduce [claim, artifact, paper, or run]",
-        get template() {
-          return workflow(Default.REPRODUCE)
-        },
-        hints: ["$ARGUMENTS"],
-      },
-      [Default.COMPARE]: {
-        name: Default.COMPARE,
-        description: "compare runs or artifacts on a fair, explicit basis",
-        source: "builtin",
-        category: "evidence",
-        usage: "/compare [left] vs [right] [metric or question]",
-        get template() {
-          return workflow(Default.COMPARE)
-        },
-        hints: ["$ARGUMENTS"],
-      },
-      [Default.SOURCES]: {
-        name: Default.SOURCES,
-        description: "audit sources, citations, and unsupported claims",
-        source: "builtin",
-        category: "evidence",
-        usage: "/sources [claim, artifact, or scope]",
-        get template() {
-          return workflow(Default.SOURCES)
-        },
-        hints: ["$ARGUMENTS"],
-      },
-      [Default.EXPORT]: {
-        name: Default.EXPORT,
-        description: "package results with provenance and reproduction instructions",
-        source: "builtin",
-        category: "output",
-        usage: "/export [target] [format or destination]",
-        get template() {
-          return workflow(Default.EXPORT)
-        },
-        hints: ["$ARGUMENTS"],
       },
     }
 

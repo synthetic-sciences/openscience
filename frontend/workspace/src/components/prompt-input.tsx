@@ -62,6 +62,7 @@ import { showToast } from "@synsci/ui/toast"
 import { uiStore } from "@/atlas/store/ui"
 import { projectHref, projectPathname } from "@/utils/project-route"
 import { ModelSettingsPopover } from "./model-settings-popover"
+import { enabledSkills } from "@/atlas/skill-permissions"
 import { modelControl } from "./model-presentation"
 import { DialogSettings } from "./dialog-settings"
 import "./prompt-input.css"
@@ -80,7 +81,16 @@ import {
   type ReviewPreferences,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
-import { slashGroup, slashIcon, slashSource, sortSlash, type SlashCommand } from "./prompt-slash"
+import {
+  slashGroup,
+  slashIcon,
+  slashMode,
+  slashSource,
+  SLASH_NATIVE,
+  sortSlash,
+  type SlashCommand,
+  type SlashMode,
+} from "./prompt-slash"
 import {
   RESEARCH_ACCESS_OPTIONS,
   researchAccessLabel as accessLabel,
@@ -575,6 +585,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: Prompt | null
     dragging: boolean
     mode: "normal" | "shell"
+    intent: SlashMode | null
     applyingHistory: boolean
   }>({
     popover: null,
@@ -582,6 +593,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: null,
     dragging: false,
     mode: "normal",
+    intent: null,
     applyingHistory: false,
   })
 
@@ -590,6 +602,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const placeholder = createMemo(() => {
     if (submitting()) return "Sending…"
     if (store.mode === "shell") return language.t("prompt.placeholder.shell")
+    if (store.intent === "plan") return "Describe your task to generate a plan…"
+    if (store.intent === "goal") return "Describe your goal and the measurable outcome…"
     if (commentCount() > 1) return language.t("prompt.placeholder.summarizeComments")
     if (commentCount() === 1) return language.t("prompt.placeholder.summarizeComment")
     return language.t("prompt.placeholder.normal")
@@ -867,77 +881,76 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const usage: Record<string, string> = {
-      goals: "/goals",
-      stop: "/stop [turn|compute|all]",
       compact: "/compact [focus]",
-      handoff: "/handoff [project-relative path]",
-      checkpoint: "/checkpoint [label]",
+      context: "/context",
+      plan: "/plan",
+      goal: "/goal",
+      status: "/status",
     }
-    const builtin = command.options
-      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
-      .map((opt) => ({
-        id: opt.id,
-        trigger: opt.slash!,
-        title: opt.title,
-        description: opt.description,
-        keybind: opt.keybind,
+    const catalog = new Map(sync.data.command.map((item) => [item.name, item]))
+    const builtin = SLASH_NATIVE.map((name) => {
+      const item = catalog.get(name)
+      return {
+        id: `command.${name}`,
+        trigger: name,
+        title: name,
+        description: item?.description,
+        usage: usage[name],
         source: "builtin" as const,
-        category: "session" as const,
-        usage: usage[opt.slash!] ?? `/${opt.slash!}`,
-        type: "action" as const,
-      }))
+        category: ((["compact", "context", "status"] as string[]).includes(name) ? "session" : "research") as
+          | "session"
+          | "research",
+        type: slashMode({ trigger: name }) ? ("mode" as const) : ("action" as const),
+      }
+    })
 
-    const triggers = new Set(builtin.map((command) => command.trigger))
-    const custom = sync.data.command
-      // Existing sessions register menu commands as direct, zero-model actions.
-      // Keep the matching server command only when that action is unavailable so
-      // the complete slash hierarchy remains discoverable on a brand-new session.
-      .filter((command) => !(command as { menu?: boolean }).menu || !triggers.has(command.name))
-      .map((cmd) => ({
-        id: `command.${cmd.name}`,
-        trigger: cmd.name,
-        title: cmd.name,
-        description: cmd.description,
-        usage: (cmd as { usage?: string }).usage,
-        source: ((cmd as { source?: "builtin" | "project" | "mcp" }).source ?? (cmd.mcp ? "mcp" : "project")) as
-          | "builtin"
-          | "project"
-          | "mcp",
-        category: ((
-          cmd as {
-            category?: "session" | "research" | "evidence" | "output" | "project"
-          }
-        ).category ?? "project") as "session" | "research" | "evidence" | "output" | "project",
-        type: "command" as const,
-      }))
+    const reserved = new Set<string>(SLASH_NATIVE)
 
     // Surface installed skills as slash entries. Selecting one prefills a
     // "Use the <name> skill: " prompt that the agent matches against its
-    // built-in skill tool — lazy invocation, no new pipeline.
+    // built-in skill tool — lazy invocation, no new pipeline. A real command
+    // owns its trigger when names collide, so it is never repeated as a skill.
     // Hide skills tagged `entry: false` (internal helpers).
-    const skills = (sync.data.skill ?? [])
-      .filter((s) => (s as { entry?: boolean }).entry !== false)
-      .map((s) => ({
-        id: `skill.${s.name}`,
-        trigger: s.name,
-        title: s.name,
-        description: s.description?.slice(0, 120) ?? "",
-        usage: `/${s.name} [request]`,
-        source: "skill" as const,
-        category: "skill" as const,
-        type: "skill" as const,
-      }))
+    const skills = enabledSkills(sync.data.skill ?? [], reserved, sync.data.config.permission).map((s) => ({
+      id: `skill.${s.name}`,
+      trigger: s.name,
+      title: s.name,
+      description: s.description?.slice(0, 120) ?? "",
+      usage: `/${s.name} [request]`,
+      source: "skill" as const,
+      category: "skill" as const,
+      type: "skill" as const,
+    }))
 
-    return [...custom, ...skills, ...builtin].toSorted(sortSlash)
+    return [...builtin, ...skills].toSorted(sortSlash)
   })
+
+  const setIntent = (intent: SlashMode | null) => {
+    setStore("intent", intent)
+    setStore("mode", "normal")
+    setStore("popover", null)
+    requestAnimationFrame(() => editorRef.focus({ preventScroll: true }))
+  }
+
+  const enterIntent = (intent: SlashMode) => {
+    editorRef.textContent = ""
+    prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+    setIntent(intent)
+  }
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
     setStore("popover", null)
 
-    if (cmd.type === "command" || cmd.type === "skill") {
-      // Both surfaces prefill the literal slash command. The agent reads
-      // `/<name>` as a request to invoke the named skill / command.
+    const intent = slashMode(cmd)
+    if (intent) {
+      enterIntent(intent)
+      return
+    }
+
+    if (cmd.type === "skill") {
+      // Skills remain editable requests. The agent loads the selected skill
+      // before responding when the submitted message begins with this slash.
       const text = `/${cmd.trigger} `
       editorRef.textContent = text
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -955,7 +968,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     editorRef.textContent = ""
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
-    command.trigger(cmd.id, "slash")
+    void handleSubmit(new Event("submit"), cmd.trigger)
   }
 
   const {
@@ -1031,16 +1044,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
-  // Auto-scroll active command into view when navigating with keyboard
-  createEffect(() => {
+  const scrollSlashActive = () => {
     const activeId = slashActive()
     if (!activeId || !slashPopoverRef) return
-
-    requestAnimationFrame(() => {
-      const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
-      element?.scrollIntoView({ block: "nearest", behavior: "auto" })
-    })
-  })
+    const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
+    element?.scrollIntoView({ block: "nearest", behavior: "auto" })
+  }
 
   const selectPopoverActive = () => {
     if (store.popover === "at") {
@@ -1207,10 +1216,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const shellMode = store.mode === "shell"
+    const slashMatch = shellMode ? null : rawText.match(/^\/(\S*)$/)
+    const keepSlashFocus = !!slashMatch && document.activeElement === editorRef
 
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
-      const slashMatch = rawText.match(/^\/(\S*)$/)
 
       if (atMatch) {
         atOnInput(atMatch[1])
@@ -1218,6 +1228,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
         setStore("popover", "slash")
+        requestAnimationFrame(() => {
+          if (slashPopoverRef) slashPopoverRef.scrollTop = 0
+        })
       } else {
         setStore("popover", null)
       }
@@ -1233,6 +1246,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
+    if (keepSlashFocus) {
+      requestAnimationFrame(() => {
+        if (document.activeElement !== editorRef) {
+          editorRef.focus({ preventScroll: true })
+          setCursorPosition(editorRef, cursorPosition)
+        }
+        if (editorRef.textContent?.match(/^\/(\S*)$/)) setStore("popover", "slash")
+      })
+    }
   }
 
   const setRangeEdge = (range: Range, edge: "start" | "end", offset: number) => {
@@ -1421,6 +1443,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const cursorPosition = getCursorPosition(editorRef)
       if (cursorPosition === 0) {
         setStore("mode", "shell")
+        setStore("intent", null)
         setStore("popover", null)
         event.preventDefault()
         return
@@ -1470,6 +1493,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
         if (store.popover === "slash") {
           slashOnKeyDown(event)
+          requestAnimationFrame(scrollSlashActive)
         }
         event.preventDefault()
         return
@@ -1536,7 +1560,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const handleSubmit = async (event: Event) => {
+  const handleSubmit = async (event: Event, action?: string) => {
     event.preventDefault()
 
     // A first prompt may need to create its session (and sometimes a
@@ -1553,9 +1577,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const currentPrompt = prompt.current()
-    const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
-    const images = imageAttachments().slice()
-    const mode = store.mode
+    const text = action ? `/${action}` : currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
+    const images = action ? [] : imageAttachments().slice()
+    const mode = action ? "normal" : store.mode
+    const intent = action ? null : store.intent
+
+    const typedIntent = !intent && images.length === 0 ? text.trim().match(/^\/(plan|goal)$/)?.[1] : undefined
+    if (typedIntent === "plan" || typedIntent === "goal") {
+      enterIntent(typedIntent)
+      return
+    }
 
     if (text.trim().length === 0 && images.length === 0) return
 
@@ -1599,7 +1630,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (native && active && mode === "normal" && images.length === 0) {
       setSubmitting(true)
       clearInput()
-      window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
+      if (!action) window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
       setStore("historyIndex", -1)
       setStore("savedPrompt", null)
       props.onSubmit?.()
@@ -1645,7 +1676,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // keep that work off the input event's critical path.
     setSubmitting(true)
     clearInput()
-    window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
+    if (!action) window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
 
@@ -1736,6 +1767,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         .catch((err) => {
           showToast({
             title: language.t("prompt.toast.shellSendFailed.title"),
+            description: errorMessage(err),
+          })
+          restoreInputAfterFailure()
+        })
+      setSubmitting(false)
+      return
+    }
+
+    if (intent) {
+      client.session
+        .command({
+          sessionID: session.id,
+          command: intent,
+          arguments: text,
+          agent,
+          model: `${model.providerID}/${model.modelID}`,
+          variant,
+          tier,
+          parts: images.map((attachment) => ({
+            id: Identifier.ascending("part"),
+            type: "file" as const,
+            mime: attachment.mime,
+            url: attachment.dataUrl,
+            filename: attachment.filename,
+          })),
+        })
+        .catch((err) => {
+          showToast({
+            title: `Could not start ${intent} mode`,
             description: errorMessage(err),
           })
           restoreInputAfterFailure()
@@ -2862,6 +2922,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </section>
                   </div>
                 </details>
+                <Show when={store.intent}>
+                  {(intent) => (
+                    <Tooltip placement="top" value={`Exit ${intent()} mode`}>
+                      <button
+                        type="button"
+                        class="workspace-composer__intent"
+                        data-composer-intent={intent()}
+                        aria-label={`Exit ${intent()} mode`}
+                        onClick={() => setIntent(null)}
+                      >
+                        <span class="workspace-composer__intent-close" aria-hidden="true">
+                          <Icon name="close" size="small" />
+                        </span>
+                        <span>{intent() === "plan" ? "Plan" : "Goal"}</span>
+                      </button>
+                    </Tooltip>
+                  )}
+                </Show>
               </Match>
             </Switch>
           </div>

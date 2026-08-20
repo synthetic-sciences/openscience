@@ -266,9 +266,9 @@
 
 .workspace-composer__suggestions {
   z-index: 40;
-  max-height: min(520px, 70vh);
+  max-height: min(360px, 48vh);
   gap: 1px;
-  padding: 6px;
+  padding: 5px;
   overscroll-behavior: contain;
   border: 1px solid var(--color-border-weak, var(--color-border));
   border-radius: var(--radius-xl);
@@ -283,8 +283,8 @@
 }
 
 .workspace-composer__suggestion {
-  min-height: 38px;
-  padding: 7px 10px;
+  min-height: 34px;
+  padding: 5px 8px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -313,9 +313,9 @@
 }
 
 .workspace-composer__slash-heading {
-  min-height: 28px;
+  min-height: 24px;
   display: block;
-  padding: 5px 10px 4px;
+  padding: 4px 8px 2px;
   color: var(--text-weak);
   font-size: 12px;
   font-weight: var(--font-weight-medium);
@@ -329,7 +329,7 @@
 
 .workspace-composer__slash-row {
   display: grid;
-  grid-template-columns: 20px minmax(104px, 0.42fr) minmax(0, 1fr) auto;
+  grid-template-columns: 20px minmax(96px, 0.38fr) minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 10px;
 }
@@ -376,7 +376,7 @@
 
 @media (max-width: 639px) {
   .workspace-composer__suggestions {
-    max-height: min(440px, 66vh);
+    max-height: min(340px, 48vh);
   }
 
   .workspace-composer__slash-row {
@@ -530,6 +530,57 @@ form.workspace-composer .workspace-composer__attach:focus-visible {
 
 form.workspace-composer .workspace-composer__attach:active:not(:disabled) {
   transform: scale(0.97);
+}
+
+form.workspace-composer .workspace-composer__intent {
+  min-width: 0;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: var(--composer-radius-pill);
+  background: var(--surface-raised-base-hover);
+  color: var(--text-weak);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background-color 140ms var(--ease-standard),
+    color 140ms var(--ease-standard),
+    transform 100ms var(--ease-standard);
+}
+
+form.workspace-composer .workspace-composer__intent:hover,
+form.workspace-composer .workspace-composer__intent:focus-visible {
+  background: var(--surface-raised-base-active);
+  color: var(--text-strong);
+}
+
+form.workspace-composer .workspace-composer__intent:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: 1px;
+}
+
+form.workspace-composer .workspace-composer__intent:active {
+  transform: translateY(1px);
+}
+
+form.workspace-composer .workspace-composer__intent-close {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-weak) 16%, transparent);
+  color: currentColor;
+}
+
+form.workspace-composer .workspace-composer__intent-close [data-slot="icon-svg"] {
+  width: 11px;
+  height: 11px;
 }
 
 form.workspace-composer .workspace-composer__research-tools {
