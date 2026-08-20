@@ -1,0 +1,4 @@
+interface:
+  display_name: "Initialize Project"
+  short_description: "Create or refresh project agent instructions"
+  default_prompt: "Use $init to create or refresh AGENTS.md for this project."

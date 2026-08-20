@@ -19,7 +19,7 @@ export type SlashMode = "plan" | "goal"
 export const SLASH_NATIVE = ["compact", "context", "plan", "goal", "status"] as const
 
 export function slashGroup(command: SlashCommand): SlashGroup {
-  return command.type === "skill" ? "Skills" : "Commands"
+  return command.source === "skill" ? "Skills" : "Commands"
 }
 
 export function slashMode(command: Pick<SlashCommand, "trigger">): SlashMode | undefined {

@@ -70,6 +70,11 @@ describe("research slash commands", () => {
           expect(content, name).toContain(`research-workflows/references/${name}.md`)
         }
 
+        const init = await Bun.file(path.join(import.meta.dir, "../../skills/other/init/SKILL.md")).text()
+        expect(init).toContain("name: init")
+        expect(init).not.toContain("entry: false")
+        expect(init).toContain("Create or refresh an AGENTS.md")
+
         const template = await commands.get("plan")?.template
         expect(template).toContain("# Research Workflow Engine")
         expect(template).toContain("# Workflow: plan")

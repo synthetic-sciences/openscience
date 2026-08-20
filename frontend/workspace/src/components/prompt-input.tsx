@@ -919,11 +919,48 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       usage: `/${s.name} [request]`,
       source: "skill" as const,
       category: "skill" as const,
-      type: "skill" as const,
+      type: s.name === "init" ? ("action" as const) : ("skill" as const),
     }))
 
     return [...builtin, ...skills].toSorted(sortSlash)
   })
+
+  const slashItems = (query: string) => {
+    const items = slashCommands()
+    if (!query.trim()) return items
+
+    const shown = new Set(items.map((item) => item.trigger))
+    const commands: SlashCommand[] = sync.data.command
+      .filter((item) => item.source === "builtin" && !shown.has(item.name))
+      .map((item) => ({
+        id: `command.${item.name}`,
+        trigger: item.name,
+        title: item.name,
+        description: item.description,
+        usage: item.usage,
+        source: "builtin",
+        category: item.category ?? "session",
+        type: slashMode({ trigger: item.name }) ? "mode" : "action",
+      }))
+
+    const all = [...items, ...commands]
+    const needle = query.trim().replace(/^\/+/, "").toLowerCase()
+    const trigger = (item: SlashCommand) => item.trigger.toLowerCase()
+    const exact = all.filter((item) => trigger(item) === needle)
+    if (exact.length) return exact
+
+    const prefix = all.filter((item) => trigger(item).startsWith(needle))
+    if (prefix.length) return prefix
+
+    const contained = all.filter((item) => trigger(item).includes(needle))
+    if (contained.length) return contained
+
+    const terms = needle.split(/\s+/)
+    return all.filter((item) => {
+      const text = [item.trigger, item.title, item.description, item.usage].filter(Boolean).join(" ").toLowerCase()
+      return terms.every((term) => text.includes(term))
+    })
+  }
 
   const setIntent = (intent: SlashMode | null) => {
     setStore("intent", intent)
@@ -980,7 +1017,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onKeyDown: slashOnKeyDown,
     refetch: slashRefetch,
   } = useFilteredList<SlashCommand>({
-    items: slashCommands,
+    items: slashItems,
     key: (x) => x?.id,
     filterKeys: ["trigger", "title", "description", "usage"],
     groupBy: slashGroup,
