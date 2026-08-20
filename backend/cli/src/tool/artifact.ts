@@ -59,7 +59,7 @@ function savedExecution(run: Run): Omit<ArtifactStore.Execution, "id" | "artifac
   }
 }
 
-async function traceSavedArtifact(saved: ArtifactStore.Artifact, run: Run) {
+async function traceSavedArtifact(saved: ArtifactStore.Artifact, run?: Run) {
   const scope = { projectID: Instance.project.id, directory: Instance.directory }
   const version = saved.current
   const id = ArtifactStore.reviewTargetID(version.id, version.sha256)
@@ -97,7 +97,7 @@ async function traceSavedArtifact(saved: ArtifactStore.Artifact, run: Run) {
       },
     } as Parameters<typeof Provenance.record>[0])
   }
-  await Provenance.linkOwned(scope, { from: run.id, to: id, relation: "produced" })
+  if (run) await Provenance.linkOwned(scope, { from: run.id, to: id, relation: "produced" })
 }
 
 export const ArtifactTool = Tool.define("artifact", {
@@ -166,7 +166,15 @@ export const ArtifactTool = Tool.define("artifact", {
         captureQuality: "declared",
         ...(entry ? { execution: savedExecution(entry) } : {}),
       })
-      if (entry) await traceSavedArtifact(saved, entry)
+      await traceSavedArtifact(saved, entry).catch((error) => {
+        if (entry) throw error
+        log.warn("saved Result has no review provenance target", {
+          sessionID: ctx.sessionID,
+          artifactID: saved.id,
+          versionID: saved.currentVersionID,
+          error,
+        })
+      })
       // Dynamic import avoids a registry cycle: review launches route back
       // through the session prompt loop that owns this tool definition.
       const { SessionReview } = await import("@/session/review")

@@ -62,7 +62,15 @@ test("artifact save_file promotes a workspace result into immutable versions", a
         version: 2,
       })
       expect(await ArtifactStore.list(Instance.project.id)).toHaveLength(1)
-      expect(await ArtifactStore.get(Instance.project.id, firstSaved.id)).toMatchObject({ versionCount: 2 })
+      const detail = await ArtifactStore.get(Instance.project.id, firstSaved.id)
+      expect(detail).toMatchObject({ versionCount: 2 })
+      const scope = { projectID: Instance.project.id, directory: Instance.directory }
+      for (const version of detail!.versions) {
+        expect(await Provenance.find(scope, ArtifactStore.reviewTargetID(version.id, version.sha256))).toMatchObject({
+          kind: "artifact",
+          meta: { artifactID: firstSaved.id, versionID: version.id, sessionID: session.id },
+        })
+      }
     },
   })
 })

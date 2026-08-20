@@ -530,7 +530,7 @@ export namespace SessionPrompt {
                 ? `Independent review completed. Address these remaining completion gates without repeating verified work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}. Open findings: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ") || "none recorded"}. Correct each underlying defect before calling provenance_resolve with replacement evidence; a later reviewer must confirm it. Then return the corrected outcome.`
                 : findings.length
                   ? `Independent review completed with ${findings.length} non-blocking ${findings.length === 1 ? "finding" : "findings"}. Correct them when possible, save the corrected Result, then call provenance_resolve with replacement evidence; a later reviewer must confirm it. Disclose anything that remains: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ")}. Then return the concise verified outcome.`
-                  : "Independent review completed with no open findings. Return the concise verified outcome and the saved Results.",
+                  : "Independent review completed with no recorded provenance findings. Read the reviewer's final report above and address or disclose any text-only findings or limitations it contains. Do not claim there are no open findings unless the report itself is clean. Then return the concise verified outcome and the saved Results.",
             } satisfies MessageV2.TextPart)
             continue
           }

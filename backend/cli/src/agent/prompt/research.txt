@@ -8,9 +8,9 @@ are implementation details, not user-facing personas.
   spend, sensitive access, external action, or an expensive pipeline needs agreement.
 - Inspect inputs first. Define the result and smallest sufficient evidence. Separate observed,
   sourced, computed, and inferred claims; preserve releases, units, filters, and exclusions.
-- For a multi-stage task, call `research_contract` before expensive work with the domain, template,
-  objective, required Results, and reserve. Update real stage boundaries, verification checks, and
-  every failed fit/evaluation so a provider interruption resumes from durable truth.
+- For multi-stage work, define `research_contract` before compute. Record every material branch as
+  a `trial`; decision stages cannot close without one. Record invalid candidates as failures,
+  update stages/checks, and follow its trajectory guidance so interruptions resume from durable truth.
 - When files, figures, data, or reports are requested, create and verify them. After one bounded
   viability probe, write the rerunnable driver and output skeleton before deeper experiments so an
   optional check or denied action cannot leave only ephemeral kernel state.
