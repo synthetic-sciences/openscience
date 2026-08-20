@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import {
   SLASH_NATIVE,
+  SLASH_ACTION_SKILLS,
+  slashActionSkill,
   slashGroup,
   slashIcon,
   slashMode,
@@ -11,7 +13,7 @@ import {
   type SlashCommand,
 } from "./prompt-slash"
 
-test("slash menu keeps a small native action surface above toggleable skills", () => {
+test("slash menu keeps a small toggleable action surface above other skills", () => {
   const component = readFileSync(fileURLToPath(new URL("./prompt-input.tsx", import.meta.url)), "utf8")
   const hierarchy = readFileSync(fileURLToPath(new URL("./prompt-slash.ts", import.meta.url)), "utf8")
   const styles = readFileSync(fileURLToPath(new URL("./prompt-input.css", import.meta.url)), "utf8")
@@ -20,18 +22,21 @@ test("slash menu keeps a small native action surface above toggleable skills", (
   expect(component).toContain("sync.data.command")
   expect(component).toContain("sync.data.skill")
   expect(component).toContain("const catalog = new Map(sync.data.command")
-  expect(component).toContain("const builtin = SLASH_NATIVE.map")
+  expect(component).toContain("const builtin = SLASH_NATIVE.filter((name) => available.has(name)).map")
   expect(component).toContain("const slashItems = (query: string) =>")
   expect(component).toContain("if (!query.trim()) return items")
-  expect(component).toContain('item.source === "builtin" && !shown.has(item.name)')
+  expect(component).toContain('item.source === "builtin" &&')
+  expect(component).toContain("(!governed.has(item.name) || enabled.has(item.name))")
   expect(component).toContain("const exact = all.filter((item) => trigger(item) === needle)")
   expect(component).toContain("if (exact.length) return exact")
   expect(component).toContain("if (prefix.length) return prefix")
   expect(component).toContain("if (contained.length) return contained")
   expect(component).toContain("items: slashItems")
-  expect(component).toContain("enabledSkills(sync.data.skill ?? [], reserved, sync.data.config.permission)")
+  expect(component).toContain("const enabled = enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission)")
+  expect(component).toContain("const skills = enabled")
+  expect(component).toContain(".filter((skill) => !reserved.has(skill.name))")
   expect(component).toContain('source: "builtin" as const')
-  expect(component).toContain('type: s.name === "init" ? ("action" as const) : ("skill" as const)')
+  expect(component).toContain('type: slashActionSkill(s.name) ? ("action" as const) : ("skill" as const)')
   expect(component).toContain("groupBy: slashGroup")
   expect(component).toContain("grouped: slashGrouped")
   expect(component).toContain("aria-label={group.category}")
@@ -82,6 +87,9 @@ test("slash hierarchy keeps frequent native actions ahead of a stable skills cat
   expect(slashGroup(items.find((item) => item.trigger === "review")!)).toBe("Skills")
   expect(slashGroup(items.find((item) => item.trigger === "biology")!)).toBe("Skills")
   expect(slashGroup({ ...command("init", "skill"), type: "action" })).toBe("Skills")
+  expect(SLASH_ACTION_SKILLS).toEqual(["init", "stop", "handoff", "checkpoint"])
+  expect(SLASH_ACTION_SKILLS.every(slashActionSkill)).toBe(true)
+  expect(slashActionSkill("review")).toBe(false)
   expect(items.slice(0, 5).map(slashSource)).toEqual(["Built in", "Built in", "Built in", "Built in", "Built in"])
   expect(slashSource(items.find((item) => item.trigger === "biology")!)).toBe("")
   expect(items.slice(0, 5).map(slashIcon)).toEqual(["collapse", "book-open", "branch", "task", "activity"])

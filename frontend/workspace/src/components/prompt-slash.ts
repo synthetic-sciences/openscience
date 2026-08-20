@@ -17,6 +17,11 @@ export type SlashMode = "plan" | "goal"
 // workflow belongs in the toggleable Skills section instead of masquerading as
 // an app command.
 export const SLASH_NATIVE = ["compact", "context", "plan", "goal", "status"] as const
+export const SLASH_ACTION_SKILLS = ["init", "stop", "handoff", "checkpoint"] as const
+
+export function slashActionSkill(name: string) {
+  return (SLASH_ACTION_SKILLS as readonly string[]).includes(name)
+}
 
 export function slashGroup(command: SlashCommand): SlashGroup {
   return command.source === "skill" ? "Skills" : "Commands"

@@ -19,7 +19,11 @@ export function skillAction(permission: unknown, name: string): SkillPermissionA
 
 export function visibleSkills<T extends CatalogSkill>(skills: readonly T[], reserved: Iterable<string>) {
   const names = new Set(reserved)
-  return skills.filter((skill) => skill.entry !== false && !names.has(skill.name))
+  return skills.filter((skill) => {
+    if (skill.entry === false || names.has(skill.name)) return false
+    names.add(skill.name)
+    return true
+  })
 }
 
 export function enabledSkills<T extends CatalogSkill>(

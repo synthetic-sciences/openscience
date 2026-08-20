@@ -62,7 +62,7 @@ import { showToast } from "@synsci/ui/toast"
 import { uiStore } from "@/atlas/store/ui"
 import { projectHref, projectPathname } from "@/utils/project-route"
 import { ModelSettingsPopover } from "./model-settings-popover"
-import { enabledSkills } from "@/atlas/skill-permissions"
+import { enabledSkills, visibleSkills } from "@/atlas/skill-permissions"
 import { modelControl } from "./model-presentation"
 import { DialogSettings } from "./dialog-settings"
 import "./prompt-input.css"
@@ -85,6 +85,7 @@ import {
   slashGroup,
   slashIcon,
   slashMode,
+  slashActionSkill,
   slashSource,
   SLASH_NATIVE,
   sortSlash,
@@ -888,7 +889,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       status: "/status",
     }
     const catalog = new Map(sync.data.command.map((item) => [item.name, item]))
-    const builtin = SLASH_NATIVE.map((name) => {
+    const enabled = enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission)
+    const available = new Set(enabled.map((skill) => skill.name))
+    const builtin = SLASH_NATIVE.filter((name) => available.has(name)).map((name) => {
       const item = catalog.get(name)
       return {
         id: `command.${name}`,
@@ -911,16 +914,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // built-in skill tool — lazy invocation, no new pipeline. A real command
     // owns its trigger when names collide, so it is never repeated as a skill.
     // Hide skills tagged `entry: false` (internal helpers).
-    const skills = enabledSkills(sync.data.skill ?? [], reserved, sync.data.config.permission).map((s) => ({
-      id: `skill.${s.name}`,
-      trigger: s.name,
-      title: s.name,
-      description: s.description?.slice(0, 120) ?? "",
-      usage: `/${s.name} [request]`,
-      source: "skill" as const,
-      category: "skill" as const,
-      type: s.name === "init" ? ("action" as const) : ("skill" as const),
-    }))
+    const skills = enabled
+      .filter((skill) => !reserved.has(skill.name))
+      .map((s) => ({
+        id: `skill.${s.name}`,
+        trigger: s.name,
+        title: s.name,
+        description: s.description?.slice(0, 120) ?? "",
+        usage: `/${s.name} [request]`,
+        source: "skill" as const,
+        category: "skill" as const,
+        type: slashActionSkill(s.name) ? ("action" as const) : ("skill" as const),
+      }))
 
     return [...builtin, ...skills].toSorted(sortSlash)
   })
@@ -930,8 +935,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!query.trim()) return items
 
     const shown = new Set(items.map((item) => item.trigger))
+    const governed = new Set(visibleSkills(sync.data.skill ?? [], []).map((skill) => skill.name))
+    const enabled = new Set(
+      enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission).map((skill) => skill.name),
+    )
     const commands: SlashCommand[] = sync.data.command
-      .filter((item) => item.source === "builtin" && !shown.has(item.name))
+      .filter(
+        (item) =>
+          item.source === "builtin" && !shown.has(item.name) && (!governed.has(item.name) || enabled.has(item.name)),
+      )
       .map((item) => ({
         id: `command.${item.name}`,
         trigger: item.name,

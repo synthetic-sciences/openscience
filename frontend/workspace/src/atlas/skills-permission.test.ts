@@ -9,10 +9,17 @@ import {
 } from "./skill-permissions"
 
 describe("skill Settings permission controls", () => {
-  test("native command collisions never become toggleable or duplicate skill entries", () => {
-    const skills = [{ name: "goal" }, { name: "biology" }, { name: "internal", entry: false }, { name: "physics" }]
+  test("deduplicates skill names and can reserve command-owned entries", () => {
+    const skills = [
+      { name: "goal" },
+      { name: "biology" },
+      { name: "goal" },
+      { name: "internal", entry: false },
+      { name: "physics" },
+    ]
     const commands = ["goal", "plan", "compact"]
 
+    expect(visibleSkills(skills, []).map((skill) => skill.name)).toEqual(["goal", "biology", "physics"])
     expect(visibleSkills(skills, commands).map((skill) => skill.name)).toEqual(["biology", "physics"])
     expect(enabledSkills(skills, commands, { skill: { biology: "deny" } }).map((skill) => skill.name)).toEqual([
       "physics",

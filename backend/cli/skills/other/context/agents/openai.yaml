@@ -1,0 +1,4 @@
+interface:
+  display_name: "Context Usage"
+  short_description: "Show context composition and capacity"
+  default_prompt: "Use $context to show the current context usage."

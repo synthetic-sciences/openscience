@@ -1,0 +1,4 @@
+interface:
+  display_name: "Goal Mode"
+  short_description: "Set a persistent measurable objective"
+  default_prompt: "Use $goal to set and pursue a measurable objective."

@@ -25,7 +25,6 @@ import { installFromGit } from "./skills-settings"
 import { restoreExactSkillPermission, skillAction, skillPermissionChange, visibleSkills } from "./skill-permissions"
 import "./skills-page.css"
 import { SearchInput, FilterMenu, AddMenu, EmptyState, FormField, FormButton } from "@/components/settings/_shared"
-import { SLASH_NATIVE } from "@/components/prompt-slash"
 
 interface Skill {
   name: string
@@ -228,7 +227,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
     permissionWrites = permissionWrites.then(persist, persist)
   }
 
-  const all = createMemo(() => visibleSkills(skills() ?? initialSkills, SLASH_NATIVE))
+  const all = createMemo(() => visibleSkills(skills() ?? initialSkills, []))
   const enabledCount = createMemo(() => all().filter((s) => enabled(s.name)).length)
 
   const categories = createMemo(() => {

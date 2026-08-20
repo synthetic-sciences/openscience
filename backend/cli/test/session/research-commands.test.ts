@@ -11,6 +11,8 @@ import { tmpdir, trustProject } from "../fixture/fixture"
 
 const names = ["init", "plan", "goal", "status", "context", "stop", "compact", "handoff", "checkpoint"]
 const workflows = ["review", "verify", "reproduce", "compare", "sources", "export"]
+const actions = ["init", "stop", "handoff", "checkpoint"]
+const primary = ["compact", "context", "plan", "goal", "status"]
 
 async function seed(sessionID: string) {
   const message: MessageV2.User = {
@@ -70,10 +72,16 @@ describe("research slash commands", () => {
           expect(content, name).toContain(`research-workflows/references/${name}.md`)
         }
 
-        const init = await Bun.file(path.join(import.meta.dir, "../../skills/other/init/SKILL.md")).text()
-        expect(init).toContain("name: init")
-        expect(init).not.toContain("entry: false")
-        expect(init).toContain("Create or refresh an AGENTS.md")
+        for (const name of actions) {
+          const content = await Bun.file(path.join(import.meta.dir, `../../skills/other/${name}/SKILL.md`)).text()
+          expect(content, name).toContain(`name: ${name}`)
+          expect(content, name).not.toContain("entry: false")
+        }
+        for (const name of primary) {
+          const content = await Bun.file(path.join(import.meta.dir, `../../skills/other/${name}/SKILL.md`)).text()
+          expect(content, name).toContain(`name: ${name}`)
+          expect(content, name).not.toContain("entry: false")
+        }
 
         const template = await commands.get("plan")?.template
         expect(template).toContain("# Research Workflow Engine")

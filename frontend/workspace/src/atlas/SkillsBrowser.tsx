@@ -11,7 +11,6 @@ import { useSync } from "@/context/sync"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconSearch } from "@/atlas/shared/Icon"
 import { enabledSkills } from "./skill-permissions"
-import { SLASH_NATIVE } from "@/components/prompt-slash"
 
 interface SkillRow {
   name: string
@@ -57,7 +56,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
   })
 
   const groups = createMemo(() => {
-    const all = enabledSkills((sync.data.skill ?? []) as SkillRow[], SLASH_NATIVE, sync.data.config.permission)
+    const all = enabledSkills((sync.data.skill ?? []) as SkillRow[], [], sync.data.config.permission)
     const q = query().trim().toLowerCase()
     const filtered = q
       ? all.filter(
