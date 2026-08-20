@@ -84,8 +84,6 @@ export namespace LLM {
         ...(input.user.system ? [input.user.system] : []),
         // plan mode instructions (if enabled)
         ...(await SystemPrompt.planModeInstructions()),
-        // slash-skill invocation contract
-        ...SystemPrompt.slashSkillDirective(),
       ]
         .filter((x) => x)
         .join("\n"),

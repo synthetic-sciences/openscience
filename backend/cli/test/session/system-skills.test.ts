@@ -27,7 +27,7 @@ category: ${category}
   )
 }
 
-test("availableSkills lists loaded skills instead of static prompt entries", async () => {
+test("availableSkills summarizes callable categories without injecting every name", async () => {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
@@ -41,8 +41,9 @@ test("availableSkills lists loaded skills instead of static prompt entries", asy
       await trust()
       const section = await SystemPrompt.availableSkills([])
       expect(section).toContain("<available-skills>")
-      expect(section).toContain("### biology")
-      expect(section).toContain("- scanpy")
+      expect(section).toContain("1 skill is callable")
+      expect(section).toContain("biology (1)")
+      expect(section).not.toContain("- scanpy")
       expect(section).not.toContain("peft")
     },
   })
@@ -68,8 +69,34 @@ test("availableSkills excludes permission-denied skills", async () => {
           action: "deny",
         },
       ])
-      expect(section).toContain("- scanpy")
+      expect(section).toContain("1 skill is callable")
+      expect(section).toContain("biology (1)")
+      expect(section).not.toContain("scanpy")
       expect(section).not.toContain("private-analysis")
+    },
+  })
+})
+
+test("availableSkills injects call-first routing only for a known slash skill", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await writeSkill(dir, "scanpy", "biology")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const known = await SystemPrompt.availableSkills([], "/scanpy run qc")
+      const upper = await SystemPrompt.availableSkills([], "/SCANPY")
+      const unknown = await SystemPrompt.availableSkills([], "/not-a-skill")
+      expect(Buffer.byteLength(known)).toBeLessThanOrEqual(700)
+      expect(known).toContain('<slash-skill-invocation>')
+      expect(known).toContain('skill({name:"scanpy"})')
+      expect(upper).toContain('skill({name:"scanpy"})')
+      expect(unknown).not.toContain("slash-skill-invocation")
     },
   })
 })

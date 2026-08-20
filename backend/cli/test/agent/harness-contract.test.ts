@@ -45,14 +45,6 @@ test("every provider receives one compact product operating contract", () => {
   expect(instructions).not.toContain("project init")
 })
 
-test("slash-skill routing stays compact and preserves call-first behavior", () => {
-  const prompt = SystemPrompt.slashSkillDirective().join("\n")
-  expect(Buffer.byteLength(prompt)).toBeLessThanOrEqual(400)
-  expect(prompt).toContain('skill({name:"<name>"})')
-  expect(prompt).toContain("no preceding text")
-  expect(prompt).toContain("unknown names as literal text")
-})
-
 test("the primary and domain prompts stay adaptive instead of procedural", async () => {
   const [research, ml, biology, physics] = await Promise.all([
     read("agent/prompt/research.txt"),

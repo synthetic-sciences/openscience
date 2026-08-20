@@ -23,20 +23,7 @@ export namespace SystemPrompt {
     return [await ComputePrompt.system(value)]
   }
 
-  /** When the user message begins with `/<name>` matching an installed
-   *  skill, the model should invoke the skill tool immediately and
-   *  silently — zero text output before the tool call. */
-  export function slashSkillDirective(): string[] {
-    return [
-      `<slash-skill-invocation>
-If a user message begins with /<name> and <name> is an available skill, the first output must be
-skill({name:"<name>"}) with no preceding text or acknowledgement. After it returns, answer the request;
-when the message was only /<name>, ask what the user wants then. Treat unknown names as literal text.
-</slash-skill-invocation>`,
-    ]
-  }
-
-  export async function availableSkills(permission: PermissionNext.Ruleset) {
+  export async function availableSkills(permission: PermissionNext.Ruleset, message?: string) {
     const skills = (await Skill.all()).filter(
       (skill) => PermissionNext.evaluate("skill", skill.name, permission).action !== "deny",
     )
@@ -49,25 +36,32 @@ when the message was only /<name>, ask what the user wants then. Treat unknown n
       ].join("\n")
     }
 
-    const groups = new Map<string, string[]>()
+    const groups = new Map<string, number>()
     for (const skill of skills) {
       const category = skill.category ?? "other"
-      groups.set(category, [...(groups.get(category) ?? []), skill.name])
+      groups.set(category, (groups.get(category) ?? 0) + 1)
     }
 
     const list = [...groups.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .flatMap(([category, names]) => [
-        `### ${category}`,
-        ...names.sort((a, b) => a.localeCompare(b)).map((name) => `- ${name}`),
-      ])
+      .map(([category, count]) => `${category} (${count})`)
+      .join(", ")
+    const total = skills.length === 1 ? "1 skill is" : `${skills.length} skills are`
+    const name = message?.trimStart().match(/^\/([a-z0-9][a-z0-9_-]*)(?:\s|$)/i)?.[1]?.toLowerCase()
+    const invoke = name && skills.some((skill) => skill.name === name)
+      ? [
+          "<slash-skill-invocation>",
+          `The user invoked /${name}. First output skill({name:"${name}"}) with no preceding text. After it returns, answer the request; when the message was only /${name}, ask what they want then.`,
+          "</slash-skill-invocation>",
+        ]
+      : []
 
     return [
       "<available-skills>",
-      "Only the skill names below are currently loaded and callable.",
-      "Static skill routing tables are guidance only. Never call a skill absent from this list.",
-      ...list,
+      `${total} callable across: ${list}.`,
+      "Browse a relevant category with the skill tool, then load one returned name. Do not guess names from static routing tables.",
       "</available-skills>",
+      ...invoke,
     ].join("\n")
   }
 

@@ -1021,11 +1021,17 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
       const contract = await SessionResearch.prompt(sessionID, Instance.project.id)
+      const skillMessage = lastUserMsg?.parts.find(
+        (part): part is MessageV2.TextPart =>
+          part.type === "text" && !part.ignored && !part.synthetic && !!part.text.trim(),
+      )
       const system = [
         ...(await SystemPrompt.environment(model, sessionID)),
         ...(await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
-        ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
+        ...(SKILL_ROUTING_AGENTS.has(agent.name)
+          ? [await SystemPrompt.availableSkills(agent.permission, skillMessage?.text)]
+          : []),
         ...(contract ? [contract] : []),
       ]
 
