@@ -7,12 +7,12 @@ const Data = z.record(z.string(), z.unknown())
 
 export const AtlasRecordTool = Tool.define("atlas_record", {
   description: [
-    "Publish one existing local kernel provenance record to Atlas through the OpenScience host broker.",
+    "Publish one existing local kernel provenance record to Gateway through the OpenScience host broker.",
     "Pass the provenance_id returned by the notebook or R kernel; the host verifies that it belongs to this project.",
-    "The host derives code, output, outcome, and Git state. No local folder path, Atlas credential, or arbitrary payload is accepted.",
+    "The host derives code, output, outcome, and Git state. No local folder path, Gateway credential, or arbitrary payload is accepted.",
   ].join("\n"),
   parameters: z.object({
-    project: z.string().trim().min(1).describe("Atlas project node id or slug."),
+    project: z.string().trim().min(1).describe("Gateway project node id or slug."),
     provenance_id: z.string().trim().min(1).describe("Local provenance id returned by a kernel execution."),
     title: z.string().trim().min(1).max(240).optional().describe("Optional run title override."),
     config: Data.optional().describe("Additional non-secret run configuration."),
@@ -53,7 +53,7 @@ export const AtlasRecordTool = Tool.define("atlas_record", {
     })
     const output = OpenScience.redactSecrets(JSON.stringify(result, null, 2))
     ctx.metadata({
-      title: "Atlas run recorded",
+      title: "Gateway run recorded",
       metadata: {
         operation: "run",
         broker: "host",
@@ -63,7 +63,7 @@ export const AtlasRecordTool = Tool.define("atlas_record", {
       },
     })
     return {
-      title: "Atlas run recorded",
+      title: "Gateway run recorded",
       output,
       metadata: {
         operation: "run",

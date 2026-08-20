@@ -22,6 +22,7 @@ const TOOL: Record<string, [string, string]> = {
   read: ["Read", UI.Style.TEXT_HIGHLIGHT_BOLD],
   write: ["Write", UI.Style.TEXT_SUCCESS_BOLD],
   websearch: ["Search", UI.Style.TEXT_DIM_BOLD],
+  research_search: ["Search", UI.Style.TEXT_DIM_BOLD],
 }
 
 export function runMessage(parts: string[]) {

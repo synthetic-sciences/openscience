@@ -1,15 +1,15 @@
 ---
 name: initialize-atlas-graph
-description: "Create or link this repo's Atlas research graph so hypotheses, experiments, runs, and decisions are tracked. Use when the canvas says 'no graph for this project', when the user asks to initialize/set up Atlas, or before starting research that should be recorded."
+description: "Create or link this repo's Gateway research graph so hypotheses, experiments, runs, and decisions are tracked. Use when the canvas says 'no graph for this project', when the user asks to initialize/set up Gateway, or before starting research that should be recorded."
 category: research
 allowed-tools: [Bash]
 ---
 
-# Initialize the Atlas Research Graph
+# Initialize the Gateway Research Graph
 
 ## Overview
 
-An Atlas **project** is this repo's research graph — the root that hypotheses,
+Gateway **projects** are repository research graphs — the roots that hypotheses,
 experiments, training/eval runs, evidence, and decisions hang off. Creating (or
 linking to an existing) graph is a one-command, dedupe-safe operation. It is
 keyed off the **git repo**, not the opened folder, so a subfolder or a fresh
@@ -17,7 +17,7 @@ clone at a different path resolves to the **same** graph.
 
 Run this skill when:
 - The canvas shows "no graph for this project" / the folder isn't linked yet.
-- The user asks to "initialize", "set up Atlas", or "start tracking" research.
+- The user asks to "initialize", "set up Gateway", or "start tracking" research.
 - You are about to begin research work that should be recorded.
 
 ## Steps
@@ -42,17 +42,17 @@ Run this skill when:
    NOT guess or tell the user to re-login for a network problem:
    - `"unauthenticated"` — no session, or the backend rejected the saved key.
      Tell the user to run `openscience login`.
-   - `"unreachable"` — the Atlas backend at the printed `host` could not be
+   - `"unreachable"` — the Gateway backend at the printed `host` could not be
      reached (network/DNS error or 5xx). The user IS logged in; suggest checking
      connectivity and any `OPENSCIENCE_API_BASE`/`SYNSC_API_BASE` override, then
      retrying — not re-authenticating.
-   - `"plan"` — authenticated, but the account has no active Atlas plan. Point
+   - `"plan"` — authenticated, but the account has no active Gateway plan. Point
      the user at https://app.syntheticsciences.ai/billing; include the
      backend `message` if present.
    - `"backend"` — anything else; show the backend's `status`/`message` verbatim.
 
 3. **Confirm to the user.** Report the `project_id` and tell them the graph now
-   shows in the canvas (Atlas pane). From here, milestones are recorded against
+   shows in the Gateway canvas. From here, milestones are recorded against
    this graph as the work progresses.
 
 ## Notes

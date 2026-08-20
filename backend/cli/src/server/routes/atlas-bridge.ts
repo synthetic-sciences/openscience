@@ -243,7 +243,7 @@ async function stageNode(input: StageNodeInput & { directory: string }): Promise
   })
   if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
   const data = await res.json()
-  if (!nodeIdOf(data)) throw new Error("Atlas returned no node id")
+  if (!nodeIdOf(data)) throw new Error("Gateway returned no node id")
   return data
 }
 
@@ -253,15 +253,15 @@ function mutationError(error: unknown): { status: number; detail: string } {
   if (error instanceof BackendHttpError) {
     return {
       status: error.status,
-      detail: backendMessage(error.body) ?? `Atlas request failed with HTTP ${error.status}`,
+      detail: backendMessage(error.body) ?? `Gateway request failed with HTTP ${error.status}`,
     }
   }
   if (error instanceof Error && error.message === "unauthenticated") {
-    return { status: 401, detail: "Sign in to Atlas before changing the graph." }
+    return { status: 401, detail: "Sign in to Gateway before changing the graph." }
   }
   return {
     status: 502,
-    detail: error instanceof Error ? error.message : "Atlas is unavailable",
+    detail: error instanceof Error ? error.message : "Gateway is unavailable",
   }
 }
 
@@ -270,15 +270,15 @@ function readError(error: unknown): { status: number; detail: string } {
   if (error instanceof BackendHttpError) {
     return {
       status: error.status,
-      detail: backendMessage(error.body) ?? `Atlas request failed with HTTP ${error.status}`,
+      detail: backendMessage(error.body) ?? `Gateway request failed with HTTP ${error.status}`,
     }
   }
   if (error instanceof Error && error.message === "unauthenticated") {
-    return { status: 401, detail: "Sign in to Atlas to load the graph." }
+    return { status: 401, detail: "Sign in to Gateway to load the graph." }
   }
   return {
     status: 502,
-    detail: error instanceof Error ? error.message : "Atlas is unavailable",
+    detail: error instanceof Error ? error.message : "Gateway is unavailable",
   }
 }
 
@@ -397,7 +397,7 @@ async function resolveProjectId(directory: string): Promise<string | null> {
 export type InitProjectFailureKind =
   | "unauthenticated" // no session, or the backend rejected the key (401/403)
   | "unreachable" // network/DNS error or 5xx — the service couldn't be reached
-  | "plan" // authenticated, but no active Atlas plan (402 / plan-coded 4xx)
+  | "plan" // authenticated, but no active Gateway plan (402 / plan-coded 4xx)
   | "backend" // any other backend answer — pass its message through
 
 export interface InitProjectFailure {
@@ -546,10 +546,10 @@ export async function initProjectDetailed(directory: string): Promise<InitProjec
       parentIDs: [],
       title: `Project: ${name}`,
       kind: "insight",
-      summary: `Atlas research-graph root for ${name}.`,
+      summary: `Gateway research-graph root for ${name}.`,
       hypothesis: "",
       content: "",
-      reason: "Initialized as this repo's Atlas research-graph root.",
+      reason: "Initialized as this repo's Gateway research-graph root.",
       context: { ...ctx, external_transcript_ref: `atlas-project-dedupe:${key}` },
     })
     if (node_id) {
@@ -703,13 +703,13 @@ export const AtlasBridgeRoutes = lazy(() =>
       const detail =
         result.failure.message ??
         (result.failure.kind === "unauthenticated"
-          ? "Sign in to Atlas before initializing the project graph."
+          ? "Sign in to Gateway before initializing the project graph."
           : result.failure.kind === "plan"
-            ? "An active Atlas plan is required to initialize the project graph."
+            ? "An active Gateway plan is required to initialize the project graph."
             : result.failure.kind === "unreachable"
-              ? `Atlas is unavailable at ${result.failure.host}.`
-              : "Atlas could not initialize the project graph.")
+              ? `Gateway is unavailable at ${result.failure.host}.`
+              : "Gateway could not initialize the project graph.")
       return c.json({ ...payload, detail }, status as any)
     })
-    .all("/*", (c) => c.json({ detail: "Atlas bridge route not found" }, 404)),
+    .all("/*", (c) => c.json({ detail: "Gateway bridge route not found" }, 404)),
 )

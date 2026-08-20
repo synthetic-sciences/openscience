@@ -1,12 +1,27 @@
 import { expect, test } from "bun:test"
 import { OpenScience } from "../../src/openscience"
 import { Instance } from "../../src/project/instance"
-import { KernelExecutionError, KernelRuntime, type KernelIdentity } from "../../src/science/kernel/registry"
+import {
+  KernelExecutionError,
+  KernelRuntime,
+  saveOptionalProvenance,
+  type KernelIdentity,
+} from "../../src/science/kernel/registry"
 import { Provenance } from "../../src/science/provenance/store"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import "../../src/tool/notebook"
 import { tmpdir, trustProject } from "../fixture/fixture"
+
+test("optional provenance persistence cannot replace an authoritative execution result", async () => {
+  await expect(saveOptionalProvenance(async () => ({ id: "prov_ok" }))).resolves.toEqual({ id: "prov_ok" })
+  await expect(
+    saveOptionalProvenance(async () => {
+      throw new Error("optional store unavailable")
+    }),
+  ).resolves.toBeUndefined()
+  expect(new KernelExecutionError(new Error("kernel failed")).message).toBe("kernel failed")
+})
 
 test("canonical runtime records agent kernel executions with outputs", async () => {
   await using tmp = await tmpdir({ git: true })

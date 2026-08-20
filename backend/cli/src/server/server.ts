@@ -61,6 +61,7 @@ import { BillingSettingsRoutes } from "./routes/settings/billing"
 import { WalletSettingsRoutes } from "./routes/settings/wallet"
 import { SettingsUsageRoutes } from "./routes/settings/usage"
 import { UpdatesSettingsRoutes } from "./routes/settings/updates"
+import { ResearchToolsSettingsRoutes } from "./routes/settings/research-tools"
 import { projectSelection } from "./project-selection"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ComputeJobs } from "../compute/jobs"
@@ -252,6 +253,7 @@ export namespace Server {
         .route("/settings/billing", BillingSettingsRoutes())
         .route("/settings/wallet", WalletSettingsRoutes())
         .route("/settings/updates", UpdatesSettingsRoutes())
+        .route("/settings/research-tools", ResearchToolsSettingsRoutes())
         .put(
           "/auth/:providerID",
           describeRoute({

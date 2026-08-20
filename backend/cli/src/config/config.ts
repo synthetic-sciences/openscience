@@ -764,7 +764,7 @@ export namespace Config {
         .boolean()
         .optional()
         .describe(
-          "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Disabled by default; enable it from the composer or Sandbox settings.",
+          "Run local terminals, kernels, and shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to authorized project roots. Enabled by default; an explicit false selects full host access.",
         ),
       network: z
         .enum(["allow", "deny"])
@@ -1192,7 +1192,7 @@ export namespace Config {
             .enum(["managed", "byok"])
             .optional()
             .describe(
-              "How GPU/compute is paid for. 'managed' runs on Atlas-provisioned compute billed to your wallet (via the bundled atlas CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.",
+              "How GPU/compute is paid for. 'managed' runs on Gateway-provisioned compute billed to your wallet (via the bundled gateway CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.",
             ),
         })
         .optional()
@@ -1786,7 +1786,9 @@ export namespace Config {
     }
     const policy = { ...(base ?? {}), ...(managed ?? {}) }
     return {
-      enabled: policy.enabled ?? false,
+      // New installations start in the low-friction contained mode. `false`
+      // remains an explicit, durable Full access choice for existing users.
+      enabled: policy.enabled ?? true,
       network: policy.network ?? "deny",
       allowWrite: policy.allowWrite ?? [],
       onUnavailable: policy.onUnavailable ?? "error",

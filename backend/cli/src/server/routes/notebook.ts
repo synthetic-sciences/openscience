@@ -31,11 +31,12 @@ const validateEnvironment = (
   input: { language: z.infer<typeof Language>; environment?: string },
   issue: z.RefinementCtx,
 ) => {
-  if (input.language === "r" && input.environment && input.environment !== "r") {
+  const environment = input.environment?.toLowerCase()
+  if (input.language === "r" && environment && environment !== "r" && environment !== "default") {
     issue.addIssue({
       code: "custom",
       path: ["environment"],
-      message: "Named interpreter environments currently support Python; use environment 'r' for R.",
+      message: "Named interpreter environments currently support Python; omit environment or use 'default'/'r' for R.",
     })
   }
 }
@@ -90,13 +91,18 @@ const identity = (
     environment?: string
   },
   canonical: boolean,
-): KernelIdentity => ({
-  projectID: Instance.project.id,
-  sessionID: input.sessionID,
-  name: canonical ? input.language : input.environment ? `environment:${input.environment}` : `notebook:${input.id}`,
-  language: input.language,
-  environmentName: input.environment && input.environment !== input.language ? input.environment : undefined,
-})
+): KernelIdentity => {
+  const requested = input.environment?.toLowerCase()
+  const environment = !requested || requested === "default" ? input.language : requested
+  const namedLegacyEnvironment = !!requested && requested !== "default"
+  return {
+    projectID: Instance.project.id,
+    sessionID: input.sessionID,
+    name: canonical ? input.language : namedLegacyEnvironment ? `environment:${environment}` : `notebook:${input.id}`,
+    language: input.language,
+    environmentName: environment === input.language ? undefined : environment,
+  }
+}
 
 const canonicalIdentity = (input: KernelIdentity) => input.name === input.language
 

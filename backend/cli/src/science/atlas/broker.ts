@@ -35,7 +35,7 @@ const required = (value: string | undefined, name: string) => {
 
 const sources = (values: string[] | undefined) => {
   if (!values?.length) return
-  if (values.length > 100) throw new AtlasBrokerError("source_ids accepts at most 100 Atlas identifiers")
+  if (values.length > 100) throw new AtlasBrokerError("source_ids accepts at most 100 Gateway identifiers")
   const result = new Set<string>()
   for (const raw of values) {
     const value = raw.trim()
@@ -50,7 +50,7 @@ const sources = (values: string[] | undefined) => {
       normalized.startsWith("~/") ||
       segments.includes(".") ||
       segments.includes("..")
-    if (local) throw new AtlasBrokerError("source_ids must contain Atlas identifiers, not local folder paths")
+    if (local) throw new AtlasBrokerError("source_ids must contain Gateway identifiers, not local folder paths")
     result.add(value)
   }
   return [...result]
@@ -67,7 +67,7 @@ const query = (values: Record<string, string | number | boolean | undefined>) =>
 
 export async function atlasRequest(method: string, path: string, body?: unknown, signal?: AbortSignal) {
   const session = await OpenScience.getSession()
-  if (!session?.api_key) throw new AtlasBrokerError("Sign in to Atlas before using the host broker.", 401)
+  if (!session?.api_key) throw new AtlasBrokerError("Sign in to Gateway before using the host broker.", 401)
   const limit = AbortSignal.timeout(timeout)
   const response = await fetch(`${API_BASE}${path}`, {
     method,
@@ -81,7 +81,7 @@ export async function atlasRequest(method: string, path: string, body?: unknown,
   })
   if (!response.ok) {
     const detail = await response.text().catch(() => "")
-    throw new AtlasBrokerError(detail || `Atlas request failed with HTTP ${response.status}`, response.status)
+    throw new AtlasBrokerError(detail || `Gateway request failed with HTTP ${response.status}`, response.status)
   }
   return response.json() as Promise<unknown>
 }

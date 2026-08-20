@@ -21,6 +21,8 @@ import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { State } from "@/project/state"
+import { OutboundTelemetry } from "@/telemetry/outbound"
+import { ProjectTrust } from "@/project/trust"
 
 export namespace Agent {
   export const Info = z
@@ -50,10 +52,15 @@ export namespace Agent {
   export type Info = z.infer<typeof Info>
 
   const compute = async () => {
-    const [cfg, sandbox] = await Promise.all([Config.getExecution(), Config.trustedSandbox()])
+    const [cfg, sandbox, trust] = await Promise.all([
+      Config.getExecution(),
+      Config.trustedSandbox(),
+      ProjectTrust.status(Instance.project),
+    ])
+    const accessMode = !trust.canExecuteProjectCode ? "ask" : sandbox.enabled ? "approve" : "full"
     const boundaryAction = sandbox.enabled ? "ask" : "allow"
 
-    const defaults = PermissionNext.fromConfig({
+    let defaults = PermissionNext.fromConfig({
       "*": "allow",
       mcp: boundaryAction,
       doom_loop: boundaryAction,
@@ -74,7 +81,66 @@ export namespace Agent {
           }
         : "allow",
     })
+    // The three user-facing action modes share the same persisted trust and
+    // sandbox state that execution enforces. Built-in read-only denies remain
+    // stricter, while their convenience allows below are mode-aware so Ask
+    // cannot be bypassed; explicit advanced user policy still wins.
+    const access = PermissionNext.fromConfig(
+      accessMode === "ask"
+        ? {
+            atlas: "ask",
+            bash: "ask",
+            codesearch: "ask",
+            compute_job: "ask",
+            doom_loop: "ask",
+            edit: "ask",
+            environment_mutation: "ask",
+            external_directory: "ask",
+            mcp: "ask",
+            modal: "ask",
+            network: "ask",
+            remote_compute: "ask",
+            webfetch: "ask",
+            websearch: "ask",
+          }
+        : accessMode === "approve"
+          ? {
+              atlas: "ask",
+              bash: "allow",
+              codesearch: "ask",
+              compute_job: "ask",
+              doom_loop: "ask",
+              edit: "allow",
+              environment_mutation: "ask",
+              external_directory: "ask",
+              mcp: "ask",
+              modal: "ask",
+              network: "ask",
+              remote_compute: "ask",
+              webfetch: "ask",
+              websearch: "ask",
+            }
+          : {
+              atlas: "allow",
+              bash: "allow",
+              codesearch: "allow",
+              compute_job: "allow",
+              doom_loop: "allow",
+              edit: "allow",
+              environment_mutation: "allow",
+              external_directory: "allow",
+              mcp: "allow",
+              modal: "allow",
+              network: "allow",
+              remote_compute: "allow",
+              webfetch: "allow",
+              websearch: "allow",
+            },
+    )
+    defaults = PermissionNext.merge(defaults, access)
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
+    const safeAction = accessMode === "ask" ? "ask" : "allow"
+    const externalAction = accessMode === "full" ? "allow" : "ask"
 
     const result: Record<string, Info> = {
       // --- Research modes (top) ---
@@ -263,14 +329,14 @@ export namespace Agent {
             grep: "allow",
             glob: "allow",
             list: "allow",
-            bash: "allow",
+            bash: safeAction,
             // WebFetch owns a narrowly scoped brokered transfer. Without this
             // explicit rule the profile's wildcard deny blocks the broker's
             // per-host authorization before the webfetch allow can apply.
-            network: "allow",
-            webfetch: "allow",
-            websearch: "allow",
-            codesearch: "allow",
+            network: externalAction,
+            webfetch: externalAction,
+            websearch: externalAction,
+            codesearch: externalAction,
             read: "allow",
           }),
           user,
@@ -290,14 +356,14 @@ export namespace Agent {
           defaults,
           PermissionNext.fromConfig({
             "*": "deny",
-            bash: "allow",
-            network: "allow",
+            bash: safeAction,
+            network: externalAction,
             read: "allow",
             glob: "allow",
             grep: "allow",
-            webfetch: "allow",
-            websearch: "allow",
-            codesearch: "allow",
+            webfetch: externalAction,
+            websearch: externalAction,
+            codesearch: externalAction,
             skill: "allow",
           }),
           user,
@@ -344,7 +410,7 @@ export namespace Agent {
             read: "allow",
             glob: "allow",
             grep: "allow",
-            bash: "allow",
+            bash: safeAction,
           }),
           user,
         ),
@@ -517,6 +583,7 @@ export namespace Agent {
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
     const cfg = await Config.getExecution()
+    const sharing = await OutboundTelemetry.enabled()
     const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(model)
@@ -527,7 +594,9 @@ export namespace Agent {
 
     const params = {
       experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
+        isEnabled: cfg.experimental?.openTelemetry === true && sharing,
+        recordInputs: false,
+        recordOutputs: false,
         metadata: {
           userId: cfg.username ?? "unknown",
         },

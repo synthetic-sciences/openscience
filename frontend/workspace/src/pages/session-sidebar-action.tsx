@@ -62,7 +62,7 @@ export function CompactContextActions(props: {
           onClick={() => props.onContext("canvas")}
         >
           <IconLayoutGrid size={13} strokeWidth={1.5} />
-          Atlas
+          Gateway
         </button>
       </Show>
     </div>
@@ -144,9 +144,9 @@ export function SessionSidebarActions(props: {
         </SidebarAction>
         <Show when={props.atlas}>
           <SidebarAction
-            label="Atlas"
+            label="Gateway"
             detail="Research map"
-            ariaLabel="Open Atlas"
+            ariaLabel="Open Gateway"
             active={props.context === "canvas" && props.contextOpen}
             onClick={(_event?: Event) => props.onContext("canvas")}
           >

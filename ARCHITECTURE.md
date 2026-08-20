@@ -17,7 +17,7 @@ When you run `openscience`, the CLI starts a local server and opens a workspace 
         +--  Skills             bundled and user-installed skill packs
         +--  Providers          Anthropic, OpenAI, Google, and 75+ more
         |
-        +--  Atlas client       optional: managed models, wallet, graph
+        +--  Gateway client     optional: managed models, wallet, search, graphs
 ```
 
 The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. There is no remote mode.
@@ -49,7 +49,7 @@ The backend is a Bun and TypeScript application compiled to a single native bina
 - `src/agent` holds the agent registry and prompts. `research` is the single user-facing agent; it loads domain knowledge through skills and may delegate bounded Explore, Execute, or Review work internally. Domain and legacy helper profiles remain hidden compatibility aliases; `plan` is a read-only mode.
 - `src/provider` routes each request to a model. Model definitions come from [models.dev](https://models.dev), cached locally with a bundled snapshot as a fallback.
 - `src/tool` and `src/science` implement the tools the agent can call, including the shell, editor, LSP bridge, MCP client, and the scientific database connectors.
-- `src/openscience` is the Atlas client. It is optional; the base install and every bring-your-own-key flow work without it.
+- `src/openscience` is the Gateway client. It is optional; the base install and every bring-your-own-key flow work without it.
 
 ### Prompt architecture
 
@@ -57,7 +57,7 @@ Prompts are assembled in two layers: a provider-level system prompt selected by 
 
 ### Skills
 
-Skills are instruction bundles the agent loads on demand (`src/skill`). The canonical default library is `backend/cli/skills`; releases embed a compressed, hashed copy of the complete tree and materialize it into a versioned local cache. Learned skills, user-authored skills, Git-installed skills, and project skills are also local. Skill discovery, loading, security review, installation, and removal never require Atlas. An authenticated upgrade can perform a one-time read-only import of skill records created by older releases.
+Skills are instruction bundles the agent loads on demand (`src/skill`). The canonical default library is `backend/cli/skills`; releases embed a compressed, hashed copy of the complete tree and materialize it into a versioned local cache. Learned skills, user-authored skills, Git-installed skills, and project skills are also local. Skill discovery, loading, security review, installation, and removal never require the Gateway. An authenticated upgrade can perform a one-time read-only import of skill records created by older releases.
 
 ## Frontend
 
@@ -74,9 +74,9 @@ Skills are instruction bundles the agent loads on demand (`src/skill`). The cano
 
 Global config lives in `~/.config/openscience/openscience.json`; project config in `openscience.json` or a `.openscience/` directory at the repo root. Persistent application data (sessions, auth, credentials, binaries, and logs) defaults to the stable `~/.openscience` data root and can be relocated; config, cache, and state use their resolved XDG directories. `src/global/index.ts` owns those paths. Installs made before the OpenScience rename import or migrate the legacy `synsc` directories on first run.
 
-## Atlas integration
+## Gateway integration
 
-Atlas is a separate, closed platform. Only its optional client lives here. OpenScience starts and remains useful without an Atlas installation, login, or network connection. After login, the client enables managed models, wallet and credential synchronization, Codex credential backup, research graphs, library search, cloud evidence, and publishing. The standalone `@synsci/atlas` CLI is an optional companion and is used when present, but it is never required to run OpenScience. The wire contract uses the `synsci` model provider id, `thk_` wallet keys, and `/api/cli/*`, with `app.syntheticsciences.ai` as the default managed base URL (`src/endpoints.ts`). Skills are explicitly outside this contract.
+The Gateway is a separate managed service. Only its optional client lives here. OpenScience starts and remains useful without a Gateway installation, login, or network connection. After login, the client can enable managed models, wallet and credential synchronization, private research graphs, and managed research search. The legacy `@synsci/atlas` package and `atlas` binary names remain compatibility-only implementation identifiers; new product copy calls the service Gateway. The wire contract uses the `synsci` model provider id, `thk_` wallet keys, and `/api/cli/*`, with `app.syntheticsciences.ai` as the default managed base URL (`src/endpoints.ts`). Skills are explicitly outside this contract.
 
 ## Build and release
 

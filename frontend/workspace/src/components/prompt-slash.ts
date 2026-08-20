@@ -7,19 +7,32 @@ export interface SlashCommand {
   source: "builtin" | "project" | "mcp" | "skill"
   category: "session" | "research" | "evidence" | "output" | "project" | "skill"
   keybind?: string
-  type: "action" | "command" | "skill"
+  type: "action" | "command" | "mode" | "skill"
 }
 
 export type SlashGroup = "Commands" | "Skills"
+export type SlashMode = "plan" | "goal"
 
-export const SLASH_CORE = ["goals", "compact", "review", "plan"] as const
+// Keep the native surface intentionally small. Everything that is an optional
+// workflow belongs in the toggleable Skills section instead of masquerading as
+// an app command.
+export const SLASH_NATIVE = ["compact", "context", "plan", "goal", "status"] as const
+export const SLASH_ACTION_SKILLS = ["init", "stop", "handoff", "checkpoint"] as const
+
+export function slashActionSkill(name: string) {
+  return (SLASH_ACTION_SKILLS as readonly string[]).includes(name)
+}
 
 export function slashGroup(command: SlashCommand): SlashGroup {
-  return SLASH_CORE.some((name) => name === command.trigger) ? "Commands" : "Skills"
+  return command.source === "skill" ? "Skills" : "Commands"
+}
+
+export function slashMode(command: Pick<SlashCommand, "trigger">): SlashMode | undefined {
+  if (command.trigger === "plan" || command.trigger === "goal") return command.trigger
 }
 
 export function slashRank(command: SlashCommand) {
-  const core = SLASH_CORE.findIndex((name) => name === command.trigger)
+  const core = SLASH_NATIVE.findIndex((name) => name === command.trigger)
   if (core >= 0) return core
   if (command.source === "builtin") return 100
   if (command.source === "project") return 200
@@ -32,7 +45,8 @@ export function sortSlash(a: SlashCommand, b: SlashCommand) {
 }
 
 export function slashIcon(command: SlashCommand) {
-  if (command.trigger === "goals") return "task" as const
+  if (command.trigger === "goal") return "task" as const
+  if (command.trigger === "init") return "file" as const
   if (command.trigger === "compact") return "collapse" as const
   if (command.trigger === "review") return "eye" as const
   if (command.trigger === "plan") return "branch" as const
@@ -55,9 +69,8 @@ export function slashIcon(command: SlashCommand) {
 }
 
 export function slashSource(command: SlashCommand) {
-  if (SLASH_CORE.some((name) => name === command.trigger)) return ""
   if (command.source === "builtin") return "Built in"
   if (command.source === "project") return "Project"
   if (command.source === "mcp") return "MCP"
-  return "Skill"
+  return ""
 }

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Compact Context"
+  short_description: "Summarize the chat to free context space"
+  default_prompt: "Use $compact to compact the current chat context."

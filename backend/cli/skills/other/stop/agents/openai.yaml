@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stop Work"
+  short_description: "Stop the current turn or active compute"
+  default_prompt: "Use $stop to stop the active work in this session."

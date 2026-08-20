@@ -8,7 +8,9 @@ describe("Atlas canvas accessibility", () => {
   test("keeps graph nodes named, focusable, and keyboard operable", () => {
     const canvas = source()
 
-    expect(canvas).toContain('aria-label="Atlas research graph. Use Tab to move between nodes and Enter to open one."')
+    expect(canvas).toContain(
+      'aria-label="Gateway research graph. Use Tab to move between nodes and Enter to open one."',
+    )
     expect(canvas).toContain("data-node-id={s.id}")
     expect(canvas).toContain('role="button"')
     expect(canvas).toContain("tabindex={0}")

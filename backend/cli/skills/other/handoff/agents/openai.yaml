@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Handoff"
+  short_description: "Save context for another agent to continue"
+  default_prompt: "Use $handoff to save a continuation packet for another agent."

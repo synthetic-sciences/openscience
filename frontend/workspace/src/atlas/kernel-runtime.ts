@@ -237,8 +237,8 @@ export function kernelUptimeLabel(kernel?: KernelStatus, now = Date.now()) {
 
 export function kernelAtlasLabel(kernel?: KernelStatus) {
   const atlas = kernel?.environment?.atlas
-  if (!atlas) return "Atlas access pending"
-  return "Atlas host broker · credentials withheld · source IDs only"
+  if (!atlas) return "Gateway access pending"
+  return "Gateway host broker · credentials withheld · source IDs only"
 }
 
 export function kernelEnvironmentLabel(kernel?: KernelStatus) {

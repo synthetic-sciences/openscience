@@ -13,7 +13,7 @@ Give it a goal. It reads the literature, writes and runs code, runs the experime
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![docs](https://img.shields.io/badge/docs-openscience.sh-0d9488.svg)](https://openscience.sh/docs)
 
-[Install](#install) · [Quickstart](#quickstart) · [Docs](https://openscience.sh/docs) · [Atlas](#atlas)
+[Install](#install) · [Quickstart](#quickstart) · [Docs](https://openscience.sh/docs) · [Gateway](#gateway)
 
 </div>
 
@@ -41,7 +41,7 @@ npm install -g @synsci/openscience
 openscience
 ```
 
-The command is `openscience`, and it opens the workspace in your browser without requiring an account or setup wizard. Connect ChatGPT/Codex, your own provider keys, or Atlas managed models from **Customize → Models** when you want them. If you would rather not install it globally, `npx synsci` does the same thing in a single step:
+The command is `openscience`, and it opens the workspace in your browser without requiring an account or setup wizard. Connect ChatGPT/Codex, your own provider keys, or optional Gateway-managed models from **Customize → Models** when you want them. If you would rather not install it globally, `npx synsci` does the same thing in a single step:
 
 ```bash
 npx synsci
@@ -66,20 +66,20 @@ openscience
 openscience ~/code/my-project
 ```
 
-## Atlas
+## Gateway
 
-[Atlas](https://app.syntheticsciences.ai) is Synthetic Sciences' managed platform. It gives you a curated set of frontier models billed from a prepaid wallet, so you do not need per-provider keys, plus a persistent research graph and cloud compute. OpenScience works with Atlas but never requires it.
+[The OpenScience Gateway](https://app.syntheticsciences.ai) is optional. It adds synced private research graphs, managed models, and managed research search without becoming a dependency for local, BYOK, or ChatGPT/Codex-backed work.
 
 ```bash
-openscience login          # connect your Atlas account
+openscience login          # connect your Gateway account
 openscience wallet         # check your balance and top up
 ```
 
-Bring-your-own-key usage is always free and is never gated — Atlas only meters the models it serves. Use `openscience status` to see what you are connected to, and `openscience logout` to disconnect.
+Ace is $20/month with 20 managed credits and 1,000 managed searches per billing cycle. Ace+ is $100/month with 100 purchased credits, 50 promotional credits, and 5,000 managed searches. Managed token usage costs the provider price plus a 5% service fee; card-processing fees are shown before purchase. Bring-your-own-key, local-model, and eligible ChatGPT/Codex usage remain independent of those plans and are never charged to the Gateway wallet. Use `openscience status` to see what you are connected to, and `openscience logout` to disconnect.
 
 ## How it works
 
-OpenScience runs a local server that hosts the workspace UI, the agent runtime, the complete default skill library, and the tool layer. The agent plans with a research harness, calls tools (shell, editor, LSP, MCP servers, scientific connectors, and skills), and streams its work back to the browser. Models are routed per request, so you can switch between providers or run local models without changing anything else. Sessions, skills, artifacts, and provenance are stored on disk. Atlas adds optional managed models, credential sync, research graphs, library search, and cloud publishing after login.
+OpenScience runs a local server that hosts the workspace UI, the agent runtime, the complete default skill library, and the tool layer. The agent plans with a research harness, calls tools (shell, editor, LSP, MCP servers, scientific connectors, and skills), and streams its work back to the browser. Models are routed per request, so you can switch between providers or run local models without changing anything else. Sessions, skills, artifacts, and provenance are stored on disk. The Gateway adds optional managed models, credential sync, private research graphs, and managed search after login.
 
 | Path                 | Contents                                                     |
 | -------------------- | ------------------------------------------------------------ |
@@ -111,7 +111,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for how the system fits together, [CONTRI
 
 ## Security
 
-The permission system keeps you aware of what the agent is doing; it is not an isolation boundary by itself. New local installs start in **Full access** so a trusted project can use files, commands, and the internet without setup. The composer’s **Research tools → Action approval** menu can switch to **Approve for me** (trusted project inside macOS Seatbelt or Linux bubblewrap) or **Ask for approval** (sandboxed and project trust revoked) at any time. Managed policy may enforce a stricter boundary. The sandbox is not a full jail, so use a container or VM for hostile code. Managed Atlas tokens stay out of general subprocess environments, arbitrary Python/R kernels receive a minimal environment, and credential-shaped values are redacted from output. To inspect or verify containment, run `openscience sandbox` and `openscience sandbox test`; to report a vulnerability, see [SECURITY.md](SECURITY.md).
+The permission system keeps you aware of what the agent is doing; it is not an isolation boundary by itself. New local installs start in **Approve for me**: the project is trusted, while commands run inside macOS Seatbelt or Linux bubblewrap containment. The composer’s **Research tools → Action approval** menu can switch to **Ask for approval** (sandboxed and project trust revoked) or deliberately enable **Full access** (trusted project with containment off). Managed policy may enforce a stricter boundary. The sandbox is not a full jail, so use a container or VM for hostile code. Gateway tokens stay out of general subprocess environments, arbitrary Python/R kernels receive a minimal environment, and credential-shaped values are redacted from output. Content-free product telemetry is enabled by default and can be disabled in Settings; prompts, responses, files, notebook cells, and shell output require a separate explicit research-content opt-in. To inspect or verify containment, run `openscience sandbox` and `openscience sandbox test`; to report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 

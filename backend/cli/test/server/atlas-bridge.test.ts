@@ -205,7 +205,7 @@ describe("read bridge failures", () => {
     const response = await AtlasBridgeRoutes().request("/nodes")
 
     expect(response.status).toBe(401)
-    expect(await response.json()).toEqual({ detail: "Sign in to Atlas to load the graph." })
+    expect(await response.json()).toEqual({ detail: "Sign in to Gateway to load the graph." })
   })
 
   test("propagates an Atlas backend failure instead of impersonating an empty account", async () => {
@@ -237,7 +237,7 @@ describe("read bridge failures", () => {
     const response = await AtlasBridgeRoutes().request("/not-a-real-route")
 
     expect(response.status).toBe(404)
-    expect(await response.json()).toEqual({ detail: "Atlas bridge route not found" })
+    expect(await response.json()).toEqual({ detail: "Gateway bridge route not found" })
   })
 })
 
@@ -276,7 +276,7 @@ describe("project init route", () => {
     expect(await response.json()).toMatchObject({
       project_id: null,
       error: "unauthenticated",
-      detail: "Sign in to Atlas before initializing the project graph.",
+      detail: "Sign in to Gateway before initializing the project graph.",
     })
   })
 

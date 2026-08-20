@@ -1,0 +1,4 @@
+interface:
+  display_name: "Save Checkpoint"
+  short_description: "Capture a local recovery checkpoint"
+  default_prompt: "Use $checkpoint to save the current session state for recovery."

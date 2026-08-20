@@ -10,6 +10,7 @@ import { useDialog } from "@synsci/ui/context/dialog"
 import { useSync } from "@/context/sync"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconSearch } from "@/atlas/shared/Icon"
+import { enabledSkills } from "./skill-permissions"
 
 interface SkillRow {
   name: string
@@ -55,7 +56,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
   })
 
   const groups = createMemo(() => {
-    const all = ((sync.data.skill ?? []) as SkillRow[]).filter((s) => s.entry !== false)
+    const all = enabledSkills((sync.data.skill ?? []) as SkillRow[], [], sync.data.config.permission)
     const q = query().trim().toLowerCase()
     const filtered = q
       ? all.filter(

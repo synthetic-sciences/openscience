@@ -148,9 +148,9 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
           <p style={intro()}>Pick how to power your models. You can change this anytime in Settings.</p>
           <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
             <ChoiceCard
-              title="Atlas managed"
+              title="Gateway managed"
               hint="recommended"
-              body="Sign in to Atlas and use a prepaid wallet for metered model access."
+              body="Sign in to Gateway and use a prepaid wallet for metered model access."
               onClick={openManaged}
             />
             <ChoiceCard
@@ -185,7 +185,7 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
             . Copy your <code style={code()}>thk_</code> API key from there and paste it below.
           </p>
           <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
-            <span style={label()}>Atlas API key</span>
+            <span style={label()}>Gateway API key</span>
             <TextField
               type="password"
               hideLabel
@@ -237,7 +237,7 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
         {/* ── Managed connected ── */}
         <Show when={view() === "done"}>
           <p style={intro()}>
-            Connected to Atlas.
+            Connected to Gateway.
             <Show when={balance() !== undefined}> Wallet balance {money(balance()!)}.</Show> Managed models are ready.
           </p>
           <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>

@@ -43,8 +43,8 @@ const props = {
   projects: [
     {
       id: "prj_atlas",
-      name: "Atlas",
-      worktree: "/Users/aayam/Research/atlas",
+      name: "Gateway",
+      worktree: "/Users/aayam/Research/gateway",
       time: { created: Date.now() - 86_400_000 },
       updatedAt: Date.now() - 86_400_000,
       pinned: false,
@@ -73,7 +73,7 @@ describe("ProjectsWorkbench", () => {
 
     expect(host.querySelector("h1")?.textContent).toBe("Projects")
     expect(host.textContent).toContain("Research workspaces, sessions, and files in one place.")
-    expect(row?.textContent).toContain("Atlas")
+    expect(row?.textContent).toContain("Gateway")
     expect(row?.textContent).not.toContain("Local project")
     expect(row?.textContent).toContain("4 sessions")
     expect(row?.textContent).toContain("Edited")
@@ -89,12 +89,12 @@ describe("ProjectsWorkbench", () => {
     const search = host.querySelector<HTMLInputElement>('input[aria-label="Search projects"]')
 
     if (search) {
-      search.value = "atlas"
+      search.value = "gateway"
       search.dispatchEvent(new InputEvent("input", { bubbles: true }))
       search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
     }
 
-    expect(queries).toEqual(["atlas", ""])
+    expect(queries).toEqual(["gateway", ""])
     expect(search?.closest(".science-home__toolbar")).toBeTruthy()
     expect(host.querySelector(".science-home__bar input")).toBeNull()
     expect(host.querySelector('button[aria-label="New project"]')).toBeTruthy()
@@ -117,7 +117,7 @@ describe("ProjectsWorkbench", () => {
     cleanups.pop()?.()
     total.remove()
 
-    const filtered = mount(() => subject.ProjectsWorkbench({ ...props, totalProjects: 43, query: "atlas" }))
+    const filtered = mount(() => subject.ProjectsWorkbench({ ...props, totalProjects: 43, query: "gateway" }))
     expect(filtered.querySelector(".science-home__results-summary")?.textContent).toBe("1 of 43 projects")
   })
 
@@ -133,8 +133,8 @@ describe("ProjectsWorkbench", () => {
       }),
     )
 
-    host.querySelector<HTMLButtonElement>('button[aria-label="Unpin Atlas"]')?.click()
-    host.querySelector<HTMLButtonElement>('button[aria-label="Remove Atlas from home"]')?.click()
+    host.querySelector<HTMLButtonElement>('button[aria-label="Unpin Gateway"]')?.click()
+    host.querySelector<HTMLButtonElement>('button[aria-label="Remove Gateway from home"]')?.click()
 
     expect(host.querySelector('[data-pinned="true"]')).toBeTruthy()
     expect(calls).toEqual(["pin:prj_atlas", "remove:prj_atlas"])

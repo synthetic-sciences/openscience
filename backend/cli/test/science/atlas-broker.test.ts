@@ -99,14 +99,14 @@ describe("Atlas host broker", () => {
         query: "private source",
         sourceIDs: ["/Users/researcher/private-data"],
       }),
-    ).rejects.toThrow("source_ids must contain Atlas identifiers")
+    ).rejects.toThrow("source_ids must contain Gateway identifiers")
     await expect(
       AtlasBroker.run({
         operation: "ask",
         query: "private source",
         sourceIDs: ["../private-data"],
       }),
-    ).rejects.toThrow("source_ids must contain Atlas identifiers")
+    ).rejects.toThrow("source_ids must contain Gateway identifiers")
     expect(called).toBe(false)
   })
 

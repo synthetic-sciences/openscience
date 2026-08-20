@@ -4,7 +4,7 @@ Use the `apply_patch` tool to edit files. Your patch language is a stripped‑do
 [ one or more file sections ]
 *** End Patch
 
-Within that envelope, you get a sequence of file operations. Multi-file patches are supported: the harness validates every file before writing and rolls back completed file operations if a later operation fails.
+Within that envelope, you get a sequence of file operations. Multi-file patches are supported in one call: the harness preflights every file before writing, requests approval for the complete diff, and rolls back completed file operations if a later operation fails.
 You MUST include a header to specify the action you are taking.
 Each operation starts with one of three headers:
 

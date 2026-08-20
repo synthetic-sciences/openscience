@@ -139,7 +139,7 @@ describe("focused workspace shell", () => {
     expect(session).toContain('ariaLabel="Customize OpenScience"')
     expect(action).toContain('ariaLabel="Open project files"')
     expect(action).toContain('ariaLabel="Open project terminal"')
-    expect(action).toContain('ariaLabel="Open Atlas"')
+    expect(action).toContain('ariaLabel="Open Gateway"')
     expect(action).not.toContain('ariaLabel="Open Evidence"')
     expect(action).toContain('ariaLabel="Open project compute"')
     expect(action).toContain('ariaLabel="Open file details"')
@@ -284,7 +284,10 @@ describe("focused workspace shell", () => {
     expect(pane).toContain('aria-label="Research inspector"')
     expect(pane).toContain('class="research-inspector__header"')
     expect(pane).toContain('class="research-inspector__context"')
-    expect(pane).toContain('<TerminalSurface active={context() === "terminal"} />')
+    expect(pane).toContain(
+      'const terminalVisible = () => uiStore.rightPaneOpen() && terminal() && context() === "terminal"',
+    )
+    expect(pane).toContain("<TerminalSurface active={terminalVisible()} />")
     expect(pane).toContain("narrow() ? void closePane() : void closeWorkTab()")
     expect(pane).toContain("<WorkTabStrip")
     expect(pane).not.toContain('class="research-inspector__tabs"')

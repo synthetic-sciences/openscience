@@ -33,10 +33,10 @@ const BillingShowCommand = cmd({
       return
     }
     prompts.log.info(`Credits     : $${mode.balance_usd.toFixed(2)}`)
-    prompts.log.info("Key routing : per-provider (auto). BYOK key if set, else Atlas managed (debits wallet).")
+    prompts.log.info("Key routing : per-provider (auto). BYOK key if set, else Gateway managed (debits wallet).")
     if (!mode.managed_supported) {
       prompts.log.warn(
-        "Atlas managed fallback is not provisioned on this deployment — set a BYOK key for each provider.",
+        "Gateway managed fallback is not provisioned on this deployment — set a BYOK key for each provider.",
       )
     }
     prompts.log.info("Manage plans + top up at " + PLAN_URL + " (Plan tab).")

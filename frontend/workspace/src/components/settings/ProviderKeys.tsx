@@ -57,7 +57,7 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
     label: "billed from wallet",
     removable: false,
     note: "routed through OpenScience credits",
-    title: "Routed through the Atlas managed proxy and billed to your OpenScience credits",
+    title: "Routed through the Gateway managed proxy and billed to your OpenScience credits",
   },
 }
 

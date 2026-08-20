@@ -7,6 +7,7 @@ import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
 import { ProjectTrust } from "../../src/project/trust"
 import { Tool } from "../../src/tool/tool"
+import { Agent } from "../../src/agent/agent"
 
 async function trustProject() {
   const status = await ProjectTrust.status(Instance.project)
@@ -64,6 +65,44 @@ describe("tool.registry", () => {
         expect(ids.filter((id) => id === "r")).toHaveLength(1)
         expect(ids).not.toContain("notebook")
         expect(ids).not.toContain("rkernel")
+        expect(ids).toEqual(expect.arrayContaining(["webfetch", "science_search", "science_fetch", "research_search"]))
+      },
+    })
+  })
+
+  test("advertises canonical research search independent of provider and keeps websearch as an alias", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        for (const providerID of ["anthropic", "openai", "synsci"]) {
+          const tools = await ToolRegistry.tools({ providerID, modelID: "test-model" })
+          expect(tools.map((tool) => tool.id)).toContain("research_search")
+          expect(tools.map((tool) => tool.id)).not.toContain("websearch")
+        }
+        expect((await ToolRegistry.resolve("websearch", { providerID: "openai", modelID: "gpt-test" }))?.id).toBe(
+          "research_search",
+        )
+      },
+    })
+  })
+
+  test("keeps the atomic multi-file ApplyPatchTool contract for delegated sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        for (const profile of ["execute", "explore"]) {
+          const agent = await Agent.get(profile)
+          const patch = (await ToolRegistry.tools({ providerID: "openai", modelID: "gpt-5" }, agent)).find(
+            (tool) => tool.id === "apply_patch",
+          )
+          expect(patch?.description).toContain("Multi-file patches are supported in one call")
+          expect(patch?.description).toContain("rolls back completed file operations")
+          expect(patch?.description).not.toContain(
+            "apply_patch verification failed: multi-file patches are not atomic; submit one file per patch",
+          )
+        }
       },
     })
   })

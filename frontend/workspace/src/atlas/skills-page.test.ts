@@ -100,6 +100,8 @@ test("settings skills bound hidden DOM and make toggle feedback immediate", () =
   expect(page).toContain('sync.set("config", "permission", change.optimistic')
   expect(page).toContain("permissionWrites = permissionWrites.then")
   expect(page).not.toContain("disabled={permissionBusy()}")
+  expect(page).toContain("visibleSkills(")
+  expect(page).toContain("visibleSkills(skills() ?? initialSkills, [])")
 })
 
 test("skill tags remain whole and switches keep compact geometry", () => {

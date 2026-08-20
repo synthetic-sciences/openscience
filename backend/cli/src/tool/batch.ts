@@ -39,9 +39,10 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
       const discardedCalls = params.tool_calls.slice(25)
 
       const { ToolRegistry } = await import("./registry")
-      const availableTools = await ToolRegistry.tools({ modelID: "", providerID: "" }, initCtx?.agent)
+      const model = initCtx?.model ?? { modelID: "", providerID: "" }
+      const availableTools = await ToolRegistry.tools(model, initCtx?.agent)
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
-      const aliases = new Set(["notebook", "rkernel"])
+      const aliases = new Set(["notebook", "rkernel", "websearch"])
 
       const executeCall = async (call: (typeof toolCalls)[0]) => {
         const callStartTime = Date.now()
@@ -56,7 +57,7 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
 
           const tool =
             toolMap.get(call.tool) ??
-            (aliases.has(call.tool) ? await ToolRegistry.resolve(call.tool, undefined, initCtx?.agent) : undefined)
+            (aliases.has(call.tool) ? await ToolRegistry.resolve(call.tool, model, initCtx?.agent) : undefined)
           if (!tool) {
             const availableToolsList = Array.from(toolMap.keys()).filter((name) => !FILTERED_FROM_SUGGESTIONS.has(name))
             throw new Error(

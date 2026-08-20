@@ -48,7 +48,7 @@ const labels: Record<ContextTab, string> = {
   artifact: "Artifact details",
   files: "Files",
   terminal: "Terminal",
-  canvas: "Atlas",
+  canvas: "Gateway",
   kernels: "Compute",
   trace: "Trace",
 }

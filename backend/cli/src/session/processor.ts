@@ -21,6 +21,8 @@ import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { ToolRetryGuard } from "./tool-retry-guard"
 import { SessionResearch } from "./research"
+import { OutboundTelemetry } from "@/telemetry/outbound"
+import type { CredentialSource } from "./billing-gate"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -30,6 +32,20 @@ export namespace SessionProcessor {
   // provider (or a permanent error arriving as JSON) looped forever.
   const MAX_RETRY_ATTEMPTS = 10
   const log = Log.create({ service: "session.processor" })
+
+  function telemetryRoute(source: CredentialSource, model: Provider.Model) {
+    if (
+      model.providerID === "ollama" ||
+      model.providerID === "lmstudio" ||
+      Provider.isLocalBaseURL(model.options?.baseURL ?? model.api.url)
+    ) {
+      return "local"
+    }
+    if (source === "managed") return "managed"
+    if (source === "oauth-free" && model.providerID === "openai-codex") return "chatgpt"
+    if (source === "oauth-free") return "subscription"
+    return "byok"
+  }
 
   /** True when the last `threshold` TOOL calls are the same tool with the same
    *  input, ignoring reasoning/text/step parts interleaved between them. A naive
@@ -173,6 +189,7 @@ export namespace SessionProcessor {
           }
         }
         await input.updatePart(terminal)
+        void OutboundTelemetry.tool(terminal).catch(() => undefined)
         terminalParts.set(callID, terminal)
         if (outcome.status === "error") {
           input.onRejected?.(outcome.error)
@@ -572,6 +589,13 @@ export namespace SessionProcessor {
                     cost: usage.cost,
                   })
                   await Session.updateMessage(input.assistantMessage)
+                  void OutboundTelemetry.assistant({
+                    sessionID: input.sessionID,
+                    route: telemetryRoute(credentialSource, input.model),
+                    provider: input.model.providerID,
+                    model: input.model.family ?? input.model.id,
+                    tokens: usage.tokens,
+                  }).catch(() => undefined)
 
                   // Report usage ONLY for managed-proxy credentials. BYOK keys
                   // and first-party OAuth subscriptions are billed to the user's

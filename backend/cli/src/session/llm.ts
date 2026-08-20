@@ -24,6 +24,7 @@ import { Auth } from "@/auth"
 import { SessionHarness } from "./harness"
 import { SessionTraceStore } from "./trace-store"
 import { ToolSelection } from "./tool-selection"
+import { OutboundTelemetry } from "@/telemetry/outbound"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -66,11 +67,12 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg, provider, auth] = await Promise.all([
+    const [language, cfg, provider, auth, sharing] = await Promise.all([
       Provider.getLanguage(routed),
       Config.get(),
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
+      OutboundTelemetry.enabled(),
     ])
     const isCodex = isCodexSubscriptionModel(input.model, auth)
 
@@ -310,7 +312,9 @@ export namespace LLM {
         ],
       }),
       experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
+        isEnabled: cfg.experimental?.openTelemetry === true && sharing,
+        recordInputs: false,
+        recordOutputs: false,
         metadata: {
           userId: cfg.username ?? "unknown",
           sessionId: input.sessionID,

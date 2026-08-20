@@ -86,7 +86,7 @@ export namespace AtlasRecorder {
     const outcome =
       input.outcome ?? (node.status === "ok" ? "success" : node.status === "error" ? "failure" : "inconclusive")
     if (node.status === "error" && outcome === "success") {
-      throw new AtlasBrokerError("A failed local execution cannot be published as a successful Atlas run.")
+      throw new AtlasBrokerError("A failed local execution cannot be published as a successful Gateway run.")
     }
     const output = tail
       ? [

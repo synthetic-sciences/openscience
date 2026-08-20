@@ -1,5 +1,7 @@
 export type SkillPermissionAction = "allow" | "ask" | "deny"
 
+type CatalogSkill = { name: string; entry?: boolean }
+
 const isAction = (value: unknown): value is SkillPermissionAction =>
   value === "allow" || value === "ask" || value === "deny"
 
@@ -13,6 +15,23 @@ export function skillAction(permission: unknown, name: string): SkillPermissionA
   if (isAction(exact)) return exact
   const wildcard = rules["*"]
   return isAction(wildcard) ? wildcard : "allow"
+}
+
+export function visibleSkills<T extends CatalogSkill>(skills: readonly T[], reserved: Iterable<string>) {
+  const names = new Set(reserved)
+  return skills.filter((skill) => {
+    if (skill.entry === false || names.has(skill.name)) return false
+    names.add(skill.name)
+    return true
+  })
+}
+
+export function enabledSkills<T extends CatalogSkill>(
+  skills: readonly T[],
+  reserved: Iterable<string>,
+  permission: unknown,
+) {
+  return visibleSkills(skills, reserved).filter((skill) => skillAction(permission, skill.name) !== "deny")
 }
 
 export function skillPermissionChange(permission: unknown, name: string, enabled: boolean) {

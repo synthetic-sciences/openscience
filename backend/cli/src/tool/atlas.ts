@@ -7,9 +7,9 @@ const Operation = z.enum(["brief", "node", "tree", "search", "ask", "usage"])
 
 export const AtlasTool = Tool.define("atlas", {
   description: [
-    "Read Atlas through the OpenScience host broker.",
-    "Use this instead of shelling out to the Atlas CLI when execution is sandboxed or network egress is denied.",
-    "The host keeps Atlas credentials private and returns only the requested JSON.",
+    "Read Gateway through the OpenScience host broker.",
+    "Use this instead of shelling out to the bundled graph CLI when execution is sandboxed or network egress is denied.",
+    "The host keeps Gateway credentials private and returns only the requested JSON.",
     "This first broker surface is read-only and accepts source identifiers, never host folder paths.",
   ].join("\n"),
   parameters: z.object({
@@ -18,9 +18,9 @@ export const AtlasTool = Tool.define("atlas", {
     node: z.string().trim().min(1).optional().describe("Node id or slug for node or tree."),
     query: z.string().trim().min(1).max(20_000).optional().describe("Question for search or ask."),
     full: z.boolean().optional().describe("Load the expanded project brief."),
-    mode: z.enum(["universal", "targeted", "web", "deep"]).optional().describe("Atlas library search mode."),
+    mode: z.enum(["universal", "targeted", "web", "deep"]).optional().describe("Gateway library search mode."),
     top_k: z.number().int().min(1).max(50).optional().describe("Maximum search or answer result count."),
-    source_ids: z.array(z.string().trim().min(1)).max(100).optional().describe("Indexed Atlas source ids."),
+    source_ids: z.array(z.string().trim().min(1)).max(100).optional().describe("Indexed Gateway source ids."),
     projection: z.string().trim().min(1).optional().describe("Node or tree projection."),
     max_nodes: z.number().int().min(1).max(10_000).optional().describe("Maximum tree node count."),
     max_depth: z.number().int().min(0).max(100).optional().describe("Maximum tree depth."),
@@ -50,11 +50,11 @@ export const AtlasTool = Tool.define("atlas", {
     )
     const output = OpenScience.redactSecrets(JSON.stringify(result, null, 2))
     ctx.metadata({
-      title: `Atlas ${params.operation}`,
+      title: `Gateway ${params.operation}`,
       metadata: { operation: params.operation, broker: "host", credentials: "host_only" },
     })
     return {
-      title: `Atlas ${params.operation}`,
+      title: `Gateway ${params.operation}`,
       output,
       metadata: { operation: params.operation, broker: "host", credentials: "host_only" },
     }

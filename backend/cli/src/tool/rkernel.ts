@@ -601,6 +601,10 @@ const RFields = {
     .max(1024)
     .optional()
     .describe("Script path associated with this execution, when applicable"),
+  environment: z
+    .enum(["default", "r"])
+    .optional()
+    .describe("Optional compatibility selector. Omit it or use 'default'/'r' for the canonical R runtime."),
   timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
 }
 
@@ -788,7 +792,7 @@ const RDefinition: Awaited<ReturnType<Tool.Info<typeof RParameters>["init"]>> = 
   description: [
     "Run R code in one long-lived managed process per conversation. Objects, attached packages, and state persist across calls; child conversations are isolated.",
     "State is working memory, not reproducibility; save source, inputs, parameters, and outputs for material results and clean-rerun when practical.",
-    "Set a concise scientific `title` and `source` for script-backed work. Use `action: stop` to clear state.",
+    "Omit `environment` or use `default`/`r` for the canonical host runtime. Set a concise scientific `title` and `source` for script-backed work; use `action: stop` to clear state.",
     "Prefer this to `bash Rscript` for analysis. Submit package installs, removals, and updates separately; they require approval and automatically restart R after success.",
     "Print output is captured; supported base/ggplot2 plots become inline PNGs. Requires Rscript on PATH and reports an install hint when absent.",
   ].join("\n"),

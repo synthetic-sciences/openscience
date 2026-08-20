@@ -9,22 +9,10 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { Todo } from "../../src/session/todo"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
-const names = [
-  "plan",
-  "review",
-  "verify",
-  "goals",
-  "status",
-  "context",
-  "stop",
-  "compact",
-  "handoff",
-  "checkpoint",
-  "reproduce",
-  "compare",
-  "sources",
-  "export",
-]
+const names = ["init", "plan", "goal", "status", "context", "stop", "compact", "handoff", "checkpoint"]
+const workflows = ["review", "verify", "reproduce", "compare", "sources", "export"]
+const actions = ["init", "stop", "handoff", "checkpoint"]
+const primary = ["compact", "context", "plan", "goal", "status"]
 
 async function seed(sessionID: string) {
   const message: MessageV2.User = {
@@ -47,7 +35,7 @@ async function seed(sessionID: string) {
 }
 
 describe("research slash commands", () => {
-  test("ships the complete catalog with source, category, usage, and argument-aware prompts", async () => {
+  test("keeps native actions built in and exposes optional workflows as toggleable skills", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
@@ -62,8 +50,10 @@ describe("research slash commands", () => {
         }
 
         expect(commands.get("plan")).toMatchObject({ agent: "plan", subtask: false })
-        expect(commands.get("review")).toMatchObject({ agent: "reviewer", subtask: false })
-        expect(commands.get("goals")?.menu).toBe(true)
+        expect(commands.get("goal")?.category).toBe("research")
+        expect(commands.get("goal")?.menu).toBeUndefined()
+        expect(await commands.get("goal")?.template).toContain("persistent goal")
+        expect(await commands.get("goal")?.template).toContain("$ARGUMENTS")
         expect(commands.get("status")?.menu).toBe(true)
         expect(commands.get("context")?.menu).toBe(true)
         expect(commands.get("stop")?.menu).toBe(true)
@@ -71,21 +61,34 @@ describe("research slash commands", () => {
         expect(commands.get("checkpoint")?.category).toBe("session")
         expect(await commands.get("checkpoint")?.template).toBe("")
 
-        const workflows = ["plan", "review", "verify", "reproduce", "compare", "sources", "export"]
+        expect(commands.has("goals")).toBe(false)
+        for (const name of workflows) expect(commands.has(name), name).toBe(false)
+
         for (const name of workflows) {
-          const template = await commands.get(name)?.template
-          expect(template, name).toContain("# Research Workflow Engine")
-          expect(template, name).toContain(`# Workflow: ${name}`)
-          expect(template, name).toContain("<invocation>")
-          expect(template?.split("\n").length ?? 0, name).toBeGreaterThan(60)
+          const content = await Bun.file(path.join(import.meta.dir, `../../skills/research/${name}/SKILL.md`)).text()
+          expect(content, name).toContain(`name: ${name}`)
+          expect(content, name).toContain("category: research")
+          expect(content, name).not.toContain("entry: false")
+          expect(content, name).toContain(`research-workflows/references/${name}.md`)
         }
+
+        for (const name of actions) {
+          const content = await Bun.file(path.join(import.meta.dir, `../../skills/other/${name}/SKILL.md`)).text()
+          expect(content, name).toContain(`name: ${name}`)
+          expect(content, name).not.toContain("entry: false")
+        }
+        for (const name of primary) {
+          const content = await Bun.file(path.join(import.meta.dir, `../../skills/other/${name}/SKILL.md`)).text()
+          expect(content, name).toContain(`name: ${name}`)
+          expect(content, name).not.toContain("entry: false")
+        }
+
+        const template = await commands.get("plan")?.template
+        expect(template).toContain("# Research Workflow Engine")
+        expect(template).toContain("# Workflow: plan")
+        expect(template).toContain("<invocation>")
+        expect(template?.split("\n").length ?? 0).toBeGreaterThan(60)
         expect(await commands.get("plan")?.template).toContain("Call `plan_exit` only when")
-        expect(await commands.get("review")?.template).toContain("Finding validation")
-        expect(await commands.get("verify")?.template).toContain("exactly `PASS`, `FAIL`, or `NOT TESTED`")
-        expect(await commands.get("reproduce")?.template).toContain("`PARTIALLY SUPPORTED`")
-        expect(await commands.get("compare")?.template).toContain("`INSUFFICIENT EVIDENCE`")
-        expect(await commands.get("sources")?.template).toContain("Source ledger")
-        expect(await commands.get("export")?.template).toContain("`PARTIAL EXPORT`")
       },
     })
   })
@@ -104,19 +107,6 @@ describe("research slash commands", () => {
             { id: "active", content: "Run the independent check", status: "in_progress", priority: "high" },
           ],
         })
-
-        const goals = await SessionPrompt.command({
-          sessionID: session.id,
-          command: "goals",
-          arguments: "",
-        })
-        const goalsText = goals.parts.find((part) => part.type === "text")
-        expect(goals.info.role === "assistant" ? goals.info.cost : -1).toBe(0)
-        expect(goalsText?.type === "text" ? goalsText.text : "").toContain(
-          "Investigate the result and preserve the evidence.",
-        )
-        expect(goalsText?.type === "text" ? goalsText.text : "").toContain("Run the independent check")
-        expect(goalsText?.type === "text" ? goalsText.text : "").toContain("Completed** · 1/2")
 
         const first = await SessionPrompt.command({
           sessionID: session.id,
@@ -215,16 +205,15 @@ describe("research slash commands", () => {
         expect(text?.type === "text" ? text.ignored : false).toBe(true)
         expect(text?.type === "text" ? text.text : "").toContain("Empty study")
 
-        const goals = await SessionPrompt.command({
+        const goal = await SessionPrompt.command({
           sessionID: session.id,
-          command: "goals",
+          command: "goal",
           arguments: "",
         })
-        const goalsText = goals.parts.find((part) => part.type === "text")
-        expect(goals.info.role === "assistant" ? goals.info.cost : -1).toBe(0)
-        expect(goalsText?.type === "text" ? goalsText.ignored : false).toBe(true)
-        expect(goalsText?.type === "text" ? goalsText.text : "").toContain("### Goals")
-        expect(goalsText?.type === "text" ? goalsText.text : "").toContain("Define the next concrete step")
+        const goalText = goal.parts.find((part) => part.type === "text")
+        expect(goal.info.role === "assistant" ? goal.info.cost : -1).toBe(0)
+        expect(goalText?.type === "text" ? goalText.ignored : false).toBe(true)
+        expect(goalText?.type === "text" ? goalText.text : "").toContain("Describe the objective after `/goal`.")
 
         const checkpoint = await SessionPrompt.command({
           sessionID: session.id,

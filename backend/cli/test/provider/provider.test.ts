@@ -1599,7 +1599,7 @@ test("managed atlas keys without proxy base URLs fail before provider SDK creati
         }
         expect(error).toBeDefined()
         expect((error as Error).cause).toBeInstanceOf(Error)
-        expect(((error as Error).cause as Error).message).toContain("managed Atlas key without an Atlas proxy URL")
+        expect(((error as Error).cause as Error).message).toContain("managed Gateway key without a Gateway proxy URL")
       }
     },
   })

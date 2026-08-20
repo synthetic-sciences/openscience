@@ -6,6 +6,7 @@ import z from "zod"
 import { Global } from "@/global"
 import { FileLease } from "@/util/file-lease"
 import { Lock } from "@/util/lock"
+import { OutboundTelemetry } from "@/telemetry/outbound"
 
 export namespace ArtifactStore {
   export const MAX_VERSION_BYTES = 1024 * 1024 * 1024
@@ -514,7 +515,11 @@ export namespace ArtifactStore {
       const row = rows(db, input.projectID, id)[0]
       db.close()
       if (!row) throw new Error(`Artifact ${id} was not saved`)
-      return artifact(row)
+      const saved = artifact(row)
+      void OutboundTelemetry.artifact({ sessionID: input.sessionID, type: input.kind, size: staged.size }).catch(
+        () => undefined,
+      )
+      return saved
     } catch (error) {
       db.exec("ROLLBACK")
       db.close()

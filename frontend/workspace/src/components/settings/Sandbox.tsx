@@ -88,7 +88,7 @@ const Sandbox: Component = () => {
 
   const config = (): SandboxConfig =>
     data()?.config ?? {
-      enabled: false,
+      enabled: true,
       network: "deny",
       allowWrite: [],
       onUnavailable: "error",

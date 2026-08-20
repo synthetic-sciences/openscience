@@ -21,14 +21,14 @@ import type { InitProjectFailure } from "../../server/routes/atlas-bridge"
  */
 export const ProjectCommand = cmd({
   command: "project",
-  describe: "manage the Atlas project for this folder",
+  describe: "manage the Gateway project for this folder",
   builder: (yargs) => yargs.command(ProjectInitCommand).command(ProjectMergeCommand).demandCommand(),
   async handler() {},
 })
 
 const ProjectInitCommand = cmd({
   command: "init",
-  describe: "create or link this repo's Atlas research graph (dedupe-safe)",
+  describe: "create or link this repo's Gateway research graph (dedupe-safe)",
   builder: (yargs) =>
     yargs
       .option("dir", { type: "string", describe: "folder to resolve (defaults to the current directory)" })
@@ -44,7 +44,7 @@ const ProjectInitCommand = cmd({
         return
       }
       UI.empty()
-      prompts.log.error("Not connected to Atlas. Run `openscience login` first.")
+      prompts.log.error("Not connected to Gateway. Run `openscience login` first.")
       return
     }
     const opened = (args.dir as string | undefined) || process.cwd()
@@ -64,7 +64,7 @@ const ProjectInitCommand = cmd({
     }
     UI.empty()
     if (result.projectId) {
-      prompts.log.success(`Atlas research graph ready — project ${result.projectId}`)
+      prompts.log.success(`Gateway research graph ready — project ${result.projectId}`)
       prompts.log.info("Pinned to .openscience/project.json; the canvas will show it on next open.")
       return
     }
@@ -82,27 +82,27 @@ function reportInitFailure(failure: InitProjectFailure | undefined) {
       prompts.log.error(
         f.status
           ? `${f.host} rejected your saved session (HTTP ${f.status})${detail}. Run \`openscience login\` to re-authenticate.`
-          : "Not connected to Atlas. Run `openscience login` first.",
+          : "Not connected to Gateway. Run `openscience login` first.",
       )
       break
     case "unreachable":
       prompts.log.error(
-        `Could not reach the Atlas backend at ${f.host}${f.status ? ` (HTTP ${f.status})` : ""}${detail}.`,
+        `Could not reach the Gateway backend at ${f.host}${f.status ? ` (HTTP ${f.status})` : ""}${detail}.`,
       )
       prompts.log.info(
         "You are logged in — this is a network/service issue, not an auth issue. Check connectivity (and any OPENSCIENCE_API_BASE/SYNSC_API_BASE override), then retry.",
       )
       break
     case "plan":
-      prompts.log.error(`Authenticated against ${f.host}, but your account has no active Atlas plan${detail}.`)
+      prompts.log.error(`Authenticated against ${f.host}, but your account has no active Gateway plan${detail}.`)
       prompts.log.info("Manage your plan at https://app.syntheticsciences.ai/billing.")
       break
     default:
       prompts.log.error(
-        `Atlas could not initialize the graph${f.status ? ` (HTTP ${f.status} from ${f.host})` : ""}${detail}.`,
+        `Gateway could not initialize the graph${f.status ? ` (HTTP ${f.status} from ${f.host})` : ""}${detail}.`,
       )
   }
-  if (Bun.which("atlas")) prompts.log.info("Atlas CLI detected — `atlas doctor --format=json` can help diagnose.")
+  if (Bun.which("atlas")) prompts.log.info("Gateway CLI detected — `atlas doctor --format=json` can help diagnose.")
 }
 
 async function git(args: string[], cwd: string): Promise<string> {
@@ -138,7 +138,7 @@ function rootRef(n: any): string | null {
 
 const ProjectMergeCommand = cmd({
   command: ["merge", "pick"],
-  describe: "pick one canonical Atlas root for this folder and collapse duplicates",
+  describe: "pick one canonical Gateway root for this folder and collapse duplicates",
   builder: (yargs) =>
     yargs.option("dir", {
       type: "string",
@@ -171,7 +171,7 @@ const ProjectMergeCommand = cmd({
       headers: { Authorization: `Bearer ${session.api_key}`, Accept: "application/json" },
     }).catch(() => null)
     if (!res || !res.ok) {
-      prompts.log.error(`Could not list Atlas roots${res ? ` (HTTP ${res.status})` : ""}.`)
+      prompts.log.error(`Could not list Gateway roots${res ? ` (HTTP ${res.status})` : ""}.`)
       prompts.outro("Aborted")
       return
     }
@@ -187,7 +187,7 @@ const ProjectMergeCommand = cmd({
     const candidates = allRoots.filter((r) => r.ref === refKey || r.title.toLowerCase().includes(lname))
     const pool = candidates.length > 0 ? candidates : allRoots
     if (pool.length === 0) {
-      prompts.log.warn("No Atlas project roots found for your account.")
+      prompts.log.warn("No Gateway project roots found for your account.")
       prompts.outro("Nothing to merge")
       return
     }
@@ -237,7 +237,7 @@ const ProjectMergeCommand = cmd({
           "",
           "The other roots are left untouched (no silent merge). To fully",
           "collapse them server-side (cross-machine) or re-parent their",
-          "children, do it from the Atlas web UI — the CLI contract has no",
+          "children, do it from the Gateway web UI — the CLI contract has no",
           "node-update/re-parent endpoint yet.",
           "",
           "Other roots:",

@@ -7,6 +7,8 @@ export type ResearchAccessState = {
 
 export type ResearchAccessMutation = { kind: "sandbox"; enabled: boolean } | { kind: "trust"; trusted: boolean }
 
+export const DEFAULT_RESEARCH_ACCESS_MODE: ResearchAccessMode = "approve"
+
 export const RESEARCH_ACCESS_OPTIONS = [
   {
     value: "ask",
@@ -21,7 +23,7 @@ export const RESEARCH_ACCESS_OPTIONS = [
   {
     value: "full",
     label: "Full access",
-    description: "Unrestricted files, commands, and internet",
+    description: "Warning: disables the sandbox for files, commands, and internet",
   },
 ] as const satisfies ReadonlyArray<{
   value: ResearchAccessMode
@@ -36,6 +38,12 @@ export function researchAccessMode(state: ResearchAccessState): ResearchAccessMo
 
 export function researchAccessLabel(mode: ResearchAccessMode): string {
   return RESEARCH_ACCESS_OPTIONS.find((option) => option.value === mode)?.label ?? "Full access"
+}
+
+export function researchAccessContract(mode: ResearchAccessMode) {
+  if (mode === "ask") return { sandbox: "workspace-write", approval: "on-request", review: "user" } as const
+  if (mode === "approve") return { sandbox: "workspace-write", approval: "on-request", review: "auto_review" } as const
+  return { sandbox: "danger-full-access", approval: "never", review: "none" } as const
 }
 
 /**

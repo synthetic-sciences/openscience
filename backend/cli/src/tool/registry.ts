@@ -20,7 +20,7 @@ import path from "path"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@synsci/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
-import { WebSearchTool } from "./websearch"
+import { ResearchSearchTool } from "./research-search"
 import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
@@ -50,6 +50,7 @@ export namespace ToolRegistry {
     [NotebookTool.id, NotebookTool],
     [RKernelTool.id, RKernelTool],
     [ModalTool.id, ModalTool],
+    ["websearch", ResearchSearchTool],
   ])
 
   const compute = async () => {
@@ -155,7 +156,7 @@ export namespace ToolRegistry {
       WebFetchTool,
       ...(config.experimental?.plan_mode === true ? [PlanWriteTool] : [TodoWriteTool]),
       TodoReadTool,
-      WebSearchTool,
+      ResearchSearchTool,
       CodeSearchTool,
       SkillTool,
       ApplyPatchTool,
@@ -207,7 +208,7 @@ export namespace ToolRegistry {
       using _ = log.time(alias.id)
       return {
         id: alias.id,
-        ...(await alias.init({ agent })),
+        ...(await alias.init({ agent, model })),
       }
     }
     if (!model) return
@@ -249,8 +250,10 @@ export namespace ToolRegistry {
             return !!agent?.name && COMPUTE_AGENTS.includes(agent.name)
           }
 
-          // Enable websearch/codesearch for zen users OR via enable flag
-          if (t.id === "codesearch" || t.id === "websearch") {
+          // Community code search retains its existing provider/flag rule.
+          // `research_search` is always advertised; its execution path selects
+          // managed Gateway search or the preserved community rule.
+          if (t.id === "codesearch") {
             return model.providerID === "synsci" || Flag.OPENSCIENCE_ENABLE_EXA
           }
 
@@ -266,7 +269,7 @@ export namespace ToolRegistry {
           using _ = log.time(t.id)
           return {
             id: t.id,
-            ...(await t.init({ agent })),
+            ...(await t.init({ agent, model })),
           }
         }),
     )

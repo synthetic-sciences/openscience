@@ -4,28 +4,28 @@ description: "The trust boundary, credential storage, execution sandbox, and sub
 icon: "shield-check"
 ---
 
-OpenScience is open source under Apache-2.0, so the whole security model below is auditable in the [repository](https://github.com/synthetic-sciences/openscience). The agent runs locally. New local installs default to trusted **Full access**, while two contained presets are available directly beneath the composer. Two principles anchor the design: keep credentials out of subprocesses that do not need them, and make each trust boundary explicit instead of treating permissions, sandboxing, and project trust as the same control.
+OpenScience is open source under Apache-2.0, so the whole security model below is auditable in the [repository](https://github.com/synthetic-sciences/openscience). The agent runs locally. New local installs default to **Approve for me**: the project is trusted while execution remains contained. Two principles anchor the design: keep credentials out of subprocesses that do not need them, and make each trust boundary explicit instead of treating permissions, sandboxing, and project trust as the same control.
 
 ## Permissions are not the sandbox
 
 The permission system decides whether an agent may take an action. It is not, on its own, an isolation boundary.
 
-OpenScience ships a real [execution sandbox](/openscience/sandbox), but **Full access** is the default. In that mode a trusted project has your user account's filesystem and network authority. Open **Research tools → Action approval** and select **Approve for me** to trust the project inside macOS Seatbelt or Linux bubblewrap, or **Ask for approval** to enable that boundary and revoke project trust. Containment limits commands to the workspace and approved paths and denies network egress; if the selected boundary is unavailable, the default policy refuses to run rather than silently falling back to the host. Verify it with `openscience sandbox test`. It is OS containment, not a full VM — for actively hostile code, still run OpenScience inside a container or VM.
+OpenScience ships a real [execution sandbox](/openscience/sandbox), and **Approve for me** is the default. It trusts the project inside macOS Seatbelt or Linux bubblewrap. Open **Research tools → Action approval** to select **Ask for approval** and revoke project trust while retaining containment, or deliberately choose **Full access** to disable containment after a warning. Containment limits commands to the workspace and approved paths and denies network egress; if the selected boundary is unavailable, the default policy refuses to run rather than silently falling back to the host. Verify it with `openscience sandbox test`. It is OS containment, not a full VM — for actively hostile code, still run OpenScience inside a container or VM.
 
 ## Credential storage
 
 | Surface | Where | Notes |
 | --- | --- | --- |
 | BYOK provider keys | Environment variables or `<data-root>/auth.json` | Model requests go straight to the provider. No account required. Approved skill subprocesses can receive supported user-owned keys; arbitrary Python/R kernels receive a minimal environment without provider keys. |
-| Atlas session | `<data-root>/openscience-session.json` | `thk_*` key created by `openscience login`; revocable from the dashboard. |
-| Synced service credentials | `<data-root>/credentials.json` | Present only when [connected to Atlas](/openscience/atlas); encrypted at rest and refreshed with `openscience sync`. |
+| Gateway session | `<data-root>/openscience-session.json` | `thk_*` key created by `openscience login`; revocable from the dashboard. |
+| Synced service credentials | `<data-root>/credentials.json` | Present only when [connected to Gateway](/openscience/gateway); encrypted at rest and refreshed with `openscience sync`. |
 | Native binary (curl install) | `~/.openscience/bin/openscience` | Added to PATH through your shell rc. |
 
 The data root defaults to `~/.openscience` and can be relocated from Storage settings or with `OPENSCIENCE_DATA_DIR`. Override the config directory with `OPENSCIENCE_CONFIG_DIR` (or its XDG parent with `XDG_CONFIG_HOME`). Run `openscience debug paths` to print the resolved data, config, cache, and state directories on your machine.
 
 ## Subprocess environment boundaries
 
-Shell tools receive a sanitized environment: managed Atlas tokens and control-plane variables are stripped, while ordinary user environment values and supported user-owned provider or service credentials may be available to approved commands. Credential files, SSH/cloud config, and other sensitive paths are denied to OS-sandboxed Python/R kernels; kernels also receive a minimal runtime and locale environment without provider, Atlas, or cloud keys.
+Shell tools receive a sanitized environment: managed Gateway tokens and control-plane variables are stripped, while ordinary user environment values and supported user-owned provider or service credentials may be available to approved commands. Credential files, SSH/cloud config, and other sensitive paths are denied to OS-sandboxed Python/R kernels; kernels also receive a minimal runtime and locale environment without provider, Gateway, or cloud keys.
 
 Managed Modal credentials are narrower still: they resolve only inside the trusted compute adapter after approval and are not injected into general shell or kernel environments.
 
@@ -44,9 +44,11 @@ For defense in depth on a shared host or behind a reverse proxy, set `OPENSCIENC
 ## What leaves your machine
 
 - Prompts and responses sent to your model provider, governed by that provider's policy.
-- Nothing else automatically, in BYOK mode. If you [connect to Atlas](/openscience/atlas), synced credentials and usage metering are held against your account.
+- Content-free product telemetry, enabled by default and disableable in Settings. It contains only allowlisted operational fields and aggregate usage; it rejects prompts, responses, file paths and content, notebook cells, shell output, environment values, credentials, and arbitrary metadata.
+- Managed-search queries when you intentionally use Gateway research search. They are sent to the Gateway and its configured search provider; routine telemetry does not retain the query text.
+- Synced credentials and authoritative managed usage when you [connect the Gateway](/openscience/gateway).
 
-Source files stay local unless the agent explicitly uploads them through a tool you approve. Approved shell commands and user-owned terminals can still access credentials in their environment, while Python/R kernels stay on the minimal environment described above.
+Research content is not collected or shared, and there is no content-sharing setting in this release. Source files stay local unless the agent explicitly uploads them through a tool you approve. Approved shell commands and user-owned terminals can still access credentials in their environment, while Python/R kernels stay on the minimal environment described above. Telemetry upload failure never blocks research and can never debit the Gateway wallet.
 
 ## Reporting a vulnerability
 

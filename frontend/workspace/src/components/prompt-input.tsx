@@ -60,8 +60,10 @@ import { createOpenScienceClient, type Message, type Part } from "@synsci/sdk/v2
 import { Binary } from "@synsci/util/binary"
 import { showToast } from "@synsci/ui/toast"
 import { uiStore } from "@/atlas/store/ui"
+import { confirmDialog } from "@/atlas/dialogs"
 import { projectHref, projectPathname } from "@/utils/project-route"
 import { ModelSettingsPopover } from "./model-settings-popover"
+import { enabledSkills, skillAction, visibleSkills } from "@/atlas/skill-permissions"
 import { modelControl } from "./model-presentation"
 import { DialogSettings } from "./dialog-settings"
 import "./prompt-input.css"
@@ -80,14 +82,26 @@ import {
   type ReviewPreferences,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
-import { slashGroup, slashIcon, slashSource, sortSlash, type SlashCommand } from "./prompt-slash"
 import {
+  slashGroup,
+  slashIcon,
+  slashMode,
+  slashActionSkill,
+  slashSource,
+  SLASH_NATIVE,
+  sortSlash,
+  type SlashCommand,
+  type SlashMode,
+} from "./prompt-slash"
+import {
+  DEFAULT_RESEARCH_ACCESS_MODE,
   RESEARCH_ACCESS_OPTIONS,
   researchAccessLabel as accessLabel,
   researchAccessMode,
   researchAccessMutations,
   type ResearchAccessMode,
 } from "./research-access"
+import { searchStatus, type ResearchToolsStatus } from "./settings/research-tools-state"
 
 type PendingPrompt = {
   abort: AbortController
@@ -108,10 +122,13 @@ interface ResearchAccessSnapshot {
   root: string
   trusted: boolean
   sandboxEnabled: boolean
+  sandboxAvailable: boolean
+  sandboxUnavailableReason?: string
 }
 
 interface SandboxSettingsPayload {
   config: { enabled?: boolean }
+  status?: { available?: boolean; reason?: string }
 }
 
 const requestDetail = (kind: "effort" | "speed", id: string) => {
@@ -160,6 +177,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     settings<CapabilityPreferences>("/settings/preferences"),
   )
   const [review, reviewActions] = createResource(() => settings<ReviewPreferences>("/settings/review"))
+  const [researchStatusRequested, setResearchStatusRequested] = createSignal(false)
+  const [researchToolsStatus, researchToolsStatusActions] = createResource(
+    () => researchStatusRequested() || undefined,
+    () => settings<ResearchToolsStatus>("/settings/research-tools"),
+  )
+  const researchToolsSummary = createMemo(() => {
+    const status = researchToolsStatus()
+    if (!status) return undefined
+    return {
+      plan: status.plan.label,
+      search: searchStatus(status).label,
+      sharing: status.telemetry.analyticsEnabled ? "Sharing on" : "Sharing off",
+    }
+  })
   const saveCapabilities = (patch: Partial<CapabilityPreferences>) => {
     const previous = capabilities()
     if (!previous) return
@@ -335,13 +366,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       root: trust.data.root,
       trusted: trust.data.canExecuteProjectCode,
       sandboxEnabled: sandbox.config.enabled !== false,
+      sandboxAvailable: sandbox.status?.available === true,
+      sandboxUnavailableReason: sandbox.status?.reason,
     }
   }
   const [researchAccess, researchAccessControls] = createResource(() => sdk.projectID || false, loadResearchAccess)
   const [researchAccessSaving, setResearchAccessSaving] = createSignal(false)
   const selectedResearchAccess = createMemo(() => {
     const current = researchAccess()
-    return current ? researchAccessMode(current) : "full"
+    return current ? researchAccessMode(current) : DEFAULT_RESEARCH_ACCESS_MODE
   })
   const researchAccessLabel = createMemo(() => accessLabel(selectedResearchAccess()))
 
@@ -351,6 +384,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const initial = researchAccess()
     if (!projectID || !initial || researchAccessSaving()) return
     if (researchAccessMode(initial) === mode) return
+    if (mode === "full") {
+      const confirmed = await confirmDialog(dialog, {
+        title: "Enable Full access?",
+        message:
+          "Full access disables the execution sandbox. OpenScience may run commands with unrestricted file and network access without asking for action approval.",
+        confirmLabel: "Enable Full access",
+        danger: true,
+      })
+      if (!confirmed) return
+    }
 
     setResearchAccessSaving(true)
     try {
@@ -575,6 +618,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: Prompt | null
     dragging: boolean
     mode: "normal" | "shell"
+    intent: SlashMode | null
     applyingHistory: boolean
   }>({
     popover: null,
@@ -582,6 +626,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: null,
     dragging: false,
     mode: "normal",
+    intent: null,
     applyingHistory: false,
   })
 
@@ -590,6 +635,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const placeholder = createMemo(() => {
     if (submitting()) return "Sending…"
     if (store.mode === "shell") return language.t("prompt.placeholder.shell")
+    if (store.intent === "plan") return "Describe your task to generate a plan…"
+    if (store.intent === "goal") return "Describe your goal and the measurable outcome…"
     if (commentCount() > 1) return language.t("prompt.placeholder.summarizeComments")
     if (commentCount() === 1) return language.t("prompt.placeholder.summarizeComment")
     return language.t("prompt.placeholder.normal")
@@ -867,56 +914,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const usage: Record<string, string> = {
-      goals: "/goals",
-      stop: "/stop [turn|compute|all]",
       compact: "/compact [focus]",
-      handoff: "/handoff [project-relative path]",
-      checkpoint: "/checkpoint [label]",
+      context: "/context",
+      plan: "/plan",
+      goal: "/goal",
+      status: "/status",
     }
-    const builtin = command.options
-      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
-      .map((opt) => ({
-        id: opt.id,
-        trigger: opt.slash!,
-        title: opt.title,
-        description: opt.description,
-        keybind: opt.keybind,
-        source: "builtin" as const,
-        category: "session" as const,
-        usage: usage[opt.slash!] ?? `/${opt.slash!}`,
-        type: "action" as const,
-      }))
+    const catalog = new Map(sync.data.command.map((item) => [item.name, item]))
+    const enabled = enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission)
+    const builtin = SLASH_NATIVE.filter((name) => skillAction(sync.data.config.permission, name) !== "deny").map(
+      (name) => {
+        const item = catalog.get(name)
+        return {
+          id: `command.${name}`,
+          trigger: name,
+          title: name,
+          description: item?.description,
+          usage: usage[name],
+          source: "builtin" as const,
+          category: ((["compact", "context", "status"] as string[]).includes(name) ? "session" : "research") as
+            | "session"
+            | "research",
+          type: slashMode({ trigger: name }) ? ("mode" as const) : ("action" as const),
+        }
+      },
+    )
 
-    const triggers = new Set(builtin.map((command) => command.trigger))
-    const custom = sync.data.command
-      // Existing sessions register menu commands as direct, zero-model actions.
-      // Keep the matching server command only when that action is unavailable so
-      // the complete slash hierarchy remains discoverable on a brand-new session.
-      .filter((command) => !(command as { menu?: boolean }).menu || !triggers.has(command.name))
-      .map((cmd) => ({
-        id: `command.${cmd.name}`,
-        trigger: cmd.name,
-        title: cmd.name,
-        description: cmd.description,
-        usage: (cmd as { usage?: string }).usage,
-        source: ((cmd as { source?: "builtin" | "project" | "mcp" }).source ?? (cmd.mcp ? "mcp" : "project")) as
-          | "builtin"
-          | "project"
-          | "mcp",
-        category: ((
-          cmd as {
-            category?: "session" | "research" | "evidence" | "output" | "project"
-          }
-        ).category ?? "project") as "session" | "research" | "evidence" | "output" | "project",
-        type: "command" as const,
-      }))
+    const reserved = new Set<string>(SLASH_NATIVE)
 
     // Surface installed skills as slash entries. Selecting one prefills a
     // "Use the <name> skill: " prompt that the agent matches against its
-    // built-in skill tool — lazy invocation, no new pipeline.
+    // built-in skill tool — lazy invocation, no new pipeline. A real command
+    // owns its trigger when names collide, so it is never repeated as a skill.
     // Hide skills tagged `entry: false` (internal helpers).
-    const skills = (sync.data.skill ?? [])
-      .filter((s) => (s as { entry?: boolean }).entry !== false)
+    const skills = enabled
+      .filter((skill) => !reserved.has(skill.name))
       .map((s) => ({
         id: `skill.${s.name}`,
         trigger: s.name,
@@ -925,19 +957,82 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         usage: `/${s.name} [request]`,
         source: "skill" as const,
         category: "skill" as const,
-        type: "skill" as const,
+        type: slashActionSkill(s.name) ? ("action" as const) : ("skill" as const),
       }))
 
-    return [...custom, ...skills, ...builtin].toSorted(sortSlash)
+    return [...builtin, ...skills].toSorted(sortSlash)
   })
+
+  const slashItems = (query: string) => {
+    const items = slashCommands()
+    if (!query.trim()) return items
+
+    const shown = new Set(items.map((item) => item.trigger))
+    const governed = new Set(visibleSkills(sync.data.skill ?? [], []).map((skill) => skill.name))
+    const commands: SlashCommand[] = sync.data.command
+      .filter(
+        (item) =>
+          item.source === "builtin" &&
+          !shown.has(item.name) &&
+          ((!governed.has(item.name) && !SLASH_NATIVE.some((name) => name === item.name)) ||
+            skillAction(sync.data.config.permission, item.name) !== "deny"),
+      )
+      .map((item) => ({
+        id: `command.${item.name}`,
+        trigger: item.name,
+        title: item.name,
+        description: item.description,
+        usage: item.usage,
+        source: "builtin",
+        category: item.category ?? "session",
+        type: slashMode({ trigger: item.name }) ? "mode" : "action",
+      }))
+
+    const all = [...items, ...commands]
+    const needle = query.trim().replace(/^\/+/, "").toLowerCase()
+    const trigger = (item: SlashCommand) => item.trigger.toLowerCase()
+    const exact = all.filter((item) => trigger(item) === needle)
+    if (exact.length) return exact
+
+    const prefix = all.filter((item) => trigger(item).startsWith(needle))
+    if (prefix.length) return prefix
+
+    const contained = all.filter((item) => trigger(item).includes(needle))
+    if (contained.length) return contained
+
+    const terms = needle.split(/\s+/)
+    return all.filter((item) => {
+      const text = [item.trigger, item.title, item.description, item.usage].filter(Boolean).join(" ").toLowerCase()
+      return terms.every((term) => text.includes(term))
+    })
+  }
+
+  const setIntent = (intent: SlashMode | null) => {
+    setStore("intent", intent)
+    setStore("mode", "normal")
+    setStore("popover", null)
+    requestAnimationFrame(() => editorRef.focus({ preventScroll: true }))
+  }
+
+  const enterIntent = (intent: SlashMode) => {
+    editorRef.textContent = ""
+    prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+    setIntent(intent)
+  }
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
     setStore("popover", null)
 
-    if (cmd.type === "command" || cmd.type === "skill") {
-      // Both surfaces prefill the literal slash command. The agent reads
-      // `/<name>` as a request to invoke the named skill / command.
+    const intent = slashMode(cmd)
+    if (intent) {
+      enterIntent(intent)
+      return
+    }
+
+    if (cmd.type === "skill") {
+      // Skills remain editable requests. The agent loads the selected skill
+      // before responding when the submitted message begins with this slash.
       const text = `/${cmd.trigger} `
       editorRef.textContent = text
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -955,7 +1050,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     editorRef.textContent = ""
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
-    command.trigger(cmd.id, "slash")
+    void handleSubmit(new Event("submit"), cmd.trigger)
   }
 
   const {
@@ -967,7 +1062,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onKeyDown: slashOnKeyDown,
     refetch: slashRefetch,
   } = useFilteredList<SlashCommand>({
-    items: slashCommands,
+    items: slashItems,
     key: (x) => x?.id,
     filterKeys: ["trigger", "title", "description", "usage"],
     groupBy: slashGroup,
@@ -1031,16 +1126,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
-  // Auto-scroll active command into view when navigating with keyboard
-  createEffect(() => {
+  const scrollSlashActive = () => {
     const activeId = slashActive()
     if (!activeId || !slashPopoverRef) return
-
-    requestAnimationFrame(() => {
-      const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
-      element?.scrollIntoView({ block: "nearest", behavior: "auto" })
-    })
-  })
+    const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
+    element?.scrollIntoView({ block: "nearest", behavior: "auto" })
+  }
 
   const selectPopoverActive = () => {
     if (store.popover === "at") {
@@ -1207,10 +1298,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const shellMode = store.mode === "shell"
+    const slashMatch = shellMode ? null : rawText.match(/^\/(\S*)$/)
+    const keepSlashFocus = !!slashMatch && document.activeElement === editorRef
 
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
-      const slashMatch = rawText.match(/^\/(\S*)$/)
 
       if (atMatch) {
         atOnInput(atMatch[1])
@@ -1218,6 +1310,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
         setStore("popover", "slash")
+        requestAnimationFrame(() => {
+          if (slashPopoverRef) slashPopoverRef.scrollTop = 0
+        })
       } else {
         setStore("popover", null)
       }
@@ -1233,6 +1328,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
+    if (keepSlashFocus) {
+      requestAnimationFrame(() => {
+        if (document.activeElement !== editorRef) {
+          editorRef.focus({ preventScroll: true })
+          setCursorPosition(editorRef, cursorPosition)
+        }
+        if (editorRef.textContent?.match(/^\/(\S*)$/)) setStore("popover", "slash")
+      })
+    }
   }
 
   const setRangeEdge = (range: Range, edge: "start" | "end", offset: number) => {
@@ -1421,6 +1525,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const cursorPosition = getCursorPosition(editorRef)
       if (cursorPosition === 0) {
         setStore("mode", "shell")
+        setStore("intent", null)
         setStore("popover", null)
         event.preventDefault()
         return
@@ -1470,6 +1575,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
         if (store.popover === "slash") {
           slashOnKeyDown(event)
+          requestAnimationFrame(scrollSlashActive)
         }
         event.preventDefault()
         return
@@ -1536,7 +1642,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const handleSubmit = async (event: Event) => {
+  const handleSubmit = async (event: Event, action?: string) => {
     event.preventDefault()
 
     // A first prompt may need to create its session (and sometimes a
@@ -1553,9 +1659,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const currentPrompt = prompt.current()
-    const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
-    const images = imageAttachments().slice()
-    const mode = store.mode
+    const text = action ? `/${action}` : currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
+    const images = action ? [] : imageAttachments().slice()
+    const mode = action ? "normal" : store.mode
+    const intent = action ? null : store.intent
+
+    const typedIntent = !intent && images.length === 0 ? text.trim().match(/^\/(plan|goal)$/)?.[1] : undefined
+    if (typedIntent === "plan" || typedIntent === "goal") {
+      enterIntent(typedIntent)
+      return
+    }
 
     if (text.trim().length === 0 && images.length === 0) return
 
@@ -1599,7 +1712,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (native && active && mode === "normal" && images.length === 0) {
       setSubmitting(true)
       clearInput()
-      window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
+      if (!action) window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
       setStore("historyIndex", -1)
       setStore("savedPrompt", null)
       props.onSubmit?.()
@@ -1645,7 +1758,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // keep that work off the input event's critical path.
     setSubmitting(true)
     clearInput()
-    window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
+    if (!action) window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
 
@@ -1736,6 +1849,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         .catch((err) => {
           showToast({
             title: language.t("prompt.toast.shellSendFailed.title"),
+            description: errorMessage(err),
+          })
+          restoreInputAfterFailure()
+        })
+      setSubmitting(false)
+      return
+    }
+
+    if (intent) {
+      client.session
+        .command({
+          sessionID: session.id,
+          command: intent,
+          arguments: text,
+          agent,
+          model: `${model.providerID}/${model.modelID}`,
+          variant,
+          tier,
+          parts: images.map((attachment) => ({
+            id: Identifier.ascending("part"),
+            type: "file" as const,
+            mime: attachment.mime,
+            url: attachment.dataUrl,
+            filename: attachment.filename,
+          })),
+        })
+        .catch((err) => {
+          showToast({
+            title: `Could not start ${intent} mode`,
             description: errorMessage(err),
           })
           restoreInputAfterFailure()
@@ -2459,7 +2601,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   ref={(element) => (researchToolsRef = element)}
                   class="workspace-composer__research-tools"
                   onToggle={(event) => {
-                    if (event.currentTarget.open) return
+                    if (event.currentTarget.open) {
+                      if (!researchStatusRequested()) setResearchStatusRequested(true)
+                      else void researchToolsStatusActions.refetch()
+                      return
+                    }
                     resetResearchTools()
                   }}
                   onKeyDown={(event) => {
@@ -2840,7 +2986,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                   data-tone={option.value === "full" ? "warning" : undefined}
                                   aria-checked={selectedResearchAccess() === option.value}
                                   tabindex={selectedResearchAccess() === option.value ? 0 : -1}
-                                  disabled={researchAccess.loading || researchAccessSaving()}
+                                  disabled={
+                                    researchAccess.loading ||
+                                    researchAccessSaving() ||
+                                    (option.value !== "full" && researchAccess()?.sandboxAvailable === false)
+                                  }
                                   onClick={(event) => {
                                     void applyResearchAccess(option.value, event.currentTarget)
                                     event.currentTarget.closest("details")?.removeAttribute("open")
@@ -2848,7 +2998,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                 >
                                   <span>
                                     <strong>{option.label}</strong>
-                                    <small>{option.description}</small>
+                                    <small>
+                                      {option.value !== "full" && researchAccess()?.sandboxAvailable === false
+                                        ? `Unavailable: ${researchAccess()?.sandboxUnavailableReason ?? "sandbox backend not installed"}`
+                                        : option.description}
+                                    </small>
                                   </span>
                                   <Show when={selectedResearchAccess() === option.value}>
                                     <Icon name="check" size="small" />
@@ -2860,8 +3014,51 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </details>
                       </Show>
                     </section>
+                    <div class="workspace-composer__research-status" aria-live="polite">
+                      <Show
+                        when={researchToolsSummary()}
+                        fallback={
+                          <span>
+                            {researchToolsStatus.loading ? "Loading plan and search…" : "Plan status unavailable"}
+                          </span>
+                        }
+                      >
+                        {(summary) => (
+                          <span>
+                            {summary().plan} · {summary().search} · {summary().sharing}
+                          </span>
+                        )}
+                      </Show>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeResearchTools()
+                          dialog.show(() => <DialogSettings initial="research-tools" />)
+                        }}
+                      >
+                        Manage
+                      </button>
+                    </div>
                   </div>
                 </details>
+                <Show when={store.intent}>
+                  {(intent) => (
+                    <Tooltip placement="top" value={`Exit ${intent()} mode`}>
+                      <button
+                        type="button"
+                        class="workspace-composer__intent"
+                        data-composer-intent={intent()}
+                        aria-label={`Exit ${intent()} mode`}
+                        onClick={() => setIntent(null)}
+                      >
+                        <span class="workspace-composer__intent-close" aria-hidden="true">
+                          <Icon name="close" size="small" />
+                        </span>
+                        <span>{intent() === "plan" ? "Plan" : "Goal"}</span>
+                      </button>
+                    </Tooltip>
+                  )}
+                </Show>
               </Match>
             </Switch>
           </div>

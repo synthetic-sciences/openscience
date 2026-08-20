@@ -13,6 +13,10 @@ export namespace Tool {
 
   export interface InitContext {
     agent?: Agent.Info
+    model?: {
+      providerID: string
+      modelID: string
+    }
   }
 
   export type Context<M extends Metadata = Metadata> = {

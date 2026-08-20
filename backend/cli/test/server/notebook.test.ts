@@ -308,7 +308,13 @@ describe("/notebook routes", () => {
         const second = await app.request("/execute", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionID: session.id, id: "analysis.ipynb", language: "python", code: "value + 1" }),
+          body: JSON.stringify({
+            sessionID: session.id,
+            id: "analysis.ipynb",
+            language: "python",
+            environment: "default",
+            code: "value + 1",
+          }),
         })
         const result = (await second.json()) as {
           ok: boolean
@@ -1483,15 +1489,15 @@ describe("/notebook routes", () => {
         const app = NotebookRoutes()
         const first = await Session.create({})
         const second = await Session.create({})
-        const execute = (sessionID: string, code: string) =>
+        const execute = (sessionID: string, code: string, environment?: "default") =>
           app.request("/execute", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionID, id: "analysis.ipynb", language: "r", code }),
+            body: JSON.stringify({ sessionID, id: "analysis.ipynb", language: "r", code, environment }),
           })
 
         expect((await execute(first.id, "private_value <- 41")).status).toBe(200)
-        const resumed = (await (await execute(first.id, "private_value + 1")).json()) as {
+        const resumed = (await (await execute(first.id, "private_value + 1", "default")).json()) as {
           execution_count: number
           outputs: Array<{ text?: string }>
         }

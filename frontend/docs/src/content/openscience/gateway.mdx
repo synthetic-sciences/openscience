@@ -1,0 +1,90 @@
+---
+title: "Connect the Gateway"
+description: "Optionally add managed model credits, research search, synced credentials, and private research graphs without changing local or BYOK workflows."
+icon: "link"
+---
+
+OpenScience never requires an account. Local models, your own provider keys, eligible ChatGPT/Codex access, scientific tools, Python/R, and direct downloads continue to work without a plan. The **OpenScience Gateway** is the optional managed service.
+
+## What connecting adds
+
+- **Managed model credits.** Use supported models without configuring a provider key. Only Gateway-served calls debit the wallet.
+- **Managed research search.** Ace includes 1,000 completed searches per billing cycle; Ace+ includes 5,000. Search does not consume wallet credits or trigger auto reload.
+- **Private research graphs.** Sync durable claims, runs, evidence, and decisions that are visible only to owners and explicitly invited collaborators.
+- **Synced service credentials.** Store supported service keys on your account and pull them to another signed-in machine.
+- **Hosted researchers.** Ace and Ace+ include access to hosted Synthetic Scientists, subject to the plan's concurrency limits.
+
+Compute and public graph discovery are not current application features. Existing compatible compute APIs remain available to clients that already use them.
+
+## Link your account
+
+<Steps>
+  <Step title="Log in">
+    ```bash
+    openscience login
+    ```
+    Opens your browser to approve the device. On a headless machine, use `--no-browser`, or pass `--key thk_...` with a key created at `app.syntheticsciences.ai/cli`.
+  </Step>
+  <Step title="Verify">
+    ```bash
+    openscience status
+    ```
+    Shows the connected user, subscription, wallet, managed-search allowance, synced services, and recent managed usage.
+  </Step>
+  <Step title="Sync credentials">
+    ```bash
+    openscience sync
+    ```
+    Refreshes supported credentials after you change them in the Gateway.
+  </Step>
+</Steps>
+
+## Ace plans
+
+| Plan | Monthly price | Managed credits | Managed searches |
+| --- | ---: | ---: | ---: |
+| Ace | $20 | 20 purchased | 1,000 |
+| Ace+ | $100 | 100 purchased + 50 promotional | 5,000 |
+
+Ace+ promotional credits expire at the end of the billing cycle. Eligible `.edu` accounts receive 50% off the first month. Managed token usage costs the provider price plus a 5% service fee. Card processing is included in the plan price with no additional checkout fee; checkout shows the complete auto-reload settings before payment.
+
+New checkout presents auto reload selected by default. Ace reloads $20 below a $5 purchased-balance threshold with a default $100 monthly cap; Ace+ reloads $100 below $20 with a default $500 cap. You can deselect it before checkout or disable it later. Existing accounts are not silently enrolled.
+
+## Routing and billing
+
+Routing and plan status are independent. An Ace subscriber may still use local, BYOK, or ChatGPT/Codex-backed models without a Gateway charge.
+
+| Path | What runs where | Billing |
+| --- | --- | --- |
+| Local | OpenScience calls a local endpoint. | No Gateway charge. |
+| BYOK | OpenScience calls your provider directly. | Your provider account; no Gateway charge. |
+| ChatGPT/Codex | OpenScience uses the eligible signed-in route. | Your subscription; no Gateway charge. |
+| Gateway managed | OpenScience calls the Gateway, which calls the provider. | Gateway wallet. |
+
+Managed-search queries are sent to the Gateway and its configured search provider. If the Gateway is unavailable or an allowance is exhausted, OpenScience keeps non-managed routes working and explains the available fallback.
+
+## Privacy
+
+Content-free product telemetry is enabled by default and can be disabled in Settings. It records allowlisted operational events and aggregate usage, not prompt or response text, file content, notebook cells, or shell output. Research content is not collected or shared, and there is no content-sharing setting in this release.
+
+## Account commands
+
+| Command | Use |
+| --- | --- |
+| `openscience login` | Authenticate this device. |
+| `openscience status` | Inspect connection, plan, wallet, search allowance, and recent usage. |
+| `openscience wallet` | Inspect the managed balance and auto-reload state. |
+| `openscience sync` | Refresh synced supported credentials. |
+| `openscience devices` | List authenticated devices. |
+| `openscience logout` | Disconnect this machine; local and BYOK routes keep working. |
+
+## What's next
+
+<Columns cols={2}>
+  <Card title="Models" icon="package-check" href="/openscience/models">
+    Choose local, BYOK, ChatGPT/Codex, or managed routing.
+  </Card>
+  <Card title="Security" icon="shield-check" href="/openscience/security">
+    Review execution, credentials, telemetry, and managed-service boundaries.
+  </Card>
+</Columns>

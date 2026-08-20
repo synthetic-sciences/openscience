@@ -33,7 +33,7 @@ export namespace SkillMigration {
       { mode: 0o600 },
     )
     if (installedCount) await Skill.invalidate()
-    log.info("legacy Atlas skill installs imported locally", { installed: installedCount })
+    log.info("legacy research skill installs imported locally", { installed: installedCount })
     return true
   }
 

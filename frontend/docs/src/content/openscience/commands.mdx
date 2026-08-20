@@ -35,16 +35,16 @@ openscience run --format json "Summarize the experiment in results/" > summary.j
 
 ## Account
 
-Connecting an Atlas account is optional — see [Atlas](/openscience/atlas). OpenScience runs fully standalone with your own provider keys.
+Connecting the Gateway is optional — see [Gateway](/openscience/gateway). OpenScience runs fully standalone with your own provider keys, local models, or eligible ChatGPT/Codex access.
 
 | Command | Use |
 | --- | --- |
 | `openscience init` | First-run setup wizard — choose managed models, your own keys, or skip. Rerun anytime (alias `onboard`). |
-| `openscience login` | Connect your Atlas account (browser flow, or `--key thk_…`). |
-| `openscience status` | One view of your Atlas state — account, synced services, subscription, wallet balance + lifetime spend, recent usage, managed-compute availability, and the bundled `atlas` companion version (alias `whoami`). |
+| `openscience login` | Connect your Gateway account (browser flow, or `--key thk_…`). |
+| `openscience status` | One view of your Gateway state — account, synced services, subscription, wallet balance, managed-search allowance, and recent managed usage (alias `whoami`). |
 | `openscience sync` | Re-pull synced credentials. |
 | `openscience devices` | List authorized devices. |
-| `openscience logout` | Disconnect this device from Atlas. |
+| `openscience logout` | Disconnect this device from the Gateway. |
 | `openscience doctor` | Report what's configured: account, provider keys, wallet, default model. |
 
 `openscience connect …` still works as an alias for `login` / `logout` / `status` / `sync` / `devices`.
@@ -70,7 +70,7 @@ Connecting an Atlas account is optional — see [Atlas](/openscience/atlas). Ope
 | `openscience sandbox disable` | Turn the sandbox off. |
 | `openscience sandbox test` | Prove containment on this machine (writes inside/outside the workspace, network egress). |
 
-Disabled in the default **Full access** preset. Use the composer’s **Research tools → Action approval** menu or `sandbox enable` to turn on fail-closed containment; managed policy can require it. See [Sandbox and project trust](/openscience/sandbox).
+Enabled in the default **Approve for me** preset. Use the composer’s **Research tools → Action approval** menu to change the trust/containment preset, or `sandbox enable` and `sandbox disable` to manage containment directly; managed policy can require it. See [Sandbox and project trust](/openscience/sandbox).
 
 ## Agent profiles
 
@@ -114,7 +114,7 @@ Flags: `--path`, `--description`, `--mode <all\|primary\|subagent>`, `--tools`, 
 
 | Command | Use |
 | --- | --- |
-| `openscience project` | Pin the Atlas project root for this folder (`merge`). |
+| `openscience project` | Pin the Gateway project root for this folder (`merge`). |
 | `openscience export` / `openscience import` | Export or import a session as JSON. |
 | `openscience generate` | Emit the OpenAPI spec for the local server to stdout. |
 | `openscience stats` | Local token-usage and cost stats. |

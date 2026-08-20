@@ -162,7 +162,7 @@ export const SessionRoutes = lazy(() =>
         summary: "Get local harness trace",
         tags: ["Session"],
         description:
-          "Build one local, Atlas-independent trace with effective harness manifests, composition transitions, attribution invariants, deterministic trajectory fingerprints, inference, tools, child agents, compute, artifacts, failures, costs, and timing. Hidden reasoning, prompt content, and copied tool outputs are excluded.",
+          "Build one local, Gateway-independent trace with effective harness manifests, composition transitions, attribution invariants, deterministic trajectory fingerprints, inference, tools, child agents, compute, artifacts, failures, costs, and timing. Hidden reasoning, prompt content, and copied tool outputs are excluded.",
         operationId: "session.trace",
         responses: {
           200: {

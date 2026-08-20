@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Mode"
+  short_description: "Plan a multi-step task before execution"
+  default_prompt: "Use $plan to create a decision-ready plan for this task."

@@ -122,7 +122,7 @@ export async function runAtlasLogin(args: { key?: string; browser?: boolean } = 
 
 export const LoginCommand = cmd({
   command: "login",
-  describe: "log in to your Atlas account (managed models, wallet, sync)",
+  describe: "log in to your Gateway account (managed models, wallet, sync)",
   builder: (yargs) =>
     yargs
       .option("key", {
@@ -144,14 +144,14 @@ export const LoginCommand = cmd({
 
 export const LogoutCommand = cmd({
   command: "logout",
-  describe: "log out of your Atlas account",
+  describe: "log out of your Gateway account",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.warn("Not signed in to Atlas.")
+      prompts.log.warn("Not signed in to Gateway.")
       prompts.log.info("To remove a saved provider key instead, use `openscience keys rm`.")
       prompts.outro("Done")
       return
@@ -161,7 +161,7 @@ export const LogoutCommand = cmd({
     // the call, then clear every local credential artifact.
     const revoked = await OpenScience.revokeCurrentDevice()
     await OpenScience.clearSession()
-    prompts.log.success("Signed out of Atlas")
+    prompts.log.success("Signed out of Gateway")
     if (!revoked) {
       prompts.log.info(
         "Could not revoke this device's key server-side — remove it from the Devices tab at app.syntheticsciences.ai if needed",
@@ -173,14 +173,14 @@ export const LogoutCommand = cmd({
 
 export const StatusCommand = cmd({
   command: ["status", "whoami"],
-  describe: "show Atlas connection, account, and wallet",
+  describe: "show Gateway connection, account, and wallet",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.warn("Not connected to Atlas")
+      prompts.log.warn("Not connected to Gateway")
       prompts.log.info("Run `openscience login` to connect, or `openscience keys add` to use your own key.")
       prompts.outro("Done")
       return
@@ -222,7 +222,7 @@ export const StatusCommand = cmd({
     }
     if (mode) {
       prompts.log.info(`Managed compute: ${mode.managed_supported ? "available" : "unavailable"}`)
-      prompts.log.info("Routing: per-provider (auto) — your key if set, else Atlas managed (debits wallet).")
+      prompts.log.info("Routing: per-provider (auto) — your key if set, else Gateway managed (debits wallet).")
     }
     if (txns && txns.length > 0) {
       const noun = txns.length === 1 ? "charge" : "charges"
@@ -240,7 +240,7 @@ export const StatusCommand = cmd({
 
 export const SyncCommand = cmd({
   command: "sync",
-  describe: "sync service credentials from your Atlas account",
+  describe: "sync service credentials from your Gateway account",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")

@@ -745,7 +745,7 @@ export function AtlasCanvas(): JSX.Element {
             <IconNetwork size={13} strokeWidth={1.6} />
           </span>
           <span
-            title={selectedGraph()?.title || selectedGraph()?.node_id || "Atlas graph (account-scoped)"}
+            title={selectedGraph()?.title || selectedGraph()?.node_id || "Gateway graph (account-scoped)"}
             style={{
               "font-family": FONT_SANS,
               "font-size": "13px",
@@ -872,7 +872,7 @@ export function AtlasCanvas(): JSX.Element {
             width="100%"
             height="100%"
             role="group"
-            aria-label="Atlas research graph. Use Tab to move between nodes and Enter to open one."
+            aria-label="Gateway research graph. Use Tab to move between nodes and Enter to open one."
             style={{ display: "block", cursor: panStart ? "grabbing" : "grab", "touch-action": "none" }}
             onpointerdown={onPointerDown}
             onpointermove={onPointerMove}
@@ -1500,7 +1500,7 @@ function AtlasErrorHero(props: { message: string; onRetry: () => void }): JSX.El
           "letter-spacing": "0.06em",
         }}
       >
-        atlas is unavailable
+        gateway is unavailable
       </div>
       <div
         style={{
@@ -1553,7 +1553,7 @@ function EmptyHero(props: { onCreate: () => void }): JSX.Element {
           "letter-spacing": "0.06em",
         }}
       >
-        atlas graph is empty
+        gateway graph is empty
       </div>
       <div
         style={{
@@ -1624,7 +1624,7 @@ function InitHero(props: { onInit: () => void; onChat: () => void; busy: boolean
           "line-height": 1.55,
         }}
       >
-        This folder isn't linked to an Atlas research graph yet. Initialize one to start tracking hypotheses,
+        This folder isn't linked to a Gateway research graph yet. Initialize one to start tracking hypotheses,
         experiments, and decisions here.
       </div>
       <button

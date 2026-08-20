@@ -22,7 +22,7 @@ import { usePlatform } from "@/context/platform"
 import { useGlobalSync } from "@/context/global-sync"
 import type { Config } from "@synsci/sdk/v2/client"
 import { installFromGit } from "./skills-settings"
-import { restoreExactSkillPermission, skillAction, skillPermissionChange } from "./skill-permissions"
+import { restoreExactSkillPermission, skillAction, skillPermissionChange, visibleSkills } from "./skill-permissions"
 import "./skills-page.css"
 import { SearchInput, FilterMenu, AddMenu, EmptyState, FormField, FormButton } from "@/components/settings/_shared"
 
@@ -227,7 +227,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
     permissionWrites = permissionWrites.then(persist, persist)
   }
 
-  const all = () => skills() ?? initialSkills
+  const all = createMemo(() => visibleSkills(skills() ?? initialSkills, []))
   const enabledCount = createMemo(() => all().filter((s) => enabled(s.name)).length)
 
   const categories = createMemo(() => {

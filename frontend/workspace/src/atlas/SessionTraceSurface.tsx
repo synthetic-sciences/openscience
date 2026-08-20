@@ -264,7 +264,7 @@ export function SessionTraceSurface(props: { session: string }): JSX.Element {
 
                 <footer class="session-trace__privacy">
                   <span>Local to this machine</span>
-                  <span>Atlas not required</span>
+                  <span>Gateway not required</span>
                   <span>No chain-of-thought</span>
                 </footer>
               </>

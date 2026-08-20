@@ -223,7 +223,11 @@ export namespace KernelEnvironmentMutation {
     }
 
     const packages = path.join(managedRoot("python", environment), "site-packages")
-    if (allowMutation) mkdirSync(packages, { recursive: true })
+    // The default managed environment is a runtime primitive, not an
+    // installation side effect. Recreate its empty package root on demand so
+    // a cleaned data directory cannot make an otherwise valid host Python
+    // fail to start. Package writes remain gated separately below.
+    mkdirSync(packages, { recursive: true })
     return {
       ...runtime,
       binary,
@@ -239,7 +243,10 @@ export namespace KernelEnvironmentMutation {
   /** Complete R start contract shared by all canonical entry points. */
   export function rRuntime(allowMutation = false): KernelStartOptions {
     const packages = path.join(managedRoot("r", "r"), "library")
-    if (allowMutation) mkdirSync(packages, { recursive: true })
+    // R warns or fails when R_LIBS_USER names a missing directory. Provision
+    // the empty app-managed library for every default start and recover it
+    // after cache cleanup; mutation authority is still required to write it.
+    mkdirSync(packages, { recursive: true })
     return {
       environmentName: "r",
       env: { R_LIBS_USER: packages },

@@ -79,11 +79,11 @@ describe("home project preparation", () => {
 
     const project = {
       id: "prj_1234567890abcdefghijkl",
-      name: "Atlas Research",
+      name: "Gateway Research",
       worktree: "/Users/aayam/Research/atlas",
       time: { created: 10 },
     }
-    expect(subject.projectName(project)).toBe("Atlas Research")
+    expect(subject.projectName(project)).toBe("Gateway Research")
     expect(subject.projectName(project)).not.toContain(project.worktree)
   })
 

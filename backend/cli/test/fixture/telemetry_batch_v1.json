@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "consent_version": "openscience-analytics-2026-08-20",
+  "installation_id": "installation-fixture-0001",
+  "events": [
+    {
+      "event_id": "event-fixture-00000001",
+      "schema_version": 1,
+      "event_type": "assistant.completed",
+      "occurred_at": "2026-08-20T12:00:00Z",
+      "app_version": "0.1.0",
+      "platform": "macos",
+      "architecture": "arm64",
+      "installation_id": "installation-fixture-0001",
+      "session_id": "session-fixture-0001",
+      "model_route": "managed",
+      "provider_family": "openai",
+      "model_family": "gpt-5",
+      "input_tokens": 120,
+      "output_tokens": 40,
+      "cached_tokens": 0,
+      "reasoning_tokens": 10,
+      "success": true
+    }
+  ]
+}

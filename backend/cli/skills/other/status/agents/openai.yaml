@@ -1,0 +1,4 @@
+interface:
+  display_name: "Session Status"
+  short_description: "Show live session and workspace status"
+  default_prompt: "Use $status to show the current session status."

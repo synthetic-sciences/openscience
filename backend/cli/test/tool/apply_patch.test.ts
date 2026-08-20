@@ -59,6 +59,16 @@ const makeCtx = () => {
 }
 
 describe("tool.apply_patch freeform", () => {
+  test("tells the model that multi-file patches are preflighted and rolled back together", async () => {
+    const description = await Bun.file(new URL("../../src/tool/apply_patch.txt", import.meta.url)).text()
+    expect(description).toContain("Multi-file patches are supported in one call")
+    expect(description).toContain("preflights every file before writing")
+    expect(description).toContain("rolls back completed file operations")
+    expect(description).not.toContain(
+      "apply_patch verification failed: multi-file patches are not atomic; submit one file per patch",
+    )
+  })
+
   test("requires patchText", async () => {
     const { ctx } = makeCtx()
     await expect(execute({ patchText: "" }, ctx)).rejects.toThrow("patchText is required")

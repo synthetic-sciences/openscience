@@ -7,6 +7,7 @@ import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
+import { ProjectTrust } from "../../src/project/trust"
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENSCIENCE_TEST_MANAGED_CONFIG_DIR!
@@ -35,8 +36,8 @@ test("loads config with defaults when no files exist", async () => {
   })
 })
 
-test("trusted sandbox defaults to full access while managed config can require containment", async () => {
-  expect(await Config.trustedSandbox()).toMatchObject({ enabled: false, requireProjectTrust: false })
+test("trusted sandbox defaults to containment while preserving explicit and managed policy", async () => {
+  expect(await Config.trustedSandbox()).toMatchObject({ enabled: true, requireProjectTrust: false })
 
   await using tmp = await tmpdir({
     init: (dir) => writeConfig(dir, { sandbox: { requireProjectTrust: true } }),
@@ -46,9 +47,28 @@ test("trusted sandbox defaults to full access while managed config can require c
     fn: async () => expect((await Config.trustedSandbox()).requireProjectTrust).toBe(false),
   })
 
+  await Config.setSandbox({ enabled: false })
+  expect(await Config.trustedSandbox()).toMatchObject({ enabled: false, requireProjectTrust: false })
+
   await writeManagedSettings({ sandbox: { enabled: true, requireProjectTrust: true } })
 
   expect(await Config.trustedSandbox()).toMatchObject({ enabled: true, requireProjectTrust: true })
+  await Config.unsetGlobal(["sandbox"])
+})
+
+test("a fresh project combines default trust with default containment", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await ProjectTrust.status(Instance.project)).toMatchObject({
+        source: "default",
+        state: "trusted",
+        canExecuteProjectCode: true,
+      })
+      expect(await Config.trustedSandbox()).toMatchObject({ enabled: true })
+    },
+  })
 })
 
 test("loads JSON config file", async () => {

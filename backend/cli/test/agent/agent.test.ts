@@ -4,6 +4,7 @@ import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { PermissionNext } from "../../src/permission/next"
 import { ProjectTrust } from "../../src/project/trust"
+import { Config } from "../../src/config/config"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionNext.Action | undefined {
@@ -118,8 +119,8 @@ test("explore agent denies edit and write", async () => {
       expect(explore?.mode).toBe("subagent")
       expect(evalPerm(explore, "edit")).toBe("deny")
       expect(evalPerm(explore, "write")).toBe("deny")
-      expect(evalPerm(explore, "webfetch")).toBe("allow")
-      expect(evalPerm(explore, "network")).toBe("allow")
+      expect(evalPerm(explore, "webfetch")).toBe("ask")
+      expect(evalPerm(explore, "network")).toBe("ask")
       expect(evalPerm(explore, "todoread")).toBe("deny")
       expect(evalPerm(explore, "todowrite")).toBe("deny")
     },
@@ -181,7 +182,7 @@ test("untrusted project agent configuration stays inert", async () => {
       const research = await Agent.get("research")
       expect(research?.prompt).toBeUndefined()
       expect(research?.color).toBe("#d48765")
-      expect(evalPerm(research, "bash")).toBe("allow")
+      expect(evalPerm(research, "bash")).toBe("ask")
       expect(await Agent.defaultAgent()).toBe("research")
     },
   })
@@ -497,30 +498,64 @@ test("Agent.get returns undefined for non-existent agent", async () => {
   })
 })
 
-test("default Full access removes routine approval prompts", async () => {
+test("fresh Approve mode auto-allows safe sandboxed work and asks at external boundaries", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const research = await Agent.get("research")
-      expect(evalPerm(research, "mcp")).toBe("allow")
-      expect(evalPerm(research, "doom_loop")).toBe("allow")
-      expect(evalPerm(research, "external_directory")).toBe("allow")
-      expect(evalPerm(research, "compute_job")).toBe("allow")
-      expect(PermissionNext.evaluate("read", ".env", research!.permission).action).toBe("allow")
+      expect(evalPerm(research, "edit")).toBe("allow")
+      expect(evalPerm(research, "bash")).toBe("allow")
+      expect(evalPerm(research, "network")).toBe("ask")
+      expect(evalPerm(research, "websearch")).toBe("ask")
+      expect(evalPerm(research, "mcp")).toBe("ask")
+      expect(evalPerm(research, "external_directory")).toBe("ask")
+      expect(evalPerm(research, "compute_job")).toBe("ask")
+      expect(PermissionNext.evaluate("read", ".env", research!.permission).action).toBe("ask")
     },
   })
 })
 
-test("webfetch is allowed by default", async () => {
+test("persisted Ask mode overrides built-in subagent convenience allows", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
+      Agent.invalidate()
+      expect(await ProjectTrust.status(Instance.project)).toMatchObject({ source: "persisted", state: "revoked" })
       const research = await Agent.get("research")
-      expect(evalPerm(research, "webfetch")).toBe("allow")
+      const explore = await Agent.get("explore")
+      expect(evalPerm(research, "edit")).toBe("ask")
+      expect(evalPerm(explore, "edit")).toBe("deny")
+      for (const permission of ["bash", "network", "webfetch", "websearch"]) {
+        expect(evalPerm(research, permission)).toBe("ask")
+        expect(evalPerm(explore, permission)).toBe("ask")
+      }
+      expect(evalPerm(research, "external_directory")).toBe("ask")
+      expect(evalPerm(explore, "external_directory")).toBe("deny")
     },
   })
+})
+
+test("explicit Full mode removes file command and internet approval prompts", async () => {
+  const previous = await Config.trustedSandbox()
+  await Config.setSandbox({ enabled: false })
+  try {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const research = await Agent.get("research")
+        for (const permission of ["edit", "bash", "network", "webfetch", "websearch", "external_directory"]) {
+          expect(evalPerm(research, permission)).toBe("allow")
+        }
+        expect(PermissionNext.evaluate("read", ".env", research!.permission).action).toBe("allow")
+      },
+    })
+  } finally {
+    await Config.setSandbox(previous)
+  }
 })
 
 test("legacy tools config converts to permissions", async () => {

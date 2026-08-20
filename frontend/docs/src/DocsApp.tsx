@@ -115,7 +115,7 @@ const ICONS: Record<string, ReactNode> = {
   models: <PackageCheck size={17} strokeWidth={1.8} />,
   skills: <BookOpen size={17} strokeWidth={1.8} />,
   sessions: <Terminal size={17} strokeWidth={1.8} />,
-  atlas: <GitBranch size={17} strokeWidth={1.8} />,
+  gateway: <GitBranch size={17} strokeWidth={1.8} />,
   commands: <Terminal size={17} strokeWidth={1.8} />,
   security: <ShieldCheck size={17} strokeWidth={1.8} />,
 }
@@ -207,7 +207,8 @@ const PAGE_ALIASES: Record<string, string> = {
   "first-session": "sessions",
   "sub-agents": "agents",
   "web-ui": "workspace",
-  credentials: "atlas",
+  atlas: "gateway",
+  credentials: "gateway",
 }
 
 // Redirects from the oldest single-segment URLs to the #/<section>/<page> scheme.
@@ -222,8 +223,8 @@ const LEGACY_REDIRECTS: Record<string, { section: SectionKey; path: string }> = 
   "cli:sub-agents": { section: "openscience", path: "agents" },
   "cli:skills": { section: "openscience", path: "skills" },
   "cli:cli-runtime": { section: "openscience", path: "commands" },
-  "cli:connect": { section: "openscience", path: "atlas" },
-  "cli:credentials": { section: "openscience", path: "atlas" },
+  "cli:connect": { section: "openscience", path: "gateway" },
+  "cli:credentials": { section: "openscience", path: "gateway" },
   "cli:security": { section: "openscience", path: "security" },
   "cli:feature-map": { section: "openscience", path: "commands" },
   "cli:commands": { section: "openscience", path: "commands" },
@@ -244,7 +245,8 @@ function routeFromHash(): Route {
   const segments = raw.split("/")
   const maybeSection = segments[0] as SectionKey
   if (SECTION_KEYS.includes(maybeSection)) {
-    const path = segments.slice(1).join("/") || "index"
+    const rawPath = segments.slice(1).join("/") || "index"
+    const path = PAGE_ALIASES[rawPath] ?? rawPath
     if (pageExists(maybeSection, path)) return { section: maybeSection, path }
     return { section: maybeSection, path: "index" }
   }

@@ -36,7 +36,7 @@ const button = (host: HTMLElement, label: string) =>
   host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
 
 describe("SessionSidebarActions", () => {
-  test("keeps Files, Terminal, and Compute reachable in the compact menu and gates Atlas", async () => {
+  test("keeps Files, Terminal, and Compute reachable in the compact menu and gates Gateway", async () => {
     const subject = await import("./session-sidebar-action")
     const state = createContextState()
     const compact = mount(() => (
@@ -65,7 +65,7 @@ describe("SessionSidebarActions", () => {
     menu("Compute")?.click()
     await Promise.resolve()
     expect(state.context()).toBe("kernels")
-    expect(menu("Atlas")).toBeUndefined()
+    expect(menu("Gateway")).toBeUndefined()
     expect(menu("Evidence")).toBeUndefined()
     expect(menu("Trace")).toBeUndefined()
 
@@ -77,7 +77,7 @@ describe("SessionSidebarActions", () => {
         .find((item) => item.textContent?.trim() === "Compute")
         ?.getAttribute("aria-pressed"),
     ).toBe("true")
-    expect(connected.textContent).toContain("Atlas")
+    expect(connected.textContent).toContain("Gateway")
   })
 
   test("keeps Trace hidden until the General preference is enabled", async () => {
@@ -171,12 +171,12 @@ describe("SessionSidebarActions", () => {
     expect(state.context()).toBe("terminal")
     expect(state.open()).toBe(true)
 
-    button(host, "Open Atlas")?.click()
+    button(host, "Open Gateway")?.click()
     await Promise.resolve()
     expect(state.context()).toBe("canvas")
     expect(state.open()).toBe(true)
 
-    button(host, "Open Atlas")?.click()
+    button(host, "Open Gateway")?.click()
     await Promise.resolve()
     expect(state.context()).toBe("canvas")
     expect(state.open()).toBe(true)
@@ -194,7 +194,7 @@ describe("SessionSidebarActions", () => {
         onContext={() => {}}
       />
     ))
-    expect(button(selected, "Open Atlas")?.getAttribute("aria-pressed")).toBe("true")
+    expect(button(selected, "Open Gateway")?.getAttribute("aria-pressed")).toBe("true")
     expect(button(selected, "Open project terminal")).not.toBeNull()
     expect(button(selected, "Open Evidence")).toBeNull()
 
@@ -208,7 +208,7 @@ describe("SessionSidebarActions", () => {
       />
     ))
     expect(button(files, "Open project files")?.getAttribute("aria-pressed")).toBe("true")
-    expect(button(files, "Open Atlas")).toBeNull()
+    expect(button(files, "Open Gateway")).toBeNull()
   })
 
   test("offers Details only when an artifact is active", async () => {

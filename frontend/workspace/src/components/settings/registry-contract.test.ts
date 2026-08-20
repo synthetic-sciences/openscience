@@ -7,6 +7,7 @@ const modules: Record<(typeof SETTINGS_PANEL_IDS)[number], string> = {
   "local-models": "LocalModels",
   skills: "Skills",
   connectors: "Connectors",
+  "research-tools": "ResearchTools",
   compute: "Compute",
   network: "Network",
   permissions: "Permissions",

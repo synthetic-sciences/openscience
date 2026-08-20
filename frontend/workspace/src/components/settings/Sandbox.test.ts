@@ -35,10 +35,10 @@ test("sandbox mutations respond optimistically while server writes stay ordered"
   expect(component).not.toContain("disabled={busy()")
 })
 
-test("sandbox reflects the full-access default and retains the explicit containment policy", async () => {
+test("sandbox reflects the contained default and retains the explicit containment policy", async () => {
   const component = await source
 
-  expect(component).toContain("enabled: false")
+  expect(component).toContain("enabled: true")
   expect(component).toContain("requireProjectTrust?: boolean")
   expect(component).toContain("requireProjectTrust: false")
   expect(component).toContain("Sandboxed terminals, kernels, and local jobs can run immediately")

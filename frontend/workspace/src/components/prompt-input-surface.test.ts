@@ -150,9 +150,10 @@ describe("floating prompt surface", () => {
   test("uses draft-safe rollback for every post-dispatch failure path", () => {
     const calls = source.match(/restoreInputAfterFailure\(\)/g) ?? []
 
-    // Shell, custom command, pending-worktree cleanup, and normal prompt
-    // failures all share the same draft-safe rollback.
-    expect(calls).toHaveLength(4)
+    // Native actions, shell, Plan/Goal intent, custom commands,
+    // pending-worktree cleanup, and normal prompts all share the same
+    // draft-safe rollback.
+    expect(calls).toHaveLength(6)
     expect(source).toContain("canRestoreFailedSubmission(prompt.current(), store.mode)")
   })
 
@@ -184,7 +185,9 @@ describe("composer control consolidation", () => {
     expect(source).toContain("local.model.tier.set(option.id)")
     expect(source).toContain("const resetResearchTools = () =>")
     expect(source).toContain('".workspace-composer__research-choice[open]"')
-    expect(source).toContain("if (event.currentTarget.open) return")
+    expect(source).toContain("if (event.currentTarget.open) {")
+    expect(source).toContain("setResearchStatusRequested(true)")
+    expect(source).toContain("researchToolsStatusActions.refetch()")
     expect(source).not.toContain("Ultra")
     expect(source).not.toContain('class="workspace-composer__research-tools-separator"')
     expect(source).not.toContain("<strong>{researchAccessLabel()}</strong>")
@@ -220,6 +223,9 @@ describe("composer control consolidation", () => {
     expect(source).toContain('sdk.request("/settings/sandbox", init)')
     expect(source).toContain('sdk.event.on("project.trust.changed"')
     expect(source).toContain('sdk.event.on("server.instance.disposed"')
+    expect(source).toContain('title: "Enable Full access?"')
+    expect(source).toContain("Full access disables the execution sandbox")
+    expect(source).toContain("if (!confirmed) return")
     expect(source).toContain("title: `${accessLabel(effective)} enabled`")
     expect(source).toContain("onKeyDown={navigateResearchChoices}")
     expect(componentCss).toContain(".workspace-composer__research-choice-menu > button")

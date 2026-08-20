@@ -18,7 +18,6 @@ Options:
     -v, --version <version> Install a specific version (e.g., 1.0.180)
     -b, --binary <path>     Install from a local binary instead of downloading
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
-        --no-atlas          Don't offer to install the Atlas CLI companion
 
 Examples:
     curl -fsSL https://openscience.sh/install | bash
@@ -29,7 +28,6 @@ EOF
 
 requested_version=${VERSION:-}
 no_modify_path=false
-no_atlas=false
 binary_path=""
 
 while [[ $# -gt 0 ]]; do
@@ -60,8 +58,9 @@ while [[ $# -gt 0 ]]; do
             no_modify_path=true
             shift
             ;;
-        --no-atlas)
-            no_atlas=true
+        --no-atlas|--no-gateway)
+            # Retained as a no-op for installer-script compatibility. The
+            # OpenScience installer no longer offers a separate companion.
             shift
             ;;
         *)
@@ -486,28 +485,6 @@ if [[ -n "$shadow" && "$shadow" != "$INSTALL_DIR/openscience" ]]; then
     print_message warning "Another openscience binary at ${shadow} may shadow this install."
     print_message info "${MUTED}If it was installed by npm (the deprecated ${NC}@synsci/cli${MUTED} package), remove it with:${NC}"
     print_message info "  npm rm -g @synsci/cli"
-fi
-
-# Offer the Atlas CLI companion (research graph — maps, runs, shared library).
-# Piping via curl|bash makes stdin the script itself, so prompt on /dev/tty.
-# Skips when non-interactive, in CI, already installed, or opted out.
-if [ "$no_atlas" != true ] && [ -z "${OPENSCIENCE_NO_ATLAS:-}" ] && [ -z "${CI:-}" ] \
-    && [ -t 1 ] && [ -r /dev/tty ] && ! command -v atlas >/dev/null 2>&1; then
-    echo -e ""
-    echo -e "${MUTED}Atlas is Synthetic Sciences' research graph — maps, runs, and a shared library.${NC}"
-    printf "Install the Atlas CLI companion too? [y/N] "
-    read -r atlas_reply </dev/tty || atlas_reply=""
-    case "$atlas_reply" in
-        [Yy]*)
-            if command -v npm >/dev/null 2>&1; then
-                echo -e "${MUTED}Installing @synsci/atlas…${NC}"
-                npm install -g @synsci/atlas@latest \
-                    || print_message warning "Atlas install failed — run: npm i -g @synsci/atlas@latest"
-            else
-                print_message info "npm not found — install Atlas later with: npm i -g @synsci/atlas@latest"
-            fi
-            ;;
-    esac
 fi
 
 echo -e ""

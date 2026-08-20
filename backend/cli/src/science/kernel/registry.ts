@@ -14,6 +14,7 @@ import { KernelMetrics } from "./metrics"
 import { ProcessIdentity } from "@/process/process-identity"
 import * as ExecutionFiles from "@/science/execution/files"
 import { ExecutionHistory } from "@/science/execution/history"
+import { Log } from "@/util/log"
 import type {
   ExecuteOptions,
   ExecuteResult,
@@ -52,11 +53,26 @@ export class KernelStartupCancelled extends Error {
 export class KernelExecutionError extends Error {
   constructor(
     error: unknown,
-    readonly provenanceID: string,
+    readonly provenanceID?: string,
   ) {
     const cause = error instanceof Error ? error : new Error(String(error))
     super(cause.message, { cause })
     this.name = "KernelExecutionError"
+  }
+}
+
+const log = Log.create({ service: "science.kernel.registry" })
+
+/** Provenance enriches a completed execution but is never execution authority.
+ * A corrupt/locked optional graph store must not erase a valid kernel result
+ * or replace the kernel's original failure. The execution journal remains the
+ * durable fallback and can be reconciled later. */
+export async function saveOptionalProvenance<T>(save: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await save()
+  } catch (error) {
+    log.warn("optional provenance save failed", { error: error instanceof Error ? error.message : String(error) })
+    return undefined
   }
 }
 
@@ -1024,23 +1040,25 @@ export namespace KernelRuntime {
             resources,
             files,
           })
-          const node = await provenance(
-            identity,
-            value,
-            code,
-            startedAt,
-            completedAt,
-            running.codeState,
-            options?.origin,
-            complete,
-            undefined,
-            resources,
-            complete.ok ? "succeeded" : "failed",
-            files,
-            running.sequence,
+          const node = await saveOptionalProvenance(() =>
+            provenance(
+              identity,
+              value,
+              code,
+              startedAt,
+              completedAt,
+              running.codeState,
+              options?.origin,
+              complete,
+              undefined,
+              resources,
+              complete.ok ? "succeeded" : "failed",
+              files,
+              running.sequence,
+            ),
           )
-          await ExecutionHistory.link(running.journal!, node.id)
-          return { ...complete, provenanceID: node.id }
+          if (node) await saveOptionalProvenance(() => ExecutionHistory.link(running.journal!, node.id))
+          return { ...complete, ...(node ? { provenanceID: node.id } : {}) }
         }),
       (error) =>
         withLease(value, async () => {
@@ -1073,23 +1091,25 @@ export namespace KernelRuntime {
             resources,
             files,
           })
-          const node = await provenance(
-            identity,
-            value,
-            code,
-            startedAt,
-            completedAt,
-            running.codeState,
-            options?.origin,
-            undefined,
-            error,
-            resources,
-            status,
-            files,
-            running.sequence,
+          const node = await saveOptionalProvenance(() =>
+            provenance(
+              identity,
+              value,
+              code,
+              startedAt,
+              completedAt,
+              running.codeState,
+              options?.origin,
+              undefined,
+              error,
+              resources,
+              status,
+              files,
+              running.sequence,
+            ),
           )
-          await ExecutionHistory.link(running.journal!, node.id)
-          throw new KernelExecutionError(error, node.id)
+          if (node) await saveOptionalProvenance(() => ExecutionHistory.link(running.journal!, node.id))
+          throw new KernelExecutionError(error, node?.id)
         }),
     )
   }

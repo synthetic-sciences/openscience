@@ -179,8 +179,8 @@ export default function General() {
             <div class="settings-card settings-preferences-card">
               <Row
                 icon="branch"
-                title="Atlas"
-                description="Show the research map in project navigation. Your map data is never changed."
+                title="Gateway"
+                description="Show the Gateway research map in project navigation. Your map data is never changed."
               >
                 <Switch
                   hideLabel
@@ -188,7 +188,7 @@ export default function General() {
                   disabled={!prefs() || preferenceBusy()}
                   onChange={(atlas_enabled) => void savePref({ atlas_enabled })}
                 >
-                  Show Atlas
+                  Show Gateway
                 </Switch>
               </Row>
               <Row

@@ -17,6 +17,7 @@ import { runLocalModelSetup } from "./cmd/local"
 import { Installation } from "../installation"
 import { webVersion } from "../web/assets"
 import { BYOK_LLM_ENV_KEYS } from "../openscience/synced-env-policy"
+import { Instance } from "../project/instance"
 
 const PLAN_URL = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || "https://app.syntheticsciences.ai/cli"
 const MARKER = path.join(Global.Path.state, "onboarded")
@@ -25,7 +26,11 @@ function hasProviderEnv(): boolean {
   return BYOK_LLM_ENV_KEYS.some((key) => !!process.env[key])
 }
 
-/** True once the user has any usable way to run a model: a managed Atlas
+async function currentConfig() {
+  return Instance.provide({ directory: process.cwd(), fn: () => Config.get() })
+}
+
+/** True once the user has any usable way to run a model: a managed Gateway
  *  session, a saved BYOK key, a provider env var, or an explicit default
  *  model in config. Used to decide whether to auto-launch onboarding and
  *  whether to warn about a missing model. */
@@ -36,7 +41,7 @@ export async function isConfigured(): Promise<boolean> {
     if (Object.keys(await Auth.all()).length > 0) return true
   } catch {}
   try {
-    const config = await Config.get()
+    const config = await currentConfig()
     if (config.model) return true
   } catch {}
   return false
@@ -71,12 +76,12 @@ export async function needsOnboarding(): Promise<boolean> {
 async function onboardManaged(): Promise<void> {
   const existing = await OpenScience.getSession()
   if (existing) {
-    prompts.log.success("Already connected to your Atlas account.")
+    prompts.log.success("Already connected to your Gateway account.")
     await OpenScience.syncServices().catch(() => {})
   } else {
     const ok = await runAtlasLogin({})
     if (!ok) {
-      prompts.log.warn("Skipped Atlas sign-in. Run `openscience login` anytime to connect.")
+      prompts.log.warn("Skipped Gateway sign-in. Run `openscience login` anytime to connect.")
       return
     }
   }
@@ -125,7 +130,7 @@ function onboardSkip(): void {
   prompts.log.info("No problem — you can explore projects and files without a model.")
   prompts.log.message(
     "Connect a model before using chat:\n" +
-      "  openscience login       connect Atlas managed models (prepaid wallet)\n" +
+      "  openscience login       connect Gateway managed models (prepaid wallet)\n" +
       "  openscience keys add    add your own provider key (always free)\n" +
       "  openscience local add   use a local model (Ollama / LM Studio / OpenAI-compatible)",
   )
@@ -134,7 +139,7 @@ function onboardSkip(): void {
 async function offerAtlasCli(): Promise<void> {
   if (Bun.which("atlas")) return
   const yes = await prompts.confirm({
-    message: "Install the Atlas CLI companion? (research graph — maps, runs, library)",
+    message: "Install the Gateway CLI companion? (research graph — maps, runs, library)",
     initialValue: false,
   })
   if (prompts.isCancel(yes) || !yes) return
@@ -149,7 +154,7 @@ async function offerAtlasCli(): Promise<void> {
     const proc = Bun.spawn(["npm", "install", "-g", "@synsci/atlas@latest"], { stdout: "ignore", stderr: "pipe" })
     const code = await proc.exited
     if (code === 0) {
-      spin.stop("Atlas CLI installed — it shares your session, so it's already signed in.")
+      spin.stop("Gateway CLI installed — it shares your session, so it's already signed in.")
     } else {
       spin.stop("Couldn't install automatically. Run: npm i -g @synsci/atlas@latest", 1)
     }
@@ -167,7 +172,7 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
     message: "How do you want to power the models?",
     initialValue: "managed",
     options: [
-      { value: "managed", label: "Atlas managed", hint: "★ recommended · prepaid wallet · zero setup" },
+      { value: "managed", label: "Gateway managed", hint: "★ recommended · prepaid wallet · zero setup" },
       { value: "byok", label: "Your own keys", hint: "Anthropic · OpenAI · Google · 100+ providers · always free" },
       {
         value: "local",
@@ -195,7 +200,7 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
 
 export const InitCommand = cmd({
   command: ["init", "onboard"],
-  describe: "set up OpenScience — models, keys, and Atlas",
+  describe: "set up OpenScience — models, keys, and Gateway",
   async handler() {
     UI.empty()
     UI.println(UI.logo("  "))
@@ -385,14 +390,14 @@ export const DoctorCommand = cmd({
 
     const session = await OpenScience.getSession()
     if (session) {
-      prompts.log.success("Atlas account: connected")
+      prompts.log.success("Gateway account: connected")
       const mode = await OpenScience.getBillingMode().catch(() => null)
       if (mode) {
         const suffix = mode.managed_supported ? "" : " (managed not provisioned)"
         prompts.log.info(`Wallet: $${mode.balance_usd.toFixed(2)}${suffix}`)
       }
     } else {
-      prompts.log.info("Atlas account: not connected  (run `openscience login`)")
+      prompts.log.info("Gateway account: not connected  (run `openscience login`)")
     }
 
     try {
@@ -405,7 +410,7 @@ export const DoctorCommand = cmd({
     if (envKeys.length) prompts.log.info(`Environment keys: ${envKeys.join(", ")}`)
 
     try {
-      const config = await Config.get()
+      const config = await currentConfig()
       const locals = Object.entries(config.provider ?? {}).filter(([, p]) =>
         Provider.isLocalBaseURL(p?.options?.baseURL ?? p?.api),
       )

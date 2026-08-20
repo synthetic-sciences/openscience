@@ -532,7 +532,7 @@ export namespace Provider {
     if (!Auth.isAtlasApiKey(effective)) return
     if (isAtlasProxyBaseURL(options["baseURL"])) return
     throw new Error(
-      `${provider.id} is using a managed Atlas key without an Atlas proxy URL. ` +
+      `${provider.id} is using a managed Gateway key without a Gateway proxy URL. ` +
         "Run `openscience sync` and try again.",
     )
   }
@@ -631,14 +631,14 @@ export namespace Provider {
     if (Auth.isAtlasApiKey(effective)) return
     if (!isByokKey(effective)) return
     if (hasManagedProxyPath(options["baseURL"])) {
-      log.warn("refusing to route BYOK key through Atlas proxy — pinning to public endpoint", {
+      log.warn("refusing to route BYOK key through Gateway proxy — pinning to public endpoint", {
         provider: provider.id,
       })
       const modelURL = typeof publicURL === "string" && !hasManagedProxyPath(publicURL) ? publicURL : undefined
       const safeURL = modelURL ?? PUBLIC_PROVIDER_BASE_URLS[provider.id]
       if (!safeURL) {
         throw new Error(
-          `${provider.id} is using a user-owned key with an Atlas proxy URL, but no safe public endpoint is known. ` +
+          `${provider.id} is using a user-owned key with a Gateway proxy URL, but no safe public endpoint is known. ` +
             "Remove the managed proxy base URL and try again.",
         )
       }

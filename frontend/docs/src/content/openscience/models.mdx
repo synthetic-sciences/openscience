@@ -1,6 +1,6 @@
 ---
 title: "Models & providers"
-description: "Bring your own keys for any provider, switch models per run, and optionally route through Atlas managed."
+description: "Bring your own keys, use eligible ChatGPT/Codex access, run local models, or optionally route managed calls through the Gateway."
 icon: "package-check"
 ---
 
@@ -19,13 +19,13 @@ Keys stay on your machine. Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral,
 
 The current frontier families are available on both paths:
 
-| Family | BYOK model | Atlas managed model |
+| Family | BYOK model | Gateway-managed model |
 | --- | --- | --- |
 | GPT-5.6 Sol / Terra / Luna | `openai/gpt-5.6-*` | `openrouter/openai/gpt-5.6-*` |
 | Grok 4.5 | `xai/grok-4.5` | `openrouter/x-ai/grok-4.5` |
-| Muse Spark 1.1 | `meta/muse-spark-1.1` | `meta/muse-spark-1.1` through the Atlas Meta proxy |
+| Muse Spark 1.1 | `meta/muse-spark-1.1` | `meta/muse-spark-1.1` through the Gateway Meta proxy |
 
-For BYOK, use `OPENAI_API_KEY`, `XAI_API_KEY`, or `META_MODEL_API_KEY`. The managed Meta route sends only your Atlas session token and proxy URL to OpenScience; Atlas keeps its shared Meta credential server-side.
+For BYOK, use `OPENAI_API_KEY`, `XAI_API_KEY`, or `META_MODEL_API_KEY`. The managed Meta route sends only your Gateway session token and proxy URL to OpenScience; the Gateway keeps its shared Meta credential server-side.
 
 Current frontier families include:
 
@@ -70,20 +70,20 @@ openscience run --model moonshotai/kimi-k3 "Implement the pipeline"
 
 `--model <provider>/<model>` overrides the default for one run; in the workspace, use the model selector per session. `--variant` picks a reasoning-effort tier — `minimal`, `high`, `max`, and so on. Available tiers depend on the model: Claude Opus 5 and GPT-5.6 extend through `xhigh` and `max`, Kimi K3 supports `low`, `high`, and `max`, and current Grok models expose their provider-supported ladders.
 
-## Atlas managed (optional)
+## Gateway managed (optional)
 
-[Atlas](/openscience/atlas) is the managed platform. Connecting adds a curated set of frontier models billed from a prepaid wallet, so you can skip per-provider keys entirely:
+[Gateway](/openscience/gateway) is the optional managed service. Connecting adds supported models billed from a prepaid wallet, so you can skip per-provider keys when you choose:
 
 ```bash
 openscience login   # defaults to app.syntheticsciences.ai
 ```
 
-Once connected, launching the workspace syncs your provider config and credentials, and Settings → Billing has independent managed/BYOK spend toggles for LLM calls and compute — mix routes freely, per concern. BYOK usage is always free and never gated; Atlas only meters the models it serves.
+Once connected, Settings → Billing lets you choose managed or user-funded model routing. A plan never disables BYOK, local, or eligible ChatGPT/Codex routes; only calls served by the Gateway debit its wallet.
 
 | Path | What runs where | Billing |
 | --- | --- | --- |
 | BYOK (default) | Your machine calls the provider directly. | Your provider account. |
-| Atlas managed | Your machine calls Atlas, which calls the provider. | Prepaid wallet. See [Connect to Atlas](/openscience/atlas). |
+| Gateway managed | Your machine calls the Gateway, which calls the provider. | Gateway wallet. See [Connect the Gateway](/openscience/gateway). |
 
 ## Key hygiene
 
@@ -98,8 +98,8 @@ Provider keys and synced credentials are filtered out of the environment of ever
   <Card title="Sessions" icon="layers" href="/openscience/sessions">
     Per-run model and variant flags in context.
   </Card>
-  <Card title="Atlas" icon="globe" href="/openscience/atlas">
-    What connecting to Atlas adds.
+  <Card title="Gateway" icon="globe" href="/openscience/gateway">
+    Managed credits, research search, and private graphs.
   </Card>
   <Card title="Security" icon="shield-check" href="/openscience/security">
     The env allow-list and trust boundary.

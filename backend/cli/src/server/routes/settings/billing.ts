@@ -17,7 +17,7 @@ export const BillingState = z.object({
   llm: z.enum(["managed", "byok"]).nullable(),
   compute: z.enum(["managed", "byok"]),
   wallet: z.object({
-    signedIn: z.boolean().describe("Whether an Atlas session (thk_ key) is available"),
+    signedIn: z.boolean().describe("Whether a Gateway session (thk_ key) is available"),
     balanceUsd: z.number().describe("Credit balance in USD; -1 when signed out or unavailable"),
   }),
 })
