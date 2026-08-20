@@ -574,10 +574,33 @@ async function normalizeRun(runFile: string, campaignRoot: string): Promise<Camp
       numberValue(run, ["cost", "metrics.cost", "usage.cost", "summary.cost"]) ??
       numberValue(trace, ["summary.cost", "cost"]),
     tokens,
+    inferenceCalls:
+      numberValue(run, ["inferenceCalls", "metrics.inferenceCalls", "summary.inferenceCalls"]) ??
+      numberValue(trace, ["summary.inferenceCalls"]),
     toolCalls:
       numberValue(run, ["toolCalls", "metrics.toolCalls", "summary.toolCalls"]) ??
       numberValue(trace, ["summary.toolCalls"]) ??
       arrayValue(trace, ["tools"]).length,
+    toolCallsPerInference:
+      numberValue(run, ["toolCallsPerInference", "metrics.toolCallsPerInference"]) ??
+      numberValue(trace, ["summary.toolCallsPerInference"]),
+    toolExecutionMs:
+      numberValue(run, ["toolExecutionMs", "metrics.toolExecutionMs"]) ??
+      numberValue(trace, ["summary.toolExecutionMs"]),
+    toolCriticalPathMs:
+      numberValue(run, ["toolCriticalPathMs", "metrics.toolCriticalPathMs"]) ??
+      numberValue(trace, ["summary.toolCriticalPathMs"]),
+    toolMaxConcurrency:
+      numberValue(run, ["toolMaxConcurrency", "metrics.toolMaxConcurrency"]) ??
+      numberValue(trace, ["summary.toolMaxConcurrency"]),
+    toolParallelism:
+      numberValue(run, ["toolParallelism", "metrics.toolParallelism"]) ??
+      numberValue(trace, ["summary.toolParallelism"]),
+    toolContractBytes:
+      numberValue(run, ["toolContractBytes", "metrics.toolContractBytes"]) ??
+      numberValue(trace, ["summary.toolContractBytes"]),
+    contractBytes:
+      numberValue(run, ["contractBytes", "metrics.contractBytes"]) ?? numberValue(trace, ["summary.contractBytes"]),
     searches:
       numberValue(run, ["searches", "metrics.searches", "summary.searchCount"]) ??
       numberValue(trace, ["summary.searchCount"]) ??
@@ -946,6 +969,10 @@ function integer(value: number | undefined) {
   return value === undefined ? "—" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)
 }
 
+function decimal(value: number | undefined) {
+  return value === undefined ? "—" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
+}
+
 function money(value: number | undefined) {
   if (value === undefined) return "—"
   return new Intl.NumberFormat("en-US", {
@@ -1108,6 +1135,14 @@ function runDetails(report: CampaignReport, output: string, run: CampaignRunRepo
     ["Completed", run.completedAt ? dateTime(run.completedAt) : "—"],
     ["First event", escapeHtml(duration(run.metrics.timeToFirstEventMs))],
     ["First visible text", escapeHtml(duration(run.metrics.timeToFirstOutputMs))],
+    ["Inference calls", escapeHtml(integer(run.metrics.inferenceCalls))],
+    ["Tool calls / inference", escapeHtml(decimal(run.metrics.toolCallsPerInference))],
+    ["Tool execution", escapeHtml(duration(run.metrics.toolExecutionMs))],
+    ["Tool critical path", escapeHtml(duration(run.metrics.toolCriticalPathMs))],
+    ["Max tool concurrency", escapeHtml(integer(run.metrics.toolMaxConcurrency))],
+    ["Average tool parallelism", escapeHtml(decimal(run.metrics.toolParallelism))],
+    ["Tool contract", escapeHtml(bytes(run.metrics.toolContractBytes))],
+    ["System + tool contract", escapeHtml(bytes(run.metrics.contractBytes))],
     ["Events", escapeHtml(integer(run.metrics.eventCount))],
     ["Metric scope", "Root session"],
     ["Captured sessions", escapeHtml(integer(run.treeMetrics?.sessionCount))],

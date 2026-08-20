@@ -9,6 +9,8 @@ export namespace SessionHarness {
     name: z.string(),
     descriptionHash: Digest,
     schemaHash: Digest,
+    descriptionBytes: z.number().int().nonnegative().optional(),
+    schemaBytes: z.number().int().nonnegative().optional(),
   })
 
   const Fields = z.object({
@@ -19,6 +21,10 @@ export namespace SessionHarness {
     model: z.string(),
     systemHash: Digest,
     instructionsHash: Digest.optional(),
+    systemBytes: z.number().int().nonnegative().optional(),
+    instructionsBytes: z.number().int().nonnegative().optional(),
+    toolBytes: z.number().int().nonnegative().optional(),
+    contractBytes: z.number().int().nonnegative().optional(),
     tools: z.array(ToolInfo),
     fingerprint: Digest,
   })
@@ -37,6 +43,10 @@ export namespace SessionHarness {
       model: value.model,
       systemHash: value.systemHash,
       instructionsHash: value.instructionsHash,
+      systemBytes: value.systemBytes,
+      instructionsBytes: value.instructionsBytes,
+      toolBytes: value.toolBytes,
+      contractBytes: value.contractBytes,
       tools: value.tools,
     }
     return ordered(value.tools) && value.fingerprint === hash(base)
@@ -200,12 +210,21 @@ export namespace SessionHarness {
     tools: Record<string, Tool>
   }): Promise<Snapshot> {
     const tools = await Promise.all(
-      Object.entries(input.tools).map(async ([name, item]) => ({
-        name,
-        descriptionHash: hash(item.description ?? ""),
-        schemaHash: hash(await asSchema(item.inputSchema).jsonSchema),
-      })),
+      Object.entries(input.tools).map(async ([name, item]) => {
+        const description = item.description ?? ""
+        const schema = await asSchema(item.inputSchema).jsonSchema
+        return {
+          name,
+          descriptionHash: hash(description),
+          schemaHash: hash(schema),
+          descriptionBytes: Buffer.byteLength(description),
+          schemaBytes: Buffer.byteLength(JSON.stringify(schema)),
+        }
+      }),
     ).then((items) => items.toSorted((a, b) => a.name.localeCompare(b.name)))
+    const systemBytes = input.system.reduce((sum, item) => sum + Buffer.byteLength(item), 0)
+    const instructionsBytes = input.instructions ? Buffer.byteLength(input.instructions) : undefined
+    const toolBytes = tools.reduce((sum, item) => sum + item.descriptionBytes + item.schemaBytes, 0)
     const base = {
       version: 1 as const,
       profile: input.agent.name,
@@ -214,6 +233,10 @@ export namespace SessionHarness {
       model: input.model,
       systemHash: hash(input.system),
       instructionsHash: input.instructions ? hash(input.instructions) : undefined,
+      systemBytes,
+      instructionsBytes,
+      toolBytes,
+      contractBytes: systemBytes + (instructionsBytes ?? 0) + toolBytes,
       tools,
     }
     return Snapshot.parse({ ...base, fingerprint: hash(base) })

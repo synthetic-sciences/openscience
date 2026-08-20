@@ -36,6 +36,13 @@ describe("session harness fingerprint", () => {
 
     expect(first).toEqual(second)
     expect(first.tools.map((item) => item.name)).toEqual(["bash", "read"])
+    expect(first.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "bash", descriptionBytes: 13, schemaBytes: expect.any(Number) }),
+      ]),
+    )
+    expect(first.toolBytes).toBeGreaterThan(0)
+    expect(first.contractBytes).toBe(first.systemBytes! + first.instructionsBytes! + first.toolBytes!)
     expect(JSON.stringify(first)).not.toContain("private")
     expect(first.fingerprint).toHaveLength(64)
   })

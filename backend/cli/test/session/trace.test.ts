@@ -81,7 +81,7 @@ test("builds one local observable harness trace without reasoning or copied outp
                 callID: "call_search_original",
               },
             },
-            time: { start: started + 110, end: started + 115 },
+            time: { start: started + 50, end: started + 105 },
           },
         },
         {
@@ -281,7 +281,12 @@ test("builds one local observable harness trace without reasoning or copied outp
       const trace = await SessionTrace.build(session.id)
       expect(trace.summary).toMatchObject({
         cost: 0.42,
+        inferenceCalls: 2,
         toolCalls: 9,
+        toolCallsPerInference: 4.5,
+        toolExecutionMs: 362,
+        toolCriticalPathMs: 312,
+        toolMaxConcurrency: 2,
         childCount: 1,
         searchCount: 2,
         dedupeHits: 1,
@@ -291,6 +296,7 @@ test("builds one local observable harness trace without reasoning or copied outp
         failureCount: 3,
         retryCount: 1,
       })
+      expect(trace.summary.toolParallelism).toBeCloseTo(362 / 312)
       expect(trace.inference[0]).toMatchObject({
         provider: "openai-codex",
         model: "gpt-5",

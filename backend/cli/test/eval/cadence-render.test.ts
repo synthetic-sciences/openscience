@@ -53,7 +53,15 @@ async function fixture() {
         timeToFirstUsefulOutputMs: 800,
         cost: 0.125,
         tokens: { input: 1_000, output: 500, reasoning: 250, cache: { read: 100, write: 0 } },
+        inferenceCalls: 2,
         toolCalls: 2,
+        toolCallsPerInference: 1,
+        toolExecutionMs: 400,
+        toolCriticalPathMs: 300,
+        toolMaxConcurrency: 2,
+        toolParallelism: 1.333,
+        toolContractBytes: 45_561,
+        contractBytes: 50_000,
         searchCount: 1,
         childCount: 1,
         retryCount: 1,
@@ -115,7 +123,15 @@ describe("cadence harness dashboard", () => {
 
     expect(report.totals).toMatchObject({ planned: 20, observed: 1, completed: 1, tokens: 1_850 })
     expect(report.status).toBe("pending")
-    expect(report.runs[0]?.metrics).toMatchObject({ durationMs: 120_000, failures: 1, toolCalls: 2 })
+    expect(report.runs[0]?.metrics).toMatchObject({
+      durationMs: 120_000,
+      failures: 1,
+      inferenceCalls: 2,
+      toolCalls: 2,
+      toolCriticalPathMs: 300,
+      toolMaxConcurrency: 2,
+      toolContractBytes: 45_561,
+    })
     expect(report.improvements[0]?.title).toBe("Clarify execution authority")
     expect(html).toContain("Cadence harness campaign")
     expect(html).toContain("Use &lt;script&gt;bad()&lt;/script&gt; data")
@@ -123,6 +139,9 @@ describe("cadence harness dashboard", () => {
     expect(html).toContain("Bearer [redacted]")
     expect(html).toContain("api_key=[redacted]")
     expect(html).toContain("report.html")
+    expect(html).toContain("Inference calls")
+    expect(html).toContain("Tool critical path")
+    expect(html).toContain("44.5 KB")
     expect(html).not.toContain("NEVER_RENDER")
     expect(html).not.toContain("outside.txt")
     expect(html).not.toContain("super-secret-value")

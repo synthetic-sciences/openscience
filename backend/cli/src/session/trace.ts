@@ -204,7 +204,15 @@ export namespace SessionTrace {
       totalCompletionTimeMs: z.number().optional(),
       cost: z.number(),
       tokens: Tokens,
+      inferenceCalls: z.number().int().nonnegative(),
       toolCalls: z.number(),
+      toolCallsPerInference: z.number().nonnegative().optional(),
+      toolExecutionMs: z.number().nonnegative(),
+      toolCriticalPathMs: z.number().nonnegative(),
+      toolMaxConcurrency: z.number().int().nonnegative(),
+      toolParallelism: z.number().nonnegative().optional(),
+      toolContractBytes: z.number().int().nonnegative().optional(),
+      contractBytes: z.number().int().nonnegative().optional(),
       childCount: z.number(),
       searchCount: z.number(),
       dedupeHits: z.number(),
@@ -280,6 +288,46 @@ export namespace SessionTrace {
       startedAt,
       completedAt,
       durationMs: (completedAt ?? now) - startedAt,
+    }
+  }
+
+  function toolTiming(tools: z.infer<typeof Tool>[], now: number) {
+    const intervals = tools
+      .flatMap((tool) => {
+        if (tool.startedAt === undefined) return []
+        const end = tool.completedAt ?? now
+        if (end < tool.startedAt) return []
+        return [{ start: tool.startedAt, end }]
+      })
+      .toSorted((a, b) => a.start - b.start || a.end - b.end)
+    const merged = intervals.reduce<Array<{ start: number; end: number }>>((all, item) => {
+      const prior = all.at(-1)
+      if (!prior || item.start > prior.end) return [...all, { ...item }]
+      prior.end = Math.max(prior.end, item.end)
+      return all
+    }, [])
+    const execution = intervals.reduce((sum, item) => sum + item.end - item.start, 0)
+    const critical = merged.reduce((sum, item) => sum + item.end - item.start, 0)
+    const concurrency = intervals
+      .filter((item) => item.end > item.start)
+      .flatMap((item) => [
+        { time: item.start, delta: 1 },
+        { time: item.end, delta: -1 },
+      ])
+      .toSorted((a, b) => a.time - b.time || a.delta - b.delta)
+      .reduce(
+        (value, item) => {
+          value.current += item.delta
+          value.max = Math.max(value.max, value.current)
+          return value
+        },
+        { current: 0, max: 0 },
+      ).max
+    return {
+      toolExecutionMs: execution,
+      toolCriticalPathMs: critical,
+      toolMaxConcurrency: concurrency,
+      toolParallelism: critical > 0 ? execution / critical : undefined,
     }
   }
 
@@ -635,6 +683,9 @@ export namespace SessionTrace {
             .toSorted((a, b) => b - a)[0]
         : undefined
     const tokens = inference.reduce((total, item) => addTokens(total, item.tokens), emptyTokens())
+    const timing = toolTiming(tools, now)
+    const harness = stored.harness.at(-1)
+    const inferenceCalls = Math.max(inference.length, stored.harness.length)
     const external: z.infer<typeof External>[] = [
       ...inference.map((item) => ({
         kind: "model" as const,
@@ -726,7 +777,12 @@ export namespace SessionTrace {
         totalCompletionTimeMs: completedAt === undefined ? undefined : completedAt - startedAt,
         cost: inference.reduce((total, item) => total + item.cost, 0),
         tokens,
+        inferenceCalls,
         toolCalls: tools.length,
+        toolCallsPerInference: inferenceCalls ? tools.length / inferenceCalls : undefined,
+        ...timing,
+        toolContractBytes: harness?.toolBytes,
+        contractBytes: harness?.contractBytes,
         childCount: children.length,
         searchCount: searches.length,
         dedupeHits: searches.filter((search) => search.dedupeHit).length,

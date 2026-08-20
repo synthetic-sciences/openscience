@@ -51,7 +51,15 @@ export type CampaignRunMetrics = {
   timeToFirstOutputMs?: number
   cost?: number
   tokens?: CampaignTokenMetrics
+  inferenceCalls?: number
   toolCalls?: number
+  toolCallsPerInference?: number
+  toolExecutionMs?: number
+  toolCriticalPathMs?: number
+  toolMaxConcurrency?: number
+  toolParallelism?: number
+  toolContractBytes?: number
+  contractBytes?: number
   searches?: number
   childAgents?: number
   retries?: number
