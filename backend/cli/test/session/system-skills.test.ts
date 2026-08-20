@@ -3,6 +3,7 @@ import path from "path"
 import { SystemPrompt } from "../../src/session/system"
 import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
+import { Skill } from "../../src/skill"
 import { tmpdir } from "../fixture/fixture"
 
 async function trust() {
@@ -132,6 +133,29 @@ test("availableSkills blocks skill calls when the registry is empty", async () =
       const section = await SystemPrompt.availableSkills([])
       expect(section).toContain("No skills are currently available")
       expect(section).toContain("Do not call the skill tool")
+    },
+  })
+})
+
+test("availableSkills cache follows real skill catalog invalidation", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await writeSkill(dir, "scanpy", "biology")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const catalog = await Skill.all()
+      expect(await Skill.all()).toBe(catalog)
+      expect(await SystemPrompt.availableSkills([])).toContain("1 skill is callable")
+      await writeSkill(tmp.path, "pysam", "biology")
+      await Skill.invalidate()
+      expect(await Skill.all()).not.toBe(catalog)
+      expect(await SystemPrompt.availableSkills([])).toContain("2 skills are callable")
     },
   })
 })

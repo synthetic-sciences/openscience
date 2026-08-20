@@ -322,6 +322,7 @@ export namespace Skill {
   }
 
   export const state = Instance.state(compute)
+  const lists = new WeakMap<Record<string, Info>, Info[]>()
 
   export async function invalidate() {
     State.clear(Instance.directory, compute)
@@ -398,6 +399,11 @@ export namespace Skill {
   }
 
   export async function all() {
-    return state().then((x) => Object.values(x))
+    const current = await state()
+    const cached = lists.get(current)
+    if (cached) return cached
+    const value = Object.values(current)
+    lists.set(current, value)
+    return value
   }
 }

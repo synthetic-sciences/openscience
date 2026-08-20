@@ -11,6 +11,8 @@ import { PermissionNext } from "../permission/next"
 import { ComputePrompt } from "../compute/prompt"
 
 export namespace SystemPrompt {
+  const skillPrompts = new WeakMap<Skill.Info[], Map<string, string>>()
+
   export function instructions() {
     return PROMPT_CORE.trim()
   }
@@ -24,16 +26,37 @@ export namespace SystemPrompt {
   }
 
   export async function availableSkills(permission: PermissionNext.Ruleset, message?: string) {
-    const skills = (await Skill.all()).filter(
+    const catalog = await Skill.all()
+    const key = (message?.length ?? 0) <= 8_192 ? JSON.stringify([permission, message ?? ""]) : undefined
+    const cache = (() => {
+      const current = skillPrompts.get(catalog)
+      if (current) return current
+      const value = new Map<string, string>()
+      skillPrompts.set(catalog, value)
+      return value
+    })()
+    if (key) {
+      const cached = cache.get(key)
+      if (cached) return cached
+    }
+    const publish = (value: string) => {
+      if (!key) return value
+      cache.set(key, value)
+      if (cache.size > 32) cache.delete(cache.keys().next().value!)
+      return value
+    }
+    const skills = catalog.filter(
       (skill) => PermissionNext.evaluate("skill", skill.name, permission).action !== "deny",
     )
     if (skills.length === 0) {
-      return [
-        "<available-skills>",
-        "No skills are currently available. Static skill routing tables are guidance only.",
-        "Do not call the skill tool because no skill name will resolve.",
-        "</available-skills>",
-      ].join("\n")
+      return publish(
+        [
+          "<available-skills>",
+          "No skills are currently available. Static skill routing tables are guidance only.",
+          "Do not call the skill tool because no skill name will resolve.",
+          "</available-skills>",
+        ].join("\n"),
+      )
     }
 
     const groups = new Map<string, number>()
@@ -97,14 +120,16 @@ export namespace SystemPrompt {
         ]
       : []
 
-    return [
-      "<available-skills>",
-      `${total} callable across: ${list}.`,
-      ...likely,
-      "Load a likely match directly, or browse a relevant category when the shortlist is insufficient. Do not guess other names from static routing tables.",
-      "</available-skills>",
-      ...invoke,
-    ].join("\n")
+    return publish(
+      [
+        "<available-skills>",
+        `${total} callable across: ${list}.`,
+        ...likely,
+        "Load a likely match directly, or browse a relevant category when the shortlist is insufficient. Do not guess other names from static routing tables.",
+        "</available-skills>",
+        ...invoke,
+      ].join("\n"),
+    )
   }
 
   export async function planModeInstructions(): Promise<string[]> {
