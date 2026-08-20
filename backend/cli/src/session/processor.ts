@@ -80,6 +80,13 @@ export namespace SessionProcessor {
     return Provider.isIdleTimeoutError(error) ? undefined : SessionRetry.retryable(normalized)
   }
 
+  /** File snapshots protect tool side effects. A model that cannot call any
+   * advertised tool cannot mutate the workspace, so two Git index passes add
+   * latency and contention without creating a useful revert boundary. */
+  export function tracks(input: { tools: Record<string, unknown>; toolcall: boolean }) {
+    return input.toolcall && Object.keys(input.tools).length > 0
+  }
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
@@ -327,6 +334,7 @@ export namespace SessionProcessor {
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
+        const tracking = tracks({ tools: streamInput.tools, toolcall: input.model.capabilities.toolcall })
         needsCompaction = false
         overflow = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
@@ -528,7 +536,7 @@ export namespace SessionProcessor {
                   throw value.error
 
                 case "start-step":
-                  snapshot = await Snapshot.track()
+                  snapshot = tracking ? await Snapshot.track() : undefined
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -552,7 +560,7 @@ export namespace SessionProcessor {
                   await Session.updatePart({
                     id: stepPartID,
                     reason: value.finishReason,
-                    snapshot: await Snapshot.track(),
+                    snapshot: tracking ? await Snapshot.track() : undefined,
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "step-finish",
