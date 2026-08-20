@@ -23,6 +23,8 @@ export namespace ToolSelection {
     /\b(?:api|backend|bash|branch|bug|build|cli|code|codebase|commit|compile|endpoint|frontend|git|github|golang|java|javascript|kotlin|lint|package manager|php|pull request|python|refactor|repo|repository|ruby|rust|sdk|server|shell|source code|swift|test suite|typecheck|typescript|working tree)\b/i
   const science =
     /\b(?:bioinformatics|biology|cell|chemistry|clinical|data analysis|dataset|evidence|experiment|gene|genomic|hypothesis|literature|machine learning|molecule|neural|paper|physics|protein|research|rna|science|scientific|simulation|statistics?|study)\b/i
+  const work =
+    /\b(?:analy[sz]e|attached|calculate|cite|create|current|dataset|document|download|fetch|file|find|inspect|latest|load|look up|open|paper|plot|read|review|run|save|search|source|today|verify|write)\b|https?:\/\/|\.[a-z0-9]{1,5}\b/i
 
   export function enabled(
     tool: string,
@@ -36,10 +38,31 @@ export namespace ToolSelection {
     return !PermissionNext.disabled([tool], input.permission).has(tool)
   }
 
+  export function direct(input: {
+    agent?: string
+    message?: string
+    fresh?: boolean
+    attachments?: boolean
+    tools?: Record<string, boolean>
+  }) {
+    if (
+      input.agent !== "research" ||
+      !input.fresh ||
+      input.attachments ||
+      Object.values(input.tools ?? {}).some((enabled) => enabled)
+    )
+      return false
+    const message = input.message?.trim()
+    if (!message || message.length > 320 || code.test(message) || work.test(message)) return false
+    return /^(?:(?:in|within)\s+(?:no more than\s+)?(?:one|two|three|\d+)\s+sentences?,?\s*)?(?:please\s+)?(?:briefly\s+)?(?:compare|define|explain|how|what|why)\b/i.test(
+      message,
+    )
+  }
+
   /**
-   * Drop research-only contracts for requests that are explicitly about code
-   * and contain no scientific work. Ambiguous, mixed, and non-code requests
-   * keep the full registry. A named tool or capability also stays available.
+   * Fresh direct answers carry no implicit tools. Code-only requests drop
+   * research contracts, while ambiguous and mixed work keeps the full registry.
+   * A named tool or capability also stays available.
    */
   export function relevant(
     tool: string,
@@ -47,10 +70,12 @@ export namespace ToolSelection {
       agent?: string
       message?: string
       tools?: Record<string, boolean>
+      direct?: boolean
     },
   ) {
-    if (!domain.has(tool)) return true
     if (input.tools?.[tool] === true) return true
+    if (input.direct) return false
+    if (!domain.has(tool)) return true
     if (input.agent !== "research") return true
 
     const message = input.message?.trim()

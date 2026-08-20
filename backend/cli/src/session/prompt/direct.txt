@@ -1,0 +1,3 @@
+<system-reminder>
+Answer this short conceptual question directly and within the requested format. Do not plan, use tools, delegate, search, create files, or add process commentary. State material uncertainty instead of inventing facts.
+</system-reminder>

@@ -22,6 +22,7 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import PROMPT_WRITE from "../agent/prompt/write.txt"
 import PROMPT_ML from "../agent/prompt/ml.txt"
 import PROMPT_RESEARCH from "../agent/prompt/research.txt"
+import PROMPT_DIRECT from "../session/prompt/direct.txt"
 import PROMPT_BIOLOGY from "../agent/prompt/biology.txt"
 import PROMPT_PHYSICS from "../agent/prompt/physics.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -976,7 +977,8 @@ export namespace SessionPrompt {
       using _ = defer(() => InstructionPrompt.clear(processor.message.id))
 
       // Check if user explicitly invoked an agent via @ in this turn
-      const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+      const route = request(msgs, agent.name)
+      const lastUserMsg = route.user
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
       const tools = await resolveTools({
@@ -988,6 +990,8 @@ export namespace SessionPrompt {
         processor,
         bypassAgentCheck,
         messages: msgs,
+        request: route.text,
+        direct: route.direct,
       })
 
       if (step === 1) {
@@ -1020,17 +1024,13 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
-      const contract = await SessionResearch.prompt(sessionID, Instance.project.id)
-      const skillMessage = lastUserMsg?.parts.find(
-        (part): part is MessageV2.TextPart =>
-          part.type === "text" && !part.ignored && !part.synthetic && !!part.text.trim(),
-      )
+      const contract = route.direct ? undefined : await SessionResearch.prompt(sessionID, Instance.project.id)
       const system = [
         ...(await SystemPrompt.environment(model, sessionID)),
-        ...(await SystemPrompt.compute()),
+        ...(route.direct ? [] : await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
-        ...(SKILL_ROUTING_AGENTS.has(agent.name)
-          ? [await SystemPrompt.availableSkills(agent.permission, skillMessage?.text)]
+        ...(SKILL_ROUTING_AGENTS.has(agent.name) && !route.direct
+          ? [await SystemPrompt.availableSkills(agent.permission, route.text)]
           : []),
         ...(contract ? [contract] : []),
       ]
@@ -1139,6 +1139,29 @@ export namespace SessionPrompt {
     return "normal" as const
   }
 
+  function request(messages: MessageV2.WithParts[], agent: string) {
+    const user = messages.findLast((message) => message.info.role === "user")
+    const text = user?.parts
+      .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.ignored && !part.synthetic)
+      .map((part) => part.text)
+      .join("\n")
+    const fresh =
+      messages.filter((message) => message.info.role === "user").length === 1 &&
+      !messages.some((message) => message.info.role === "assistant")
+    const attachments = user?.parts.some((part) => part.type === "file") ?? false
+    return {
+      user,
+      text,
+      direct: ToolSelection.direct({
+        agent,
+        message: text,
+        fresh,
+        attachments,
+        tools: user?.info.role === "user" ? user.info.tools : undefined,
+      }),
+    }
+  }
+
   async function resolveTools(input: {
     agent: Agent.Info
     model: Provider.Model
@@ -1148,16 +1171,12 @@ export namespace SessionPrompt {
     processor: SessionProcessor.Info
     bypassAgentCheck: boolean
     messages: MessageV2.WithParts[]
+    request?: string
+    direct: boolean
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
-    const request = input.messages
-      .findLast((message) => message.info.role === "user")
-      ?.parts.filter(
-        (part): part is MessageV2.TextPart => part.type === "text" && !part.ignored && !part.synthetic,
-      )
-      .map((part) => part.text)
-      .join("\n")
+    if (input.direct) return tools
 
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
@@ -1191,8 +1210,9 @@ export namespace SessionPrompt {
         ToolSelection.enabled(id, { permission: input.agent.permission, tools: input.tools }) &&
         ToolSelection.relevant(id, {
           agent: input.agent.name,
-          message: request,
+          message: input.request,
           tools: input.tools,
+          direct: input.direct,
         }),
     )) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
@@ -1233,6 +1253,15 @@ export namespace SessionPrompt {
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
+      if (
+        !ToolSelection.relevant(key, {
+          agent: input.agent.name,
+          message: input.request,
+          tools: input.tools,
+          direct: input.direct,
+        })
+      )
+        continue
       const execute = item.execute
       if (!execute) continue
 
@@ -1772,7 +1801,8 @@ export namespace SessionPrompt {
   }
 
   async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
-    const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
+    const route = request(input.messages, input.agent.name)
+    const userMessage = route.user
     if (!userMessage) return input.messages
     const effort = userMessage.info.role === "user" ? userMessage.info.effort : undefined
 
@@ -1814,7 +1844,7 @@ export namespace SessionPrompt {
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
           type: "text",
-          text: [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n"),
+          text: route.direct ? PROMPT_DIRECT : [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n"),
           synthetic: true,
         })
       }
@@ -1879,7 +1909,7 @@ export namespace SessionPrompt {
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n"),
+        text: route.direct ? PROMPT_DIRECT : [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n"),
         synthetic: true,
       })
     }

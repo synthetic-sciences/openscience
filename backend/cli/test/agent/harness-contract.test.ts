@@ -46,8 +46,9 @@ test("every provider receives one compact product operating contract", () => {
 })
 
 test("the primary and domain prompts stay adaptive instead of procedural", async () => {
-  const [research, ml, biology, physics] = await Promise.all([
+  const [research, direct, ml, biology, physics] = await Promise.all([
     read("agent/prompt/research.txt"),
+    read("session/prompt/direct.txt"),
     read("agent/prompt/ml.txt"),
     read("agent/prompt/biology.txt"),
     read("agent/prompt/physics.txt"),
@@ -69,6 +70,9 @@ test("the primary and domain prompts stay adaptive instead of procedural", async
   expect(research).toContain("optional binaries as capabilities")
   expect(research).toContain("never\n  convert failed candidates to NaN")
   expect(research).toContain("without a filtering pipeline")
+  expect(direct.length).toBeLessThan(300)
+  expect(direct).toContain("Do not plan, use tools, delegate, search")
+  expect(direct).toContain("requested format")
   expect(research).not.toContain("data once to the workspace with Shell")
   expect(research).toContain("immutable data release")
   expect(ml).toContain("simplest method")

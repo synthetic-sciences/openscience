@@ -61,4 +61,42 @@ describe("tool selection", () => {
       }),
     ).toBe(true)
   })
+
+  test("recognizes only fresh self-contained conceptual questions as direct answers", () => {
+    expect(
+      ToolSelection.direct({
+        agent: "research",
+        message: "In two sentences, explain why randomization matters in an experiment.",
+        fresh: true,
+      }),
+    ).toBe(true)
+    expect(ToolSelection.direct({ agent: "research", message: "What is a p-value?", fresh: true })).toBe(true)
+    expect(ToolSelection.direct({ agent: "research", message: "What is the latest trial result?", fresh: true })).toBe(
+      false,
+    )
+    expect(ToolSelection.direct({ agent: "research", message: "Explain this dataset.", fresh: true })).toBe(false)
+    expect(ToolSelection.direct({ agent: "research", message: "Explain how Python works.", fresh: true })).toBe(false)
+    expect(
+      ToolSelection.direct({ agent: "research", message: "Why does randomization matter?", fresh: true, attachments: true }),
+    ).toBe(false)
+    expect(ToolSelection.direct({ agent: "research", message: "Why does randomization matter?", fresh: false })).toBe(
+      false,
+    )
+    expect(
+      ToolSelection.direct({
+        agent: "research",
+        message: "Why does randomization matter?",
+        fresh: true,
+        tools: { python: true },
+      }),
+    ).toBe(false)
+  })
+
+  test("direct answers advertise no implicit tools while explicit enables still win", () => {
+    const input = { agent: "research", message: "What is a p-value?", direct: true }
+    expect(ToolSelection.relevant("bash", input)).toBe(false)
+    expect(ToolSelection.relevant("context7_query-docs", input)).toBe(false)
+    expect(ToolSelection.relevant("python", input)).toBe(false)
+    expect(ToolSelection.relevant("python", { ...input, tools: { python: true } })).toBe(true)
+  })
 })
