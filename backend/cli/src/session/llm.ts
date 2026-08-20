@@ -20,10 +20,10 @@ import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
-import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
 import { SessionHarness } from "./harness"
 import { SessionTraceStore } from "./trace-store"
+import { ToolSelection } from "./tool-selection"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -342,12 +342,9 @@ export namespace LLM {
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
-    const wildcardDisable = input.user.tools?.["*"] === false
-    const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
     for (const tool of Object.keys(input.tools)) {
-      if (wildcardDisable || input.user.tools?.[tool] === false || disabled.has(tool)) {
+      if (!ToolSelection.enabled(tool, { permission: input.agent.permission, tools: input.user.tools }))
         delete input.tools[tool]
-      }
     }
     return input.tools
   }

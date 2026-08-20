@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test"
+import z from "zod"
 import path from "path"
 import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
 import { ProjectTrust } from "../../src/project/trust"
+import { Tool } from "../../src/tool/tool"
 
 async function trustProject() {
   const status = await ProjectTrust.status(Instance.project)
@@ -12,6 +14,36 @@ async function trustProject() {
 }
 
 describe("tool.registry", () => {
+  test("does not initialize tools filtered out for the current turn", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const initialized: string[] = []
+        const probe = Tool.define("selection_probe", async () => {
+          initialized.push("selection_probe")
+          return {
+            description: "probe",
+            parameters: z.object({}),
+            async execute() {
+              return { title: "probe", output: "probe", metadata: {} }
+            },
+          }
+        })
+        await ToolRegistry.register(probe)
+
+        const tools = await ToolRegistry.tools(
+          { providerID: "test", modelID: "test" },
+          undefined,
+          (id) => id !== probe.id,
+        )
+
+        expect(tools.some((tool) => tool.id === probe.id)).toBe(false)
+        expect(initialized).toEqual([])
+      },
+    })
+  })
+
   test("includes the native Atlas host broker", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

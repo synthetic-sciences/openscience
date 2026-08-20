@@ -220,11 +220,17 @@ export namespace ToolRegistry {
       modelID: string
     },
     agent?: Agent.Info,
+    enabled: (id: string) => boolean = () => true,
   ) {
     const tools = await all()
     const result = await Promise.all(
       tools
         .filter((t) => {
+          // Dynamic tools may load agent or skill catalogs to build their
+          // descriptions. Disabled tools should contribute neither that startup
+          // work nor a model-facing contract.
+          if (!enabled(t.id)) return false
+
           // Biology-only tools: only available for the biology agent.
           if (BIOLOGY_TOOL_IDS.has(t.id)) {
             return agent?.name === "biology"
