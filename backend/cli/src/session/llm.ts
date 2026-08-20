@@ -193,28 +193,28 @@ export namespace LLM {
     }
 
     const trace = input.trace
-    if (trace) {
-      await SessionHarness.snapshot({
-        agent: input.agent,
-        provider: routed.providerID,
-        model: routed.id,
-        system,
-        instructions: typeof params.options.instructions === "string" ? params.options.instructions : undefined,
-        tools,
-      })
-        .then((snapshot) =>
-          SessionTraceStore.recordHarness({
-            sessionID: input.sessionID,
-            messageID: trace.messageID,
-            parentMessageID: input.user.id,
-            attempt: trace.attempt,
-            snapshot,
-          }),
-        )
-        .catch((error) => l.warn("failed to record harness fingerprint", { error }))
-    }
+    const harness = trace
+      ? SessionHarness.snapshot({
+          agent: input.agent,
+          provider: routed.providerID,
+          model: routed.id,
+          system,
+          instructions: typeof params.options.instructions === "string" ? params.options.instructions : undefined,
+          tools,
+        })
+          .then((snapshot) =>
+            SessionTraceStore.recordHarness({
+              sessionID: input.sessionID,
+              messageID: trace.messageID,
+              parentMessageID: input.user.id,
+              attempt: trace.attempt,
+              snapshot,
+            }),
+          )
+          .catch((error) => l.warn("failed to record harness fingerprint", { error }))
+      : undefined
 
-    return streamText({
+    const result = streamText({
       onError(error) {
         l.error("stream error", {
           error,
@@ -311,6 +311,8 @@ export namespace LLM {
         },
       },
     })
+    await harness
+    return result
   }
 
   export async function modelTools(input: Pick<StreamInput, "tools" | "agent" | "model" | "user">) {
