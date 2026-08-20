@@ -13,6 +13,7 @@ const names = [
   "plan",
   "review",
   "verify",
+  "goals",
   "status",
   "context",
   "stop",
@@ -62,6 +63,7 @@ describe("research slash commands", () => {
 
         expect(commands.get("plan")).toMatchObject({ agent: "plan", subtask: false })
         expect(commands.get("review")).toMatchObject({ agent: "reviewer", subtask: false })
+        expect(commands.get("goals")?.menu).toBe(true)
         expect(commands.get("status")?.menu).toBe(true)
         expect(commands.get("context")?.menu).toBe(true)
         expect(commands.get("stop")?.menu).toBe(true)
@@ -102,6 +104,19 @@ describe("research slash commands", () => {
             { id: "active", content: "Run the independent check", status: "in_progress", priority: "high" },
           ],
         })
+
+        const goals = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "goals",
+          arguments: "",
+        })
+        const goalsText = goals.parts.find((part) => part.type === "text")
+        expect(goals.info.role === "assistant" ? goals.info.cost : -1).toBe(0)
+        expect(goalsText?.type === "text" ? goalsText.text : "").toContain(
+          "Investigate the result and preserve the evidence.",
+        )
+        expect(goalsText?.type === "text" ? goalsText.text : "").toContain("Run the independent check")
+        expect(goalsText?.type === "text" ? goalsText.text : "").toContain("Completed** · 1/2")
 
         const first = await SessionPrompt.command({
           sessionID: session.id,
@@ -199,6 +214,17 @@ describe("research slash commands", () => {
         expect(result.info.role === "assistant" ? result.info.modelID : "").toBe("local")
         expect(text?.type === "text" ? text.ignored : false).toBe(true)
         expect(text?.type === "text" ? text.text : "").toContain("Empty study")
+
+        const goals = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "goals",
+          arguments: "",
+        })
+        const goalsText = goals.parts.find((part) => part.type === "text")
+        expect(goals.info.role === "assistant" ? goals.info.cost : -1).toBe(0)
+        expect(goalsText?.type === "text" ? goalsText.ignored : false).toBe(true)
+        expect(goalsText?.type === "text" ? goalsText.text : "").toContain("### Goals")
+        expect(goalsText?.type === "text" ? goalsText.text : "").toContain("Define the next concrete step")
 
         const checkpoint = await SessionPrompt.command({
           sessionID: session.id,

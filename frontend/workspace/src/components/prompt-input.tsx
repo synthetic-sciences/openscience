@@ -80,6 +80,7 @@ import {
   type ReviewPreferences,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
+import { slashGroup, sortSlash, type SlashCommand } from "./prompt-slash"
 import {
   RESEARCH_ACCESS_OPTIONS,
   researchAccessLabel as accessLabel,
@@ -101,18 +102,6 @@ interface PromptInputProps {
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
-}
-
-interface SlashCommand {
-  id: string
-  trigger: string
-  title: string
-  description?: string
-  usage?: string
-  source: "builtin" | "project" | "mcp" | "skill"
-  category: "session" | "research" | "evidence" | "output" | "project" | "skill"
-  keybind?: string
-  type: "action" | "command" | "skill"
 }
 
 interface ResearchAccessSnapshot {
@@ -878,6 +867,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const usage: Record<string, string> = {
+      goals: "/goals",
       stop: "/stop [turn|compute|all]",
       compact: "/compact [focus]",
       handoff: "/handoff [project-relative path]",
@@ -897,16 +887,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "action" as const,
       }))
 
+    const triggers = new Set(builtin.map((command) => command.trigger))
     const custom = sync.data.command
-      // `menu` commands are executable action commands (e.g. /compact) that must RUN
-      // on select, not prefill text. They're surfaced by their owning context as a
-      // builtin `command.options` entry (with a matching `slash`) and dropped here so
-      // they don't ALSO appear as a prefill-only custom entry. A menu command is
-      // therefore visible only where that builtin is registered — e.g. /compact only
-      // once a session exists (session.tsx registers it under params.id); it is
-      // intentionally absent in the new-session composer, where there's nothing to
-      // compact and a prefilled "/compact " would not execute anyway.
-      .filter((cmd) => !(cmd as { menu?: boolean }).menu)
+      // Existing sessions register menu commands as direct, zero-model actions.
+      // Keep the matching server command only when that action is unavailable so
+      // the complete slash hierarchy remains discoverable on a brand-new session.
+      .filter((command) => !(command as { menu?: boolean }).menu || !triggers.has(command.name))
       .map((cmd) => ({
         id: `command.${cmd.name}`,
         trigger: cmd.name,
@@ -942,32 +928,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "skill" as const,
       }))
 
-    const priority = [
-      "plan",
-      "review",
-      "verify",
-      "status",
-      "context",
-      "stop",
-      "compact",
-      "handoff",
-      "checkpoint",
-      "reproduce",
-      "compare",
-      "sources",
-      "export",
-    ]
-    const rank = (cmd: SlashCommand) => {
-      const pinned = priority.indexOf(cmd.trigger)
-      if (pinned >= 0) return pinned
-      if (cmd.source === "project") return 100
-      if (cmd.source === "mcp") return 200
-      if (cmd.source === "skill") return 300
-      return 50
-    }
-    return [...custom, ...skills, ...builtin].toSorted(
-      (a, b) => rank(a) - rank(b) || a.trigger.localeCompare(b.trigger),
-    )
+    return [...custom, ...skills, ...builtin].toSorted(sortSlash)
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
@@ -998,6 +959,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const {
+    grouped: slashGrouped,
     flat: slashFlat,
     active: slashActive,
     setActive: setSlashActive,
@@ -1008,6 +970,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     items: slashCommands,
     key: (x) => x?.id,
     filterKeys: ["trigger", "title", "description", "usage"],
+    groupBy: slashGroup,
+    sortBy: sortSlash,
+    sortGroupsBy: (a, b) => (a.category === "Commands" ? -1 : b.category === "Commands" ? 1 : 0),
     onSelect: handleSlashSelect,
   })
 
@@ -1629,7 +1594,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const [head, ...tail] = text.split(" ")
     const name = text.startsWith("/") ? head.slice(1) : undefined
     const command = name ? sync.data.command.find((item) => item.name === name) : undefined
-    const native = command?.source === "builtin" && command.menu && ["status", "context", "stop"].includes(command.name)
+    const native = command?.source === "builtin" && command.menu
     const active = info()
     if (native && active && mode === "normal" && images.length === 0) {
       setSubmitting(true)
@@ -2230,35 +2195,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 when={slashFlat().length > 0}
                 fallback={<div class="text-text-weak px-2 py-1">{language.t("prompt.popover.emptyCommands")}</div>}
               >
-                <For each={slashFlat()}>
-                  {(cmd) => (
-                    <button
-                      data-slash-id={cmd.id}
-                      classList={{
-                        "workspace-composer__suggestion w-full flex items-center justify-between gap-4": true,
-                        "bg-surface-raised-base-hover": slashActive() === cmd.id,
-                      }}
-                      onClick={() => handleSlashSelect(cmd)}
-                      onMouseEnter={() => setSlashActive(cmd.id)}
-                    >
-                      <div class="workspace-composer__slash-copy min-w-0">
-                        <span class="text-14-medium text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
-                        <Show when={cmd.description || cmd.usage}>
-                          <span class="workspace-composer__slash-detail truncate">
-                            {cmd.description}
-                            <Show when={cmd.usage && cmd.usage !== `/${cmd.trigger}`}>
-                              <span class="workspace-composer__slash-usage">{cmd.usage}</span>
-                            </Show>
-                          </span>
-                        </Show>
-                      </div>
-                      <div class="flex items-center gap-2 shrink-0">
-                        <span class="workspace-composer__slash-badge">{cmd.source}</span>
-                        <Show when={command.keybind(cmd.id)}>
-                          <span class="text-12-regular text-text-weaker">{command.keybind(cmd.id)}</span>
-                        </Show>
-                      </div>
-                    </button>
+                <For each={slashGrouped()}>
+                  {(group) => (
+                    <section class="workspace-composer__slash-group" aria-label={group.category}>
+                      <header class="workspace-composer__slash-heading">
+                        <span>{group.category}</span>
+                        <span>{group.items.length}</span>
+                      </header>
+                      <For each={group.items}>
+                        {(cmd) => (
+                          <button
+                            data-slash-id={cmd.id}
+                            classList={{
+                              "workspace-composer__suggestion w-full flex items-center justify-between gap-4": true,
+                              "bg-surface-raised-base-hover": slashActive() === cmd.id,
+                            }}
+                            onClick={() => handleSlashSelect(cmd)}
+                            onMouseEnter={() => setSlashActive(cmd.id)}
+                          >
+                            <div class="workspace-composer__slash-copy min-w-0">
+                              <span class="text-14-medium text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
+                              <Show when={cmd.description || cmd.usage}>
+                                <span class="workspace-composer__slash-detail truncate">
+                                  {cmd.description}
+                                  <Show when={cmd.usage && cmd.usage !== `/${cmd.trigger}`}>
+                                    <span class="workspace-composer__slash-usage">{cmd.usage}</span>
+                                  </Show>
+                                </span>
+                              </Show>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                              <span class="workspace-composer__slash-badge">{cmd.source}</span>
+                              <Show when={command.keybind(cmd.id)}>
+                                <span class="text-12-regular text-text-weaker">{command.keybind(cmd.id)}</span>
+                              </Show>
+                            </div>
+                          </button>
+                        )}
+                      </For>
+                    </section>
                   )}
                 </For>
               </Show>

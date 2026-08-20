@@ -2373,6 +2373,64 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     )
   }
 
+  async function goals(input: CommandInput) {
+    const [session, messages, todos, contract] = await Promise.all([
+      Session.get(input.sessionID),
+      Session.messages({ sessionID: input.sessionID }),
+      Todo.get(input.sessionID),
+      SessionResearch.read(input.sessionID),
+    ])
+    const request = messages
+      .filter((message) => message.info.role === "user")
+      .flatMap((message) =>
+        message.parts.flatMap((part) =>
+          part.type === "text" && !part.ignored && !part.synthetic && part.text.trim() ? [part.text.trim()] : [],
+        ),
+      )[0]
+    const objective = (contract?.objective ?? request ?? session.title).slice(0, 2_000)
+    const active = todos.filter((todo) => todo.status === "in_progress")
+    const pending = todos.filter((todo) => todo.status === "pending")
+    const completed = todos.filter((todo) => todo.status === "completed")
+    const next =
+      active[0]?.content ??
+      pending[0]?.content ??
+      contract?.stages.find((stage) => stage.status === "running")?.label ??
+      contract?.stages.find((stage) => stage.status === "pending")?.label ??
+      "Define the next concrete step with `/plan`."
+    const rows = (items: typeof todos, empty: string) =>
+      items.length > 0 ? items.map((todo) => `- ${todo.content}`) : [`- ${empty}`]
+    return notice(
+      input,
+      [
+        "### Goals",
+        "",
+        "**Objective**",
+        objective,
+        "",
+        "**In progress**",
+        ...rows(active, "No active plan item"),
+        "",
+        "**Up next**",
+        ...rows(pending, "No queued plan items"),
+        "",
+        `**Completed** · ${completed.length}/${todos.length}`,
+        ...(contract
+          ? [
+              "",
+              `**Research workflow** · ${contract.stages.filter((stage) => stage.status === "completed").length}/${contract.stages.length} stages complete`,
+              ...contract.stages.map(
+                (stage) =>
+                  `- [${stage.status === "completed" ? "x" : " "}] ${stage.label}${stage.status === "running" ? " (active)" : ""}`,
+              ),
+            ]
+          : []),
+        "",
+        "**Next action**",
+        next,
+      ].join("\n"),
+    )
+  }
+
   async function context(input: CommandInput) {
     const messages = await Session.messages({ sessionID: input.sessionID })
     const composition = MessageV2.composition(messages)
@@ -2442,6 +2500,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     await Session.assertDirectory(input.sessionID)
 
     const configured = (await Config.get()).command?.[input.command]
+    if (!configured && input.command === Command.Default.GOALS) return goals(input)
     if (!configured && input.command === Command.Default.STATUS) return status(input)
     if (!configured && input.command === Command.Default.CONTEXT) return context(input)
     if (!configured && input.command === Command.Default.STOP) return stop(input)

@@ -659,6 +659,7 @@ export default function Page(): JSX.Element {
       },
     })
     list.push(
+      action("goals", "Goals", "Show the objective, active plan, research progress, and next action"),
       action("status", "Session status", "Show live plan, artifact, and workspace state"),
       action("context", "Context usage", "Show context composition, capacity, and compaction state"),
       action("stop", "Stop active work", "Stop the active response in this session"),

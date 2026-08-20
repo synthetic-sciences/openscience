@@ -76,6 +76,7 @@ export namespace Command {
     PLAN: "plan",
     REVIEW: "review",
     VERIFY: "verify",
+    GOALS: "goals",
     STATUS: "status",
     CONTEXT: "context",
     STOP: "stop",
@@ -141,6 +142,18 @@ export namespace Command {
           return workflow(Default.VERIFY)
         },
         hints: ["$ARGUMENTS"],
+      },
+      [Default.GOALS]: {
+        name: Default.GOALS,
+        description: "show the objective, active plan, research progress, and next action",
+        source: "builtin",
+        category: "session",
+        usage: "/goals",
+        menu: true,
+        get template() {
+          return ""
+        },
+        hints: [],
       },
       [Default.STATUS]: {
         name: Default.STATUS,
