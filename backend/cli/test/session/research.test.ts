@@ -263,6 +263,28 @@ test("requires a material trial before the domain decision stage can complete", 
   }
 })
 
+test("retains stage boundary evidence without treating it as a verification check", async () => {
+  const sessionID = `ses_research_${crypto.randomUUID()}`
+  try {
+    const contract = await SessionResearch.define(sessionID, {
+      objective: "Verify a physical simulation",
+      domain: "physics",
+      template: "minimal",
+    })
+    const updated = await SessionResearch.stage(sessionID, {
+      id: "model",
+      status: "completed",
+      detail: "model.json matches the frozen specification",
+    })
+    expect(updated.stages.find((stage) => stage.id === "model")?.detail).toBe(
+      "model.json matches the frozen specification",
+    )
+    expect(updated.checks).toEqual(contract.checks)
+  } finally {
+    await SessionResearch.remove(sessionID)
+  }
+})
+
 test("loads pre-trajectory contracts with an empty attempt ledger", () => {
   const parsed = SessionResearch.Contract.parse({
     version: 1,
@@ -310,4 +332,171 @@ test("requires evidence before a trial may claim advancement or regression", () 
       recordedAt: 1,
     }).success,
   ).toBe(true)
+})
+
+test("requires observed evidence before a verification check may settle", async () => {
+  const sessionID = `ses_research_${crypto.randomUUID()}`
+  try {
+    const contract = await SessionResearch.define(sessionID, {
+      objective: "Verify a saved result",
+      domain: "general",
+      template: "minimal",
+    })
+    const check = contract.checks[0]
+    await expect(SessionResearch.check(sessionID, { id: check.id, status: "passed" })).rejects.toThrow(
+      "requires observed evidence",
+    )
+
+    const legacy = {
+      ...contract,
+      checks: [{ ...check, status: "passed" as const }],
+    }
+    const assessment = SessionResearch.assess(legacy, {
+      artifacts: [],
+      jobs: [],
+      kernels: [],
+      findings: [],
+      reviewed: false,
+      busy: false,
+    })
+    expect(assessment.gates.find((gate) => gate.id === "checks")).toMatchObject({ status: "pending", complete: 0 })
+
+    expect(
+      await SessionResearch.check(sessionID, {
+        id: check.id,
+        status: "passed",
+        evidence: "verification.log: exit 0",
+      }),
+    ).toMatchObject({ checks: [expect.objectContaining({ id: check.id, status: "passed" })] })
+  } finally {
+    await SessionResearch.remove(sessionID)
+  }
+})
+
+test("promotes project research lessons across independent sessions and retires contradictions", async () => {
+  const projectID = `prj_experience_${crypto.randomUUID()}`
+  const otherID = `prj_experience_${crypto.randomUUID()}`
+  const firstID = `ses_research_${crypto.randomUUID()}`
+  const secondID = `ses_research_${crypto.randomUUID()}`
+  const thirdID = `ses_research_${crypto.randomUUID()}`
+  const physicsID = `ses_research_${crypto.randomUUID()}`
+  const situation = "the contamination rate is unknown and may exceed ten percent"
+  const guidance = "compare a bounded-influence estimator against the frozen classical baseline"
+  try {
+    for (const sessionID of [firstID, secondID, thirdID]) {
+      await SessionResearch.define(sessionID, {
+        objective: "Compare robust estimators",
+        domain: "statistics",
+        template: "minimal",
+      })
+    }
+    await SessionResearch.define(physicsID, {
+      objective: "Validate a numerical solver",
+      domain: "physics",
+      template: "minimal",
+    })
+    await SessionResearch.trial(
+      firstID,
+      {
+        stage: "simulate",
+        branch: "robust",
+        candidate: "Huber estimator",
+        outcome: "advanced",
+        summary: "Reduced error under the frozen contamination sweep",
+        evidence: "metrics-first.json:huber.rmse",
+      },
+      "support-first",
+    )
+    const first = await SessionResearch.learn(projectID, firstID, {
+      sourceTrial: "trial-support-first",
+      situation,
+      guidance,
+    })
+    expect(first).toMatchObject({ confidence: "tentative", status: "active", supports: [{ sessionID: firstID }] })
+    expect(first.supports[0].evidence).toBe("metrics-first.json:huber.rmse")
+
+    const duplicate = await SessionResearch.learn(projectID, firstID, {
+      sourceTrial: "trial-support-first",
+      situation,
+      guidance,
+      evidence: "metrics-first.json:huber.rmse",
+    })
+    expect(duplicate.supports).toHaveLength(1)
+
+    await SessionResearch.trial(
+      secondID,
+      {
+        stage: "simulate",
+        branch: "robust",
+        candidate: "Tukey estimator",
+        outcome: "advanced",
+        summary: "Confirmed the method-family advantage on an independent session",
+        evidence: "metrics-second.json:tukey.rmse",
+      },
+      "support-second",
+    )
+    const supported = await SessionResearch.learn(projectID, secondID, {
+      sourceTrial: "trial-support-second",
+      situation: `  ${situation.toUpperCase()}  `,
+      guidance: ` ${guidance.toUpperCase()} `,
+      evidence: "metrics-second.json:tukey.rmse",
+    })
+    expect(supported).toMatchObject({ confidence: "supported", status: "active" })
+    expect(supported.supports).toHaveLength(2)
+    expect(supported.situation).toBe(situation)
+    expect(supported.guidance).toBe(guidance)
+
+    const prompt = await SessionResearch.prompt(secondID, projectID)
+    expect(prompt).toContain("Project research experience")
+    expect(prompt).toContain(`[supported] ${supported.id}`)
+    expect(prompt).toContain(`situation=${JSON.stringify(situation)}`)
+    expect(prompt).toContain(`guidance=${JSON.stringify(guidance)}`)
+    expect(prompt).not.toContain("metrics-second.json:tukey.rmse")
+    expect(await SessionResearch.prompt(secondID, otherID)).not.toContain("Project research experience")
+
+    await SessionResearch.trial(
+      physicsID,
+      {
+        stage: "solve",
+        branch: "finite-difference",
+        candidate: "Stable explicit solver",
+        outcome: "advanced",
+        summary: "The frozen-grid solver met its convergence criterion",
+        evidence: "physics-metrics.json:order",
+      },
+      "physics-support",
+    )
+    await expect(
+      SessionResearch.unlearn(projectID, physicsID, {
+        lesson: supported.id,
+        sourceTrial: "trial-physics-support",
+        reason: "A physics trial must not mutate statistics experience",
+        evidence: "physics-metrics.json:order",
+      }),
+    ).rejects.toThrow("belongs to the statistics domain")
+
+    await SessionResearch.trial(
+      thirdID,
+      {
+        stage: "simulate",
+        branch: "clean-data",
+        candidate: "classical estimator under verified Gaussian data",
+        outcome: "regressed",
+        summary: "The robust estimator lost efficiency after contamination was ruled out",
+        evidence: "metrics-third.json:efficiency",
+      },
+      "contradiction",
+    )
+    const rejected = await SessionResearch.unlearn(projectID, thirdID, {
+      lesson: supported.id,
+      sourceTrial: "trial-contradiction",
+      reason: "The prior is invalid after contamination is ruled out",
+      evidence: "metrics-third.json:efficiency",
+    })
+    expect(rejected).toMatchObject({ status: "rejected", contradictions: [{ sessionID: thirdID }] })
+    expect(await SessionResearch.prompt(thirdID, projectID)).not.toContain(`[supported] ${supported.id}`)
+  } finally {
+    await Promise.all([firstID, secondID, thirdID, physicsID].map((sessionID) => SessionResearch.remove(sessionID)))
+    await Promise.all([projectID, otherID].map((id) => SessionResearch.removeExperience(id)))
+  }
 })

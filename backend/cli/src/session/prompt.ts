@@ -1019,7 +1019,7 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
-      const contract = await SessionResearch.prompt(sessionID)
+      const contract = await SessionResearch.prompt(sessionID, Instance.project.id)
       const system = [
         ...(await SystemPrompt.environment(model, sessionID)),
         ...(await SystemPrompt.compute()),

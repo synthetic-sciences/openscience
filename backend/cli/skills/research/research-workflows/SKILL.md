@@ -13,7 +13,9 @@ Treat each workflow as a state machine, not a prose request. Follow the selected
 
 - Keep implementation steps in `planwrite` or `todowrite`; replace the complete list on every update and keep only genuinely active work in progress.
 - Keep multi-stage scientific completion state in `research_contract`. Define the contract before expensive work, update a stage only at a real boundary, record every materially distinct failed candidate, and pass a check only after observing its evidence.
+- Record reusable project method lessons only from a named evidence-backed trial. Treat a one-session lesson as tentative, reinforce it only from an independent session, and reject it explicitly when a later trial supplies counterevidence. Never turn a task-specific scientific claim into standing guidance.
 - Keep files in the workspace, durable Results through `artifact` with `action: save_file`, and exact claim lineage through provenance tools. Do not copy bulky file contents into conversational status text.
+- Preserve a design manifest before execution when later claims depend on temporal freezing, and link producing runs to exact code, inputs, and outputs. A post-run checksum proves consistency, not preregistration.
 - Treat jobs, kernels, reviewer findings, artifacts, and verification checks as authoritative session state. Never infer success from an assistant sentence when the recorded state disagrees.
 
 ## Execution protocol
