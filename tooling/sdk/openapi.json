@@ -51651,6 +51651,27 @@
           "mcp": {
             "type": "boolean"
           },
+          "source": {
+            "type": "string",
+            "enum": [
+              "builtin",
+              "project",
+              "mcp"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "session",
+              "research",
+              "evidence",
+              "output",
+              "project"
+            ]
+          },
+          "usage": {
+            "type": "string"
+          },
           "menu": {
             "type": "boolean"
           },

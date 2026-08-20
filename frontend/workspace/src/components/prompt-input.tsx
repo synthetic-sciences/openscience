@@ -108,8 +108,11 @@ interface SlashCommand {
   trigger: string
   title: string
   description?: string
+  usage?: string
+  source: "builtin" | "project" | "mcp" | "skill"
+  category: "session" | "research" | "evidence" | "output" | "project" | "skill"
   keybind?: string
-  type: "builtin" | "custom" | "skill"
+  type: "action" | "command" | "skill"
 }
 
 interface ResearchAccessSnapshot {
@@ -874,6 +877,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
+    const usage: Record<string, string> = {
+      stop: "/stop [turn|compute|all]",
+      compact: "/compact [focus]",
+      handoff: "/handoff [project-relative path]",
+    }
     const builtin = command.options
       .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
       .map((opt) => ({
@@ -882,7 +890,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         title: opt.title,
         description: opt.description,
         keybind: opt.keybind,
-        type: "builtin" as const,
+        source: "builtin" as const,
+        category: "session" as const,
+        usage: usage[opt.slash!] ?? `/${opt.slash!}`,
+        type: "action" as const,
       }))
 
     const custom = sync.data.command
@@ -896,11 +907,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       // compact and a prefilled "/compact " would not execute anyway.
       .filter((cmd) => !(cmd as { menu?: boolean }).menu)
       .map((cmd) => ({
-        id: `custom.${cmd.name}`,
+        id: `command.${cmd.name}`,
         trigger: cmd.name,
         title: cmd.name,
         description: cmd.description,
-        type: "custom" as const,
+        usage: (cmd as { usage?: string }).usage,
+        source: ((cmd as { source?: "builtin" | "project" | "mcp" }).source ?? (cmd.mcp ? "mcp" : "project")) as
+          | "builtin"
+          | "project"
+          | "mcp",
+        category: ((
+          cmd as {
+            category?: "session" | "research" | "evidence" | "output" | "project"
+          }
+        ).category ?? "project") as "session" | "research" | "evidence" | "output" | "project",
+        type: "command" as const,
       }))
 
     // Surface installed skills as slash entries. Selecting one prefills a
@@ -914,17 +935,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         trigger: s.name,
         title: s.name,
         description: s.description?.slice(0, 120) ?? "",
+        usage: `/${s.name} [request]`,
+        source: "skill" as const,
+        category: "skill" as const,
         type: "skill" as const,
       }))
 
-    return [...custom, ...skills, ...builtin]
+    const priority = [
+      "plan",
+      "review",
+      "verify",
+      "status",
+      "context",
+      "stop",
+      "compact",
+      "handoff",
+      "checkpoint",
+      "reproduce",
+      "compare",
+      "sources",
+      "export",
+    ]
+    const rank = (cmd: SlashCommand) => {
+      const pinned = priority.indexOf(cmd.trigger)
+      if (pinned >= 0) return pinned
+      if (cmd.source === "project") return 100
+      if (cmd.source === "mcp") return 200
+      if (cmd.source === "skill") return 300
+      return 50
+    }
+    return [...custom, ...skills, ...builtin].toSorted(
+      (a, b) => rank(a) - rank(b) || a.trigger.localeCompare(b.trigger),
+    )
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
     setStore("popover", null)
 
-    if (cmd.type === "custom" || cmd.type === "skill") {
+    if (cmd.type === "command" || cmd.type === "skill") {
       // Both surfaces prefill the literal slash command. The agent reads
       // `/<name>` as a request to invoke the named skill / command.
       const text = `/${cmd.trigger} `
@@ -957,7 +1006,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
-    filterKeys: ["trigger", "title", "description"],
+    filterKeys: ["trigger", "title", "description", "usage"],
     onSelect: handleSlashSelect,
   })
 
@@ -1544,25 +1593,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (text.trim().length === 0 && images.length === 0) return
 
-    const currentModel = local.model.current()
-    const currentAgent = local.agent.current()
-    if (!currentModel || !currentAgent) {
-      showToast({
-        title: language.t("prompt.toast.modelAgentRequired.title"),
-        description: language.t("prompt.toast.modelAgentRequired.description"),
-      })
-      return
-    }
-
-    const model = {
-      modelID: currentModel.id,
-      providerID: currentModel.provider.id,
-    }
-    const agent = currentAgent.name
-    const variant = local.model.variant.prompt()
-    const tier = local.model.tier.prompt()
-    const researchEffort = "normal" as const
-
     const errorMessage = (err: unknown) => {
       if (err && typeof err === "object" && "data" in err) {
         const data = (err as { data?: { message?: string } }).data
@@ -1594,6 +1624,50 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       restoreInput()
       return true
     }
+
+    const [head, ...tail] = text.split(" ")
+    const name = text.startsWith("/") ? head.slice(1) : undefined
+    const command = name ? sync.data.command.find((item) => item.name === name) : undefined
+    const native = command?.source === "builtin" && command.menu && ["status", "context", "stop"].includes(command.name)
+    const active = info()
+    if (native && active && mode === "normal" && images.length === 0) {
+      setSubmitting(true)
+      clearInput()
+      window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
+      setStore("historyIndex", -1)
+      setStore("savedPrompt", null)
+      props.onSubmit?.()
+      sdk.client.session
+        .command({ sessionID: active.id, command: command.name, arguments: tail.join(" ") })
+        .catch((err) => {
+          showToast({
+            title: language.t("prompt.toast.commandSendFailed.title"),
+            description: errorMessage(err),
+          })
+          restoreInputAfterFailure()
+        })
+      setSubmitting(false)
+      return
+    }
+
+    const currentModel = local.model.current()
+    const currentAgent = local.agent.current()
+    if (!currentModel || !currentAgent) {
+      showToast({
+        title: language.t("prompt.toast.modelAgentRequired.title"),
+        description: language.t("prompt.toast.modelAgentRequired.description"),
+      })
+      return
+    }
+
+    const model = {
+      modelID: currentModel.id,
+      providerID: currentModel.provider.id,
+    }
+    const agent = currentAgent.name
+    const variant = local.model.variant.prompt()
+    const tier = local.model.tier.prompt()
+    const researchEffort = "normal" as const
 
     const restoreBootstrap = () => {
       setSubmitting(false)
@@ -2166,18 +2240,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       onClick={() => handleSlashSelect(cmd)}
                       onMouseEnter={() => setSlashActive(cmd.id)}
                     >
-                      <div class="flex items-center gap-2 min-w-0">
-                        <span class="text-14-regular text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
-                        <Show when={cmd.description}>
-                          <span class="text-14-regular text-text-weak truncate">{cmd.description}</span>
+                      <div class="workspace-composer__slash-copy min-w-0">
+                        <span class="text-14-medium text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
+                        <Show when={cmd.description || cmd.usage}>
+                          <span class="workspace-composer__slash-detail truncate">
+                            {cmd.description}
+                            <Show when={cmd.usage && cmd.usage !== `/${cmd.trigger}`}>
+                              <span class="workspace-composer__slash-usage">{cmd.usage}</span>
+                            </Show>
+                          </span>
                         </Show>
                       </div>
                       <div class="flex items-center gap-2 shrink-0">
-                        <Show when={cmd.type === "custom"}>
-                          <span class="text-11-regular text-text-weaker px-1.5 py-0.5 bg-surface-base rounded">
-                            {language.t("prompt.slash.badge.custom")}
-                          </span>
-                        </Show>
+                        <span class="workspace-composer__slash-badge">{cmd.source}</span>
                         <Show when={command.keybind(cmd.id)}>
                           <span class="text-12-regular text-text-weaker">{command.keybind(cmd.id)}</span>
                         </Show>

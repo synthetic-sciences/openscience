@@ -1,0 +1,7 @@
+Verify this scope:
+
+$ARGUMENTS
+
+Determine the concrete acceptance criteria from the request, plan, repository instructions, and claimed result. Run the smallest relevant real checks first, then broaden in proportion to risk. For code, use the repository's actual typecheck, test, build, and integration paths. For research, recompute decisive quantities where feasible, inspect immutable artifacts and provenance, validate statistical assumptions, units, citations, seeds, environments, and figure-to-data consistency.
+
+Do not edit the implementation merely to make a check pass unless the user explicitly asked for a fix. Never substitute a mock or a repeated implementation for the real behavior. Finish with a compact verification ledger: each criterion, command or evidence used, result as PASS, FAIL, or NOT TESTED, and the exact remaining gap. Do not say verified when only static inspection was performed.

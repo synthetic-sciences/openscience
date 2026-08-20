@@ -1,0 +1,7 @@
+Audit the sources for this scope:
+
+$ARGUMENTS
+
+List the material claims, numbers, datasets, methods, and prior work in scope. Trace each to its exact primary source, immutable artifact, or provenance node. Open and inspect the source when available. Check that citations support the nearby claim, versions and dates are correct, datasets and licenses are identified, retractions or superseding work are not ignored, and generated text is not being cited as evidence.
+
+Return a source ledger with claim, source, support level, and issue. Use SUPPORTED, PARTIAL, MISMATCHED, MISSING, or UNAVAILABLE. Prefer primary literature and official documentation over summaries. Do not invent metadata or URLs. End with the unsupported claims that must be fixed before publication or release.

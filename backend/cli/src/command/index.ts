@@ -5,6 +5,13 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_PLAN from "./template/plan.txt"
+import PROMPT_VERIFY from "./template/verify.txt"
+import PROMPT_CHECKPOINT from "./template/checkpoint.txt"
+import PROMPT_REPRODUCE from "./template/reproduce.txt"
+import PROMPT_COMPARE from "./template/compare.txt"
+import PROMPT_SOURCES from "./template/sources.txt"
+import PROMPT_EXPORT from "./template/export.txt"
 import { MCP } from "../mcp"
 import { State } from "../project/state"
 
@@ -28,6 +35,9 @@ export namespace Command {
       agent: z.string().optional(),
       model: z.string().optional(),
       mcp: z.boolean().optional(),
+      source: z.enum(["builtin", "project", "mcp"]).optional(),
+      category: z.enum(["session", "research", "evidence", "output", "project"]).optional(),
+      usage: z.string().optional(),
       // Surface this command in the composer slash menu. Only no-argument action
       // commands (e.g. /compact) should set it — arg-taking prompt-template
       // commands can't receive their args from that menu.
@@ -57,9 +67,19 @@ export namespace Command {
 
   export const Default = {
     INIT: "init",
+    PLAN: "plan",
     REVIEW: "review",
+    VERIFY: "verify",
+    STATUS: "status",
+    CONTEXT: "context",
+    STOP: "stop",
     COMPACT: "compact",
     HANDOFF: "handoff",
+    CHECKPOINT: "checkpoint",
+    REPRODUCE: "reproduce",
+    COMPARE: "compare",
+    SOURCES: "sources",
+    EXPORT: "export",
   } as const
 
   const compute = async () => {
@@ -72,6 +92,8 @@ export namespace Command {
       [Default.INIT]: {
         name: Default.INIT,
         description: "create/update AGENTS.md",
+        source: "builtin",
+        category: "project",
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", Instance.worktree)
         },
@@ -79,18 +101,85 @@ export namespace Command {
       },
       [Default.REVIEW]: {
         name: Default.REVIEW,
-        description: "review changes [commit|branch|pr], defaults to uncommitted",
+        description: "independently review code, results, claims, or an artifact",
+        source: "builtin",
+        category: "research",
+        usage: "/review [scope]",
+        agent: "reviewer",
         get template() {
           return PROMPT_REVIEW.replace("${path}", Instance.worktree)
         },
-        subtask: true,
+        subtask: false,
         hints: hints(PROMPT_REVIEW),
+      },
+      [Default.PLAN]: {
+        name: Default.PLAN,
+        description: "enter read-only plan mode and produce a decision-ready plan",
+        source: "builtin",
+        category: "research",
+        usage: "/plan [objective]",
+        agent: "plan",
+        get template() {
+          return PROMPT_PLAN
+        },
+        subtask: false,
+        hints: hints(PROMPT_PLAN),
+      },
+      [Default.VERIFY]: {
+        name: Default.VERIFY,
+        description: "run the relevant checks and report pass, fail, or not tested",
+        source: "builtin",
+        category: "evidence",
+        usage: "/verify [claim, artifact, or test scope]",
+        get template() {
+          return PROMPT_VERIFY
+        },
+        hints: hints(PROMPT_VERIFY),
+      },
+      [Default.STATUS]: {
+        name: Default.STATUS,
+        description: "show live session, plan, artifact, and workspace state",
+        source: "builtin",
+        category: "session",
+        usage: "/status",
+        menu: true,
+        get template() {
+          return ""
+        },
+        hints: [],
+      },
+      [Default.CONTEXT]: {
+        name: Default.CONTEXT,
+        description: "show context composition, capacity, and compaction state",
+        source: "builtin",
+        category: "session",
+        usage: "/context",
+        menu: true,
+        get template() {
+          return ""
+        },
+        hints: [],
+      },
+      [Default.STOP]: {
+        name: Default.STOP,
+        description: "stop the active turn, compute, or everything in this session",
+        source: "builtin",
+        category: "session",
+        usage: "/stop [turn|compute|all]",
+        menu: true,
+        get template() {
+          return ""
+        },
+        hints: [],
       },
       // Action command, not a prompt template — SessionPrompt.command intercepts
       // it and runs SessionCompaction directly. The empty template is never used.
       [Default.COMPACT]: {
         name: Default.COMPACT,
         description: "summarize the conversation so far to free up context",
+        source: "builtin",
+        category: "session",
+        usage: "/compact [focus]",
         menu: true,
         get template() {
           return ""
@@ -100,17 +189,77 @@ export namespace Command {
       [Default.HANDOFF]: {
         name: Default.HANDOFF,
         description: "write a self-contained handoff.md for another agent, then compact",
+        source: "builtin",
+        category: "session",
+        usage: "/handoff [project-relative path]",
         menu: true,
         get template() {
           return ""
         },
         hints: [],
       },
+      [Default.CHECKPOINT]: {
+        name: Default.CHECKPOINT,
+        description: "save a durable recovery checkpoint without ending the session",
+        source: "builtin",
+        category: "research",
+        usage: "/checkpoint [label]",
+        get template() {
+          return PROMPT_CHECKPOINT
+        },
+        hints: hints(PROMPT_CHECKPOINT),
+      },
+      [Default.REPRODUCE]: {
+        name: Default.REPRODUCE,
+        description: "reproduce a result with exact inputs, environment, and evidence",
+        source: "builtin",
+        category: "evidence",
+        usage: "/reproduce [claim, artifact, paper, or run]",
+        get template() {
+          return PROMPT_REPRODUCE
+        },
+        hints: hints(PROMPT_REPRODUCE),
+      },
+      [Default.COMPARE]: {
+        name: Default.COMPARE,
+        description: "compare runs or artifacts on a fair, explicit basis",
+        source: "builtin",
+        category: "evidence",
+        usage: "/compare [left] vs [right] [metric or question]",
+        get template() {
+          return PROMPT_COMPARE
+        },
+        hints: hints(PROMPT_COMPARE),
+      },
+      [Default.SOURCES]: {
+        name: Default.SOURCES,
+        description: "audit sources, citations, and unsupported claims",
+        source: "builtin",
+        category: "evidence",
+        usage: "/sources [claim, artifact, or scope]",
+        get template() {
+          return PROMPT_SOURCES
+        },
+        hints: hints(PROMPT_SOURCES),
+      },
+      [Default.EXPORT]: {
+        name: Default.EXPORT,
+        description: "package results with provenance and reproduction instructions",
+        source: "builtin",
+        category: "output",
+        usage: "/export [target] [format or destination]",
+        get template() {
+          return PROMPT_EXPORT
+        },
+        hints: hints(PROMPT_EXPORT),
+      },
     }
 
     for (const [name, command] of Object.entries(cfg.command ?? {})) {
       result[name] = {
         name,
+        source: "project",
+        category: "project",
         agent: command.agent,
         model: command.model,
         description: command.description,
@@ -125,6 +274,7 @@ export namespace Command {
       result[name] = {
         name,
         mcp: true,
+        source: "mcp",
         description: prompt.description,
         get template() {
           // since a getter can't be async we need to manually return a promise here

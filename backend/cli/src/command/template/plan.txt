@@ -1,0 +1,7 @@
+Enter plan mode for this objective:
+
+$ARGUMENTS
+
+Inspect the repository and current session state before proposing changes. Separate facts you verified from assumptions. Produce a decision-ready plan covering scope, affected interfaces and data flow, failure and cancellation behavior, tests, migration or compatibility concerns, and any unresolved choice that genuinely needs the user.
+
+Do not modify implementation files or run mutating commands while planning. Save the plan through the existing plan workflow and use the plan review control when it is ready. If no objective was supplied, infer the active objective from the conversation and ask only if it is genuinely ambiguous.

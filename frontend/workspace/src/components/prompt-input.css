@@ -299,6 +299,36 @@
   outline-offset: -2px;
 }
 
+.workspace-composer__slash-copy {
+  display: grid;
+  grid-template-columns: minmax(88px, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+}
+
+.workspace-composer__slash-detail {
+  color: var(--text-weak);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.workspace-composer__slash-usage {
+  margin-left: 8px;
+  color: var(--text-weaker);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+}
+
+.workspace-composer__slash-badge {
+  padding: 1px 6px;
+  border: 1px solid var(--color-border-weak, var(--color-border));
+  border-radius: 999px;
+  color: var(--text-weaker);
+  font-size: 10px;
+  line-height: 15px;
+  text-transform: capitalize;
+}
+
 /* Composer surface
    ----------------
    This file is the sole owner of the input surface, editor baseline, utility

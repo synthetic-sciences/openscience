@@ -1,0 +1,7 @@
+Create a durable recovery checkpoint for the current research session.
+
+Label: $ARGUMENTS
+
+Inspect current state and write a concise Markdown checkpoint under `.openscience/checkpoints/`. Keep that local recovery directory self-ignored with a `*` rule unless the user explicitly asks to version a checkpoint. Use a timestamped, collision-resistant filename and do not overwrite an existing checkpoint. Capture the objective, current plan state, completed work, decisions and their evidence, exact artifacts and provenance nodes, important commands and outcomes, model or environment details that affect reproducibility, seeds and configs, git branch and commit plus dirty-state caveats, unresolved risks, and the single best next action.
+
+Record facts only. Mark unknown or unverified state explicitly. The checkpoint must let a fresh agent resume safely without repeating completed work or blindly retrying a side effect whose outcome is unknown. Do not compact or end the session. Return the saved path and a two-line summary.

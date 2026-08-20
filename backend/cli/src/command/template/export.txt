@@ -1,0 +1,7 @@
+Export this target:
+
+$ARGUMENTS
+
+Resolve the intended artifact, audience, format, and destination from the request. Package the result using existing project export and publication capabilities where available. Preserve source files and immutable versions. Include a concise README or manifest with title, generated files, provenance links, code and data references, environment and dependency details, exact reproduction commands, seeds and configs, checksums when available, known limitations, and verification status.
+
+Do not claim reproducibility for missing inputs and do not silently omit failed or inconclusive checks. Avoid exporting secrets, credentials, private paths, caches, or unrelated large files. Validate that every exported file exists and opens in its target format, then report the destination, contents, checks performed, and any portability gap.

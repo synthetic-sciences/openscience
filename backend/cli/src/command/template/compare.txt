@@ -1,0 +1,7 @@
+Compare the following targets:
+
+$ARGUMENTS
+
+Resolve the exact runs, artifacts, methods, models, or claims being compared. Establish a fair comparison contract before drawing conclusions: same dataset or population, split, preprocessing, budget, metric definition and direction, units, seeds, environment, and uncertainty treatment. If the comparison is not identifiable, say why and report the mismatches rather than forcing a ranking.
+
+Use primary artifacts and provenance where possible. Present a compact table of the decisive fields, absolute and relative differences where meaningful, uncertainty or variability, and any confounder. Separate observed evidence from interpretation. Conclude with the winner only when the stated criterion supports one; otherwise report a tie, tradeoff, or insufficient evidence and name the next discriminating check.
