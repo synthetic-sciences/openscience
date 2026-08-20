@@ -317,15 +317,13 @@ function artifacts(job: JobBroker.Job) {
 export function createComputeJobTool(base?: JobBroker.Options) {
   return Tool.define<typeof ComputeJobParameters, Metadata>("compute_job", {
     description: [
-      "Plan, start, inspect, and control project-scoped compute jobs through OpenScience's single JobBroker.",
-      "Use targets to discover this computer, saved SSH/Slurm/PBS hosts, and whether Modal is configured.",
-      "Use plan for a no-dispatch preview. Use start for detached local, SSH/Slurm/PBS, or Modal work; remote starts show the exact immutable plan and scoped approval before dispatch.",
-      "Prefer the Python and R tools for interactive local analysis. Use start for durable background jobs and remote schedulers.",
-      "Use list, status, logs, and artifacts for read-only checks; these never dispatch compute and never require paid-run approval.",
-      "Use cancel to stop a live job, retry_delivery to harvest a retained Modal volume without rerunning the command, and release only when the user wants to discard retained remote resources.",
-      "Never use a new modal dispatch to check an existing job. Never invoke the Modal SDK or CLI directly.",
-      'Every call must use the "action" field (never "operation"). For plan/start, target is a nested object, never a JSON-encoded string.',
-      `Copy-ready action inputs:\n${ACTION_HELP}`,
+      "Project JobBroker for detached local, SSH/scheduler, and Modal work; prefer Python/R for interactive analysis.",
+      "Actions: targets discovers providers; plan previews without dispatch; start dispatches; list filters project jobs; status, logs, artifacts, cancel, retry_delivery, and release require job_id. logs optionally accepts bytes.",
+      "plan/start require name, purpose, command, and target; remote start presents an immutable scoped approval. Optional workload fields are cwd, resources, modules, container, artifacts, checkpoint, uploads, packages, image, and gpu.",
+      'Example: {"action":"start","name":"Run analysis","purpose":"Produce the result","command":"python analysis.py","target":{"kind":"local"}}.',
+      "list/status/logs/artifacts are read-only. cancel stops a live job; retry_delivery harvests retained Modal output without rerunning; release discards retained resources.",
+      "Never redispatch Modal to inspect a job or invoke Modal SDK/CLI directly.",
+      'Always use "action", never "operation". target is a nested object, never a JSON-encoded string.',
     ].join("\n"),
     parameters: ComputeJobParameters,
     normalizeInput,
