@@ -17,6 +17,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Session } from "@/session"
 import { ProjectTrust } from "@/project/trust"
 import { BundledSkills } from "./bundled"
+import { lazy } from "@/util/lazy"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -64,55 +65,82 @@ export namespace Skill {
   const UserSkillName = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
   const priority = { default: 0, installed: 1, user: 2, project: 3 } as const
 
+  async function read(match: string, origin: Info["origin"]): Promise<Info | undefined> {
+    const md = await ConfigMarkdown.parse(match).catch((err) => {
+      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+        ? err.data.message
+        : `Failed to parse skill ${match}`
+      Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+      log.error("failed to load skill", { skill: match, err })
+      return undefined
+    })
+    if (!md) return
+
+    const parsed = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).safeParse(
+      md.data,
+    )
+    if (!parsed.success) return
+
+    const desc = parsed.data.description.toLowerCase()
+    if (desc.includes("always run this skill") || desc.includes("must always run")) {
+      log.warn("blocked skill with injection pattern", {
+        name: parsed.data.name,
+        reason: "description contains injection directive",
+      })
+      return
+    }
+
+    return {
+      name: parsed.data.name,
+      description: parsed.data.description,
+      location: match,
+      category: parsed.data.category,
+      tags: parsed.data.tags,
+      entry: parsed.data.entry,
+      origin,
+    }
+  }
+
+  const defaults = lazy(async () => {
+    if (Flag.OPENSCIENCE_DISABLE_BUNDLED_SKILLS) return []
+    const root = await BundledSkills.root()
+    if (!root) return []
+    const skills: Info[] = []
+    let count = 0
+    for await (const match of SKILL_GLOB.scan({
+      cwd: root,
+      absolute: true,
+      onlyFiles: true,
+      followSymlinks: false,
+    })) {
+      const skill = await read(match, "default")
+      if (skill) skills.push(skill)
+      count++
+    }
+    log.info("Loaded bundled skills", { path: root, count })
+    return skills
+  })
+
   async function compute() {
     const skills: Record<string, Info> = {}
 
-    const addSkill = async (match: string, origin: Info["origin"]) => {
-      const md = await ConfigMarkdown.parse(match).catch((err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse skill ${match}`
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load skill", { skill: match, err })
-        return undefined
-      })
-
-      if (!md) return
-
-      const parsed = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).safeParse(
-        md.data,
-      )
-      if (!parsed.success) return
-
-      // Block skills with injection-like descriptions
-      const desc = (parsed.data.description ?? "").toLowerCase()
-      if (desc.includes("always run this skill") || desc.includes("must always run")) {
-        log.warn("blocked skill with injection pattern", {
-          name: parsed.data.name,
-          reason: "description contains injection directive",
-        })
-        return
-      }
-
-      const existing = skills[parsed.data.name]
+    const add = (skill: Info) => {
+      const existing = skills[skill.name]
+      const origin = skill.origin
       if (existing && priority[existing.origin] > priority[origin]) return
       if (existing) {
         log.warn("duplicate skill name", {
-          name: parsed.data.name,
+          name: skill.name,
           existing: existing.location,
-          duplicate: match,
+          duplicate: skill.location,
         })
       }
+      skills[skill.name] = skill
+    }
 
-      skills[parsed.data.name] = {
-        name: parsed.data.name,
-        description: parsed.data.description,
-        location: match,
-        category: parsed.data.category,
-        tags: parsed.data.tags,
-        entry: parsed.data.entry,
-        origin,
-      }
+    const addSkill = async (match: string, origin: Info["origin"]) => {
+      const skill = await read(match, origin)
+      if (skill) add(skill)
     }
 
     // Scan .claude/skills/ directories (project-level)
@@ -174,22 +202,7 @@ export namespace Skill {
     // Default skills are an immutable release asset. Source builds scan the
     // repository tree; compiled releases materialize their embedded archive to
     // a versioned cache directory. Neither path needs Atlas or a network.
-    if (!Flag.OPENSCIENCE_DISABLE_BUNDLED_SKILLS) {
-      const root = await BundledSkills.root()
-      if (root) {
-        let count = 0
-        for await (const match of SKILL_GLOB.scan({
-          cwd: root,
-          absolute: true,
-          onlyFiles: true,
-          followSymlinks: false,
-        })) {
-          await addSkill(match, "default")
-          count++
-        }
-        log.info("Loaded bundled skills", { path: root, count })
-      }
-    }
+    for (const skill of await defaults()) add(skill)
 
     // === User Skills: authored locally via openscience/web, private by default ===
     if (await Filesystem.isDir(USER_SKILL_DIR)) {
