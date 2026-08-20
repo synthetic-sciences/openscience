@@ -2292,6 +2292,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       sessionID: input.sessionID,
       type: "text",
       text: line,
+      ignored: true,
       time: { start: Date.now(), end: Date.now() },
     }
     await Session.updateMessage(user)
@@ -2319,6 +2320,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       type: "text",
       text,
       synthetic: true,
+      ignored: true,
       time: { start: Date.now(), end: Date.now() },
     }
     await Session.updateMessage(assistant)

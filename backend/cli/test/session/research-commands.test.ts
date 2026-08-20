@@ -88,6 +88,7 @@ describe("research slash commands", () => {
             { id: "next", content: "Export the report", status: "pending", priority: "medium" },
           ],
         })
+        const before = MessageV2.composition(await Session.messages({ sessionID: session.id }))
 
         const status = await SessionPrompt.command({
           sessionID: session.id,
@@ -97,6 +98,7 @@ describe("research slash commands", () => {
         const statusText = status.parts.find((part) => part.type === "text")
         expect(status.info.role).toBe("assistant")
         expect(status.info.role === "assistant" ? status.info.cost : -1).toBe(0)
+        expect(statusText?.type === "text" ? statusText.ignored : false).toBe(true)
         expect(statusText?.type === "text" ? statusText.text : "").toContain("1 active, 1 pending")
         expect(statusText?.type === "text" ? statusText.text : "").toContain("Long-horizon study")
 
@@ -109,6 +111,7 @@ describe("research slash commands", () => {
         expect(context.info.role === "assistant" ? context.info.cost : -1).toBe(0)
         expect(contextText?.type === "text" ? contextText.text : "").toContain("Conversation estimate")
         expect(contextText?.type === "text" ? contextText.text : "").toContain("deterministic conversation estimate")
+        expect(MessageV2.composition(await Session.messages({ sessionID: session.id })).total).toBe(before.total)
       },
     })
   })
@@ -127,6 +130,7 @@ describe("research slash commands", () => {
         const text = result.parts.find((part) => part.type === "text")
         expect(result.info.role === "assistant" ? result.info.providerID : "").toBe("openscience")
         expect(result.info.role === "assistant" ? result.info.modelID : "").toBe("local")
+        expect(text?.type === "text" ? text.ignored : false).toBe(true)
         expect(text?.type === "text" ? text.text : "").toContain("Empty study")
       },
     })
