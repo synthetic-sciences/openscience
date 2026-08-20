@@ -23,6 +23,7 @@ import PROMPT_WRITE from "../agent/prompt/write.txt"
 import PROMPT_ML from "../agent/prompt/ml.txt"
 import PROMPT_RESEARCH from "../agent/prompt/research.txt"
 import PROMPT_DIRECT from "../session/prompt/direct.txt"
+import PROMPT_INSPECTION from "../session/prompt/inspection.txt"
 import PROMPT_BIOLOGY from "../agent/prompt/biology.txt"
 import PROMPT_PHYSICS from "../agent/prompt/physics.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -1024,12 +1025,13 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
-      const contract = route.direct ? undefined : await SessionResearch.prompt(sessionID, Instance.project.id)
+      const narrow = route.direct || route.inspection
+      const contract = narrow ? undefined : await SessionResearch.prompt(sessionID, Instance.project.id)
       const system = [
         ...(await SystemPrompt.environment(model, sessionID)),
-        ...(route.direct ? [] : await SystemPrompt.compute()),
+        ...(narrow ? [] : await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
-        ...(SKILL_ROUTING_AGENTS.has(agent.name) && !route.direct
+        ...(SKILL_ROUTING_AGENTS.has(agent.name) && !narrow
           ? [await SystemPrompt.availableSkills(agent.permission, route.text)]
           : []),
         ...(contract ? [contract] : []),
@@ -1044,6 +1046,7 @@ export namespace SessionPrompt {
         user: lastUser,
         agent,
         direct: route.direct,
+        inspection: route.inspection,
         abort,
         sessionID,
         system,
@@ -1146,10 +1149,11 @@ export namespace SessionPrompt {
       .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.ignored && !part.synthetic)
       .map((part) => part.text)
       .join("\n")
-    const fresh =
-      messages.filter((message) => message.info.role === "user").length === 1 &&
-      !messages.some((message) => message.info.role === "assistant")
+    // Assistant tool-loop messages still belong to the first user turn. Keep
+    // its narrow route until a second user message actually starts a follow-up.
+    const fresh = ToolSelection.fresh(messages.map((message) => message.info.role))
     const attachments = user?.parts.some((part) => part.type === "file") ?? false
+    const tools = user?.info.role === "user" ? user.info.tools : undefined
     return {
       user,
       text,
@@ -1158,7 +1162,14 @@ export namespace SessionPrompt {
         message: text,
         fresh,
         attachments,
-        tools: user?.info.role === "user" ? user.info.tools : undefined,
+        tools,
+      }),
+      inspection: ToolSelection.inspection({
+        agent,
+        message: text,
+        fresh,
+        attachments,
+        tools,
       }),
     }
   }
@@ -1806,6 +1817,11 @@ export namespace SessionPrompt {
     const userMessage = route.user
     if (!userMessage) return input.messages
     const effort = userMessage.info.role === "user" ? userMessage.info.effort : undefined
+    const research = route.direct
+      ? PROMPT_DIRECT
+      : route.inspection
+        ? PROMPT_INSPECTION
+        : [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n")
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE) {
@@ -1845,7 +1861,7 @@ export namespace SessionPrompt {
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
           type: "text",
-          text: route.direct ? PROMPT_DIRECT : [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n"),
+          text: research,
           synthetic: true,
         })
       }
@@ -1910,7 +1926,7 @@ export namespace SessionPrompt {
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: route.direct ? PROMPT_DIRECT : [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n"),
+        text: research,
         synthetic: true,
       })
     }

@@ -1,0 +1,5 @@
+<system-reminder>
+Inspect only the requested local files with the provided read-only tools. Answer from observed
+contents, identify the source paths, and be concise. Batch independent reads. Do not modify files,
+delegate, search externally, run commands, or invent missing facts.
+</system-reminder>

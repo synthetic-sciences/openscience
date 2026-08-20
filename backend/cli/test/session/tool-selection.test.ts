@@ -3,6 +3,12 @@ import { PermissionNext } from "../../src/permission/next"
 import { ToolSelection } from "../../src/session/tool-selection"
 
 describe("tool selection", () => {
+  test("keeps the first user turn fresh across assistant tool-loop steps", () => {
+    expect(ToolSelection.fresh(["user"])).toBe(true)
+    expect(ToolSelection.fresh(["user", "assistant", "assistant"])).toBe(true)
+    expect(ToolSelection.fresh(["user", "assistant", "user"])).toBe(false)
+  })
+
   const permission = PermissionNext.fromConfig({
     "*": "allow",
     edit: "deny",
@@ -160,5 +166,27 @@ describe("tool selection", () => {
         tools: { bash: true },
       }),
     ).toBe(true)
+    expect(
+      ToolSelection.inspection({
+        agent: "research",
+        message,
+        fresh: true,
+      }),
+    ).toBe(true)
+    expect(
+      ToolSelection.inspection({
+        agent: "research",
+        message,
+        fresh: false,
+      }),
+    ).toBe(false)
+    expect(
+      ToolSelection.inspection({
+        agent: "research",
+        message,
+        fresh: true,
+        tools: { bash: true },
+      }),
+    ).toBe(false)
   })
 })

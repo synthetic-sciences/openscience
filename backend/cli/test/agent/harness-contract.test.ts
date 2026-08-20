@@ -55,6 +55,16 @@ test("direct answers receive a compact truth-preserving core", () => {
   expect(instructions).toContain("uncertainty")
 })
 
+test("read-only inspections receive a compact evidence-preserving core", () => {
+  const instructions = SystemPrompt.instructions(false, true)
+  expect(SystemPrompt.provider(undefined as never, false, true)[0]?.trim()).toBe(instructions)
+  expect(instructions.length).toBeLessThan(350)
+  expect(instructions).toContain("You are OpenScience")
+  expect(instructions).toContain("requested local files")
+  expect(instructions).toContain("observed")
+  expect(instructions).toContain("Do not modify files")
+})
+
 test("the primary and domain prompts stay adaptive instead of procedural", async () => {
   const [research, direct, ml, biology, physics] = await Promise.all([
     read("agent/prompt/research.txt"),

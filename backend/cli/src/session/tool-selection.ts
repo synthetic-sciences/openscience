@@ -27,6 +27,10 @@ export namespace ToolSelection {
     /\b(?:analy[sz]e|attached|calculate|cite|create|current|dataset|document|download|fetch|file|find|inspect|latest|load|look up|open|paper|plot|read|review|run|save|search|source|today|verify|write)\b|https?:\/\/|\.[a-z0-9]{1,5}\b/i
   const browse = new Set(["glob", "grep", "invalid", "read"])
 
+  export function fresh(roles: string[]) {
+    return roles.filter((role) => role === "user").length === 1
+  }
+
   function inspect(message: string) {
     const readonly =
       /\b(?:do not|don't|without)\s+(?:change|creat(?:e|ing)|delet(?:e|ing)|edit(?:ing)?|modif(?:y|ying)|writ(?:e|ing))\b/i
@@ -76,6 +80,24 @@ export namespace ToolSelection {
     return /^(?:(?:in|within)\s+(?:no more than\s+)?(?:one|two|three|\d+)\s+sentences?,?\s*)?(?:please\s+)?(?:briefly\s+)?(?:compare|define|explain|how|what|why)\b/i.test(
       message,
     )
+  }
+
+  export function inspection(input: {
+    agent?: string
+    message?: string
+    fresh?: boolean
+    attachments?: boolean
+    tools?: Record<string, boolean>
+  }) {
+    if (
+      input.agent !== "research" ||
+      !input.fresh ||
+      input.attachments ||
+      Object.values(input.tools ?? {}).some((enabled) => enabled)
+    )
+      return false
+    const message = input.message?.trim()
+    return Boolean(message && inspect(message))
   }
 
   /**

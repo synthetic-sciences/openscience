@@ -42,6 +42,7 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     direct?: boolean
+    inspection?: boolean
     trace?: { messageID: string; attempt: number }
     onReasoningEffortResolved?: (effort: string | undefined) => void | Promise<void>
   }
@@ -82,7 +83,7 @@ export namespace LLM {
           ? [input.agent.prompt]
           : isCodex
             ? []
-            : SystemPrompt.provider(input.model, input.direct)),
+            : SystemPrompt.provider(input.model, input.direct, input.inspection)),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -128,7 +129,7 @@ export namespace LLM {
       mergeDeep(variant),
     )
     if (isCodex) {
-      options.instructions = SystemPrompt.instructions(input.direct)
+      options.instructions = SystemPrompt.instructions(input.direct, input.inspection)
     }
 
     const params = await Plugin.trigger(
