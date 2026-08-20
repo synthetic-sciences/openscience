@@ -151,9 +151,7 @@ export const BashTool = Tool.define("bash", async () => {
         .optional(),
       description: z
         .string()
-        .describe(
-          "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
-        ),
+        .describe("Clear 5-10 word description of the command's purpose"),
     }),
     async execute(params, ctx) {
       const authority = await ExecutionAuthority.require({

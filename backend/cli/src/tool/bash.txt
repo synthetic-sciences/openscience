@@ -1,14 +1,14 @@
-Run a shell command in the session workspace. Use `workdir` instead of changing directories inside the command.
+Run a shell command in the session workspace; set `workdir` instead of changing directories in the command.
 
-Use Bash for builds, tests, package managers, Git, system utilities, and scripts. Prefer the dedicated file tools for reading, searching, creating, or editing files. Do not use shell redirection, `echo`, or `cat` to write files when a dedicated tool can perform the operation safely.
+Use Bash for builds, tests, package managers, Git, utilities, and scripts. Use dedicated file tools for reading, searching, creating, or editing files; do not write through shell redirection, `echo`, or `cat` when a file tool fits.
 
-Quote paths containing spaces. The `command` field is required; `timeout` is optional. Output beyond ${maxLines} lines or ${maxBytes} bytes is saved automatically, so do not add `head` or `tail` merely to limit output. Give each call a concise 5–10 word description.
+Quote paths containing spaces. `command` is required and `timeout` is optional. Output beyond ${maxLines} lines or ${maxBytes} bytes is saved automatically; do not add `head` or `tail` only to limit output. Describe each call in 5–10 words.
 
-Issue independent Bash calls together so they can run in parallel. Combine dependent operations with `&&` only when the later operation must not run after failure.
+Issue independent calls together. Join dependent commands with `&&` only when later work must stop after failure.
 
 Git and GitHub safety:
-- Commit, push, or create a pull request only when the user explicitly requests it.
-- Before committing, inspect status, diff, and recent log; stage only the intended paths.
-- Never change Git configuration, bypass hooks, force-push, use interactive Git, or run a destructive reset/checkout without explicit authorization.
-- Do not amend a pushed commit. Never push directly to `main` or `master`.
-- For a requested pull request, inspect the complete branch diff against its base, use `gh`, create at most one PR, and return its URL.
+- Commit, push, or create a pull request only when explicitly requested.
+- Before committing, inspect status, diff, and recent log; stage only intended paths.
+- Never change Git config, bypass hooks, force-push, use interactive Git, or destructively reset/checkout without explicit authorization.
+- Never amend a pushed commit or push directly to `main`/`master`.
+- For a requested PR, inspect the full branch diff, use `gh`, create at most one, and return its URL.
