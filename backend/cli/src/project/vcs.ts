@@ -5,6 +5,8 @@ import z from "zod"
 import { Log } from "@/util/log"
 import { Instance } from "./instance"
 import { FileWatcher } from "@/file/watcher"
+import fs from "fs/promises"
+import path from "path"
 
 const log = Log.create({ service: "vcs" })
 
@@ -26,6 +28,32 @@ export namespace Vcs {
       ref: "VcsInfo",
     })
   export type Info = z.infer<typeof Info>
+
+  const metadata = Instance.state(async () => {
+    if (Instance.project.vcs !== "git") return
+    const marker = path.join(Instance.worktree, ".git")
+    const stat = await fs.stat(marker).catch(() => undefined)
+    if (!stat) return
+    const git = stat.isDirectory()
+      ? marker
+      : await Bun.file(marker)
+          .text()
+          .then((value) => value.match(/^gitdir:\s*(.+)\s*$/im)?.[1])
+          .then((value) => (value ? path.resolve(path.dirname(marker), value) : undefined))
+          .catch(() => undefined)
+    if (!git) return
+    const common = await Bun.file(path.join(git, "commondir"))
+      .text()
+      .then((value) => path.resolve(git, value.trim()))
+      .catch(() => git)
+    return fs.realpath(common).catch(() => path.resolve(common))
+  })
+
+  /** Git's shared metadata directory. Linked worktrees keep this outside the
+   * checked-out tree, but sandboxed Git still needs it for status and commits. */
+  export async function metadataRoot() {
+    return metadata()
+  }
 
   async function currentBranch() {
     return $`git rev-parse --abbrev-ref HEAD`

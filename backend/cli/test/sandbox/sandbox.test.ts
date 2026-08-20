@@ -32,6 +32,7 @@ describe("Sandbox.cacheEnvironment", () => {
     const env = Sandbox.cacheEnvironment(workspace)
     expect(Object.values(env).every((value) => value.startsWith(workspace + path.sep))).toBe(true)
     expect(env.MPLCONFIGDIR).toBe(path.join(workspace, ".openscience", "cache", "matplotlib"))
+    expect(env.XDG_CONFIG_HOME).toBe(path.join(workspace, ".openscience", "config"))
     expect(env.UV_CACHE_DIR).toBe(path.join(workspace, ".openscience", "cache", "uv"))
     expect(env.PIP_CACHE_DIR).toBe(path.join(workspace, ".openscience", "cache", "pip"))
   })

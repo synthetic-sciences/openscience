@@ -252,14 +252,15 @@ export namespace Sandbox {
     ]
   }
 
-  /** Stable writable cache roots for scientific tools launched through the
-   * shell. The OS sandbox intentionally leaves the user's home read-only;
-   * without these overrides matplotlib, pip, uv, numba, and joblib either
-   * warn, rebuild caches for every command, or fail before useful work starts. */
+  /** Stable writable config/cache roots for tools launched through the shell.
+   * The OS sandbox intentionally leaves the user's home read-only; without
+   * these overrides Git and scientific runtimes either warn, rebuild caches
+   * for every command, or fail before useful work starts. */
   export function cacheEnvironment(workspace: string) {
     const cache = path.join(workspace, ".openscience", "cache")
     return {
       MPLCONFIGDIR: path.join(cache, "matplotlib"),
+      XDG_CONFIG_HOME: path.join(workspace, ".openscience", "config"),
       XDG_CACHE_HOME: path.join(cache, "xdg"),
       NUMBA_CACHE_DIR: path.join(cache, "numba"),
       JOBLIB_TEMP_FOLDER: path.join(cache, "joblib"),

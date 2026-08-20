@@ -7,6 +7,7 @@ import { SessionFilesystem } from "@/session/filesystem"
 import { Instance } from "./instance"
 import { Project } from "./project"
 import { ProjectTrust } from "./trust"
+import { Vcs } from "./vcs"
 
 /**
  * The single process-execution authority for a project session.
@@ -113,10 +114,11 @@ export namespace ExecutionAuthority {
       })
     }
 
-    const [trust, filesystem, policy] = await Promise.all([
+    const [trust, filesystem, policy, metadata] = await Promise.all([
       ProjectTrust.status(Instance.project),
       SessionFilesystem.snapshot(input.sessionID),
       Config.trustedSandbox(),
+      Vcs.metadataRoot(),
     ])
     const backend = Sandbox.describe()
     const sandbox = {
@@ -149,6 +151,8 @@ export namespace ExecutionAuthority {
       SessionFilesystem.processWriteRoots(input.sessionID),
       SessionFilesystem.workspace(input.sessionID),
     ])
+    const processReadable = [...new Set([...readable, ...(metadata ? [metadata] : [])])]
+    const processWritable = [...new Set([...writable, ...(metadata ? [metadata] : [])])]
     const generation = crypto
       .createHash("sha256")
       .update(
@@ -175,8 +179,8 @@ export namespace ExecutionAuthority {
       generation,
       directory: Instance.directory,
       workspace,
-      readable,
-      writable,
+      readable: processReadable,
+      writable: processWritable,
       sandbox,
       remediation: reason === "project_untrusted" ? trust.remediation : undefined,
     }
