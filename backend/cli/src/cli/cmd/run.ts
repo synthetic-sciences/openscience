@@ -24,6 +24,10 @@ const TOOL: Record<string, [string, string]> = {
   websearch: ["Search", UI.Style.TEXT_DIM_BOLD],
 }
 
+export function runMessage(parts: string[]) {
+  return parts.join(" ")
+}
+
 export const RunCommand = cmd({
   command: "run [message..]",
   describe: false as any,
@@ -101,9 +105,7 @@ export const RunCommand = cmd({
       })
   },
   handler: async (args) => {
-    let message = [...args.message, ...(args["--"] || [])]
-      .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
-      .join(" ")
+    let message = runMessage([...args.message, ...(args["--"] || [])])
 
     const fileParts: any[] = []
     if (args.file) {
