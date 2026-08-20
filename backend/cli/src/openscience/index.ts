@@ -1412,12 +1412,22 @@ export namespace OpenScience {
 
   /** Credit balance cache */
   let cachedBalance: { value: number; at: number } | null = null
+  let pendingBalance: Promise<number | null> | undefined
+  let balanceRevision = 0
   const BALANCE_CACHE_TTL = 30 * 1000
+
+  function publishBalance(value: number) {
+    balanceRevision++
+    pendingBalance = undefined
+    cachedBalance = { value, at: Date.now() }
+  }
 
   /** Drop the cached balance so the next getBalance() refetches. Called when
    *  the wallet gate blocks, so a top-up is visible on the next attempt
    *  instead of after the cache TTL. */
   export function invalidateBalance() {
+    balanceRevision++
+    pendingBalance = undefined
     cachedBalance = null
   }
 
@@ -1429,31 +1439,41 @@ export namespace OpenScience {
     if (cachedBalance && Date.now() - cachedBalance.at < BALANCE_CACHE_TTL) {
       return cachedBalance.value
     }
-    const session = await getSession()
-    if (!session) return null
-    try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/balance`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
-      if (!res.ok) return null
-      const data = await res.json()
-      const usd =
-        typeof data.balance_usd === "number"
-          ? data.balance_usd
-          : typeof data.balance_cents === "number"
-            ? data.balance_cents / 100
-            : null
-      if (usd === null) return null
-      cachedBalance = { value: usd, at: Date.now() }
-      return usd
-    } catch {
-      return null
-    }
+    if (pendingBalance) return pendingBalance
+    const revision = balanceRevision
+    const request = (async () => {
+      const session = await getSession()
+      if (!session) return null
+      try {
+        const res = await atlasFetch(`${API_BASE}/api/cli/balance`, {
+          headers: { Authorization: `Bearer ${session.api_key}` },
+        })
+        if (!res.ok) return null
+        const data = await res.json()
+        const usd =
+          typeof data.balance_usd === "number"
+            ? data.balance_usd
+            : typeof data.balance_cents === "number"
+              ? data.balance_cents / 100
+              : null
+        if (usd === null) return null
+        if (revision !== balanceRevision) return cachedBalance?.value ?? null
+        cachedBalance = { value: usd, at: Date.now() }
+        return usd
+      } catch {
+        return null
+      }
+    })()
+    pendingBalance = request
+    void request.finally(() => {
+      if (pendingBalance === request) pendingBalance = undefined
+    })
+    return request
   }
 
   /** Invalidate balance cache (call after usage report) */
   export function invalidateBalanceCache() {
-    cachedBalance = null
+    invalidateBalance()
   }
 
   type UsageParams = {
@@ -1568,7 +1588,7 @@ export namespace OpenScience {
     const result = await sendReport(params, session)
     // Update balance cache from server response, or invalidate so next check is fresh
     if (result.ok && result.data?.remaining_balance_cents !== undefined) {
-      cachedBalance = { value: result.data.remaining_balance_cents / 100, at: Date.now() }
+      publishBalance(result.data.remaining_balance_cents / 100)
     } else {
       invalidateBalanceCache()
     }
