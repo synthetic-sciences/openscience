@@ -62,7 +62,7 @@ import { showToast } from "@synsci/ui/toast"
 import { uiStore } from "@/atlas/store/ui"
 import { projectHref, projectPathname } from "@/utils/project-route"
 import { ModelSettingsPopover } from "./model-settings-popover"
-import { enabledSkills, visibleSkills } from "@/atlas/skill-permissions"
+import { enabledSkills, skillAction, visibleSkills } from "@/atlas/skill-permissions"
 import { modelControl } from "./model-presentation"
 import { DialogSettings } from "./dialog-settings"
 import "./prompt-input.css"
@@ -890,22 +890,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     const catalog = new Map(sync.data.command.map((item) => [item.name, item]))
     const enabled = enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission)
-    const available = new Set(enabled.map((skill) => skill.name))
-    const builtin = SLASH_NATIVE.filter((name) => available.has(name)).map((name) => {
-      const item = catalog.get(name)
-      return {
-        id: `command.${name}`,
-        trigger: name,
-        title: name,
-        description: item?.description,
-        usage: usage[name],
-        source: "builtin" as const,
-        category: ((["compact", "context", "status"] as string[]).includes(name) ? "session" : "research") as
-          | "session"
-          | "research",
-        type: slashMode({ trigger: name }) ? ("mode" as const) : ("action" as const),
-      }
-    })
+    const builtin = SLASH_NATIVE.filter((name) => skillAction(sync.data.config.permission, name) !== "deny").map(
+      (name) => {
+        const item = catalog.get(name)
+        return {
+          id: `command.${name}`,
+          trigger: name,
+          title: name,
+          description: item?.description,
+          usage: usage[name],
+          source: "builtin" as const,
+          category: ((["compact", "context", "status"] as string[]).includes(name) ? "session" : "research") as
+            | "session"
+            | "research",
+          type: slashMode({ trigger: name }) ? ("mode" as const) : ("action" as const),
+        }
+      },
+    )
 
     const reserved = new Set<string>(SLASH_NATIVE)
 
@@ -936,13 +937,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const shown = new Set(items.map((item) => item.trigger))
     const governed = new Set(visibleSkills(sync.data.skill ?? [], []).map((skill) => skill.name))
-    const enabled = new Set(
-      enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission).map((skill) => skill.name),
-    )
     const commands: SlashCommand[] = sync.data.command
       .filter(
         (item) =>
-          item.source === "builtin" && !shown.has(item.name) && (!governed.has(item.name) || enabled.has(item.name)),
+          item.source === "builtin" &&
+          !shown.has(item.name) &&
+          ((!governed.has(item.name) && !SLASH_NATIVE.some((name) => name === item.name)) ||
+            skillAction(sync.data.config.permission, item.name) !== "deny"),
       )
       .map((item) => ({
         id: `command.${item.name}`,
