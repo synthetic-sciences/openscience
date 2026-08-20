@@ -30,7 +30,7 @@ export namespace DarwinResponsibilityLauncher {
   function sourceArgs(): string[] {
     const executable = path.basename(process.execPath).toLowerCase()
     const sourceRuntime = executable === "bun" || executable === "bun.exe"
-    const entry = fileURLToPath(new URL("../index.ts", import.meta.url))
+    const entry = fileURLToPath(import.meta.url)
     return sourceRuntime ? [entry] : []
   }
 
@@ -278,5 +278,14 @@ export namespace DarwinResponsibilityLauncher {
       ],
       env: process.env,
     })
+  }
+}
+
+if (import.meta.main && process.argv[2] === DARWIN_RESPONSIBILITY_LAUNCHER_ARG) {
+  try {
+    process.exit(await DarwinResponsibilityLauncher.run(process.argv.slice(3)))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
   }
 }
