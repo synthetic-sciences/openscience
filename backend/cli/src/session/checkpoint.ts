@@ -81,7 +81,8 @@ export namespace SessionCheckpoint {
       ...activeTools.map((tool) => `- Tool outcome may be unknown: \`${tool.name}\` (${tool.callID}, ${tool.status})`),
       ...activeJobs.map((job) => `- Compute outcome may be unknown: \`${job.name}\` (${job.id}, ${job.status})`),
       ...activeKernels.map(
-        (kernel) => `- ${kernel.language.toUpperCase()} kernel outcome may be unknown: ${kernel.toolID} (${kernel.status})`,
+        (kernel) =>
+          `- ${kernel.language.toUpperCase()} kernel outcome may be unknown: ${kernel.toolID} (${kernel.status})`,
       ),
     ]
     const contract = trace.research.contract
@@ -128,7 +129,7 @@ export namespace SessionCheckpoint {
         "Saved artifacts",
         trace.artifacts.map(
           (artifact) =>
-            `- ${artifact.path ? `\`${artifact.path}\`` : artifact.artifactID ?? artifact.toolID}${artifact.versionID ? ` (version ${artifact.versionID})` : ""}${artifact.sha256 ? ` — sha256 \`${artifact.sha256}\`` : ""}`,
+            `- ${artifact.path ? `\`${artifact.path}\`` : (artifact.artifactID ?? artifact.toolID)}${artifact.versionID ? ` (version ${artifact.versionID})` : ""}${artifact.sha256 ? ` — sha256 \`${artifact.sha256}\`` : ""}`,
         ),
       ),
       ...section("Inference and harness", [
@@ -143,32 +144,29 @@ export namespace SessionCheckpoint {
             `- ${check.id}: **${check.status}**${check.affected.length ? ` — affected ${check.affected.join(", ")}` : ""}`,
         ),
       ]),
-      ...section(
-        "Runtime ledger",
-        [
-          ...trace.jobs.map(
-            (job) =>
-              `- Job \`${job.name}\` (${job.id}): ${job.status}${job.exitCode !== undefined && job.exitCode !== null ? `, exit ${job.exitCode}` : ""}; target ${job.targetLabel}; artifacts ${job.artifactCount}`,
+      ...section("Runtime ledger", [
+        ...trace.jobs.map(
+          (job) =>
+            `- Job \`${job.name}\` (${job.id}): ${job.status}${job.exitCode !== undefined && job.exitCode !== null ? `, exit ${job.exitCode}` : ""}; target ${job.targetLabel}; artifacts ${job.artifactCount}`,
+        ),
+        ...trace.kernels.map(
+          (kernel) =>
+            `- ${kernel.language.toUpperCase()} kernel ${kernel.toolID}: ${kernel.status}${kernel.executionCount !== undefined ? `, execution ${kernel.executionCount}` : ""}`,
+        ),
+        ...trace.tools
+          .slice(-20)
+          .map(
+            (tool) =>
+              `- Tool \`${tool.name}\` (${tool.callID}): ${tool.status}${tool.title ? ` — ${clean(tool.title)}` : ""}`,
           ),
-          ...trace.kernels.map(
-            (kernel) =>
-              `- ${kernel.language.toUpperCase()} kernel ${kernel.toolID}: ${kernel.status}${kernel.executionCount !== undefined ? `, execution ${kernel.executionCount}` : ""}`,
-          ),
-          ...trace.tools.slice(-20).map(
-            (tool) => `- Tool \`${tool.name}\` (${tool.callID}): ${tool.status}${tool.title ? ` — ${clean(tool.title)}` : ""}`,
-          ),
-        ],
-      ),
-      ...section(
-        "Recorded failures",
-        [
-          ...(contract?.failures.map(
-            (failure) =>
-              `- ${failure.stage} / ${failure.candidate}: ${clean(clip(failure.message, 700))}${failure.disposition ? ` — ${clean(failure.disposition)}` : ""}`,
-          ) ?? []),
-          ...trace.failures.map((failure) => `- ${failure.kind} ${failure.id}: ${clean(clip(failure.message, 700))}`),
-        ],
-      ),
+      ]),
+      ...section("Recorded failures", [
+        ...(contract?.failures.map(
+          (failure) =>
+            `- ${failure.stage} / ${failure.candidate}: ${clean(clip(failure.message, 700))}${failure.disposition ? ` — ${clean(failure.disposition)}` : ""}`,
+        ) ?? []),
+        ...trace.failures.map((failure) => `- ${failure.kind} ${failure.id}: ${clean(clip(failure.message, 700))}`),
+      ]),
       ...section(
         "Reviewer findings",
         trace.reviewerFindings.map(
@@ -177,7 +175,10 @@ export namespace SessionCheckpoint {
         ),
       ),
       ...section("Uncertain in-flight outcomes", unknown, "No in-flight tool, compute, or kernel outcome detected"),
-      ...section("Known gaps", trace.research.missing.map((item) => `- ${item}`)),
+      ...section(
+        "Known gaps",
+        trace.research.missing.map((item) => `- ${item}`),
+      ),
       ...section("Next action", [next]),
       "Do not blindly retry an operation listed under uncertain outcomes. Inspect its durable state first.",
       "",

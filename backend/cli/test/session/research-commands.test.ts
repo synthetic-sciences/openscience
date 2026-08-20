@@ -209,9 +209,7 @@ describe("research slash commands", () => {
         expect(checkpoint.info.role === "assistant" ? checkpoint.info.providerID : "").toBe("openscience")
         expect(checkpoint.info.role === "assistant" ? checkpoint.info.modelID : "").toBe("local")
         expect(checkpoint.info.role === "assistant" ? checkpoint.info.cost : -1).toBe(0)
-        expect(checkpointText?.type === "text" ? checkpointText.text : "").toContain(
-          ".openscience/checkpoints/",
-        )
+        expect(checkpointText?.type === "text" ? checkpointText.text : "").toContain(".openscience/checkpoints/")
         expect(checkpointText?.type === "text" ? checkpointText.text : "").not.toContain("../..")
       },
     })
