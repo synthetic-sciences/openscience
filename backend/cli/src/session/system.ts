@@ -48,6 +48,47 @@ export namespace SystemPrompt {
       .join(", ")
     const total = skills.length === 1 ? "1 skill is" : `${skills.length} skills are`
     const name = message?.trimStart().match(/^\/([a-z0-9][a-z0-9_-]*)(?:\s|$)/i)?.[1]?.toLowerCase()
+    const stop = new Set([
+      "and",
+      "answer",
+      "available",
+      "concise",
+      "final",
+      "for",
+      "from",
+      "most",
+      "outline",
+      "relevant",
+      "skill",
+      "sound",
+      "the",
+      "this",
+      "use",
+      "with",
+      "workflow",
+    ])
+    const words = (value: string) =>
+      new Set((value.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((word) => word.length > 2 && !stop.has(word)))
+    const query = words(message ?? "")
+    const matches = skills
+      .map((skill) => {
+        const keys = words(`${skill.name} ${skill.category ?? "other"}`)
+        const body = words(skill.description)
+        const score = [...query].reduce((sum, word) => sum + (keys.has(word) ? 4 : body.has(word) ? 1 : 0), 0)
+        return { skill, score }
+      })
+      .filter((item) => item.score > 1)
+      .sort((a, b) => b.score - a.score || a.skill.name.localeCompare(b.skill.name))
+      .slice(0, 8)
+    const likely = matches.length
+      ? [
+          "Likely matches for this request:",
+          ...matches.map(
+            (item) =>
+              `- ${item.skill.name}: ${item.skill.description.slice(0, 120)}${item.skill.description.length > 120 ? "..." : ""}`,
+          ),
+      ]
+      : []
     const invoke = name && skills.some((skill) => skill.name === name)
       ? [
           "<slash-skill-invocation>",
@@ -59,7 +100,8 @@ export namespace SystemPrompt {
     return [
       "<available-skills>",
       `${total} callable across: ${list}.`,
-      "Browse a relevant category with the skill tool, then load one returned name. Do not guess names from static routing tables.",
+      ...likely,
+      "Load a likely match directly, or browse a relevant category when the shortlist is insufficient. Do not guess other names from static routing tables.",
       "</available-skills>",
       ...invoke,
     ].join("\n")

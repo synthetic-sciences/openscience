@@ -13,12 +13,12 @@ async function trust() {
   })
 }
 
-async function writeSkill(dir: string, name: string, category: string) {
+async function writeSkill(dir: string, name: string, category: string, description = `${name} test skill.`) {
   await Bun.write(
     path.join(dir, ".openscience", "skill", name, "SKILL.md"),
     `---
 name: ${name}
-description: ${name} test skill.
+description: ${description}
 category: ${category}
 ---
 
@@ -97,6 +97,28 @@ test("availableSkills injects call-first routing only for a known slash skill", 
       expect(known).toContain('skill({name:"scanpy"})')
       expect(upper).toContain('skill({name:"scanpy"})')
       expect(unknown).not.toContain("slash-skill-invocation")
+    },
+  })
+})
+
+test("availableSkills offers a bounded request-relevant shortlist", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await writeSkill(dir, "scanpy", "biology", "Standard single-cell RNA-seq quality-control analysis.")
+      await writeSkill(dir, "pysam", "biology", "Read and write sequence alignment files.")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const section = await SystemPrompt.availableSkills([], "analyze single-cell RNA-seq quality control")
+      expect(section).toContain("Likely matches for this request")
+      expect(section).toContain("- scanpy: Standard single-cell")
+      expect(section).not.toContain("- pysam:")
+      expect(Buffer.byteLength(section)).toBeLessThanOrEqual(1_500)
     },
   })
 })
