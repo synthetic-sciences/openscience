@@ -22,11 +22,7 @@ on:
 concurrency: ${{ github.workflow }}
 
 permissions:
-  id-token: write
-  contents: write
-  # publish.ts falls back to a release PR when branch protection rejects the
-  # automated version-bump commit on main.
-  pull-requests: write
+  contents: read
 
 jobs:
   release-source:
@@ -164,6 +160,12 @@ jobs:
       - verify-native-cli
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      id-token: write
+      contents: write
+      # publish.ts falls back to a release PR when branch protection rejects
+      # the automated version-bump commit on main.
+      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
