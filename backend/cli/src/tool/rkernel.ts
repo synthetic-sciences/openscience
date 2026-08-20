@@ -790,11 +790,11 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
 
 const RDefinition: Awaited<ReturnType<Tool.Info<typeof RParameters>["init"]>> = {
   description: [
-    "Run R code in one long-lived managed process per conversation. Objects, attached packages, and state persist across calls; child conversations are isolated.",
-    "State is working memory, not reproducibility; save source, inputs, parameters, and outputs for material results and clean-rerun when practical.",
-    "Omit `environment` or use `default`/`r` for the canonical host runtime. Set a concise scientific `title` and `source` for script-backed work; use `action: stop` to clear state.",
-    "Prefer this to `bash Rscript` for analysis. Submit package installs, removals, and updates separately; they require approval and automatically restart R after success.",
-    "Print output is captured; supported base/ggplot2 plots become inline PNGs. Requires Rscript on PATH and reports an install hint when absent.",
+    "Run R in one long-lived managed process per conversation. Objects, packages, and state persist; child conversations stay isolated.",
+    "Treat state as working memory, not reproducibility. For material results, save source, inputs, parameters, and outputs, then clean-rerun when practical.",
+    "Omit `environment` or use `default`/`r` for the canonical runtime. Add a concise `title` and `source` for scripts; `action: stop` clears state.",
+    "Prefer this over `bash Rscript`. Submit package changes separately; they require approval and automatically restart R after success.",
+    "Captures output and inline base/ggplot2 PNGs. Requires Rscript on PATH; otherwise returns install guidance.",
   ].join("\n"),
   parameters: RParameters,
   execute: (params, ctx) => executeR(params, ctx, false),
