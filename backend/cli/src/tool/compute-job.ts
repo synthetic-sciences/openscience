@@ -130,7 +130,7 @@ const ComputeJobActionParameters = z
  */
 export const ComputeJobParameters = z
   .object({
-    action: z.enum(COMPUTE_ACTIONS).describe(`Select one action.\n${ACTION_HELP}`),
+    action: z.enum(COMPUTE_ACTIONS).describe("Action to perform"),
     name: ComputeWorkload.shape.name.optional(),
     purpose: ComputeWorkload.shape.purpose.optional(),
     command: ComputeWorkload.shape.command.optional(),
@@ -158,7 +158,9 @@ export const ComputeJobParameters = z
       ctx.addIssue({ code: "custom", path: issue.path, message: issue.message })
     }
   })
-  .describe(`Select one action with the required action discriminator.\n${ACTION_HELP}`)
+  .describe(
+    'Use the required "action" discriminator, for example {"action":"targets"}. Required shapes are in the tool description.',
+  )
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)

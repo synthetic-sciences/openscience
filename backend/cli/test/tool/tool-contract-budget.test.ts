@@ -23,6 +23,7 @@ test("keeps the research tool contract within its model context budget", async (
 
       expect(bytes).toBeLessThanOrEqual(50_000)
       expect(contracts.bash).toBeLessThanOrEqual(2_500)
+      expect(contracts.compute_job).toBeLessThanOrEqual(6_000)
       expect(contracts.skill).toBeLessThanOrEqual(1_800)
       expect(contracts.task).toBeLessThanOrEqual(2_500)
       expect(contracts.todowrite).toBeLessThanOrEqual(1_750)
