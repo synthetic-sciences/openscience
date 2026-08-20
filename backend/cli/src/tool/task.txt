@@ -1,41 +1,17 @@
-Delegate one bounded, independent unit of work when parallel investigation or execution will
-materially improve the result.
+Delegate one bounded, independent unit only when parallel work will materially improve the result.
 
-Internal profiles:
+Profiles:
 {agents}
 
-Choose the profile by work type, not scientific domain:
-- `explore` finds and reads relevant code, files, or sources.
-- `execute` performs a bounded implementation, analysis, or computation.
-- `review` checks an observable result when the cost of an error justifies an independent pass.
+Choose by work type: `explore` finds evidence, `execute` implements or computes, and `review`
+checks an observable result when error cost justifies an independent pass. Domain expertise comes
+from lazy skills; do not invent personas.
 
-Domain expertise comes from lazy skills. Do not invent a biology, physics, literature, writing,
-statistics, or ML persona; give the selected profile the exact task and let it load a relevant
-skill only when useful.
-
-Research effort controls optional parallelism:
-- Normal: default to zero children; at most two Task calls total per user turn.
-- Ultra: use a wider investigation only when branches are genuinely independent; at most four
-  Task calls total per user turn. Continuations count toward the same limit.
-
-Rules:
-1. Fan-out is shallow. A child cannot create more child tasks.
-2. Do not delegate sequential work, a small known-file edit, or a second opinion by ceremony.
-3. Retrieve a source set once and share it; never launch duplicate literature searches.
-4. The lead Research agent owns synthesis and verification. Treat child output as evidence, not
-   authority, and do not let an optional failed child block a usable result.
-5. Continue a child only with its `session_id`. Otherwise give a self-contained prompt with the
-   objective, exact input files or Result references, relevant context, assumptions and exclusions,
-   allowed actions, expected output, and a concrete validation criterion.
-6. A Task call blocks the lead until it returns. Issue genuinely independent calls together when
-   parallelism is worthwhile. Continue a child only for new missing work, never merely to restate
-   or reformat a result already returned.
-7. WebFetch text mode is for bounded text and APIs. Download large or binary scientific data to a root basename.
-   Absolute and nested destinations are normalized to a safe root filename. For `papers/foo.pdf`, the root download is
-   `output_path:"foo.pdf"`; only after success run sandboxed Bash
-   `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`. Never send retired
-   cap/size-evidence fields; WebFetch uses live free disk minus its reserve. Verify locally and paginate APIs; Shell
-   need not have network access.
-8. If a requested immutable release cannot be retrieved and verified, report the constraint early.
-   Stop that branch or explicitly bound and label any live-release fallback; never silently mix
-   releases or spend repeated calls before disclosure.
+- Default to no children. Normal permits two calls per turn; Ultra four; continuations count.
+- Fan-out is shallow: children cannot call Task. The lead owns synthesis and verification.
+- Do not delegate sequential work, small known-file edits, ceremonial review, or duplicate retrieval.
+- Task blocks the lead. Issue worthwhile independent calls together; optional failure must not block
+  a usable result.
+- Continue only with the returned `session_id` and only for missing work. Otherwise provide a
+  self-contained prompt: objective, exact inputs/references, relevant context, assumptions and
+  exclusions, allowed actions, expected output, and validation criterion.

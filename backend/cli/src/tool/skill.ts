@@ -54,28 +54,14 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     categories["other"] = [...(categories["other"] ?? []), ...uncategorized]
   }
 
+  const catalog = Object.entries(categories)
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([category, list]) => `${category} (${list.length})`)
+    .join(", ")
   const description =
     accessibleSkills.length === 0
       ? "Load a skill to get detailed instructions for a specific task. No skills are currently available."
-      : [
-          "Load a skill by name for expert-level instructions, code examples, and troubleshooting guidance.",
-          "Load skills BEFORE starting work — they contain critical setup steps, common pitfalls, and production-ready patterns.",
-          "Use `name` to load a specific skill directly, or `category` to browse available skills in a domain.",
-          "",
-          "INVOCATION ETIQUETTE: Call this tool silently. Do NOT preface the call with messages like 'Let me load the X skill' or 'I'll consult the X skill first'. The tool call is internal — emit your first user-visible message AFTER the skill content is loaded, using the loaded guidance directly. If the user typed `/<skill-name>` to invoke a skill, treat it as a request to act on that skill's instructions immediately, not as a request to narrate the load.",
-          "",
-          "<skill_categories>",
-          ...Object.entries(categories)
-            .sort((a, b) => b[1].length - a[1].length)
-            .map(([cat, list]) => {
-              const examples = list
-                .slice(0, 3)
-                .map((s) => s.name)
-                .join(", ")
-              return `  <category name="${cat}" count="${list.length}">${examples}, ...</category>`
-            }),
-          "</skill_categories>",
-        ].join(" ")
+      : `Load specialized instructions before work when their procedure applies. Use name for a known skill or category to browse. Available categories: ${catalog}. Call this tool silently and apply its guidance; a user /skill invocation requests immediate use, not narration.`
 
   const examples = accessibleSkills
     .slice(0, 3)
