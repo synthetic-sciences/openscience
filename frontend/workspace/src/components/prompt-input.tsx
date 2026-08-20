@@ -881,6 +881,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       stop: "/stop [turn|compute|all]",
       compact: "/compact [focus]",
       handoff: "/handoff [project-relative path]",
+      checkpoint: "/checkpoint [label]",
     }
     const builtin = command.options
       .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)

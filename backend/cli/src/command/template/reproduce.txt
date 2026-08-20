@@ -1,7 +1,0 @@
-Reproduce or validate this target:
-
-$ARGUMENTS
-
-Identify the exact claim, source, artifact, run, metric, and success criterion before executing. Recover immutable code, data, environment, dependency, seed, and configuration references where available. State what evidence would support, weaken, contradict, or leave the claim untested. Prefer the repository's real reproduction path and preserve existing outputs.
-
-Run only within available compute and permissions. Capture every materially distinct outcome, including failures and inconclusive results, with exact commands, versions, metrics, logs, and generated artifacts. Never silently replace missing inputs, change the metric, or treat a close result as confirmation. Compare the reproduced result with the original including uncertainty and tolerance. Finish with SUPPORTED, PARTIALLY SUPPORTED, CONTRADICTED, or NOT TESTED and list the evidence and remaining gaps.

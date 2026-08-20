@@ -1,21 +1,27 @@
 import { BusEvent } from "@/bus/bus-event"
+import path from "node:path"
 import z from "zod"
 import { Config } from "../config/config"
+import { ConfigMarkdown } from "../config/markdown"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
-import PROMPT_REVIEW from "./template/review.txt"
-import PROMPT_PLAN from "./template/plan.txt"
-import PROMPT_VERIFY from "./template/verify.txt"
-import PROMPT_CHECKPOINT from "./template/checkpoint.txt"
-import PROMPT_REPRODUCE from "./template/reproduce.txt"
-import PROMPT_COMPARE from "./template/compare.txt"
-import PROMPT_SOURCES from "./template/sources.txt"
-import PROMPT_EXPORT from "./template/export.txt"
 import { MCP } from "../mcp"
 import { State } from "../project/state"
+import { BundledSkills } from "../skill/bundled"
 
 export namespace Command {
+  async function workflow(name: string) {
+    const root = await BundledSkills.root()
+    if (!root) throw new Error("Bundled research workflow skill is unavailable")
+    const dir = path.join(root, "research", "research-workflows")
+    const [skill, reference] = await Promise.all([
+      ConfigMarkdown.parse(path.join(dir, "SKILL.md")),
+      Bun.file(path.join(dir, "references", `${name}.md`)).text(),
+    ])
+    return [skill.content.trim(), reference.trim()].join("\n\n")
+  }
+
   export const Event = {
     Executed: BusEvent.define(
       "command.executed",
@@ -107,10 +113,10 @@ export namespace Command {
         usage: "/review [scope]",
         agent: "reviewer",
         get template() {
-          return PROMPT_REVIEW.replace("${path}", Instance.worktree)
+          return workflow(Default.REVIEW)
         },
         subtask: false,
-        hints: hints(PROMPT_REVIEW),
+        hints: ["$ARGUMENTS"],
       },
       [Default.PLAN]: {
         name: Default.PLAN,
@@ -120,10 +126,10 @@ export namespace Command {
         usage: "/plan [objective]",
         agent: "plan",
         get template() {
-          return PROMPT_PLAN
+          return workflow(Default.PLAN)
         },
         subtask: false,
-        hints: hints(PROMPT_PLAN),
+        hints: ["$ARGUMENTS"],
       },
       [Default.VERIFY]: {
         name: Default.VERIFY,
@@ -132,9 +138,9 @@ export namespace Command {
         category: "evidence",
         usage: "/verify [claim, artifact, or test scope]",
         get template() {
-          return PROMPT_VERIFY
+          return workflow(Default.VERIFY)
         },
-        hints: hints(PROMPT_VERIFY),
+        hints: ["$ARGUMENTS"],
       },
       [Default.STATUS]: {
         name: Default.STATUS,
@@ -200,14 +206,15 @@ export namespace Command {
       },
       [Default.CHECKPOINT]: {
         name: Default.CHECKPOINT,
-        description: "save a durable recovery checkpoint without ending the session",
+        description: "capture a local recovery packet from durable session state",
         source: "builtin",
-        category: "research",
+        category: "session",
         usage: "/checkpoint [label]",
+        menu: true,
         get template() {
-          return PROMPT_CHECKPOINT
+          return ""
         },
-        hints: hints(PROMPT_CHECKPOINT),
+        hints: [],
       },
       [Default.REPRODUCE]: {
         name: Default.REPRODUCE,
@@ -216,9 +223,9 @@ export namespace Command {
         category: "evidence",
         usage: "/reproduce [claim, artifact, paper, or run]",
         get template() {
-          return PROMPT_REPRODUCE
+          return workflow(Default.REPRODUCE)
         },
-        hints: hints(PROMPT_REPRODUCE),
+        hints: ["$ARGUMENTS"],
       },
       [Default.COMPARE]: {
         name: Default.COMPARE,
@@ -227,9 +234,9 @@ export namespace Command {
         category: "evidence",
         usage: "/compare [left] vs [right] [metric or question]",
         get template() {
-          return PROMPT_COMPARE
+          return workflow(Default.COMPARE)
         },
-        hints: hints(PROMPT_COMPARE),
+        hints: ["$ARGUMENTS"],
       },
       [Default.SOURCES]: {
         name: Default.SOURCES,
@@ -238,9 +245,9 @@ export namespace Command {
         category: "evidence",
         usage: "/sources [claim, artifact, or scope]",
         get template() {
-          return PROMPT_SOURCES
+          return workflow(Default.SOURCES)
         },
-        hints: hints(PROMPT_SOURCES),
+        hints: ["$ARGUMENTS"],
       },
       [Default.EXPORT]: {
         name: Default.EXPORT,
@@ -249,9 +256,9 @@ export namespace Command {
         category: "output",
         usage: "/export [target] [format or destination]",
         get template() {
-          return PROMPT_EXPORT
+          return workflow(Default.EXPORT)
         },
-        hints: hints(PROMPT_EXPORT),
+        hints: ["$ARGUMENTS"],
       },
     }
 

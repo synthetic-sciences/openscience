@@ -664,6 +664,7 @@ export default function Page(): JSX.Element {
       action("stop", "Stop active work", "Stop the active response in this session"),
       action("compact", "Compact conversation", "Summarize the conversation to free up context"),
       action("handoff", "Write handoff & compact", "Save a resumable handoff, then compact"),
+      action("checkpoint", "Save checkpoint", "Capture a local recovery packet from current session state"),
     )
     return list
   })

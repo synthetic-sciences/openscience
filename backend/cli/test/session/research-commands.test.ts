@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { Command } from "../../src/command"
 import { Identifier } from "../../src/id/id"
 import { Instance } from "../../src/project/instance"
@@ -64,12 +65,78 @@ describe("research slash commands", () => {
         expect(commands.get("status")?.menu).toBe(true)
         expect(commands.get("context")?.menu).toBe(true)
         expect(commands.get("stop")?.menu).toBe(true)
-        expect(await commands.get("verify")?.template).toContain("PASS, FAIL, or NOT TESTED")
-        expect(await commands.get("checkpoint")?.template).toContain("side effect whose outcome is unknown")
-        expect(await commands.get("reproduce")?.template).toContain("PARTIALLY SUPPORTED")
-        expect(await commands.get("compare")?.template).toContain("fair comparison contract")
-        expect(await commands.get("sources")?.template).toContain("source ledger")
-        expect(await commands.get("export")?.template).toContain("reproduction commands")
+        expect(commands.get("checkpoint")?.menu).toBe(true)
+        expect(commands.get("checkpoint")?.category).toBe("session")
+        expect(await commands.get("checkpoint")?.template).toBe("")
+
+        const workflows = ["plan", "review", "verify", "reproduce", "compare", "sources", "export"]
+        for (const name of workflows) {
+          const template = await commands.get(name)?.template
+          expect(template, name).toContain("# Research Workflow Engine")
+          expect(template, name).toContain(`# Workflow: ${name}`)
+          expect(template, name).toContain("<invocation>")
+          expect(template?.split("\n").length ?? 0, name).toBeGreaterThan(60)
+        }
+        expect(await commands.get("plan")?.template).toContain("Call `plan_exit` only when")
+        expect(await commands.get("review")?.template).toContain("Finding validation")
+        expect(await commands.get("verify")?.template).toContain("exactly `PASS`, `FAIL`, or `NOT TESTED`")
+        expect(await commands.get("reproduce")?.template).toContain("`PARTIALLY SUPPORTED`")
+        expect(await commands.get("compare")?.template).toContain("`INSUFFICIENT EVIDENCE`")
+        expect(await commands.get("sources")?.template).toContain("Source ledger")
+        expect(await commands.get("export")?.template).toContain("`PARTIAL EXPORT`")
+      },
+    })
+  })
+
+  test("checkpoint captures durable state without a model call or overwrite", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "Recovery study" })
+        await seed(session.id)
+        await Todo.update({
+          sessionID: session.id,
+          todos: [
+            { id: "done", content: "Resolve the input data", status: "completed", priority: "high" },
+            { id: "active", content: "Run the independent check", status: "in_progress", priority: "high" },
+          ],
+        })
+
+        const first = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "checkpoint",
+          arguments: "before validation",
+        })
+        const text = first.parts.find((part) => part.type === "text")
+        expect(first.info.role === "assistant" ? first.info.cost : -1).toBe(0)
+        expect(text?.type === "text" ? text.ignored : false).toBe(true)
+        const match = text?.type === "text" ? text.text.match(/`([^`]+\.md)`/) : undefined
+        expect(match?.[1]).toBeDefined()
+
+        const firstPath = path.join(tmp.path, match?.[1] ?? "missing")
+        const content = await Bun.file(firstPath).text()
+        expect(content).toContain("# OpenScience recovery checkpoint")
+        expect(content).toContain("Investigate the result and preserve the evidence.")
+        expect(content).toContain("Run the independent check")
+        expect(content).toContain("## Next action")
+        expect(content).toContain("Do not blindly retry")
+        expect(await Bun.file(path.join(tmp.path, ".openscience/checkpoints/.gitignore")).text()).toContain("*")
+        const git = Bun.spawn(["git", "status", "--short"], { cwd: tmp.path, stdout: "pipe", stderr: "pipe" })
+        const [gitStatus, gitCode] = await Promise.all([new Response(git.stdout).text(), git.exited])
+        expect(gitCode).toBe(0)
+        expect(gitStatus).not.toContain(".openscience/checkpoints")
+
+        const second = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "checkpoint",
+          arguments: "before validation",
+        })
+        const secondText = second.parts.find((part) => part.type === "text")
+        const secondMatch = secondText?.type === "text" ? secondText.text.match(/`([^`]+\.md)`/) : undefined
+        expect(secondMatch?.[1]).toBeDefined()
+        expect(secondMatch?.[1]).not.toBe(match?.[1])
+        expect(await Bun.file(firstPath).exists()).toBe(true)
       },
     })
   })
@@ -132,6 +199,20 @@ describe("research slash commands", () => {
         expect(result.info.role === "assistant" ? result.info.modelID : "").toBe("local")
         expect(text?.type === "text" ? text.ignored : false).toBe(true)
         expect(text?.type === "text" ? text.text : "").toContain("Empty study")
+
+        const checkpoint = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "checkpoint",
+          arguments: "../../before setup",
+        })
+        const checkpointText = checkpoint.parts.find((part) => part.type === "text")
+        expect(checkpoint.info.role === "assistant" ? checkpoint.info.providerID : "").toBe("openscience")
+        expect(checkpoint.info.role === "assistant" ? checkpoint.info.modelID : "").toBe("local")
+        expect(checkpoint.info.role === "assistant" ? checkpoint.info.cost : -1).toBe(0)
+        expect(checkpointText?.type === "text" ? checkpointText.text : "").toContain(
+          ".openscience/checkpoints/",
+        )
+        expect(checkpointText?.type === "text" ? checkpointText.text : "").not.toContain("../..")
       },
     })
   })

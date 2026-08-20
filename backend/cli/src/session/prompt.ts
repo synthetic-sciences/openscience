@@ -71,6 +71,7 @@ import { ReviewSettings } from "@/settings/review"
 import { RuntimeEvents } from "@/runtime/events"
 import { ComputeJobs } from "@/compute/jobs"
 import { KernelRuntime } from "@/science/kernel/registry"
+import { SessionCheckpoint } from "./checkpoint"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -2422,6 +2423,14 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     return notice(input, `Stopped: ${stopped.join(", ")}.`)
   }
 
+  async function checkpoint(input: CommandInput) {
+    const result = await SessionCheckpoint.create({
+      sessionID: input.sessionID,
+      label: input.arguments.trim() || undefined,
+    })
+    return notice(input, [`Checkpoint saved: \`${result.relative}\``, result.summary].join("\n\n"))
+  }
+
   /**
    * Regular expression to match @ file references in text
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
@@ -2436,6 +2445,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     if (!configured && input.command === Command.Default.STATUS) return status(input)
     if (!configured && input.command === Command.Default.CONTEXT) return context(input)
     if (!configured && input.command === Command.Default.STOP) return stop(input)
+    if (!configured && input.command === Command.Default.CHECKPOINT) return checkpoint(input)
 
     // /compact is an action, not a prompt template: enqueue a compaction task
     // and run the loop to process it (same machinery as auto-compaction), then
