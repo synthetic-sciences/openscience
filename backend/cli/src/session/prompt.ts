@@ -1151,6 +1151,13 @@ export namespace SessionPrompt {
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
+    const request = input.messages
+      .findLast((message) => message.info.role === "user")
+      ?.parts.filter(
+        (part): part is MessageV2.TextPart => part.type === "text" && !part.ignored && !part.synthetic,
+      )
+      .map((part) => part.text)
+      .join("\n")
 
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
@@ -1180,7 +1187,13 @@ export namespace SessionPrompt {
     for (const item of await ToolRegistry.tools(
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
-      (id) => ToolSelection.enabled(id, { permission: input.agent.permission, tools: input.tools }),
+      (id) =>
+        ToolSelection.enabled(id, { permission: input.agent.permission, tools: input.tools }) &&
+        ToolSelection.relevant(id, {
+          agent: input.agent.name,
+          message: request,
+          tools: input.tools,
+        }),
     )) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
