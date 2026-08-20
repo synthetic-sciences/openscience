@@ -92,6 +92,21 @@ const saved = (id: string, title: string) => ({
   current: { ...trashed(id, title).current, size: 2048, sourcePath: `/store/${title}` },
 })
 
+const deletedFile = (id: string, filename: string, kind: "file" | "directory" = "file") => ({
+  id,
+  projectID: "prj_1",
+  sessionID: SESSION,
+  originalPath: `${DIRECTORY}/${filename}`,
+  filename,
+  size: kind === "file" ? 12 : 0,
+  mode: 0o600,
+  kind,
+  store: "workspace",
+  state: "trash",
+  trashedAt: Date.now() - 1000,
+  expiresAt: Date.now() + 100_000,
+})
+
 const DIRECTORY = "/home/keertan/proj"
 const SESSION = "ses_1"
 
@@ -710,6 +725,95 @@ describe("files pane", () => {
 
     expect(calls).toContainEqual({ path: "/file/artifact-store/art_1/restore", method: "POST" })
     expect(host.querySelector('[data-trash-row="art_1"]')).toBeNull()
+  })
+
+  test("restores and permanently deletes workspace items from the shared Trash view", async () => {
+    startOn("trash")
+    const calls: Array<{ path: string; method?: string }> = []
+    const store = { files: [deletedFile("ftr_restore", "notes.txt"), deletedFile("ftr_purge", "raw", "directory")] }
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, init) => {
+          calls.push({ path, method: init?.method })
+          if (path === `/session/${SESSION}/filesystem`) return listing(snapshot([]))
+          if (path === "/file/trash" && !init?.method) return listing(store.files)
+          if (path === "/file/trash/ftr_restore/restore") {
+            store.files = store.files.filter((file) => file.id !== "ftr_restore")
+            return listing(deletedFile("ftr_restore", "notes.txt"))
+          }
+          if (path === "/file/trash/ftr_purge" && init?.method === "DELETE") {
+            store.files = store.files.filter((file) => file.id !== "ftr_purge")
+            return listing(deletedFile("ftr_purge", "raw", "directory"))
+          }
+          if (path.startsWith("/file/artifact-store")) return listing([])
+          return listing([])
+        },
+        onPurgeFile: (_file, submit) => void submit(),
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector('[data-file-trash-row="ftr_restore"] [data-file-trash-name]')?.textContent).toBe(
+      "notes.txt",
+    )
+    expect(host.querySelector('[data-file-trash-row="ftr_purge"]')?.textContent).toContain("Folder")
+
+    host.querySelector<HTMLButtonElement>('[data-file-trash-restore="ftr_restore"]')?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-trash-purge="ftr_purge"]')?.click()
+    await settle()
+
+    expect(calls).toContainEqual({ path: "/file/trash/ftr_restore/restore", method: "POST" })
+    expect(calls).toContainEqual({ path: "/file/trash/ftr_purge", method: "DELETE" })
+    expect(host.querySelector("[data-file-trash-row]")).toBeNull()
+  })
+
+  test("wires rename and recoverable trash actions for writable local rows", async () => {
+    startOn("project")
+    const bodies: Array<{ path: string; body: Record<string, unknown> }> = []
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, init) => {
+          if (path === `/session/${SESSION}/filesystem`) return listing(snapshot([]))
+          if (path.startsWith("/file/artifact-store") || (path === "/file/trash" && !init?.method)) return listing([])
+          if (path === "/file/rename" || (path === "/file/trash" && init?.method === "POST")) {
+            bodies.push({ path, body: JSON.parse(String(init?.body)) as Record<string, unknown> })
+            return listing({ ok: true })
+          }
+          if (path === "/file")
+            return listing([
+              {
+                name: "draft.md",
+                type: "file",
+                size: 12,
+                absolute: `${DIRECTORY}/draft.md`,
+              },
+            ])
+          return listing([])
+        },
+        onRenameFile: (_file, submit) => void submit("report.md"),
+        onTrashFile: (_file, submit) => void submit(),
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-file-rename="draft.md"]')?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-trash="draft.md"]')?.click()
+    await settle()
+
+    expect(bodies).toContainEqual({
+      path: "/file/rename",
+      body: { from: `${DIRECTORY}/draft.md`, to: `${DIRECTORY}/report.md`, sessionID: SESSION },
+    })
+    expect(bodies).toContainEqual({
+      path: "/file/trash",
+      body: { path: `${DIRECTORY}/draft.md`, sessionID: SESSION },
+    })
   })
 
   test("lists saved Results under Results rather than reporting an empty folder", async () => {

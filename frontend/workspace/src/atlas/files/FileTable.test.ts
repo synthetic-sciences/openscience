@@ -121,4 +121,30 @@ describe("file table", () => {
     expect(loading.textContent).not.toContain("This folder is empty.")
     expect(unavailable.textContent).not.toContain("This folder is empty.")
   })
+
+  test("shows compact rename and trash actions only for mutable sources", () => {
+    const actions: string[] = []
+    const writable = mount(() =>
+      subject.FileTable({
+        rows: ROWS,
+        depth: 0,
+        mutable: true,
+        onOpen: () => actions.push("open"),
+        onUp: () => {},
+        onRename: (row) => actions.push(`rename:${row.name}`),
+        onTrash: (row) => actions.push(`trash:${row.name}`),
+      }),
+    )
+
+    writable.querySelector<HTMLButtonElement>('[data-file-rename="train_lr.py"]')?.click()
+    writable.querySelector<HTMLButtonElement>('[data-file-trash="train_lr.py"]')?.click()
+    expect(actions).toEqual(["rename:train_lr.py", "trash:train_lr.py"])
+    expect(writable.querySelector('[data-file-row="train_lr.py"]')).not.toBeNull()
+
+    const readonly = mount(() =>
+      subject.FileTable({ rows: ROWS, depth: 0, onOpen: () => {}, onUp: () => {}, mutable: false }),
+    )
+    expect(readonly.querySelector("[data-file-rename]")).toBeNull()
+    expect(readonly.querySelector("[data-file-trash]")).toBeNull()
+  })
 })

@@ -17,6 +17,7 @@ import { PublicationReview } from "../../file/review"
 import { Identifier } from "../../id/id"
 import { ArtifactStore } from "../../artifact/store"
 import { FileTrash } from "../../file/trash"
+import { SessionFilesystem } from "../../session/filesystem"
 
 const LineageRun = z.object({
   id: z.string(),
@@ -262,6 +263,47 @@ export const FileRoutes = lazy(() =>
       async (c) => c.json(await FileTrash.list(Instance.project.id)),
     )
     .post(
+      "/file/trash",
+      describeRoute({
+        summary: "Move a workspace file or folder to trash",
+        description:
+          "Move a local file or folder into recoverable same-volume trash without loading its contents into memory.",
+        operationId: "file.trash.create",
+        responses: {
+          200: {
+            description: "Recoverable file record",
+            content: { "application/json": { schema: resolver(FileTrash.Record) } },
+          },
+          409: { description: "The workspace root cannot be trashed" },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          path: z.string().min(1),
+          sessionID: Identifier.schema("session"),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        const authorized = await SessionFilesystem.authorize({
+          sessionID: body.sessionID,
+          path: body.path,
+          access: "write",
+        })
+        if (authorized.path === Instance.directory || authorized.path === authorized.grant.path) {
+          throw new HTTPException(409, { message: "The workspace root cannot be moved to trash" })
+        }
+        const record = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: body.sessionID,
+          path: authorized.path,
+          root: authorized.grant.path,
+        })
+        return c.json(record)
+      },
+    )
+    .post(
       "/file/trash/:id/restore",
       describeRoute({
         summary: "Restore a deleted source file",
@@ -274,6 +316,7 @@ export const FileRoutes = lazy(() =>
             content: { "application/json": { schema: resolver(FileTrash.Record) } },
           },
           404: { description: "Recoverable file not found" },
+          409: { description: "A file or folder already exists at the restore path" },
         },
       }),
       validator("param", z.object({ id: z.string().startsWith("ftr_") })),
@@ -287,6 +330,56 @@ export const FileRoutes = lazy(() =>
         if (!result) return c.json({ error: "Recoverable file not found" }, 404)
         return c.json(result)
       },
+    )
+    .delete(
+      "/file/trash/:id",
+      describeRoute({
+        summary: "Permanently delete a trashed workspace item",
+        description: "Permanently remove a recoverable file or folder after rechecking write authorization.",
+        operationId: "file.trash.purge",
+        responses: {
+          200: {
+            description: "Purged file record",
+            content: { "application/json": { schema: resolver(FileTrash.Record) } },
+          },
+          404: { description: "Recoverable file not found" },
+        },
+      }),
+      validator("param", z.object({ id: z.string().startsWith("ftr_") })),
+      validator("json", z.object({ sessionID: Identifier.schema("session") })),
+      async (c) => {
+        const result = await FileTrash.purge({
+          projectID: Instance.project.id,
+          sessionID: c.req.valid("json").sessionID,
+          id: c.req.valid("param").id,
+        })
+        if (!result) return c.json({ error: "Recoverable file not found" }, 404)
+        return c.json(result)
+      },
+    )
+    .post(
+      "/file/rename",
+      describeRoute({
+        summary: "Rename a workspace file or folder",
+        description: "Rename a local file or folder without overwriting an existing destination.",
+        operationId: "file.rename",
+        responses: {
+          200: {
+            description: "Renamed file",
+            content: { "application/json": { schema: resolver(File.Rename) } },
+          },
+          409: { description: "The destination exists or the source is a workspace root" },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          from: z.string().min(1),
+          to: z.string().min(1),
+          sessionID: Identifier.schema("session"),
+        }),
+      ),
+      async (c) => c.json(await File.rename(c.req.valid("json"))),
     )
     .get(
       "/file/inspect",

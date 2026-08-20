@@ -1,5 +1,5 @@
 import { For, Show, createMemo, type JSX } from "solid-js"
-import { IconArrowUp, IconFile, IconFolder } from "@/atlas/shared/Icon"
+import { IconArrowUp, IconEdit, IconFile, IconFolder, IconTrash } from "@/atlas/shared/Icon"
 import { bytes } from "./bytes"
 
 export interface FileRow {
@@ -28,6 +28,10 @@ export function FileTable(props: {
   loading?: boolean
   /** Suppresses a false empty state when the listing could not be read. */
   unavailable?: boolean
+  /** Local write-capable sources expose lightweight row actions. */
+  mutable?: boolean
+  onRename?: (row: FileRow) => void
+  onTrash?: (row: FileRow) => void
   /**
    * A listing is in flight. The rows on screen still describe the folder being
    * left, so they are shown but not clickable: clicking one would append its
@@ -84,31 +88,61 @@ export function FileTable(props: {
       >
         <For each={sorted()}>
           {(row) => (
-            <button
-              type="button"
-              class="files-row"
-              classList={{ "files-row--ignored": row.ignored }}
-              data-file-row={row.name}
-              data-file-kind={row.type}
-              aria-label={`${row.type === "directory" ? "Open folder" : "Open file"} ${row.name}`}
-              title={row.ignored ? `${row.name} is ignored by the project` : row.name}
-              disabled={props.busy}
-              onClick={() => props.onOpen(row)}
+            <div
+              class="files-row files-row--entry"
+              classList={{ "files-row--ignored": row.ignored, "files-row--mutable": props.mutable }}
+              data-file-entry={row.name}
             >
-              <span class="files-row__glyph" aria-hidden="true">
-                {row.type === "directory" ? (
-                  <IconFolder size={15} strokeWidth={1.45} />
-                ) : (
-                  <IconFile size={15} strokeWidth={1.45} />
-                )}
-              </span>
-              <span class="files-row__name" data-file-name>
-                {row.name}
-              </span>
-              <span class="files-row__size" data-file-size>
-                {row.type === "directory" ? "" : bytes(row.size)}
-              </span>
-            </button>
+              <button
+                type="button"
+                class="files-row__open"
+                data-file-row={row.name}
+                data-file-kind={row.type}
+                aria-label={`${row.type === "directory" ? "Open folder" : "Open file"} ${row.name}`}
+                title={row.ignored ? `${row.name} is ignored by the project` : row.name}
+                disabled={props.busy}
+                onClick={() => props.onOpen(row)}
+              >
+                <span class="files-row__glyph" aria-hidden="true">
+                  {row.type === "directory" ? (
+                    <IconFolder size={15} strokeWidth={1.45} />
+                  ) : (
+                    <IconFile size={15} strokeWidth={1.45} />
+                  )}
+                </span>
+                <span class="files-row__name" data-file-name>
+                  {row.name}
+                </span>
+                <span class="files-row__size" data-file-size>
+                  {row.type === "directory" ? "" : bytes(row.size)}
+                </span>
+              </button>
+              <Show when={props.mutable}>
+                <span class="files-row__actions">
+                  <button
+                    type="button"
+                    data-file-rename={row.name}
+                    aria-label={`Rename ${row.name}`}
+                    title="Rename"
+                    disabled={props.busy}
+                    onClick={() => props.onRename?.(row)}
+                  >
+                    <IconEdit size={13} strokeWidth={1.5} />
+                  </button>
+                  <button
+                    type="button"
+                    class="files-row__trash"
+                    data-file-trash={row.name}
+                    aria-label={`Move ${row.name} to Trash`}
+                    title="Move to Trash"
+                    disabled={props.busy}
+                    onClick={() => props.onTrash?.(row)}
+                  >
+                    <IconTrash size={13} strokeWidth={1.5} />
+                  </button>
+                </span>
+              </Show>
+            </div>
           )}
         </For>
       </Show>

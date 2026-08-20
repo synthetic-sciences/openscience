@@ -10923,8 +10923,11 @@ export type FileTrashListResponses = {
     originalPath: string
     filename: string
     size: number
-    sha256: string
+    sha256?: string
     mode: number
+    kind?: "file" | "directory"
+    store?: "data" | "workspace"
+    payloadPath?: string
     state: "trash" | "restored"
     trashedAt: number
     expiresAt: number
@@ -10933,6 +10936,50 @@ export type FileTrashListResponses = {
 }
 
 export type FileTrashListResponse = FileTrashListResponses[keyof FileTrashListResponses]
+
+export type FileTrashCreateData = {
+  body?: {
+    path: string
+    sessionID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/file/trash"
+}
+
+export type FileTrashCreateErrors = {
+  /**
+   * The workspace root cannot be trashed
+   */
+  409: unknown
+}
+
+export type FileTrashCreateResponses = {
+  /**
+   * Recoverable file record
+   */
+  200: {
+    id: string
+    projectID: string
+    sessionID?: string
+    originalPath: string
+    filename: string
+    size: number
+    sha256?: string
+    mode: number
+    kind?: "file" | "directory"
+    store?: "data" | "workspace"
+    payloadPath?: string
+    state: "trash" | "restored"
+    trashedAt: number
+    expiresAt: number
+    restoredAt?: number
+  }
+}
+
+export type FileTrashCreateResponse = FileTrashCreateResponses[keyof FileTrashCreateResponses]
 
 export type FileTrashRestoreData = {
   body?: {
@@ -10952,6 +10999,10 @@ export type FileTrashRestoreErrors = {
    * Recoverable file not found
    */
   404: unknown
+  /**
+   * A file or folder already exists at the restore path
+   */
+  409: unknown
 }
 
 export type FileTrashRestoreResponses = {
@@ -10965,8 +11016,11 @@ export type FileTrashRestoreResponses = {
     originalPath: string
     filename: string
     size: number
-    sha256: string
+    sha256?: string
     mode: number
+    kind?: "file" | "directory"
+    store?: "data" | "workspace"
+    payloadPath?: string
     state: "trash" | "restored"
     trashedAt: number
     expiresAt: number
@@ -10975,6 +11029,84 @@ export type FileTrashRestoreResponses = {
 }
 
 export type FileTrashRestoreResponse = FileTrashRestoreResponses[keyof FileTrashRestoreResponses]
+
+export type FileTrashPurgeData = {
+  body?: {
+    sessionID: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/file/trash/{id}"
+}
+
+export type FileTrashPurgeErrors = {
+  /**
+   * Recoverable file not found
+   */
+  404: unknown
+}
+
+export type FileTrashPurgeResponses = {
+  /**
+   * Purged file record
+   */
+  200: {
+    id: string
+    projectID: string
+    sessionID?: string
+    originalPath: string
+    filename: string
+    size: number
+    sha256?: string
+    mode: number
+    kind?: "file" | "directory"
+    store?: "data" | "workspace"
+    payloadPath?: string
+    state: "trash" | "restored"
+    trashedAt: number
+    expiresAt: number
+    restoredAt?: number
+  }
+}
+
+export type FileTrashPurgeResponse = FileTrashPurgeResponses[keyof FileTrashPurgeResponses]
+
+export type FileRenameData = {
+  body?: {
+    from: string
+    to: string
+    sessionID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/file/rename"
+}
+
+export type FileRenameErrors = {
+  /**
+   * The destination exists or the source is a workspace root
+   */
+  409: unknown
+}
+
+export type FileRenameResponses = {
+  /**
+   * Renamed file
+   */
+  200: {
+    from: string
+    to: string
+    type: "file" | "directory"
+  }
+}
+
+export type FileRenameResponse = FileRenameResponses[keyof FileRenameResponses]
 
 export type FileInspectData = {
   body?: never

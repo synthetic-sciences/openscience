@@ -62,6 +62,8 @@ import type {
   FilePublicationResponses,
   FileRawResponses,
   FileReadResponses,
+  FileRenameErrors,
+  FileRenameResponses,
   FileReproducibilityResponses,
   FileReviewsCurrentErrors,
   FileReviewsCurrentResponses,
@@ -72,7 +74,11 @@ import type {
   FileReviewsResolveResponses,
   FileReviewsRunResponses,
   FileStatusResponses,
+  FileTrashCreateErrors,
+  FileTrashCreateResponses,
   FileTrashListResponses,
+  FileTrashPurgeErrors,
+  FileTrashPurgeResponses,
   FileTrashRestoreErrors,
   FileTrashRestoreResponses,
   FileWriteResponses,
@@ -4449,6 +4455,43 @@ export class Trash extends HeyApiClient {
   }
 
   /**
+   * Move a workspace file or folder to trash
+   *
+   * Move a local file or folder into recoverable same-volume trash without loading its contents into memory.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      path?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "path" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<FileTrashCreateResponses, FileTrashCreateErrors, ThrowOnError>({
+      url: "/file/trash",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Restore a deleted source file
    *
    * Restore a source or workspace file during its 30-day recovery window without overwriting an existing path.
@@ -4475,6 +4518,43 @@ export class Trash extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<FileTrashRestoreResponses, FileTrashRestoreErrors, ThrowOnError>({
       url: "/file/trash/{id}/restore",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Permanently delete a trashed workspace item
+   *
+   * Permanently remove a recoverable file or folder after rechecking write authorization.
+   */
+  public purge<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<FileTrashPurgeResponses, FileTrashPurgeErrors, ThrowOnError>({
+      url: "/file/trash/{id}",
       ...options,
       ...params,
       headers: {
@@ -5219,6 +5299,45 @@ export class File extends HeyApiClient {
     )
     return (options?.client ?? this.client).put<FileWriteResponses, unknown, ThrowOnError>({
       url: "/file/content",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Rename a workspace file or folder
+   *
+   * Rename a local file or folder without overwriting an existing destination.
+   */
+  public rename<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      from?: string
+      to?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "from" },
+            { in: "body", key: "to" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<FileRenameResponses, FileRenameErrors, ThrowOnError>({
+      url: "/file/rename",
       ...options,
       ...params,
       headers: {

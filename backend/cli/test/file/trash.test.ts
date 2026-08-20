@@ -88,6 +88,18 @@ describe("recoverable source file trash", () => {
           ).rejects.toThrow("symbolic link")
           expect(await fs.readlink(linked)).toBe(target)
           expect(await fs.readFile(target, "utf8")).toBe("new bytes\n")
+
+          const redirected = path.join(tmp.path, "redirected-trash")
+          const trash = path.join(tmp.path, FileTrash.FOLDER)
+          await fs.rm(trash, { recursive: true })
+          await fs.mkdir(redirected)
+          await fs.symlink(redirected, trash)
+          await expect(
+            FileTrash.trash({ projectID: Instance.project.id, sessionID: session.id, path: target }),
+          ).rejects.toThrow("Invalid workspace trash root")
+          expect(await fs.readFile(target, "utf8")).toBe("new bytes\n")
+          await fs.unlink(trash)
+          await fs.rm(redirected, { recursive: true })
         }
 
         const trashed = await FileTrash.trash({
@@ -157,6 +169,132 @@ describe("recoverable source file trash", () => {
         )
         expect(await FileTrash.list(projectID)).toEqual([])
         await fs.rm(entry, { recursive: true, force: true })
+      },
+    })
+  })
+
+  test("moves folders into same-volume workspace trash and restores them through the routes", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const target = path.join(tmp.path, "dataset")
+        await fs.mkdir(path.join(target, "nested"), { recursive: true })
+        await fs.writeFile(path.join(target, "nested", "sample.csv"), "x,y\n1,2\n")
+
+        const response = await FileRoutes().request("/file/trash", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: target, sessionID: session.id }),
+        })
+        expect(response.status).toBe(200)
+        const record = (await response.json()) as FileTrash.Record
+        expect(record).toMatchObject({ filename: "dataset", kind: "directory", store: "workspace" })
+        expect(record.payloadPath).toContain(`${path.sep}${FileTrash.FOLDER}${path.sep}${record.id}${path.sep}payload`)
+        expect(await fs.readFile(path.join(tmp.path, FileTrash.FOLDER, ".gitignore"), "utf8")).toBe("*\n")
+        await expect(fs.stat(target)).rejects.toThrow()
+
+        const second = path.join(tmp.path, "second.txt")
+        await fs.writeFile(second, "second\n")
+        const secondRecord = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          path: second,
+        })
+        expect(await fs.readFile(path.join(tmp.path, FileTrash.FOLDER, ".gitignore"), "utf8")).toBe("*\n")
+        await FileTrash.purge({ projectID: Instance.project.id, sessionID: session.id, id: secondRecord.id })
+
+        const listing = await FileRoutes().request(
+          `/file?path=${encodeURIComponent(tmp.path)}&sessionID=${encodeURIComponent(session.id)}`,
+        )
+        expect(listing.status).toBe(200)
+        expect((await listing.json()) as Array<{ name: string }>).not.toContainEqual({ name: FileTrash.FOLDER })
+
+        const restored = await FileRoutes().request(`/file/trash/${record.id}/restore`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id }),
+        })
+        expect(restored.status).toBe(200)
+        expect(await fs.readFile(path.join(target, "nested", "sample.csv"), "utf8")).toBe("x,y\n1,2\n")
+      },
+    })
+  })
+
+  test("permanently purges a recoverable file through the route", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const target = path.join(tmp.path, "discard.txt")
+        await fs.writeFile(target, "discard\n")
+        const trashed = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          path: target,
+        })
+
+        const response = await FileRoutes().request(`/file/trash/${trashed.id}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id }),
+        })
+        expect(response.status).toBe(200)
+        expect(await FileTrash.list(Instance.project.id)).toEqual([])
+        await expect(fs.stat(target)).rejects.toThrow()
+        if (trashed.payloadPath) await expect(fs.stat(trashed.payloadPath)).rejects.toThrow()
+      },
+    })
+  })
+
+  test("rollback restores the original file mode", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const target = path.join(tmp.path, "rollback.txt")
+        await fs.writeFile(target, "rollback\n", { mode: 0o640 })
+        const record = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          path: target,
+        })
+
+        await FileTrash.rollback(record)
+        expect(await fs.readFile(target, "utf8")).toBe("rollback\n")
+        if (process.platform !== "win32") expect((await fs.stat(target)).mode & 0o777).toBe(0o640)
+        expect(await FileTrash.list(Instance.project.id)).toEqual([])
+      },
+    })
+  })
+
+  test("rejects forged workspace metadata before restore", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const target = path.join(tmp.path, "trusted.txt")
+        const forged = path.join(tmp.path, "forged.txt")
+        await fs.writeFile(target, "trusted\n")
+        const record = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          path: target,
+        })
+        expect(record.payloadPath).toBeString()
+        const local = path.join(path.dirname(record.payloadPath!), "record.json")
+        await fs.writeFile(local, JSON.stringify({ ...record, originalPath: forged }))
+
+        await expect(
+          FileTrash.restore({ projectID: Instance.project.id, sessionID: session.id, id: record.id }),
+        ).rejects.toThrow("metadata mismatch")
+        await expect(fs.stat(forged)).rejects.toThrow()
+        await expect(fs.stat(target)).rejects.toThrow()
+        expect(await fs.readFile(record.payloadPath!, "utf8")).toBe("trusted\n")
       },
     })
   })

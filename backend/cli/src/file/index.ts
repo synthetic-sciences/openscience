@@ -21,6 +21,8 @@ import { PublicationReview } from "./review"
 import { SessionFilesystem } from "../session/filesystem"
 import { Filesystem } from "../util/filesystem"
 import { SafeFileIO } from "./safe-io"
+import { FileTrash } from "./trash"
+import { Lock } from "@/util/lock"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -87,6 +89,13 @@ export namespace File {
       ref: "FileContent",
     })
   export type Content = z.infer<typeof Content>
+
+  export const Rename = z.object({
+    from: z.string(),
+    to: z.string(),
+    type: z.enum(["file", "directory"]),
+  })
+  export type Rename = z.infer<typeof Rename>
 
   async function shouldEncode(file: { type?: string }): Promise<boolean> {
     const type = file.type?.toLowerCase()
@@ -227,14 +236,19 @@ export namespace File {
 
   async function contained(file: string, access: SessionFilesystem.Access, options?: AccessOptions): Promise<string> {
     if (options?.sessionID) {
-      return SessionFilesystem.authorize({
+      const target = await SessionFilesystem.authorize({
         sessionID: options.sessionID,
         path: file,
         access,
       }).then((result) => result.path)
+      if (FileTrash.protectedPath(target)) throw new HTTPException(403, { message: "Recovery data is protected" })
+      return target
     }
     const full = path.isAbsolute(file) ? file : path.resolve(Instance.directory, file)
     const canonical = await Filesystem.canonical(full)
+    if (canonical && FileTrash.protectedPath(canonical)) {
+      throw new HTTPException(403, { message: "Recovery data is protected" })
+    }
     if (canonical && (await Instance.containsCanonicalPath(canonical))) return canonical
     throw new Error(`Access denied: path escapes project directory`)
   }
@@ -459,8 +473,54 @@ export namespace File {
     return readPath(file, full)
   }
 
+  export async function rename(input: { from: string; to: string; sessionID: string }): Promise<Rename> {
+    const source = await SessionFilesystem.authorize({ sessionID: input.sessionID, path: input.from, access: "write" })
+    if (source.path === Instance.directory || source.path === source.grant.path) {
+      throw new HTTPException(409, { message: "The workspace root cannot be renamed" })
+    }
+    const target = await SessionFilesystem.authorize({ sessionID: input.sessionID, path: input.to, access: "write" })
+    if (FileTrash.protectedPath(source.path) || FileTrash.protectedPath(target.path)) {
+      throw new HTTPException(403, { message: "Recovery data is protected" })
+    }
+    if (source.path === target.path) {
+      const stat = await fs.promises.lstat(source.path)
+      return Rename.parse({ from: source.path, to: target.path, type: stat.isDirectory() ? "directory" : "file" })
+    }
+    if (source.grant.path !== target.grant.path) {
+      throw new HTTPException(409, { message: "Files cannot be renamed across workspace sources" })
+    }
+    const parent = await fs.promises.stat(path.dirname(target.path)).catch(() => undefined)
+    if (!parent?.isDirectory()) throw new HTTPException(400, { message: "The destination folder does not exist" })
+
+    using _ = await Lock.write(`file-rename:${Instance.project.id}`)
+    if (await fs.promises.lstat(target.path).catch(() => undefined)) {
+      throw new HTTPException(409, { message: `Refusing to overwrite ${target.path}` })
+    }
+    const stat = await fs.promises.lstat(source.path)
+    const type = stat.isDirectory() ? "directory" : stat.isFile() ? "file" : undefined
+    if (!type || stat.isSymbolicLink())
+      throw new HTTPException(400, { message: "Only files and folders can be renamed" })
+    if (type === "directory" && Filesystem.contains(source.path, target.path)) {
+      throw new HTTPException(409, { message: "A folder cannot be moved inside itself" })
+    }
+    await fs.promises.rename(source.path, target.path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "EEXIST" || error.code === "ENOTEMPTY") {
+        throw new HTTPException(409, { message: `Refusing to overwrite ${target.path}` })
+      }
+      if (error.code === "EXDEV") {
+        throw new HTTPException(409, { message: "Files cannot be renamed across filesystems" })
+      }
+      throw error
+    })
+    await Promise.all([
+      Bus.publish(FileWatcher.Event.Updated, { file: source.path, event: "unlink" }),
+      Bus.publish(FileWatcher.Event.Updated, { file: target.path, event: "add" }),
+    ])
+    return Rename.parse({ from: source.path, to: target.path, type })
+  }
+
   export async function list(dir?: string, options?: AccessOptions) {
-    const exclude = [".git", ".DS_Store"]
+    const exclude = [".git", ".DS_Store", FileTrash.FOLDER]
     const project = Instance.project
     let ignored = (_: string) => false
     if (project.vcs === "git") {

@@ -20,7 +20,7 @@ import { useServer } from "@/context/server"
 import { SourceMenu } from "@/atlas/files/SourceMenu"
 import { ArtifactGrid } from "@/atlas/files/ArtifactGrid"
 import { FileTable, type FileRow } from "@/atlas/files/FileTable"
-import { TrashList } from "@/atlas/files/TrashList"
+import { TrashList, type TrashedFile } from "@/atlas/files/TrashList"
 import { buildSources, type PaneSource } from "@/atlas/files/sources"
 import { readSource, writeSource } from "@/atlas/files/last-source"
 import { RemoteFileView, type RemoteFile } from "@/atlas/files/RemoteFileView"
@@ -41,6 +41,7 @@ import {
 } from "@/atlas/file-sources"
 import "@/atlas/files/FilesPane.css"
 import { NativeDirectoryPickerUnavailable } from "@/utils/native-picker"
+import { confirmDialog, promptDialog } from "@/atlas/dialogs"
 
 export type Transport = (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
 
@@ -90,6 +91,33 @@ const concise = (value: unknown) => {
     .replace(/^Error:\s*/, "")
     .trim()
   return line.length > 160 ? `${line.slice(0, 159)}…` : line
+}
+
+const normalizeTrash = (value: unknown): TrashedFile[] => {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return []
+    const row = item as Record<string, unknown>
+    if (
+      typeof row.id !== "string" ||
+      typeof row.filename !== "string" ||
+      typeof row.originalPath !== "string" ||
+      (row.kind !== "file" && row.kind !== "directory") ||
+      typeof row.trashedAt !== "number" ||
+      typeof row.expiresAt !== "number"
+    )
+      return []
+    return [
+      {
+        id: row.id,
+        filename: row.filename,
+        originalPath: row.originalPath,
+        kind: row.kind,
+        trashedAt: row.trashedAt,
+        expiresAt: row.expiresAt,
+      },
+    ]
+  })
 }
 
 // FileExplorer.tsx:57-77 keeps equivalent readAccess/grantAccess/revokeAccess
@@ -189,6 +217,9 @@ export function FilesPane(
     /** Bounded test/integration seam. Production downloads through a direct browser navigation. */
     onDownload?: (name: string, blob: Blob) => void
     onRenameArtifact?: (artifact: StoredArtifact, submit: (title: string) => Promise<unknown>) => void
+    onRenameFile?: (file: FileRow, submit: (name: string) => Promise<unknown>) => void
+    onTrashFile?: (file: FileRow, submit: () => Promise<unknown>) => void
+    onPurgeFile?: (file: TrashedFile, submit: () => Promise<unknown>) => void
   } = {},
 ): JSX.Element {
   // The `request` prop is a standalone test seam (see FilesPane.test.ts) that
@@ -233,6 +264,21 @@ export function FilesPane(
   // needs no session identity — only the project root as a refetch key.
   const ask = (path: string, init?: RequestInit) => transport(path, init)
   const [artifacts, { refetch: refetchArtifacts }] = createArtifactsResource(ask, () => sdk?.directory ?? true)
+  const [trashError, setTrashError] = createSignal("")
+  const [deleted, { refetch: refetchDeleted }] = createResource(
+    () => projectRoot() || true,
+    () =>
+      transport("/file/trash")
+        .then(json)
+        .then((value) => {
+          setTrashError("")
+          return normalizeTrash(value)
+        })
+        .catch((value) => {
+          setTrashError(concise(value))
+          return [] as TrashedFile[]
+        }),
+  )
 
   const [snapshot, { refetch: refetchSnapshot }] = createResource(identity, (current) =>
     readAccess(transport, current).catch(() => undefined),
@@ -418,7 +464,9 @@ export function FilesPane(
 
   const sourceLoading = createMemo(() => {
     const kind = current().kind
-    return kind === "artifacts" || kind === "trash" ? artifacts.loading : entries.loading
+    if (kind === "artifacts") return artifacts.loading
+    if (kind === "trash") return artifacts.loading || deleted.loading
+    return entries.loading
   })
 
   const sourceError = createMemo(() => {
@@ -428,7 +476,7 @@ export function FilesPane(
       return message ? `Results could not be loaded. ${message}` : ""
     }
     if (kind === "trash") {
-      const message = artifacts.latest?.errors.trash
+      const message = artifacts.latest?.errors.trash ?? trashError()
       return message ? `Trash could not be loaded. ${message}` : ""
     }
     return listingError()
@@ -438,6 +486,7 @@ export function FilesPane(
     const kind = current().kind
     if (kind === "artifacts" || kind === "trash") {
       void refetchArtifacts()
+      if (kind === "trash") void refetchDeleted()
       return
     }
     setListingError("")
@@ -450,10 +499,16 @@ export function FilesPane(
     return query ? list.filter((row) => row.name.toLowerCase().includes(query)) : list
   })
 
-  const trash = createMemo(() => {
+  const artifactTrash = createMemo(() => {
     const query = filter().trim().toLowerCase()
     const list = artifacts.latest?.trash ?? []
     return query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
+  })
+
+  const fileTrash = createMemo(() => {
+    const query = filter().trim().toLowerCase()
+    const list = deleted.latest ?? []
+    return query ? list.filter((item) => item.filename.toLowerCase().includes(query)) : list
   })
 
   // The grid takes artifacts whole. Projecting them into FileRow threw away the
@@ -641,7 +696,7 @@ export function FilesPane(
     // root, even when the picker is browsing the project or a connected
     // folder. Preserve the API's canonical handle so the preview and Details
     // requests do not accidentally read an empty same-named scratch path.
-    const target = row.absolute ?? row.path ?? [where(), row.name].filter(Boolean).join("/")
+    const target = filePath(row)
     const file: PaneFile = {
       name: row.name,
       path: target,
@@ -650,6 +705,74 @@ export function FilesPane(
     }
     if (props.onOpenFile) return props.onOpenFile(file)
     uiStore.openFile(projectRoot(), file.path)
+  }
+
+  const filePath = (row: FileRow) => row.absolute ?? row.path ?? [where(), row.name].filter(Boolean).join("/")
+
+  const mutable = createMemo(() => {
+    const kind = current().kind
+    return Boolean(
+      sessionID() && !current().readonly && (kind === "project" || kind === "session" || kind === "connected"),
+    )
+  })
+
+  const renameFile = (row: FileRow) => {
+    const submit = async (name: string) => {
+      const next = name.trim()
+      if (!next || next === row.name) return
+      if (next === "." || next === ".." || /[\\/\u0000]/u.test(next)) {
+        setError("A file name cannot contain a path separator.")
+        return
+      }
+      const session = sessionID()
+      if (!session) return setError("Start a session before renaming workspace files.")
+      const target = [current().root, ...path(), next].filter(Boolean).join("/")
+      setBusy(true)
+      return transport("/file/rename", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: filePath(row), to: target, sessionID: session }),
+      })
+        .then(json)
+        .then(() => refetchEntries())
+        .then(() => setError(""))
+        .catch((value) => setError(`${row.name} could not be renamed. ${concise(value)}`))
+        .finally(() => setBusy(false))
+    }
+    if (props.onRenameFile) return props.onRenameFile(row, submit)
+    if (!dialog) return
+    void promptDialog(dialog, {
+      title: `Rename ${row.type === "directory" ? "folder" : "file"}`,
+      message: "Enter a new name. Existing files will never be replaced.",
+      initial: row.name,
+      confirmLabel: "Rename",
+    }).then((name) => (name === null ? undefined : submit(name)))
+  }
+
+  const trashFile = (row: FileRow) => {
+    const submit = async () => {
+      const session = sessionID()
+      if (!session) return setError("Start a session before changing workspace files.")
+      setBusy(true)
+      return transport("/file/trash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: filePath(row), sessionID: session }),
+      })
+        .then(json)
+        .then(() => Promise.all([refetchEntries(), refetchDeleted()]))
+        .then(() => setError(""))
+        .catch((value) => setError(`${row.name} could not be moved to Trash. ${concise(value)}`))
+        .finally(() => setBusy(false))
+    }
+    if (props.onTrashFile) return props.onTrashFile(row, submit)
+    if (!dialog) return
+    void confirmDialog(dialog, {
+      title: `Move ${row.name} to Trash?`,
+      message: "You can restore it from Files for 30 days.",
+      confirmLabel: "Move to Trash",
+      danger: true,
+    }).then((confirmed) => (confirmed ? submit() : undefined))
   }
 
   const openRemote = (remote: RemoteFile) => setRemoteOpen(remote)
@@ -710,7 +833,7 @@ export function FilesPane(
       })
   }
 
-  const restore = (artifact: StoredArtifact) => {
+  const restoreArtifact = (artifact: StoredArtifact) => {
     if (busy()) return
     setBusy(true)
     restoreStoredArtifact(ask, artifact.id)
@@ -723,6 +846,48 @@ export function FilesPane(
         setBusy(false)
         setError(errorMessage(cause))
       })
+  }
+
+  const restoreFile = (file: TrashedFile) => {
+    const session = sessionID()
+    if (!session || busy()) return
+    setBusy(true)
+    transport(`/file/trash/${encodeURIComponent(file.id)}/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionID: session }),
+    })
+      .then(json)
+      .then(() => Promise.all([refetchDeleted(), refetchEntries()]))
+      .then(() => setError(""))
+      .catch((value) => setError(`${file.filename} could not be restored. ${concise(value)}`))
+      .finally(() => setBusy(false))
+  }
+
+  const purgeFile = (file: TrashedFile) => {
+    const submit = async () => {
+      const session = sessionID()
+      if (!session) return setError("Start a session before changing workspace files.")
+      setBusy(true)
+      return transport(`/file/trash/${encodeURIComponent(file.id)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionID: session }),
+      })
+        .then(json)
+        .then(() => refetchDeleted())
+        .then(() => setError(""))
+        .catch((value) => setError(`${file.filename} could not be deleted. ${concise(value)}`))
+        .finally(() => setBusy(false))
+    }
+    if (props.onPurgeFile) return props.onPurgeFile(file, submit)
+    if (!dialog) return
+    void confirmDialog(dialog, {
+      title: `Delete ${file.filename} permanently?`,
+      message: "This cannot be undone.",
+      confirmLabel: "Delete permanently",
+      danger: true,
+    }).then((confirmed) => (confirmed ? submit() : undefined))
   }
 
   const browser = () => (
@@ -945,12 +1110,15 @@ export function FilesPane(
       <Switch>
         <Match when={current().kind === "trash"}>
           <TrashList
-            rows={trash()}
+            rows={artifactTrash()}
+            files={fileTrash()}
             busy={busy()}
             filtered={Boolean(filter().trim())}
             loading={sourceLoading()}
             unavailable={Boolean(sourceError())}
-            onRestore={restore}
+            onRestore={restoreArtifact}
+            onRestoreFile={restoreFile}
+            onPurgeFile={purgeFile}
           />
         </Match>
 
@@ -975,9 +1143,12 @@ export function FilesPane(
             rows={rows()}
             depth={path().length}
             busy={sourceLoading()}
+            mutable={mutable()}
             filtered={Boolean(filter().trim())}
             loading={sourceLoading()}
             unavailable={Boolean(sourceError())}
+            onRename={renameFile}
+            onTrash={trashFile}
             onUp={() => {
               setPath(path().slice(0, -1))
               // Symmetric with descending: a query typed for the folder being

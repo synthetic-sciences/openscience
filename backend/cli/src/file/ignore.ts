@@ -24,6 +24,7 @@ export namespace FileIgnore {
     "desktop",
     ".sst",
     ".cache",
+    ".openscience-trash",
     ".webkit-cache",
     "__pycache__",
     ".pytest_cache",
