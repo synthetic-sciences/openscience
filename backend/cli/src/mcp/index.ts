@@ -82,11 +82,41 @@ export namespace MCP {
   )
 
   type MCPClient = Client
+  type ToolList = Awaited<ReturnType<MCPClient["listTools"]>>
   const credentialProcesses = new WeakMap<MCPClient, string>()
   const localClients = new WeakSet<MCPClient>()
   const localSandboxes = new WeakMap<MCPClient, Sandbox.Wrapped>()
+  const toolLists = new WeakMap<MCPClient, { value: ToolList; at: number }>()
+  const toolRequests = new WeakMap<MCPClient, Promise<ToolList>>()
+  const toolRevisions = new WeakMap<MCPClient, number>()
+  const TOOL_LIST_TTL_MS = 30_000
+
+  function invalidateTools(client: MCPClient) {
+    toolRevisions.set(client, (toolRevisions.get(client) ?? 0) + 1)
+    toolLists.delete(client)
+    toolRequests.delete(client)
+  }
+
+  function listTools(client: MCPClient, timeout = DEFAULT_TIMEOUT): Promise<ToolList> {
+    const cached = toolLists.get(client)
+    if (cached && Date.now() - cached.at < TOOL_LIST_TTL_MS) return Promise.resolve(cached.value)
+    const pending = toolRequests.get(client)
+    if (pending) return pending
+    const revision = toolRevisions.get(client) ?? 0
+    const request = withTimeout(client.listTools(), timeout)
+      .then((value) => {
+        if ((toolRevisions.get(client) ?? 0) === revision) toolLists.set(client, { value, at: Date.now() })
+        return value
+      })
+      .finally(() => {
+        if (toolRequests.get(client) === request) toolRequests.delete(client)
+      })
+    toolRequests.set(client, request)
+    return request
+  }
 
   async function closeClient(client: MCPClient): Promise<void> {
+    invalidateTools(client)
     const id = credentialProcesses.get(client)
     try {
       // Enumerate and revoke while the owned launcher is still alive. Closing
@@ -208,6 +238,7 @@ export namespace MCP {
   function registerNotificationHandlers(client: MCPClient, serverName: string) {
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
       log.info("tools list changed notification received", { server: serverName })
+      invalidateTools(client)
       Bus.publish(ToolsChanged, { server: serverName })
     })
   }
@@ -708,7 +739,7 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
+    const result = await listTools(mcpClient, mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return undefined
     })
@@ -905,7 +936,10 @@ export namespace MCP {
         continue
       }
 
-      const toolsResult = await client.listTools().catch((e) => {
+      const mcpConfig = config[clientName]
+      const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
+      const timeout = entry?.timeout ?? defaultTimeout
+      const toolsResult = await listTools(client, timeout ?? DEFAULT_TIMEOUT).catch((e) => {
         log.error("failed to get tools", { clientName, error: e.message })
         const failedStatus = {
           status: "failed" as const,
@@ -918,9 +952,6 @@ export namespace MCP {
       if (!toolsResult) {
         continue
       }
-      const mcpConfig = config[clientName]
-      const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
-      const timeout = entry?.timeout ?? defaultTimeout
       const projectOwned = await Config.projectControlsMcp(clientName)
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
