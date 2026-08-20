@@ -157,7 +157,7 @@ jobs:
           prefix="$RUNNER_TEMP/openscience-npm-test-prefix"
           home="$RUNNER_TEMP/openscience-npm-test-home"
           mkdir -p "$prefix" "$home"
-          npm install --global --prefix "$prefix" @synsci/openscience@test
+          npm install --global --prefix "$prefix" "@synsci/openscience@${{ needs.publish-test.outputs.version }}"
           echo "$prefix/bin" >> "$GITHUB_PATH"
           "$prefix/bin/openscience" --version | tee "$RUNNER_TEMP/openscience-version.txt"
           grep -Fx "${{ needs.publish-test.outputs.version }}" "$RUNNER_TEMP/openscience-version.txt"
@@ -176,7 +176,7 @@ jobs:
           NODE
 
           launcher_prefix="$RUNNER_TEMP/synsci-npm-test-prefix"
-          npm install --global --prefix "$launcher_prefix" synsci@test
+          npm install --global --prefix "$launcher_prefix" "synsci@${{ needs.publish-test.outputs.version }}"
           node --check "$launcher_prefix/lib/node_modules/synsci/bin/synsci.mjs"
           LAUNCHER_DIR="$launcher_prefix/lib/node_modules/synsci" node --input-type=module - <<'NODE'
           const mod = await import(`file://${process.env.LAUNCHER_DIR}/lib/channel.mjs`)
@@ -343,7 +343,7 @@ jobs:
           export OPENSCIENCE_DISABLE_LSP_DOWNLOAD=true
           export OPENSCIENCE_DISABLE_DEFAULT_PLUGINS=true
           export OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER=true
-          npm install --global --prefix "$prefix" @synsci/openscience@test
+          npm install --global --prefix "$prefix" "@synsci/openscience@${{ needs.publish-test.outputs.version }}"
           bin="$prefix/bin/openscience"
           "$bin" --version | tee "$RUNNER_TEMP/openscience-version.txt"
           grep -Fx "${{ needs.publish-test.outputs.version }}" "$RUNNER_TEMP/openscience-version.txt"
@@ -366,7 +366,7 @@ jobs:
           $env:OPENSCIENCE_DISABLE_LSP_DOWNLOAD = "true"
           $env:OPENSCIENCE_DISABLE_DEFAULT_PLUGINS = "true"
           $env:OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER = "true"
-          npm install --global --prefix $prefix "@synsci/openscience@test"
+          npm install --global --prefix $prefix "@synsci/openscience@${{ needs.publish-test.outputs.version }}"
           $bin = Join-Path $prefix "openscience.cmd"
           & $bin --version | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP "openscience-version.txt")
           $actual = Get-Content (Join-Path $env:RUNNER_TEMP "openscience-version.txt")
