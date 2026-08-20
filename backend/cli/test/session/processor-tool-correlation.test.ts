@@ -9,7 +9,11 @@ import { BashTool } from "../../src/tool/bash"
 import type { Tool } from "../../src/tool/tool"
 import { executionSession, tmpdir } from "../fixture/fixture"
 
-function running(callID: string, input: Record<string, unknown> = {}): MessageV2.ToolPart {
+function running(
+  callID: string,
+  input: Record<string, unknown> = {},
+  start = 100,
+): MessageV2.ToolPart & { state: MessageV2.ToolStateRunning } {
   return {
     id: `part_${callID}`,
     sessionID: "ses_tool_correlation",
@@ -20,7 +24,7 @@ function running(callID: string, input: Record<string, unknown> = {}): MessageV2
     state: {
       status: "running",
       input,
-      time: { start: 100 },
+      time: { start },
     },
   }
 }
@@ -67,12 +71,26 @@ describe("SessionProcessor tool outcome correlation", () => {
             output: "CHEMBL203",
             title: "Fetch target",
             metadata: { count: 1 },
-            time: { start: 100 },
+            time: { start: expect.any(Number), end: expect.any(Number) },
           },
         })
         await Session.remove(session.id)
       },
     })
+  })
+
+  test("uses execution timing when a fast tool settles before its streamed call arrives", async () => {
+    const { coordinator, updates } = fixture()
+    await coordinator.execute("call_fast", {}, async () => ({ title: "Fast read", output: "done", metadata: {} }))
+    await Bun.sleep(2)
+    const part = running("call_fast", {}, Date.now())
+    await coordinator.running(part)
+
+    const state = updates.at(-1)?.state
+    expect(state?.status).toBe("completed")
+    if (state?.status !== "completed") throw new Error("fast tool did not reach a completed state")
+    expect(state.time.end).toBeGreaterThanOrEqual(state.time.start)
+    expect(state.time.start).toBeLessThan(part.state.time.start)
   })
 
   test("persists execution error that settles before tool-call and has no streamed tool-result", async () => {
@@ -95,7 +113,7 @@ describe("SessionProcessor tool outcome correlation", () => {
         status: "error",
         input: { query: "bad" },
         error: "connector rejected the query",
-        time: { start: 100 },
+        time: { start: expect.any(Number), end: expect.any(Number) },
       },
     })
     expect(rejected).toEqual([failure])

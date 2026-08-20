@@ -118,8 +118,8 @@ export namespace SessionProcessor {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     const outcomes = new Map<
       string,
-      | { status: "completed"; input: unknown; output: ToolExecutionOutput; endedAt: number }
-      | { status: "error"; input: unknown; error: unknown; endedAt: number }
+      | { status: "completed"; input: unknown; output: ToolExecutionOutput; startedAt?: number; endedAt: number }
+      | { status: "error"; input: unknown; error: unknown; startedAt?: number; endedAt: number }
     >()
     const active = new Map<string, Promise<void>>()
     const metadataWrites = new Map<string, Promise<void>>()
@@ -143,6 +143,8 @@ export namespace SessionProcessor {
         await metadataWrites.get(callID)
         const match = toolcalls[callID]
         if (!match || match.state.status !== "running" || settled.has(callID)) return false
+        const startedAt = outcome.startedAt ?? Math.min(match.state.time.start, outcome.endedAt)
+        const time = { start: startedAt, end: Math.max(startedAt, outcome.endedAt) }
         let terminal: MessageV2.ToolPart
         if (outcome.status === "completed") {
           terminal = {
@@ -153,7 +155,7 @@ export namespace SessionProcessor {
               output: outcome.output.output,
               metadata: outcome.output.metadata ?? {},
               title: outcome.output.title,
-              time: { start: match.state.time.start, end: outcome.endedAt },
+              time,
               attachments: outcome.output.attachments,
             },
           }
@@ -166,7 +168,7 @@ export namespace SessionProcessor {
               input: outcome.input ?? match.state.input,
               error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
               ...(metadata ? { metadata } : {}),
-              time: { start: match.state.time.start, end: outcome.endedAt },
+              time,
             },
           }
         }
@@ -226,24 +228,25 @@ export namespace SessionProcessor {
           if (metadataWrites.get(callID) === write && settled.has(callID)) metadataWrites.delete(callID)
         })
       },
-      async result(callID: string, args: unknown, output: ToolExecutionOutput) {
+      async result(callID: string, args: unknown, output: ToolExecutionOutput, startedAt?: number) {
         if (settled.has(callID)) return
-        outcomes.set(callID, { status: "completed", input: args, output, endedAt: Date.now() })
+        outcomes.set(callID, { status: "completed", input: args, output, startedAt, endedAt: Date.now() })
         await apply(callID)
       },
-      async error(callID: string, args: unknown, error: unknown) {
+      async error(callID: string, args: unknown, error: unknown, startedAt?: number) {
         if (settled.has(callID)) return
-        outcomes.set(callID, { status: "error", input: args, error, endedAt: Date.now() })
+        outcomes.set(callID, { status: "error", input: args, error, startedAt, endedAt: Date.now() })
         await apply(callID)
       },
       execute<T extends ToolExecutionOutput>(callID: string, args: unknown, run: () => Promise<T>) {
+        const startedAt = Date.now()
         const execution = (async () => {
           try {
             const output = await run()
-            await coordinator.result(callID, args, output)
+            await coordinator.result(callID, args, output, startedAt)
             return output
           } catch (error) {
-            await coordinator.error(callID, args, error)
+            await coordinator.error(callID, args, error, startedAt)
             throw error
           }
         })()
