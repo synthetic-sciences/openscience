@@ -5,6 +5,7 @@ import z from "zod"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { CredentialLifecycle } from "../credentials/lifecycle"
+import { isAtlasManagedKey } from "../credentials/managed-key"
 
 export const OAUTH_DUMMY_KEY = "synsc-oauth-dummy-key"
 
@@ -19,7 +20,7 @@ export namespace Auth {
    *  the AI SDK loaders, plus Provider already imports Auth AND Config, so
    *  an Auth -> Provider edge would close two cycles through it at once). */
   export function isAtlasApiKey(key: unknown): key is string {
-    return typeof key === "string" && key.startsWith("thk_")
+    return isAtlasManagedKey(key)
   }
 
   export const Oauth = z

@@ -56,6 +56,10 @@ test("a thk_ OpenRouter key added while billing.llm is managed does not flip the
   expect(cfg.billing?.llm).toBe("managed")
 })
 
+test("a reserved thk- integration marker is managed credential material", () => {
+  expect(Auth.isAtlasApiKey("thk-codex-oauth-placeholder")).toBe(true)
+})
+
 test("an OAuth credential for openrouter while billing.llm is managed does not flip the mode", async () => {
   await Config.updateGlobal({ billing: { llm: "managed" } })
 

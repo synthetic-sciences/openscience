@@ -3,6 +3,7 @@ import path from "path"
 import fs from "fs/promises"
 import { Global } from "../src/global"
 import { OpenScience } from "../src/openscience"
+import { CredentialLifecycle } from "../src/credentials/lifecycle"
 
 const file = path.join(Global.Path.data, "openscience-session.json")
 const original = globalThis.fetch
@@ -60,4 +61,41 @@ test("scheduled credential refresh is non-blocking and single-flight", async () 
   expect(state.calls).toBe(1)
   gate.resolve()
   await first
+})
+
+test("scheduled credential refresh does not revoke the active runtime", async () => {
+  await fs.mkdir(Global.Path.data, { recursive: true })
+  await Bun.write(
+    file,
+    JSON.stringify({
+      api_key: "thk_test.secret",
+      user_id: "user-1",
+      cached_v: 7,
+      last_check_ts: 0,
+    }),
+  )
+
+  const state = { revocations: 0 }
+  const unregister = CredentialLifecycle.onRevoke(() => {
+    state.revocations++
+  })
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    if (String(input).endsWith("/api/cli/sync/version")) return Response.json({ v: 8 })
+    if (String(input).endsWith("/api/cli/sync")) {
+      return Response.json({ user: {}, services: {} })
+    }
+    return new Response("not found", { status: 404 })
+  }) as typeof fetch
+
+  try {
+    await OpenScience.refreshIfStale()
+    for (const _ of Array.from({ length: 200 })) {
+      if ((await OpenScience.getSession())?.cached_v === 8) break
+      await Bun.sleep(10)
+    }
+    expect((await OpenScience.getSession())?.cached_v).toBe(8)
+    expect(state.revocations).toBe(0)
+  } finally {
+    unregister()
+  }
 })

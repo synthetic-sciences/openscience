@@ -26,6 +26,7 @@ test("allows user-owned provider keys and blocks synced provider base URLs", () 
   for (const key of keys) {
     expect(isSyncedEnvAllowed(key, "user-owned-key")).toBe(true)
     expect(isSyncedEnvAllowed(key, "thk_managed")).toBe(false)
+    expect(isSyncedEnvAllowed(key, "thk-codex-oauth-placeholder")).toBe(false)
     expect(BLOCKED_SYNCED_ENV.has(key)).toBe(false)
 
     const base = key.replace(/_API_KEY$/, "_BASE_URL")

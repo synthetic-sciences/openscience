@@ -128,10 +128,27 @@ export namespace SessionRetry {
       })
       if (!json || typeof json !== "object") continue
       const err = json.error && typeof json.error === "object" ? json.error : json
-      const nestedStatus = Number(err.statusCode ?? err.status_code ?? json.statusCode ?? json.status_code)
+      const nestedStatus = Number(
+        err.statusCode ??
+          err.status_code ??
+          json.statusCode ??
+          json.status_code ??
+          // OpenRouter streamed errors use numeric `error.code` for the HTTP
+          // class while omitting statusCode entirely (for example 502 with
+          // metadata.error_type=provider_unavailable). Preserve that 5xx so a
+          // message mentioning "context window" is not misclassified as a
+          // deterministic overflow and compacted twice into a terminal error.
+          (typeof err.code === "number" ? err.code : undefined) ??
+          (typeof json.code === "number" ? json.code : undefined),
+      )
       if (!statusCode && Number.isFinite(nestedStatus)) statusCode = nestedStatus
       code = asString(err.code) || asString(json.code) || code
-      type = asString(err.type) || asString(json.type) || type
+      type =
+        asString(err.type) ||
+        asString(json.type) ||
+        asString(err.metadata?.error_type) ||
+        asString(json.metadata?.error_type) ||
+        type
       message = asString(err.message) || asString(json.message) || message
       break
     }

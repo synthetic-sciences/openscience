@@ -15,6 +15,7 @@ import {
   SYNCED_SERVICE_ENV_KEYS,
   managedOpenRouterBaseURL,
 } from "./synced-env-policy"
+import { isAtlasManagedKey } from "../credentials/managed-key"
 import { resolveAtlasPackageDir } from "./atlas-package"
 import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 import { CredentialLifecycle } from "../credentials/lifecycle"
@@ -48,7 +49,7 @@ const syncedSecretValues = new Map<string, string>()
 // (a hot path in bash output streaming) can mask them without an async read.
 const byokSecretValues = new Set<string>()
 const TOKEN_SECRET_PATTERNS = [
-  /\b(?:thk_|sk-|sk_|gsk_|hf_|nvapi-|ghp_|gho_|ghu_|ghs_|github_pat_|xox[baprs]-)[A-Za-z0-9._-]{8,}\b/g,
+  /\b(?:thk[_-]|sk-|sk_|gsk_|hf_|nvapi-|ghp_|gho_|ghu_|ghs_|github_pat_|xox[baprs]-)[A-Za-z0-9._-]{8,}\b/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
 ]
 const QUOTED_SECRET =
@@ -60,7 +61,7 @@ const SECRET_FIELD =
   /(^|[_-])(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|credential|authorization)($|[_-])|^(apiKey|accessToken|refreshToken|authToken|clientSecret|secretKey)$/i
 
 function isManagedAtlasKey(value: string): boolean {
-  return value.startsWith("thk_")
+  return isAtlasManagedKey(value)
 }
 
 function isManagedOpenRouterProxy(value: string | undefined): boolean {
@@ -592,7 +593,13 @@ export namespace OpenScience {
     // continues with the existing env; new env applies to the NEXT message.
     void (async () => {
       try {
-        await syncServices()
+        // The current turn has already constructed its provider SDK from the
+        // previous snapshot. Publishing the cross-process revision is still
+        // required, but reconciling it locally would run the instance revoker,
+        // dispose SessionPrompt state, and abort the turn that scheduled this
+        // refresh. Apply the new snapshot for the next turn without revoking
+        // this process's in-flight work.
+        await syncServices({ reconcileLocal: false })
         await updateSession({ cached_v: v as number })
         // Force provider SDK to rebuild from the new env on the next call.
         const provider = await import("../provider/provider")
@@ -970,8 +977,8 @@ export namespace OpenScience {
     }
   }
 
-  /** Fetch all connected service credentials and inject as env vars */
-  export async function syncServices(): Promise<{
+  /** Fetch all connected service credentials and inject as env vars. */
+  export async function syncServices(options: { reconcileLocal?: boolean } = {}): Promise<{
     user: SyncResponse["user"]
     credentials: number
   } | null> {
@@ -1175,7 +1182,7 @@ export namespace OpenScience {
           .catch((error) => log.warn("legacy skill migration failed", { error: String(error) }))
 
         return { user: data.user, credentials }
-      })
+      }, options)
     } catch (e) {
       log.warn("sync error", { error: e instanceof Error ? e.message : String(e) })
       return null

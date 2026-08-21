@@ -108,6 +108,14 @@ test("a synced direct-provider managed token is dropped", async () => {
   expect(process.env["ANTHROPIC_API_KEY"]).toBeUndefined()
 })
 
+test("a synced Codex availability marker is never used as a public OpenAI API key", async () => {
+  await seedSession()
+  delete process.env["OPENAI_API_KEY"]
+  stubSync({ openai: { OPENAI_API_KEY: "thk-codex-oauth-placeholder" } })
+  await OpenScience.syncServices()
+  expect(process.env["OPENAI_API_KEY"]).toBeUndefined()
+})
+
 test("a synced direct-provider BYOK key transfers when the slot is empty", async () => {
   await seedSession()
   delete process.env["ANTHROPIC_API_KEY"]

@@ -12,6 +12,7 @@
  */
 
 import { managedApiBase } from "../endpoints"
+import { isAtlasManagedKey } from "../credentials/managed-key"
 
 /** The model-provider LLM env vars whose values are the user's OWN (BYOK)
  *  credential. Single source of truth — openscience/index.ts imports this for
@@ -124,7 +125,7 @@ export const BLOCKED_SYNCED_ENV = new Set<string>(
  *  a direct provider's env var. */
 export function isSyncedEnvAllowed(key: string, value?: string, atlasBase = managedApiBase()): boolean {
   if (BLOCKED_SYNCED_ENV.has(key)) return false
-  if (value?.startsWith("thk_") && !MANAGED_SYNCED_LLM_KEYS.has(key)) return false
+  if (isAtlasManagedKey(value) && !MANAGED_SYNCED_LLM_KEYS.has(key)) return false
   // Likewise, managed routing may only target the provider-specific Atlas
   // proxy. A mismatched/public URL is dropped before it reaches process.env.
   const route = MANAGED_SYNCED_BASE_URLS[key]

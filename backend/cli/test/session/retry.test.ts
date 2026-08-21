@@ -284,6 +284,20 @@ describe("SessionRetry.isContextOverflow", () => {
     expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })
 
+  test("retries OpenRouter streamed provider-unavailable 502 instead of compacting it", () => {
+    const err = wrap(
+      JSON.stringify({
+        error: {
+          code: 502,
+          message: "Your input exceeds the context window of this model. Please adjust your input and try again.",
+          metadata: { error_type: "provider_unavailable" },
+        },
+      }),
+    )
+    expect(SessionRetry.isContextOverflow(err)).toBe(false)
+    expect(SessionRetry.retryable(err)).toBe("Provider is overloaded")
+  })
+
   test("false for a plain rate limit", () => {
     const err = api({
       statusCode: 429,
