@@ -6,7 +6,9 @@ import {
   childPermissionRules,
   classifyTaskOutcome,
   summarizeTurn,
+  taskHandoff,
   taskDispatchBudget,
+  TASK_HANDOFF_CHARS,
   TASK_WALL_CLOCK_MS,
   TaskTool,
   withTaskDeadline,
@@ -168,6 +170,26 @@ test("Task summaries expose command and runtime failures carried in completed me
     { tool: "bash", status: "error" },
     { tool: "python", status: "error" },
   ])
+})
+
+test("Task handoffs stay bounded while preserving findings and the final conclusion", () => {
+  const opening = "## Findings\n- exact result: 0.913 at /tmp/result.json\n"
+  const middle = "x".repeat(TASK_HANDOFF_CHARS + 2_000)
+  const closing = "\n## Next action\n- apply the verified patch"
+  const result = taskHandoff(opening + middle + closing + '\n<task_metadata>{"private":true}</task_metadata>')
+
+  expect(result.truncated).toBe(true)
+  expect(result.text.length).toBeLessThanOrEqual(TASK_HANDOFF_CHARS)
+  expect(result.text).toStartWith("## Findings")
+  expect(result.text).toEndWith("- apply the verified patch")
+  expect(result.text).toContain("full result remains in the child session")
+  expect(result.text).not.toContain("private")
+})
+
+test("Task handoffs honor very small defensive limits", () => {
+  const result = taskHandoff("a result that exceeds the requested cap", 8)
+
+  expect(result).toEqual({ text: "a result", truncated: true })
 })
 
 test("Task dispatch budget counts continuations across one parent user turn", () => {

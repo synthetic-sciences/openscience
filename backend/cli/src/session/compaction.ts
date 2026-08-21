@@ -139,6 +139,9 @@ export namespace SessionCompaction {
 ### Blocked / open
 - [blockers, failing checks, unresolved questions]
 
+### Delegated evidence
+- [child session/profile — outcome; decisive findings and evidence; exact artifact/file references; material limitation. Preserve this even when the original Task output was reduced. Write "(none)" if no child work informed the result]
+
 ## Next Move
 1. [the next action REQUIRED to fulfill the Objective — nothing else. Do NOT introduce new goals, investigations, files, or analyses the user did not explicitly ask for. If the Objective is already satisfied, write exactly: "Objective complete — report the result to the user and stop."]
 2. [the action after that, only if it too is required by the Objective]

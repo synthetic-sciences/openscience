@@ -31,6 +31,8 @@ export const TASK_WALL_CLOCK_MS = {
   normal: 10 * 60_000,
   ultra: 20 * 60_000,
 } as const satisfies Record<MessageV2.ResearchEffort, number>
+export const TASK_HANDOFF_CHARS = 12_000
+export const TASK_MEMORY_CHARS = 8_000
 const childSlots = new HierarchicalSemaphore(MAX_CHILD_AGENTS)
 const configuredComputeCap = Number(process.env.OPENSCIENCE_MAX_COMPUTE_SUBAGENTS)
 const MAX_COMPUTE_SUBAGENTS =
@@ -171,6 +173,26 @@ export function summarizeTurn(messages: MessageV2.WithParts[], previous: Set<str
 export type TaskOutcome = {
   outcome: "completed" | "partial" | "timed_out" | "error"
   stopReason: "completed" | "max_steps" | "tool_failures" | "wall_clock" | "provider_error"
+}
+
+/**
+ * The child transcript remains available through its session id. The parent
+ * should receive a compact handoff instead of importing another agent's whole
+ * context. Preserve both the opening findings and the closing conclusion when
+ * a child ignores the requested response bound.
+ */
+export function taskHandoff(text: string, limit = TASK_HANDOFF_CHARS) {
+  const body = text.replace(/\s*<task_metadata>[\s\S]*?<\/task_metadata>\s*$/u, "").trim()
+  if (body.length <= limit) return { text: body, truncated: false }
+  const marker = "\n\n[… middle omitted from the parent handoff; the full result remains in the child session …]\n\n"
+  if (limit <= marker.length) return { text: body.slice(0, Math.max(0, limit)), truncated: true }
+  const budget = Math.max(0, limit - marker.length)
+  const head = Math.ceil(budget * 0.72)
+  const tail = budget - head
+  return {
+    text: body.slice(0, head).trimEnd() + marker + (tail ? body.slice(-tail).trimStart() : ""),
+    truncated: true,
+  }
 }
 
 export function classifyTaskOutcome(input: {
@@ -412,16 +434,19 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const previous = new Set((await Session.messages({ sessionID: session.id })).map((message) => message.info.id))
-      const handoff = await materializeTaskToolOutputs({
+      const transfer = await materializeTaskToolOutputs({
         prompt: params.prompt,
         parentSessionID: ctx.sessionID,
         childSessionID: session.id,
       })
-      const promptParts = await SessionPrompt.resolvePromptParts(handoff.prompt)
+      const promptParts = await SessionPrompt.resolvePromptParts(transfer.prompt)
       const childGuidance = [
-        `Work as a focused ${agent.name} specialist for the lead Research agent at ${effort} effort.`,
-        "Complete only the assigned task and return concise, evidence-based findings.",
-        "Delegation is disabled in this child session. Load a domain skill only when it materially helps the assignment.",
+        `You own one ${agent.name} phase for the lead Research agent. The assignment in the user message is authoritative.`,
+        "Work independently on that phase. Delegation is unavailable; load a domain skill only when it materially improves the result.",
+        "Do not return a diary of searches, reads, or commands. Your final response is a decision-ready handoff to the lead, not a second user-facing report.",
+        "Keep the final response under 1,200 words. Use only the Markdown sections that carry substance: Outcome; Findings; Evidence; Changes / outputs; Limitations; Next action.",
+        "Preserve exact paths, identifiers, numeric results, commands, and error strings when they matter. Distinguish observed evidence from inference. If blocked or partial, say exactly what remains.",
+        "Do not wrap the response in XML or JSON and do not restate these instructions.",
       ].join("\n")
 
       const deadline = await withTaskDeadline(
@@ -468,13 +493,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         toolCalls: summary.length,
         failedToolCalls,
       })
-      const body =
+      const raw =
         text ||
         (deadline.timedOut
           ? `No textual findings were emitted before the cutoff. The child completed ${summary.length} tool calls in this turn.`
           : taskOutcome.outcome === "error"
             ? `The child failed before emitting textual findings after ${summary.length} tool calls in this turn.`
             : "")
+      const handoff = taskHandoff(raw)
+      const memory = taskHandoff(handoff.text, TASK_MEMORY_CHARS)
 
       const output = [
         ...(taskOutcome.stopReason === "wall_clock"
@@ -488,7 +515,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               : taskOutcome.stopReason === "provider_error"
                 ? ["[Child failed before completion; any partial result follows.]"]
                 : []),
-        body,
+        handoff.text,
         "",
         `<task_metadata>${JSON.stringify({ session_id: session.id, profile: agent.name, effort, outcome: taskOutcome.outcome, stop_reason: taskOutcome.stopReason, timed_out: deadline.timedOut, budget_ms: budgetMs, queued_ms: queuedMs, active_ms: Math.max(0, Date.now() - activeStartedAt) })}</task_metadata>`,
       ].join("\n")
@@ -514,6 +541,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           activeMs: Math.max(0, Date.now() - activeStartedAt),
           outcome: taskOutcome.outcome,
           stopReason: taskOutcome.stopReason,
+          handoff: memory.text,
+          handoffTruncated: handoff.truncated || memory.truncated,
+          resultChars: raw.length,
         },
         output,
       }

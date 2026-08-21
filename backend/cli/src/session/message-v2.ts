@@ -910,6 +910,7 @@ export namespace MessageV2 {
   // long `edit` oldString) is dead weight — truncate it while keeping the JSON valid and
   // the small identifying args (paths, flags) intact so the call still reads correctly.
   export const ARG_TRUNCATE_CHARS = 200
+  export const TASK_HANDOFF_CHARS = 8_000
 
   export function truncateArgs(input: Record<string, unknown>, cap = ARG_TRUNCATE_CHARS): Record<string, unknown> {
     const out: Record<string, unknown> = {}
@@ -934,6 +935,14 @@ export namespace MessageV2 {
       .replace(/\s+/g, " ")
       .slice(0, 80)
       .trim()
+    const handoff = tool === "task" && typeof state.metadata.handoff === "string" ? state.metadata.handoff.trim() : ""
+    if (handoff) {
+      const retained =
+        handoff.length <= TASK_HANDOFF_CHARS
+          ? handoff
+          : handoff.slice(0, TASK_HANDOFF_CHARS).trimEnd() + "\n[… child handoff truncated …]"
+      return `[task]${descriptor ? " " + descriptor : ""} → retained child handoff\n${retained}`
+    }
     const lines = state.output ? state.output.split("\n").length : 0
     return `[${tool}]${descriptor ? " " + descriptor : ""} → cleared (${lines} line${lines === 1 ? "" : "s"})`
   }

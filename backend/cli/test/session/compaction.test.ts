@@ -491,6 +491,8 @@ describe("session.compaction.buildHandoffPrompt", () => {
   test("no prior summary → create prompt with the section structure", () => {
     const p = SessionCompaction.buildHandoffPrompt({})
     expect(p).toContain("## Objective")
+    expect(p).toContain("### Delegated evidence")
+    expect(p).toContain("Preserve this even when the original Task output was reduced")
     expect(p).not.toContain("<previous-summary>")
   })
   test("prior summary → update prompt embeds it and says update-not-regenerate", () => {
