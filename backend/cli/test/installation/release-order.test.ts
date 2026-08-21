@@ -23,3 +23,22 @@ test("publish source gates normalize GitHub's case-insensitive repository slug",
     expect(source).not.toContain('[[ "$GITHUB_REPOSITORY" != "synthetic-sciences/OpenScience"')
   }
 })
+
+test("production release preparation jobs can write their draft GitHub release", async () => {
+  const source = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
+  const jobs = [
+    ["version", "build-cli"],
+    ["build-cli", "verify-native-cli"],
+  ]
+
+  for (const item of jobs) {
+    const start = source.indexOf(`\n  ${item[0]}:`)
+    const end = source.indexOf(`\n  ${item[1]}:`)
+
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const job = source.slice(start, end)
+    expect(job).toContain("permissions:")
+    expect(job).toContain("contents: write")
+  }
+})

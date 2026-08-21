@@ -44,6 +44,9 @@ jobs:
     needs: release-source
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      # version.ts creates the draft GitHub release before build/publish.
+      contents: write
     steps:
       - name: Require a bump or version input
         if: ${{ !inputs.bump && !inputs.version }}
@@ -72,6 +75,9 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      # build.ts uploads the native archives and checksums to the draft release.
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
