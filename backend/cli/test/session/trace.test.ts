@@ -366,6 +366,84 @@ test("builds one local observable harness trace without reasoning or copied outp
   })
 })
 
+test("runtime gates remain visible failures without masquerading as model inferences", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "Bounded trace" })
+      const started = Date.now()
+      const user: MessageV2.User = {
+        id: "msg_trace_budget_user",
+        sessionID: session.id,
+        role: "user",
+        effort: "normal",
+        time: { created: started },
+        agent: "research",
+        model: { providerID: "test-provider", modelID: "test-model" },
+      }
+      const inference: MessageV2.Assistant = {
+        id: "msg_trace_budget_inference",
+        sessionID: session.id,
+        role: "assistant",
+        time: { created: started + 1, completed: started + 2 },
+        parentID: user.id,
+        modelID: "test-model",
+        providerID: "test-provider",
+        mode: "research",
+        agent: "research",
+        path: { cwd: tmp.path, root: tmp.path },
+        cost: 0.01,
+        tokens: { input: 10, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: "stop",
+      }
+      const blocked: MessageV2.Assistant = {
+        ...inference,
+        id: "msg_trace_budget_gate",
+        parentID: user.id,
+        time: { created: started + 3, completed: started + 4 },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: undefined,
+        error: {
+          name: "UnknownError",
+          data: { message: "Error: This bounded research run reached its finalization boundary." },
+        },
+      }
+      await Session.updateMessage(user)
+      await Session.updateMessage(inference)
+      await Session.updateMessage(blocked)
+      const manifest = {
+        version: 1 as const,
+        profile: "research",
+        mode: "primary" as const,
+        provider: "test-provider",
+        model: "test-model",
+        systemHash: "a".repeat(64),
+        tools: [],
+      }
+      await SessionTraceStore.recordHarness({
+        sessionID: session.id,
+        messageID: inference.id,
+        parentMessageID: user.id,
+        attempt: 1,
+        snapshot: SessionHarness.Snapshot.parse({ ...manifest, fingerprint: SessionHarness.hash(manifest) }),
+      })
+
+      const trace = await SessionTrace.build(session.id)
+      expect(trace.summary.inferenceCalls).toBe(1)
+      expect(trace.inference.map((item) => item.messageID)).toEqual([inference.id])
+      expect(trace.failures).toContainEqual(
+        expect.objectContaining({ kind: "runtime", id: blocked.id, message: expect.stringContaining("finalization") }),
+      )
+      expect(trace.harnessReport).toMatchObject({ records: 1, valid: true })
+      expect(trace.harnessReport.checks.every((item) => item.status === "pass")).toBe(true)
+
+      await Session.remove(session.id)
+    },
+  })
+})
+
 test("parent readiness includes findings recorded by a delegated reviewer", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({

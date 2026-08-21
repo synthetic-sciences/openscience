@@ -407,9 +407,13 @@ export namespace SessionProcessor {
 
             runtimeDecision = await SessionResearch.runtimePreflight(input.sessionID)
             if (runtimeDecision.decision === "block") {
-              throw new Error(
-                `The research contract runtime budget is exhausted: ${runtimeDecision.reason ?? "configured limit reached"}. Existing Results and checkpoints are preserved. Begin a new user-approved bounded run to continue.`,
-              )
+              const boundary = runtimeDecision.boundary ?? "hard"
+              const reason = runtimeDecision.reason ?? "configured limit reached"
+              const message =
+                boundary === "hard"
+                  ? `This bounded research run reached its hard runtime limit: ${reason}. Existing Results and checkpoints are preserved. Reply \`continue\` or run \`/resume\` to start a fresh bounded run from the same state.`
+                  : `This bounded research run reached its finalization boundary: ${reason}. Its two reserved finalization turns are complete, and existing Results and checkpoints are preserved. Reply \`continue\` or run \`/resume\` to start a fresh bounded run from the same state.`
+              throw new Error(message)
             }
 
             const requestContext = {
@@ -420,14 +424,22 @@ export namespace SessionProcessor {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const finalizing = creditDecision === "finalize" || runtimeDecision.decision === "finalize"
+            const finalTurn = runtimeDecision.decision === "finalize" && runtimeDecision.finalizationCall === 2
             const request = finalizing
               ? {
                   ...streamInput,
+                  // The first reserved turn may save/checkpoint work. The last
+                  // one is deliberately text-only so an agent cannot consume
+                  // the entire reserve on another tool loop and strand the user
+                  // without a usable partial result.
+                  tools: finalTurn ? {} : streamInput.tools,
                   system: [
                     ...streamInput.system,
                     creditDecision === "finalize"
                       ? "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now."
-                      : `The research contract runtime budget is at its finalization boundary (${runtimeDecision.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
+                      : finalTurn
+                        ? `This is the last reserved finalization turn for the research runtime budget (${runtimeDecision.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
+                        : `The research contract runtime budget is at its finalization boundary (${runtimeDecision.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
                   ],
                 }
               : streamInput

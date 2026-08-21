@@ -155,7 +155,7 @@ export namespace SessionTrace {
   })
 
   export const Failure = z.object({
-    kind: z.enum(["model", "tool", "approval", "job"]),
+    kind: z.enum(["model", "runtime", "tool", "approval", "job"]),
     id: z.string(),
     message: z.string(),
     createdAt: z.number(),
@@ -362,6 +362,12 @@ export namespace SessionTrace {
     return string(data?.message) ?? string(record?.message) ?? string(record?.name) ?? "Unknown model failure"
   }
 
+  function runtimeGate(message: MessageV2.Assistant) {
+    return /(?:research contract runtime budget is exhausted|bounded research run reached its (?:hard runtime limit|finalization boundary))/i.test(
+      errorMessage(message.error),
+    )
+  }
+
   function query(input: Record<string, unknown>) {
     return ["query", "term", "symbol", "id", "operation"]
       .map((key) => string(input[key]))
@@ -419,29 +425,39 @@ export namespace SessionTrace {
       inputHash: SearchDedupe.signature(part.state.input),
       inputKeys: Object.keys(part.state.input).toSorted(),
     }))
-    const inference = assistants.map((message) => {
-      const parent = users.get(message.info.parentID)
-      const route = parent?.info.role === "user" ? parent.info.inference : undefined
-      return {
-        messageID: message.info.id,
-        parentMessageID: message.info.parentID,
-        agent: message.info.agent,
-        model: message.info.modelID,
-        provider: message.info.providerID,
-        effort:
-          message.info.reasoningEffort ??
-          route?.effort ??
-          (parent?.info.role === "user" ? parent.info.variant : undefined) ??
-          "unknown",
-        source: route?.source ?? ("unknown" as const),
-        tier: parent?.info.role === "user" ? parent.info.tier : undefined,
-        startedAt: message.info.time.created,
-        completedAt: message.info.time.completed,
-        durationMs: message.info.time.completed ? message.info.time.completed - message.info.time.created : undefined,
-        cost: message.info.cost,
-        tokens: message.info.tokens,
-      }
-    })
+    const manifests = new Set(stored.harness.map((item) => item.messageID))
+    const inference = assistants
+      .filter((message) => {
+        if (runtimeGate(message.info)) return false
+        if (message.info.providerID === "openscience" && message.info.modelID === "local") return false
+        if (manifests.has(message.info.id)) return true
+        const tokens = message.info.tokens
+        const used = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+        return message.info.cost > 0 || used > 0 || message.info.finish !== undefined
+      })
+      .map((message) => {
+        const parent = users.get(message.info.parentID)
+        const route = parent?.info.role === "user" ? parent.info.inference : undefined
+        return {
+          messageID: message.info.id,
+          parentMessageID: message.info.parentID,
+          agent: message.info.agent,
+          model: message.info.modelID,
+          provider: message.info.providerID,
+          effort:
+            message.info.reasoningEffort ??
+            route?.effort ??
+            (parent?.info.role === "user" ? parent.info.variant : undefined) ??
+            "unknown",
+          source: route?.source ?? ("unknown" as const),
+          tier: parent?.info.role === "user" ? parent.info.tier : undefined,
+          startedAt: message.info.time.created,
+          completedAt: message.info.time.completed,
+          durationMs: message.info.time.completed ? message.info.time.completed - message.info.time.created : undefined,
+          cost: message.info.cost,
+          tokens: message.info.tokens,
+        }
+      })
     const children = parts
       .filter((part) => part.tool === "task")
       .map((part) => {
@@ -611,7 +627,7 @@ export namespace SessionTrace {
       ...assistants
         .filter((message) => message.info.error)
         .map((message) => ({
-          kind: "model" as const,
+          kind: runtimeGate(message.info) ? ("runtime" as const) : ("model" as const),
           id: message.info.id,
           message: errorMessage(message.info.error),
           createdAt: message.info.time.completed ?? message.info.time.created,

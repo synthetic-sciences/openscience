@@ -5,6 +5,7 @@ import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import type { MessageV2 } from "@/session/message-v2"
 import { SessionTraceStore } from "@/session/trace-store"
+import { Context } from "@/util/context"
 import z from "zod"
 
 export namespace SessionResearch {
@@ -156,6 +157,15 @@ export namespace SessionResearch {
   })
   export type Experience = z.infer<typeof Experience>
 
+  export const RuntimeUsage = z.object({
+    modelCalls: z.number().int().nonnegative(),
+    toolCalls: z.number().int().nonnegative(),
+    tokens: z.number().int().nonnegative(),
+    wallClockMs: z.number().int().nonnegative(),
+    costUsd: z.number().nonnegative(),
+  })
+  export type RuntimeUsage = z.infer<typeof RuntimeUsage>
+
   export const Budget = z.object({
     reserveUsd: z.number().min(0).max(100).default(1),
     finalizationCalls: z.number().int().nonnegative().default(0),
@@ -187,15 +197,9 @@ export namespace SessionResearch {
     runtimeFinalizing: z.boolean().default(false),
     runtimeExhausted: z.boolean().default(false),
     runtimeReason: z.string().optional(),
-    lastUsage: z
-      .object({
-        modelCalls: z.number().int().nonnegative(),
-        toolCalls: z.number().int().nonnegative(),
-        tokens: z.number().int().nonnegative(),
-        wallClockMs: z.number().int().nonnegative(),
-        costUsd: z.number().nonnegative(),
-      })
-      .optional(),
+    runtimeEpoch: z.number().int().positive().default(1),
+    runtimeBaseline: RuntimeUsage.optional(),
+    lastUsage: RuntimeUsage.optional(),
     updatedAt: z.number(),
   })
   export type Budget = z.infer<typeof Budget>
@@ -355,6 +359,7 @@ export namespace SessionResearch {
     deliverables?: Deliverable[]
     reserveUsd?: number
     limits?: Partial<Budget["limits"]>
+    baseline: RuntimeUsage
   }): Contract {
     const now = Date.now()
     return Contract.parse({
@@ -384,6 +389,8 @@ export namespace SessionResearch {
         runtimeModelCalls: 0,
         runtimeFinalizing: false,
         runtimeExhausted: false,
+        runtimeEpoch: 1,
+        runtimeBaseline: input.baseline,
         updatedAt: now,
       },
       createdAt: now,
@@ -407,7 +414,19 @@ export namespace SessionResearch {
       limits?: Partial<Budget["limits"]>
     },
   ): Promise<Contract> {
-    const next = initial(input)
+    // A contract can be created late in a long session. Snapshot everything
+    // that happened before this definition so the new bounded run is charged
+    // only for work performed under its contract, not the entire chat history.
+    const baseline = await runtimeUsage(sessionID).catch((error) => {
+      // Contract helpers are also used before a persisted Session exists (for
+      // example by importers and unit-level contract construction). There is
+      // no prior runtime to exclude in that case. Preserve every other error.
+      if (error instanceof Context.NotFound && error.name === "instance") {
+        return { modelCalls: 0, toolCalls: 0, tokens: 0, wallClockMs: 0, costUsd: 0 }
+      }
+      throw error
+    })
+    const next = initial({ ...input, baseline })
     await JsonStore.update(file(sessionID), (data) => {
       const current = Contract.safeParse(data)
       if (!current.success) return next
@@ -1072,11 +1091,12 @@ export namespace SessionResearch {
     })
   }
 
-  export type RuntimeUsage = NonNullable<Budget["lastUsage"]>
   export type RuntimeDecision = {
     decision: "allow" | "finalize" | "block"
     usage?: RuntimeUsage
     reason?: string
+    boundary?: "hard" | "finalization"
+    finalizationCall?: number
   }
 
   function messageTokens(message: MessageV2.Assistant) {
@@ -1089,10 +1109,19 @@ export namespace SessionResearch {
     )
   }
 
-  export async function runtimeUsage(sessionID: string): Promise<RuntimeUsage> {
+  function runtimeGate(error: MessageV2.Assistant["error"]) {
+    if (!error || error.name !== "UnknownError") return false
+    return /(?:research contract runtime budget is exhausted|bounded research run reached its (?:hard runtime limit|finalization boundary))/i.test(
+      error.data.message,
+    )
+  }
+
+  export async function runtimeUsage(sessionID: string, options?: { before?: number }): Promise<RuntimeUsage> {
     const { Session } = await import("@/session")
     const seen = new Set<string>()
     const intervals: Array<[number, number]> = []
+    const before = options?.before
+    const included = (time: number | undefined) => before === undefined || (time !== undefined && time <= before)
     const visit = async (id: string): Promise<RuntimeUsage> => {
       if (seen.has(id)) return { modelCalls: 0, toolCalls: 0, tokens: 0, wallClockMs: 0, costUsd: 0 }
       seen.add(id)
@@ -1101,27 +1130,51 @@ export namespace SessionResearch {
         Session.children(id),
         SessionTraceStore.read(id),
       ])
-      const completed = messages.filter(
-        (message) =>
-          message.info.role === "assistant" &&
-          (message.info.time.completed !== undefined || message.info.error !== undefined),
-      ).length
+      const retries = trace.retries.filter((item) => included(item.createdAt))
+      const harness = trace.harness.filter((item) => included(item.createdAt))
+      const manifests = new Set(harness.map((item) => item.messageID))
+      const inference = (message: MessageV2.Assistant) => {
+        if (runtimeGate(message.error)) return false
+        if (message.providerID === "openscience" && message.modelID === "local") return false
+        return (
+          manifests.has(message.id) || message.cost > 0 || messageTokens(message) > 0 || message.finish !== undefined
+        )
+      }
+      const completed = messages.filter((message) => {
+        if (message.info.role !== "assistant") return false
+        const terminal = message.info.time.completed !== undefined || message.info.error !== undefined
+        if (!terminal || !included(message.info.time.completed ?? message.info.time.created)) return false
+        return inference(message.info)
+      }).length
       const local = messages.reduce<RuntimeUsage>(
         (total, message) => {
           const assistant = message.info.role === "assistant" ? message.info : undefined
-          const tools = message.parts.filter((part) => part.type === "tool").length
-          if (assistant?.time.completed !== undefined)
-            intervals.push([assistant.time.created, assistant.time.completed])
+          const counted =
+            assistant &&
+            inference(assistant) &&
+            (before === undefined ||
+              ((assistant.time.completed !== undefined || assistant.error !== undefined) &&
+                included(assistant.time.completed ?? assistant.time.created)))
+          const tools = message.parts.filter((part) => {
+            if (part.type !== "tool") return false
+            if (before === undefined) return true
+            if (part.state.status === "pending") return false
+            return included(part.state.time.start)
+          }).length
+          if (counted && assistant.time.completed !== undefined && included(assistant.time.completed)) {
+            const start = before === undefined ? assistant.time.created : Math.min(assistant.time.created, before)
+            intervals.push([start, assistant.time.completed])
+          }
           return {
             modelCalls: total.modelCalls,
             toolCalls: total.toolCalls + tools,
-            tokens: total.tokens + (assistant ? messageTokens(assistant) : 0),
+            tokens: total.tokens + (counted ? messageTokens(assistant) : 0),
             wallClockMs: total.wallClockMs,
-            costUsd: total.costUsd + (assistant?.cost ?? 0),
+            costUsd: total.costUsd + (counted ? assistant.cost : 0),
           }
         },
         {
-          modelCalls: Math.max(completed + trace.retries.length, trace.harness.length),
+          modelCalls: Math.max(completed + retries.length, harness.length),
           toolCalls: 0,
           tokens: 0,
           wallClockMs: 0,
@@ -1169,15 +1222,87 @@ export namespace SessionResearch {
     return visit(sessionID)
   }
 
+  function subtract(usage: RuntimeUsage, baseline: RuntimeUsage): RuntimeUsage {
+    return {
+      modelCalls: Math.max(0, usage.modelCalls - baseline.modelCalls),
+      toolCalls: Math.max(0, usage.toolCalls - baseline.toolCalls),
+      tokens: Math.max(0, usage.tokens - baseline.tokens),
+      wallClockMs: Math.max(0, usage.wallClockMs - baseline.wallClockMs),
+      costUsd: Math.max(0, usage.costUsd - baseline.costUsd),
+    }
+  }
+
+  export function resumeIntent(parts: Array<{ type: string; text?: string; synthetic?: boolean }>) {
+    if (parts.some((part) => part.type !== "text")) return false
+    const text = parts
+      .filter((part) => part.type === "text" && !part.synthetic)
+      .map((part) => part.text ?? "")
+      .join(" ")
+      .trim()
+    return /^(?:please\s+)?(?:continue|contine|resume|keep going)(?:\s+please)?[.!]*$/i.test(text)
+  }
+
+  export async function resume(sessionID: string) {
+    const anchor = await runtimeContract(sessionID)
+    if (!anchor) return { resumed: false as const, reason: "No research contract is active." }
+    const observed = await runtimeUsage(anchor)
+    const result = { resumed: false, epoch: 0, sessionID: anchor, reason: "The current bounded run is still active." }
+    await JsonStore.update(file(anchor), (data) => {
+      const current = Contract.parse(data)
+      result.epoch = current.budget.runtimeEpoch
+      const exhausted =
+        current.budget.runtimeExhausted ||
+        (current.budget.runtimeFinalizing && current.budget.runtimeFinalizationCalls >= 2)
+      if (!exhausted) return current
+      result.resumed = true
+      result.epoch = current.budget.runtimeEpoch + 1
+      result.reason = "Started a fresh bounded runtime epoch from the existing contract and checkpoints."
+      return {
+        ...current,
+        budget: {
+          ...current.budget,
+          runtimeEpoch: result.epoch,
+          runtimeBaseline: observed,
+          runtimeFinalizationCalls: 0,
+          runtimeModelCalls: 0,
+          runtimeFinalizing: false,
+          runtimeExhausted: false,
+          runtimeReason: undefined,
+          lastUsage: {
+            modelCalls: 0,
+            toolCalls: 0,
+            tokens: 0,
+            wallClockMs: 0,
+            costUsd: 0,
+          },
+          updatedAt: Date.now(),
+        },
+        updatedAt: Date.now(),
+      }
+    })
+    return result
+  }
+
   export async function runtimePreflight(sessionID: string): Promise<RuntimeDecision> {
     const anchor = await runtimeContract(sessionID)
     if (!anchor) return { decision: "allow" as const }
     const observed = await runtimeUsage(anchor)
-    const result: RuntimeDecision = { decision: "allow", usage: observed }
+    const contract = (await read(anchor))!
+    // Contracts saved before runtime epochs were introduced are migrated from
+    // their creation timestamp. This unlocks old sessions without forgiving
+    // work that genuinely happened after the contract began.
+    const baseline = contract.budget.runtimeBaseline ?? (await runtimeUsage(anchor, { before: contract.createdAt }))
+    const measured = subtract(observed, baseline)
+    const result: RuntimeDecision = { decision: "allow", usage: measured }
     await JsonStore.update(file(anchor), (data) => {
       const current = Contract.parse(data)
-      const used = Math.max(current.budget.runtimeModelCalls, observed.modelCalls)
-      const usage = { ...observed, modelCalls: used }
+      const legacy = current.budget.runtimeBaseline === undefined
+      // Legacy contracts persisted the lifetime call count, so carrying that
+      // reservation forward would keep them falsely exhausted even after the
+      // creation-time baseline is reconstructed.
+      const reserved = legacy ? 0 : current.budget.runtimeModelCalls
+      const used = Math.max(reserved, measured.modelCalls)
+      const usage = { ...measured, modelCalls: used }
       const limits = current.budget.limits
       const hard =
         used >= limits.modelCalls ||
@@ -1198,26 +1323,31 @@ export namespace SessionResearch {
           ? [`cost limit ($${usage.costUsd.toFixed(4)}/$${limits.costUsd.toFixed(2)})`]
           : []),
       ]
-      const reason = reasons.join(", ") || current.budget.runtimeReason
-      const finalizing = reasons.length > 0 || current.budget.runtimeFinalizing
+      const reason = reasons.join(", ") || (legacy ? undefined : current.budget.runtimeReason)
+      const finalizing = reasons.length > 0 || (!legacy && current.budget.runtimeFinalizing)
       const decision =
         hard || (finalizing && current.budget.runtimeFinalizationCalls >= 2)
           ? ("block" as const)
           : finalizing
             ? ("finalize" as const)
             : ("allow" as const)
+      const boundary = hard ? ("hard" as const) : decision === "block" ? ("finalization" as const) : undefined
       const calls = used + Number(decision !== "block")
       result.decision = decision
       result.usage = { ...usage, modelCalls: calls }
       result.reason = reason
+      result.boundary = boundary
+      result.finalizationCall = decision === "finalize" ? current.budget.runtimeFinalizationCalls + 1 : undefined
       return {
         ...current,
         budget: {
           ...current.budget,
           runtimeModelCalls: calls,
+          runtimeBaseline: current.budget.runtimeBaseline ?? baseline,
           runtimeFinalizing: decision === "finalize",
           runtimeExhausted: decision === "block",
-          runtimeFinalizationCalls: current.budget.runtimeFinalizationCalls + (decision === "finalize" ? 1 : 0),
+          runtimeFinalizationCalls:
+            decision === "allow" ? 0 : current.budget.runtimeFinalizationCalls + (decision === "finalize" ? 1 : 0),
           runtimeReason: reason,
           lastUsage: result.usage,
           updatedAt: Date.now(),

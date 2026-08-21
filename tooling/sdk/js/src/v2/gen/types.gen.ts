@@ -9373,7 +9373,7 @@ export type SessionTraceResponses = {
       completedAt?: number
     }>
     failures: Array<{
-      kind: "model" | "tool" | "approval" | "job"
+      kind: "model" | "runtime" | "tool" | "approval" | "job"
       id: string
       message: string
       createdAt: number
@@ -9580,6 +9580,14 @@ export type SessionTraceResponses = {
           runtimeFinalizing?: boolean
           runtimeExhausted?: boolean
           runtimeReason?: string
+          runtimeEpoch?: number
+          runtimeBaseline?: {
+            modelCalls: number
+            toolCalls: number
+            tokens: number
+            wallClockMs: number
+            costUsd: number
+          }
           lastUsage?: {
             modelCalls: number
             toolCalls: number

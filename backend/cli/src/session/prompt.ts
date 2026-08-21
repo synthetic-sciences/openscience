@@ -201,6 +201,11 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
+    // A runtime gate stops before the provider sees the next user message.
+    // Recognize an unambiguous continuation reply locally so the same session
+    // can start a fresh bounded epoch instead of repeating the gate forever.
+    if (SessionResearch.resumeIntent(input.parts)) await SessionResearch.resume(input.sessionID)
+
     const message = await createUserMessage(input).catch((e) => {
       // e.g. no providers are available at all — surface the failure to the
       // session (the web UI listens for session.error) instead of only throwing.
@@ -2524,6 +2529,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     if (!configured && input.command === Command.Default.CONTEXT) return context(input)
     if (!configured && input.command === Command.Default.STOP) return stop(input)
     if (!configured && input.command === Command.Default.CHECKPOINT) return checkpoint(input)
+    if (!configured && input.command === Command.Default.RESUME) {
+      const result = await SessionResearch.resume(input.sessionID)
+      if (!result.resumed) return notice(input, result.reason)
+    }
 
     // /compact is an action, not a prompt template: enqueue a compaction task
     // and run the loop to process it (same machinery as auto-compaction), then

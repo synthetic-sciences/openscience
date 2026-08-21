@@ -78,6 +78,7 @@ export namespace Command {
     STATUS: "status",
     CONTEXT: "context",
     STOP: "stop",
+    RESUME: "resume",
     COMPACT: "compact",
     HANDOFF: "handoff",
     CHECKPOINT: "checkpoint",
@@ -165,6 +166,22 @@ export namespace Command {
         menu: true,
         get template() {
           return ""
+        },
+        hints: [],
+      },
+      [Default.RESUME]: {
+        name: Default.RESUME,
+        description: "resume an exhausted research contract from its current checkpoints",
+        source: "builtin",
+        category: "research",
+        usage: "/resume",
+        menu: true,
+        get template() {
+          return [
+            "The user explicitly authorized a fresh bounded runtime epoch for the existing research contract.",
+            "Continue from the preserved stages, evidence, Results, and checkpoints without repeating completed work.",
+            "Finish the genuine next incomplete gate, or return a clear verified partial result if the new bound is reached.",
+          ].join("\n")
         },
         hints: [],
       },

@@ -9,10 +9,10 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { Todo } from "../../src/session/todo"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
-const names = ["init", "plan", "goal", "status", "context", "stop", "compact", "handoff", "checkpoint"]
+const names = ["init", "plan", "goal", "status", "context", "stop", "resume", "compact", "handoff", "checkpoint"]
 const workflows = ["review", "verify", "reproduce", "compare", "sources", "export"]
 const actions = ["init", "stop", "handoff", "checkpoint"]
-const primary = ["compact", "context", "plan", "goal", "status"]
+const primary = ["compact", "context", "plan", "goal", "resume", "status"]
 
 async function seed(sessionID: string) {
   const message: MessageV2.User = {
@@ -57,6 +57,8 @@ describe("research slash commands", () => {
         expect(commands.get("status")?.menu).toBe(true)
         expect(commands.get("context")?.menu).toBe(true)
         expect(commands.get("stop")?.menu).toBe(true)
+        expect(commands.get("resume")?.menu).toBe(true)
+        expect(commands.get("resume")?.category).toBe("research")
         expect(commands.get("checkpoint")?.menu).toBe(true)
         expect(commands.get("checkpoint")?.category).toBe("session")
         expect(await commands.get("checkpoint")?.template).toBe("")
@@ -214,6 +216,15 @@ describe("research slash commands", () => {
         expect(goal.info.role === "assistant" ? goal.info.cost : -1).toBe(0)
         expect(goalText?.type === "text" ? goalText.ignored : false).toBe(true)
         expect(goalText?.type === "text" ? goalText.text : "").toContain("Describe the objective after `/goal`.")
+
+        const resume = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "resume",
+          arguments: "",
+        })
+        const resumeText = resume.parts.find((part) => part.type === "text")
+        expect(resume.info.role === "assistant" ? resume.info.cost : -1).toBe(0)
+        expect(resumeText?.type === "text" ? resumeText.text : "").toContain("No research contract is active")
 
         const checkpoint = await SessionPrompt.command({
           sessionID: session.id,

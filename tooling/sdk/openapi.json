@@ -22122,6 +22122,7 @@
                             "type": "string",
                             "enum": [
                               "model",
+                              "runtime",
                               "tool",
                               "approval",
                               "job"
@@ -22686,6 +22687,114 @@
                                     "type": "string",
                                     "maxLength": 2000
                                   },
+                                  "evidenceRefs": {
+                                    "default": [],
+                                    "maxItems": 20,
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "ref": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 1000
+                                            },
+                                            "note": {
+                                              "type": "string",
+                                              "maxLength": 1000
+                                            },
+                                            "verifiedAt": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "artifact"
+                                            },
+                                            "artifactID": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "versionID": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "path": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            }
+                                          },
+                                          "required": [
+                                            "ref",
+                                            "verifiedAt",
+                                            "kind",
+                                            "artifactID",
+                                            "versionID",
+                                            "path",
+                                            "sha256"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "ref": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 1000
+                                            },
+                                            "note": {
+                                              "type": "string",
+                                              "maxLength": 1000
+                                            },
+                                            "verifiedAt": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "tool"
+                                            },
+                                            "tool": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "callID": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "status": {
+                                              "type": "string",
+                                              "enum": [
+                                                "completed",
+                                                "error"
+                                              ]
+                                            },
+                                            "outputHash": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            }
+                                          },
+                                          "required": [
+                                            "ref",
+                                            "verifiedAt",
+                                            "kind",
+                                            "tool",
+                                            "callID",
+                                            "status",
+                                            "outputHash"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  },
                                   "detail": {
                                     "type": "string",
                                     "maxLength": 1000
@@ -22783,6 +22892,150 @@
                                     "type": "string",
                                     "maxLength": 2000
                                   },
+                                  "evidenceRefs": {
+                                    "default": [],
+                                    "maxItems": 20,
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "ref": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 1000
+                                            },
+                                            "note": {
+                                              "type": "string",
+                                              "maxLength": 1000
+                                            },
+                                            "verifiedAt": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "artifact"
+                                            },
+                                            "artifactID": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "versionID": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "path": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            }
+                                          },
+                                          "required": [
+                                            "ref",
+                                            "verifiedAt",
+                                            "kind",
+                                            "artifactID",
+                                            "versionID",
+                                            "path",
+                                            "sha256"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "ref": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 1000
+                                            },
+                                            "note": {
+                                              "type": "string",
+                                              "maxLength": 1000
+                                            },
+                                            "verifiedAt": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "tool"
+                                            },
+                                            "tool": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "callID": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "status": {
+                                              "type": "string",
+                                              "enum": [
+                                                "completed",
+                                                "error"
+                                              ]
+                                            },
+                                            "outputHash": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            }
+                                          },
+                                          "required": [
+                                            "ref",
+                                            "verifiedAt",
+                                            "kind",
+                                            "tool",
+                                            "callID",
+                                            "status",
+                                            "outputHash"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "metric": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 120
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "direction": {
+                                        "type": "string",
+                                        "enum": [
+                                          "maximize",
+                                          "minimize"
+                                        ]
+                                      },
+                                      "baseline": {
+                                        "type": "number"
+                                      },
+                                      "target": {
+                                        "type": "number"
+                                      },
+                                      "unit": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 40
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "value",
+                                      "direction"
+                                    ]
+                                  },
                                   "recordedAt": {
                                     "type": "number"
                                   }
@@ -22823,6 +23076,149 @@
                                 },
                                 "lastBalanceUsd": {
                                   "type": "number"
+                                },
+                                "limits": {
+                                  "default": {
+                                    "modelCalls": 128,
+                                    "toolCalls": 1024,
+                                    "tokens": 5000000,
+                                    "wallClockMs": 86400000,
+                                    "costUsd": 200
+                                  },
+                                  "type": "object",
+                                  "properties": {
+                                    "modelCalls": {
+                                      "default": 128,
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 10000
+                                    },
+                                    "toolCalls": {
+                                      "default": 1024,
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 100000
+                                    },
+                                    "tokens": {
+                                      "default": 5000000,
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000000
+                                    },
+                                    "wallClockMs": {
+                                      "default": 86400000,
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 2592000000
+                                    },
+                                    "costUsd": {
+                                      "default": 200,
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 100000
+                                    }
+                                  }
+                                },
+                                "runtimeFinalizationCalls": {
+                                  "default": 0,
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "runtimeModelCalls": {
+                                  "default": 0,
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "runtimeFinalizing": {
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "runtimeExhausted": {
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "runtimeReason": {
+                                  "type": "string"
+                                },
+                                "runtimeEpoch": {
+                                  "default": 1,
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "runtimeBaseline": {
+                                  "type": "object",
+                                  "properties": {
+                                    "modelCalls": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "toolCalls": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "tokens": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "wallClockMs": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "costUsd": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "modelCalls",
+                                    "toolCalls",
+                                    "tokens",
+                                    "wallClockMs",
+                                    "costUsd"
+                                  ]
+                                },
+                                "lastUsage": {
+                                  "type": "object",
+                                  "properties": {
+                                    "modelCalls": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "toolCalls": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "tokens": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "wallClockMs": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "costUsd": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "modelCalls",
+                                    "toolCalls",
+                                    "tokens",
+                                    "wallClockMs",
+                                    "costUsd"
+                                  ]
                                 },
                                 "updatedAt": {
                                   "type": "number"
