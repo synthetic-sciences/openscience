@@ -339,35 +339,12 @@ export namespace SessionResearch {
     evidence: "claims",
   }
 
-  const outputs: Record<Template, Deliverable[]> = {
-    minimal: [],
-    empirical: [
-      { path: "analysis.py", label: "Rerunnable analysis", required: true },
-      { path: "metrics.json", label: "Machine-readable metrics", required: true },
-      { path: "report.md", label: "Research report", required: true },
-      { path: "REPRODUCE.md", label: "Reproduction instructions", required: true },
-    ],
-    evidence: [
-      { path: "report.md", label: "Evidence synthesis", required: true },
-      { path: "claims.csv", label: "Claim-evidence matrix", required: true },
-      { path: "sources.csv", label: "Source inventory", required: true },
-      { path: "REPRODUCE.md", label: "Reproduction instructions", required: true },
-    ],
-  }
-
   const validations: Record<Template, Array<{ id: string; label: string }>> = {
-    minimal: [{ id: "artifact-inspection", label: "Inspect every requested deliverable" }],
-    empirical: [
-      { id: "clean-run", label: "Run the saved entry point in a clean process" },
-      { id: "machine-output", label: "Recompute report numbers from machine outputs" },
-      { id: "checkpoint-reload", label: "Reload saved models or checkpoints" },
-      { id: "figure-qa", label: "Inspect every generated figure" },
-    ],
+    minimal: [],
+    empirical: [{ id: "result-verification", label: "Verify the result against its success criterion" }],
     evidence: [
       { id: "source-verification", label: "Verify claims against primary sources" },
-      { id: "quote-verification", label: "Verify every quotation and attributed number" },
       { id: "contradiction-audit", label: "Adjudicate material contradictions" },
-      { id: "artifact-inspection", label: "Inspect the final synthesis and tables" },
     ],
   }
 
@@ -386,11 +363,15 @@ export namespace SessionResearch {
       domain: input.domain,
       template: input.template,
       stages: phases[input.domain].map((stage) => ({ ...stage, status: "pending", updatedAt: now })),
-      // An explicit list is the user's requested result contract, not an
-      // add-on to template filenames. This matters for evidence tasks whose
-      // exact machine-readable names often differ from the generic defaults.
-      deliverables: input.deliverables?.length ? input.deliverables : outputs[input.template],
-      checks: validations[input.template].map((check) => ({ ...check, status: "pending", updatedAt: now })),
+      // Result files are explicit. Templates describe the workflow and its
+      // evidence standard; they must not invent a report or fixed artifact set.
+      deliverables: input.deliverables ?? [],
+      checks: [
+        ...validations[input.template],
+        ...(input.deliverables?.length
+          ? [{ id: "artifact-inspection", label: "Inspect every requested deliverable" }]
+          : []),
+      ].map((check) => ({ ...check, status: "pending", updatedAt: now })),
       failures: [],
       trials: [],
       budget: {

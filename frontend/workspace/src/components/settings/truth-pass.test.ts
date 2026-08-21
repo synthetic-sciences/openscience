@@ -26,6 +26,7 @@ describe("launch settings truth pass", () => {
       "local-models",
       "skills",
       "connectors",
+      "research-tools",
       "compute",
       "network",
       "permissions",

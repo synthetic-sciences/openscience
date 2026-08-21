@@ -60,6 +60,7 @@ describe("floating prompt surface", () => {
     expect(source).toContain('aria-label="Model and send"')
     expect(source).toContain('aria-label="Research tools"')
     expect(popover).toContain("aria-label={`Model: ${label()}`}")
+    expect(popover).toContain("`${name} · ${routeAccess(model)}`")
     expect(source).not.toContain('aria-label="Research capabilities"')
     expect(source).not.toContain("workspace-composer__overflow")
     expect(source).toContain('class="workspace-composer__research-tools"')

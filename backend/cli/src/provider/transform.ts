@@ -973,7 +973,12 @@ export namespace ProviderTransform {
       // verified org, but that is the SAME gate OpenAI requires to *stream* gpt-5 at
       // all. Any org that can stream the model can also receive these keys, so this
       // adds no failure surface beyond the streaming requirement already in force.
-      if (input.model.providerID.startsWith("synsci") || viaManagedProxy || input.model.providerID === "openai") {
+      if (
+        input.model.providerID.startsWith("synsci") ||
+        viaManagedProxy ||
+        input.model.providerID === "openai" ||
+        input.model.providerID === "openai-codex"
+      ) {
         result["promptCacheKey"] = input.sessionID
         result["include"] = ["reasoning.encrypted_content"]
         result["reasoningSummary"] = "auto"

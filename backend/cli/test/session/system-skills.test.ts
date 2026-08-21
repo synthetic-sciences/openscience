@@ -159,3 +159,30 @@ test("availableSkills cache follows real skill catalog invalidation", async () =
     },
   })
 })
+
+test("availableSkills gives explicit routes for venue and figure work", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await writeSkill(dir, "venue-templates", "writing")
+      await writeSkill(dir, "ml-paper-writing", "writing")
+      await writeSkill(dir, "scientific-schematics", "visualization")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const section = await SystemPrompt.availableSkills([])
+      expect(section).toContain("<skill-routing>")
+      expect(section).toContain(
+        "Venue-specific paper formatting, submission checks, or page limits: venue-templates, ml-paper-writing",
+      )
+      expect(section).toContain(
+        "Technical figures, architectures, workflows, or scientific diagrams: scientific-schematics",
+      )
+      expect(section).toContain("load the listed skill or skills before the first substantive edit")
+    },
+  })
+})

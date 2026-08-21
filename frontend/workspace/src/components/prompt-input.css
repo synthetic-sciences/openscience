@@ -275,7 +275,7 @@
   background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
   background-clip: padding-box;
   box-shadow:
-    0 18px 44px color-mix(in srgb, var(--surface-base) 72%, transparent),
+    var(--atlas-shadow-md),
     inset 0 1px color-mix(in srgb, var(--text-strong) 5%, transparent);
   font-family: var(--font-family-sans);
   font-synthesis: none;
@@ -418,7 +418,7 @@ form.workspace-composer {
 
 form.workspace-composer:focus-within {
   border-color: var(--border-base);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-strong) 5%, transparent);
+  box-shadow: var(--focus-lit);
 }
 
 .workspace-composer__editor {
@@ -574,7 +574,7 @@ form.workspace-composer .workspace-composer__intent-close {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--text-weak) 16%, transparent);
+  background: var(--surface-base-hover);
   color: currentColor;
 }
 

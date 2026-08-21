@@ -43,6 +43,7 @@ import { ResearchContractTool } from "./research-contract"
 import { State } from "@/project/state"
 import { ProjectTrust } from "@/project/trust"
 import { AuthoritySignal } from "@/project/authority-signal"
+import { GenerateImageTool } from "./generate-image"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -173,6 +174,7 @@ export namespace ToolRegistry {
       AtlasRecordTool,
       PythonTool,
       RTool,
+      GenerateImageTool,
       ArtifactTool,
       ResearchContractTool,
       ComputeJobTool,

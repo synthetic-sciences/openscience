@@ -31,6 +31,25 @@ test("subprocess env filtering still passes BYOK OpenRouter keys", () => {
   expect(filtered.OPENROUTER_API_KEY).toBe("sk-or-user-owned")
 })
 
+test("subprocess env filtering repins BYOK away from an inherited Atlas proxy", () => {
+  const filtered = OpenScience.filterEnvForSubprocess({
+    OPENROUTER_API_KEY: "sk-or-user-owned",
+    OPENROUTER_BASE_URL: "https://atlas.test/api/llm/proxy/openrouter/v1",
+  })
+
+  expect(filtered.OPENROUTER_API_KEY).toBe("sk-or-user-owned")
+  expect(filtered.OPENROUTER_BASE_URL).toBe("https://openrouter.ai/api/v1")
+})
+
+test("subprocess env filtering preserves a BYOK custom gateway", () => {
+  const filtered = OpenScience.filterEnvForSubprocess({
+    OPENROUTER_API_KEY: "sk-or-user-owned",
+    OPENROUTER_BASE_URL: "https://my-gateway.example/api/v1",
+  })
+
+  expect(filtered.OPENROUTER_BASE_URL).toBe("https://my-gateway.example/api/v1")
+})
+
 test("subprocess env filtering keeps legacy skill credentials but never exposes Modal tokens", () => {
   const filtered = OpenScience.filterEnvForSubprocess({
     PATH: "/usr/bin",
@@ -117,6 +136,18 @@ test("mergeByokEnv does not override an existing value", () => {
     { openrouter: { type: "api", key: "sk-or-from-auth" } },
   )
   expect(merged.OPENROUTER_API_KEY).toBe("sk-or-from-shell")
+})
+
+test("mergeByokEnv repairs an existing BYOK key paired with the managed proxy", () => {
+  const merged = OpenScience.mergeByokEnv(
+    {
+      OPENROUTER_API_KEY: "sk-or-from-shell",
+      OPENROUTER_BASE_URL: "https://app.syntheticsciences.ai/api/llm/proxy/openrouter/v1",
+    },
+    {},
+  )
+
+  expect(merged.OPENROUTER_BASE_URL).toBe("https://openrouter.ai/api/v1")
 })
 
 test("mergeByokEnv supports the canonical direct-provider set and aliases", () => {

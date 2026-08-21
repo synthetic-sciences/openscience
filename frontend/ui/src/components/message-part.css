@@ -210,15 +210,30 @@
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--text-base);
-  opacity: 0.8;
   line-height: var(--line-height-large);
 
+  [data-slot="reasoning-part-label"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    color: var(--text-weaker);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.02em;
+
+    [data-component="icon"] {
+      color: var(--icon-weak);
+    }
+  }
+
   [data-component="markdown"] {
-    margin-top: 24px;
+    margin-top: 0;
     font-style: normal;
+    color: var(--text-weak);
 
     p:has(strong) {
-      margin-top: 24px;
+      margin-top: 16px;
       margin-bottom: 0;
 
       &:first-child {
@@ -494,6 +509,242 @@
   }
 }
 
+[data-component="delegation-card"] {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-raised-base) 94%, transparent), transparent 58%),
+    var(--surface-base);
+  overflow: hidden;
+
+  &[data-outcome="error"],
+  &[data-outcome="partial"],
+  &[data-outcome="timed_out"] {
+    border-color: color-mix(in srgb, var(--border-critical-base) 55%, var(--border-weak-base));
+  }
+
+  [data-slot="delegation-header"] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  [data-slot="delegation-mark"] {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-weak-base);
+    border-radius: var(--radius-md);
+    color: var(--icon-base);
+    background: var(--surface-raised-base);
+  }
+
+  [data-slot="delegation-heading"] {
+    min-width: 0;
+
+    > strong {
+      display: block;
+      margin-top: 3px;
+      font-size: 14px;
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-base);
+    }
+
+    > p {
+      margin: 3px 0 0;
+      font-size: 13px;
+      line-height: 19px;
+      color: var(--text-weak);
+    }
+  }
+
+  [data-slot="delegation-eyebrow"] {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-weaker);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.04em;
+  }
+
+  [data-slot="delegation-status"] {
+    padding-left: 7px;
+    border-left: 1px solid var(--border-weak-base);
+    color: var(--text-weak);
+  }
+
+  [data-slot="delegation-open"] {
+    height: 30px;
+    padding: 0 9px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--border-weak-base);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised-base);
+    color: var(--text-weak);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+
+    &:hover {
+      border-color: var(--border-base);
+      color: var(--text-base);
+    }
+  }
+
+  [data-slot="delegation-metrics"] {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 0 12px 10px 52px;
+
+    > span {
+      padding: 3px 7px;
+      border-radius: var(--radius-xs);
+      background: var(--surface-raised-base);
+      color: var(--text-weaker);
+      font-size: 11px;
+      line-height: 16px;
+
+      &[data-failed] {
+        color: var(--text-on-critical-base);
+        background: var(--surface-critical-weak);
+      }
+    }
+  }
+
+  [data-slot="delegation-section-label"] {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--text-weaker);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.04em;
+  }
+
+  [data-slot="delegation-current"] {
+    margin: 0 12px 10px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--border-weaker-base);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-raised-base) 78%, transparent);
+    color: var(--text-weaker);
+    font-size: 12px;
+
+    > strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-base);
+      font-weight: var(--font-weight-medium);
+    }
+  }
+
+  [data-slot="delegation-findings"],
+  [data-slot="delegation-activity"] {
+    margin: 0 12px 10px;
+    padding: 10px;
+    border: 1px solid var(--border-weaker-base);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-raised-base) 72%, transparent);
+  }
+
+  [data-slot="delegation-findings"] [data-component="markdown"] {
+    margin-top: 0;
+    color: var(--text-weak);
+    font-size: 13px;
+
+    > :first-child {
+      margin-top: 0;
+    }
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  [data-slot="delegation-activity"] {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  [data-slot="delegation-activity-row"] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+
+    > [data-component="icon"] {
+      color: var(--icon-weak);
+    }
+
+    > div {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+
+      > strong {
+        flex-shrink: 0;
+        color: var(--text-weak);
+        font-size: 12px;
+        font-weight: var(--font-weight-medium);
+      }
+
+      > span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--text-weaker);
+        font-size: 11px;
+      }
+    }
+  }
+
+  [data-slot="delegation-activity-failed"] {
+    color: var(--text-on-critical-base);
+    font-size: 11px;
+  }
+
+  [data-slot="delegation-raw"] {
+    border-top: 1px solid var(--border-weaker-base);
+
+    > summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      list-style: none;
+      color: var(--text-weaker);
+      font-size: 11px;
+
+      &::-webkit-details-marker {
+        display: none;
+      }
+    }
+
+    &[open] > summary {
+      color: var(--text-weak);
+      background: color-mix(in srgb, var(--surface-raised-base) 62%, transparent);
+    }
+  }
+}
+
 [data-component="task-tools"] {
   padding: 2px 18px 12px;
   display: flex;
@@ -530,6 +781,29 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 560px) {
+  [data-component="delegation-card"] {
+    [data-slot="delegation-header"] {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    [data-slot="delegation-open"] {
+      grid-column: 2;
+      justify-self: start;
+    }
+
+    [data-slot="delegation-metrics"] {
+      padding-left: 12px;
+    }
+
+    [data-slot="delegation-activity-row"] > div {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 1px;
+    }
   }
 }
 

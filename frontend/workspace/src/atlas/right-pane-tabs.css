@@ -89,11 +89,11 @@
 .research-inspector__header {
   box-sizing: border-box;
   min-width: 0;
-  min-height: 40px;
-  height: 40px;
+  min-height: 44px;
+  height: 44px;
   display: flex;
   align-items: stretch;
-  flex: 0 0 40px;
+  flex: 0 0 44px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-subtle);
 }
@@ -131,9 +131,9 @@
 .research-inspector__control {
   appearance: none;
   box-sizing: border-box;
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   display: inline-grid;
   place-items: center;
   padding: 0;
@@ -167,7 +167,7 @@
 
 .inspector-tabs {
   min-width: 0;
-  height: 40px;
+  height: 44px;
   flex: 1 1 auto;
   display: flex;
   align-items: center;
@@ -186,7 +186,7 @@
 .inspector-tab-pair {
   min-width: 0;
   max-width: 180px;
-  min-height: 30px;
+  min-height: 32px;
   display: inline-flex;
   align-items: stretch;
   flex: 0 1 auto;
@@ -213,7 +213,7 @@
 .inspector-tab-pair .inspector-tab {
   appearance: none;
   min-width: 0;
-  min-height: 30px;
+  min-height: 32px;
   flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
@@ -247,7 +247,7 @@
   appearance: none;
   width: 0;
   min-width: 0;
-  min-height: 30px;
+  min-height: 32px;
   display: inline-grid;
   place-items: center;
   padding: 0;

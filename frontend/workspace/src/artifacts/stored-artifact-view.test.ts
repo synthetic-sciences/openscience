@@ -28,6 +28,13 @@ test("keeps the saved artifact surface focused on preview while provenance UI is
   expect(source).not.toContain("/review/artifact")
 })
 
+test("renders saved PDFs with the same first-party viewer used by project files", () => {
+  expect(source).toContain('import { PdfViewer } from "@/science/renderers/documents/PdfViewer"')
+  expect(source).toContain('<PdfViewer kind="pdf" data={{ url: props.url, maxPages: 40 }} />')
+  expect(source).not.toContain("<iframe")
+  expect(source).toContain('return "PDF"')
+})
+
 test("keeps rename and recoverable deletion in the stored artifact lifecycle", () => {
   expect(source).toContain('method: "PATCH"')
   expect(source).toContain('method: "DELETE"')

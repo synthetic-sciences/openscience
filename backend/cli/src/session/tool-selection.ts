@@ -8,6 +8,7 @@ export namespace ToolSelection {
     "atlas",
     "atlas_record",
     "compute_job",
+    "generate_image",
     "provenance_query",
     "provenance_record",
     "provenance_resolve",
@@ -141,6 +142,10 @@ export namespace ToolSelection {
         return /\b(?:cluster|compute job|gpu|job broker|modal|remote compute|slurm)\b/i.test(message)
       if (tool === "research_contract")
         return /\b(?:research contract|research loop|autonomous research)\b/i.test(message)
+      if (tool === "generate_image")
+        return /\b(?:diagram|figure|graphic|illustration|image|nano banana|poster|schematic|slide|visual)\b/i.test(
+          message,
+        )
       if (tool === "atlas" || tool === "atlas_record") return /\batlas\b/i.test(message)
       if (tool.startsWith("provenance_")) return /\b(?:lineage|provenance)\b/i.test(message)
       if (tool.startsWith("science_")) return /\bscientific database\b|\bscience tool\b/i.test(message)

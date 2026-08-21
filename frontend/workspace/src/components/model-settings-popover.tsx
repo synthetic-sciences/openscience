@@ -350,9 +350,12 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
     onCleanup(() => window.removeEventListener("keydown", dismiss, true))
   })
 
-  const label = createMemo(() =>
-    current() ? modelDisplayName(current()!.name, current()!.provider.id, current()!.id) : "Select model",
-  )
+  const label = createMemo(() => {
+    const model = current()
+    if (!model) return "Select model"
+    const name = modelDisplayName(model.name, model.provider.id, model.id)
+    return `${name} · ${routeAccess(model)}`
+  })
 
   const focus = (selector: string, reset = false) =>
     queueMicrotask(() => {

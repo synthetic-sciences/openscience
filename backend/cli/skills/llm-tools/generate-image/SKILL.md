@@ -2,180 +2,75 @@
 name: generate-image
 description: Generate or edit images using AI models (FLUX, Gemini). Use for general-purpose image generation including photos, illustrations, artwork, visual assets, concept art, and any image that isn't a technical diagram or schematic. For flowcharts, circuits, pathways, and technical diagrams, use the scientific-schematics skill instead.
 category: llm-tools
+allowed-tools: [Read, generate_image]
 ---
 
 # Generate Image
 
-Generate and edit high-quality images using OpenRouter's image generation models including FLUX.2 Pro and Gemini 3 Pro.
+Generate or edit a high-quality image with OpenScience's native `generate_image` tool. The tool keeps credentials in the trusted host and saves the returned image directly into the connected workspace.
 
-## When to Use This Skill
+## Required route
 
-**Use generate-image for:**
-- Photos and photorealistic images
-- Artistic illustrations and artwork
-- Concept art and visual concepts
-- Visual assets for presentations or documents
-- Image editing and modifications
-- Any general-purpose image generation needs
+Inside OpenScience, always call the native `generate_image` tool. Do not invoke `scripts/generate_image.py` through Bash: that standalone helper can use a shell-provided BYOK key, but arbitrary subprocesses intentionally cannot receive the managed wallet token.
 
-**Use scientific-schematics instead for:**
-- Flowcharts and process diagrams
-- Circuit diagrams and electrical schematics
-- Biological pathways and signaling cascades
-- System architecture diagrams
-- CONSORT diagrams and methodology flowcharts
-- Any technical/schematic diagrams
+Credential routing is automatic:
 
-## Quick Start
+1. A connected user-owned OpenRouter key is used when BYOK routing is active.
+2. Otherwise, when managed LLM spend is enabled, a signed-in user's funded OpenScience wallet is used.
+3. Only stop when neither route is available or the selected route reports insufficient credit.
 
-Use the `scripts/generate_image.py` script to generate or edit images:
+Never ask the user to paste a secret into chat. Do not claim that wallet Credits are unavailable until the native tool has attempted the resolved route.
 
-```bash
-# Generate a new image
-python scripts/generate_image.py "A beautiful sunset over mountains"
+## Tool contract
 
-# Edit an existing image
-python scripts/generate_image.py "Make the sky purple" --input photo.jpg
+Call `generate_image` with:
+
+- `prompt` (required): detailed generation or editing instructions.
+- `output_path`: destination in the connected workspace; default `generated-image.png`.
+- `input_path`: existing image for an edit.
+- `model`: OpenRouter image model; default `google/gemini-3-pro-image` (Nano Banana Pro).
+- `aspect_ratio`: optional `1:1`, `3:2`, `2:3`, `4:3`, `3:4`, `16:9`, or `9:16`.
+
+Example generation:
+
+```json
+{
+  "prompt": "Editorial scientific illustration of a DNA double helix with one mutation site highlighted, restrained blue and amber palette, no decorative text",
+  "output_path": "figures/dna-mutation.png",
+  "aspect_ratio": "3:2"
+}
 ```
 
-This generates/edits an image and saves it as `generated_image.png` in the current directory.
+Example edit:
 
-## API Key Setup
-
-**CRITICAL**: The script requires an OpenRouter API key. It resolves the key in
-this order: `--api-key` flag → `OPENROUTER_API_KEY` environment variable →
-`.env` file. If the user connected an OpenRouter key (`openscience login` or the
-dashboard), it is already exported into the environment and the script will pick
-it up automatically. If the user pastes their own key in chat, pass it inline:
-`OPENROUTER_API_KEY="<key>" python scripts/generate_image.py "..."`.
-
-If no key is found, inform the user they can:
-- Connect OpenRouter via `openscience login` or at https://app.syntheticsciences.ai → Services
-- Or set it for the run: `export OPENROUTER_API_KEY=your-api-key-here`
-- Get an API key from: https://openrouter.ai/keys
-
-## Model Selection
-
-**Default model**: `google/gemini-3-pro-image` (Nano Banana Pro, GA — high quality, recommended)
-
-**Available models for generation and editing**:
-- `google/gemini-3-pro-image` - Nano Banana Pro (GA), supports generation + editing
-- `google/gemini-3-pro-image-preview` - Preview slug (retires 2026-06-25); use the GA slug above
-- `black-forest-labs/flux.2-pro` - Fast, high quality, supports generation + editing
-
-**Generation only**:
-- `black-forest-labs/flux.2-flex` - Fast and cheap, but not as high quality as pro
-
-Select based on:
-- **Quality**: Use gemini-3-pro or flux.2-pro
-- **Editing**: Use gemini-3-pro or flux.2-pro (both support image editing)
-- **Cost**: Use flux.2-flex for generation only
-
-## Common Usage Patterns
-
-### Basic generation
-```bash
-python scripts/generate_image.py "Your prompt here"
+```json
+{
+  "prompt": "Preserve every plotted value and label; improve spacing and contrast for a two-column conference paper",
+  "input_path": "figures/ablation-draft.png",
+  "output_path": "figures/ablation-refined.png",
+  "aspect_ratio": "4:3"
+}
 ```
 
-### Specify model
-```bash
-python scripts/generate_image.py "A cat in space" --model "black-forest-labs/flux.2-pro"
-```
+## Model selection
 
-### Custom output path
-```bash
-python scripts/generate_image.py "Abstract art" --output artwork.png
-```
+- `google/gemini-3-pro-image`: Nano Banana Pro; recommended for generation and editing.
+- `black-forest-labs/flux.2-pro`: fast, high-quality generation and editing.
+- `black-forest-labs/flux.2-flex`: cheaper generation-only alternative.
 
-### Edit an existing image
-```bash
-python scripts/generate_image.py "Make the background blue" --input photo.jpg
-```
+Use Nano Banana Pro unless the user requests another model or a measured iteration shows a reason to switch.
 
-### Edit with a specific model
-```bash
-python scripts/generate_image.py "Add sunglasses to the person" --input portrait.png --model "black-forest-labs/flux.2-pro"
-```
+## Quality workflow
 
-### Edit with custom output
-```bash
-python scripts/generate_image.py "Remove the text from the image" --input screenshot.png --output cleaned.png
-```
+1. Inspect the destination document or visual context first.
+2. State the communication goal, content constraints, aspect ratio, and typography constraints in the prompt.
+3. Generate one purposeful candidate; never create filler images merely because an output slot exists.
+4. Open and inspect the saved image.
+5. Check factual content, legibility at final size, cropping, color accessibility, and unwanted invented text.
+6. Refine only when a concrete defect remains. Preserve requested content during edits.
 
-### Multiple images
-Run the script multiple times with different prompts or output paths:
-```bash
-python scripts/generate_image.py "Image 1 description" --output image1.png
-python scripts/generate_image.py "Image 2 description" --output image2.png
-```
+For a technical architecture, method flow, pathway, or experimental diagram, load `scientific-schematics` and apply its publication checks while still using the native `generate_image` tool for the Nano Banana call.
 
-## Script Parameters
+## Standalone script
 
-- `prompt` (required): Text description of the image to generate, or editing instructions
-- `--input` or `-i`: Input image path for editing (enables edit mode)
-- `--model` or `-m`: OpenRouter model ID (default: google/gemini-3-pro-image)
-- `--output` or `-o`: Output file path (default: generated_image.png)
-- `--api-key`: OpenRouter API key (overrides .env file)
-
-## Example Use Cases
-
-### For Scientific Documents
-```bash
-# Generate a conceptual illustration for a paper
-python scripts/generate_image.py "Microscopic view of cancer cells being attacked by immunotherapy agents, scientific illustration style" --output figures/immunotherapy_concept.png
-
-# Create a visual for a presentation
-python scripts/generate_image.py "DNA double helix structure with highlighted mutation site, modern scientific visualization" --output slides/dna_mutation.png
-```
-
-### For Presentations and Posters
-```bash
-# Title slide background
-python scripts/generate_image.py "Abstract blue and white background with subtle molecular patterns, professional presentation style" --output slides/background.png
-
-# Poster hero image
-python scripts/generate_image.py "Laboratory setting with modern equipment, photorealistic, well-lit" --output poster/hero.png
-```
-
-### For General Visual Content
-```bash
-# Website or documentation images
-python scripts/generate_image.py "Professional team collaboration around a digital whiteboard, modern office" --output docs/team_collaboration.png
-
-# Marketing materials
-python scripts/generate_image.py "Futuristic AI brain concept with glowing neural networks" --output marketing/ai_concept.png
-```
-
-## Error Handling
-
-The script provides clear error messages for:
-- Missing API key (with setup instructions)
-- API errors (with status codes)
-- Unexpected response formats
-- Missing dependencies (requests library)
-
-If the script fails, read the error message and address the issue before retrying.
-
-## Notes
-
-- Images are returned as base64-encoded data URLs and automatically saved as PNG files
-- The script supports both `images` and `content` response formats from different OpenRouter models
-- Generation time varies by model (typically 5-30 seconds)
-- For image editing, the input image is encoded as base64 and sent to the model
-- Supported input image formats: PNG, JPEG, GIF, WebP
-- Check OpenRouter pricing for cost information: https://openrouter.ai/models
-
-## Image Editing Tips
-
-- Be specific about what changes you want (e.g., "change the sky to sunset colors" vs "edit the sky")
-- Reference specific elements in the image when possible
-- For best results, use clear and detailed editing instructions
-- Both Gemini 3 Pro and FLUX.2 Pro support image editing through OpenRouter
-
-## Integration with Other Skills
-
-- **scientific-schematics**: Use for technical diagrams, flowcharts, circuits, pathways
-- **generate-image**: Use for photos, illustrations, artwork, visual concepts
-- **scientific-slides**: Combine with generate-image for visually rich presentations
-- **latex-posters**: Use generate-image for poster visuals and hero images
+`scripts/generate_image.py` remains a BYOK-only helper for use outside OpenScience. It reads `--api-key`, `OPENROUTER_API_KEY`, or `.env` and calls public OpenRouter. It is not the in-product wallet route.

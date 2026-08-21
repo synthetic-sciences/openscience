@@ -12,6 +12,7 @@ import { SessionWorkspace } from "../../src/session/workspace"
 import { Storage } from "../../src/storage/storage"
 import { BashTool } from "../../src/tool/bash"
 import { NotebookTool as BiologyNotebookTool, shutdownBiologyKernels } from "../../src/tool/biology/notebook"
+import { assertExternalDirectory } from "../../src/tool/external-directory"
 import "../../src/tool/notebook"
 import "../../src/tool/rkernel"
 import { tmpdir, trustProject } from "../fixture/fixture"
@@ -58,6 +59,18 @@ const context = (sessionID: string) => ({
 })
 
 describe("managed project session scratch", () => {
+  test("lets brokered file tools use the managed project directory without a redundant grant", async () => {
+    await managed(async (root) => {
+      const session = await Session.create({ title: "managed source" })
+      const file = path.join(root, "source.ts")
+      await Bun.write(file, "export const value = 1\n")
+
+      const authorized = await assertExternalDirectory(context(session.id), file)
+
+      expect(authorized?.path).toBe(await fs.realpath(file))
+    })
+  })
+
   test("creates separate durable roots without changing project binding", async () => {
     await managed(async (root) => {
       const first = await Session.create({ title: "first" })
@@ -283,7 +296,7 @@ describe("managed project session scratch", () => {
           },
           context(first.id),
         ),
-      ).rejects.toThrow("External paths are read-only to shell commands")
+      ).rejects.toThrow("External write paths must be connected to this project")
 
       const python: KernelIdentity = {
         projectID: Instance.project.id,

@@ -28,7 +28,7 @@ const Define = z.object({
   action: z.literal("define"),
   objective: z.string().trim().min(1).max(2_000),
   domain: Domain.default("general"),
-  template: SessionResearch.Template.default("empirical"),
+  template: SessionResearch.Template.default("minimal"),
   deliverables: z
     .array(
       z.object({
@@ -86,7 +86,13 @@ const Check = z
 
 const Failure = z.object({
   action: z.literal("failure"),
-  stage: z.string().trim().min(1).max(120),
+  stage: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .describe("Contract stage ID. Omit to use the active or next pending stage.")
+    .optional(),
   candidate: z.string().trim().min(1).max(240),
   message: z.string().trim().min(1).max(4_000),
   disposition: z.string().trim().max(1_000).optional(),
@@ -385,10 +391,17 @@ export const ResearchContractTool = Tool.define("research_contract", {
       }
       if (params.action === "failure") {
         const input = Failure.parse(params)
+        const current = input.stage ? undefined : await SessionResearch.read(ctx.sessionID)
+        const stage =
+          input.stage ??
+          current?.stages.find((item) => item.status === "running")?.id ??
+          current?.stages.find((item) => item.status === "pending")?.id ??
+          current?.stages[0]?.id
+        if (!stage) throw new Error("No research contract stage is available for this failure")
         return SessionResearch.fail(
           ctx.sessionID,
           {
-            stage: input.stage,
+            stage,
             candidate: input.candidate,
             message: input.message,
             disposition: input.disposition,

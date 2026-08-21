@@ -815,9 +815,7 @@ describe("session filesystem grants", () => {
       await read
 
       await expect(request("read")).resolves.toBeUndefined()
-      const write = request("write")
-      const promptWrite = await wait(session.id)
-      expect(promptWrite).toBeDefined()
+      await expect(request("write")).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
       await expect(
         SessionFilesystem.authorize({
           sessionID: session.id,
@@ -825,9 +823,38 @@ describe("session filesystem grants", () => {
           access: "write",
         }),
       ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      expect((await PermissionNext.list()).filter((item) => item.sessionID === session.id)).toEqual([])
+    })
+  })
 
-      await PermissionNext.reply({ requestID: promptWrite!.id, reply: "reject" })
-      await expect(write).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+  test("keeps an explicit read-only connection read-only under automatic approval", async () => {
+    await using external = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "data.txt"), "external"),
+    })
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: external.path,
+        access: "read",
+        scope: "project",
+      })
+
+      const glob = path.join(external.path, "*")
+      await expect(
+        PermissionNext.ask({
+          sessionID: session.id,
+          permission: "external_directory",
+          patterns: [glob],
+          always: [glob],
+          metadata: { filesystem: { path: external.path, access: "write" } },
+          ruleset: PermissionNext.fromConfig({ external_directory: "allow" }),
+        }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      expect(await SessionFilesystem.allows({ sessionID: session.id, path: external.path, access: "write" })).toBe(
+        false,
+      )
+      expect(await Bun.file(path.join(external.path, "data.txt")).text()).toBe("external")
     })
   })
 })

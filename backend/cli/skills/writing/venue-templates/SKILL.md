@@ -437,6 +437,29 @@ python scripts/validate_format.py \
 
 ## Best Practices
 
+### Venue Compliance Gate
+
+For a current conference submission, treat the official author guidelines and official style files
+as the formatting authority. Before editing, record the applicable main-text limit, what is excluded
+from that limit, anonymization requirements, paper size, and required statements. Do not override an
+official style choice, including title alignment or spacing, merely because another layout looks more
+balanced.
+
+After compiling:
+
+1. Build from a fresh extraction of the exact source archive that will be delivered.
+2. Confirm the page size, total pages, embedded fonts, unresolved references, and build warnings.
+3. Identify the last page of counted main text and the first page of references or appendices; do not
+   infer compliance from total page count alone.
+4. Rasterize and inspect every page. At minimum, explicitly review the first page, every page with a
+   figure or table, the last counted page, the first excluded page, and the final page.
+5. Compare the first-page title and author layout with a clean build of the official template. If the
+   style intentionally uses left alignment, do not center it.
+
+For format-only work, preserve scientific text and existing figures. If the user requests a new or
+revised technical figure, load `scientific-schematics` and run its Nano Banana Pro generation and
+review loop before inserting the result.
+
 ### Template Selection
 1. **Verify currency**: Check template date and compare with latest author guidelines
 2. **Check official sources**: Many journals provide official LaTeX classes
@@ -684,4 +707,3 @@ The venue-templates skill provides comprehensive access to:
 7. **Integration** with other scientific writing skills
 
 Use this skill whenever you need venue-specific formatting guidance, writing style conventions, or templates for academic publishing.
-

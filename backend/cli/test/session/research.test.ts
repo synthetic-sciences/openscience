@@ -41,6 +41,46 @@ test("explicit deliverables replace generic template filenames", async () => {
   }
 })
 
+test("minimal contracts do not invent files or artifact checks", async () => {
+  const sessionID = `ses_research_${crypto.randomUUID()}`
+  try {
+    const contract = await SessionResearch.define(sessionID, {
+      objective: "Track a bounded scientific workflow",
+      domain: "general",
+      template: "minimal",
+    })
+
+    expect(contract.deliverables).toEqual([])
+    expect(contract.checks).toEqual([])
+  } finally {
+    await SessionResearch.remove(sessionID)
+  }
+})
+
+test("research templates do not invent reports or fixed artifact sets", async () => {
+  const empiricalID = `ses_research_${crypto.randomUUID()}`
+  const evidenceID = `ses_research_${crypto.randomUUID()}`
+  try {
+    const empirical = await SessionResearch.define(empiricalID, {
+      objective: "Validate an empirical result",
+      domain: "ml",
+      template: "empirical",
+    })
+    const evidence = await SessionResearch.define(evidenceID, {
+      objective: "Audit an evidence base",
+      domain: "evidence",
+      template: "evidence",
+    })
+
+    expect(empirical.deliverables).toEqual([])
+    expect(evidence.deliverables).toEqual([])
+    expect(empirical.checks.map((check) => check.id)).toEqual(["result-verification"])
+    expect(evidence.checks.map((check) => check.id)).toEqual(["source-verification", "contradiction-audit"])
+  } finally {
+    await Promise.all([SessionResearch.remove(empiricalID), SessionResearch.remove(evidenceID)])
+  }
+})
+
 test("persists, resumes, and truthfully assesses a research completion contract", async () => {
   const sessionID = `ses_research_${crypto.randomUUID()}`
   try {
@@ -445,7 +485,7 @@ test("requires observed evidence before a verification check may settle", async 
     const contract = await SessionResearch.define(sessionID, {
       objective: "Verify a saved result",
       domain: "general",
-      template: "minimal",
+      template: "empirical",
     })
     const check = contract.checks[0]
     await expect(SessionResearch.check(sessionID, { id: check.id, status: "passed" })).rejects.toThrow(

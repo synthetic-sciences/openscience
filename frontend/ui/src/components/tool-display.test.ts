@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test"
 import {
+  artifactTypeLabel,
   artifactActions,
   generatedArtifacts,
   humanizeToolName,
@@ -177,5 +178,20 @@ describe("generatedArtifacts", () => {
         { type: "tool", tool: "artifact", state: { status: "error", metadata: { savedArtifact: artifact } } },
       ]),
     ).toEqual([artifact])
+  })
+
+  test("shows only the latest version of one logical artifact", () => {
+    const latest = { ...artifact, title: "Final ROC curve", versionID: "ver_2", version: 2, sha256: "def456" }
+    expect(
+      generatedArtifacts([
+        { type: "tool", tool: "artifact", state: { status: "completed", metadata: { savedArtifact: artifact } } },
+        { type: "tool", tool: "artifact", state: { status: "completed", metadata: { savedArtifact: latest } } },
+      ]),
+    ).toEqual([latest])
+  })
+
+  test("labels PDFs by format instead of the broad report kind", () => {
+    expect(artifactTypeLabel({ kind: "report", path: "paper/final.pdf", mimeType: "application/pdf" })).toBe("PDF")
+    expect(artifactTypeLabel({ kind: "figure", path: "figures/roc.png", mimeType: "image/png" })).toBe("Figure")
   })
 })

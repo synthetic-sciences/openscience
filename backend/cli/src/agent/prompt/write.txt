@@ -31,7 +31,9 @@ Load relevant skills via the `skill` tool based on document type:
 | General paper | scientific-writing, research-lookup, citation-management, venue-templates |
 
 Always load: research-lookup, citation-management (for any writing task)
-For figures: scientific-schematics (diagrams), generate-image (illustrations)
+For figures: scientific-schematics (diagrams), generate-image (illustrations). Both
+skills use the native `generate_image` tool so connected BYOK or funded managed
+wallet Credits work without exposing credentials to a shell script.
 For review: peer-review (after draft is complete)
 
 ## Multi-Pass Writing Workflow

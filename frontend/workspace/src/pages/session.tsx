@@ -79,6 +79,7 @@ type SyncSession = ReturnType<typeof useSync>["data"]["session"][number]
  */
 const sessionSidebarKey = "openscience-session-sidebar-v1"
 const sessionSidebarWidthKey = "openscience-session-sidebar-width-v1"
+const traceExpansionKey = "openscience-trace-expansion-v1"
 
 function readSessionSidebar() {
   if (typeof localStorage === "undefined") return false
@@ -108,6 +109,26 @@ function readSessionSidebarWidth() {
 function writeSessionSidebarWidth(width: number) {
   try {
     localStorage.setItem(sessionSidebarWidthKey, clampSidebarWidth(width).toString())
+  } catch {}
+}
+
+function readTraceExpansion() {
+  if (typeof localStorage === "undefined") return {} as Record<string, boolean>
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(traceExpansionKey) ?? "{}")
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, true] => entry[1] === true),
+    )
+  } catch {
+    return {}
+  }
+}
+
+function writeTraceExpansion(value: Record<string, boolean>) {
+  try {
+    const entries = Object.entries(value).filter((entry): entry is [string, true] => entry[1] === true)
+    localStorage.setItem(traceExpansionKey, JSON.stringify(Object.fromEntries(entries.slice(-200))))
   } catch {}
 }
 
@@ -425,6 +446,24 @@ export default function Page(): JSX.Element {
   // stay hidden until the user restores them or sends a new message (which
   // makes the revert permanent server-side).
   const activeSession = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const childSessions = createMemo(() => {
+    const parent = activeSession()?.parentID
+    if (!parent) return []
+    return sync.data.session
+      .filter((session) => session.parentID === parent)
+      .toSorted((a, b) => (a.time?.created ?? 0) - (b.time?.created ?? 0) || a.id.localeCompare(b.id))
+  })
+  const childIndex = createMemo(() => childSessions().findIndex((session) => session.id === params.id))
+  const previousChild = createMemo(() => {
+    const index = childIndex()
+    if (index <= 0) return
+    return childSessions()[index - 1]
+  })
+  const nextChild = createMemo(() => {
+    const index = childIndex()
+    if (index < 0 || index >= childSessions().length - 1) return
+    return childSessions()[index + 1]
+  })
   const revertInfo = createMemo(() => activeSession()?.revert)
   // A `path.md` mentioned in an assistant message dispatches this. Keep the
   // transcript mounted and open the file in the contextual Files pane.
@@ -669,8 +708,13 @@ export default function Page(): JSX.Element {
     return list
   })
 
-  const [stepsExpanded, setStepsExpanded] = createSignal<Record<string, boolean>>({})
-  const toggleSteps = (id: string) => setStepsExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+  const [stepsExpanded, setStepsExpanded] = createSignal<Record<string, boolean>>(readTraceExpansion())
+  const toggleSteps = (id: string) =>
+    setStepsExpanded((previous) => {
+      const next = { ...previous, [id]: !previous[id] }
+      writeTraceExpansion(next)
+      return next
+    })
 
   useGlobalKeys({ onNew: newSession })
 
@@ -972,24 +1016,55 @@ export default function Page(): JSX.Element {
                         "overflow-x": "hidden",
                       }}
                     >
-                      {/* Sub-agent back-to-parent navigation only. The editable
-                          session title lives once in the workspace header above, so
-                          this row never repeats it. Kept outside contentRef so the
-                          ResizeObserver measures only the growing message list. */}
+                      {/* Delegated work keeps its own identity and sibling navigation.
+                          This remains outside contentRef so the ResizeObserver measures
+                          only the growing message list. */}
                       <Show when={activeSession()?.parentID}>
                         <div class="sticky top-0 z-30 bg-background-stronger w-full">
                           <div class="w-full px-4 md:px-6 md:max-w-200 md:mx-auto">
-                            <div class="h-10 flex items-center gap-1.5">
-                              <Show when={activeSession()?.parentID}>
+                            <div class="min-h-12 py-1.5 flex items-center gap-2 border-b border-border-weak-base">
+                              <div class="min-w-0 flex-1">
+                                <div class="text-[10px] tracking-[0.04em] text-text-weaker">Delegated agent</div>
+                                <div class="truncate text-xs font-medium text-text-base">
+                                  {activeSession()?.title?.trim() || "Research task"}
+                                </div>
+                              </div>
+                              <div
+                                class="flex items-center gap-1"
+                                role="navigation"
+                                aria-label="Delegated agent sessions"
+                              >
                                 <button
                                   type="button"
-                                  class="flex items-center justify-center size-7 shrink-0 rounded-md text-text-weak hover:text-text-base hover:bg-surface-base-hover transition-colors"
+                                  class="h-7 px-2 flex items-center gap-1 rounded-md text-xs text-text-weak hover:text-text-base hover:bg-surface-base-hover transition-colors"
                                   aria-label="Back to parent session"
                                   onClick={() => navigate(`/${params.dir}/session/${activeSession()!.parentID}`)}
                                 >
-                                  <IconChevronLeft />
+                                  <IconChevronLeft size={13} strokeWidth={1.6} />
+                                  Parent
                                 </button>
-                              </Show>
+                                <button
+                                  type="button"
+                                  class="size-7 flex items-center justify-center rounded-md text-text-weak hover:text-text-base hover:bg-surface-base-hover transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                                  aria-label="Previous delegated agent"
+                                  disabled={!previousChild()}
+                                  onClick={() => navigate(`/${params.dir}/session/${previousChild()!.id}`)}
+                                >
+                                  <IconChevronLeft size={13} strokeWidth={1.6} />
+                                </button>
+                                <span class="min-w-10 text-center text-[11px] text-text-weaker">
+                                  {Math.max(0, childIndex()) + 1}/{childSessions().length}
+                                </span>
+                                <button
+                                  type="button"
+                                  class="size-7 flex items-center justify-center rounded-md text-text-weak hover:text-text-base hover:bg-surface-base-hover transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                                  aria-label="Next delegated agent"
+                                  disabled={!nextChild()}
+                                  onClick={() => navigate(`/${params.dir}/session/${nextChild()!.id}`)}
+                                >
+                                  <IconChevronRight size={13} strokeWidth={1.6} />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>

@@ -235,31 +235,49 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       for (const [directory, access] of directories) {
-        if (access === "write") {
+        const granted =
+          access === "write" && authority.sandbox.enabled
+            ? await SessionFilesystem.allows({ sessionID: ctx.sessionID, path: directory, access }).catch((error) => {
+                if (SessionFilesystem.DeniedError.isInstance(error)) return false
+                if (SessionFilesystem.InvalidPathError.isInstance(error)) return false
+                throw error
+              })
+            : true
+        if (!granted) {
           throw new Error(
-            `External paths are read-only to shell commands: ${directory}. Use the write, edit, or apply_patch tool for brokered mutation.`,
+            `External write paths must be connected to this project before a sandboxed shell can use them: ${directory}.`,
           )
         }
-        const parent = path.dirname(directory)
-        const glob = path.join(parent, "*")
-        await ctx.ask({
-          permission: "external_directory",
-          patterns: [glob],
-          always: [glob],
-          metadata: {
-            filepath: directory,
-            parentDir: parent,
-            filesystem: {
-              path: parent,
-              access,
+        if (authority.sandbox.enabled) {
+          const parent = path.dirname(directory)
+          const glob = path.join(parent, "*")
+          await ctx.ask({
+            permission: "external_directory",
+            patterns: [glob],
+            always: [glob],
+            metadata: {
+              filepath: directory,
+              parentDir: parent,
+              filesystem: {
+                path: parent,
+                access,
+              },
             },
-          },
-        })
-        const authorized = await SessionFilesystem.authorize({
-          sessionID: ctx.sessionID,
-          path: directory,
-          access,
-        })
+          })
+        }
+        if (!authority.sandbox.enabled) {
+          await SessionFilesystem.allows({ sessionID: ctx.sessionID, path: directory, access }).catch((error) => {
+            if (SessionFilesystem.InvalidPathError.isInstance(error)) return false
+            throw error
+          })
+        }
+        const authorized = authority.sandbox.enabled
+          ? await SessionFilesystem.authorize({
+              sessionID: ctx.sessionID,
+              path: directory,
+              access,
+            })
+          : { path: directory }
         readable.add(authorized.path)
       }
       const { existsSync, mkdirSync } = await import("fs")
@@ -364,7 +382,10 @@ export const BashTool = Tool.define("bash", async () => {
             child = spawn(wrapped.file, wrapped.args, {
               shell: wrapped.spawnShell,
               cwd,
-              env: { ...env, ...(runtime.env ?? {}), ...cache },
+              // Re-sanitize at the final process boundary too: runtime/cache
+              // overlays must never restore a managed token or re-pair a
+              // user's key with the Credits proxy after subprocessEnv ran.
+              env: OpenScience.filterEnvForSubprocess({ ...env, ...(runtime.env ?? {}), ...cache }),
               stdio: ["ignore", "pipe", "pipe"],
               detached: process.platform !== "win32",
             })

@@ -681,6 +681,21 @@ export namespace SessionFilesystem {
   }
 
   /**
+   * An explicit read-only connection is a durable upper bound, not an invitation
+   * for an automatic permission policy to add a stronger session grant. The
+   * boundary remains until the user explicitly adds a matching write grant via
+   * the filesystem settings/API.
+   */
+  export async function restrictsWrite(input: { sessionID: string; path: string }) {
+    const record = await state(input.sessionID)
+    const target = await canonical(input.path, workspaceGrant(record)?.path ?? record.directory)
+    assertPrivate(record, target, "write")
+    const grants = record.grants.filter((grant) => permits(grant, "read") && Filesystem.contains(grant.path, target))
+    if (!grants.length) return false
+    return !grants.some((grant) => permits(grant, "write"))
+  }
+
+  /**
    * An exact app-managed tool output belongs to the session that produced it.
    * This is deliberately narrower than a normal filesystem grant: callers may
    * read that one file without reopening the external-directory policy, but a

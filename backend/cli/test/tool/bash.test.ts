@@ -8,6 +8,7 @@ import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { Shell } from "../../src/shell/shell"
+import { Config } from "../../src/config/config"
 
 async function context() {
   const session = await executionSession()
@@ -158,8 +159,16 @@ describe("tool.bash permissions", () => {
     })
   })
 
-  test("rejects an external workdir instead of mounting it into the shell", async () => {
+  test("allows an external workdir when Full access is active", async () => {
     await using tmp = await tmpdir({ git: true })
+    await using outside = await tmpdir()
+    const sandbox = await Config.trustedSandbox()
+    await Config.setSandbox({ enabled: false })
+    await using restore = {
+      async [Symbol.asyncDispose]() {
+        await Config.setSandbox(sandbox)
+      },
+    }
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -171,18 +180,17 @@ describe("tool.bash permissions", () => {
             requests.push(req)
           },
         }
-        await expect(
-          bash.execute(
-            {
-              command: "ls",
-              workdir: "/tmp",
-              description: "List /tmp",
-            },
-            testCtx,
-          ),
-        ).rejects.toThrow("External paths are read-only to shell commands")
+        const result = await bash.execute(
+          {
+            command: "pwd",
+            workdir: outside.path,
+            description: "Print external working directory",
+          },
+          testCtx,
+        )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeUndefined()
+        expect(result.output).toContain(outside.path)
       },
     })
   })

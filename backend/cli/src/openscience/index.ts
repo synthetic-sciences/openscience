@@ -63,6 +63,17 @@ function isManagedAtlasKey(value: string): boolean {
   return value.startsWith("thk_")
 }
 
+function isManagedOpenRouterProxy(value: string | undefined): boolean {
+  if (!value) return false
+  try {
+    const url = new URL(value)
+    const route = "/api/llm/proxy/openrouter"
+    return url.pathname === route || url.pathname.endsWith(route) || url.pathname.includes(`${route}/`)
+  } catch {
+    return false
+  }
+}
+
 function getSyncedConfigDir(): string {
   const config = process.env.OPENSCIENCE_CONFIG_DIR?.trim()
   if (config) return path.resolve(config)
@@ -1270,6 +1281,18 @@ export namespace OpenScience {
   }
 
   /** Filter env vars for subprocesses — exclude managed Atlas proxy tokens. */
+  export function normalizeByokRouting(env: Record<string, string>): Record<string, string> {
+    const result = { ...env }
+    if (
+      result.OPENROUTER_API_KEY &&
+      !isManagedAtlasKey(result.OPENROUTER_API_KEY) &&
+      isManagedOpenRouterProxy(result.OPENROUTER_BASE_URL)
+    ) {
+      result.OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+    }
+    return result
+  }
+
   export function filterEnvForSubprocess(env: NodeJS.ProcessEnv): Record<string, string> {
     const result: Record<string, string> = {}
     for (const [key, value] of Object.entries(env)) {
@@ -1285,7 +1308,10 @@ export namespace OpenScience {
         result[key] = value
       }
     }
-    return result
+    // A user-owned key may already be present in the process while an earlier
+    // managed sync left the Atlas proxy base URL beside it. Never send BYOK to
+    // that Credits-backed route. Preserve explicit non-Atlas gateways.
+    return normalizeByokRouting(result)
   }
 
   /** Minimal environment for arbitrary notebook/R code. Kernels need language
@@ -1448,7 +1474,7 @@ export namespace OpenScience {
       for (const key of spec.keys) result[key] = info.key
       if (spec.baseUrl && spec.publicBaseUrl) result[spec.baseUrl] = spec.publicBaseUrl
     }
-    return result
+    return normalizeByokRouting(result)
   }
 
   /** Subprocess env = sanitized base env + any user-owned BYOK provider keys

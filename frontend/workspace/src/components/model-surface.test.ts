@@ -45,6 +45,7 @@ describe("model control surface", () => {
     expect(composer).not.toContain("Thinking ·")
     expect(settings).toContain("aria-label={`Model: ${label()}`}")
     expect(settings).toContain("{label()}")
+    expect(settings).toContain("`${name} · ${routeAccess(model)}`")
     expect(settings).not.toContain("local.model.variant.list()")
     expect(settings).not.toContain('data-model-menu-row="effort"')
     expect(composer).toContain('data-research-control="effort"')

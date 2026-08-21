@@ -237,9 +237,11 @@ describe("new model reasoning effort contracts", () => {
       include: ["reasoning.encrypted_content"],
     })
 
-    expect(
-      ProviderTransform.options({ model: codex("gpt-5.6-sol"), sessionID, providerOptions: {} }).reasoningEffort,
-    ).toBe("low")
+    expect(ProviderTransform.options({ model: codex("gpt-5.6-sol"), sessionID, providerOptions: {} })).toMatchObject({
+      reasoningEffort: "low",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    })
     expect(
       ProviderTransform.options({ model: codex("gpt-5.6-terra"), sessionID, providerOptions: {} }).reasoningEffort,
     ).toBe("medium")

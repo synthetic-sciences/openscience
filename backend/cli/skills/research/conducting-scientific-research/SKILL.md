@@ -12,8 +12,8 @@ Use this skill when the task is scientific work rather than a single factual exp
 1. Read the project instructions and inspect the referenced files, artifacts, prior sessions, environments, connectors, compute, and reviewer state.
 2. Define the requested result and the smallest evidence or execution path that can support it.
 3. Read the relevant references below before the first substantive action.
-4. Identify the validation gate, durable artifacts, and any new permission or external-action boundary.
-5. Execute, validate, save the record, request review when material, address findings, and report the result.
+4. Identify the validation gate, whether any durable artifact is actually needed, and any new permission or external-action boundary.
+5. Execute, validate, save only requested or genuinely reusable outputs, request review when material, address findings, and report the result.
 
 ## Reference routing
 
@@ -38,7 +38,7 @@ Read only the references that affect the active work. Keep reference loading one
 
 ```text
 Inspect state → establish objective and evidence → execute → validate
-→ save artifacts and provenance → review → correct → report
+→ save requested or reusable outputs when needed → review proportionately → correct → report
 ```
 
-For a simple task, several stages may collapse into one. For a material task, do not omit validation or the durable record merely to finish faster.
+For a simple task, several stages may collapse into one and no artifact is required. For a material task, do not omit validation merely to finish faster; create a durable record only when the request or future reuse warrants it.

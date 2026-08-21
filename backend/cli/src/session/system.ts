@@ -117,8 +117,42 @@ export namespace SystemPrompt {
           ),
         ]
       : []
+    const names = new Set(skills.map((skill) => skill.name))
+    const route = [
+      {
+        when: "Venue-specific paper formatting, submission checks, or page limits",
+        skills: ["venue-templates", "ml-paper-writing"],
+      },
+      {
+        when: "General manuscript drafting or revision",
+        skills: ["scientific-writing"],
+      },
+      {
+        when: "Citation verification or bibliography repair",
+        skills: ["citation-management", "research-lookup"],
+      },
+      {
+        when: "Technical figures, architectures, workflows, or scientific diagrams",
+        skills: ["scientific-schematics"],
+      },
+      {
+        when: "Illustrations, artwork, photos, or other non-technical images",
+        skills: ["generate-image"],
+      },
+    ]
+      .map((item) => ({ ...item, skills: item.skills.filter((skill) => names.has(skill)) }))
+      .filter((item) => item.skills.length > 0)
+    const routing = route.length
+      ? [
+          "<skill-routing>",
+          "When a request clearly matches one of these routes, load the listed skill or skills before the first substantive edit, build, search, or generation step. Do not merely mention the skill in prose.",
+          ...route.map((item) => `- ${item.when}: ${item.skills.join(", ")}`),
+          "For an existing manuscript, preserve its scientific content and existing figures unless the user asks for content or figure changes. When creating or replacing a technical figure, use scientific-schematics and the native generate_image tool so Nano Banana Pro runs through connected BYOK or a funded OpenScience wallet without exposing credentials to shell scripts.",
+          "</skill-routing>",
+        ]
+      : []
     const invoke =
-      name && skills.some((skill) => skill.name === name)
+      name && names.has(name)
         ? [
             "<slash-skill-invocation>",
             `The user invoked /${name}. First output skill({name:"${name}"}) with no preceding text. After it returns, answer the request; when the message was only /${name}, ask what they want then.`,
@@ -130,6 +164,7 @@ export namespace SystemPrompt {
       [
         "<available-skills>",
         `${total} callable across: ${list}.`,
+        ...routing,
         ...likely,
         "Load a likely match directly, or browse a relevant category when the shortlist is insufficient. Do not guess other names from static routing tables.",
         "</available-skills>",
@@ -152,20 +187,43 @@ Keep only one item in_progress at a time.
     ]
   }
 
-  export async function environment(model: Provider.Model, sessionID: string) {
+  export async function environment(model: { api: { id: string }; providerID: string }, sessionID: string) {
     const project = Instance.project
-    const workspace = await SessionFilesystem.workspace(sessionID)
+    const context = await Promise.all([
+      SessionFilesystem.workspace(sessionID),
+      SessionFilesystem.state(sessionID),
+      Config.trustedSandbox(),
+    ])
+    const workspace = context[0]
+    const filesystem = context[1]
+    const sandbox = context[2]
+    const sources = filesystem.grants.filter(
+      (grant) =>
+        !grant.time.consumed && !grant.time.revoked && (grant.source === "api" || grant.source === "permission"),
+    )
+    const access = sandbox.enabled
+      ? "Sandboxed access. Connected folders listed below are already authorized; other host locations may require approval."
+      : "Full access. Local file tools and shell commands may read and write host paths without approval prompts."
     return [
       [
         `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
         `Here is some useful information about the environment you are running in:`,
         `<env>`,
-        `  Working directory: ${workspace}`,
-        `  Project directory: ${Instance.directory}`,
+        `  Session scratch directory: ${workspace}`,
+        `  OpenScience project directory: ${Instance.directory}`,
+        `  Access mode: ${access}`,
+        `  Connected project folders:`,
+        ...(sources.length
+          ? sources.map(
+              (grant) =>
+                `    - ${grant.path} (${grant.access === "write" ? "read and write" : "read only"}, ${grant.scope} scope)`,
+            )
+          : [`    - none`]),
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
+        `Work directly in a connected project folder when the user refers to its files. Do not ask the user to copy or clone an already-connected folder into the session scratch directory. Use the scratch directory only for temporary work or outputs that do not belong in a connected folder.`,
         `<files>`,
         `  ${
           project.vcs === "git" && false

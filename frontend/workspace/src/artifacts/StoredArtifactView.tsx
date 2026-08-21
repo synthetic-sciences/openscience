@@ -19,6 +19,7 @@ import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconDownload, IconFile, IconMoreH, IconTrash } from "@/atlas/shared/Icon"
 import { toast } from "@/atlas/Toast"
 import { uiStore } from "@/atlas/store/ui"
+import { PdfViewer } from "@/science/renderers/documents/PdfViewer"
 import {
   normalizeStoredArtifact,
   normalizeStoredArtifactDetail,
@@ -46,6 +47,13 @@ function text(version: StoredArtifactVersion) {
 
 function markdown(version: StoredArtifactVersion) {
   return /\.(md|markdown)$/i.test(version.filename)
+}
+
+function label(version: StoredArtifactVersion | undefined, fallback: string) {
+  if (!version) return fallback
+  if (version.mimeType === "application/pdf" || version.filename.toLowerCase().endsWith(".pdf")) return "PDF"
+  if (version.mimeType.startsWith("image/")) return "Image"
+  return fallback === "report" ? "Document" : fallback
 }
 
 export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Element {
@@ -157,7 +165,8 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
         <span style={{ flex: 1, "min-width": 0 }}>
           <strong style={title()}>{detail.latest?.title ?? props.artifact.title}</strong>
           <span style={meta()}>
-            {detail.latest?.kind ?? props.artifact.kind} · {size(selected()?.size ?? props.artifact.current.size)}
+            {label(selected(), detail.latest?.kind ?? props.artifact.kind)} ·{" "}
+            {size(selected()?.size ?? props.artifact.current.size)}
           </span>
         </span>
         <Show when={selected()}>
@@ -309,7 +318,7 @@ function Preview(props: {
     return <img src={props.url} alt={props.version.filename} style={image()} />
   }
   if (props.version.mimeType === "application/pdf" || props.version.filename.toLowerCase().endsWith(".pdf")) {
-    return <iframe title={props.version.filename} src={props.url} style={frame()} />
+    return <PdfViewer kind="pdf" data={{ url: props.url, maxPages: 40 }} />
   }
   if (text(props.version) && props.version.size > 8 * 1024 * 1024) {
     return (
@@ -414,7 +423,6 @@ const image = (): JSX.CSSProperties => ({
   margin: "16px auto",
   "object-fit": "contain",
 })
-const frame = (): JSX.CSSProperties => ({ display: "block", width: "100%", height: "100%", border: 0 })
 const document = (): JSX.CSSProperties => ({ margin: "0 auto", padding: "24px", width: "min(100%, 760px)" })
 const pre = (): JSX.CSSProperties => ({
   margin: 0,

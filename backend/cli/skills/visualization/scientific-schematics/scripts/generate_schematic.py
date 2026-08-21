@@ -86,16 +86,10 @@ Environment Variables:
 
     args = parser.parse_args()
 
-    # Check for API key
+    # Pass an explicit/BYOK key when present. Otherwise let the AI entry point
+    # report that OpenRouter BYOK is not connected. Managed Atlas credentials
+    # are intentionally unavailable to this user-key workflow.
     api_key = args.api_key or os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        print("Error: OPENROUTER_API_KEY environment variable not set")
-        print("\nFor AI generation, you need an OpenRouter API key.")
-        print("Get one at: https://openrouter.ai/keys")
-        print("\nSet it with:")
-        print("  export OPENROUTER_API_KEY='your_api_key'")
-        print("\nOr use --api-key flag")
-        sys.exit(1)
 
     # Find AI generation script
     script_dir = Path(__file__).parent

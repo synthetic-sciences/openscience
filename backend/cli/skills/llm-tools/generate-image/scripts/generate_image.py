@@ -36,23 +36,15 @@ def check_env_file() -> Optional[str]:
     return None
 
 
-def synced_env() -> dict:
-    """Read OpenScience's managed synced env written by `openscience connect sync`.
+def byok_key(value: Optional[str]) -> Optional[str]:
+    """Return only a user-owned OpenRouter key, never an Atlas proxy token."""
+    return value if value and not value.startswith("thk_") else None
 
-    In managed mode this holds OPENROUTER_API_KEY (the managed thk_ token) and
-    OPENROUTER_BASE_URL (the Atlas proxy). Reading it here lets image generation
-    route through the managed key — billed to the user's wallet like other LLM
-    usage — so users don't need to bring their own OpenRouter key. The managed
-    token is intentionally stripped from the subprocess env, so we read the
-    file the CLI already persisted (same data, no broad env leak).
-    """
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    try:
-        with open(os.path.join(base, "openscience", "synced-env.json"), encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+
+def byok_base_url() -> str:
+    """Keep BYOK off the Atlas Credits proxy even if a stale base URL leaked in."""
+    value = (os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1").rstrip("/")
+    return "https://openrouter.ai/api/v1" if "/api/llm/proxy/" in value else value
 
 
 def load_image_as_base64(image_path: str) -> str:
@@ -118,19 +110,21 @@ def generate_image(
         print("Error: 'requests' library not found. Install with: pip install requests")
         sys.exit(1)
 
-    # Resolve the key: explicit arg → env var → .env → OpenScience managed credential.
+    # Resolve the key: explicit arg → OpenScience-injected BYOK env var → .env.
     # The env var path matters most: the CLI injects OPENROUTER_API_KEY into the
     # subprocess env, so reading only .env (the old behavior) made the key invisible.
-    # The managed fallback lets nano-banana work through the Atlas proxy with no
-    # user-provided key.
-    synced = synced_env()
+    # BYOK bypasses the Atlas wallet; managed thk_* credentials stay unavailable.
     if not api_key:
-        api_key = os.getenv("OPENROUTER_API_KEY") or check_env_file() or synced.get("OPENROUTER_API_KEY")
+        api_key = byok_key(os.getenv("OPENROUTER_API_KEY")) or byok_key(check_env_file())
+
+    api_key = byok_key(api_key)
 
     if not api_key:
-        print("❌ Error: OPENROUTER_API_KEY not found!")
-        print("\nConnect OpenRouter via `openscience login` or at https://app.syntheticsciences.ai → Services,")
-        print("or set it for this run: export OPENROUTER_API_KEY=your-api-key-here")
+        print("❌ Error: OpenRouter BYOK is not connected!")
+        print("\nAdd an OpenRouter key in OpenScience Settings → Models & providers,")
+        print("or set it for this run: export OPENROUTER_API_KEY=your-api-key-here.")
+        print("Atlas Credits are not required for BYOK image generation.")
+        print("Inside OpenScience, call the native generate_image tool to use a funded wallet instead.")
         print("\nGet your own API key from: https://openrouter.ai/keys")
         sys.exit(1)
 
@@ -155,11 +149,8 @@ def generate_image(
         print(f"📝 Prompt: {prompt}")
         message_content = prompt
 
-    # Honor OPENROUTER_BASE_URL (managed/proxied routes); default to public OpenRouter.
-    # Use the managed proxy base only when the key itself came from the managed synced
-    # env — a BYOK key must hit public OpenRouter, not the proxy.
-    managed_base = synced.get("OPENROUTER_BASE_URL") if api_key == synced.get("OPENROUTER_API_KEY") else None
-    base_url = (os.getenv("OPENROUTER_BASE_URL") or managed_base or "https://openrouter.ai/api/v1").rstrip("/")
+    # subprocessEnv pins this to public OpenRouter when it injects a BYOK key.
+    base_url = byok_base_url()
 
     # Make API request
     response = requests.post(

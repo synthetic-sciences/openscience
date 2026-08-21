@@ -53,6 +53,7 @@ import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { savedArtifact, scienceTaskLabel, sentenceCaseLabel, skillName, stripRedactedReasoning } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
+import { formatTaskDuration, stripTaskMetadata, summarizeTaskActivity } from "./research-trace"
 
 export { ARTIFACT_TOOL, ToolRegistry, type ToolComponent, type ToolProps } from "./tool-registry"
 
@@ -401,6 +402,12 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         icon: "code-lines",
         title: i18n.t("ui.messagePart.title.write"),
         subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "generate_image":
+      return {
+        icon: "photo",
+        title: "Generate image",
+        subtitle: input.output_path,
       }
     case "apply_patch":
       return {
@@ -919,6 +926,10 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="reasoning-part">
+        <div data-slot="reasoning-part-label">
+          <Icon name="sparkles" size="small" />
+          <span>Reasoning summary</span>
+        </div>
         <Markdown text={throttledText()} cacheKey={part.id} />
       </div>
     </Show>
@@ -1322,6 +1333,33 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
+  name: "generate_image",
+  render(props) {
+    const route = () => (props.metadata.route === "wallet" ? "OpenScience wallet" : "Connected OpenRouter key")
+    return (
+      <BasicTool
+        {...props}
+        icon="photo"
+        defaultOpen={true}
+        trigger={{
+          title: props.status === "error" ? "Image generation failed" : "Generated image",
+          subtitle: props.title || props.input.output_path || "generated-image.png",
+          args: [props.metadata.model || props.input.model, route()].filter((value): value is string => !!value),
+        }}
+      >
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output">
+              <Markdown text={output()} />
+            </div>
+          )}
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
   name: "task",
   render(props) {
     const data = useData()
@@ -1329,12 +1367,29 @@ ToolRegistry.register({
     const summary = () =>
       (props.metadata.summary ?? []) as { id: string; tool: string; state: { status: string; title?: string } }[]
 
-    const autoScroll = createAutoScroll({
-      working: () => true,
-      overflowAnchor: "auto",
-    })
-
     const childSessionId = () => props.metadata.sessionId as string | undefined
+    const activity = createMemo(() => summarizeTaskActivity(summary()))
+    const findings = createMemo(() => stripTaskMetadata(props.output))
+    const duration = () => formatTaskDuration(props.metadata.durationMs as number | undefined)
+    const model = () => {
+      const value = props.metadata.model as { providerID?: string; modelID?: string } | undefined
+      return [value?.providerID, value?.modelID].filter(Boolean).join(" / ") || undefined
+    }
+    const outcome = () => {
+      if (props.status === "running" || props.status === "pending") return props.status
+      const value = props.metadata.outcome
+      if (value === "completed" || value === "partial" || value === "error" || value === "timed_out") return value
+      return props.status === "error" ? "error" : "completed"
+    }
+    const outcomeLabel = () => {
+      if (outcome() === "running") return "Working"
+      if (outcome() === "pending") return "Queued"
+      if (outcome() === "partial") return "Partial result"
+      if (outcome() === "timed_out") return "Time limit reached"
+      if (outcome() === "error") return "Needs attention"
+      return "Completed"
+    }
+    const current = () => summary().findLast((item) => item.state.status === "running") ?? summary().at(-1)
 
     const childPermission = createMemo(() => {
       const sessionId = childSessionId()
@@ -1462,41 +1517,127 @@ ToolRegistry.register({
             )}
           </Match>
           <Match when={true}>
-            <BasicTool
-              icon="task"
-              defaultOpen={true}
-              trigger={{
-                title: i18n.t("ui.tool.agent", {
-                  type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)),
-                }),
-                subtitle: props.input.description,
-              }}
-              onSubtitleClick={handleSubtitleClick}
-            >
-              <div
-                ref={autoScroll.scrollRef}
-                onScroll={autoScroll.handleScroll}
-                data-component="tool-output"
-                data-scrollable
-              >
-                <div ref={autoScroll.contentRef} data-component="task-tools">
-                  <For each={summary()}>
-                    {(item) => {
-                      const info = getToolInfo(item.tool)
-                      return (
-                        <div data-slot="task-tool-item">
-                          <Icon name={info.icon} size="small" />
-                          <span data-slot="task-tool-title">{info.title}</span>
-                          <Show when={item.state.title}>
-                            <span data-slot="task-tool-subtitle">{item.state.title}</span>
-                          </Show>
+            <section data-component="delegation-card" data-outcome={outcome()}>
+              <header data-slot="delegation-header">
+                <div data-slot="delegation-mark">
+                  <Icon name="research" size="normal" />
+                </div>
+                <div data-slot="delegation-heading">
+                  <div data-slot="delegation-eyebrow">
+                    <span>Delegated research</span>
+                    <span data-slot="delegation-status">{outcomeLabel()}</span>
+                  </div>
+                  <strong>
+                    {i18n.t("ui.tool.agent", {
+                      type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)),
+                    })}
+                  </strong>
+                  <Show when={props.input.description}>
+                    <p>{props.input.description}</p>
+                  </Show>
+                </div>
+                <Show when={childSessionId()}>
+                  <button type="button" data-slot="delegation-open" onClick={handleSubtitleClick}>
+                    Open agent
+                    <Icon name="arrow-right" size="small" />
+                  </button>
+                </Show>
+              </header>
+
+              <div data-slot="delegation-metrics" aria-label="Delegated research details">
+                <Show when={model()}>{(value) => <span>{value()}</span>}</Show>
+                <Show when={props.metadata.effort}>
+                  <span>{sentenceCaseLabel(String(props.metadata.effort))} effort</span>
+                </Show>
+                <Show when={duration()}>{(value) => <span>{value()}</span>}</Show>
+                <Show when={props.metadata.toolCalls !== undefined}>
+                  <span>{Number(props.metadata.toolCalls)} operations</span>
+                </Show>
+                <Show when={Number(props.metadata.failedToolCalls) > 0}>
+                  <span data-failed>{Number(props.metadata.failedToolCalls)} failed</span>
+                </Show>
+              </div>
+
+              <Show when={(outcome() === "running" || outcome() === "pending") && current()}>
+                {(item) => (
+                  <div data-slot="delegation-current">
+                    <Spinner />
+                    <span>Current activity</span>
+                    <strong>{item().state.title || getToolInfo(item().tool).title}</strong>
+                  </div>
+                )}
+              </Show>
+
+              <Show when={findings()}>
+                {(value) => (
+                  <div data-slot="delegation-findings">
+                    <span data-slot="delegation-section-label">Findings</span>
+                    <Markdown text={value()} />
+                  </div>
+                )}
+              </Show>
+
+              <Show when={activity().length > 0}>
+                <div data-slot="delegation-activity">
+                  <span data-slot="delegation-section-label">Activity</span>
+                  <For each={activity()}>
+                    {(group) => (
+                      <div data-slot="delegation-activity-row" data-family={group.family}>
+                        <Icon
+                          name={
+                            group.family === "context"
+                              ? "glasses"
+                              : group.family === "sources"
+                                ? "window-cursor"
+                                : group.family === "commands"
+                                  ? "console"
+                                  : group.family === "changes"
+                                    ? "code-lines"
+                                    : group.family === "images"
+                                      ? "photo"
+                                      : group.family === "skills"
+                                        ? "sparkles"
+                                        : "activity"
+                          }
+                          size="small"
+                        />
+                        <div>
+                          <strong>{group.label}</strong>
+                          <span>{group.detail}</span>
                         </div>
-                      )
-                    }}
+                        <Show when={group.failed > 0}>
+                          <span data-slot="delegation-activity-failed">{group.failed} failed</span>
+                        </Show>
+                      </div>
+                    )}
                   </For>
                 </div>
-              </div>
-            </BasicTool>
+              </Show>
+
+              <Show when={summary().length > 0}>
+                <details data-slot="delegation-raw">
+                  <summary>
+                    Raw operations <span>· {summary().length}</span>
+                  </summary>
+                  <div data-component="task-tools">
+                    <For each={summary()}>
+                      {(item) => {
+                        const info = getToolInfo(item.tool)
+                        return (
+                          <div data-slot="task-tool-item">
+                            <Icon name={info.icon} size="small" />
+                            <span data-slot="task-tool-title">{info.title}</span>
+                            <Show when={item.state.title}>
+                              <span data-slot="task-tool-subtitle">{item.state.title}</span>
+                            </Show>
+                          </div>
+                        )
+                      }}
+                    </For>
+                  </div>
+                </details>
+              </Show>
+            </section>
           </Match>
         </Switch>
       </div>

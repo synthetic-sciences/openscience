@@ -632,21 +632,33 @@ export namespace SessionProcessor {
                         },
                       })
                   if (usageResult && "modelBlocked" in usageResult) {
-                    log.warn("model blocked by server — halting session", { model: input.model.id })
-                    // The provider step is already complete and may contain the
-                    // only copy of a terminal research result. Preserve it and
-                    // stop the outer loop instead of replacing it with a 402.
-                    await SessionResearch.exhaust(input.sessionID)
-                    blocked = true
-                    await Session.updatePart({
-                      id: Identifier.ascending("part"),
-                      messageID: input.assistantMessage.id,
-                      sessionID: input.sessionID,
-                      type: "text",
-                      synthetic: true,
-                      text: "Managed billing stopped this run after the provider step. The response, Results, and checkpoints above are preserved. Resume after topping up Credits or switching LLM spend to BYOK; the research trace shows any remaining completion gates.",
-                      time: { start: Date.now(), end: Date.now() },
-                    } satisfies MessageV2.TextPart)
+                    const balance = await OpenScience.getBalance().catch(() => null)
+                    if (balance !== null && balance > 0) {
+                      // The managed proxy has already authorized, executed, and
+                      // settled this step. A legacy /api/cli/usage response can
+                      // still report model_blocked when the account-side toggle
+                      // is stale; it is telemetry, not a second billing authority.
+                      log.warn("ignoring stale usage model block after settled provider step", {
+                        model: input.model.id,
+                        balance,
+                      })
+                    } else {
+                      log.warn("model blocked by server — halting session", { model: input.model.id })
+                      // The provider step is already complete and may contain the
+                      // only copy of a terminal research result. Preserve it and
+                      // stop the outer loop instead of replacing it with a 402.
+                      await SessionResearch.exhaust(input.sessionID)
+                      blocked = true
+                      await Session.updatePart({
+                        id: Identifier.ascending("part"),
+                        messageID: input.assistantMessage.id,
+                        sessionID: input.sessionID,
+                        type: "text",
+                        synthetic: true,
+                        text: "Managed billing stopped this run after the provider step. The response, Results, and checkpoints above are preserved. Resume after topping up Credits or switching LLM spend to BYOK; the research trace shows any remaining completion gates.",
+                        time: { start: Date.now(), end: Date.now() },
+                      } satisfies MessageV2.TextPart)
+                    }
                   }
 
                   if (snapshot) {

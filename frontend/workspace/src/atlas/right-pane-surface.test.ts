@@ -78,8 +78,8 @@ test("resize separator exposes keyboard and range semantics", () => {
 test("uses a compact tab strip that reveals close controls only when relevant", () => {
   const styles = read("./right-pane-tabs.css")
 
-  expect(styles).toMatch(/\.research-inspector__header\s*\{[^}]*height: 40px/s)
-  expect(styles).toMatch(/\.inspector-tab-pair\s*\{[^}]*max-width: 180px;[^}]*min-height: 30px/s)
+  expect(styles).toMatch(/\.research-inspector__header\s*\{[^}]*height: 44px/s)
+  expect(styles).toMatch(/\.inspector-tab-pair\s*\{[^}]*max-width: 180px;[^}]*min-height: 32px/s)
   expect(styles).toMatch(/\.inspector-tab-pair \.inspector-tab__close\s*\{[^}]*width: 0;[^}]*min-width: 0/s)
   expect(styles).toMatch(
     /\.inspector-tab-pair\[data-active="true"\] \.inspector-tab__close\s*\{[^}]*width: 28px;[^}]*min-width: 28px/s,

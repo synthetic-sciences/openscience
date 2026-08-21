@@ -39,6 +39,11 @@ export type SavedArtifact = {
   preview?: { kind: "image" | "text"; data: string }
 }
 
+export function artifactTypeLabel(artifact: Pick<SavedArtifact, "kind" | "path" | "mimeType">): string {
+  if (artifact.mimeType === "application/pdf" || artifact.path.toLowerCase().endsWith(".pdf")) return "PDF"
+  return sentenceCaseLabel(artifact.kind)
+}
+
 const record = (value: unknown): Record<string, unknown> | undefined => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return
   return value as Record<string, unknown>
@@ -83,15 +88,16 @@ export function generatedArtifacts(
     state?: { status?: string; metadata?: unknown }
   }>,
 ): SavedArtifact[] {
-  const seen = new Set<string>()
-  return parts.flatMap((part) => {
-    if (part.type !== "tool" || part.tool !== "artifact" || part.state?.status !== "completed") return []
+  const artifacts = new Map<string, SavedArtifact>()
+  for (const part of parts) {
+    if (part.type !== "tool" || part.tool !== "artifact" || part.state?.status !== "completed") continue
     const metadata = record(part.state.metadata)
     const artifact = savedArtifact(metadata?.savedArtifact)
-    if (!artifact || seen.has(artifact.versionID)) return []
-    seen.add(artifact.versionID)
-    return [artifact]
-  })
+    if (!artifact) continue
+    const current = artifacts.get(artifact.id)
+    if (!current || artifact.version >= current.version) artifacts.set(artifact.id, artifact)
+  }
+  return [...artifacts.values()]
 }
 
 const filename = (value: string) => value.replaceAll("\\", "/").split("/").pop() || value

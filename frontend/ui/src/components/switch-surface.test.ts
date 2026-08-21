@@ -9,7 +9,7 @@ describe("shared switch surface", () => {
     const css = styles()
 
     expect(css).toMatch(
-      /\[data-slot="switch-control"\]\s*\{[^}]*box-sizing: border-box;[^}]*width: 34px;[^}]*height: 20px;[^}]*padding: 1px;[^}]*border: 1px solid var\(--border-weak-base\);[^}]*border-radius: 999px;/s,
+      /\[data-slot="switch-control"\]\s*\{[^}]*box-sizing: border-box;[^}]*width: 34px;[^}]*height: 20px;[^}]*padding: 1px;[^}]*border: 1px solid var\(--border-weak-base\);[^}]*border-radius: var\(--radius-xl\);/s,
     )
     expect(css).toMatch(
       /\[data-slot="switch-thumb"\]\s*\{[^}]*box-sizing: border-box;[^}]*width: 16px;[^}]*height: 16px;[^}]*border: 0;[^}]*border-radius: 50%;[^}]*transform: translateX\(0\);/s,

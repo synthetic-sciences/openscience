@@ -335,13 +335,13 @@
 }
 .files-row__actions button:hover:not(:disabled),
 .files-row__actions button:focus-visible {
-  background: var(--color-bg-base);
+  background: var(--color-surface-solid);
   color: var(--color-text);
   outline: none;
 }
 .files-row__actions .files-row__trash:hover:not(:disabled),
 .files-row__actions .files-row__trash:focus-visible {
-  color: var(--color-icon-critical-base);
+  color: var(--syntax-critical);
 }
 .files-row--mutable:hover .files-row__actions,
 .files-row--mutable:focus-within .files-row__actions {
@@ -405,9 +405,8 @@
   padding: 12px 8px 4px;
   color: var(--color-text-faint);
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 .files-trash__actions {
   display: inline-flex;
@@ -452,7 +451,7 @@
 .files-purge:hover:not(:disabled),
 .files-purge:focus-visible {
   background: var(--color-bg-subtle);
-  color: var(--color-icon-critical-base);
+  color: var(--syntax-critical);
   outline: none;
 }
 

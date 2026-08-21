@@ -20,9 +20,9 @@ import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, Pare
 import { DiffChanges } from "./diff-changes"
 import { Message, Part } from "./message-part"
 import {
+  artifactTypeLabel,
   artifactActions,
   generatedArtifacts,
-  sentenceCaseLabel,
   stripRedactedReasoning,
   writtenFiles,
 } from "./tool-display"
@@ -41,6 +41,8 @@ import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { lastResponseTextPart } from "./session-turn-response"
+import { groupResearchTrace, type ResearchTraceGroup } from "./research-trace"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
@@ -143,14 +145,7 @@ function AssistantMessageItem(props: {
   const data = useData()
   const emptyParts: PartType[] = []
   const msgParts = createMemo(() => data.store.part[props.message.id] ?? emptyParts)
-  const lastTextPart = createMemo(() => {
-    const parts = msgParts()
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const part = parts[i]
-      if (part?.type === "text") return part as TextPart
-    }
-    return undefined
-  })
+  const lastTextPart = createMemo(() => lastResponseTextPart(msgParts()))
 
   const filteredParts = createMemo(() => {
     let parts = msgParts()
@@ -163,6 +158,8 @@ function AssistantMessageItem(props: {
       parts = parts.filter((part) => !isHiddenTool(part))
     }
 
+    parts = parts.filter((part) => part?.type !== "tool" || part.tool !== "todoread")
+
     if (!props.hideResponsePart) return parts
 
     const responsePartId = props.responsePartId
@@ -172,7 +169,48 @@ function AssistantMessageItem(props: {
     return parts.filter((part) => part?.id !== responsePartId)
   })
 
-  return <Message message={props.message} parts={filteredParts()} />
+  const trace = createMemo(() => groupResearchTrace(filteredParts().map((part) => ({ message: props.message, part }))))
+
+  return (
+    <For each={trace()}>
+      {(item) => (
+        <Show
+          when={item.kind === "group" ? (item as ResearchTraceGroup) : undefined}
+          fallback={
+            <Part part={(item as { kind: "part"; entry: { part: PartType } }).entry.part} message={props.message} />
+          }
+        >
+          {(group) => <ResearchTraceGroupDisplay group={group()} />}
+        </Show>
+      )}
+    </For>
+  )
+}
+
+function ResearchTraceGroupDisplay(props: { group: ResearchTraceGroup }) {
+  const icon = () => {
+    if (props.group.family === "context") return "glasses" as const
+    if (props.group.family === "sources") return "window-cursor" as const
+    if (props.group.family === "commands") return "console" as const
+    if (props.group.family === "changes") return "code-lines" as const
+    if (props.group.family === "images") return "photo" as const
+    if (props.group.family === "skills") return "sparkles" as const
+    return "activity" as const
+  }
+
+  return (
+    <details data-component="research-trace-group" data-family={props.group.family}>
+      <summary>
+        <Icon name={icon()} size="small" />
+        <span data-slot="research-trace-group-label">{props.group.label}</span>
+        <span data-slot="research-trace-group-detail">{props.group.detail}</span>
+        <Icon name="chevron-down" size="small" />
+      </summary>
+      <div data-slot="research-trace-group-operations">
+        <For each={props.group.entries}>{(entry) => <Part part={entry.part} message={entry.message} />}</For>
+      </div>
+    </details>
+  )
 }
 
 export function SessionTurn(
@@ -291,10 +329,8 @@ export function SessionTurn(
     const msgs = assistantMessages()
     for (let mi = msgs.length - 1; mi >= 0; mi--) {
       const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
-      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
-        const part = msgParts[pi]
-        if (part?.type === "text") return part as TextPart
-      }
+      const part = lastResponseTextPart(msgParts)
+      if (part) return part
     }
     return undefined
   })
@@ -742,26 +778,28 @@ export function SessionTurn(
                       </div>
                     </Show>
                     <Show when={promoted().length > 0}>
-                      <section data-slot="session-turn-promoted-results" aria-label="Analysis code and results">
-                        <For each={promoted()}>
-                          {(entry) => <Message message={entry.message} parts={entry.parts} />}
-                        </For>
-                      </section>
+                      <details data-slot="session-turn-metadata">
+                        <summary>
+                          Analysis outputs
+                          <span>· {promoted().reduce((count, entry) => count + entry.parts.length, 0)}</span>
+                        </summary>
+                        <section data-slot="session-turn-promoted-results" aria-label="Analysis code and results">
+                          <For each={promoted()}>
+                            {(entry) => <Message message={entry.message} parts={entry.parts} />}
+                          </For>
+                        </section>
+                      </details>
                     </Show>
                     <Show when={!props.stepsExpanded && requestParts().length > 0}>
                       <div data-slot="session-turn-permission-parts">
                         <For each={requestParts()}>{({ part, message }) => <Part part={part} message={message} />}</For>
                       </div>
                     </Show>
-                    {/* Response */}
-                    <div class="sr-only" aria-live="polite">
-                      {!working() && response() ? response() : ""}
-                    </div>
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
                           <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
-                          <div data-slot="session-turn-response">
+                          <div data-slot="session-turn-response" aria-live="polite" aria-atomic="true">
                             <Markdown
                               data-slot="session-turn-markdown"
                               data-diffs={hasDiffs()}
@@ -953,7 +991,7 @@ export function SessionTurn(
                                 </span>
                                 <span data-slot="session-turn-generated-copy">
                                   <strong>{artifact.title}</strong>
-                                  <small>{sentenceCaseLabel(artifact.kind)}</small>
+                                  <small>{artifactTypeLabel(artifact)}</small>
                                 </span>
                               </button>
                             )}
@@ -963,33 +1001,38 @@ export function SessionTurn(
                     </Show>
                     {/* Explicit save: offer the written files as durable Results */}
                     <Show when={isLastUserMessage() && !working() && !!data.saveArtifact && written().length > 0}>
-                      <div data-slot="session-turn-artifact-save">
-                        <For each={artifactActions(written())}>
-                          {(action) => {
-                            const state = () => store.artifacts[action.path]
-                            const label = () => {
-                              if (state()?.state === "saving")
-                                return `Saving ${action.path.split("/").pop() ?? action.path}…`
-                              if (state()?.state === "saved") return "Saved to Results"
-                              if (state()?.state === "error") return "Save failed · retry"
-                              return action.label
-                            }
-                            return (
-                              <Button
-                                data-slot="session-turn-artifact-action"
-                                data-state={state()?.state}
-                                variant="ghost"
-                                size="small"
-                                title={state()?.error ?? action.path}
-                                disabled={state()?.state === "saving"}
-                                onClick={() => saveArtifact(action.path)}
-                              >
-                                {label()}
-                              </Button>
-                            )
-                          }}
-                        </For>
-                      </div>
+                      <details data-slot="session-turn-metadata">
+                        <summary>
+                          Other changed files<span>· {artifactActions(written()).length}</span>
+                        </summary>
+                        <div data-slot="session-turn-artifact-save">
+                          <For each={artifactActions(written())}>
+                            {(action) => {
+                              const state = () => store.artifacts[action.path]
+                              const label = () => {
+                                if (state()?.state === "saving")
+                                  return `Saving ${action.path.split("/").pop() ?? action.path}…`
+                                if (state()?.state === "saved") return "Saved to Results"
+                                if (state()?.state === "error") return "Save failed · retry"
+                                return action.label
+                              }
+                              return (
+                                <Button
+                                  data-slot="session-turn-artifact-action"
+                                  data-state={state()?.state}
+                                  variant="ghost"
+                                  size="small"
+                                  title={state()?.error ?? action.path}
+                                  disabled={state()?.state === "saving"}
+                                  onClick={() => saveArtifact(action.path)}
+                                >
+                                  {label()}
+                                </Button>
+                              )
+                            }}
+                          </For>
+                        </div>
+                      </details>
                     </Show>
                     <Show when={error() && !props.stepsExpanded}>
                       <Card variant="error" class="error-card">

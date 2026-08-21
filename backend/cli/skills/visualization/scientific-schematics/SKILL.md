@@ -2,15 +2,17 @@
 name: scientific-schematics
 description: "[EXPERIMENTAL] Create publication-quality scientific diagrams using Nano Banana Pro AI with smart iterative refinement. Uses Gemini 3 Pro for quality review. Only regenerates if quality is below threshold for your document type. Specialized in neural network architectures, system diagrams, flowcharts, biological pathways, and complex scientific visualizations."
 category: visualization
-allowed-tools: [Read, Write, Edit, Bash]
+allowed-tools: [Read, Write, Edit, Bash, generate_image]
 ---
 
 # Scientific Schematics and Diagrams
 
 > **[EXPERIMENTAL] External AI Dependency**
-> This skill depends on Nano Banana Pro AI for diagram generation — an external
-> third-party service that may be unavailable or require separate credentials.
-> If unavailable, consider using matplotlib, tikz, or mermaid for diagram generation.
+> Inside OpenScience, call the native `generate_image` tool for every Nano Banana
+> generation or edit. It automatically uses connected OpenRouter BYOK or, when
+> managed spend is enabled, a funded OpenScience wallet. Do not run the Python
+> wrapper through Bash in-product, and do not silently replace a requested Nano
+> Banana figure with matplotlib, TikZ, or Mermaid.
 
 
 ## Overview
@@ -42,20 +44,15 @@ Scientific schematics and diagrams transform complex concepts into clear visual 
 
 ## Quick Start: Generate Any Diagram
 
-Create any scientific diagram by simply describing it. Nano Banana Pro handles everything automatically with **smart iteration**:
+Create any scientific diagram by calling `generate_image` with a publication-specific prompt and output path. Example:
 
-```bash
-# Generate for journal paper (highest quality threshold: 8.5/10)
-python scripts/generate_schematic.py "CONSORT participant flow diagram with 500 screened, 150 excluded, 350 randomized" -o figures/consort.png --doc-type journal
-
-# Generate for presentation (lower threshold: 6.5/10 - faster)
-python scripts/generate_schematic.py "Transformer encoder-decoder architecture showing multi-head attention" -o figures/transformer.png --doc-type presentation
-
-# Generate for poster (moderate threshold: 7.0/10)
-python scripts/generate_schematic.py "MAPK signaling pathway from EGFR to gene transcription" -o figures/mapk_pathway.png --doc-type poster
-
-# Custom max iterations (max 2)
-python scripts/generate_schematic.py "Complex circuit diagram with op-amp, resistors, and capacitors" -o figures/circuit.png --iterations 2 --doc-type journal
+```json
+{
+  "prompt": "Conference-paper technical schematic: Transformer encoder-decoder architecture with multi-head self-attention, cross-attention, residual connections, and tensor flow. Clean white background, restrained colorblind-safe palette, precise readable labels, no decorative elements.",
+  "output_path": "figures/transformer.png",
+  "model": "google/gemini-3-pro-image",
+  "aspect_ratio": "4:3"
+}
 ```
 
 **What happens behind the scenes:**
@@ -75,12 +72,9 @@ python scripts/generate_schematic.py "Complex circuit diagram with op-amp, resis
 
 ### Configuration
 
-Set your OpenRouter API key:
-```bash
-export OPENROUTER_API_KEY='your_api_key_here'
-```
-
-Get an API key at: https://openrouter.ai/keys
+No shell credential setup is required. The native tool selects connected BYOK first
+when that route is active and otherwise uses a funded wallet in managed mode. Only
+surface a connection or balance error returned by that tool; never request a key in chat.
 
 ### AI Generation Best Practices
 
@@ -619,4 +613,3 @@ python scripts/generate_schematic.py "your diagram description" -o output.png
 ---
 
 Use this skill to create clear, accessible, publication-quality diagrams that effectively communicate complex scientific concepts. The AI-powered workflow with iterative refinement ensures diagrams meet professional standards.
-

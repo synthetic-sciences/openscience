@@ -9,6 +9,10 @@ allowed-tools: [Read, Write, Edit, Bash]
 
 > **[EXPERIMENTAL] External AI Dependency**
 > This skill uses Nano Banana Pro AI for slide image generation — an external
+> model. Inside OpenScience, make every generation/edit with the native
+> `generate_image` tool so the request uses connected OpenRouter BYOK or a funded
+> OpenScience wallet in managed mode. The Python scripts documented below are
+> standalone BYOK helpers, not the in-product wallet route.
 > third-party service that may be unavailable or require separate credentials.
 > The core slide structure and content guidance works independently.
 

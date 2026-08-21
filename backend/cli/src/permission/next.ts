@@ -231,6 +231,22 @@ export namespace PermissionNext {
     async (input) => {
       const s = await state()
       const { ruleset, ...request } = input
+      const filesystemRequest =
+        request.permission === "external_directory" ? FilesystemMetadata.safeParse(request.metadata) : undefined
+      if (
+        filesystemRequest?.success &&
+        filesystemRequest.data.filesystem.access === "write" &&
+        (await SessionFilesystem.restrictsWrite({
+          sessionID: request.sessionID,
+          path: filesystemRequest.data.filesystem.path,
+        }))
+      ) {
+        throw new SessionFilesystem.DeniedError({
+          sessionID: request.sessionID,
+          path: filesystemRequest.data.filesystem.path,
+          access: "write",
+        })
+      }
       // Configured agent/tool policy is not a user approval. In an untrusted
       // clone it may never silently turn an external path request into a grant;
       // explicit standing approvals and already-materialized filesystem grants
