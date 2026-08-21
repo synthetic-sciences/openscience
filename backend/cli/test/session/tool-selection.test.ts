@@ -56,6 +56,12 @@ describe("tool selection", () => {
     expect(ToolSelection.relevant("science_search", { agent: "research", message: "Summarize this source." })).toBe(
       true,
     )
+    expect(
+      ToolSelection.relevant("research_contract", {
+        agent: "research",
+        message: "Update the Python harness and benchmark the model against a baseline metric.",
+      }),
+    ).toBe(true)
   })
 
   test("keeps explicitly named or enabled domain capabilities", () => {

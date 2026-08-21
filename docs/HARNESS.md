@@ -79,6 +79,34 @@ Research runs also fail closed around completion:
 - Bash and Zsh pipelines use `pipefail`, so a failed analysis cannot be hidden by `tail`, `tee`, or
   another successful downstream formatter.
 
+## Research completion contracts
+
+Multi-stage research can define a durable completion contract without changing the fast path for
+ordinary questions or code work. Contracted runs add three fail-closed guarantees:
+
+- settled checks and advancing or regressing trials cite runtime-verified evidence references. The
+  runtime resolves `artifact:<id>` and `artifact-path:<path>` to an immutable Result version and
+  SHA-256, or `tool:<name>` and `tool-call:<id>` to an exact terminal tool call and output hash.
+  Free-text evidence remains useful explanation, but cannot pass a gate;
+- independent review completes only after a reviewer records a structured `supports` or `refutes`
+  disposition. When required Results are immutable, every Result version must have a disposition;
+  an empty reviewer response or completed child session does not count; and
+- the complete session tree has configurable model-call, tool-call, token, wall-clock, and cost
+  ceilings. Model calls, including provider retries and delegated child calls, are reserved
+  atomically against the parent contract. Defaults are intentionally generous. Near a ceiling, two
+  finalization calls remain for preserving outputs and returning a verified or explicitly partial
+  result; further inference fails closed while Results and checkpoints remain available.
+  Redefining an active contract can tighten limits but cannot raise them or reset recorded usage.
+
+Quantitative trials may also record a named metric, direction, baseline, target, and unit. When a
+baseline is present, the runtime rejects an `advanced` or `regressed` label that contradicts the
+observed direction. Reusable project lessons become independently supported only from verified
+observations across more than one session; legacy prose-only observations remain tentative.
+
+These controls make runs bounded and auditable. They deliberately do not provide benchmark
+datasets, official graders, leaderboard claims, or a candidate optimizer; those remain separate
+evaluation concerns.
+
 ## Non-goals
 
 - No external agent harness is installed or invoked.

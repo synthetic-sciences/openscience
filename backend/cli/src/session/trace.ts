@@ -724,20 +724,12 @@ export namespace SessionTrace {
       jobs,
       kernels,
       findings: reviewerFindings.map((item) => ({
+        target: item.target,
         verdict: item.relation,
         status: item.status,
         severity: item.severity,
       })),
-      reviewed:
-        reviewerFindings.length > 0 ||
-        inference.some(
-          (item) => (item.agent === "reviewer" || item.agent === "artifact-reviewer") && item.completedAt !== undefined,
-        ) ||
-        children.some(
-          (item) =>
-            (item.agent === "review" || item.agent === "reviewer" || item.agent === "artifact-reviewer") &&
-            item.status === "completed",
-        ),
+      reviewed: reviewerFindings.some((item) => item.relation === "supports" || item.relation === "refutes"),
       busy: SessionStatus.get(sessionID).type !== "idle",
     })
     const harnessReport = SessionHarness.analyze({

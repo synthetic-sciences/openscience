@@ -426,7 +426,7 @@ test("parent readiness includes findings recorded by a delegated reviewer", asyn
   })
 })
 
-test("a completed delegated review satisfies the review gate without findings", async () => {
+test("a completed delegated review cannot satisfy the review gate without a structured disposition", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
     directory: tmp.path,
@@ -485,7 +485,10 @@ test("a completed delegated review satisfies the review gate without findings", 
       const trace = await SessionTrace.build(session.id)
       expect(trace.children[0]).toMatchObject({ agent: "review", status: "completed" })
       expect(trace.reviewerFindings).toHaveLength(0)
-      expect(trace.research.gates.find((gate) => gate.id === "review")?.status).toBe("passed")
+      expect(trace.research.gates.find((gate) => gate.id === "review")).toMatchObject({
+        status: "pending",
+        detail: "Independent review has not recorded a structured disposition",
+      })
       await Session.remove(session.id)
     },
   })

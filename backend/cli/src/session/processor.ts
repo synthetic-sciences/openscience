@@ -322,6 +322,7 @@ export namespace SessionProcessor {
     let needsCompaction = false
     let overflow = false
     let creditDecision: "allow" | "finalize" | "block" | undefined
+    let runtimeDecision: Awaited<ReturnType<typeof SessionResearch.runtimePreflight>> | undefined
 
     const toolOutcomes = createToolOutcomeCoordinator({
       abort: input.abort,
@@ -404,6 +405,13 @@ export namespace SessionProcessor {
               }
             }
 
+            runtimeDecision = await SessionResearch.runtimePreflight(input.sessionID)
+            if (runtimeDecision.decision === "block") {
+              throw new Error(
+                `The research contract runtime budget is exhausted: ${runtimeDecision.reason ?? "configured limit reached"}. Existing Results and checkpoints are preserved. Begin a new user-approved bounded run to continue.`,
+              )
+            }
+
             const requestContext = {
               sessionID: input.sessionID,
               messageID: input.assistantMessage.id,
@@ -411,16 +419,18 @@ export namespace SessionProcessor {
             }
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-            const request =
-              creditDecision === "finalize"
-                ? {
-                    ...streamInput,
-                    system: [
-                      ...streamInput.system,
-                      "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now.",
-                    ],
-                  }
-                : streamInput
+            const finalizing = creditDecision === "finalize" || runtimeDecision.decision === "finalize"
+            const request = finalizing
+              ? {
+                  ...streamInput,
+                  system: [
+                    ...streamInput.system,
+                    creditDecision === "finalize"
+                      ? "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now."
+                      : `The research contract runtime budget is at its finalization boundary (${runtimeDecision.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
+                  ],
+                }
+              : streamInput
             const stream = await Provider.withRequestContext(requestContext, () =>
               LLM.stream({
                 ...request,

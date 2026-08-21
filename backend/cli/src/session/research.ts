@@ -3,6 +3,8 @@ import path from "node:path"
 import { createHash } from "node:crypto"
 import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
+import type { MessageV2 } from "@/session/message-v2"
+import { SessionTraceStore } from "@/session/trace-store"
 import z from "zod"
 
 export namespace SessionResearch {
@@ -18,6 +20,42 @@ export namespace SessionResearch {
 
   export const Status = z.enum(["pending", "running", "completed", "blocked"])
   export type Status = z.infer<typeof Status>
+
+  const Reference = {
+    ref: z.string().trim().min(1).max(1_000),
+    note: z.string().trim().max(1_000).optional(),
+    verifiedAt: z.number().int().nonnegative(),
+  }
+
+  export const EvidenceReference = z.discriminatedUnion("kind", [
+    z.object({
+      ...Reference,
+      kind: z.literal("artifact"),
+      artifactID: z.string().trim().min(1),
+      versionID: z.string().trim().min(1),
+      path: z.string().trim().min(1),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    }),
+    z.object({
+      ...Reference,
+      kind: z.literal("tool"),
+      tool: z.string().trim().min(1),
+      callID: z.string().trim().min(1),
+      status: z.enum(["completed", "error"]),
+      outputHash: z.string().regex(/^[a-f0-9]{64}$/),
+    }),
+  ])
+  export type EvidenceReference = z.infer<typeof EvidenceReference>
+
+  export const Metric = z.object({
+    name: z.string().trim().min(1).max(120),
+    value: z.number().finite(),
+    direction: z.enum(["maximize", "minimize"]),
+    baseline: z.number().finite().optional(),
+    target: z.number().finite().optional(),
+    unit: z.string().trim().min(1).max(40).optional(),
+  })
+  export type Metric = z.infer<typeof Metric>
 
   export const Stage = z.object({
     id: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
@@ -40,6 +78,7 @@ export namespace SessionResearch {
     label: z.string().trim().min(1).max(120),
     status: z.enum(["pending", "passed", "failed"]),
     evidence: z.string().trim().max(2_000).optional(),
+    evidenceRefs: z.array(EvidenceReference).max(20).default([]),
     detail: z.string().trim().max(1_000).optional(),
     updatedAt: z.number(),
   })
@@ -67,11 +106,21 @@ export namespace SessionResearch {
       outcome: Outcome,
       summary: z.string().trim().min(1).max(2_000),
       evidence: z.string().trim().max(2_000).optional(),
+      evidenceRefs: z.array(EvidenceReference).max(20).default([]),
+      metric: Metric.optional(),
       recordedAt: z.number(),
     })
     .superRefine((value, ctx) => {
-      if ((value.outcome === "advanced" || value.outcome === "regressed") && !value.evidence) {
-        ctx.addIssue({ code: "custom", path: ["evidence"], message: `${value.outcome} trials require evidence` })
+      if (value.metric?.baseline === undefined) return
+      const improved =
+        value.metric.direction === "maximize"
+          ? value.metric.value > value.metric.baseline
+          : value.metric.value < value.metric.baseline
+      if (value.outcome === "advanced" && !improved) {
+        ctx.addIssue({ code: "custom", path: ["metric"], message: "Advanced outcome contradicts the metric" })
+      }
+      if (value.outcome === "regressed" && (improved || value.metric.value === value.metric.baseline)) {
+        ctx.addIssue({ code: "custom", path: ["metric"], message: "Regressed outcome contradicts the metric" })
       }
     })
   export type Trial = z.infer<typeof Trial>
@@ -81,6 +130,7 @@ export namespace SessionResearch {
     trialID: z.string(),
     outcome: Outcome,
     evidence: z.string().trim().min(1).max(2_000),
+    evidenceRefs: z.array(EvidenceReference).max(20).default([]),
     note: z.string().trim().min(1).max(2_000),
     recordedAt: z.number(),
   })
@@ -112,6 +162,40 @@ export namespace SessionResearch {
     finalizing: z.boolean().default(false),
     exhausted: z.boolean().default(false),
     lastBalanceUsd: z.number().optional(),
+    limits: z
+      .object({
+        modelCalls: z.number().int().positive().max(10_000).default(128),
+        toolCalls: z.number().int().positive().max(100_000).default(1_024),
+        tokens: z.number().int().positive().max(1_000_000_000).default(5_000_000),
+        wallClockMs: z
+          .number()
+          .int()
+          .positive()
+          .max(30 * 24 * 60 * 60_000)
+          .default(24 * 60 * 60_000),
+        costUsd: z.number().positive().max(100_000).default(200),
+      })
+      .default({
+        modelCalls: 128,
+        toolCalls: 1_024,
+        tokens: 5_000_000,
+        wallClockMs: 24 * 60 * 60_000,
+        costUsd: 200,
+      }),
+    runtimeFinalizationCalls: z.number().int().nonnegative().default(0),
+    runtimeModelCalls: z.number().int().nonnegative().default(0),
+    runtimeFinalizing: z.boolean().default(false),
+    runtimeExhausted: z.boolean().default(false),
+    runtimeReason: z.string().optional(),
+    lastUsage: z
+      .object({
+        modelCalls: z.number().int().nonnegative(),
+        toolCalls: z.number().int().nonnegative(),
+        tokens: z.number().int().nonnegative(),
+        wallClockMs: z.number().int().nonnegative(),
+        costUsd: z.number().nonnegative(),
+      })
+      .optional(),
     updatedAt: z.number(),
   })
   export type Budget = z.infer<typeof Budget>
@@ -293,6 +377,7 @@ export namespace SessionResearch {
     template: Template
     deliverables?: Deliverable[]
     reserveUsd?: number
+    limits?: Partial<Budget["limits"]>
   }): Contract {
     const now = Date.now()
     return Contract.parse({
@@ -313,6 +398,11 @@ export namespace SessionResearch {
         finalizationCalls: 0,
         finalizing: false,
         exhausted: false,
+        limits: input.limits ?? {},
+        runtimeFinalizationCalls: 0,
+        runtimeModelCalls: 0,
+        runtimeFinalizing: false,
+        runtimeExhausted: false,
         updatedAt: now,
       },
       createdAt: now,
@@ -333,6 +423,7 @@ export namespace SessionResearch {
       template: Template
       deliverables?: Deliverable[]
       reserveUsd?: number
+      limits?: Partial<Budget["limits"]>
     },
   ): Promise<Contract> {
     const next = initial(input)
@@ -347,7 +438,32 @@ export namespace SessionResearch {
         checks,
         failures: current.data.failures,
         trials: current.data.trials,
-        budget: { ...current.data.budget, reserveUsd: input.reserveUsd ?? current.data.budget.reserveUsd },
+        budget: {
+          ...current.data.budget,
+          reserveUsd: input.reserveUsd ?? current.data.budget.reserveUsd,
+          limits: {
+            modelCalls: Math.min(
+              current.data.budget.limits.modelCalls,
+              input.limits?.modelCalls ?? current.data.budget.limits.modelCalls,
+            ),
+            toolCalls: Math.min(
+              current.data.budget.limits.toolCalls,
+              input.limits?.toolCalls ?? current.data.budget.limits.toolCalls,
+            ),
+            tokens: Math.min(
+              current.data.budget.limits.tokens,
+              input.limits?.tokens ?? current.data.budget.limits.tokens,
+            ),
+            wallClockMs: Math.min(
+              current.data.budget.limits.wallClockMs,
+              input.limits?.wallClockMs ?? current.data.budget.limits.wallClockMs,
+            ),
+            costUsd: Math.min(
+              current.data.budget.limits.costUsd,
+              input.limits?.costUsd ?? current.data.budget.limits.costUsd,
+            ),
+          },
+        },
         createdAt: current.data.createdAt,
         updatedAt: Date.now(),
       })
@@ -388,10 +504,25 @@ export namespace SessionResearch {
 
   export async function check(
     sessionID: string,
-    input: { id: string; label?: string; status: "pending" | "passed" | "failed"; evidence?: string; detail?: string },
+    input: {
+      id: string
+      label?: string
+      status: "pending" | "passed" | "failed"
+      evidence?: string
+      evidenceRefs?: EvidenceReference[]
+      detail?: string
+    },
   ): Promise<Contract> {
-    if (input.status !== "pending" && !input.evidence?.trim()) {
-      throw new Error(`Research check ${input.id} requires observed evidence before it can be marked ${input.status}`)
+    if (input.status !== "pending" && !input.evidenceRefs?.length) {
+      throw new Error(
+        `Research check ${input.id} requires a verified artifact or tool reference before it can be marked ${input.status}`,
+      )
+    }
+    if (
+      input.status === "passed" &&
+      input.evidenceRefs?.some((item) => item.kind === "tool" && item.status === "error")
+    ) {
+      throw new Error(`Research check ${input.id} cannot pass with an errored tool as evidence`)
     }
     await JsonStore.update(file(sessionID), (data) => {
       const current = Contract.parse(data)
@@ -401,6 +532,7 @@ export namespace SessionResearch {
         label: input.label ?? known?.label ?? input.id,
         status: input.status,
         evidence: input.evidence,
+        evidenceRefs: input.status === "pending" ? [] : input.evidenceRefs,
         detail: input.detail,
         updatedAt: Date.now(),
       })
@@ -435,9 +567,12 @@ export namespace SessionResearch {
 
   export async function trial(
     sessionID: string,
-    input: Omit<Trial, "id" | "recordedAt">,
+    input: Omit<Trial, "id" | "recordedAt" | "evidenceRefs"> & { evidenceRefs?: EvidenceReference[] },
     key?: string,
   ): Promise<Contract> {
+    if ((input.outcome === "advanced" || input.outcome === "regressed") && !input.evidenceRefs?.length) {
+      throw new Error(`${input.outcome} trials require verified evidence references`)
+    }
     const item = Trial.parse({
       ...input,
       id: `trial-${key ?? crypto.randomUUID()}`,
@@ -461,6 +596,8 @@ export namespace SessionResearch {
     outcome: Outcome
     summary: string
     evidence?: string
+    evidenceRefs: EvidenceReference[]
+    metric?: Metric
     recordedAt: number
   }
 
@@ -474,6 +611,7 @@ export namespace SessionResearch {
         outcome: "failed" as const,
         summary: failure.message,
         evidence: failure.disposition,
+        evidenceRefs: [],
         recordedAt: failure.recordedAt,
       })),
     ]
@@ -506,7 +644,8 @@ export namespace SessionResearch {
   }
 
   function confidence(supports: Observation[]) {
-    return new Set(supports.map((item) => item.sessionID)).size > 1 ? ("supported" as const) : ("tentative" as const)
+    const verified = supports.filter((item) => item.evidenceRefs.length)
+    return new Set(verified.map((item) => item.sessionID)).size > 1 ? ("supported" as const) : ("tentative" as const)
   }
 
   export async function experience(projectID: string, domain?: Domain): Promise<Lesson[]> {
@@ -514,6 +653,7 @@ export namespace SessionResearch {
     if (!parsed.success) return []
     return parsed.data.lessons
       .filter((lesson) => !domain || lesson.domain === domain)
+      .map((lesson) => ({ ...lesson, confidence: confidence(lesson.supports) }))
       .toSorted((a, b) => {
         const rank = Number(b.confidence === "supported") - Number(a.confidence === "supported")
         return rank || b.updatedAt - a.updatedAt
@@ -523,7 +663,13 @@ export namespace SessionResearch {
   export async function learn(
     projectID: string,
     sessionID: string,
-    input: { sourceTrial: string; situation: string; guidance: string; evidence?: string },
+    input: {
+      sourceTrial: string
+      situation: string
+      guidance: string
+      evidence?: string
+      evidenceRefs?: EvidenceReference[]
+    },
   ): Promise<Lesson> {
     const contract = await read(sessionID)
     if (!contract) throw new Error("No research completion contract has been defined for this session")
@@ -532,10 +678,11 @@ export namespace SessionResearch {
     if (trial.outcome === "inconclusive") {
       throw new Error("An inconclusive trial cannot create reusable project experience")
     }
-    const evidence = input.evidence ?? trial.evidence
-    if (!evidence?.trim()) {
+    const evidenceRefs = input.evidenceRefs?.length ? input.evidenceRefs : trial.evidenceRefs
+    if (!evidenceRefs.length) {
       throw new Error(`Research trial ${trial.id} needs observed evidence before it can create project experience`)
     }
+    const evidence = input.evidence?.trim() || trial.evidence?.trim() || evidenceRefs.map((item) => item.ref).join(", ")
     const now = Date.now()
     const situation = compact(input.situation)
     const guidance = compact(input.guidance)
@@ -545,6 +692,7 @@ export namespace SessionResearch {
       trialID: trial.id,
       outcome: trial.outcome,
       evidence,
+      evidenceRefs,
       note: trial.summary,
       recordedAt: now,
     })
@@ -587,7 +735,13 @@ export namespace SessionResearch {
   export async function unlearn(
     projectID: string,
     sessionID: string,
-    input: { lesson: string; sourceTrial: string; reason: string; evidence: string },
+    input: {
+      lesson: string
+      sourceTrial: string
+      reason: string
+      evidence: string
+      evidenceRefs?: EvidenceReference[]
+    },
   ): Promise<Lesson> {
     const contract = await read(sessionID)
     if (!contract) throw new Error("No research completion contract has been defined for this session")
@@ -596,12 +750,18 @@ export namespace SessionResearch {
     if (trial.outcome === "inconclusive") {
       throw new Error("An inconclusive trial cannot reject reusable project experience")
     }
+    if (!input.evidenceRefs?.length) {
+      throw new Error(
+        `Research trial ${trial.id} needs verified counterevidence before it can reject project experience`,
+      )
+    }
     const now = Date.now()
     const observation = Observation.parse({
       sessionID,
       trialID: trial.id,
       outcome: trial.outcome,
       evidence: input.evidence,
+      evidenceRefs: input.evidenceRefs,
       note: input.reason,
       recordedAt: now,
     })
@@ -649,7 +809,8 @@ export namespace SessionResearch {
       contract.stages.find((item) => item.status === "running")?.id ??
       contract.stages.find((item) => item.status === "pending")?.id
     const history = entries(contract, stage)
-    const negatives = history.filter((entry) => entry.outcome !== "advanced")
+    const advancing = (entry: Entry) => entry.outcome === "advanced" && entry.evidenceRefs.length > 0
+    const negatives = history.filter((entry) => !advancing(entry))
     const counts = negatives.reduce<Record<string, { label: string; count: number }>>((all, entry) => {
       const key = signature(entry.candidate)
       const current = all[key]
@@ -659,15 +820,14 @@ export namespace SessionResearch {
       .filter((item) => item.count > 1)
       .map((item) => item.label)
     const recent = history.slice(-3)
-    const stalled = recent.length === 3 && recent.every((entry) => entry.outcome !== "advanced")
+    const stalled = recent.length === 3 && recent.every((entry) => !advancing(entry))
     const last = history.at(-1)
     const repeated =
-      last?.outcome !== "advanced" &&
+      last !== undefined &&
+      !advancing(last) &&
       repeatedCandidates.some((candidate) => signature(candidate) === signature(last?.candidate ?? ""))
     const improved = new Set(
-      history
-        .filter((entry) => entry.outcome === "advanced" && entry.branch !== "failure")
-        .map((entry) => entry.branch),
+      history.filter((entry) => advancing(entry) && entry.branch !== "failure").map((entry) => entry.branch),
     )
     const complete = contract.stages.every((item) => item.status === "completed")
     const mode = complete
@@ -729,10 +889,10 @@ export namespace SessionResearch {
   }
 
   export type Evidence = {
-    artifacts: Array<{ path?: string }>
+    artifacts: Array<{ artifactID?: string; versionID?: string; path?: string; sha256?: string }>
     jobs: Array<{ status: string }>
     kernels: Array<{ status: string }>
-    findings: Array<{ verdict?: string; status?: string; severity?: string }>
+    findings: Array<{ target?: string; verdict?: string; status?: string; severity?: string }>
     reviewed: boolean
     busy: boolean
   }
@@ -762,7 +922,7 @@ export namespace SessionResearch {
     const paths = evidence.artifacts.flatMap((item) => (item.path ? [item.path] : []))
     const missing = required.filter((item) => !paths.some((value) => match(item.path, value)))
     const stages = contract.stages.filter((stage) => stage.status === "completed").length
-    const checks = contract.checks.filter((check) => check.status === "passed" && !!check.evidence?.trim()).length
+    const checks = contract.checks.filter((check) => check.status === "passed" && check.evidenceRefs.length).length
     const failed = contract.checks.filter((check) => check.status === "failed").length
     const open = evidence.findings.filter(
       (finding) =>
@@ -770,6 +930,23 @@ export namespace SessionResearch {
         finding.status !== "confirmed" &&
         (finding.severity === "blocking" || finding.severity === "major"),
     ).length
+    const requiredArtifacts = required.flatMap((item) =>
+      evidence.artifacts.filter((artifact) => artifact.path && match(item.path, artifact.path)),
+    )
+    const targets = [
+      ...new Set(
+        requiredArtifacts.map((artifact) =>
+          artifact.versionID && artifact.sha256
+            ? `artifact-version:${artifact.versionID}:${artifact.sha256.slice(0, 16)}`
+            : `unversioned:${artifact.path ?? "unknown"}`,
+        ),
+      ),
+    ]
+    const reviewedTargets = new Set(
+      evidence.findings.flatMap((finding) => (finding.verdict && finding.target ? [finding.target] : [])),
+    )
+    const unreviewed = targets.filter((target) => !reviewedTargets.has(target))
+    const reviewed = targets.length ? unreviewed.length === 0 : evidence.reviewed
     const running = evidence.jobs.filter((job) => job.status === "queued" || job.status === "running").length
     const jobFailures = evidence.jobs.filter(
       (job) => job.status === "failed" || job.status === "interrupted" || job.status === "cancelled",
@@ -786,7 +963,7 @@ export namespace SessionResearch {
       missing.length === 0 &&
       checks === contract.checks.length &&
       failed === 0 &&
-      evidence.reviewed &&
+      reviewed &&
       open === 0
     const gates: Gate[] = [
       {
@@ -820,14 +997,16 @@ export namespace SessionResearch {
       {
         id: "review",
         label: "Independent review",
-        status: open ? "failed" : evidence.reviewed ? "passed" : "pending",
-        complete: open || !evidence.reviewed ? 0 : 1,
+        status: open ? "failed" : reviewed ? "passed" : "pending",
+        complete: open || !reviewed ? 0 : 1,
         total: 1,
         detail: open
           ? `${open} blocking or major ${open === 1 ? "finding" : "findings"} remain open`
-          : evidence.reviewed
-            ? "Independent review completed without open major findings"
-            : "Independent review has not completed",
+          : reviewed
+            ? "Independent review recorded a disposition for every required Result"
+            : unreviewed.length
+              ? `${unreviewed.length} required ${unreviewed.length === 1 ? "Result has" : "Results have"} no structured review disposition`
+              : "Independent review has not recorded a structured disposition",
       },
       {
         id: "runtime",
@@ -912,14 +1091,170 @@ export namespace SessionResearch {
     })
   }
 
+  export type RuntimeUsage = NonNullable<Budget["lastUsage"]>
+  export type RuntimeDecision = {
+    decision: "allow" | "finalize" | "block"
+    usage?: RuntimeUsage
+    reason?: string
+  }
+
+  function messageTokens(message: MessageV2.Assistant) {
+    return (
+      message.tokens.input +
+      message.tokens.output +
+      message.tokens.reasoning +
+      message.tokens.cache.read +
+      message.tokens.cache.write
+    )
+  }
+
+  export async function runtimeUsage(sessionID: string): Promise<RuntimeUsage> {
+    const { Session } = await import("@/session")
+    const seen = new Set<string>()
+    const intervals: Array<[number, number]> = []
+    const visit = async (id: string): Promise<RuntimeUsage> => {
+      if (seen.has(id)) return { modelCalls: 0, toolCalls: 0, tokens: 0, wallClockMs: 0, costUsd: 0 }
+      seen.add(id)
+      const [messages, children, trace] = await Promise.all([
+        Session.messages({ sessionID: id }),
+        Session.children(id),
+        SessionTraceStore.read(id),
+      ])
+      const completed = messages.filter(
+        (message) =>
+          message.info.role === "assistant" &&
+          (message.info.time.completed !== undefined || message.info.error !== undefined),
+      ).length
+      const local = messages.reduce<RuntimeUsage>(
+        (total, message) => {
+          const assistant = message.info.role === "assistant" ? message.info : undefined
+          const tools = message.parts.filter((part) => part.type === "tool").length
+          if (assistant?.time.completed !== undefined)
+            intervals.push([assistant.time.created, assistant.time.completed])
+          return {
+            modelCalls: total.modelCalls,
+            toolCalls: total.toolCalls + tools,
+            tokens: total.tokens + (assistant ? messageTokens(assistant) : 0),
+            wallClockMs: total.wallClockMs,
+            costUsd: total.costUsd + (assistant?.cost ?? 0),
+          }
+        },
+        {
+          modelCalls: Math.max(completed + trace.retries.length, trace.harness.length),
+          toolCalls: 0,
+          tokens: 0,
+          wallClockMs: 0,
+          costUsd: 0,
+        },
+      )
+      const descendants = await Promise.all(children.map((child) => visit(child.id)))
+      return descendants.reduce(
+        (total, item) => ({
+          modelCalls: total.modelCalls + item.modelCalls,
+          toolCalls: total.toolCalls + item.toolCalls,
+          tokens: total.tokens + item.tokens,
+          wallClockMs: total.wallClockMs + item.wallClockMs,
+          costUsd: total.costUsd + item.costUsd,
+        }),
+        local,
+      )
+    }
+    const usage = await visit(sessionID)
+    const elapsed = intervals
+      .toSorted((a, b) => a[0] - b[0])
+      .reduce(
+        (total, interval) => {
+          if (interval[0] >= total.end) return { end: interval[1], value: total.value + interval[1] - interval[0] }
+          const end = Math.max(total.end, interval[1])
+          return { end, value: total.value + end - total.end }
+        },
+        { end: 0, value: 0 },
+      ).value
+    return { ...usage, wallClockMs: elapsed }
+  }
+
+  async function runtimeContract(sessionID: string) {
+    const { Session } = await import("@/session")
+    const seen = new Set<string>()
+    const visit = async (id: string, found?: string): Promise<string | undefined> => {
+      if (seen.has(id)) return found
+      seen.add(id)
+      const contract = await read(id)
+      const anchor = contract ? id : found
+      const session = await Session.get(id).catch(() => undefined)
+      if (!session?.parentID) return anchor
+      return visit(session.parentID, anchor)
+    }
+    return visit(sessionID)
+  }
+
+  export async function runtimePreflight(sessionID: string): Promise<RuntimeDecision> {
+    const anchor = await runtimeContract(sessionID)
+    if (!anchor) return { decision: "allow" as const }
+    const observed = await runtimeUsage(anchor)
+    const result: RuntimeDecision = { decision: "allow", usage: observed }
+    await JsonStore.update(file(anchor), (data) => {
+      const current = Contract.parse(data)
+      const used = Math.max(current.budget.runtimeModelCalls, observed.modelCalls)
+      const usage = { ...observed, modelCalls: used }
+      const limits = current.budget.limits
+      const hard =
+        used >= limits.modelCalls ||
+        usage.toolCalls >= limits.toolCalls ||
+        usage.tokens >= limits.tokens ||
+        usage.wallClockMs >= limits.wallClockMs ||
+        usage.costUsd >= limits.costUsd
+      const reasons = [
+        ...(used >= Math.max(1, limits.modelCalls - 2) ? [`model-call limit (${used}/${limits.modelCalls})`] : []),
+        ...(usage.toolCalls >= limits.toolCalls * 0.9
+          ? [`tool-call limit (${usage.toolCalls}/${limits.toolCalls})`]
+          : []),
+        ...(usage.tokens >= limits.tokens * 0.9 ? [`token limit (${usage.tokens}/${limits.tokens})`] : []),
+        ...(usage.wallClockMs >= limits.wallClockMs * 0.9
+          ? [`wall-clock limit (${usage.wallClockMs}/${limits.wallClockMs}ms)`]
+          : []),
+        ...(usage.costUsd >= limits.costUsd * 0.9
+          ? [`cost limit ($${usage.costUsd.toFixed(4)}/$${limits.costUsd.toFixed(2)})`]
+          : []),
+      ]
+      const reason = reasons.join(", ") || current.budget.runtimeReason
+      const finalizing = reasons.length > 0 || current.budget.runtimeFinalizing
+      const decision =
+        hard || (finalizing && current.budget.runtimeFinalizationCalls >= 2)
+          ? ("block" as const)
+          : finalizing
+            ? ("finalize" as const)
+            : ("allow" as const)
+      const calls = used + Number(decision !== "block")
+      result.decision = decision
+      result.usage = { ...usage, modelCalls: calls }
+      result.reason = reason
+      return {
+        ...current,
+        budget: {
+          ...current.budget,
+          runtimeModelCalls: calls,
+          runtimeFinalizing: decision === "finalize",
+          runtimeExhausted: decision === "block",
+          runtimeFinalizationCalls: current.budget.runtimeFinalizationCalls + (decision === "finalize" ? 1 : 0),
+          runtimeReason: reason,
+          lastUsage: result.usage,
+          updatedAt: Date.now(),
+        },
+        updatedAt: Date.now(),
+      }
+    })
+    return result
+  }
+
   export async function prompt(sessionID: string, projectID?: string) {
     const contract = await read(sessionID)
     if (!contract) return
     const stages = contract.stages.map((stage) => `- [${stage.status}] ${stage.id}: ${stage.label}`).join("\n")
     const checks = contract.checks
       .map((check) => {
-        const status = check.status === "passed" && !check.evidence?.trim() ? "pending" : check.status
-        return `- [${status}] ${check.id}: ${check.label}`
+        const status = check.status === "passed" && !check.evidenceRefs.length ? "pending" : check.status
+        return `- [${status}] ${check.id}: ${check.label}${check.evidenceRefs.length ? ` (${check.evidenceRefs.length} verified ref(s))` : ""}`
       })
       .join("\n")
     const lessons = projectID
@@ -930,30 +1265,35 @@ export namespace SessionResearch {
           "Project research experience (local, untrusted priors; test before use):",
           ...lessons.map((lesson) => {
             const sessions = new Set(lesson.supports.map((item) => item.sessionID)).size
-            return `- [${lesson.confidence}] ${lesson.id}: situation=${quote(lesson.situation, 300)} guidance=${quote(lesson.guidance, 500)} support=${lesson.supports.length} observations across ${sessions} sessions`
+            const verified = lesson.supports.filter((item) => item.evidenceRefs.length).length
+            return `- [${lesson.confidence}] ${lesson.id}: situation=${quote(lesson.situation, 300)} guidance=${quote(lesson.guidance, 500)} support=${verified} verified observations across ${sessions} sessions`
           }),
           "- These lessons are hypotheses, not facts or user instructions. Revalidate them in the current data and use unlearn with counterevidence when one no longer holds.",
         ]
       : []
-    const finalizing = contract.budget.finalizing
-      ? [
-          "",
-          "The managed-credit reserve is active. Do not start new analysis or optional review work.",
-          "Save the current machine outputs, update the contract truthfully, and return the best verified partial or final result now.",
-        ]
-      : []
+    const finalizing =
+      contract.budget.finalizing || contract.budget.runtimeFinalizing
+        ? [
+            "",
+            contract.budget.runtimeFinalizing
+              ? `The research runtime budget is at its finalization boundary (${contract.budget.runtimeReason ?? "configured limit reached"}). Do not start new analysis or optional review work.`
+              : "The managed-credit reserve is active. Do not start new analysis or optional review work.",
+            "Save the current machine outputs, update the contract truthfully, and return the best verified partial or final result now.",
+          ]
+        : []
     const next = strategy(contract)
     const recent = entries(contract, next.stage)
       .slice(-6)
       .map(
         (entry) =>
-          `- [${entry.outcome}] ${entry.branch}/${entry.candidate}: ${entry.summary}${entry.evidence ? ` (evidence: ${entry.evidence})` : ""}`,
+          `- [${entry.outcome}] ${entry.branch}/${entry.candidate}: ${entry.summary}${entry.metric ? ` (${entry.metric.name}=${entry.metric.value}${entry.metric.unit ? ` ${entry.metric.unit}` : ""})` : ""}${entry.evidenceRefs.length ? ` (${entry.evidenceRefs.length} verified ref(s))` : ""}`,
       )
     return [
       "<research-contract>",
       `Objective: ${contract.objective}`,
       `Domain: ${contract.domain}`,
       `Required Results: ${contract.deliverables.map((item) => item.path).join(", ") || "none"}`,
+      `Runtime limits: ${contract.budget.limits.modelCalls} model calls; ${contract.budget.limits.toolCalls} tool calls; ${contract.budget.limits.tokens} tokens; ${Math.round(contract.budget.limits.wallClockMs / 60_000)} minutes; $${contract.budget.limits.costUsd.toFixed(2)}`,
       "Stages:",
       stages,
       "Checks:",

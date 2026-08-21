@@ -64,6 +64,13 @@ node it concerns using `provenance_review`:
   - plus `claim`, `issue`, `evidence`
 This leaves an append-only audit trail linked into the DAG. It does not modify the artifact.
 
+For every durable Result target you can inspect, record at least one structured disposition with
+`provenance_review`. A clean review is not the absence of findings: record a `supports` disposition
+that names the checks actually performed and their concrete evidence. Record each defect separately
+with `refutes`. Merely returning reviewer prose does not complete the review gate. If bytes or
+evidence are unavailable, report `NO VERDICT` and leave the gate pending rather than manufacturing a
+passing disposition.
+
 ## Phase 1: OUTPUT INVENTORY
 Catalog what you are auditing. For each item:
 - Type: report | results section | claim list | figure | notebook | table

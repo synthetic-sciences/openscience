@@ -1,6 +1,28 @@
 import { expect, test } from "bun:test"
 import { SessionResearch } from "../../src/session/research"
 
+function verified(label: string): SessionResearch.EvidenceReference {
+  return {
+    kind: "tool",
+    ref: `call-${label}`,
+    tool: "bash",
+    callID: `call-${label}`,
+    status: "completed",
+    outputHash: new Bun.CryptoHasher("sha256").update(label).digest("hex"),
+    verifiedAt: 1,
+  }
+}
+
+function artifact(path: string, index: number) {
+  const sha256 = index.toString(16).padStart(64, "0")
+  const versionID = `ver-${index}`
+  return { path, artifactID: `art-${index}`, versionID, sha256 }
+}
+
+function target(item: ReturnType<typeof artifact>) {
+  return `artifact-version:${item.versionID}:${item.sha256.slice(0, 16)}`
+}
+
 test("explicit deliverables replace generic template filenames", async () => {
   const sessionID = `ses_research_${crypto.randomUUID()}`
   try {
@@ -46,6 +68,7 @@ test("persists, resumes, and truthfully assesses a research completion contract"
       outcome: "advanced",
       summary: "Produced finite calibration metrics",
       evidence: "metrics.json",
+      evidenceRefs: [verified("calibration")],
     })
     for (const stage of created.stages) {
       await SessionResearch.stage(sessionID, { id: stage.id, status: "completed", detail: "verified" })
@@ -55,6 +78,7 @@ test("persists, resumes, and truthfully assesses a research completion contract"
         id: check.id,
         status: "passed",
         evidence: "clean process output",
+        evidenceRefs: [verified(check.id)],
       })
     }
     await SessionResearch.fail(sessionID, {
@@ -65,33 +89,34 @@ test("persists, resumes, and truthfully assesses a research completion contract"
     })
 
     const contract = (await SessionResearch.read(sessionID))!
+    const artifacts = [
+      artifact("analysis.py", 1),
+      artifact("metrics.json", 2),
+      artifact("report.md", 3),
+      artifact("REPRODUCE.md", 4),
+      artifact("figures/calibration.png", 5),
+    ]
+    const findings = artifacts.map((item) => ({
+      target: target(item),
+      verdict: "supports",
+      status: undefined,
+      severity: "info",
+    }))
     const assessment = SessionResearch.assess(contract, {
-      artifacts: [
-        { path: "analysis.py" },
-        { path: "metrics.json" },
-        { path: "report.md" },
-        { path: "REPRODUCE.md" },
-        { path: "figures/calibration.png" },
-      ],
+      artifacts,
       jobs: [{ status: "completed" }],
       kernels: [{ status: "completed" }],
-      findings: [{ verdict: "supports", status: undefined, severity: "info" }],
+      findings,
       reviewed: true,
       busy: false,
     })
     expect(assessment).toMatchObject({ status: "ready", readiness: 100, failedCandidates: 1 })
 
     const recovered = SessionResearch.assess(contract, {
-      artifacts: [
-        { path: "analysis.py" },
-        { path: "metrics.json" },
-        { path: "report.md" },
-        { path: "REPRODUCE.md" },
-        { path: "figures/calibration.png" },
-      ],
+      artifacts,
       jobs: [{ status: "failed" }, { status: "completed" }],
       kernels: [{ status: "error" }, { status: "completed" }],
-      findings: [{ verdict: "supports", status: "confirmed", severity: "info" }],
+      findings: findings.map((item) => ({ ...item, status: "confirmed" })),
       reviewed: true,
       busy: false,
     })
@@ -131,6 +156,37 @@ test("blocks readiness on unresolved review findings and runtime failures", asyn
     expect(assessment.status).toBe("blocked")
     expect(assessment.gates.find((gate) => gate.id === "review")?.status).toBe("failed")
     expect(assessment.gates.find((gate) => gate.id === "runtime")?.detail).toContain("2 kernel or compute failures")
+  } finally {
+    await SessionResearch.remove(sessionID)
+  }
+})
+
+test("review coverage requires a structured disposition for every required immutable Result", async () => {
+  const sessionID = `ses_research_${crypto.randomUUID()}`
+  try {
+    const contract = await SessionResearch.define(sessionID, {
+      objective: "Review every result",
+      domain: "general",
+      template: "minimal",
+      deliverables: [
+        { path: "report.md", label: "Report", required: true },
+        { path: "metrics.json", label: "Metrics", required: true },
+      ],
+    })
+    const report = artifact("report.md", 20)
+    const metrics = artifact("metrics.json", 21)
+    const assessment = SessionResearch.assess(contract, {
+      artifacts: [report, metrics],
+      jobs: [],
+      kernels: [],
+      findings: [{ target: target(report), verdict: "supports", severity: "info" }],
+      reviewed: true,
+      busy: false,
+    })
+    expect(assessment.gates.find((gate) => gate.id === "review")).toMatchObject({
+      status: "pending",
+      detail: "1 required Result has no structured review disposition",
+    })
   } finally {
     await SessionResearch.remove(sessionID)
   }
@@ -191,6 +247,7 @@ test("persists material attempts and changes trajectory strategy without repeati
       outcome: "advanced",
       summary: "Reduced error under the frozen contamination case",
       evidence: "metrics.json:trimmed_mae",
+      evidenceRefs: [verified("trimmed")],
     })
     const fused = await SessionResearch.trial(sessionID, {
       stage: "scope",
@@ -199,6 +256,7 @@ test("persists material attempts and changes trajectory strategy without repeati
       outcome: "advanced",
       summary: "Improved the heavy-tail control independently",
       evidence: "metrics.json:mom_mae",
+      evidenceRefs: [verified("mom")],
     })
     expect(SessionResearch.strategy(fused)).toMatchObject({ mode: "fuse", attempts: 4, branches: 3 })
 
@@ -215,6 +273,7 @@ test("persists material attempts and changes trajectory strategy without repeati
       outcome: "advanced",
       summary: "Combined the independent robust branches",
       evidence: "metrics.json:fused_mae",
+      evidenceRefs: [verified("fused")],
     })
     for (const stage of fused.stages) {
       await SessionResearch.stage(sessionID, { id: stage.id, status: "completed" })
@@ -248,6 +307,7 @@ test("requires a material trial before the domain decision stage can complete", 
       outcome: "advanced",
       summary: "Reduced contaminated RMSE",
       evidence: "metrics.json:sample_median.rmse",
+      evidenceRefs: [verified("sample-median")],
     })
     expect(
       await SessionResearch.stage(sessionID, {
@@ -285,16 +345,36 @@ test("retains stage boundary evidence without treating it as a verification chec
   }
 })
 
-test("loads pre-trajectory contracts with an empty attempt ledger", () => {
+test("loads pre-verification contracts without treating prose as verified", () => {
   const parsed = SessionResearch.Contract.parse({
     version: 1,
     objective: "Legacy contract",
     domain: "general",
     template: "minimal",
-    stages: [],
+    stages: [{ id: "scope", label: "Scope", status: "pending", updatedAt: 1 }],
     deliverables: [],
-    checks: [],
+    checks: [
+      {
+        id: "legacy-check",
+        label: "Legacy check",
+        status: "passed",
+        evidence: "verification.log",
+        updatedAt: 1,
+      },
+    ],
     failures: [],
+    trials: [
+      {
+        id: "legacy-trial",
+        stage: "scope",
+        branch: "legacy",
+        candidate: "legacy candidate",
+        outcome: "advanced",
+        summary: "Legacy claimed improvement",
+        evidence: "metrics.json:score",
+        recordedAt: 1,
+      },
+    ],
     budget: {
       reserveUsd: 1,
       finalizationCalls: 0,
@@ -305,10 +385,12 @@ test("loads pre-trajectory contracts with an empty attempt ledger", () => {
     createdAt: 1,
     updatedAt: 1,
   })
-  expect(parsed.trials).toEqual([])
+  expect(parsed.checks[0]?.evidenceRefs).toEqual([])
+  expect(parsed.trials[0]?.evidenceRefs).toEqual([])
+  expect(SessionResearch.strategy(parsed).mode).toBe("explore")
 })
 
-test("requires evidence before a trial may claim advancement or regression", () => {
+test("loads legacy prose-only trials but requires verified evidence for new advancement claims", async () => {
   expect(
     SessionResearch.Trial.safeParse({
       id: "trial-1",
@@ -317,9 +399,10 @@ test("requires evidence before a trial may claim advancement or regression", () 
       candidate: "trimmed mean",
       outcome: "advanced",
       summary: "Lower error",
+      evidence: "legacy metrics note",
       recordedAt: 1,
     }).success,
-  ).toBe(false)
+  ).toBe(true)
   expect(
     SessionResearch.Trial.safeParse({
       id: "trial-2",
@@ -329,9 +412,31 @@ test("requires evidence before a trial may claim advancement or regression", () 
       outcome: "advanced",
       summary: "Lower error",
       evidence: "metrics.json:mae",
+      evidenceRefs: [verified("trial-2")],
       recordedAt: 1,
     }).success,
   ).toBe(true)
+
+  const sessionID = `ses_research_${crypto.randomUUID()}`
+  try {
+    await SessionResearch.define(sessionID, {
+      objective: "Reject unverified advancement",
+      domain: "general",
+      template: "minimal",
+    })
+    await expect(
+      SessionResearch.trial(sessionID, {
+        stage: "scope",
+        branch: "legacy",
+        candidate: "prose-only claim",
+        outcome: "advanced",
+        summary: "Claimed improvement",
+        evidence: "metrics.json:score",
+      }),
+    ).rejects.toThrow("require verified evidence references")
+  } finally {
+    await SessionResearch.remove(sessionID)
+  }
 })
 
 test("requires observed evidence before a verification check may settle", async () => {
@@ -344,8 +449,17 @@ test("requires observed evidence before a verification check may settle", async 
     })
     const check = contract.checks[0]
     await expect(SessionResearch.check(sessionID, { id: check.id, status: "passed" })).rejects.toThrow(
-      "requires observed evidence",
+      "requires a verified artifact or tool reference",
     )
+    const errored = verified("errored")
+    if (errored.kind !== "tool") throw new Error("Expected tool evidence")
+    await expect(
+      SessionResearch.check(sessionID, {
+        id: check.id,
+        status: "passed",
+        evidenceRefs: [{ ...errored, status: "error" }],
+      }),
+    ).rejects.toThrow("cannot pass with an errored tool")
 
     const legacy = {
       ...contract,
@@ -366,6 +480,7 @@ test("requires observed evidence before a verification check may settle", async 
         id: check.id,
         status: "passed",
         evidence: "verification.log: exit 0",
+        evidenceRefs: [verified("verification")],
       }),
     ).toMatchObject({ checks: [expect.objectContaining({ id: check.id, status: "passed" })] })
   } finally {
@@ -404,6 +519,7 @@ test("promotes project research lessons across independent sessions and retires 
         outcome: "advanced",
         summary: "Reduced error under the frozen contamination sweep",
         evidence: "metrics-first.json:huber.rmse",
+        evidenceRefs: [verified("first")],
       },
       "support-first",
     )
@@ -432,6 +548,7 @@ test("promotes project research lessons across independent sessions and retires 
         outcome: "advanced",
         summary: "Confirmed the method-family advantage on an independent session",
         evidence: "metrics-second.json:tukey.rmse",
+        evidenceRefs: [verified("second")],
       },
       "support-second",
     )
@@ -463,6 +580,7 @@ test("promotes project research lessons across independent sessions and retires 
         outcome: "advanced",
         summary: "The frozen-grid solver met its convergence criterion",
         evidence: "physics-metrics.json:order",
+        evidenceRefs: [verified("physics")],
       },
       "physics-support",
     )
@@ -472,6 +590,7 @@ test("promotes project research lessons across independent sessions and retires 
         sourceTrial: "trial-physics-support",
         reason: "A physics trial must not mutate statistics experience",
         evidence: "physics-metrics.json:order",
+        evidenceRefs: [verified("physics-counter")],
       }),
     ).rejects.toThrow("belongs to the statistics domain")
 
@@ -484,6 +603,7 @@ test("promotes project research lessons across independent sessions and retires 
         outcome: "regressed",
         summary: "The robust estimator lost efficiency after contamination was ruled out",
         evidence: "metrics-third.json:efficiency",
+        evidenceRefs: [verified("third")],
       },
       "contradiction",
     )
@@ -492,6 +612,7 @@ test("promotes project research lessons across independent sessions and retires 
       sourceTrial: "trial-contradiction",
       reason: "The prior is invalid after contamination is ruled out",
       evidence: "metrics-third.json:efficiency",
+      evidenceRefs: [verified("third-counter")],
     })
     expect(rejected).toMatchObject({ status: "rejected", contradictions: [{ sessionID: thirdID }] })
     expect(await SessionResearch.prompt(thirdID, projectID)).not.toContain(`[supported] ${supported.id}`)

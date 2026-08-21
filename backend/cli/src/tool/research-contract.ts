@@ -1,12 +1,33 @@
 import { SessionResearch } from "@/session/research"
 import { Instance } from "@/project/instance"
+import { ArtifactStore } from "@/artifact/store"
+import { Session } from "@/session"
+import type { MessageV2 } from "@/session/message-v2"
 import { Tool } from "./tool"
 import z from "zod"
+
+const EvidenceRequests = z
+  .array(z.string().trim().min(3).max(1_000))
+  .min(1)
+  .max(8)
+  .describe("Runtime-verified refs: artifact:<id>, artifact-path:<path>, tool:<name>, or tool-call:<id>.")
+
+const Domain = z.enum([
+  "general",
+  "statistics",
+  "biology",
+  "physics",
+  "chemistry",
+  "ml",
+  "weather",
+  "posttrain",
+  "evidence",
+])
 
 const Define = z.object({
   action: z.literal("define"),
   objective: z.string().trim().min(1).max(2_000),
-  domain: SessionResearch.Domain.default("general"),
+  domain: Domain.default("general"),
   template: SessionResearch.Template.default("empirical"),
   deliverables: z
     .array(
@@ -17,9 +38,17 @@ const Define = z.object({
       }),
     )
     .max(40)
-    .describe("Required Results; omit for template defaults.")
     .optional(),
   reserve_usd: z.number().min(0).max(100).optional(),
+  max_model_calls: z.number().int().positive().max(10_000).optional(),
+  max_tool_calls: z.number().int().positive().max(100_000).optional(),
+  max_tokens: z.number().int().positive().max(1_000_000_000).optional(),
+  max_minutes: z
+    .number()
+    .positive()
+    .max(30 * 24 * 60)
+    .optional(),
+  max_cost_usd: z.number().positive().max(100_000).optional(),
 })
 
 const Stage = z.object({
@@ -42,11 +71,16 @@ const Check = z
     label: z.string().trim().min(1).max(120).optional(),
     status: z.enum(["pending", "passed", "failed"]),
     evidence: z.string().trim().min(1).max(2_000).optional(),
+    evidence_refs: EvidenceRequests.optional(),
     detail: z.string().trim().max(1_000).optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.status !== "pending" && !value.evidence) {
-      ctx.addIssue({ code: "custom", path: ["evidence"], message: `${value.status} checks require observed evidence` })
+    if (value.status !== "pending" && !value.evidence_refs?.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["evidence_refs"],
+        message: `${value.status} checks require runtime-verified evidence references`,
+      })
     }
   })
 
@@ -65,31 +99,36 @@ const Trial = z
       .string()
       .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/)
       .describe("Contract stage ID that produced this attempt."),
-    branch: z
-      .string()
-      .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/)
-      .describe("Approach-family ID; reuse for refinements, change for a new approach."),
+    branch: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
     candidate: z.string().trim().min(1).max(240).describe("Unique label for the concrete candidate."),
     outcome: SessionResearch.Outcome.describe("Observed result."),
-    summary: z.string().trim().min(1).max(2_000).describe("Attempt and observed result."),
+    summary: z.string().trim().min(1).max(2_000),
     evidence: z
       .string()
       .trim()
       .max(2_000)
       .describe("Supporting artifact, metric, source, or check; required for advanced/regressed.")
       .optional(),
+    evidence_refs: EvidenceRequests.optional(),
+    metric: SessionResearch.Metric.optional().describe(
+      "Optional quantitative result. When baseline is supplied, the runtime rejects an outcome that contradicts the metric direction.",
+    ),
   })
   .superRefine((value, ctx) => {
-    if ((value.outcome === "advanced" || value.outcome === "regressed") && !value.evidence) {
-      ctx.addIssue({ code: "custom", path: ["evidence"], message: `${value.outcome} trials require evidence` })
+    if ((value.outcome === "advanced" || value.outcome === "regressed") && !value.evidence_refs?.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["evidence_refs"],
+        message: `${value.outcome} trials require runtime-verified evidence references`,
+      })
     }
   })
 
 const Learn = z.object({
   action: z.literal("learn"),
-  source_trial: z.string().trim().min(1).max(200).describe("Prior material trial ID."),
-  situation: z.string().trim().min(1).max(500).describe("Reusable project condition, never a scientific conclusion."),
-  guidance: z.string().trim().min(1).max(1_000).describe("Reusable method guidance to test later."),
+  source_trial: z.string().trim().min(1).max(200),
+  situation: z.string().trim().min(1).max(500),
+  guidance: z.string().trim().min(1).max(1_000),
   evidence: z
     .string()
     .trim()
@@ -97,6 +136,7 @@ const Learn = z.object({
     .max(2_000)
     .describe("Support for the lesson; defaults to source-trial evidence.")
     .optional(),
+  evidence_refs: EvidenceRequests.optional(),
 })
 
 const Unlearn = z.object({
@@ -105,23 +145,138 @@ const Unlearn = z.object({
   source_trial: z.string().trim().min(1).max(200).describe("Current trial contradicting the lesson."),
   reason: z.string().trim().min(1).max(1_000),
   evidence: z.string().trim().min(1).max(2_000).describe("Counterevidence invalidating the lesson."),
+  evidence_refs: EvidenceRequests,
 })
 
 const Status = z.object({ action: z.literal("status") })
+
+function hash(value: string) {
+  return new Bun.CryptoHasher("sha256").update(value).digest("hex")
+}
+
+async function evidenceContext(sessionID: string) {
+  const sessions = new Set<string>()
+  const visit = async (id: string): Promise<MessageV2.WithParts[]> => {
+    if (sessions.has(id)) return []
+    sessions.add(id)
+    const [messages, children] = await Promise.all([Session.messages({ sessionID: id }), Session.children(id)])
+    return [messages, ...(await Promise.all(children.map((child) => visit(child.id))))].flat()
+  }
+  const [messages, artifacts] = await Promise.all([visit(sessionID), ArtifactStore.list(Instance.project.id)])
+  return { sessions, messages, artifacts }
+}
+
+async function evidence(
+  requests: z.infer<typeof EvidenceRequests> | undefined,
+  sessionID: string,
+): Promise<SessionResearch.EvidenceReference[]> {
+  if (!requests?.length) return []
+  const context = await evidenceContext(sessionID)
+  return Promise.all(
+    requests.map(async (request) => {
+      const parsed = (() => {
+        if (request.startsWith("artifact-path:")) {
+          return { kind: "artifact" as const, path: request.slice("artifact-path:".length) }
+        }
+        if (request.startsWith("artifact:")) {
+          return { kind: "artifact" as const, artifactID: request.slice("artifact:".length) }
+        }
+        if (request.startsWith("tool-call:")) {
+          return { kind: "tool" as const, callID: request.slice("tool-call:".length) }
+        }
+        if (request.startsWith("tool:")) return { kind: "tool" as const, tool: request.slice("tool:".length) }
+        throw new Error(
+          `Invalid evidence reference ${JSON.stringify(request)}; use artifact:<id>, artifact-path:<path>, tool:<name>, or tool-call:<id>`,
+        )
+      })()
+      if (!Object.values(parsed).every((value) => value)) {
+        throw new Error(`Evidence reference ${JSON.stringify(request)} has an empty selector`)
+      }
+      if (parsed.kind === "artifact") {
+        const current = context.artifacts.find(
+          (item) =>
+            item.state === "active" &&
+            context.sessions.has(item.current.sessionID) &&
+            (!("artifactID" in parsed) || item.id === parsed.artifactID) &&
+            (!("path" in parsed) || item.current.sourcePath === parsed.path),
+        )
+        if (!current) {
+          throw new Error(`No active durable Result in this session tree matches ${request}`)
+        }
+        const detail = await ArtifactStore.get(Instance.project.id, current.id)
+        const version = detail?.current
+        if (!version || !context.sessions.has(version.sessionID)) {
+          throw new Error(`Artifact version ${current.currentVersionID} is not in this session tree`)
+        }
+        const snapshot = await ArtifactStore.read(Instance.project.id, current.id, version.id)
+        if (!snapshot || snapshot.info.sha256 !== version.sha256) {
+          throw new Error(`Artifact ${current.id} version ${version.id} failed immutable blob verification`)
+        }
+        return SessionResearch.EvidenceReference.parse({
+          kind: "artifact",
+          ref: `${current.id}:${version.id}`,
+          artifactID: current.id,
+          versionID: version.id,
+          path: version.sourcePath,
+          sha256: version.sha256,
+          verifiedAt: Date.now(),
+        })
+      }
+
+      const tools = context.messages
+        .flatMap((message) => message.parts)
+        .filter(
+          (
+            part,
+          ): part is MessageV2.ToolPart & {
+            state: MessageV2.ToolStateCompleted | MessageV2.ToolStateError
+          } =>
+            part.type === "tool" &&
+            (part.state.status === "completed" || part.state.status === "error") &&
+            part.tool !== "research_contract",
+        )
+        .toSorted((a, b) => a.state.time.end - b.state.time.end)
+      const found = tools.findLast(
+        (part) =>
+          (!("callID" in parsed) || part.callID === parsed.callID) &&
+          (!("tool" in parsed) || part.tool === parsed.tool),
+      )
+      if (!found) {
+        throw new Error(`No terminal tool call matches ${request}`)
+      }
+      const output = found.state.status === "completed" ? found.state.output : found.state.error
+      return SessionResearch.EvidenceReference.parse({
+        kind: "tool",
+        ref: found.callID,
+        tool: found.tool,
+        callID: found.callID,
+        status: found.state.status,
+        outputHash: hash(output),
+        verifiedAt: Date.now(),
+      })
+    }),
+  )
+}
 
 const Params = z
   .object({
     action: z.enum(["define", "stage", "check", "trial", "failure", "learn", "unlearn", "status"]),
     objective: Define.shape.objective.optional(),
-    domain: SessionResearch.Domain.optional(),
+    domain: Domain.optional(),
     template: SessionResearch.Template.optional(),
     deliverables: Define.shape.deliverables,
     reserve_usd: Define.shape.reserve_usd,
+    max_model_calls: Define.shape.max_model_calls,
+    max_tool_calls: Define.shape.max_tool_calls,
+    max_tokens: Define.shape.max_tokens,
+    max_minutes: Define.shape.max_minutes,
+    max_cost_usd: Define.shape.max_cost_usd,
     stage: Stage.shape.stage.optional(),
     check: Check.shape.check.optional(),
     label: Check.shape.label,
     status: z.enum(["pending", "running", "completed", "blocked", "passed", "failed"]).optional(),
     evidence: Check.shape.evidence,
+    evidence_refs: EvidenceRequests.optional(),
     detail: Check.shape.detail,
     candidate: Failure.shape.candidate.optional(),
     message: Failure.shape.message.optional(),
@@ -129,6 +284,7 @@ const Params = z
     branch: Trial.shape.branch.optional(),
     outcome: SessionResearch.Outcome.optional(),
     summary: Trial.shape.summary.optional(),
+    metric: SessionResearch.Metric.optional(),
     source_trial: Learn.shape.source_trial.optional(),
     situation: Learn.shape.situation.optional(),
     guidance: Learn.shape.guidance.optional(),
@@ -136,25 +292,35 @@ const Params = z
     reason: Unlearn.shape.reason.optional(),
   })
   .superRefine((value, ctx) => {
-    const parsed = [Define, Stage, Check, Trial, Failure, Learn, Unlearn, Status].find(
-      (schema) => schema.safeParse(value).success,
-    )
-    if (parsed) return
-    ctx.addIssue({ code: "custom", message: `Invalid fields for research contract action ${value.action}` })
+    const schema = {
+      define: Define,
+      stage: Stage,
+      check: Check,
+      trial: Trial,
+      failure: Failure,
+      learn: Learn,
+      unlearn: Unlearn,
+      status: Status,
+    }[value.action]
+    const parsed = schema.safeParse(value)
+    if (parsed.success) return
+    parsed.error.issues.forEach((issue) => ctx.addIssue({ code: "custom", path: issue.path, message: issue.message }))
   })
 
 export const ResearchContractTool = Tool.define("research_contract", {
   description: [
-    "Durable completion contract for multi-stage research.",
-    "Use define before expensive work; stage at lifecycle boundaries; check after deterministic verification;",
-    "trial for each material hypothesis, method, fit, simulation, or evidence attempt; failure for an invalid candidate; status to inspect.",
-    "Do not record commands or transient tool errors as trials. Trial requires stage, branch, candidate, outcome, summary, plus evidence for advanced/regressed.",
-    "A decision stage requires a material trial. Stage evidence is detail, never a passed check; checks need observed evidence.",
-    "Learn only reusable method guidance from an evidence-backed trial; omitted evidence inherits from it and stays tentative until independently supported. Reinforce with the stored situation and guidance. Unlearn with counterevidence.",
-    "State survives provider interruptions and guides explore, refine, pivot, fuse, and verify.",
+    "Durable state for multi-stage research. Define first; update stages; record candidates with trial and invalid ones with failure.",
+    "Settled checks and advanced/regressed trials need runtime-verified evidence_refs. Free text is explanation only.",
+    "Add metric plus baseline when quantitative; contradictory outcomes fail.",
+    "Learn methods only from verified trials; unlearn with verified counterevidence.",
+    "Optional max_* fields bound the session tree; omitted limits are generous. Status inspects state.",
   ].join(" "),
   parameters: Params,
+  formatValidationError(error) {
+    return error.issues[0]?.message ?? "Invalid research contract input"
+  },
   async execute(params, ctx) {
+    const refs = await evidence(params.evidence_refs, ctx.sessionID)
     const lesson = await (async () => {
       if (params.action === "learn") {
         const input = Learn.parse(params)
@@ -163,6 +329,7 @@ export const ResearchContractTool = Tool.define("research_contract", {
           situation: input.situation,
           guidance: input.guidance,
           evidence: input.evidence,
+          evidenceRefs: refs,
         })
       }
       if (params.action === "unlearn") {
@@ -172,6 +339,7 @@ export const ResearchContractTool = Tool.define("research_contract", {
           sourceTrial: input.source_trial,
           reason: input.reason,
           evidence: input.evidence,
+          evidenceRefs: refs,
         })
       }
     })()
@@ -184,6 +352,16 @@ export const ResearchContractTool = Tool.define("research_contract", {
           template: input.template,
           deliverables: input.deliverables,
           reserveUsd: input.reserve_usd,
+          limits:
+            input.max_model_calls || input.max_tool_calls || input.max_tokens || input.max_minutes || input.max_cost_usd
+              ? {
+                  ...(input.max_model_calls ? { modelCalls: input.max_model_calls } : {}),
+                  ...(input.max_tool_calls ? { toolCalls: input.max_tool_calls } : {}),
+                  ...(input.max_tokens ? { tokens: input.max_tokens } : {}),
+                  ...(input.max_minutes ? { wallClockMs: input.max_minutes * 60_000 } : {}),
+                  ...(input.max_cost_usd ? { costUsd: input.max_cost_usd } : {}),
+                }
+              : undefined,
         })
       }
       if (params.action === "stage") {
@@ -201,6 +379,7 @@ export const ResearchContractTool = Tool.define("research_contract", {
           label: input.label,
           status: input.status,
           evidence: input.evidence,
+          evidenceRefs: refs,
           detail: input.detail,
         })
       }
@@ -228,6 +407,8 @@ export const ResearchContractTool = Tool.define("research_contract", {
             outcome: input.outcome,
             summary: input.summary,
             evidence: input.evidence,
+            evidenceRefs: refs,
+            metric: input.metric,
           },
           ctx.callID,
         )
@@ -237,7 +418,7 @@ export const ResearchContractTool = Tool.define("research_contract", {
       return current
     })()
     const completed = contract.stages.filter((stage) => stage.status === "completed").length
-    const passed = contract.checks.filter((check) => check.status === "passed" && !!check.evidence?.trim()).length
+    const passed = contract.checks.filter((check) => check.status === "passed" && check.evidenceRefs.length).length
     const failed = contract.checks.filter((check) => check.status === "failed").length
     const strategy = SessionResearch.strategy(contract)
     const lessons = await SessionResearch.experience(Instance.project.id, contract.domain)
@@ -264,7 +445,13 @@ export const ResearchContractTool = Tool.define("research_contract", {
         `Recorded candidate failures: ${contract.failures.length}`,
         `Recorded material attempts: ${contract.trials.length}`,
         ...(recent.length
-          ? ["Recent trial IDs:", ...recent.map((item) => `- ${item.id}: ${item.candidate} [${item.outcome}]`)]
+          ? [
+              "Recent trial IDs:",
+              ...recent.map(
+                (item) =>
+                  `- ${item.id}: ${item.candidate} [${item.outcome}]${item.metric ? ` ${item.metric.name}=${item.metric.value}${item.metric.unit ? ` ${item.metric.unit}` : ""}` : ""} · ${item.evidenceRefs.length} verified ref(s)`,
+              ),
+            ]
           : []),
         `Trajectory mode: ${strategy.mode} - ${strategy.reason}`,
         `Active project lessons: ${active.length} (${active.filter((item) => item.confidence === "supported").length} independently supported)`,
@@ -274,6 +461,9 @@ export const ResearchContractTool = Tool.define("research_contract", {
             ]
           : []),
         `Managed-credit finalization reserve: $${contract.budget.reserveUsd.toFixed(2)}`,
+        `Runtime limits: ${contract.budget.limits.modelCalls} model calls, ${contract.budget.limits.toolCalls} tool calls, ${contract.budget.limits.tokens} tokens, ${Math.round(contract.budget.limits.wallClockMs / 60_000)} minutes, $${contract.budget.limits.costUsd.toFixed(2)}`,
+        `Runtime usage: ${contract.budget.runtimeModelCalls} model calls reserved${contract.budget.lastUsage ? `, ${contract.budget.lastUsage.toolCalls} tools, ${contract.budget.lastUsage.tokens} tokens, ${Math.round(contract.budget.lastUsage.wallClockMs / 1_000)} seconds, $${contract.budget.lastUsage.costUsd.toFixed(4)}` : ""}`,
+        ...(refs.length ? [`Verified evidence references recorded: ${refs.map((item) => item.ref).join(", ")}`] : []),
       ].join("\n"),
       metadata: {
         researchContract: {
