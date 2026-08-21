@@ -58,13 +58,18 @@ const completedTool = (
   tool: string,
   input: Record<string, unknown>,
   output: string,
-  opts?: { title?: string; compacted?: boolean; attachments?: MessageV2.FilePart[] },
+  opts?: {
+    title?: string
+    compacted?: boolean
+    attachments?: MessageV2.FilePart[]
+    metadata?: Record<string, unknown>
+  },
 ): MessageV2.ToolStateCompleted => ({
   status: "completed",
   input,
   output,
   title: opts?.title ?? "",
-  metadata: {},
+  metadata: opts?.metadata ?? {},
   time: { start: 0, end: 1, ...(opts?.compacted ? { compacted: 2 } : {}) },
   ...(opts?.attachments ? { attachments: opts.attachments } : {}),
 })
@@ -89,6 +94,21 @@ describe("session.message-v2.toolSummary", () => {
   test("reports zero lines for empty output and omits an empty descriptor", () => {
     const s = MessageV2.toolSummary("read", completedTool("read", {}, ""))
     expect(s).toBe("[read] → cleared (0 lines)")
+  })
+
+  test("retains a delegated handoff instead of erasing its findings", () => {
+    const s = MessageV2.toolSummary(
+      "task",
+      completedTool("task", { subagent_type: "explore" }, "large child transcript", {
+        title: "Audit citations",
+        metadata: { handoff: "## Findings\n- citation X is unverifiable\n## Evidence\n- refs.bib:41" },
+      }),
+    )
+
+    expect(s).toContain("[task] Audit citations → retained child handoff")
+    expect(s).toContain("citation X is unverifiable")
+    expect(s).toContain("refs.bib:41")
+    expect(s).not.toContain("→ cleared")
   })
 })
 
@@ -129,6 +149,31 @@ describe("session.message-v2.toModelMessages — compacted tool rendering (P2.2)
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s).toContain("full output here")
     expect(s).not.toContain("cleared")
+  })
+
+  test("a compacted Task still renders its retained child findings", () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo("a1", "u1"),
+        parts: [
+          toolPart(
+            "a1",
+            "t1",
+            "task",
+            completedTool("task", { subagent_type: "review" }, "full child transcript", {
+              title: "Review output",
+              compacted: true,
+              metadata: { handoff: "## Outcome\npartial\n## Limitations\nmissing seed 3" },
+            }),
+          ),
+        ],
+      },
+    ]
+    const s = JSON.stringify(MessageV2.toModelMessages(input, model))
+
+    expect(s).toContain("retained child handoff")
+    expect(s).toContain("missing seed 3")
+    expect(s).not.toContain("full child transcript")
   })
 })
 
