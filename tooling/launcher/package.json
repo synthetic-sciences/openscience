@@ -1,6 +1,6 @@
 {
   "name": "synsci",
-  "version": "2.0.29",
+  "version": "2.0.30",
   "description": "Install wizard for OpenScience, the open-source AI research workspace (optionally with Atlas)",
   "license": "Apache-2.0",
   "type": "module",

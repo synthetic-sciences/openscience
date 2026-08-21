@@ -9489,6 +9489,28 @@ export type SessionTraceResponses = {
           label: string
           status: "pending" | "passed" | "failed"
           evidence?: string
+          evidenceRefs?: Array<
+            | {
+                ref: string
+                note?: string
+                verifiedAt: number
+                kind: "artifact"
+                artifactID: string
+                versionID: string
+                path: string
+                sha256: string
+              }
+            | {
+                ref: string
+                note?: string
+                verifiedAt: number
+                kind: "tool"
+                tool: string
+                callID: string
+                status: "completed" | "error"
+                outputHash: string
+              }
+          >
           detail?: string
           updatedAt: number
         }>
@@ -9508,6 +9530,36 @@ export type SessionTraceResponses = {
           outcome: "advanced" | "neutral" | "regressed" | "failed" | "inconclusive"
           summary: string
           evidence?: string
+          evidenceRefs?: Array<
+            | {
+                ref: string
+                note?: string
+                verifiedAt: number
+                kind: "artifact"
+                artifactID: string
+                versionID: string
+                path: string
+                sha256: string
+              }
+            | {
+                ref: string
+                note?: string
+                verifiedAt: number
+                kind: "tool"
+                tool: string
+                callID: string
+                status: "completed" | "error"
+                outputHash: string
+              }
+          >
+          metric?: {
+            name: string
+            value: number
+            direction: "maximize" | "minimize"
+            baseline?: number
+            target?: number
+            unit?: string
+          }
           recordedAt: number
         }>
         budget: {
@@ -9516,6 +9568,25 @@ export type SessionTraceResponses = {
           finalizing?: boolean
           exhausted?: boolean
           lastBalanceUsd?: number
+          limits?: {
+            modelCalls?: number
+            toolCalls?: number
+            tokens?: number
+            wallClockMs?: number
+            costUsd?: number
+          }
+          runtimeFinalizationCalls?: number
+          runtimeModelCalls?: number
+          runtimeFinalizing?: boolean
+          runtimeExhausted?: boolean
+          runtimeReason?: string
+          lastUsage?: {
+            modelCalls: number
+            toolCalls: number
+            tokens: number
+            wallClockMs: number
+            costUsd: number
+          }
           updatedAt: number
         }
         createdAt: number
