@@ -72,10 +72,6 @@ export namespace SystemPrompt {
       .map(([category, count]) => `${category} (${count})`)
       .join(", ")
     const total = skills.length === 1 ? "1 skill is" : `${skills.length} skills are`
-    const name = message
-      ?.trimStart()
-      .match(/^\/([a-z0-9][a-z0-9_-]*)(?:\s|$)/i)?.[1]
-      ?.toLowerCase()
     const stop = new Set([
       "and",
       "answer",
@@ -118,6 +114,9 @@ export namespace SystemPrompt {
         ]
       : []
     const names = new Set(skills.map((skill) => skill.name))
+    const invoked = [...(message ?? "").matchAll(/(?:^|[\s([{])\/([a-z0-9][a-z0-9_-]*)(?=\s|$)/gi)]
+      .map((match) => match[1].toLowerCase())
+      .filter((name, index, all) => names.has(name) && all.indexOf(name) === index)
     const route = [
       {
         when: "Venue-specific paper formatting, submission checks, or page limits",
@@ -151,14 +150,13 @@ export namespace SystemPrompt {
           "</skill-routing>",
         ]
       : []
-    const invoke =
-      name && names.has(name)
-        ? [
-            "<slash-skill-invocation>",
-            `The user invoked /${name}. First output skill({name:"${name}"}) with no preceding text. After it returns, answer the request; when the message was only /${name}, ask what they want then.`,
-            "</slash-skill-invocation>",
-          ]
-        : []
+    const invoke = invoked.length
+      ? [
+          "<slash-skill-invocation>",
+          `The user explicitly invoked ${invoked.map((name) => `/${name}`).join(", ")}. Before substantive work, load ${invoked.map((name) => `skill({name:"${name}"})`).join(" and ")} with no preceding text. Then answer the surrounding request.`,
+          "</slash-skill-invocation>",
+        ]
+      : []
 
     return publish(
       [

@@ -49,6 +49,19 @@ const record = (value: unknown): Record<string, unknown> | undefined => {
   return value as Record<string, unknown>
 }
 
+export function sessionErrorText(value: unknown): string {
+  const error = record(value)
+  const data = record(error?.data)
+  const message = typeof data?.message === "string" ? data.message : "Request failed"
+  const body = typeof data?.responseBody === "string" ? data.responseBody : ""
+  if (!body.includes('"error":"insufficient_balance"')) return message
+
+  const required = body.match(/"required_cents":\s*(\d+)/)?.[1]
+  const available = body.match(/"available_cents":\s*(\d+)/)?.[1]
+  if (!required || !available) return "Managed Credits are temporarily unavailable for this step."
+  return `Managed Credits: this step needs $${(Number(required) / 100).toFixed(2)}; $${(Number(available) / 100).toFixed(2)} is currently available. Pending requests may still be settling.`
+}
+
 export function savedArtifact(value: unknown): SavedArtifact | undefined {
   const item = record(value)
   if (

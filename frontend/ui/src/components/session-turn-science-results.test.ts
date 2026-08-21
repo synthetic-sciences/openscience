@@ -52,7 +52,9 @@ test("expanded steps render a semantic research trace and first-class delegation
 
   expect(source).toContain("groupResearchTrace")
   expect(source).toContain('data-component="research-trace-group"')
-  expect(parts).toContain('data-component="delegation-card"')
+  expect(parts).toContain('<details\n              data-component="delegation-card"')
+  expect(parts).toContain('data-slot="delegation-summary"')
+  expect(parts).toContain('data-slot="delegation-body"')
   expect(parts).toContain('data-slot="delegation-findings"')
   expect(parts).toContain('data-slot="delegation-activity"')
   expect(parts).toContain('data-slot="delegation-raw"')

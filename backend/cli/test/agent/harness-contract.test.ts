@@ -132,6 +132,9 @@ test("delegation is rare, bounded, and observable", async () => {
   expect(source).toContain("failedToolCalls")
   expect(source).toContain("usage")
   expect(source).toContain("taskDispatchBudget")
+  expect(source).toContain("system: childGuidance")
+  expect(source).toContain("parts: promptParts")
+  expect(source).not.toContain('"<system-reminder>",\n          `Research effort is')
   expect(source).not.toContain("<task_result>")
 })
 

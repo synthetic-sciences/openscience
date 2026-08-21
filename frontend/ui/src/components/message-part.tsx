@@ -1390,6 +1390,9 @@ ToolRegistry.register({
       return "Completed"
     }
     const current = () => summary().findLast((item) => item.state.status === "running") ?? summary().at(-1)
+    const subtitle = () =>
+      (outcome() === "running" || outcome() === "pending" ? current()?.state.title : undefined) ??
+      props.input.description
 
     const childPermission = createMemo(() => {
       const sessionId = childSessionId()
@@ -1517,127 +1520,135 @@ ToolRegistry.register({
             )}
           </Match>
           <Match when={true}>
-            <section data-component="delegation-card" data-outcome={outcome()}>
-              <header data-slot="delegation-header">
+            <details
+              data-component="delegation-card"
+              data-outcome={outcome()}
+              open={outcome() === "running" || outcome() === "pending"}
+            >
+              <summary data-slot="delegation-summary" aria-label={`${outcomeLabel()} delegated research`}>
                 <div data-slot="delegation-mark">
                   <Icon name="research" size="normal" />
                 </div>
                 <div data-slot="delegation-heading">
-                  <div data-slot="delegation-eyebrow">
-                    <span>Delegated research</span>
-                    <span data-slot="delegation-status">{outcomeLabel()}</span>
-                  </div>
                   <strong>
                     {i18n.t("ui.tool.agent", {
                       type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)),
                     })}
                   </strong>
-                  <Show when={props.input.description}>
-                    <p>{props.input.description}</p>
+                  <Show when={subtitle()}>
+                    <p>{subtitle()}</p>
                   </Show>
                 </div>
-                <Show when={childSessionId()}>
-                  <button type="button" data-slot="delegation-open" onClick={handleSubtitleClick}>
-                    Open agent
-                    <Icon name="arrow-right" size="small" />
-                  </button>
-                </Show>
-              </header>
-
-              <div data-slot="delegation-metrics" aria-label="Delegated research details">
-                <Show when={model()}>{(value) => <span>{value()}</span>}</Show>
-                <Show when={props.metadata.effort}>
-                  <span>{sentenceCaseLabel(String(props.metadata.effort))} effort</span>
-                </Show>
-                <Show when={duration()}>{(value) => <span>{value()}</span>}</Show>
-                <Show when={props.metadata.toolCalls !== undefined}>
-                  <span>{Number(props.metadata.toolCalls)} operations</span>
-                </Show>
-                <Show when={Number(props.metadata.failedToolCalls) > 0}>
-                  <span data-failed>{Number(props.metadata.failedToolCalls)} failed</span>
-                </Show>
-              </div>
-
-              <Show when={(outcome() === "running" || outcome() === "pending") && current()}>
-                {(item) => (
-                  <div data-slot="delegation-current">
-                    <Spinner />
-                    <span>Current activity</span>
-                    <strong>{item().state.title || getToolInfo(item().tool).title}</strong>
-                  </div>
-                )}
-              </Show>
-
-              <Show when={findings()}>
-                {(value) => (
-                  <div data-slot="delegation-findings">
-                    <span data-slot="delegation-section-label">Findings</span>
-                    <Markdown text={value()} />
-                  </div>
-                )}
-              </Show>
-
-              <Show when={activity().length > 0}>
-                <div data-slot="delegation-activity">
-                  <span data-slot="delegation-section-label">Activity</span>
-                  <For each={activity()}>
-                    {(group) => (
-                      <div data-slot="delegation-activity-row" data-family={group.family}>
-                        <Icon
-                          name={
-                            group.family === "context"
-                              ? "glasses"
-                              : group.family === "sources"
-                                ? "window-cursor"
-                                : group.family === "commands"
-                                  ? "console"
-                                  : group.family === "changes"
-                                    ? "code-lines"
-                                    : group.family === "images"
-                                      ? "photo"
-                                      : group.family === "skills"
-                                        ? "sparkles"
-                                        : "activity"
-                          }
-                          size="small"
-                        />
-                        <div>
-                          <strong>{group.label}</strong>
-                          <span>{group.detail}</span>
-                        </div>
-                        <Show when={group.failed > 0}>
-                          <span data-slot="delegation-activity-failed">{group.failed} failed</span>
-                        </Show>
-                      </div>
-                    )}
-                  </For>
+                <div data-slot="delegation-summary-meta">
+                  <span data-slot="delegation-status">{outcomeLabel()}</span>
+                  <Show when={duration()}>{(value) => <span>{value()}</span>}</Show>
+                  <Show when={props.metadata.toolCalls !== undefined}>
+                    <span>{Number(props.metadata.toolCalls)} ops</span>
+                  </Show>
+                  <Icon name="chevron-down" size="small" />
                 </div>
-              </Show>
+              </summary>
 
-              <Show when={summary().length > 0}>
-                <details data-slot="delegation-raw">
-                  <summary>
-                    Raw operations <span>· {summary().length}</span>
-                  </summary>
-                  <div data-component="task-tools">
-                    <For each={summary()}>
-                      {(item) => {
-                        const info = getToolInfo(item.tool)
-                        return (
-                          <div data-slot="task-tool-item">
-                            <Icon name={info.icon} size="small" />
-                            <span data-slot="task-tool-title">{info.title}</span>
-                            <Show when={item.state.title}>
-                              <span data-slot="task-tool-subtitle">{item.state.title}</span>
-                            </Show>
+              <div data-slot="delegation-body">
+                <div data-slot="delegation-toolbar">
+                  <div data-slot="delegation-metrics" aria-label="Delegated research details">
+                    <Show when={model()}>{(value) => <span>{value()}</span>}</Show>
+                    <Show when={props.metadata.effort}>
+                      <span>{sentenceCaseLabel(String(props.metadata.effort))} effort</span>
+                    </Show>
+                    <Show when={Number(props.metadata.failedToolCalls) > 0}>
+                      <span data-failed>{Number(props.metadata.failedToolCalls)} failed</span>
+                    </Show>
+                  </div>
+                  <Show when={childSessionId()}>
+                    <button type="button" data-slot="delegation-open" onClick={handleSubtitleClick}>
+                      Open agent
+                      <Icon name="arrow-right" size="small" />
+                    </button>
+                  </Show>
+                </div>
+
+                <Show when={(outcome() === "running" || outcome() === "pending") && current()}>
+                  {(item) => (
+                    <div data-slot="delegation-current">
+                      <Spinner />
+                      <span>Current activity</span>
+                      <strong>{item().state.title || getToolInfo(item().tool).title}</strong>
+                    </div>
+                  )}
+                </Show>
+
+                <Show when={findings()}>
+                  {(value) => (
+                    <div data-slot="delegation-findings">
+                      <span data-slot="delegation-section-label">Findings</span>
+                      <Markdown text={value()} />
+                    </div>
+                  )}
+                </Show>
+
+                <Show when={activity().length > 0}>
+                  <div data-slot="delegation-activity">
+                    <span data-slot="delegation-section-label">Activity</span>
+                    <For each={activity()}>
+                      {(group) => (
+                        <div data-slot="delegation-activity-row" data-family={group.family}>
+                          <Icon
+                            name={
+                              group.family === "context"
+                                ? "glasses"
+                                : group.family === "sources"
+                                  ? "window-cursor"
+                                  : group.family === "commands"
+                                    ? "console"
+                                    : group.family === "changes"
+                                      ? "code-lines"
+                                      : group.family === "images"
+                                        ? "photo"
+                                        : group.family === "skills"
+                                          ? "sparkles"
+                                          : "activity"
+                            }
+                            size="small"
+                          />
+                          <div>
+                            <strong>{group.label}</strong>
+                            <span>{group.detail}</span>
                           </div>
-                        )
-                      }}
+                          <Show when={group.failed > 0}>
+                            <span data-slot="delegation-activity-failed">{group.failed} failed</span>
+                          </Show>
+                        </div>
+                      )}
                     </For>
                   </div>
-                </details>
-              </Show>
-            </section>
+                </Show>
+
+                <Show when={summary().length > 0}>
+                  <details data-slot="delegation-raw">
+                    <summary>
+                      Raw operations <span>· {summary().length}</span>
+                    </summary>
+                    <div data-component="task-tools">
+                      <For each={summary()}>
+                        {(item) => {
+                          const info = getToolInfo(item.tool)
+                          return (
+                            <div data-slot="task-tool-item">
+                              <Icon name={info.icon} size="small" />
+                              <span data-slot="task-tool-title">{info.title}</span>
+                              <Show when={item.state.title}>
+                                <span data-slot="task-tool-subtitle">{item.state.title}</span>
+                              </Show>
+                            </div>
+                          )
+                        }}
+                      </For>
+                    </div>
+                  </details>
+                </Show>
+              </div>
+            </details>
           </Match>
         </Switch>
       </div>

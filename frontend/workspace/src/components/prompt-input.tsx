@@ -88,6 +88,7 @@ import {
   slashMode,
   slashActionSkill,
   slashSource,
+  slashTokenAt,
   SLASH_NATIVE,
   sortSlash,
   type SlashCommand,
@@ -619,6 +620,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     dragging: boolean
     mode: "normal" | "shell"
     intent: SlashMode | null
+    slashInline: boolean
     applyingHistory: boolean
   }>({
     popover: null,
@@ -627,6 +629,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     dragging: false,
     mode: "normal",
     intent: null,
+    slashInline: false,
     applyingHistory: false,
   })
 
@@ -988,7 +991,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: slashMode({ trigger: item.name }) ? "mode" : "action",
       }))
 
-    const all = [...items, ...commands]
+    const all = store.slashInline ? items.filter((item) => item.type === "skill") : [...items, ...commands]
     const needle = query.trim().replace(/^\/+/, "").toLowerCase()
     const trigger = (item: SlashCommand) => item.trigger.toLowerCase()
     const exact = all.filter((item) => trigger(item) === needle)
@@ -1031,20 +1034,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (cmd.type === "skill") {
-      // Skills remain editable requests. The agent loads the selected skill
-      // before responding when the submitted message begins with this slash.
-      const text = `/${cmd.trigger} `
-      editorRef.textContent = text
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-      requestAnimationFrame(() => {
-        editorRef.focus()
-        const range = document.createRange()
-        const sel = window.getSelection()
-        range.selectNodeContents(editorRef)
-        range.collapse(false)
-        sel?.removeAllRanges()
-        sel?.addRange(range)
-      })
+      const selection = window.getSelection()
+      const cursor = getCursorPosition(editorRef)
+      const text = prompt
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join("")
+      const token = slashTokenAt(text, cursor)
+      if (!selection || selection.rangeCount === 0 || !token) return
+
+      const range = selection.getRangeAt(0)
+      const value = `/${cmd.trigger} `
+      setRangeEdge(range, "start", token.start)
+      setRangeEdge(range, "end", token.end)
+      range.deleteContents()
+      const node = document.createTextNode(value)
+      range.insertNode(node)
+      range.setStart(node, value.length)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+      handleInput()
+      requestAnimationFrame(() => editorRef.focus({ preventScroll: true }))
       return
     }
 
@@ -1298,7 +1309,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const shellMode = store.mode === "shell"
-    const slashMatch = shellMode ? null : rawText.match(/^\/(\S*)$/)
+    const slashMatch = shellMode ? undefined : slashTokenAt(rawText, cursorPosition)
     const keepSlashFocus = !!slashMatch && document.activeElement === editorRef
 
     if (!shellMode) {
@@ -1308,13 +1319,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         atOnInput(atMatch[1])
         setStore("popover", "at")
       } else if (slashMatch) {
-        slashOnInput(slashMatch[1])
+        setStore("slashInline", slashMatch.inline)
+        slashOnInput(slashMatch.query)
         setStore("popover", "slash")
         requestAnimationFrame(() => {
           if (slashPopoverRef) slashPopoverRef.scrollTop = 0
         })
       } else {
         setStore("popover", null)
+        setStore("slashInline", false)
       }
     } else {
       setStore("popover", null)
@@ -1334,7 +1347,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           editorRef.focus({ preventScroll: true })
           setCursorPosition(editorRef, cursorPosition)
         }
-        if (editorRef.textContent?.match(/^\/(\S*)$/)) setStore("popover", "slash")
+        if (slashTokenAt(editorRef.textContent ?? "", getCursorPosition(editorRef))) setStore("popover", "slash")
       })
     }
   }

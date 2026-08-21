@@ -418,15 +418,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         childSessionID: session.id,
       })
       const promptParts = await SessionPrompt.resolvePromptParts(handoff.prompt)
-      const childReminder = {
-        type: "text" as const,
-        text: [
-          "<system-reminder>",
-          `Research effort is ${effort.toUpperCase()}. Complete this one bounded assignment and return natural, concise findings to the lead Research agent.`,
-          "Do not create child tasks. Load a domain skill only when it materially improves this assignment.",
-          "</system-reminder>",
-        ].join("\n"),
-      }
+      const childGuidance = [
+        `Work as a focused ${agent.name} specialist for the lead Research agent at ${effort} effort.`,
+        "Complete only the assigned task and return concise, evidence-based findings.",
+        "Delegation is disabled in this child session. Load a domain skill only when it materially helps the assignment.",
+      ].join("\n")
 
       const deadline = await withTaskDeadline(
         () =>
@@ -439,13 +435,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             },
             agent: agent.name,
             effort,
+            system: childGuidance,
             tools: {
               todowrite: false,
               todoread: false,
               task: false,
               ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
             },
-            parts: [childReminder, ...promptParts],
+            parts: promptParts,
           }),
         () => SessionPrompt.cancel(session.id),
         Math.max(1, budgetDeadlineAt - Date.now()),

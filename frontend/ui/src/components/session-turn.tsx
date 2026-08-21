@@ -23,6 +23,7 @@ import {
   artifactTypeLabel,
   artifactActions,
   generatedArtifacts,
+  sessionErrorText,
   stripRedactedReasoning,
   writtenFiles,
 } from "./tool-display"
@@ -772,7 +773,7 @@ export function SessionTurn(
                         </For>
                         <Show when={error()}>
                           <Card variant="error" class="error-card">
-                            {error()?.data?.message as string}
+                            {sessionErrorText(error())}
                           </Card>
                         </Show>
                       </div>
@@ -1036,7 +1037,7 @@ export function SessionTurn(
                     </Show>
                     <Show when={error() && !props.stepsExpanded}>
                       <Card variant="error" class="error-card">
-                        {error()?.data?.message as string}
+                        {sessionErrorText(error())}
                       </Card>
                     </Show>
                   </Match>

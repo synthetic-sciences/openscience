@@ -9,6 +9,7 @@ import {
   slashIcon,
   slashMode,
   slashSource,
+  slashTokenAt,
   sortSlash,
   type SlashCommand,
 } from "./prompt-slash"
@@ -99,4 +100,21 @@ test("slash hierarchy keeps frequent native actions ahead of a stable skills cat
   expect(slashMode(items.find((item) => item.trigger === "plan")!)).toBe("plan")
   expect(slashMode(items.find((item) => item.trigger === "goal")!)).toBe("goal")
   expect(slashMode(items.find((item) => item.trigger === "compact")!)).toBeUndefined()
+})
+
+test("slash skills can be selected at the start, middle, or end of a draft", () => {
+  expect(slashTokenAt("/scan", 5)).toEqual({ query: "scan", start: 0, end: 5, inline: false })
+  expect(slashTokenAt("Please use /scan before plotting", 16)).toEqual({
+    query: "scan",
+    start: 11,
+    end: 16,
+    inline: true,
+  })
+  expect(slashTokenAt("Inspect results, then /venue", 28)).toEqual({
+    query: "venue",
+    start: 22,
+    end: 28,
+    inline: true,
+  })
+  expect(slashTokenAt("path/to/file", 12)).toBeUndefined()
 })

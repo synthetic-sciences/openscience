@@ -7,6 +7,7 @@ import {
   sentenceCaseLabel,
   savedArtifact,
   scienceTaskLabel,
+  sessionErrorText,
   skillName,
   stripRedactedReasoning,
   writtenFiles,
@@ -31,6 +32,25 @@ describe("sentenceCaseLabel", () => {
 
   test("preserves technical acronyms", () => {
     expect(sentenceCaseLabel("PDF")).toBe("PDF")
+  })
+})
+
+describe("sessionErrorText", () => {
+  test("explains a managed-credit reservation failure with exact amounts", () => {
+    expect(
+      sessionErrorText({
+        data: {
+          message: "Payment Required: insufficient_balance",
+          responseBody: '{"error":"insufficient_balance","required_cents":374,"available_cents":258}',
+        },
+      }),
+    ).toBe(
+      "Managed Credits: this step needs $3.74; $2.58 is currently available. Pending requests may still be settling.",
+    )
+  })
+
+  test("preserves ordinary provider errors", () => {
+    expect(sessionErrorText({ data: { message: "Provider is overloaded" } })).toBe("Provider is overloaded")
   })
 })
 

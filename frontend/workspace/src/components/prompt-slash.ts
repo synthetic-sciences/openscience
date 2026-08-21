@@ -13,6 +13,28 @@ export interface SlashCommand {
 export type SlashGroup = "Commands" | "Skills"
 export type SlashMode = "plan" | "goal"
 
+export interface SlashToken {
+  query: string
+  start: number
+  end: number
+  inline: boolean
+}
+
+/** Find the slash token immediately before the caret, wherever it appears. */
+export function slashTokenAt(text: string, cursor: number): SlashToken | undefined {
+  const end = Math.max(0, Math.min(cursor, text.length))
+  const before = text.slice(0, end)
+  const match = before.match(/(?:^|[\s([{])\/([a-z0-9_-]*)$/i)
+  if (!match) return
+  const start = before.lastIndexOf("/")
+  return {
+    query: match[1],
+    start,
+    end,
+    inline: text.slice(0, start).trim().length > 0 || text.slice(end).trim().length > 0,
+  }
+}
+
 // Keep the native surface intentionally small. Everything that is an optional
 // workflow belongs in the toggleable Skills section instead of masquerading as
 // an app command.
