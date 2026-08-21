@@ -1033,156 +1033,160 @@ export namespace OpenScience {
         }
       }
 
-      return await CredentialLifecycle.mutate("managed-services.sync", async () => {
-        const current = await getSession()
-        if (!current || current.api_key !== session.api_key) {
-          throw new Error("Managed session changed while services were syncing; discarded the stale response")
-        }
-        // Keep the bundled atlas CLI authenticated for the agent on every
-        // successful sync (covers existing sessions that never re-run login).
-        await ensureAtlasCliConfig(session)
-
-        // Atlas transfers a GCP service-account document as an in-memory secret.
-        // Materialize it to an owner-only file before persistence so Google SDKs
-        // receive their standard GOOGLE_APPLICATION_CREDENTIALS path and the JSON
-        // never enters an agent shell.
-        const gcp = fresh.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-        const gcpFile = path.join(getSyncedConfigDir(), syncedGcpFilename)
-        if (gcp) {
-          fresh.delete("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-          const dir = getSyncedConfigDir()
-          const saved = await fs
-            .mkdir(dir, { recursive: true })
-            .then(() => atomicWrite(gcpFile, gcp, { mode: 0o600 }))
-            .then(() => true)
-            .catch((error) => {
-              log.warn("failed to materialize synced GCP credentials", {
-                error: error instanceof Error ? error.message : String(error),
-              })
-              return false
-            })
-          if (saved) fresh.set("GOOGLE_APPLICATION_CREDENTIALS", gcpFile)
-          if (!saved) await fs.unlink(gcpFile).catch(() => {})
-        }
-        if (!gcp) await fs.unlink(gcpFile).catch(() => {})
-
-        // Keep user-owned provider keys and the narrow OpenRouter managed route.
-        // The policy rejects direct-provider proxy tokens and untrusted provider
-        // base URLs before anything is applied or persisted.
-        for (const [key, value] of [...fresh.entries()]) {
-          if (!isSyncedEnvAllowed(key, value)) fresh.delete(key)
-        }
-
-        // Older Atlas sync responses can carry only OPENROUTER_API_KEY=thk_*.
-        // Managed OpenRouter must also carry the Atlas proxy baseURL; otherwise
-        // provider init correctly refuses to send a wallet token to public
-        // openrouter.ai and the UI shows ProviderInitError.
-        const openrouterKey = fresh.get("OPENROUTER_API_KEY")
-        if (isManagedAtlasKey(openrouterKey ?? "") && !fresh.has("OPENROUTER_BASE_URL")) {
-          fresh.set("OPENROUTER_BASE_URL", managedOpenRouterBaseURL())
-        }
-
-        // Count distinct APPLIED credential values (post-filter, ignoring routing
-        // *_BASE_URL vars) so the returned total reflects what the CLI honours —
-        // never the credentials that were dropped above.
-        const credentials = new Set(
-          [...fresh.entries()].filter(([key]) => !key.endsWith("_BASE_URL")).map(([, value]) => value),
-        ).size
-
-        // Unset previously-synced vars that are absent from the new response —
-        // mirrors the ownedKeys cleanup in server/routes/settings/credentials.ts.
-        // "Previously synced" is the union of this process's map and the on-disk
-        // snapshot preload-env.ts replayed at boot; a var is only removed when
-        // its live value still matches, so shell exports survive.
-        const previous = await readSyncedSnapshot()
-        for (const [key, value] of syncedSecretValues.entries()) previous.set(key, value)
-        for (const [key, value] of previous.entries()) {
-          if (fresh.has(key)) continue
-          unsetSyncedVar(key, value)
-        }
-        syncedSecretValues.clear()
-        for (const [key, value] of fresh.entries()) {
-          // Respect precedence: never clobber a user's own shell export or BYOK
-          // value. Only write the synced value when the slot is empty or already
-          // holds a previously-synced value — mirroring preload-env.ts's "shell
-          // exports win". Without this, a background sync could overwrite an
-          // exported ANTHROPIC_API_KEY with a managed thk_ key mid-session,
-          // silently turning a free BYOK call into a billed managed one.
-          const current = process.env[key]
-          const ownsSlot = !current || previous.get(key) === current || current === value
-          if (ownsSlot) {
-            try {
-              Env.set(key, value)
-            } catch {
-              /* Instance not initialized */
-            }
-            process.env[key] = value
+      return await CredentialLifecycle.mutate(
+        "managed-services.sync",
+        async () => {
+          const current = await getSession()
+          if (!current || current.api_key !== session.api_key) {
+            throw new Error("Managed session changed while services were syncing; discarded the stale response")
           }
-          // Track the synced value regardless (for redaction + later cleanup). A
-          // shadowing shell export is left untouched by the unset pass above, which
-          // only removes a var whose live value still equals the synced one.
-          syncedSecretValues.set(key, value)
-        }
+          // Keep the bundled atlas CLI authenticated for the agent on every
+          // successful sync (covers existing sessions that never re-run login).
+          await ensureAtlasCliConfig(session)
 
-        // Write model lockdown config to managed config dir (highest priority config layer)
-        if (data.config) {
+          // Atlas transfers a GCP service-account document as an in-memory secret.
+          // Materialize it to an owner-only file before persistence so Google SDKs
+          // receive their standard GOOGLE_APPLICATION_CREDENTIALS path and the JSON
+          // never enters an agent shell.
+          const gcp = fresh.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+          const gcpFile = path.join(getSyncedConfigDir(), syncedGcpFilename)
+          if (gcp) {
+            fresh.delete("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+            const dir = getSyncedConfigDir()
+            const saved = await fs
+              .mkdir(dir, { recursive: true })
+              .then(() => atomicWrite(gcpFile, gcp, { mode: 0o600 }))
+              .then(() => true)
+              .catch((error) => {
+                log.warn("failed to materialize synced GCP credentials", {
+                  error: error instanceof Error ? error.message : String(error),
+                })
+                return false
+              })
+            if (saved) fresh.set("GOOGLE_APPLICATION_CREDENTIALS", gcpFile)
+            if (!saved) await fs.unlink(gcpFile).catch(() => {})
+          }
+          if (!gcp) await fs.unlink(gcpFile).catch(() => {})
+
+          // Keep user-owned provider keys and the narrow OpenRouter managed route.
+          // The policy rejects direct-provider proxy tokens and untrusted provider
+          // base URLs before anything is applied or persisted.
+          for (const [key, value] of [...fresh.entries()]) {
+            if (!isSyncedEnvAllowed(key, value)) fresh.delete(key)
+          }
+
+          // Older Atlas sync responses can carry only OPENROUTER_API_KEY=thk_*.
+          // Managed OpenRouter must also carry the Atlas proxy baseURL; otherwise
+          // provider init correctly refuses to send a wallet token to public
+          // openrouter.ai and the UI shows ProviderInitError.
+          const openrouterKey = fresh.get("OPENROUTER_API_KEY")
+          if (isManagedAtlasKey(openrouterKey ?? "") && !fresh.has("OPENROUTER_BASE_URL")) {
+            fresh.set("OPENROUTER_BASE_URL", managedOpenRouterBaseURL())
+          }
+
+          // Count distinct APPLIED credential values (post-filter, ignoring routing
+          // *_BASE_URL vars) so the returned total reflects what the CLI honours —
+          // never the credentials that were dropped above.
+          const credentials = new Set(
+            [...fresh.entries()].filter(([key]) => !key.endsWith("_BASE_URL")).map(([, value]) => value),
+          ).size
+
+          // Unset previously-synced vars that are absent from the new response —
+          // mirrors the ownedKeys cleanup in server/routes/settings/credentials.ts.
+          // "Previously synced" is the union of this process's map and the on-disk
+          // snapshot preload-env.ts replayed at boot; a var is only removed when
+          // its live value still matches, so shell exports survive.
+          const previous = await readSyncedSnapshot()
+          for (const [key, value] of syncedSecretValues.entries()) previous.set(key, value)
+          for (const [key, value] of previous.entries()) {
+            if (fresh.has(key)) continue
+            unsetSyncedVar(key, value)
+          }
+          syncedSecretValues.clear()
+          for (const [key, value] of fresh.entries()) {
+            // Respect precedence: never clobber a user's own shell export or BYOK
+            // value. Only write the synced value when the slot is empty or already
+            // holds a previously-synced value — mirroring preload-env.ts's "shell
+            // exports win". Without this, a background sync could overwrite an
+            // exported ANTHROPIC_API_KEY with a managed thk_ key mid-session,
+            // silently turning a free BYOK call into a billed managed one.
+            const current = process.env[key]
+            const ownsSlot = !current || previous.get(key) === current || current === value
+            if (ownsSlot) {
+              try {
+                Env.set(key, value)
+              } catch {
+                /* Instance not initialized */
+              }
+              process.env[key] = value
+            }
+            // Track the synced value regardless (for redaction + later cleanup). A
+            // shadowing shell export is left untouched by the unset pass above, which
+            // only removes a var whose live value still equals the synced one.
+            syncedSecretValues.set(key, value)
+          }
+
+          // Write model lockdown config to managed config dir (highest priority config layer)
+          if (data.config) {
+            try {
+              const managedDir = getSyncedConfigDir()
+              await fs.mkdir(managedDir, { recursive: true })
+              await atomicWrite(
+                path.join(managedDir, "openscience-synced.json"),
+                JSON.stringify({ $schema: "https://syntheticsciences.ai/config.json", ...data.config }, null, 2),
+                { mode: 0o600 },
+              )
+              log.info("wrote managed config", { dir: managedDir })
+            } catch (e) {
+              log.warn("failed to write managed config", { error: e instanceof Error ? e.message : String(e) })
+            }
+          }
+
+          // Persist the synced env to disk so the NEXT CLI invocation can
+          // load it synchronously at module init (./preload-env.ts) — before
+          // any provider SDK reads process.env. Without this, the first call
+          // in a fresh process races: SDKs initialize empty, sync populates
+          // process.env too late.
           try {
             const managedDir = getSyncedConfigDir()
             await fs.mkdir(managedDir, { recursive: true })
-            await atomicWrite(
-              path.join(managedDir, "openscience-synced.json"),
-              JSON.stringify({ $schema: "https://syntheticsciences.ai/config.json", ...data.config }, null, 2),
-              { mode: 0o600 },
-            )
-            log.info("wrote managed config", { dir: managedDir })
+            const envSnapshot: Record<string, string> = {}
+            for (const [k, v] of fresh.entries()) {
+              envSnapshot[k] = v
+            }
+            await atomicWrite(path.join(managedDir, "synced-env.json"), JSON.stringify(envSnapshot, null, 2), {
+              mode: 0o600,
+            })
           } catch (e) {
-            log.warn("failed to write managed config", { error: e instanceof Error ? e.message : String(e) })
+            log.warn("failed to persist synced env", { error: e instanceof Error ? e.message : String(e) })
           }
-        }
 
-        // Persist the synced env to disk so the NEXT CLI invocation can
-        // load it synchronously at module init (./preload-env.ts) — before
-        // any provider SDK reads process.env. Without this, the first call
-        // in a fresh process races: SDKs initialize empty, sync populates
-        // process.env too late.
-        try {
-          const managedDir = getSyncedConfigDir()
-          await fs.mkdir(managedDir, { recursive: true })
-          const envSnapshot: Record<string, string> = {}
-          for (const [k, v] of fresh.entries()) {
-            envSnapshot[k] = v
-          }
-          await atomicWrite(path.join(managedDir, "synced-env.json"), JSON.stringify(envSnapshot, null, 2), {
-            mode: 0o600,
+          log.info("synced services", {
+            services: Object.entries(data.services)
+              .filter(([, s]) => s.connected)
+              .map(([id]) => id),
+            credentials,
           })
-        } catch (e) {
-          log.warn("failed to persist synced env", { error: e instanceof Error ? e.message : String(e) })
-        }
 
-        log.info("synced services", {
-          services: Object.entries(data.services)
-            .filter(([, s]) => s.connected)
-            .map(([id]) => id),
-          credentials,
-        })
-
-        // Log disconnected providers that have a reason so users can diagnose
-        // BYOK/managed issues without opening the dashboard.
-        for (const [id, svc] of Object.entries(data.services)) {
-          if (!svc.connected && svc.reason) {
-            log.warn(describeReason(id, svc.reason))
+          // Log disconnected providers that have a reason so users can diagnose
+          // BYOK/managed issues without opening the dashboard.
+          for (const [id, svc] of Object.entries(data.services)) {
+            if (!svc.connected && svc.reason) {
+              log.warn(describeReason(id, svc.reason))
+            }
           }
-        }
 
-        // Compatibility only: older releases stored the third-party install
-        // ledger in Atlas. Import those records once after a successful login,
-        // then keep all skill state local forever.
-        void import("../skill/migrate")
-          .then((module) => module.SkillMigration.run())
-          .catch((error) => log.warn("legacy skill migration failed", { error: String(error) }))
+          // Compatibility only: older releases stored the third-party install
+          // ledger in Atlas. Import those records once after a successful login,
+          // then keep all skill state local forever.
+          void import("../skill/migrate")
+            .then((module) => module.SkillMigration.run())
+            .catch((error) => log.warn("legacy skill migration failed", { error: String(error) }))
 
-        return { user: data.user, credentials }
-      }, options)
+          return { user: data.user, credentials }
+        },
+        options,
+      )
     } catch (e) {
       log.warn("sync error", { error: e instanceof Error ? e.message : String(e) })
       return null

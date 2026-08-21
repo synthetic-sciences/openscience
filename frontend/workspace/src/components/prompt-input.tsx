@@ -102,7 +102,6 @@ import {
   researchAccessMutations,
   type ResearchAccessMode,
 } from "./research-access"
-import { searchStatus, type ResearchToolsStatus } from "./settings/research-tools-state"
 
 type PendingPrompt = {
   abort: AbortController
@@ -178,20 +177,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     settings<CapabilityPreferences>("/settings/preferences"),
   )
   const [review, reviewActions] = createResource(() => settings<ReviewPreferences>("/settings/review"))
-  const [researchStatusRequested, setResearchStatusRequested] = createSignal(false)
-  const [researchToolsStatus, researchToolsStatusActions] = createResource(
-    () => researchStatusRequested() || undefined,
-    () => settings<ResearchToolsStatus>("/settings/research-tools"),
-  )
-  const researchToolsSummary = createMemo(() => {
-    const status = researchToolsStatus()
-    if (!status) return undefined
-    return {
-      plan: status.plan.label,
-      search: searchStatus(status).label,
-      sharing: status.telemetry.analyticsEnabled ? "Sharing on" : "Sharing off",
-    }
-  })
   const saveCapabilities = (patch: Partial<CapabilityPreferences>) => {
     const previous = capabilities()
     if (!previous) return
@@ -2614,11 +2599,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   ref={(element) => (researchToolsRef = element)}
                   class="workspace-composer__research-tools"
                   onToggle={(event) => {
-                    if (event.currentTarget.open) {
-                      if (!researchStatusRequested()) setResearchStatusRequested(true)
-                      else void researchToolsStatusActions.refetch()
-                      return
-                    }
+                    if (event.currentTarget.open) return
                     resetResearchTools()
                   }}
                   onKeyDown={(event) => {
@@ -3027,31 +3008,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </details>
                       </Show>
                     </section>
-                    <div class="workspace-composer__research-status" aria-live="polite">
-                      <Show
-                        when={researchToolsSummary()}
-                        fallback={
-                          <span>
-                            {researchToolsStatus.loading ? "Loading plan and search…" : "Plan status unavailable"}
-                          </span>
-                        }
-                      >
-                        {(summary) => (
-                          <span>
-                            {summary().plan} · {summary().search} · {summary().sharing}
-                          </span>
-                        )}
-                      </Show>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          closeResearchTools()
-                          dialog.show(() => <DialogSettings initial="research-tools" />)
-                        }}
-                      >
-                        Manage
-                      </button>
-                    </div>
                   </div>
                 </details>
                 <Show when={store.intent}>

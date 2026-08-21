@@ -664,45 +664,6 @@ form.workspace-composer .workspace-composer__research-controls {
   padding: 2px;
 }
 
-form.workspace-composer .workspace-composer__research-status {
-  min-height: 36px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  padding: 4px 9px 4px 11px;
-  border-top: 1px solid var(--color-border);
-  color: var(--text-weaker);
-  font-size: 10px;
-  line-height: 14px;
-}
-
-form.workspace-composer .workspace-composer__research-status > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-form.workspace-composer .workspace-composer__research-status > button {
-  min-width: 52px;
-  min-height: 28px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
-  color: var(--text-strong);
-  font: inherit;
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-}
-
-form.workspace-composer .workspace-composer__research-status > button:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
-  outline-offset: -2px;
-}
-
 form.workspace-composer .workspace-composer__research-control,
 form.workspace-composer .workspace-composer__research-choice > summary {
   min-height: 34px;

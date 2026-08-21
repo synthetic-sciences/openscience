@@ -908,29 +908,19 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   )
 }
 
-// Providers that don't expose raw chain-of-thought — OpenAI's models, and
-// anything routed through OpenRouter — return the reasoning *encrypted*: the
-// real content lives in providerMetadata (for multi-turn continuation) and the
-// visible text is empty, a literal "[REDACTED]" placeholder, or a readable
-// summary with "[REDACTED]" appended. None of the placeholder is meaningful, so
-// stripRedactedReasoning() drops it — a wholly-encrypted part collapses to empty
-// and the <Show> hides it, while a "…summary![REDACTED]" keeps its readable text.
-// (Supersedes the exact-match approach: OpenRouter mostly appends the placeholder
-// to a real summary, which exact-match would leave visible.)
+// Render the provider-visible reasoning exactly as it arrives. OpenRouter can
+// stream either reasoning.text, reasoning.summary, or an encrypted placeholder;
+// only the meaningless placeholder is removed. Encrypted reasoning remains in
+// providerMetadata for continuation and is never presented as readable text.
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
   const text = () => stripRedactedReasoning(part.text)
-  const throttledText = createTypewriter(text)
 
   return (
-    <Show when={throttledText()}>
+    <Show when={text()}>
       <div data-component="reasoning-part">
-        <div data-slot="reasoning-part-label">
-          <Icon name="sparkles" size="small" />
-          <span>Reasoning summary</span>
-        </div>
-        <Markdown text={throttledText()} cacheKey={part.id} />
+        <Markdown text={text()} cacheKey={part.id} />
       </div>
     </Show>
   )
