@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { ArtifactStore } from "../../src/artifact/store"
+import { Global } from "../../src/global"
+import { API_BASE } from "../../src/openscience"
+import { PermissionNext } from "../../src/permission/next"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Session } from "../../src/session"
@@ -16,13 +19,12 @@ import { RAW_TOOL_ERRORS, STRESS_MATRIX, type StressScenario } from "../../../..
 import { tmpdir, trustProject } from "../fixture/fixture"
 import {
   STRESS_PROVIDER_ID,
+  STRESS_PROVIDER_COMPACT_MODEL,
   STRESS_PROVIDER_MODEL,
   STRESS_SCENARIO_MARKER,
   startStressProvider,
   stressProviderConfig,
 } from "../fixture/stress-provider"
-
-const MODEL = { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL }
 
 const CAMPAIGN_IDS = [
   "chat.exact-reply",
@@ -32,6 +34,8 @@ const CAMPAIGN_IDS = [
   "non_research.explain",
   "non_research.rewrite",
   "non_research.local-read",
+  "non_research.local-edit",
+  "indexing.local-private",
   "skills.prefix",
   "skills.inline",
   "skills.punctuated",
@@ -41,7 +45,11 @@ const CAMPAIGN_IDS = [
   "delegation.auto-off",
   "delegation.explicit-attachment",
   "delegation.specialist",
+  "delegation.child-failure",
+  "delegation.child-grants",
   "malformed_tools.empty-bash",
+  "malformed_tools.alias-bash",
+  "malformed_tools.truncated-json",
   "malformed_tools.unknown-tool",
   "malformed_tools.repeat-breaker",
   "retries.rate-limit",
@@ -49,10 +57,20 @@ const CAMPAIGN_IDS = [
   "retries.deterministic-400",
   "retries.openrouter-502",
   "retries.stream-disconnect",
+  "compaction.proactive",
+  "compaction.reactive-overflow",
+  "compaction.handoff-objective",
   "budgets.ordinary-ungated",
+  "budgets.soft-finalization",
+  "budgets.hard-block",
+  "budgets.explicit-resume",
   "artifacts.optional-chat",
+  "artifacts.requested-only",
   "artifacts.no-invented-report",
+  "permissions.allow-once",
+  "permissions.deny",
   "permissions.full-project",
+  "permissions.external-ask",
   "provider_failures.insufficient-balance",
   "provider_failures.unauthorized",
   "provider_failures.policy",
@@ -103,6 +121,48 @@ function promptParts(scenario: StressScenario): SessionPrompt.PromptInput["parts
   ]
 }
 
+function model(scenario: StressScenario) {
+  return {
+    providerID: STRESS_PROVIDER_ID,
+    modelID: scenario.config?.context ? STRESS_PROVIDER_COMPACT_MODEL : STRESS_PROVIDER_MODEL,
+  }
+}
+
+function permissions(scenario: StressScenario): PermissionNext.Ruleset | undefined {
+  const rules = [
+    ...(scenario.config?.read === "ask" ? [{ permission: "read", pattern: "*", action: "ask" as const }] : []),
+    ...(scenario.config?.externalDirectory === "ask"
+      ? [{ permission: "external_directory", pattern: "*", action: "ask" as const }]
+      : []),
+  ]
+  return rules.length ? rules : undefined
+}
+
+async function permission(sessionID: string): Promise<PermissionNext.Request> {
+  for (const _ of Array.from({ length: 300 })) {
+    const pending = (await PermissionNext.list()).find((item) => item.sessionID === sessionID)
+    if (pending) return pending
+    await Bun.sleep(10)
+  }
+  throw new Error(`Permission request did not appear for ${sessionID}`)
+}
+
+async function prepareContract(scenario: StressScenario, sessionID: string) {
+  if (scenario.config?.researchContract !== true) return
+  const configured = Number(scenario.config.modelCalls)
+  const modelCalls = Number.isInteger(configured) && configured > 0 ? configured : 128
+  await SessionResearch.define(sessionID, {
+    objective: `Deterministically verify ${scenario.id}`,
+    domain: "general",
+    template: "minimal",
+    limits: { modelCalls: scenario.config.exhausted ? 1 : modelCalls },
+  })
+  if (scenario.config.exhausted !== true) return
+  await SessionResearch.runtimePreflight(sessionID)
+  const decision = await SessionResearch.runtimePreflight(sessionID)
+  if (decision.decision !== "block") throw new Error(`Failed to exhaust ${scenario.id}`)
+}
+
 function aggregate(messages: MessageV2.WithParts[]) {
   return JSON.stringify(messages)
 }
@@ -111,25 +171,49 @@ function toolParts(messages: MessageV2.WithParts[]) {
   return messages.flatMap((message) => message.parts.filter((part): part is MessageV2.ToolPart => part.type === "tool"))
 }
 
-async function execute(scenario: StressScenario): Promise<Outcome> {
-  const session = await Session.create({ title: `Stress: ${scenario.id}` })
+async function execute(scenario: StressScenario, externalFile: string): Promise<Outcome> {
+  const session = await Session.create({ title: `Stress: ${scenario.id}`, permission: permissions(scenario) })
   const workspace = await SessionFilesystem.workspace(session.id)
-  await Bun.write(path.join(workspace, "README.md"), `# ${scenario.id}\n`)
+  await Promise.all([
+    Bun.write(path.join(workspace, "README.md"), `# ${scenario.id}\n`),
+    Bun.write(path.join(workspace, "scratch-note.txt"), "fixture-owned note\n"),
+    Bun.write(path.join(workspace, "fixture.txt"), "MATRIX_PERMISSION_FIXTURE\n"),
+    Bun.write(path.join(workspace, "result.csv"), "name,value\nfixture,1\n"),
+    fs
+      .mkdir(path.join(workspace, "fixture-repository"), { recursive: true })
+      .then(() => Bun.write(path.join(workspace, "fixture-repository", "README.md"), "private fixture source\n")),
+  ])
+  if (scenario.id === "indexing.local-private") {
+    const folder = path.join(workspace, "fixture-repository")
+    const git = Bun.which("git")
+    if (!git) throw new Error("Git is required for the local-indexing fixture")
+    const init = Bun.spawn([git, "init", "--quiet"], { cwd: folder, stdout: "ignore", stderr: "pipe" })
+    if ((await init.exited) !== 0) throw new Error(await new Response(init.stderr).text())
+    const add = Bun.spawn([git, "add", "README.md"], { cwd: folder, stdout: "ignore", stderr: "pipe" })
+    if ((await add.exited) !== 0) throw new Error(await new Response(add.stderr).text())
+  }
+  await prepareContract(scenario, session.id)
 
   const input = {
     sessionID: session.id,
-    model: MODEL,
+    model: model(scenario),
     agent: "research",
     delegation: typeof scenario.config?.delegation === "boolean" ? scenario.config.delegation : undefined,
-    system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+    system: `${STRESS_SCENARIO_MARKER}${scenario.id}\nSTRESS_EXTERNAL_FILE:${externalFile}`,
     parts: promptParts(scenario),
   } satisfies SessionPrompt.PromptInput
-  const first = await SessionPrompt.prompt(input)
+  const pending = SessionPrompt.prompt(input)
+  const requested = scenario.config?.permissionReply
+  if (typeof requested === "string") {
+    const request = await permission(session.id)
+    await PermissionNext.reply({ requestID: request.id, reply: PermissionNext.Reply.parse(requested) })
+  }
+  const first = await pending
   const result = await (scenario.turns ?? []).reduce<Promise<MessageV2.WithParts>>(async (previous, text) => {
     await previous
     return SessionPrompt.prompt({
       sessionID: session.id,
-      model: MODEL,
+      model: input.model,
       agent: "research",
       delegation: input.delegation,
       system: input.system,
@@ -150,13 +234,32 @@ async function execute(scenario: StressScenario): Promise<Outcome> {
 describe("provider-driven harness stress campaign", () => {
   test("runs dozens of isolated real SessionPrompt turns through a local OpenAI-compatible provider", async () => {
     const scenarios = selected()
-    expect(scenarios).toHaveLength(33)
+    expect(scenarios).toHaveLength(49)
     const provider = startStressProvider(scenarios)
+    const fetch = globalThis.fetch
+    const session = path.join(Global.Path.data, "openscience-session.json")
+    const atlas: Array<{ url: string; authorization: string; body?: Record<string, unknown> }> = []
 
     try {
+      await fs.mkdir(Global.Path.data, { recursive: true })
+      await Bun.write(session, JSON.stringify({ api_key: "thk_test", user_id: "stress-user" }))
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input)
+        if (!url.startsWith(`${API_BASE}/api/v1/sources`)) return fetch(input, init)
+        const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+        atlas.push({
+          url,
+          authorization: headers.get("authorization") ?? "",
+          ...(init?.body ? { body: JSON.parse(String(init.body)) as Record<string, unknown> } : {}),
+        })
+        return Response.json({ source_id: "src_local_fixture", type: "local_folder" }, { status: 201 })
+      }) as typeof globalThis.fetch
       await using tmp = await tmpdir({
         git: true,
         config: stressProviderConfig(`http://127.0.0.1:${provider.server.port}/v1`),
+      })
+      await using external = await tmpdir({
+        init: (directory) => Bun.write(path.join(directory, "file.txt"), "MATRIX_EXTERNAL_FIXTURE\n"),
       })
       await fs.mkdir(path.join(tmp.path, ".openscience", "skills", "fixture-skill"), { recursive: true })
       await Bun.write(
@@ -181,19 +284,32 @@ describe("provider-driven harness stress campaign", () => {
         fn: async () => {
           const outcomes: Outcome[] = []
           for (let index = 0; index < scenarios.length; index += 6) {
-            outcomes.push(...(await Promise.all(scenarios.slice(index, index + 6).map(execute))))
+            outcomes.push(
+              ...(await Promise.all(
+                scenarios
+                  .slice(index, index + 6)
+                  .map((scenario) => execute(scenario, path.join(external.path, "file.txt"))),
+              )),
+            )
           }
           await provider.quiet()
 
-          expect(outcomes).toHaveLength(33)
+          expect(outcomes).toHaveLength(49)
           expect(new Set(outcomes.map((outcome) => outcome.session.id)).size).toBe(outcomes.length)
           expect(new Set(outcomes.map((outcome) => outcome.workspace)).size).toBe(outcomes.length)
-          expect(provider.requests.filter((request) => request.kind === "main")).toHaveLength(49)
+          for (const scenario of scenarios) {
+            if (scenario.id === "budgets.hard-block") {
+              expect(provider.count(scenario.id)).toBe(0)
+              continue
+            }
+            expect(provider.count(scenario.id)).toBeGreaterThan(0)
+          }
           expect(provider.requests.filter((request) => request.kind === "summary").length).toBeGreaterThanOrEqual(20)
-          expect(provider.requests.filter((request) => request.kind === "child")).toHaveLength(3)
-          expect(await Promise.all(outcomes.map((outcome) => SessionResearch.read(outcome.session.id)))).toEqual(
-            Array.from({ length: outcomes.length }, () => undefined),
-          )
+          expect(provider.requests.filter((request) => request.kind === "child")).toHaveLength(5)
+          const contracts = await Promise.all(outcomes.map((outcome) => SessionResearch.read(outcome.session.id)))
+          for (const [index, contract] of contracts.entries()) {
+            expect(!!contract).toBe(outcomes[index]?.scenario.config?.researchContract === true)
+          }
 
           for (const outcome of outcomes) {
             const text = aggregate(outcome.messages)
@@ -255,7 +371,13 @@ describe("provider-driven harness stress campaign", () => {
           expect(provider.main("delegation.explicit-attachment")[0]?.tools).toContain("task")
           expect(provider.main("delegation.specialist")[0]?.tools).toContain("task")
 
-          for (const id of ["delegation.auto-on", "delegation.explicit-attachment", "delegation.specialist"]) {
+          for (const id of [
+            "delegation.auto-on",
+            "delegation.explicit-attachment",
+            "delegation.specialist",
+            "delegation.child-failure",
+            "delegation.child-grants",
+          ]) {
             const outcome = outcomes.find((item) => item.scenario.id === id)!
             expect(await Session.children(outcome.session.id)).toHaveLength(1)
             expect(toolParts(outcome.messages)).toContainEqual(
@@ -280,9 +402,31 @@ describe("provider-driven harness stress campaign", () => {
           expect(toolParts(repeated.messages)).toHaveLength(2)
           expect(provider.count(repeated.scenario.id)).toBe(2)
 
+          const alias = outcomes.find((item) => item.scenario.id === "malformed_tools.alias-bash")!
+          const aliasPart = toolParts(alias.messages).find((part) => part.tool === "bash")
+          expect(aliasPart?.state.status).toBe("completed")
+          if (aliasPart?.state.status !== "completed") throw new Error("Expected completed Bash alias")
+          expect(aliasPart.state.output).toContain(alias.workspace)
+
+          const truncated = outcomes.find((item) => item.scenario.id === "malformed_tools.truncated-json")!
+          expect(aggregate(truncated.messages)).toContain("incomplete read call")
+          expect(toolParts(truncated.messages)).toContainEqual(
+            expect.objectContaining({ tool: "invalid", state: expect.objectContaining({ status: "completed" }) }),
+          )
+
           const read = outcomes.find((item) => item.scenario.id === "non_research.local-read")!
           expect(toolParts(read.messages)).toContainEqual(
             expect.objectContaining({ tool: "read", state: expect.objectContaining({ status: "completed" }) }),
+          )
+          const edit = outcomes.find((item) => item.scenario.id === "non_research.local-edit")!
+          expect(toolParts(edit.messages)).toContainEqual(
+            expect.objectContaining({ tool: "read", state: expect.objectContaining({ status: "completed" }) }),
+          )
+          expect(toolParts(edit.messages)).toContainEqual(
+            expect.objectContaining({ tool: "edit", state: expect.objectContaining({ status: "completed" }) }),
+          )
+          expect((await Bun.file(path.join(edit.workspace, "scratch-note.txt")).text()).trimEnd()).toBe(
+            "fixture-owned note\nMATRIX_EDIT",
           )
           const write = outcomes.find((item) => item.scenario.id === "permissions.full-project")!
           expect(await Bun.file(path.join(tmp.path, "scratch.txt")).text()).toBe("MATRIX_WRITE")
@@ -290,11 +434,130 @@ describe("provider-driven harness stress campaign", () => {
             expect.objectContaining({ tool: "write", state: expect.objectContaining({ status: "completed" }) }),
           )
 
-          expect(await ArtifactStore.list(Instance.project.id)).toEqual([])
+          const failed = outcomes.find((item) => item.scenario.id === "delegation.child-failure")!
+          const failedTask = toolParts(failed.messages).find((part) => part.tool === "task")
+          expect(failedTask?.state.status).toBe("completed")
+          if (failedTask?.state.status !== "completed") throw new Error("Expected bounded child failure handoff")
+          expect(failedTask.state.metadata).toMatchObject({ outcome: "error", stopReason: "provider_error" })
+          expect(aggregate(failed.messages)).toContain("limitation")
+          const [failedChild] = await Session.children(failed.session.id)
+          if (!failedChild) throw new Error("Expected failed child session")
+          const failedChildMessages = await Session.messages({ sessionID: failedChild.id })
+          expect(failedChildMessages.some((message) => message.info.role === "assistant" && !!message.info.error)).toBe(
+            true,
+          )
+
+          const grants = outcomes.find((item) => item.scenario.id === "delegation.child-grants")!
+          const [grantChild] = await Session.children(grants.session.id)
+          if (!grantChild) throw new Error("Expected grant-isolation child session")
+          const childWorkspace = await SessionFilesystem.workspace(grantChild.id)
+          const childGrants = await SessionFilesystem.list(grantChild.id)
+          expect(childGrants).toContainEqual(
+            expect.objectContaining({ path: childWorkspace, access: "write", source: "workspace" }),
+          )
+          expect(childGrants).toContainEqual(
+            expect.objectContaining({ path: grants.workspace, access: "read", source: "handoff" }),
+          )
+          for (const outcome of outcomes) {
+            if (outcome.session.id === grants.session.id) continue
+            expect(childGrants.some((grant) => grant.path === outcome.workspace)).toBe(false)
+          }
+          expect((await Session.get(grantChild.id)).permission).toContainEqual(
+            expect.objectContaining({ permission: "task", action: "deny" }),
+          )
+
+          for (const id of ["compaction.proactive", "compaction.reactive-overflow", "compaction.handoff-objective"]) {
+            const outcome = outcomes.find((item) => item.scenario.id === id)!
+            const carriers = outcome.messages.filter(
+              (message) => message.info.role === "user" && message.info.internal?.type === "compaction",
+            )
+            expect(carriers.length).toBeGreaterThanOrEqual(1)
+            expect(
+              provider.requests.some(
+                (request) => request.kind === "summary" && request.scenario === outcome.scenario.id,
+              ),
+            ).toBe(true)
+            expect(provider.count(id)).toBeGreaterThanOrEqual(2)
+            expect(outcome.trace.retries).toHaveLength(0)
+          }
+          expect(provider.main("compaction.proactive").at(-1)?.text).toContain("MATRIX_COMPACT_CODEWORD")
+          expect(provider.main("compaction.handoff-objective").at(-1)?.text).toContain("MATRIX_OBJECTIVE")
+
+          const soft = outcomes.find((item) => item.scenario.id === "budgets.soft-finalization")!
+          expect(provider.main(soft.scenario.id)).toHaveLength(3)
+          expect(provider.main(soft.scenario.id)[1]?.text).toContain("finalization boundary")
+          expect(await SessionResearch.read(soft.session.id)).toMatchObject({
+            budget: { runtimeFinalizing: false, runtimeFinalizationCalls: 2, runtimeExhausted: true },
+          })
+
+          const hard = outcomes.find((item) => item.scenario.id === "budgets.hard-block")!
+          expect(provider.count(hard.scenario.id)).toBe(0)
+          expect(aggregate(hard.messages)).toContain("hard runtime limit")
+          expect(await SessionResearch.read(hard.session.id)).toMatchObject({ budget: { runtimeExhausted: true } })
+
+          const resumed = outcomes.find((item) => item.scenario.id === "budgets.explicit-resume")!
+          expect(provider.count(resumed.scenario.id)).toBe(1)
+          expect(await SessionResearch.read(resumed.session.id)).toMatchObject({
+            budget: { runtimeEpoch: 2, runtimeExhausted: true, runtimeModelCalls: 1 },
+          })
+          expect(aggregate(resumed.messages)).toContain("MATRIX_EPOCH_2")
+
+          for (const id of ["permissions.allow-once", "permissions.deny", "permissions.external-ask"]) {
+            const outcome = outcomes.find((item) => item.scenario.id === id)!
+            const approvals = Object.values(outcome.trace.approvals)
+            expect(approvals).toHaveLength(1)
+            expect(approvals[0]?.reply).toBe(id === "permissions.deny" ? "reject" : "once")
+          }
+          const allowed = outcomes.find((item) => item.scenario.id === "permissions.allow-once")!
+          expect(toolParts(allowed.messages)).toContainEqual(
+            expect.objectContaining({ tool: "read", state: expect.objectContaining({ status: "completed" }) }),
+          )
+          const denied = outcomes.find((item) => item.scenario.id === "permissions.deny")!
+          expect(toolParts(denied.messages)).toContainEqual(
+            expect.objectContaining({ tool: "read", state: expect.objectContaining({ status: "error" }) }),
+          )
+          const outside = outcomes.find((item) => item.scenario.id === "permissions.external-ask")!
+          expect(Object.values(outside.trace.approvals)[0]).toMatchObject({
+            permission: "external_directory",
+            reply: "once",
+          })
+          expect(await SessionFilesystem.list(outside.session.id)).toContainEqual(
+            expect.objectContaining({ path: external.path, access: "read", scope: "once", source: "permission" }),
+          )
+
+          const indexed = outcomes.find((item) => item.scenario.id === "indexing.local-private")!
+          expect(toolParts(indexed.messages)).toContainEqual(
+            expect.objectContaining({ tool: "atlas", state: expect.objectContaining({ status: "completed" }) }),
+          )
+          expect(atlas).toHaveLength(1)
+          expect(atlas[0]).toMatchObject({
+            authorization: "Bearer thk_test",
+            body: {
+              type: "local_folder",
+              add_as_global_source: false,
+              files: [{ path: "README.md", content: "private fixture source\n" }],
+            },
+          })
+          expect(atlas[0]?.url).toBe(`${API_BASE}/api/v1/sources`)
+          expect(Object.values(indexed.trace.approvals)).toContainEqual(
+            expect.objectContaining({ permission: "atlas", reply: "once" }),
+          )
+
+          const artifacts = await ArtifactStore.list(Instance.project.id)
+          expect(artifacts).toHaveLength(1)
+          expect(artifacts[0]?.title).toBe("result.csv")
+          expect(typeof artifacts[0]?.current.sessionID).toBe("string")
+          const requested = outcomes.find((item) => item.scenario.id === "artifacts.requested-only")!
+          expect(artifacts[0]?.current.sessionID).toBe(requested.session.id)
+          expect(toolParts(requested.messages)).toContainEqual(
+            expect.objectContaining({ tool: "artifact", state: expect.objectContaining({ status: "completed" }) }),
+          )
         },
       })
     } finally {
+      globalThis.fetch = fetch
+      await fs.unlink(session).catch(() => undefined)
       provider.stop()
     }
-  }, 120_000)
+  }, 180_000)
 })

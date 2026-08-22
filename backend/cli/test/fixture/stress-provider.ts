@@ -2,6 +2,7 @@ import type { StressScenario } from "../../../../evals/cadence-harness/stress-ma
 
 export const STRESS_PROVIDER_ID = "stress"
 export const STRESS_PROVIDER_MODEL = "fixture-model"
+export const STRESS_PROVIDER_COMPACT_MODEL = "fixture-model-compact"
 export const STRESS_SCENARIO_MARKER = "OPENSCIENCE_STRESS_SCENARIO:"
 
 type ChatRequest = {
@@ -54,7 +55,7 @@ function hasToolResult(value: unknown): boolean {
   return Object.values(record).some(hasToolResult)
 }
 
-function responseChunk(delta: Record<string, unknown>, finishReason: string | null) {
+function responseChunk(delta: Record<string, unknown>, finishReason: string | null, inputTokens = 12) {
   return {
     id: "chatcmpl-stress",
     object: "chat.completion.chunk",
@@ -64,9 +65,9 @@ function responseChunk(delta: Record<string, unknown>, finishReason: string | nu
     ...(finishReason
       ? {
           usage: {
-            prompt_tokens: 12,
+            prompt_tokens: inputTokens,
             completion_tokens: 3,
-            total_tokens: 15,
+            total_tokens: inputTokens + 3,
           },
         }
       : {}),
@@ -83,8 +84,8 @@ function stream(events: ReturnType<typeof responseChunk>[]) {
   })
 }
 
-function textResponse(text: string) {
-  return stream([responseChunk({ role: "assistant", content: text }, null), responseChunk({}, "stop")])
+function textResponse(text: string, inputTokens = 12) {
+  return stream([responseChunk({ role: "assistant", content: text }, null), responseChunk({}, "stop", inputTokens)])
 }
 
 function toolResponse(call: ToolCall) {
@@ -94,7 +95,7 @@ function toolResponse(call: ToolCall) {
   ])
 }
 
-function providerError(stimulus: Extract<StressScenario["stimulus"], { kind: "error" }>) {
+function providerError(stimulus: { status: number; body: string; retryAfterMs?: number }) {
   const transient = stimulus.status === 429 || stimulus.status >= 500
   return Response.json(
     {
@@ -134,20 +135,42 @@ function childText(text: string) {
   ].join("\n\n")
 }
 
+function summaryText(id: string | undefined, source: string) {
+  const preserved = ["MATRIX_COMPACT_CODEWORD", "MATRIX_OBJECTIVE"].filter((value) => source.includes(value))
+  return [`Summary for ${id ?? "child"}.`, ...preserved].join(" ")
+}
+
+function responseTokens(scenario: StressScenario, count: number) {
+  const context = Number(scenario.config?.context)
+  if (scenario.category !== "compaction" || count !== 1 || !Number.isFinite(context) || context <= 0) return 12
+  const output = Math.min(4_096, Math.floor(context / 2))
+  const usable = context - output
+  const threshold = Number(scenario.config?.threshold ?? 0.75)
+  return Math.floor(usable * threshold) + 250
+}
+
 function toolInput(
   scenario: StressScenario,
   stimulus: Extract<StressScenario["stimulus"], { kind: "tool" }>,
   text: string,
 ) {
-  if (scenario.id !== "permissions.full-project") return stimulus.input
-  const project = text.match(/OpenScience project directory:\s*([^\n]+)/)?.[1]?.trim()
-  if (!project || typeof stimulus.input !== "object" || !stimulus.input) {
-    return stimulus.input
+  if (typeof stimulus.input !== "object" || !stimulus.input) return stimulus.input
+  if (scenario.id === "permissions.full-project") {
+    const project = text.match(/OpenScience project directory:\s*([^\n]+)/)?.[1]?.trim()
+    if (!project) return stimulus.input
+    return { ...stimulus.input, filePath: `${project}/scratch.txt` }
   }
-  return {
-    ...stimulus.input,
-    filePath: `${project}/scratch.txt`,
+  if (scenario.id === "permissions.external-ask") {
+    const file = text.match(/STRESS_EXTERNAL_FILE:([^\n]+)/)?.[1]?.trim()
+    if (!file) return stimulus.input
+    return { ...stimulus.input, filePath: file }
   }
+  if (scenario.id === "indexing.local-private") {
+    const workspace = text.match(/Session scratch directory:\s*([^\n]+)/)?.[1]?.trim()
+    if (!workspace) return stimulus.input
+    return { ...stimulus.input, folder: `${workspace}/fixture-repository` }
+  }
+  return stimulus.input
 }
 
 export function stressProviderConfig(baseURL: string) {
@@ -168,6 +191,11 @@ export function stressProviderConfig(baseURL: string) {
             name: "Deterministic stress model",
             tool_call: true,
             limit: { context: 128_000, output: 4_096 },
+          },
+          [STRESS_PROVIDER_COMPACT_MODEL]: {
+            name: "Deterministic compact-context stress model",
+            tool_call: true,
+            limit: { context: 8_000, output: 4_096 },
           },
         },
       },
@@ -223,7 +251,10 @@ export function startStressProvider(scenarios: readonly StressScenario[]) {
       const kind = summary ? "summary" : id ? "main" : "child"
       requests.push({ scenario: id, kind, body, tools: toolNames(body), text })
 
-      if (summary) return textResponse(id ? `Summary for ${id}` : "Child summary")
+      if (summary) return textResponse(summaryText(id, text))
+      if (!id && text.includes("bounded failure fixture")) {
+        return providerError({ status: 400, body: "deterministic_child_failure" })
+      }
       if (!id) return textResponse(childText(text))
 
       const scenario = lookup.get(id)
@@ -234,6 +265,21 @@ export function startStressProvider(scenarios: readonly StressScenario[]) {
       if (scenario.stimulus.kind === "error" && count === 1) return providerError(scenario.stimulus)
       if (scenario.stimulus.kind === "disconnect" && count === 1) {
         return Response.redirect(`http://127.0.0.1:${disconnect.port}/v1/chat/completions`, 307)
+      }
+
+      if (scenario.id === "non_research.local-edit" && count === 1) {
+        return toolResponse({
+          id: `call_${id.replaceAll(".", "_")}_read`,
+          type: "function",
+          function: { name: "read", arguments: JSON.stringify({ filePath: "scratch-note.txt" }) },
+        })
+      }
+      if (scenario.id === "non_research.local-edit" && count === 2 && scenario.stimulus.kind === "tool") {
+        return toolResponse({
+          id: `call_${id.replaceAll(".", "_")}_edit`,
+          type: "function",
+          function: { name: scenario.stimulus.name, arguments: JSON.stringify(scenario.stimulus.input) },
+        })
       }
 
       if (scenario.stimulus.kind === "tool") {
@@ -251,7 +297,7 @@ export function startStressProvider(scenarios: readonly StressScenario[]) {
         }
       }
 
-      return textResponse(finalText(scenario))
+      return textResponse(finalText(scenario), responseTokens(scenario, count))
     },
   })
 
