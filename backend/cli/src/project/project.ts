@@ -113,8 +113,7 @@ export namespace Project {
   }
 
   function contains(root: string, target: string) {
-    const relative = path.relative(root, target)
-    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+    return Filesystem.contains(root, target)
   }
 
   async function records(worktree: string) {
@@ -248,7 +247,17 @@ export namespace Project {
     log.info("fromDirectory", { directory })
 
     const { sandbox, worktree, vcs } = await iife(async () => {
-      const matches = Filesystem.up({ targets: [".git"], start: directory })
+      // Match Git's standard discovery ceiling. This is important for
+      // intentionally isolated folders nested below an unrelated checkout
+      // (including repo-contained test/runtime workspaces): they must not be
+      // silently adopted as sandboxes of the outer repository.
+      const ceiling = (process.env.GIT_CEILING_DIRECTORIES ?? "")
+        .split(path.delimiter)
+        .filter((value) => path.isAbsolute(value))
+        .map(canonicalize)
+        .filter((value) => Filesystem.contains(value, directory))
+        .toSorted((a, b) => b.length - a.length)[0]
+      const matches = Filesystem.up({ targets: [".git"], start: directory, ...(ceiling ? { stop: ceiling } : {}) })
       const git = await matches.next().then((x) => x.value)
       await matches.return()
 
