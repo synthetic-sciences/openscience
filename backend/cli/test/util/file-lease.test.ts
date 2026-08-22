@@ -88,6 +88,17 @@ test("cancelling a waiter leaves the healthy owner intact", async () => {
   void next
 })
 
+test("disposing the final lease removes empty coordination sidecars", async () => {
+  await using tmp = await tmpdir()
+  const filepath = path.join(tmp.path, "clean.lock")
+  const lease = await FileLease.acquire(filepath, 2_000)
+
+  await lease[Symbol.asyncDispose]()
+
+  expect(await Bun.file(filepath).exists()).toBe(false)
+  expect(await Bun.file(`${filepath}.coord`).exists()).toBe(false)
+})
+
 test("a structured lease admits a nested writer after relocation intent without a coverage gap", async () => {
   await using tmp = await tmpdir()
   const config = path.join(tmp.path, "config")

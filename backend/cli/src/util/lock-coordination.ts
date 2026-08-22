@@ -47,6 +47,23 @@ export namespace LockCoordination {
     return path.join(`${filepath}.coord`, kind)
   }
 
+  /** Remove empty coordination scaffolding after the owning lock is gone.
+   * Concurrent acquirers are safe: non-empty directories are retained, and a
+   * creator already between mkdir() and open() retries if its directory was
+   * removed while empty. */
+  export async function cleanup(filepath: string) {
+    for (const kind of ["claim", "intent"] as const) {
+      await fs.rmdir(directory(filepath, kind)).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT" || error.code === "ENOTEMPTY" || error.code === "EEXIST") return
+        throw error
+      })
+    }
+    await fs.rmdir(`${filepath}.coord`).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT" || error.code === "ENOTEMPTY" || error.code === "EEXIST") return
+      throw error
+    })
+  }
+
   async function stale(filepath: string, name: string, timeout: number) {
     const value = await Bun.file(filepath)
       .json()

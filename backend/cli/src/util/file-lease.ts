@@ -199,6 +199,7 @@ export namespace FileLease {
             if (owner && typeof owner === "object" && "token" in owner && owner.token === token) {
               await fs.rm(filepath, { force: true }).catch(() => undefined)
             }
+            await LockCoordination.cleanup(filepath).catch(() => undefined)
             await Promise.resolve(operation[Symbol.asyncDispose]()).catch(() => undefined)
           })()
           return disposal
