@@ -195,17 +195,25 @@ export namespace SessionReview {
   export async function start(sessionID: string, target?: Target): Promise<Bound | undefined> {
     const review = await prepare(sessionID, target)
     const settings = await ReviewSettings.get().catch(() => undefined)
-    const effort = await Session.messages({ sessionID })
+    const owner = await Session.messages({ sessionID })
       .then((messages) => {
-        const latest = messages.findLast((message) => message.info.role === "user")
-        return MessageV2.resolveResearchEffort(latest?.info.role === "user" ? latest.info.effort : undefined)
+        const latest = messages.findLast(
+          (message) =>
+            message.info.role === "user" &&
+            message.info.agent !== "reviewer" &&
+            message.info.agent !== "artifact-reviewer",
+        )
+        return latest?.info.role === "user" ? latest.info : undefined
       })
-      .catch(() => "normal" as const)
+      .catch(() => undefined)
+    const override = settings?.model ?? undefined
     void SessionPrompt.prompt({
       sessionID,
       agent: review.agent,
-      model: settings?.model ?? undefined,
-      effort,
+      model: override ?? owner?.model,
+      effort: MessageV2.resolveResearchEffort(owner?.effort),
+      variant: override ? undefined : owner?.variant,
+      tier: override ? undefined : owner?.tier,
       parts: [{ type: "text", text: review.text }],
     }).catch((error) => log.error("review pass failed", { sessionID, error }))
     return "target" in review ? review.target : undefined

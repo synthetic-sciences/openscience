@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { Agent } from "../../src/agent/agent"
 import { ArtifactStore } from "../../src/artifact/store"
+import { Identifier } from "../../src/id/id"
 import { PermissionNext } from "../../src/permission/next"
 import { Instance } from "../../src/project/instance"
 import { Provenance } from "../../src/science/provenance/store"
@@ -49,6 +50,59 @@ test("review settings choose the model and auto-review only opted-in Result save
         await SessionReview.auto(session.id, "reviewer")
         await SessionReview.auto(session.id, "artifact-reviewer")
         expect(prompt).not.toHaveBeenCalled()
+      } finally {
+        prompt.mockRestore()
+        await Session.remove(session.id)
+      }
+    },
+  })
+})
+
+test("the default reviewer inherits the active research route and controls", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "inherited review route" })
+      const model = { providerID: "openai-codex", modelID: "gpt-5.6-sol" }
+      await Session.updateMessage({
+        id: Identifier.ascending("message"),
+        role: "user",
+        sessionID: session.id,
+        effort: "ultra",
+        agent: "research",
+        model,
+        variant: "high",
+        tier: "fast",
+        time: { created: Date.now() },
+      })
+      const prompt = spyOn(SessionPrompt, "prompt").mockResolvedValue(undefined as never)
+      try {
+        await ReviewSettings.set({ auto: false, model: null })
+        await SessionReview.start(session.id)
+        expect(prompt).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            sessionID: session.id,
+            agent: "reviewer",
+            model,
+            effort: "ultra",
+            variant: "high",
+            tier: "fast",
+          }),
+        )
+
+        prompt.mockClear()
+        const selected = { providerID: "test-provider", modelID: "test-review-model" }
+        await ReviewSettings.set({ auto: false, model: selected })
+        await SessionReview.start(session.id)
+        expect(prompt).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            model: selected,
+            effort: "ultra",
+            variant: undefined,
+            tier: undefined,
+          }),
+        )
       } finally {
         prompt.mockRestore()
         await Session.remove(session.id)
