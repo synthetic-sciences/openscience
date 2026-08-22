@@ -35,7 +35,7 @@ test("uses the shared modal foundation for a stable, focus-contained palette", a
 
 test("renders a quiet project-search header with responsive, overflow-safe styling", () => {
   expect(source).toContain("Search this project")
-  expect(source).toContain("Search sessions, transcript messages, artifacts, and project actions.")
+  expect(source).toContain("Search sessions, transcript messages, workspace files, artifacts, and project actions.")
   expect(source).toContain("Search sessions, messages, files, and actions…")
   expect(source).toContain('class="command-palette__scope"')
   expect(source).toContain('class="command-palette__search"')
@@ -124,14 +124,16 @@ test("wires /search through the project-scoped request helper with debounce and 
   expect(source).toContain("setSearchRetry((value) => value + 1)")
 })
 
-test("renders the three search groups and routes selection correctly", () => {
+test("renders the four search groups and routes selection correctly", () => {
   expect(source).toContain('category: "Sessions"')
   expect(source).toContain('category: "Messages"')
+  expect(source).toContain('category: "Files"')
   expect(source).toContain('category: "Artifacts"')
   expect(source).toContain("projectHref(scope.project, scope.directory, s.id)")
   expect(source).toContain("projectHref(scope.project, scope.directory, m.sessionID)")
   expect(source).toContain("reveal(m.messageID)")
   expect(source).toContain("data-message-id") // transcript anchor for scroll-to-message
+  expect(source).toContain("uiStore.openFile(scope.directory, f.path)")
   expect(source).toContain("uiStore.openFile(scope.directory, a.path)")
   expect(source).not.toContain("groupNote(")
   expect(source).not.toContain("group.cmds.length")

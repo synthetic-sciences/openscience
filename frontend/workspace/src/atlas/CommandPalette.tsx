@@ -31,7 +31,7 @@ interface Cmd {
 // Shape of GET /search — plain-text, case-insensitive substring matches
 // scoped to the active project (capped at 20 per group server-side).
 type Hits = ProjectSearchHits
-const EMPTY: Hits = { sessions: [], messages: [], artifacts: [] }
+const EMPTY: Hits = { sessions: [], messages: [], files: [], artifacts: [] }
 const DEBOUNCE = 250
 const REVEAL_TIMEOUT = 2000
 
@@ -213,6 +213,16 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
         },
       })
     })
+    data.files.forEach((f) => {
+      list.push({
+        id: `file-${f.path}`,
+        label: f.name,
+        hint: f.snippet ? `${f.path} · ${f.snippet}` : f.path,
+        icon: IconFile,
+        category: "Files",
+        run: () => uiStore.openFile(scope.directory, f.path),
+      })
+    })
     data.artifacts.forEach((a) => {
       list.push({
         id: `artifact-${a.path}`,
@@ -360,7 +370,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
             </Kobalte.Title>
             <Kobalte.Description id="command-palette-description" class="command-palette__sr-only">
               {active()
-                ? "Search sessions, transcript messages, artifacts, and project actions."
+                ? "Search sessions, transcript messages, workspace files, artifacts, and project actions."
                 : "Open a project or run an available action."}
             </Kobalte.Description>
 
