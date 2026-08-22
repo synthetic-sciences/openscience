@@ -192,13 +192,36 @@ describe("session filesystem grants", () => {
     })
   })
 
-  test("rejects an imported project root that contains the managed broker enclave", async () => {
-    await using tmp = await tmpdir()
+  test("keeps a broad legacy project usable without granting the managed broker parent", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
     await Instance.provide({
-      directory: tmp.path,
+      directory: Global.Path.data,
       fn: async () => {
+        const session = await Session.create({})
+        await using cleanup = {
+          [Symbol.asyncDispose]: () => Session.remove(session.id),
+        }
+        const workspace = await SessionFilesystem.workspace(session.id)
+        const grants = await SessionFilesystem.list(session.id)
+
+        expect(grants).toContainEqual(
+          expect.objectContaining({
+            path: workspace,
+            access: "write",
+            scope: "session",
+            source: "workspace",
+          }),
+        )
+        expect(grants.some((grant) => grant.source === "api")).toBe(false)
+        expect(await SessionFilesystem.processReadRoots(session.id)).toEqual([workspace])
         await expect(
-          SessionFilesystem.initialize("ses_managed_broker_parent", Global.Path.data),
+          SessionFilesystem.grant({
+            sessionID: session.id,
+            path: Global.Path.data,
+            access: "read",
+            scope: "session",
+            source: "api",
+          }),
         ).rejects.toBeInstanceOf(SessionFilesystem.InvalidPathError)
       },
     })

@@ -148,6 +148,12 @@ export namespace SessionFilesystem {
     throw new InvalidPathError({ path: target })
   }
 
+  async function projectRoots(root: string, worktree: string) {
+    if (managedProject()) return []
+    const output = await toolOutputRoot()
+    return [...new Set([root, worktree])].filter((value) => !Filesystem.overlaps(output, value))
+  }
+
   async function managedToolOutput(target: string) {
     return Filesystem.contains(await toolOutputRoot(), target)
   }
@@ -314,12 +320,11 @@ export namespace SessionFilesystem {
   export async function initialize(sessionID: string, directory: string, options: { revokeExisting?: boolean } = {}) {
     const root = await canonical(directory)
     const worktree = await canonical(Instance.worktree)
-    // The global tool-output directory is a managed broker enclave, never a
-    // project root. Refuse an imported folder (including a broad ancestor such
-    // as the data root or home directory) that would turn initialization's
-    // implicit API grant into authority over every session's broker files.
-    await assertNotToolOutput(root)
-    await assertNotToolOutput(worktree)
+    // A broad legacy project such as the user's home directory may contain the
+    // managed tool-output enclave. Keep the session usable in its isolated
+    // scratch workspace, but never mint an implicit project grant that would
+    // expose broker files. Explicit grants remain fail-closed below.
+    const roots = await projectRoots(root, worktree)
     const existing = await read(sessionID).catch((error) => {
       if (Storage.NotFoundError.isInstance(error)) return
       throw error
@@ -341,8 +346,8 @@ export namespace SessionFilesystem {
         source: "workspace",
         time: { created: Date.now() },
       },
-      ...(!managedProject()
-        ? [...new Set([root, worktree])].map(
+      ...(roots.length
+        ? roots.map(
             (value): Grant => ({
               id: `fsg_${crypto.randomUUID()}`,
               path: value,
