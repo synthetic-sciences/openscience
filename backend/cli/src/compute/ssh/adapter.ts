@@ -1332,12 +1332,18 @@ finally:
   }
 
   async function hash(file: string, signal?: AbortSignal, size?: number) {
-    const expected = path.resolve(file)
+    const requested = await fs.lstat(file)
+    if (!requested.isFile() || requested.isSymbolicLink()) {
+      throw new Error(`SSH input changed during secure access: ${file}`)
+    }
+    const expected = await fs.realpath(file)
     const handle = await fs.open(file, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0))
     try {
       const before = await handle.stat()
       if (
         !before.isFile() ||
+        requested.dev !== before.dev ||
+        requested.ino !== before.ino ||
         !Number.isSafeInteger(before.size) ||
         before.size < 0 ||
         before.size !== (size ?? before.size)

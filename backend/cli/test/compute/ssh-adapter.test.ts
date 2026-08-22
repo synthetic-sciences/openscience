@@ -136,7 +136,7 @@ test("terminates an SSH probe when its bounded operation times out or is aborted
 
 test("rejects a non-regular approved upload without blocking on its contents", async () => {
   if (process.platform === "win32") return
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-upload-"))
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-upload-")))
   const source = path.join(root, "blocked-input")
   const fifo = Bun.spawn(["mkfifo", source], { stdout: "ignore", stderr: "pipe" })
   const [code, error] = await Promise.all([fifo.exited, new Response(fifo.stderr).text()])
@@ -172,7 +172,7 @@ test("rejects a non-regular approved upload without blocking on its contents", a
 
 test("packages and receives a bounded verified SSH staging archive", async () => {
   if (process.platform === "win32") return
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-receiver-"))
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-receiver-")))
   const source = path.join(root, "input.txt")
   const content = Buffer.from("verified input\n")
   await fs.writeFile(source, content)
