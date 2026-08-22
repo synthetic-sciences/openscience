@@ -56,6 +56,98 @@ describe("InstructionPrompt.resolve", () => {
     }
   })
 
+  test("skips oversized local instruction files without buffering the whole source", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), `begin\n${"x".repeat(2 * 1024 * 1024)}\nsecret-tail\n`)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await InstructionPrompt.system()
+        expect(result.some((entry) => entry.includes("secret-tail"))).toBe(false)
+        expect(result.some((entry) => entry.includes(path.join(tmp.path, "AGENTS.md")))).toBe(false)
+      },
+    })
+  })
+
+  test("rejects a non-regular local instruction source without blocking", async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir()
+    const instruction = path.join(tmp.path, "AGENTS.md")
+    const fifo = Bun.spawn(["mkfifo", instruction], { stdout: "ignore", stderr: "pipe" })
+    const [code, error] = await Promise.all([fifo.exited, new Response(fifo.stderr).text()])
+    if (code !== 0) throw new Error(error)
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const started = Date.now()
+        expect(await InstructionPrompt.system()).toEqual([])
+        expect(Date.now() - started).toBeLessThan(1_000)
+      },
+    })
+  })
+
+  test("caps the combined instruction payload across many individually valid files", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const files = Array.from({ length: 6 }, (_, index) => path.join(dir, `rules-${index}.md`))
+        await Promise.all(files.map((file, index) => Bun.write(file, `${index}\n${"x".repeat(220 * 1024)}`)))
+        await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ instructions: files }))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await InstructionPrompt.system()
+        expect(result.length).toBeLessThan(6)
+        expect(result.reduce((sum, entry) => sum + Buffer.byteLength(entry), 0)).toBeLessThanOrEqual(1024 * 1024)
+      },
+    })
+  })
+
+  test("cancels a chunked remote instruction response at the source limit", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "openscience.json"),
+          JSON.stringify({ instructions: ["https://example.com/oversized-instructions"] }),
+        )
+      },
+    })
+    const original = globalThis.fetch
+    const state = { pulls: 0, cancelled: false }
+    await Network.set({ allowlistEnabled: true, enabled: [], custom: ["example.com"] })
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            state.pulls++
+            controller.enqueue(new Uint8Array(64 * 1024))
+          },
+          cancel() {
+            state.cancelled = true
+          },
+        }),
+        { status: 200 },
+      )) as unknown as typeof fetch
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await InstructionPrompt.system()
+          expect(result.some((entry) => entry.includes("oversized-instructions"))).toBe(false)
+        },
+      })
+      expect(state.pulls).toBeLessThanOrEqual(6)
+      expect(state.cancelled).toBe(true)
+    } finally {
+      globalThis.fetch = original
+      await Network.set({ allowlistEnabled: false, enabled: ["package-management"], custom: [] })
+    }
+  })
+
   test("returns AGENTS.md from subdirectory (not in systemPaths)", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

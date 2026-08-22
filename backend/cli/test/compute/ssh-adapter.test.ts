@@ -23,6 +23,125 @@ test("accepts only Slurm COMPLETED 0:0 as a successful terminal result", async (
   }
 })
 
+test("stops a control subprocess before buffering an oversized response", async () => {
+  if (process.platform === "win32") return
+  await expect(SshAdapter.slurm("X".repeat(96 * 1024), "1:0")).rejects.toThrow(
+    "SSH command stdout exceeded 65536 bytes",
+  )
+})
+
+test("terminates an SSH probe when its bounded operation times out or is aborted", async () => {
+  if (process.platform === "win32") return
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-probe-"))
+  const bin = path.join(root, "bin")
+  const keyscan = path.join(bin, "ssh-keyscan")
+  const keygen = path.join(bin, "ssh-keygen")
+  const previous = process.env.PATH
+  await fs.mkdir(bin)
+  await Promise.all([
+    fs.writeFile(keyscan, "#!/bin/sh\nexec sleep 60\n", { mode: 0o700 }),
+    fs.writeFile(keygen, "#!/bin/sh\nexit 1\n", { mode: 0o700 }),
+  ])
+  process.env.PATH = `${bin}${path.delimiter}${previous ?? ""}`
+  const host = { id: "slow", label: "Slow", host: "example.com", scheduler: "none" as const }
+  try {
+    const started = Date.now()
+    await expect(SshAdapter.scan(host, { timeoutMs: 50 })).rejects.toThrow("SSH operation timed out")
+    expect(Date.now() - started).toBeLessThan(2_000)
+
+    const controller = new AbortController()
+    const pending = SshAdapter.scan(host, { signal: controller.signal, timeoutMs: 5_000 })
+    setTimeout(() => controller.abort(new Error("probe cancelled")), 25)
+    await expect(pending).rejects.toThrow("probe cancelled")
+  } finally {
+    if (previous === undefined) delete process.env.PATH
+    else process.env.PATH = previous
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("rejects a non-regular approved upload without blocking on its contents", async () => {
+  if (process.platform === "win32") return
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-upload-"))
+  const source = path.join(root, "blocked-input")
+  const fifo = Bun.spawn(["mkfifo", source], { stdout: "ignore", stderr: "pipe" })
+  const [code, error] = await Promise.all([fifo.exited, new Response(fifo.stderr).text()])
+  if (code !== 0) throw new Error(error)
+  const spec: SshAdapter.Spec = {
+    id: "blocked-upload",
+    owner: "owner",
+    root: "/remote/job",
+    cwd: ".",
+    command: "true",
+    scheduler: "none",
+    outputs: [],
+    uploads: [
+      {
+        path: "blocked-input",
+        canonical: source,
+        size: 0,
+        sha256: crypto.createHash("sha256").digest("hex"),
+      },
+    ],
+  }
+  try {
+    const started = Date.now()
+    await expect(SshAdapter.archive(spec, root, { timeoutMs: 500 })).rejects.toThrow(
+      "SSH input changed during secure access",
+    )
+    expect(Date.now() - started).toBeLessThan(1_000)
+    expect((await fs.readdir(root)).some((name) => name.includes(".ssh-stage-"))).toBe(false)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("packages and receives a bounded verified SSH staging archive", async () => {
+  if (process.platform === "win32") return
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-receiver-"))
+  const source = path.join(root, "input.txt")
+  const content = Buffer.from("verified input\n")
+  await fs.writeFile(source, content)
+  const spec: SshAdapter.Spec = {
+    id: "receiver",
+    owner: "owner-token",
+    root: path.join(root, "remote"),
+    cwd: ".",
+    command: "true",
+    scheduler: "none",
+    outputs: [],
+    uploads: [
+      {
+        path: "input.txt",
+        canonical: source,
+        size: content.byteLength,
+        sha256: crypto.createHash("sha256").update(content).digest("hex"),
+      },
+    ],
+  }
+  const packed = await SshAdapter.archive(spec, root)
+  const input = await fs.open(packed, "r")
+  try {
+    const proc = Bun.spawn(["bash", "-lc", SshAdapter.receive(spec)], {
+      stdin: input.fd,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [code, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ])
+    expect(stderr).toBe("")
+    expect(code).toBe(0)
+    expect(JSON.parse(stdout)).toEqual({ staged: true, files: 1 })
+    expect(await fs.readFile(path.join(spec.root, "work/input.txt"))).toEqual(content)
+  } finally {
+    await input.close()
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 async function archive(root: string, relative: string, content: string) {
   const source = await fs.mkdtemp(path.join(root, "archive-source-"))
   const files = path.join(source, "files")
@@ -49,6 +168,82 @@ async function archive(root: string, relative: string, content: string) {
   await fs.rm(source, { recursive: true, force: true })
   return targetArchive
 }
+
+async function adversarialArchive(root: string, manifest: unknown, relative: string, content: Buffer) {
+  const source = await fs.mkdtemp(path.join(root, "archive-adversarial-"))
+  const target = path.join(source, "files", relative)
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  await fs.writeFile(target, content)
+  await fs.writeFile(path.join(source, "manifest.json"), JSON.stringify(manifest))
+  const targetArchive = path.join(root, `${crypto.randomUUID()}.tar`)
+  const proc = Bun.spawn(["tar", "-cf", targetArchive, "-C", source, "manifest.json", "files"], {
+    stdout: "ignore",
+    stderr: "pipe",
+  })
+  const [code, error] = await Promise.all([proc.exited, new Response(proc.stderr).text()])
+  if (code !== 0) throw new Error(error)
+  await fs.rm(source, { recursive: true, force: true })
+  return targetArchive
+}
+
+test("bounds manifest and file-member extraction from adversarial output archives", async () => {
+  if (process.platform === "win32") return
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-bounded-"))
+  const workspace = path.join(root, "workspace")
+  await fs.mkdir(workspace)
+  try {
+    const hugeManifest = await adversarialArchive(
+      root,
+      { files: [], padding: "x".repeat(512 * 1024) },
+      "unused",
+      Buffer.alloc(0),
+    )
+    await expect(SshAdapter.deliver(hugeManifest, workspace)).rejects.toThrow(
+      "SSH command stdout exceeded 262144 bytes",
+    )
+
+    const content = Buffer.alloc(2 * 1024 * 1024, 7)
+    const oversizedMember = await adversarialArchive(
+      root,
+      {
+        files: [
+          {
+            path: "results/value.bin",
+            size: 1,
+            sha256: crypto.createHash("sha256").update(content).digest("hex"),
+          },
+        ],
+      },
+      "results/value.bin",
+      content,
+    )
+    await expect(SshAdapter.deliver(oversizedMember, workspace)).rejects.toThrow("SSH command stdout exceeded 1 bytes")
+    expect(await Bun.file(path.join(workspace, "results/value.bin")).exists()).toBe(false)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("cancels a blocked tar reader and leaves no delivery staging directory", async () => {
+  if (process.platform === "win32") return
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-cancel-"))
+  const archivePath = path.join(root, "blocked.tar")
+  const workspace = path.join(root, "workspace")
+  await fs.mkdir(workspace)
+  const fifo = Bun.spawn(["mkfifo", archivePath], { stdout: "ignore", stderr: "pipe" })
+  const [code, error] = await Promise.all([fifo.exited, new Response(fifo.stderr).text()])
+  if (code !== 0) throw new Error(error)
+  const controller = new AbortController()
+  const pending = SshAdapter.deliver(archivePath, workspace, { signal: controller.signal, timeoutMs: 5_000 })
+  setTimeout(() => controller.abort(new Error("delivery cancelled")), 25)
+  try {
+    await expect(pending).rejects.toThrow("delivery cancelled")
+    const names = await fs.readdir(root)
+    expect(names.some((name) => name.startsWith("ssh-delivery-"))).toBe(false)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
 
 test("installs SSH outputs beneath an inode-pinned workspace while an ancestor name is swapped", async () => {
   if (process.platform === "win32") return

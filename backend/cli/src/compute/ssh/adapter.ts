@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process"
 import crypto from "node:crypto"
-import { createReadStream } from "node:fs"
+import { constants as FS } from "node:fs"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import type { Readable } from "node:stream"
 import type { ModalAdapter } from "../modal/adapter"
 
 export namespace SshAdapter {
@@ -53,6 +54,17 @@ export namespace SshAdapter {
   export type Manifest = {
     files: { path: string; size: number; sha256: string }[]
   }
+
+  export type OperationOptions = {
+    signal?: AbortSignal
+    timeoutMs?: number
+  }
+
+  const STDOUT_BYTES = 256 * 1024
+  const STDERR_BYTES = 64 * 1024
+  const MANIFEST_BYTES = 256 * 1024
+  const COMMAND_TIMEOUT = 300_000
+  const STOP_GRACE = 1_000
 
   const SUPERVISOR = String.raw`#!/usr/bin/env python3
 import ctypes
@@ -986,25 +998,38 @@ def harvest(token):
             relative = source.relative_to(work).as_posix()
             if relative in files:
                 continue
-            size = source.stat().st_size
+            before = source.stat()
+            size = before.st_size
             digest = hashlib.sha256()
             with source.open("rb") as handle:
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
-            files[relative] = {"path": relative, "size": size, "sha256": digest.hexdigest()}
+                after = os.fstat(handle.fileno())
+            if before.st_dev != after.st_dev or before.st_ino != after.st_ino or size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
+                raise RuntimeError("SSH output changed during harvest: " + relative)
+            files[relative] = {"path": relative, "size": size, "sha256": digest.hexdigest(), "dev": after.st_dev, "ino": after.st_ino, "mtime_ns": after.st_mtime_ns}
     ordered = [files[key] for key in sorted(files)]
     if len(ordered) > 200:
         raise RuntimeError("SSH outputs exceed the 200 file recovery limit")
     if sum(item["size"] for item in ordered) > 20 * 1024 * 1024 * 1024:
         raise RuntimeError("SSH outputs exceed the 20 GiB recovery limit")
-    manifest = json.dumps({"files": ordered}, separators=(",", ":")).encode()
+    manifest = json.dumps({"files": [{key: value for key, value in item.items() if key in ("path", "size", "sha256")} for item in ordered]}, separators=(",", ":")).encode()
     with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as archive:
         info = tarfile.TarInfo("manifest.json")
         info.size = len(manifest)
         import io
         archive.addfile(info, io.BytesIO(manifest))
         for item in ordered:
-            archive.add(str(work / item["path"]), arcname="files/" + item["path"], recursive=False)
+            source = work / item["path"]
+            with source.open("rb") as handle:
+                current = os.fstat(handle.fileno())
+                if current.st_dev != item["dev"] or current.st_ino != item["ino"] or current.st_size != item["size"] or current.st_mtime_ns != item["mtime_ns"]:
+                    raise RuntimeError("SSH output changed during harvest: " + item["path"])
+                info = tarfile.TarInfo("files/" + item["path"])
+                info.size = item["size"]
+                info.mode = current.st_mode & 0o777
+                info.mtime = current.st_mtime
+                archive.addfile(info, handle)
 
 def release(token):
     own(token)
@@ -1041,11 +1066,22 @@ else:
     (root / "owner").write_text(owner + "\n", encoding="utf-8")
 incoming = pathlib.Path(tempfile.mkdtemp(prefix="incoming-", dir=root))
 try:
+    received = 0
+    members = 0
+    names = set()
     with tarfile.open(fileobj=sys.stdin.buffer, mode="r|*") as archive:
         for member in archive:
             name = pathlib.PurePosixPath(member.name)
             if name.is_absolute() or ".." in name.parts or not (member.isfile() or member.isdir()):
                 raise RuntimeError("Unsafe OpenScience SSH staging archive")
+            normalized = name.as_posix()
+            if normalized in names:
+                raise RuntimeError("Duplicate OpenScience SSH staging archive member")
+            names.add(normalized)
+            members += 1
+            received += member.size
+            if members > 10050 or received > 128 * 1024 * 1024:
+                raise RuntimeError("OpenScience SSH staging archive exceeds its approved limits")
             target = (incoming / pathlib.Path(*name.parts)).resolve()
             if incoming.resolve() != target and incoming.resolve() not in target.parents:
                 raise RuntimeError("OpenScience SSH staging archive escaped its root")
@@ -1096,31 +1132,144 @@ finally:
     }
   }
 
-  async function collect(proc: ReturnType<typeof spawn>, timeout: number) {
-    const out: Buffer[] = []
-    const err: Buffer[] = []
-    proc.stdout?.on("data", (chunk: Buffer) => out.push(chunk))
-    proc.stderr?.on("data", (chunk: Buffer) => err.push(chunk))
-    const done = new Promise<{ code: number | null; error?: string }>((resolve) => {
-      proc.once("error", (error) => resolve({ code: null, error: error.message }))
-      proc.once("exit", (code) => resolve({ code }))
-    })
-    const result = await Promise.race([
-      done,
-      Bun.sleep(timeout).then(() => ({ code: null, error: "Connection timed out" })),
-    ])
-    if (proc.exitCode === null) proc.kill("SIGKILL")
-    return {
-      ...result,
-      stdout: Buffer.concat(out),
-      stderr: Buffer.concat(err).toString("utf8").trim(),
+  async function collect(
+    proc: ReturnType<typeof spawn>,
+    options: OperationOptions & {
+      maxStdoutBytes?: number
+      maxStderrBytes?: number
+      write?: (chunk: Uint8Array) => Promise<void>
+    },
+  ) {
+    const timeout = options.timeoutMs ?? COMMAND_TIMEOUT
+    const maxout = options.maxStdoutBytes ?? STDOUT_BYTES
+    const maxerr = options.maxStderrBytes ?? STDERR_BYTES
+    if (!Number.isSafeInteger(timeout) || timeout <= 0) throw new Error("SSH command timeout must be positive")
+    if (!Number.isSafeInteger(maxout) || maxout < 0) throw new Error("SSH stdout limit must be nonnegative")
+    if (!Number.isSafeInteger(maxerr) || maxerr <= 0) throw new Error("SSH stderr limit must be positive")
+
+    const output = { chunks: [] as Buffer[], size: 0 }
+    const errors = { chunks: [] as Buffer[], size: 0 }
+    const stopped = Promise.withResolvers<void>()
+    const done = Promise.withResolvers<{ code: number | null; error?: string }>()
+    const state = { failure: undefined as Error | undefined, aborted: false }
+    const stop = (error: Error, aborted = false) => {
+      if (state.failure) return
+      state.failure = error
+      state.aborted = aborted
+      if (proc.exitCode === null && proc.signalCode === null) {
+        try {
+          proc.kill("SIGKILL")
+        } catch {
+          // The child may have exited between the stream event and the kill.
+        }
+      }
+      proc.stdout?.destroy(error)
+      proc.stderr?.destroy(error)
+      stopped.resolve()
+    }
+    const abort = () => stop(new Error("SSH operation was aborted"), true)
+    const pump = async (
+      stream: Readable | null,
+      label: "stdout" | "stderr",
+      limit: number,
+      target: typeof output,
+      write?: (chunk: Uint8Array) => Promise<void>,
+    ) => {
+      if (!stream) return
+      for await (const value of stream) {
+        if (state.failure) return
+        const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value)
+        const remaining = limit - target.size
+        const accepted = chunk.subarray(0, Math.max(0, remaining))
+        if (accepted.byteLength) {
+          if (write) await write(accepted)
+          else target.chunks.push(accepted.slice())
+          target.size += accepted.byteLength
+        }
+        if (accepted.byteLength === chunk.byteLength) continue
+        stop(new Error(`SSH command ${label} exceeded ${limit} bytes`))
+        return
+      }
+    }
+
+    proc.once("error", (error) => done.resolve({ code: null, error: error.message }))
+    proc.once("exit", (code) => done.resolve({ code }))
+    const streams = Promise.all([
+      pump(proc.stdout, "stdout", maxout, output, options.write),
+      pump(proc.stderr, "stderr", maxerr, errors),
+    ]).catch((error: unknown) => stop(error instanceof Error ? error : new Error(String(error))))
+    const timer = setTimeout(() => stop(new Error("SSH operation timed out")), timeout)
+    options.signal?.addEventListener("abort", abort, { once: true })
+    if (options.signal?.aborted) abort()
+    try {
+      const result = await Promise.race([
+        done.promise,
+        stopped.promise.then(() => ({ code: null, error: state.failure?.message })),
+      ])
+      if (!state.failure) await streams
+      if (state.failure) {
+        await Promise.race([done.promise.catch(() => undefined), Bun.sleep(STOP_GRACE)])
+        await Promise.race([streams, Bun.sleep(STOP_GRACE)])
+        void streams.catch(() => undefined)
+      }
+      if (state.aborted) options.signal?.throwIfAborted()
+      return {
+        ...result,
+        code: state.failure ? null : result.code,
+        error: state.failure?.message ?? result.error,
+        stdout: Buffer.concat(output.chunks, output.size),
+        stderr: Buffer.concat(errors.chunks, errors.size).toString("utf8").trim(),
+      }
+    } finally {
+      clearTimeout(timer)
+      options.signal?.removeEventListener("abort", abort)
     }
   }
 
-  async function hash(file: string) {
-    const value = new Bun.CryptoHasher("sha256")
-    for await (const chunk of createReadStream(file)) value.update(chunk)
-    return value.digest("hex")
+  async function hash(file: string, signal?: AbortSignal, size?: number) {
+    const expected = path.resolve(file)
+    const handle = await fs.open(file, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0))
+    try {
+      const before = await handle.stat()
+      if (
+        !before.isFile() ||
+        !Number.isSafeInteger(before.size) ||
+        before.size < 0 ||
+        before.size !== (size ?? before.size)
+      ) {
+        throw new Error(`SSH input changed during secure access: ${file}`)
+      }
+      const value = new Bun.CryptoHasher("sha256")
+      const buffer = Buffer.allocUnsafe(64 * 1024)
+      const offset = { value: 0 }
+      while (offset.value < before.size) {
+        signal?.throwIfAborted()
+        const length = Math.min(buffer.byteLength, before.size - offset.value)
+        const result = await handle.read(buffer, 0, length, offset.value)
+        if (!result.bytesRead) throw new Error(`SSH input changed during secure access: ${file}`)
+        value.update(buffer.subarray(0, result.bytesRead))
+        offset.value += result.bytesRead
+      }
+      const [after, current, canonical] = await Promise.all([handle.stat(), fs.lstat(file), fs.realpath(file)])
+      if (
+        !after.isFile() ||
+        current.isSymbolicLink() ||
+        canonical !== expected ||
+        before.dev !== after.dev ||
+        before.ino !== after.ino ||
+        before.size !== after.size ||
+        before.mtimeMs !== after.mtimeMs ||
+        before.ctimeMs !== after.ctimeMs ||
+        current.dev !== after.dev ||
+        current.ino !== after.ino ||
+        offset.value !== before.size
+      ) {
+        throw new Error(`SSH input changed during secure access: ${file}`)
+      }
+      return value.digest("hex")
+    } finally {
+      await handle.close()
+    }
   }
 
   async function identify(keygen: string, line: string) {
@@ -1129,8 +1278,9 @@ finally:
       stdio: ["pipe", "pipe", "pipe"],
     })
     child.stdin?.end(`${line}\n`)
-    const result = await collect(child, 5_000)
-    if (result.code !== 0) throw new Error(result.stderr || "SSH host key fingerprint could not be computed")
+    const result = await collect(child, { timeoutMs: 5_000, maxStdoutBytes: 64 * 1024 })
+    if (result.code !== 0)
+      throw new Error(result.error || result.stderr || "SSH host key fingerprint could not be computed")
     const digest = result.stdout.toString("utf8").match(/SHA256:[A-Za-z0-9+/=]+/)?.[0]
     if (!digest) throw new Error("SSH host key fingerprint could not be parsed")
     return digest
@@ -1180,14 +1330,14 @@ finally:
     ]
   }
 
-  export async function scan(host: Host) {
+  export async function scan(host: Host, options: OperationOptions = {}) {
     const keyscan = Bun.which("ssh-keyscan")
     const keygen = Bun.which("ssh-keygen")
     if (!keyscan || !keygen) throw new Error("OpenSSH key utilities are required for remote compute")
     const base = ["-T", "8", ...(host.port ? ["-p", String(host.port)] : []), host.host]
     const scanned = await collect(
       spawn(keyscan, ["-t", "ed25519,ecdsa,rsa", ...base], { env: env(), stdio: ["ignore", "pipe", "pipe"] }),
-      12_000,
+      { ...options, timeoutMs: options.timeoutMs ?? 12_000 },
     )
     if (scanned.code !== 0 || !scanned.stdout.length) {
       throw new Error(scanned.error || scanned.stderr || "SSH host returned no public key")
@@ -1245,14 +1395,20 @@ finally:
     return `python3 -c ${safe(script)} ${safe(spec.root)}`
   }
 
-  export async function archive(spec: Spec, directory: string) {
+  export async function archive(spec: Spec, directory: string, options: OperationOptions = {}) {
     const root = await fs.mkdtemp(path.join(directory, `${spec.id}.ssh-stage-`))
     const work = path.join(root, "work")
-    await fs.mkdir(work, { recursive: true })
-    await Promise.all(
-      spec.uploads.map(async (file) => {
+    const tar = path.join(directory, `${spec.id}.${crypto.randomUUID()}.tar`)
+    try {
+      await fs.mkdir(work, { recursive: true })
+      for (const file of spec.uploads) {
+        options.signal?.throwIfAborted()
         const current = await fs.realpath(file.canonical).catch(() => undefined)
-        if (!current || current !== file.canonical || (await hash(current)) !== file.sha256) {
+        if (
+          !current ||
+          current !== file.canonical ||
+          (await hash(current, options.signal, file.size)) !== file.sha256
+        ) {
           throw new Error(`SSH input changed after approval: ${file.path}`)
         }
         const target = path.resolve(work, file.path)
@@ -1261,29 +1417,33 @@ finally:
         await fs.mkdir(path.dirname(target), { recursive: true })
         await fs.copyFile(current, target)
         const info = await fs.stat(target)
-        if (info.size !== file.size || (await hash(target)) !== file.sha256) {
+        if (info.size !== file.size || (await hash(target, options.signal, file.size)) !== file.sha256) {
           throw new Error(`SSH input staging integrity check failed: ${file.path}`)
         }
-      }),
-    )
-    const manifest = { files: spec.uploads.map((file) => ({ path: file.path, size: file.size, sha256: file.sha256 })) }
-    await Promise.all([
-      fs.writeFile(path.join(root, "inputs.json"), JSON.stringify(manifest), { mode: 0o600 }),
-      fs.writeFile(path.join(root, "spec.json"), JSON.stringify({ ...spec, uploads: undefined, owner: undefined }), {
-        mode: 0o600,
-      }),
-      fs.writeFile(path.join(root, "control.py"), CONTROL, { mode: 0o700 }),
-      fs.writeFile(path.join(root, "supervisor.py"), SUPERVISOR, { mode: 0o700 }),
-    ])
-    const tar = path.join(directory, `${spec.id}.${crypto.randomUUID()}.tar`)
-    const proc = Bun.spawn(["tar", "-cf", tar, "-C", root, "."], { stdout: "ignore", stderr: "pipe" })
-    const [code, error] = await Promise.all([proc.exited, new Response(proc.stderr).text()])
-    await fs.rm(root, { recursive: true, force: true })
-    if (code !== 0) {
+      }
+      const manifest = {
+        files: spec.uploads.map((file) => ({ path: file.path, size: file.size, sha256: file.sha256 })),
+      }
+      await Promise.all([
+        fs.writeFile(path.join(root, "inputs.json"), JSON.stringify(manifest), { mode: 0o600 }),
+        fs.writeFile(path.join(root, "spec.json"), JSON.stringify({ ...spec, uploads: undefined, owner: undefined }), {
+          mode: 0o600,
+        }),
+        fs.writeFile(path.join(root, "control.py"), CONTROL, { mode: 0o700 }),
+        fs.writeFile(path.join(root, "supervisor.py"), SUPERVISOR, { mode: 0o700 }),
+      ])
+      const proc = spawn("tar", ["-cf", tar, "-C", root, "."], { stdio: ["ignore", "pipe", "pipe"] })
+      const result = await collect(proc, { ...options, maxStdoutBytes: 1 })
+      if (result.code !== 0) {
+        throw new Error(`Could not package SSH inputs: ${result.error || result.stderr || `tar exited ${result.code}`}`)
+      }
+      return tar
+    } catch (error) {
       await fs.rm(tar, { force: true })
-      throw new Error(`Could not package SSH inputs: ${error.trim()}`)
+      throw error
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
     }
-    return tar
   }
 
   export function parse<T>(buffer: Buffer): T {
@@ -1298,50 +1458,55 @@ finally:
     try {
       await fs.writeFile(script, CONTROL, { mode: 0o700 })
       const proc = spawn("python3", [script, "__slurm", state, exit], { stdio: ["ignore", "pipe", "pipe"] })
-      const result = await collect(proc, 5_000)
-      if (result.code !== 0) throw new Error(result.stderr || "Slurm state parser failed")
+      const result = await collect(proc, { timeoutMs: 5_000, maxStdoutBytes: 64 * 1024 })
+      if (result.code !== 0) throw new Error(result.error || result.stderr || "Slurm state parser failed")
       return parse<Result>(result.stdout)
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
   }
 
-  async function member(archive: string, name: string, target?: string) {
-    const output = target ? await fs.open(target, "w", 0o600) : undefined
+  async function member(
+    archive: string,
+    name: string,
+    options: OperationOptions & { maxBytes: number; target?: string },
+  ) {
+    const output = options.target ? await fs.open(options.target, "wx", 0o600) : undefined
     try {
       const proc = spawn("tar", ["-xOf", archive, "--", name], {
-        stdio: ["ignore", output?.fd ?? "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"],
       })
-      const chunks: Buffer[] = []
-      const errors: Buffer[] = []
-      proc.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk))
-      proc.stderr?.on("data", (chunk: Buffer) => errors.push(chunk))
-      const code = await new Promise<number | null>((resolve) => {
-        proc.once("error", () => resolve(null))
-        proc.once("exit", resolve)
+      const result = await collect(proc, {
+        ...options,
+        maxStdoutBytes: options.maxBytes,
+        write: output
+          ? async (chunk) => {
+              const cursor = { value: 0 }
+              while (cursor.value < chunk.byteLength) {
+                const written = await output.write(chunk, cursor.value, chunk.byteLength - cursor.value)
+                if (!written.bytesWritten) throw new Error(`SSH output archive member ${name} could not be written`)
+                cursor.value += written.bytesWritten
+              }
+            }
+          : undefined,
       })
-      if (code !== 0)
-        throw new Error(Buffer.concat(errors).toString("utf8").trim() || `SSH output archive is missing ${name}`)
-      return Buffer.concat(chunks)
+      if (result.code !== 0) {
+        throw new Error(result.error || result.stderr || `SSH output archive is missing ${name}`)
+      }
+      return result.stdout
     } finally {
       await output?.close().catch(() => undefined)
     }
   }
 
-  async function install(root: string, staging: string, files: Manifest["files"]) {
+  async function install(root: string, staging: string, files: Manifest["files"], options: OperationOptions) {
     const proc = spawn("python3", ["-c", BROKER, root, staging], {
       stdio: ["pipe", "pipe", "pipe"],
     })
-    const errors: Buffer[] = []
-    proc.stderr?.on("data", (chunk: Buffer) => errors.push(chunk))
     proc.stdin?.end(JSON.stringify({ files }))
-    const code = await new Promise<number | null>((resolve) => {
-      proc.once("error", () => resolve(null))
-      proc.once("exit", resolve)
-    })
-    if (code === 0) return
-    const detail = Buffer.concat(errors)
-      .toString("utf8")
+    const result = await collect(proc, { ...options, maxStdoutBytes: 4 * 1024 })
+    if (result.code === 0) return
+    const detail = (result.error || result.stderr)
       .trim()
       .split("\n")
       .at(-1)
@@ -1349,8 +1514,10 @@ finally:
     throw new Error(detail || "SSH output installation broker failed")
   }
 
-  export async function deliver(archive: string, root: string) {
-    const parsed: unknown = JSON.parse((await member(archive, "manifest.json")).toString("utf8"))
+  export async function deliver(archive: string, root: string, options: OperationOptions = {}) {
+    const parsed: unknown = JSON.parse(
+      (await member(archive, "manifest.json", { ...options, maxBytes: MANIFEST_BYTES })).toString("utf8"),
+    )
     const manifest = parsed as Partial<Manifest>
     if (!Array.isArray(manifest.files)) throw new Error("SSH output archive has no valid manifest")
     const files = manifest.files.map((item) => {
@@ -1379,18 +1546,19 @@ finally:
     const staging = await fs.mkdtemp(path.join(path.dirname(archive), "ssh-delivery-"))
     try {
       for (const item of files) {
+        options.signal?.throwIfAborted()
         const staged = path.resolve(staging, item.path)
         if (staging !== staged && !staged.startsWith(`${staging}${path.sep}`)) {
           throw new Error(`SSH output escaped local staging: ${item.path}`)
         }
         await fs.mkdir(path.dirname(staged), { recursive: true })
-        await member(archive, `files/${item.path}`, staged)
+        await member(archive, `files/${item.path}`, { ...options, maxBytes: item.size, target: staged })
         const info = await fs.stat(staged)
-        if (info.size !== item.size || (await hash(staged)) !== item.sha256) {
+        if (info.size !== item.size || (await hash(staged, options.signal, item.size)) !== item.sha256) {
           throw new Error(`SSH output failed integrity verification: ${item.path}`)
         }
       }
-      await install(root, staging, files)
+      await install(root, staging, files, options)
       return files.map((item) => ({ ...item, modified_at: new Date().toISOString() }))
     } finally {
       await fs.rm(staging, { recursive: true, force: true })
