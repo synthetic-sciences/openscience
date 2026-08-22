@@ -342,18 +342,18 @@ export const STRESS_MATRIX: readonly StressScenario[] = [
   clean({
     id: "malformed_tools.truncated-json",
     category: "malformed_tools",
-    title: "Truncated arguments become one bounded failure",
+    title: "Truncated arguments become one bounded recovery",
     prompt: "Exercise the truncated tool-argument fixture.",
     stimulus: { kind: "tool", name: "read", input: '{"filePath":' },
-    expect: { terminal: "failed", tools: 1, retries: 0, artifacts: "none", contains: ["incomplete"] },
+    expect: { terminal: "completed", tools: 1, retries: 0, artifacts: "none", contains: ["incomplete"] },
   }),
   clean({
     id: "malformed_tools.unknown-tool",
     category: "malformed_tools",
-    title: "Unknown tool cannot execute",
+    title: "Unknown tool cannot execute and recovers safely",
     prompt: "Exercise the unknown tool fixture.",
     stimulus: { kind: "tool", name: "not_a_real_tool", input: {} },
-    expect: { terminal: "failed", tools: 1, retries: 0, artifacts: "none", contains: ["unavailable"] },
+    expect: { terminal: "completed", tools: 1, retries: 0, artifacts: "none", contains: ["unavailable"] },
   }),
   clean({
     id: "malformed_tools.repeat-breaker",
@@ -361,7 +361,7 @@ export const STRESS_MATRIX: readonly StressScenario[] = [
     title: "Repeated invalid call trips breaker",
     prompt: "Exercise the repeated malformed bash fixture.",
     stimulus: { kind: "tool", name: "bash", input: {}, repeat: 4 },
-    expect: { terminal: "failed", tools: 3, retries: 0, artifacts: "none", contains: ["repeated"] },
+    expect: { terminal: "failed", tools: 2, retries: 0, artifacts: "none", contains: ["repeated"] },
   }),
   clean({
     id: "retries.rate-limit",
