@@ -3,6 +3,7 @@ import type { StressScenario } from "../../../../evals/cadence-harness/stress-ma
 import { Provider } from "../../src/provider/provider"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
+import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionResearch } from "../../src/session/research"
 import { tmpdir, trustProject } from "../fixture/fixture"
@@ -137,6 +138,148 @@ describe("current-turn context preflight", () => {
           const main = requests.findIndex((request) => request.kind === "main" && request.scenario === scenario.id)
           expect(summary).toBeGreaterThanOrEqual(0)
           expect(main).toBeGreaterThan(summary)
+        },
+      })
+    } finally {
+      provider.stop()
+    }
+  }, 30_000)
+
+  test("does not mistake a delayed prior-turn assistant for an answer to a queued prompt", async () => {
+    const provider = startStressProvider([scenario])
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: stressProviderConfig(`http://127.0.0.1:${provider.server.port}/v1`),
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          await trustProject()
+          await Provider.invalidate()
+        },
+        fn: async () => {
+          const session = await Session.create({ title: "Queued prompt ownership" })
+          const model = { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL }
+          const first = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            noReply: true,
+            tools: { "*": false },
+            parts: [{ type: "text", text: "Earlier request captured by the first provider snapshot." }],
+          })
+          const queued = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            noReply: true,
+            tools: { "*": false },
+            system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+            parts: [{ type: "text", text: scenario.prompt }],
+          })
+          if (first.info.role !== "user" || queued.info.role !== "user")
+            throw new Error("Expected queued user messages")
+          const delayed = await MessageV2.nextMessageID(session.id)
+          await Session.updateMessage({
+            id: delayed,
+            sessionID: session.id,
+            parentID: first.info.id,
+            role: "assistant",
+            mode: "research",
+            agent: "research",
+            path: { cwd: tmp.path, root: tmp.path },
+            modelID: model.modelID,
+            providerID: model.providerID,
+            cost: 0,
+            tokens: { input: 12, output: 3, reasoning: 0, cache: { read: 0, write: 0 } },
+            finish: "stop",
+            time: { created: Date.now(), completed: Date.now() },
+          })
+          await Session.updatePart({
+            id: `prt_${crypto.randomUUID().replaceAll("-", "").slice(0, 26)}`,
+            sessionID: session.id,
+            messageID: delayed,
+            type: "text",
+            text: "Answer to only the earlier request.",
+            time: { start: Date.now(), end: Date.now() },
+          })
+
+          const result = await SessionPrompt.loop(session.id)
+          await provider.quiet()
+
+          expect(result.info.role).toBe("assistant")
+          if (result.info.role !== "assistant") throw new Error("Expected queued prompt response")
+          expect(result.info.parentID).toBe(queued.info.id)
+          expect(provider.main(scenario.id)).toHaveLength(1)
+          expect(provider.main(scenario.id)[0]?.text).toContain(scenario.prompt)
+          expect(provider.main(scenario.id)[0]?.text).toContain("remains unanswered")
+        },
+      })
+    } finally {
+      provider.stop()
+    }
+  }, 30_000)
+
+  test("keeps every queued unanswered prompt verbatim through automatic compaction", async () => {
+    const provider = startStressProvider([scenario])
+    try {
+      const base = stressProviderConfig(`http://127.0.0.1:${provider.server.port}/v1`)
+      base.provider[STRESS_PROVIDER_ID].models[STRESS_PROVIDER_COMPACT_MODEL].limit.context = 80_000
+      await using tmp = await tmpdir({
+        git: true,
+        config: { ...base, compaction: { tailTurns: 1, tailTokens: 1 } },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          await trustProject()
+          await Provider.invalidate()
+        },
+        fn: async () => {
+          const session = await Session.create({ title: "Queued prompt compaction" })
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+            agent: "research",
+            tools: { "*": false },
+            system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+            parts: [{ type: "text", text: `${scenario.prompt}\n${"h".repeat(280_000)}` }],
+          })
+          await provider.quiet()
+          const before = provider.requests.length
+          const first = "FIRST_QUEUED_PROMPT_MUST_REMAIN_VERBATIM"
+          const second = "SECOND_QUEUED_PROMPT_MUST_REMAIN_VERBATIM"
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_COMPACT_MODEL },
+            agent: "research",
+            tools: { "*": false },
+            noReply: true,
+            parts: [{ type: "text", text: `${first}\n${"q".repeat(8_000)}` }],
+          })
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_COMPACT_MODEL },
+            agent: "research",
+            tools: { "*": false },
+            noReply: true,
+            system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+            parts: [{ type: "text", text: `${second}\n${"r".repeat(8_000)}` }],
+          })
+
+          const result = await SessionPrompt.loop(session.id)
+          await provider.quiet()
+
+          expect(result.info.role).toBe("assistant")
+          const requests = provider.requests.slice(before)
+          const summary = requests.find((request) => request.kind === "summary")
+          const main = requests.find((request) => request.kind === "main" && request.scenario === scenario.id)
+          if (!summary || !main) throw new Error("Expected summary and resumed provider requests")
+          expect(summary.text).not.toContain(first)
+          expect(summary.text).not.toContain(second)
+          expect(main.text).toContain(first)
+          expect(main.text).toContain(second)
         },
       })
     } finally {

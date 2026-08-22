@@ -431,6 +431,48 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     return total
   }
 
+  /** Return the transcript span that still belongs to the active, unanswered
+   * turn. Multiple ordinary user messages can arrive while a provider call is
+   * running; none of them are reducible history until a terminal assistant
+   * response has observed them. Tool, output-limit, and overflow turns are
+   * deliberately non-terminal because their follow-up still depends on the
+   * original request. */
+  export function protectedContext(messages: MessageV2.WithParts[], currentID: string) {
+    const current = messages.findIndex((message) => message.info.id === currentID && message.info.role === "user")
+    if (current < 0) return []
+    const terminal = (message: MessageV2.WithParts) => {
+      if (message.info.role !== "assistant") return false
+      if (message.info.error) return true
+      const finish = message.info.finish
+      if (!finish || finish === "compact" || finish === "length") return false
+      const tool = message.parts.some((part) => part.type === "tool")
+      return !MessageV2.isContinuingTurn(finish, tool)
+    }
+    const answered = new Set(
+      messages.flatMap((message) =>
+        terminal(message) && message.info.role === "assistant" ? [message.info.parentID] : [],
+      ),
+    )
+    const summary = messages.findLast(
+      (message) =>
+        message.info.role === "assistant" &&
+        message.info.summary === true &&
+        terminal(message) &&
+        message.parts.some((part) => part.type === "text" && part.text.trim()),
+    )
+    const compacted = (message: MessageV2.WithParts) => {
+      if (!summary || message.info.id >= summary.info.id) return false
+      if (summary.info.role !== "assistant" || !summary.info.tailStartId) return true
+      return message.info.id < summary.info.tailStartId
+    }
+    const start = messages.findIndex((message, index) => {
+      if (index > current || message.info.role !== "user") return false
+      return !answered.has(message.info.id) && !compacted(message)
+    })
+    if (start < 0) return []
+    return messages.slice(start)
+  }
+
   // Split the history into a verbatim recent tail + a head to summarize. Returns the id of
   // the user message the tail begins at. Keeps whole turns (a user message + its following
   // assistant/tool messages) newest-first up to tailTurns, trimmed to the tailTokens budget
@@ -462,6 +504,14 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       cut = start
       if (size > 0) content++
     }
+    // `tailTurns` and `tailTokens` bound answered history, never still-unanswered
+    // input. If several messages were queued during one provider turn, keep that
+    // whole active span verbatim so compaction cannot silently turn one of the
+    // user's requests into lossy summary prose before the model has seen it.
+    const current = messages[turnStarts.at(-1)!].info.id
+    const protectedID = protectedContext(messages, current)[0]?.info.id
+    const protectedStart = protectedID ? messages.findIndex((message) => message.info.id === protectedID) : -1
+    if (protectedStart > 0) cut = Math.min(cut, protectedStart)
     if (cut <= 0 || cut >= messages.length) return {} // tail covers everything / nothing kept
     return { tailStartId: messages[cut].info.id }
   }

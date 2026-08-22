@@ -1035,7 +1035,7 @@ describe("session.compaction.selectTail", () => {
         id,
         sessionID: "s",
         role: "assistant",
-        parentID: "u",
+        parentID: id.replace(/^a/, "u"),
         modelID: "m",
         providerID: "p",
         mode: "",
@@ -1158,5 +1158,25 @@ describe("session.compaction.selectTail", () => {
     const msgs = [u("u1"), a("a1", "x"), u("u2"), a("a2", big), carrier]
     const { tailStartId } = SessionCompaction.selectTail(msgs, { tailTurns: 1, tailTokens: 4000 })
     expect(tailStartId).toBe("u2") // the last REAL turn, not the empty carrier
+  })
+
+  test("keeps every queued unanswered user turn verbatim beyond the configured tail limit", () => {
+    const carrier = {
+      info: {
+        id: "cc",
+        sessionID: "s",
+        role: "user",
+        time: { created: 0 },
+        agent: "a",
+        model: { providerID: "p", modelID: "m" },
+      },
+      parts: [{ id: "ccp", sessionID: "s", messageID: "cc", type: "compaction", auto: true }],
+    } as unknown as MessageV2.WithParts
+    const msgs = [u("u1"), a("a1", "answered"), u("u2", "first queued"), u("u3", "second queued"), carrier]
+
+    const { tailStartId } = SessionCompaction.selectTail(msgs, { tailTurns: 1, tailTokens: 1 })
+
+    expect(tailStartId).toBe("u2")
+    expect(SessionCompaction.protectedContext(msgs, "cc").map((message) => message.info.id)).toEqual(["u2", "u3", "cc"])
   })
 })

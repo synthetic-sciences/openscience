@@ -178,7 +178,7 @@ async function seed(directory: string): Promise<Seed> {
   })
 }
 
-async function wrapped(directory: string) {
+async function wrapped(directory: string, interrupted = false) {
   return Instance.provide({
     directory,
     init: async () => {
@@ -223,29 +223,61 @@ async function wrapped(directory: string) {
         finish: "tool-calls",
         time: { created: Date.now(), completed: Date.now() },
       })
-      await Session.updatePart({
-        id: ids.partID,
-        sessionID: session.id,
-        messageID: ids.messageID,
-        callID: ids.callID,
-        tool: "task",
-        type: "tool",
-        metadata: TaskAttempt.wrapper({ messageID: user.info.id, partID: source.id }),
-        state: {
-          status: "completed",
-          input: {
-            description: source.description,
-            prompt: source.prompt,
-            subagent_type: "execute",
-            command: source.command,
+      const input = {
+        description: source.description,
+        prompt: source.prompt,
+        subagent_type: "execute" as const,
+        command: source.command,
+      }
+      await Session.updatePart(
+        interrupted
+          ? {
+              id: ids.partID,
+              sessionID: session.id,
+              messageID: ids.messageID,
+              callID: ids.callID,
+              tool: "task",
+              type: "tool",
+              metadata: TaskAttempt.wrapper({ messageID: user.info.id, partID: source.id }),
+              state: { status: "running", input, time: { start: Date.now() } },
+            }
+          : {
+              id: ids.partID,
+              sessionID: session.id,
+              messageID: ids.messageID,
+              callID: ids.callID,
+              tool: "task",
+              type: "tool",
+              metadata: TaskAttempt.wrapper({ messageID: user.info.id, partID: source.id }),
+              state: {
+                status: "completed",
+                input,
+                title: source.description,
+                metadata: { sessionId: "ses_completed_child" },
+                output: "DURABLE_WRAPPER_CHILD_RESULT",
+                time: { start: Date.now(), end: Date.now() },
+              },
+            },
+      )
+      if (interrupted) {
+        const identity = {
+          projectID: Instance.project.id,
+          parentSessionID: session.id,
+          parentMessageID: ids.messageID,
+          parentUserMessageID: user.info.id,
+          callID: ids.callID,
+        }
+        await TaskAttempt.reserve({ ...identity, fingerprint: TaskAttempt.fingerprint(input) })
+        await TaskAttempt.complete({
+          ...identity,
+          result: {
+            title: source.description,
+            metadata: { sessionId: "ses_completed_child" },
+            output: "DURABLE_WRAPPER_CHILD_RESULT",
           },
-          title: source.description,
-          metadata: { sessionId: "ses_completed_child" },
-          output: "DURABLE_WRAPPER_CHILD_RESULT",
-          time: { start: Date.now(), end: Date.now() },
-        },
-      })
-      return session.id
+        })
+      }
+      return { sessionID: session.id, ids }
     },
   })
 }
@@ -377,7 +409,7 @@ describe("durable Task attempts across Bun processes", () => {
         git: true,
         config: stressProviderConfig(`http://127.0.0.1:${local.server.port}/v1`),
       })
-      const sessionID = await wrapped(tmp.path)
+      const sessionID = (await wrapped(tmp.path)).sessionID
       const readyA = path.join(tmp.path, "wrapper-a.ready")
       const readyB = path.join(tmp.path, "wrapper-b.ready")
       const start = path.join(tmp.path, "wrapper.start")
@@ -422,6 +454,117 @@ describe("durable Task attempts across Bun processes", () => {
       local.release.resolve()
       for (const proc of processes) proc.kill()
       await Promise.all([...processes].map((proc) => proc.exited.catch(() => undefined)))
+      local.server.stop(true)
+    }
+  }, 30_000)
+
+  test("restores a durable child result into a running command wrapper before parent continuation", async () => {
+    const local = provider()
+    const processes = new Set<ReturnType<typeof parent>>()
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: stressProviderConfig(`http://127.0.0.1:${local.server.port}/v1`),
+      })
+      const seeded = await wrapped(tmp.path, true)
+      const ready = path.join(tmp.path, "wrapper-recovery.ready")
+      const start = path.join(tmp.path, "wrapper-recovery.start")
+      const process = parent(tmp.path, seeded.sessionID, ready, start)
+      processes.add(process)
+      await wait(ready)
+      await fs.writeFile(start, "start")
+      const output = await result(process)
+      const messages = await Instance.provide({
+        directory: tmp.path,
+        fn: () => Session.messages({ sessionID: seeded.sessionID }),
+      })
+      const wrapper = messages
+        .flatMap((message) => message.parts)
+        .find((part): part is MessageV2.ToolPart => part.type === "tool" && part.id === seeded.ids.partID)
+
+      expect(wrapper?.state.status).toBe("completed")
+      if (wrapper?.state.status !== "completed") throw new Error("Expected recovered Task result")
+      expect(wrapper.state.output).toBe("DURABLE_WRAPPER_CHILD_RESULT")
+      expect(
+        messages.filter(
+          (message) =>
+            message.info.role === "user" &&
+            message.info.internal?.type === "continuation" &&
+            message.info.internal.kind === "task",
+        ),
+      ).toHaveLength(1)
+      expect(JSON.stringify(local.requests)).toContain("DURABLE_WRAPPER_CHILD_RESULT")
+      expect(JSON.stringify(local.requests)).not.toContain("Tool execution was interrupted")
+      expect(output.output).toContain("DURABLE_CHILD_RESULT")
+    } finally {
+      local.release.resolve()
+      for (const process of processes) process.kill()
+      await Promise.all([...processes].map((process) => process.exited.catch(() => undefined)))
+      local.server.stop(true)
+    }
+  }, 30_000)
+
+  test("restores a durable child result into an ordinary running Task call after restart", async () => {
+    const local = provider()
+    const processes = new Set<ReturnType<typeof parent>>()
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: stressProviderConfig(`http://127.0.0.1:${local.server.port}/v1`),
+      })
+      const input = await seed(tmp.path)
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const identity = {
+            projectID: Instance.project.id,
+            parentSessionID: input.parentID,
+            parentMessageID: input.messageID,
+            parentUserMessageID: input.userID,
+            callID: input.callID,
+          }
+          const params = {
+            description: "Durable restart fixture",
+            prompt: "Return the deterministic child result.",
+            subagent_type: "execute" as const,
+          }
+          await TaskAttempt.reserve({ ...identity, fingerprint: TaskAttempt.fingerprint(params) })
+          await TaskAttempt.complete({
+            ...identity,
+            result: {
+              title: params.description,
+              metadata: { sessionId: "ses_completed_child" },
+              output: "DURABLE_ORDINARY_CHILD_RESULT",
+            },
+          })
+        },
+      })
+      const ready = path.join(tmp.path, "ordinary-recovery.ready")
+      const start = path.join(tmp.path, "ordinary-recovery.start")
+      const process = parent(tmp.path, input.parentID, ready, start)
+      processes.add(process)
+      await wait(ready)
+      await fs.writeFile(start, "start")
+      await result(process)
+      const messages = await Instance.provide({
+        directory: tmp.path,
+        fn: () => Session.messages({ sessionID: input.parentID }),
+      })
+      const source = messages.find((message) => message.info.id === input.messageID)
+      const task = source?.parts.find(
+        (part): part is MessageV2.ToolPart => part.type === "tool" && part.callID === input.callID,
+      )
+
+      expect(source?.info.role === "assistant" ? source.info.finish : undefined).toBe("tool-calls")
+      expect(task?.state.status).toBe("completed")
+      if (task?.state.status !== "completed") throw new Error("Expected recovered Task result")
+      expect(task.state.output).toBe("DURABLE_ORDINARY_CHILD_RESULT")
+      expect(JSON.stringify(local.requests)).toContain("DURABLE_ORDINARY_CHILD_RESULT")
+      expect(JSON.stringify(local.requests)).not.toContain("Tool execution was interrupted")
+    } finally {
+      local.release.resolve()
+      for (const process of processes) process.kill()
+      await Promise.all([...processes].map((process) => process.exited.catch(() => undefined)))
       local.server.stop(true)
     }
   }, 30_000)

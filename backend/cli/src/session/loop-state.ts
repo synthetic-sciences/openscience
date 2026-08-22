@@ -312,7 +312,7 @@ export namespace SessionLoopState {
   }
 
   export function terminalError(input: { user: MessageV2.User; assistant?: MessageV2.Assistant }) {
-    return !!input.assistant?.error && input.user.id < input.assistant.id
+    return !!input.assistant?.error && input.assistant.parentID === input.user.id
   }
 
   function isFinalized(

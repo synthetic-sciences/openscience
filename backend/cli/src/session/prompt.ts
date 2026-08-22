@@ -169,7 +169,7 @@ export namespace SessionPrompt {
     const tools = await toolTokens(input.tools)
     const extra = input.extra ? Token.estimate(input.extra) : 0
     const composition = MessageV2.composition(input.messages, { system: input.system })
-    const current = input.messages.filter((message) => message.info.id === input.current.id)
+    const current = SessionCompaction.protectedContext(input.messages, input.current.id)
     const fixed = tools + extra
     const total = composition.total + fileTokens(input.messages) + fixed
     const newest = MessageV2.composition(current, { system: input.system }).total + fileTokens(current) + fixed
@@ -514,6 +514,64 @@ export namespace SessionPrompt {
     }
   }
 
+  /** A Task child can finish durably before the processor writes its parent
+   * tool result. Reconcile that authoritative result at loop startup so a
+   * restart feeds the real handoff back to the parent instead of fabricating
+   * an interrupted-tool error. */
+  async function recoverTaskAttempts(session: Session.Info, messages: MessageV2.WithParts[]) {
+    const repairs: { info: MessageV2.Assistant; part: MessageV2.ToolPart }[] = []
+    for (const message of messages) {
+      if (message.info.role !== "assistant") continue
+      for (const part of message.parts) {
+        if (part.type !== "tool" || part.tool !== TaskTool.id) continue
+        if (part.state.status !== "pending" && part.state.status !== "running" && message.info.finish) continue
+        repairs.push({ info: message.info, part })
+      }
+    }
+    const changed = await Promise.all(
+      repairs.map(async ({ info, part }) => {
+        const identity = {
+          projectID: session.projectID,
+          parentSessionID: session.id,
+          parentMessageID: info.id,
+          parentUserMessageID: info.parentID,
+          callID: part.callID,
+        }
+        const attempt = await TaskAttempt.read(identity)
+        if (attempt?.status !== "completed" || !attempt.result) return false
+        const fingerprint = TaskAttempt.fingerprint(part.state.input)
+        const legacy = TaskAttempt.legacyFingerprint(part.state.input)
+        if (attempt.fingerprint !== fingerprint && attempt.fingerprint !== legacy) {
+          throw new Error(`Task call ${part.callID} changed arguments before durable result recovery`)
+        }
+        if (part.state.status === "pending" || part.state.status === "running") {
+          const start = part.state.status === "running" ? part.state.time.start : attempt.createdAt
+          await Session.updatePart({
+            ...part,
+            state: {
+              status: "completed",
+              input: part.state.input,
+              ...(part.state.raw ? { raw: part.state.raw } : {}),
+              title: attempt.result.title,
+              metadata: attempt.result.metadata,
+              output: attempt.result.output,
+              time: { start, end: Math.max(start, attempt.updatedAt) },
+            },
+          } satisfies MessageV2.ToolPart)
+        }
+        if (!info.finish) {
+          await Session.updateMessage({
+            ...info,
+            finish: "tool-calls",
+            time: { ...info.time, completed: info.time.completed ?? attempt.updatedAt },
+          })
+        }
+        return true
+      }),
+    )
+    return changed.some(Boolean)
+  }
+
   function pendingTaskContinuation(messages: MessageV2.WithParts[]) {
     for (let index = messages.length - 1; index >= 0; index--) {
       const wrapper = messages[index]
@@ -566,8 +624,10 @@ export namespace SessionPrompt {
       }),
     )
     const repaired = incomplete.length ? await Session.messages({ sessionID }) : initial
-    const continued = await recoverTaskContinuation(repaired)
-    const durable = continued ? await Session.messages({ sessionID }) : repaired
+    const task = await recoverTaskAttempts(session, repaired)
+    const reconciled = task ? await Session.messages({ sessionID }) : repaired
+    const continued = await recoverTaskContinuation(reconciled)
+    const durable = continued ? await Session.messages({ sessionID }) : reconciled
     const recovered = SessionLoopState.restore(durable)
     SessionCompaction.restoreBreaker(sessionID, durable)
     const interrupted = SessionLoopState.pendingCompaction(durable)
@@ -706,6 +766,7 @@ export namespace SessionPrompt {
         return true
       }
       const bareMode = lastUser.tools?.["*"] === false
+      const owned = lastAssistant?.parentID === lastUser.id
       // Provider/auth/payment/cancellation errors are terminal for the durable
       // attempt that produced them. A backend restart must not silently issue
       // the same request again; a newer real prompt has a newer user id and is
@@ -717,7 +778,7 @@ export namespace SessionPrompt {
       // same oversized request with freshly-reset local counters.
       const overflowRecovery = SessionLoopState.overflowRecovery({
         assistant: lastAssistant,
-        unanswered: !!lastAssistant && lastUser.id < lastAssistant.id,
+        unanswered: owned,
         attempts: overflowCompactions,
       })
       if (overflowRecovery === "fail") {
@@ -736,7 +797,7 @@ export namespace SessionPrompt {
       const continuing = MessageV2.isContinuingTurn(lastAssistant?.finish, lastAssistantHasTool)
       const recovery = MessageV2.outputRecovery({
         finish: lastAssistant?.finish,
-        unanswered: !!lastAssistant && lastUser.id < lastAssistant.id,
+        unanswered: owned,
         bare: bareMode,
         attempts: outputContinuations,
       })
@@ -761,7 +822,7 @@ export namespace SessionPrompt {
         continue
       }
       if (lastAssistant?.finish !== "length") outputContinuations = 0
-      if (lastAssistant?.finish && (!continuing || bareMode) && lastUser.id < lastAssistant.id) {
+      if (lastAssistant?.finish && (!continuing || bareMode) && owned) {
         const contract = await SessionResearch.read(sessionID)
         if (contract) {
           const trace = await import("./trace").then((mod) => mod.SessionTrace.build(sessionID))
@@ -1031,9 +1092,6 @@ export namespace SessionPrompt {
             result,
           )
         }
-        assistantMessage.finish = "tool-calls"
-        assistantMessage.time.completed = Date.now()
-        await Session.updateMessage(assistantMessage)
         if (result && part.state.status === "running") {
           await Session.updatePart({
             ...part,
@@ -1066,6 +1124,12 @@ export namespace SessionPrompt {
             },
           } satisfies MessageV2.ToolPart)
         }
+        // The terminal tool result is the durable commit point. Mark the
+        // wrapper assistant finished only afterwards; startup recovery handles
+        // the remaining crash edge in the opposite order idempotently.
+        assistantMessage.finish = "tool-calls"
+        assistantMessage.time.completed = Date.now()
+        await Session.updateMessage(assistantMessage)
 
         if (task.command) {
           // Add synthetic user message to prevent certain reasoning models from erroring
@@ -1125,6 +1189,7 @@ export namespace SessionPrompt {
       // context overflow, needs compaction (proactive, at the 0.75 threshold)
       const overThreshold =
         !!lastFinished &&
+        lastFinished.parentID === lastUser.id &&
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       // Circuit breaker: once repeated compactions have proven ineffective for this
@@ -1255,16 +1320,12 @@ export namespace SessionPrompt {
       const sessionMessages = clone(msgs)
 
       const queued =
-        nextStep > 1 &&
-        !!lastFinished &&
-        sessionMessages.some(
-          (message) =>
-            message.info.role === "user" &&
-            message.info.id > lastFinished.id &&
-            message.parts.some(
-              (part) => part.type === "text" && !part.ignored && !part.synthetic && !!part.text.trim(),
-            ),
-        )
+        SessionCompaction.protectedContext(sessionMessages, lastUser.id).filter(SessionLoopState.external).length > 1
+      const displaced =
+        !!lastAssistant &&
+        !owned &&
+        sessionMessages.findIndex((message) => message.info.id === lastAssistant.id) >
+          sessionMessages.findIndex((message) => message.info.id === lastUser.id)
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
@@ -1279,11 +1340,15 @@ export namespace SessionPrompt {
           : []),
         ...(contract ? [contract] : []),
         ...reminders.system,
-        ...(queued
+        ...(displaced
           ? [
-              "Additional user messages arrived while this turn was in progress. They remain ordinary user messages in the conversation. Address them in chronological order while continuing the current task.",
+              "The latest assistant message belongs to an earlier user turn. The ordinary user message before it was not part of that assistant's request and remains unanswered; treat it as the current request.",
             ]
-          : []),
+          : queued
+            ? [
+                "Additional user messages arrived while this turn was in progress. They remain ordinary user messages in the conversation. Address them in chronological order while continuing the current task.",
+              ]
+            : []),
       ]
 
       // Include the provider/agent header and tool contracts in the same-turn

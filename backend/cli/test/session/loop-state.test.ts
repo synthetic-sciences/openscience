@@ -158,6 +158,10 @@ describe("session loop restart state", () => {
     const retry = user("003", [text("003", "try again")])
     if (retry.info.role !== "user") throw new Error("bad fixture")
     expect(SessionLoopState.terminalError({ user: retry.info, assistant: error.info })).toBe(false)
+    const delayed = assistant("004", "001", "")
+    if (delayed.info.role !== "assistant") throw new Error("bad fixture")
+    delayed.info.error = error.info.error
+    expect(SessionLoopState.terminalError({ user: retry.info, assistant: delayed.info })).toBe(false)
   })
 
   test("an atomic assistant claim restores the exact step and ignores unrelated assistants", () => {
