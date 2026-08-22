@@ -11,11 +11,13 @@ OpenScience is model-agnostic. A **model** is one inference endpoint the agent r
 Set a key from any provider and start working:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
+export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ORCAROUTER_API_KEY, ...
 openscience
 ```
 
 Keys stay on your machine. Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, Meta Model API, DeepSeek, and dozens more work the same way — the catalogue is models.dev-backed, so any `provider/model` id a provider currently exposes is addressable. You can also paste keys into the Credentials panel in the [workspace](/openscience/workspace) instead of exporting them, and OpenAI Codex signs in via OAuth.
+
+Gateways work the same way. Set `ORCAROUTER_API_KEY` and address any [OrcaRouter](https://www.orcarouter.ai) model as `orcarouter/<model>` — the catalogue ids are provider-prefixed, so `orcarouter/anthropic/claude-sonnet-4.6` and `orcarouter/openai/gpt-4o` both work. OrcaRouter is an OpenAI-compatible router: one key serves 150+ models from OpenAI, Anthropic, Google, DeepSeek, Qwen, MiniMax and xAI behind a single `https://api.orcarouter.ai/v1` endpoint, and it runs gateway-level, zero-trust security for AI agents on the same endpoint. `openscience models orcarouter --flat` lists every id it exposes.
 
 The current frontier families are available on both paths:
 
