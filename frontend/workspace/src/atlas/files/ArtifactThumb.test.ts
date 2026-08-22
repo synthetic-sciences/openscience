@@ -77,31 +77,33 @@ const artifact = (over: { filename: string; mimeType?: string; size?: number }) 
   }) as never
 
 describe("artifact thumbnail", () => {
-  test("renders an image against the raw URL and defers its load", () => {
+  test("renders an image from authenticated bytes, never a raw URL", async () => {
+    let reads = 0
     const host = mount(() =>
       subject.ArtifactThumb({
         artifact: artifact({ filename: "fit.png", mimeType: "image/png" }),
-        url: () => "http://local/raw",
-        read: async () => "",
+        read: async () => {
+          reads += 1
+          return new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" })
+        },
       }),
     )
-    const image = host.querySelector("img")
+    const image = await waitFor(() => host.querySelector("img"))
 
-    expect(image?.getAttribute("src")).toBe("http://local/raw")
-    expect(image?.getAttribute("loading")).toBe("lazy")
+    expect(reads).toBe(1)
+    expect(image?.getAttribute("src")).toStartWith("data:image/png;base64,")
+    expect(image?.getAttribute("src")).not.toContain("/raw")
   })
 
-  // artifactUrl yields "" when no builder exists, which resolves to the current
-  // document -- without onError that renders the browser's broken-image glyph.
-  test("falls back to the extension when the image cannot be served", async () => {
+  test("falls back to the extension when authenticated image bytes cannot be read", async () => {
     const host = mount(() =>
       subject.ArtifactThumb({
         artifact: artifact({ filename: "fit.png", mimeType: "image/png" }),
-        url: () => "",
-        read: async () => "",
+        read: async () => {
+          throw new Error("gone")
+        },
       }),
     )
-    host.querySelector("img")!.dispatchEvent(new Event("error"))
     await settle()
 
     expect(host.querySelector("img")).toBeNull()
@@ -113,8 +115,7 @@ describe("artifact thumbnail", () => {
     const host = mount(() =>
       subject.ArtifactThumb({
         artifact: artifact({ filename: "train.py" }),
-        url: () => "",
-        read: async () => body,
+        read: async () => new Blob([body]),
         highlight: async (code) => `<span class="tinted">${code}</span>`,
       }),
     )
@@ -130,7 +131,6 @@ describe("artifact thumbnail", () => {
     const host = mount(() =>
       subject.ArtifactThumb({
         artifact: artifact({ filename: "train.py" }),
-        url: () => "",
         read: async () => {
           throw new Error("gone")
         },
@@ -145,8 +145,7 @@ describe("artifact thumbnail", () => {
     const host = mount(() =>
       subject.ArtifactThumb({
         artifact: artifact({ filename: "train.py" }),
-        url: () => "",
-        read: async () => "import numpy",
+        read: async () => new Blob(["import numpy"]),
         highlight: async () => {
           throw new Error("no grammar")
         },
@@ -162,10 +161,9 @@ describe("artifact thumbnail", () => {
     const host = mount(() =>
       subject.ArtifactThumb({
         artifact: artifact({ filename: "huge.md", mimeType: "text/markdown", size: 70_000 }),
-        url: () => "",
         read: async () => {
           reads += 1
-          return "never"
+          return new Blob(["never"])
         },
       }),
     )
@@ -175,6 +173,23 @@ describe("artifact thumbnail", () => {
     expect(host.querySelector("[data-thumb-chip]")?.textContent).toBe("md")
   })
 
+  test("does not read an image past the in-memory preview limit", async () => {
+    let reads = 0
+    const host = mount(() =>
+      subject.ArtifactThumb({
+        artifact: artifact({ filename: "huge.png", mimeType: "image/png", size: 8 * 1024 * 1024 + 1 }),
+        read: async () => {
+          reads += 1
+          return new Blob(["never"])
+        },
+      }),
+    )
+    await settle()
+
+    expect(reads).toBe(0)
+    expect(host.querySelector("[data-thumb-chip]")?.textContent).toBe("png")
+  })
+
   // Every other test injects `highlight`, which would let a wrong export name or
   // a wrong module specifier pass the suite and fail only in a browser. This one
   // runs the real shared highlighter, so the wiring itself is under test.
@@ -182,8 +197,7 @@ describe("artifact thumbnail", () => {
     const host = mount(() =>
       subject.ArtifactThumb({
         artifact: artifact({ filename: "train.py" }),
-        url: () => "",
-        read: async () => 'import numpy as np\nname = "x"\n',
+        read: async () => new Blob(['import numpy as np\nname = "x"\n']),
       }),
     )
 

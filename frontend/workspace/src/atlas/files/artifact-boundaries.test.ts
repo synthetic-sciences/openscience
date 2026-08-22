@@ -83,12 +83,11 @@ describe("artifact grid inside the app's boundaries", () => {
   // A pending thumbnail must not suspend anything above it: RightPane's Suspense
   // fallback replaces the whole pane, tabs included.
   test("never replaces the pane with the suspense fallback while bytes load", async () => {
-    let release: (value: string) => void = () => {}
+    let release: (value: Blob) => void = () => {}
     const host = mountGuarded(() =>
       thumb.ArtifactThumb({
         artifact: artifact({ filename: "train.py" }),
-        url: () => "",
-        read: () => new Promise<string>((resolve) => (release = resolve)),
+        read: () => new Promise<Blob>((resolve) => (release = resolve)),
         highlight: async (code: string) => code,
       }),
     )
@@ -96,7 +95,7 @@ describe("artifact grid inside the app's boundaries", () => {
 
     expect(host.textContent).not.toContain("PANE-REPLACED-BY-SPINNER")
 
-    release("import numpy")
+    release(new Blob(["import numpy"]))
     await settle()
 
     expect(host.textContent).toContain("import numpy")
@@ -108,7 +107,6 @@ describe("artifact grid inside the app's boundaries", () => {
     const host = mountGuarded(() =>
       thumb.ArtifactThumb({
         artifact: artifact({ filename: "train.py" }),
-        url: () => "",
         read: () => {
           throw new Error("no project")
         },
@@ -124,7 +122,6 @@ describe("artifact grid inside the app's boundaries", () => {
     const host = mountGuarded(() =>
       thumb.ArtifactThumb({
         artifact: artifact({ filename: "notes.md" }),
-        url: () => "",
         read: async () => {
           throw new Error("gone")
         },
@@ -148,13 +145,13 @@ describe("artifact grid inside the app's boundaries", () => {
         ],
         titles: new Map(),
         currentSession: undefined,
-        url: () => "",
         read: async () => {
           reads += 1
-          return "import numpy"
+          return new Blob(["import numpy"])
         },
         highlight: async (code: string) => code,
         onOpen: () => {},
+        onDownload: () => {},
         onRename: () => {},
         onTrash: () => {},
       } as never),
@@ -191,10 +188,10 @@ describe("artifact grid inside the app's boundaries", () => {
         ],
         titles: new Map(),
         currentSession: undefined,
-        url: () => "",
-        read: async () => "import numpy",
+        read: async () => new Blob(["import numpy"]),
         highlight: async (code: string) => code,
         onOpen: () => {},
+        onDownload: () => {},
         onRename: () => {},
         onTrash: () => {},
       } as never),
@@ -232,9 +229,9 @@ describe("artifact grid inside the app's boundaries", () => {
           artifacts: [],
           titles: new Map(),
           currentSession: undefined,
-          url: () => "",
-          read: async () => "",
+          read: async () => new Blob(),
           onOpen: () => {},
+          onDownload: () => {},
           onRename: () => {},
           onTrash: () => {},
         } as never),

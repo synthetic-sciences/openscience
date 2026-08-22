@@ -3,7 +3,8 @@ import { expect, test } from "bun:test"
 const source = await Bun.file(new URL("./StoredArtifactView.tsx", import.meta.url)).text()
 
 test("keeps text preview loading state reactive", () => {
-  expect(source).toContain("<Show when={!props.loading} fallback={<p style={empty()}>Loading preview…</p>}>")
+  expect(source).toContain("<Match when={props.loading}>")
+  expect(source).toContain("Loading preview…")
   expect(source).not.toContain("if (props.loading)")
 })
 
@@ -15,8 +16,8 @@ test("refreshes an open artifact record after a new immutable version is saved",
 
 test("keeps the saved artifact surface focused on preview while provenance UI is deferred", () => {
   expect(source).toContain("<Preview")
-  expect(source).toContain("versionID: version.id")
-  expect(source).toContain("raw(version(), true)")
+  expect(source).toContain("loadStoredArtifactPreview(sdk.request, artifactID, version)")
+  expect(source).toContain("requestStoredArtifact(sdk.request, props.artifact.id, version.id, true)")
   expect(source).not.toContain("Versions")
   expect(source).not.toContain("How made")
   expect(source).not.toContain("Review")
@@ -30,9 +31,17 @@ test("keeps the saved artifact surface focused on preview while provenance UI is
 
 test("renders saved PDFs with the same first-party viewer used by project files", () => {
   expect(source).toContain('import { PdfViewer } from "@/science/renderers/documents/PdfViewer"')
-  expect(source).toContain('<PdfViewer kind="pdf" data={{ url: props.url, maxPages: 40 }} />')
+  expect(source).toContain('<PdfViewer kind="pdf" data={{ bytes: data().data, maxPages: 40 }} />')
   expect(source).not.toContain("<iframe")
   expect(source).toContain('return "PDF"')
+})
+
+test("never hands protected artifact URLs to browser-native readers", () => {
+  expect(source).not.toContain("sdk.request.url")
+  expect(source).not.toMatch(/\bfetch\s*\(/)
+  expect(source).not.toMatch(/<a(?:\s|>)/)
+  expect(source).toContain("downloadBlob(version.filename, blob)")
+  expect(source).toContain('role="alert"')
 })
 
 test("keeps rename and recoverable deletion in the stored artifact lifecycle", () => {
@@ -47,7 +56,7 @@ test("uses the shared quiet boundary and control language", () => {
   expect(source).toContain('import { Button } from "@synsci/ui/button"')
   expect(source).toContain('import { IconButton } from "@synsci/ui/icon-button"')
   expect(source).toContain('import { TextField } from "@synsci/ui/text-field"')
-  expect(source).toContain('data-variant="secondary"')
+  expect(source).toContain('variant="secondary"')
   expect(source).toContain('"border-bottom": "1px solid var(--border-weak-base)"')
   expect(source).toContain('background: "var(--surface-raised-base)"')
   expect(source).toContain('"border-radius": "var(--radius-md)"')
@@ -55,5 +64,4 @@ test("uses the shared quiet boundary and control language", () => {
   expect(source).not.toContain("--color-border-subtle")
   expect(source).not.toMatch(/"border-radius": "\d+px"/)
   expect(source).not.toContain("const actionCard")
-  expect(source).not.toContain("const download")
 })

@@ -1,4 +1,5 @@
 import type { StoredArtifactVersion } from "@/artifacts/store"
+import { STORED_ARTIFACT_PREVIEW_LIMIT } from "@/artifacts/bytes"
 
 export type ThumbKind = "image" | "text" | "binary"
 
@@ -78,7 +79,7 @@ const textual = (mime: string) =>
   mime.startsWith("text/") || /(json|xml|yaml|toml|csv|markdown|javascript|typescript|x-sh)/.test(mime)
 
 export function thumbKind(version: StoredArtifactVersion): ThumbKind {
-  if (version.mimeType.startsWith("image/")) return "image"
+  if (version.mimeType.startsWith("image/")) return version.size <= STORED_ARTIFACT_PREVIEW_LIMIT ? "image" : "binary"
   if (version.size > PREVIEW_LIMIT) return "binary"
   if (generic(version.mimeType)) return LANG[extension(version.filename)] ? "text" : "binary"
   return textual(version.mimeType) ? "text" : "binary"
