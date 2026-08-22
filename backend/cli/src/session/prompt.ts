@@ -77,6 +77,7 @@ import { ToolSelection } from "./tool-selection"
 import { SessionLoopState } from "./loop-state"
 import { FileLease } from "@/util/file-lease"
 import { Global } from "@/global"
+import { TaskAttempt } from "@/tool/task-attempt"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -418,6 +419,54 @@ export namespace SessionPrompt {
     return message
   }
 
+  function taskWrapper(messages: MessageV2.WithParts[], source: { messageID: string; partID: string }) {
+    for (const message of messages) {
+      if (message.info.role !== "assistant") continue
+      const part = message.parts.find((candidate): candidate is MessageV2.ToolPart => {
+        const found = TaskAttempt.wrapperSource(candidate)
+        return found?.messageID === source.messageID && found.partID === source.partID
+      })
+      if (part) return { message: message.info, part }
+    }
+  }
+
+  function pendingTaskContinuation(messages: MessageV2.WithParts[]) {
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const wrapper = messages[index]
+      if (wrapper.info.role !== "assistant" || !wrapper.info.finish || !TaskAttempt.syntheticWrapper(wrapper)) continue
+      const part = wrapper.parts.find(
+        (candidate): candidate is MessageV2.ToolPart => candidate.type === "tool" && candidate.tool === "task",
+      )
+      if (!part || part.state.status === "pending" || part.state.status === "running") continue
+      if (typeof part.state.input.command !== "string" || !part.state.input.command) continue
+      const later = messages.slice(index + 1)
+      if (later.some((message) => SessionLoopState.external(message))) return
+      if (
+        later.some((message) => message.info.role === "user" && SessionLoopState.messageKind(message.info) === "task")
+      )
+        return
+      const parentID = wrapper.info.parentID
+      const user = messages.find(
+        (message): message is MessageV2.WithParts & { info: MessageV2.User } =>
+          message.info.role === "user" && message.info.id === parentID,
+      )
+      if (!user) return
+      return { user: user.info, epoch: SessionLoopState.messageEpoch(user.info) ?? user.info.id }
+    }
+  }
+
+  async function recoverTaskContinuation(messages: MessageV2.WithParts[]) {
+    const pending = pendingTaskContinuation(messages)
+    if (!pending) return false
+    await enqueue({
+      user: pending.user,
+      kind: "task",
+      epoch: pending.epoch,
+      text: "Summarize the task tool output above and continue with your task.",
+    })
+    return true
+  }
+
   async function execute(sessionID: string, session: Session.Info, abort: AbortSignal) {
     const initial = await Session.messages({ sessionID })
     const incomplete = SessionLoopState.incomplete(initial)
@@ -432,7 +481,9 @@ export namespace SessionPrompt {
         })
       }),
     )
-    const durable = incomplete.length ? await Session.messages({ sessionID }) : initial
+    const repaired = incomplete.length ? await Session.messages({ sessionID }) : initial
+    const continued = await recoverTaskContinuation(repaired)
+    const durable = continued ? await Session.messages({ sessionID }) : repaired
     const recovered = SessionLoopState.restore(durable)
     SessionCompaction.restoreBreaker(sessionID, durable)
     const interrupted = SessionLoopState.pendingCompaction(durable)
@@ -774,66 +825,77 @@ export namespace SessionPrompt {
           : "execute"
         const taskTool = await TaskTool.init()
         const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
-        const assistantMessage = (await Session.updateMessage({
-          id: await MessageV2.nextMessageID(sessionID),
-          role: "assistant",
-          parentID: lastUser.id,
-          sessionID,
-          mode: taskProfile,
-          agent: taskProfile,
-          path: {
-            cwd: workspace,
-            root: Instance.worktree,
-          },
-          cost: 0,
-          tokens: {
-            input: 0,
-            output: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          modelID: taskModel.id,
-          providerID: taskModel.providerID,
-          internal: { step },
-          time: {
-            created: Date.now(),
-          },
-        })) as MessageV2.Assistant
-        let part = (await Session.updatePart({
-          id: Identifier.ascending("part"),
-          messageID: assistantMessage.id,
-          sessionID: assistantMessage.sessionID,
-          type: "tool",
-          callID: ulid(),
-          tool: TaskTool.id,
-          state: {
-            status: "running",
-            input: {
-              prompt: task.prompt,
-              description: task.description,
-              subagent_type: taskProfile,
-              command: task.command,
+        const source = { messageID: lastUser.id, partID: task.id }
+        const ids = TaskAttempt.wrapperIDs(source)
+        const saved = taskWrapper(msgs, source)
+        const assistantMessage =
+          saved?.message ??
+          ((await Session.updateMessage({
+            id: ids.messageID,
+            role: "assistant",
+            parentID: lastUser.id,
+            sessionID,
+            mode: taskProfile,
+            agent: taskProfile,
+            path: {
+              cwd: workspace,
+              root: Instance.worktree,
             },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            modelID: taskModel.id,
+            providerID: taskModel.providerID,
+            internal: { step },
             time: {
-              start: Date.now(),
+              created: Date.now(),
             },
-          },
-        })) as MessageV2.ToolPart
+          })) as MessageV2.Assistant)
+        const part =
+          saved?.part ??
+          ((await Session.updatePart({
+            id: ids.partID,
+            messageID: assistantMessage.id,
+            sessionID: assistantMessage.sessionID,
+            type: "tool",
+            callID: ids.callID,
+            tool: TaskTool.id,
+            metadata: TaskAttempt.wrapper(source),
+            state: {
+              status: "running",
+              input: {
+                prompt: task.prompt,
+                description: task.description,
+                subagent_type: taskProfile,
+                command: task.command,
+              },
+              time: {
+                start: Date.now(),
+              },
+            },
+          })) as MessageV2.ToolPart)
         const taskArgs = {
           prompt: task.prompt,
           description: task.description,
           subagent_type: taskProfile,
           command: task.command,
         }
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          { args: taskArgs },
-        )
+        const replayed = part.state.status === "completed" || part.state.status === "error"
+        if (!replayed) {
+          await Plugin.trigger(
+            "tool.execute.before",
+            {
+              tool: "task",
+              sessionID,
+              callID: part.id,
+            },
+            { args: taskArgs },
+          )
+        }
         let executionError: Error | undefined
         const taskAgent = await Agent.get(taskProfile)
         const taskCtx: Tool.Context = {
@@ -865,20 +927,32 @@ export namespace SessionPrompt {
             })
           },
         }
-        const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
-          executionError = error
-          log.error("subtask execution failed", { error, agent: taskProfile, description: task.description })
-          return undefined
-        })
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          result,
-        )
+        const result =
+          part.state.status === "completed"
+            ? {
+                title: part.state.title,
+                metadata: part.state.metadata,
+                output: part.state.output,
+                attachments: part.state.attachments,
+              }
+            : part.state.status === "error"
+              ? undefined
+              : await taskTool.execute(taskArgs, taskCtx).catch((error) => {
+                  executionError = error
+                  log.error("subtask execution failed", { error, agent: taskProfile, description: task.description })
+                  return undefined
+                })
+        if (!replayed) {
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: "task",
+              sessionID,
+              callID: part.id,
+            },
+            result,
+          )
+        }
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -899,7 +973,7 @@ export namespace SessionPrompt {
             },
           } satisfies MessageV2.ToolPart)
         }
-        if (!result) {
+        if (!result && part.state.status !== "error") {
           await Session.updatePart({
             ...part,
             state: {
@@ -1263,6 +1337,13 @@ export namespace SessionPrompt {
       return MessageV2.resolveResearchEffort(item.info.effort)
     }
     return "normal" as const
+  }
+
+  async function lastDelegation(sessionID: string) {
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role !== "user") continue
+      return item.info.delegation
+    }
   }
 
   function request(messages: MessageV2.WithParts[], agent: string) {
@@ -2467,6 +2548,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     model: z.string().optional(),
     arguments: z.string(),
     command: z.string(),
+    effort: MessageV2.ResearchEffort.optional(),
+    delegation: z.boolean().optional(),
     variant: z.string().optional(),
     tier: z.string().optional(),
     parts: z
@@ -2516,7 +2599,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       time: { created: Date.now() },
       role: "user",
       agent,
-      effort: await lastResearchEffort(input.sessionID),
+      effort: input.effort ?? (await lastResearchEffort(input.sessionID)),
+      delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
       model: { providerID: model.providerID, modelID: model.modelID },
     }
     const line = `/${input.command}${input.arguments.trim() ? ` ${input.arguments.trim()}` : ""}`
@@ -2704,12 +2788,13 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
       const focus = input.arguments.trim()
-      const effort = await lastResearchEffort(input.sessionID)
+      const effort = input.effort ?? (await lastResearchEffort(input.sessionID))
       await SessionCompaction.create({
         sessionID: input.sessionID,
         agent: agentName,
         model: { providerID: model.providerID, modelID: model.modelID },
         effort,
+        delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
         auto: false,
         focus: focus || undefined,
         trigger: "manual",
@@ -2732,12 +2817,13 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     if (input.command === Command.Default.HANDOFF && !userDefinedHandoff) {
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
-      const effort = await lastResearchEffort(input.sessionID)
+      const effort = input.effort ?? (await lastResearchEffort(input.sessionID))
       await SessionCompaction.create({
         sessionID: input.sessionID,
         agent: agentName,
         model: { providerID: model.providerID, modelID: model.modelID },
         effort,
+        delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
         auto: false,
         // Keep the empty string: it is the explicit `/handoff` marker for the
         // managed per-session path. `undefined` is reserved for compaction that
@@ -2915,6 +3001,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       model: userModel,
       agent: userAgent,
       parts,
+      effort: input.effort ?? (await lastResearchEffort(input.sessionID)),
+      delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
       variant: input.variant,
       tier: modelTier(input.tier, selectedModel, userModel),
     })) as MessageV2.WithParts

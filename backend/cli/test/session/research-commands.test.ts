@@ -190,6 +190,28 @@ describe("research slash commands", () => {
     })
   })
 
+  test("command dispatch preserves research effort and delegation controls", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "Command controls" })
+        await seed(session.id)
+        await SessionPrompt.command({
+          sessionID: session.id,
+          command: "status",
+          arguments: "",
+          effort: "ultra",
+          delegation: false,
+        })
+        const latest = (await Session.messages({ sessionID: session.id })).findLast(
+          (message) => message.info.role === "user",
+        )
+        expect(latest?.info).toMatchObject({ role: "user", effort: "ultra", delegation: false })
+      },
+    })
+  })
+
   test("native readouts work in a brand-new session without a configured model", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

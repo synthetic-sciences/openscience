@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { DataRootBarrier } from "@/global/data-root-barrier"
+import { LockCoordination } from "@/util/lock-coordination"
 
 export namespace FileLease {
   const timeout = 10_000
@@ -37,6 +38,8 @@ export namespace FileLease {
       typeof value === "object" &&
       "pid" in value &&
       typeof value.pid === "number" &&
+      Number.isSafeInteger(value.pid) &&
+      value.pid > 0 &&
       "token" in value &&
       typeof value.token === "string" &&
       "created" in value &&
@@ -46,7 +49,14 @@ export namespace FileLease {
 
   async function abandoned(filepath: string, value: unknown) {
     const owner = value
-    if (owner && typeof owner === "object" && "pid" in owner && typeof owner.pid === "number") {
+    if (
+      owner &&
+      typeof owner === "object" &&
+      "pid" in owner &&
+      typeof owner.pid === "number" &&
+      Number.isSafeInteger(owner.pid) &&
+      owner.pid > 0
+    ) {
       return !running(owner.pid)
     }
     const stat = await fs.stat(filepath).catch(() => undefined)
@@ -93,38 +103,52 @@ export namespace FileLease {
       filepath = path.join(await fs.realpath(parent), path.basename(filepath))
 
       const open = async (): Promise<Awaited<ReturnType<typeof fs.open>>> => {
+        const expired = () => {
+          if (Date.now() - blocked.at < timeoutMs) return
+          throw new Error(`Timed out waiting for another OpenScience process to release ${filepath}`)
+        }
         while (true) {
           cancelled(signal)
-          const handle = await fs.open(filepath, "wx", 0o600).catch((error: NodeJS.ErrnoException) => {
-            if (error.code === "EEXIST") return
-            throw error
-          })
-          if (handle) return handle
+          const attempt = await (async () => {
+            await using intent = await LockCoordination.intent(filepath, grace)
+            if (await intent.blocked()) return { status: "blocked" as const }
+            const handle = await fs.open(filepath, "wx", 0o600).catch((error: NodeJS.ErrnoException) => {
+              if (error.code === "EEXIST") return
+              throw error
+            })
+            if (handle) return { status: "acquired" as const, handle }
+            return { status: "occupied" as const }
+          })()
+          if (attempt.status === "acquired") return attempt.handle
 
-          const current = await owner(filepath)
-          if (await abandoned(filepath, current)) {
+          const recovery = await (async () => {
+            const observed = await owner(filepath)
+            if (!(await abandoned(filepath, observed))) return { current: observed, reclaimed: false }
+            await using claim = await LockCoordination.claim(filepath, grace)
+            if (!(await claim.drain(blocked.at + timeoutMs, signal))) return { current: observed, reclaimed: false }
+            const current = await owner(filepath)
+            if (!(await abandoned(filepath, current))) return { current, reclaimed: false }
             const aside = `${filepath}.${crypto.randomUUID()}.dead`
-            const claimed = await fs
+            const reclaimed = await fs
               .rename(filepath, aside)
               .then(() => true)
               .catch(() => false)
-            if (claimed) await fs.rm(aside, { force: true })
-            if (claimed) continue
-          }
+            if (reclaimed) await fs.rm(aside, { force: true })
+            return { current, reclaimed }
+          })()
+          if (recovery.reclaimed) continue
           // Timeout one unchanged owner, not the whole healthy queue. Each
           // lease writes a unique token, so an exact owner change proves that
           // the serialized operation ahead of us completed and the queue made
           // progress. A live but wedged owner still fails within timeoutMs.
-          if (exactOwner(current)) {
-            const signature = `${current.pid}\0${current.token}\0${current.created}`
+          if (exactOwner(recovery.current)) {
+            const signature = `${recovery.current.pid}\0${recovery.current.token}\0${recovery.current.created}`
             if (signature !== blocked.owner) {
               blocked.owner = signature
               blocked.at = Date.now()
             }
           }
-          if (Date.now() - blocked.at >= timeoutMs) {
-            throw new Error(`Timed out waiting for another OpenScience process to release ${filepath}`)
-          }
+          expired()
           await pause(signal)
         }
       }

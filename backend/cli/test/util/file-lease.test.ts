@@ -41,6 +41,30 @@ test("a waiter still fails closed when one live owner stops making progress", as
   )
 }, 5_000)
 
+test("live and fresh malformed lease owners remain protected while stale malformed owners recover", async () => {
+  await using tmp = await tmpdir()
+  const live = path.join(tmp.path, "live-stale.lock")
+  const malformed = path.join(tmp.path, "malformed.lock")
+  const old = new Date(Date.now() - 6_000)
+  await fs.writeFile(live, JSON.stringify({ pid: process.pid, token: "live-owner", created: Date.now() }))
+  await fs.utimes(live, old, old)
+  await expect(FileLease.acquire(live, 75)).rejects.toThrow(
+    "Timed out waiting for another OpenScience process to release",
+  )
+  expect(await Bun.file(live).exists()).toBe(true)
+
+  await fs.writeFile(malformed, JSON.stringify({ pid: -1 }))
+  await expect(FileLease.acquire(malformed, 75)).rejects.toThrow(
+    "Timed out waiting for another OpenScience process to release",
+  )
+  expect(await Bun.file(malformed).json()).toEqual({ pid: -1 })
+
+  await fs.utimes(malformed, old, old)
+  await using recovered = await FileLease.acquire(malformed, 500)
+  expect(await Bun.file(malformed).json()).toMatchObject({ pid: process.pid })
+  void recovered
+}, 5_000)
+
 test("cancelling a waiter leaves the healthy owner intact", async () => {
   await using tmp = await tmpdir()
   const filepath = path.join(tmp.path, "cancelled-waiter.lock")

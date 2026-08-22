@@ -691,7 +691,18 @@ export default function Page(): JSX.Element {
       category: language.t("command.category.session"),
       slash: name,
       onSelect: () => {
-        void sdk.client.session.command({ sessionID: id, command: name, arguments: "" }).catch((error: unknown) => {
+        const last = lastUserMessage()
+        const request = {
+          sessionID: id,
+          command: name,
+          arguments: "",
+          effort: last?.role === "user" ? (last.effort ?? "normal") : "normal",
+          delegation: last?.role === "user" ? (last.delegation ?? true) : true,
+        } satisfies Parameters<typeof sdk.client.session.command>[0] & {
+          effort: "normal" | "ultra"
+          delegation: boolean
+        }
+        void sdk.client.session.command(request).catch((error: unknown) => {
           console.error(`${name} failed`, error)
           toast.error(`Could not run /${name}`, failure(error))
         })

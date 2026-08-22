@@ -10,6 +10,7 @@ import { $ } from "bun"
 import { NamedError } from "@synsci/util/error"
 import z from "zod"
 import { DataRootBarrier } from "@/global/data-root-barrier"
+import { LockCoordination } from "@/util/lock-coordination"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
@@ -206,32 +207,92 @@ export namespace Storage {
    * runs a production and development server against one data directory; the
    * in-memory Lock cannot serialize those writers. O_EXCL lock creation does,
    * while the stale timeout recovers a lock left by a crashed process. */
+  async function abandoned(lockfile: string) {
+    const owner = await Bun.file(lockfile)
+      .json()
+      .catch(() => undefined)
+    const pid =
+      owner &&
+      typeof owner === "object" &&
+      "pid" in owner &&
+      typeof owner.pid === "number" &&
+      Number.isSafeInteger(owner.pid) &&
+      owner.pid > 0
+        ? owner.pid
+        : undefined
+    const dead = (() => {
+      if (!pid) return undefined
+      try {
+        process.kill(pid, 0)
+        return false
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "ESRCH"
+      }
+    })()
+    const stale = await fs
+      .stat(lockfile)
+      .then((stat) => Date.now() - stat.mtimeMs > 30_000)
+      .catch(() => false)
+    return dead === true || (dead === undefined && stale)
+  }
+
+  async function reclaim(lockfile: string, deadline: number) {
+    if (!(await abandoned(lockfile))) return false
+    await using claim = await LockCoordination.claim(lockfile, 30_000)
+    if (!(await claim.drain(deadline))) return false
+    if (!(await abandoned(lockfile))) return false
+    const tombstone = `${lockfile}.${process.pid}.${randomUUID()}.dead`
+    return fs
+      .rename(lockfile, tombstone)
+      .then(async () => {
+        await fs.unlink(tombstone).catch(() => {})
+        return true
+      })
+      .catch(() => false)
+  }
+
   async function interprocess(target: string) {
     const lockfile = `${target}.lock`
     const deadline = Date.now() + 10_000
     await fs.mkdir(path.dirname(target), { recursive: true })
     for (;;) {
-      try {
-        const handle = await fs.open(lockfile, "wx", 0o600)
-        await handle.writeFile(JSON.stringify({ pid: process.pid, created: Date.now() }))
+      const attempt = await (async () => {
+        await using intent = await LockCoordination.intent(lockfile, 30_000)
+        if (await intent.blocked()) return { status: "blocked" as const }
+        const handle = await fs.open(lockfile, "wx", 0o600).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "EEXIST") return
+          throw error
+        })
+        if (handle) return { status: "acquired" as const, handle }
+        return { status: "occupied" as const }
+      })()
+      if (attempt.status === "acquired") {
+        const handle = attempt.handle
+        const token = randomUUID()
+        await handle
+          .writeFile(JSON.stringify({ pid: process.pid, token, created: Date.now() }))
+          .then(() => handle.sync())
+          .catch(async (error) => {
+            await handle.close().catch(() => undefined)
+            await fs.unlink(lockfile).catch(() => undefined)
+            throw error
+          })
         return {
           async [Symbol.asyncDispose]() {
             await handle.close().catch(() => {})
-            await fs.unlink(lockfile).catch((error) => {
-              if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+            const owner = await Bun.file(lockfile)
+              .json()
+              .catch(() => undefined)
+            if (!owner || typeof owner !== "object" || !("token" in owner) || owner.token !== token) return
+            await fs.unlink(lockfile).catch((error: NodeJS.ErrnoException) => {
+              if (error.code !== "ENOENT") throw error
             })
           },
         }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
-        const stat = await fs.stat(lockfile).catch(() => undefined)
-        if (stat && Date.now() - stat.mtimeMs > 30_000) {
-          await fs.unlink(lockfile).catch(() => {})
-          continue
-        }
-        if (Date.now() >= deadline) throw new Error(`Timed out waiting for storage mutation lock: ${target}`)
-        await new Promise<void>((resolve) => setTimeout(resolve, 10 + Math.floor(Math.random() * 20)))
       }
+      if (await reclaim(lockfile, deadline)) continue
+      if (Date.now() >= deadline) throw new Error(`Timed out waiting for storage mutation lock: ${target}`)
+      await new Promise<void>((resolve) => setTimeout(resolve, 10 + Math.floor(Math.random() * 20)))
     }
   }
 

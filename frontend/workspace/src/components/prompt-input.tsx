@@ -1702,6 +1702,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return true
     }
 
+    const researchEffort = "normal" as const
+    const delegation = capabilities()?.delegation_enabled ?? true
     const [head, ...tail] = text.split(" ")
     const name = text.startsWith("/") ? head.slice(1) : undefined
     const command = name ? sync.data.command.find((item) => item.name === name) : undefined
@@ -1714,15 +1716,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("historyIndex", -1)
       setStore("savedPrompt", null)
       props.onSubmit?.()
-      sdk.client.session
-        .command({ sessionID: active.id, command: command.name, arguments: tail.join(" ") })
-        .catch((err) => {
-          showToast({
-            title: language.t("prompt.toast.commandSendFailed.title"),
-            description: errorMessage(err),
-          })
-          restoreInputAfterFailure()
+      const request = {
+        sessionID: active.id,
+        command: command.name,
+        arguments: tail.join(" "),
+        effort: researchEffort,
+        delegation,
+      } satisfies Parameters<typeof sdk.client.session.command>[0] & {
+        effort: "normal"
+        delegation: boolean
+      }
+      sdk.client.session.command(request).catch((err) => {
+        showToast({
+          title: language.t("prompt.toast.commandSendFailed.title"),
+          description: errorMessage(err),
         })
+        restoreInputAfterFailure()
+      })
       setSubmitting(false)
       return
     }
@@ -1744,7 +1754,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const agent = currentAgent.name
     const variant = local.model.variant.prompt()
     const tier = local.model.tier.prompt()
-    const researchEffort = "normal" as const
 
     const restoreBootstrap = () => {
       setSubmitting(false)
@@ -1856,30 +1865,34 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (intent) {
-      client.session
-        .command({
-          sessionID: session.id,
-          command: intent,
-          arguments: text,
-          agent,
-          model: `${model.providerID}/${model.modelID}`,
-          variant,
-          tier,
-          parts: images.map((attachment) => ({
-            id: Identifier.ascending("part"),
-            type: "file" as const,
-            mime: attachment.mime,
-            url: attachment.dataUrl,
-            filename: attachment.filename,
-          })),
+      const request = {
+        sessionID: session.id,
+        command: intent,
+        arguments: text,
+        agent,
+        model: `${model.providerID}/${model.modelID}`,
+        effort: researchEffort,
+        delegation,
+        variant,
+        tier,
+        parts: images.map((attachment) => ({
+          id: Identifier.ascending("part"),
+          type: "file" as const,
+          mime: attachment.mime,
+          url: attachment.dataUrl,
+          filename: attachment.filename,
+        })),
+      } satisfies Parameters<typeof client.session.command>[0] & {
+        effort: "normal"
+        delegation: boolean
+      }
+      client.session.command(request).catch((err) => {
+        showToast({
+          title: `Could not start ${intent} mode`,
+          description: errorMessage(err),
         })
-        .catch((err) => {
-          showToast({
-            title: `Could not start ${intent} mode`,
-            description: errorMessage(err),
-          })
-          restoreInputAfterFailure()
-        })
+        restoreInputAfterFailure()
+      })
       setSubmitting(false)
       return
     }
@@ -1889,30 +1902,34 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
-        client.session
-          .command({
-            sessionID: session.id,
-            command: commandName,
-            arguments: args.join(" "),
-            agent,
-            model: `${model.providerID}/${model.modelID}`,
-            variant,
-            tier,
-            parts: images.map((attachment) => ({
-              id: Identifier.ascending("part"),
-              type: "file" as const,
-              mime: attachment.mime,
-              url: attachment.dataUrl,
-              filename: attachment.filename,
-            })),
+        const request = {
+          sessionID: session.id,
+          command: commandName,
+          arguments: args.join(" "),
+          agent,
+          model: `${model.providerID}/${model.modelID}`,
+          effort: researchEffort,
+          delegation,
+          variant,
+          tier,
+          parts: images.map((attachment) => ({
+            id: Identifier.ascending("part"),
+            type: "file" as const,
+            mime: attachment.mime,
+            url: attachment.dataUrl,
+            filename: attachment.filename,
+          })),
+        } satisfies Parameters<typeof client.session.command>[0] & {
+          effort: "normal"
+          delegation: boolean
+        }
+        client.session.command(request).catch((err) => {
+          showToast({
+            title: language.t("prompt.toast.commandSendFailed.title"),
+            description: errorMessage(err),
           })
-          .catch((err) => {
-            showToast({
-              title: language.t("prompt.toast.commandSendFailed.title"),
-              description: errorMessage(err),
-            })
-            restoreInputAfterFailure()
-          })
+          restoreInputAfterFailure()
+        })
         setSubmitting(false)
         return
       }

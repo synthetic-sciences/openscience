@@ -553,7 +553,7 @@ describe("session.compaction.buildHandoffPrompt", () => {
 })
 
 describe("session.compaction.persistHandoff", () => {
-  test("the compaction carrier preserves the explicit empty handoff marker", async () => {
+  test("the compaction carrier preserves prior controls and applies explicit command controls", async () => {
     await using tmp = await tmpdir()
     await withSession(tmp.path, async (session) => {
       const source = await Session.updateMessage({
@@ -579,6 +579,8 @@ describe("session.compaction.persistHandoff", () => {
         sessionID: session.id,
         agent: "build",
         model: { providerID: "test", modelID: "test-model" },
+        effort: "ultra",
+        delegation: true,
         auto: false,
         handoffFile: "",
       })
@@ -598,7 +600,8 @@ describe("session.compaction.persistHandoff", () => {
         handoffFile: "",
       })
       expect(carrier.info.tools).toEqual({ task: false })
-      expect(carrier.info.delegation).toBe(false)
+      expect(carrier.info.effort).toBe("ultra")
+      expect(carrier.info.delegation).toBe(true)
       expect(carrier.info.variant).toBe("careful")
     })
   })

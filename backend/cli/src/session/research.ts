@@ -3,6 +3,7 @@ import path from "node:path"
 import { createHash } from "node:crypto"
 import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
+import { TaskAttempt } from "@/tool/task-attempt"
 import type { MessageV2 } from "@/session/message-v2"
 import { SessionTraceStore } from "@/session/trace-store"
 import { Context } from "@/util/context"
@@ -1139,25 +1140,30 @@ export namespace SessionResearch {
       const retries = trace.retries.filter((item) => included(item.createdAt))
       const harness = trace.harness.filter((item) => included(item.createdAt))
       const manifests = new Set(harness.map((item) => item.messageID))
-      const inference = (message: MessageV2.Assistant) => {
-        if (runtimeGate(message.error)) return false
-        if (message.providerID === "openscience" && message.modelID === "local") return false
+      const inference = (message: MessageV2.WithParts) => {
+        if (message.info.role !== "assistant") return false
+        if (TaskAttempt.syntheticWrapper(message)) return false
+        if (runtimeGate(message.info.error)) return false
+        if (message.info.providerID === "openscience" && message.info.modelID === "local") return false
         return (
-          manifests.has(message.id) || message.cost > 0 || messageTokens(message) > 0 || message.finish !== undefined
+          manifests.has(message.info.id) ||
+          message.info.cost > 0 ||
+          messageTokens(message.info) > 0 ||
+          message.info.finish !== undefined
         )
       }
       const completed = messages.filter((message) => {
         if (message.info.role !== "assistant") return false
         const terminal = message.info.time.completed !== undefined || message.info.error !== undefined
         if (!terminal || !included(message.info.time.completed ?? message.info.time.created)) return false
-        return inference(message.info)
+        return inference(message)
       }).length
       const local = messages.reduce<RuntimeUsage>(
         (total, message) => {
           const assistant = message.info.role === "assistant" ? message.info : undefined
           const counted =
             assistant &&
-            inference(assistant) &&
+            inference(message) &&
             (before === undefined ||
               ((assistant.time.completed !== undefined || assistant.error !== undefined) &&
                 included(assistant.time.completed ?? assistant.time.created)))

@@ -243,6 +243,13 @@ describe("composer control consolidation", () => {
     expect(source).toContain("await client.session.prompt(request)")
   })
 
+  test("carries research controls through every slash-command dispatch", () => {
+    expect(source).toContain("const delegation = capabilities()?.delegation_enabled ?? true")
+    expect(source.match(/effort: researchEffort/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
+    expect(source.match(/delegation,/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+    expect(source.match(/\.command\(request\)/g)?.length ?? 0).toBe(3)
+  })
+
   test("offers clear delegation and reviewer controls without duplicating Compute", () => {
     expect(source).toContain('settings<CapabilityPreferences>("/settings/preferences")')
     expect(source).toContain('settings<ReviewPreferences>("/settings/review")')
