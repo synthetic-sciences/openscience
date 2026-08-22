@@ -765,7 +765,7 @@ export namespace ComputeJobs {
       ])
     }
     try {
-      return await AuthoritySignal.exclusive(() =>
+      const launched = await AuthoritySignal.exclusive(() =>
         OpenScience.withSubprocessEnv(process.env, async (env) => {
           if (options.authorize !== false) await currentAuthority(authority)
           const transport = Object.fromEntries(
@@ -873,76 +873,76 @@ export namespace ComputeJobs {
             }
             throw error
           }
-          const abort = () => {
-            const reason = options.signal?.reason
-            streams.fail(reason instanceof Error ? reason : new Error("SSH operation was aborted"))
-          }
-          const timer = setTimeout(() => streams.fail(new Error("SSH operation timed out")), options.timeout ?? 30_000)
-          options.signal?.addEventListener("abort", abort, { once: true })
-          if (options.signal?.aborted) abort()
-          try {
-            const outcome = await Promise.race([
-              done.then((result) => ({ result, error: undefined })),
-              streams.failed.then((error) => ({ result: undefined, error })),
-            ])
-            if (outcome.error) {
-              const failures: unknown[] = []
-              await CredentialProcessLedger.revoke({ id: ledger, kind: "compute" }).catch((error) =>
-                failures.push(error),
-              )
-              await Promise.race([done, Bun.sleep(SSH_DRAIN_TIMEOUT)])
-              streams.close()
-              await Promise.race([streams.finished, Bun.sleep(SSH_DRAIN_TIMEOUT)])
-              if (failures.length) {
-                throw new AggregateError(
-                  [outcome.error, ...failures],
-                  "SSH operation failed and its owned process group could not be reaped",
-                )
-              }
-              if (options.signal?.aborted) options.signal.throwIfAborted()
-              throw outcome.error
-            }
-            await completeCredentialProcess(ledger).catch(async (error) => {
-              const failures: unknown[] = []
-              await CredentialProcessLedger.revoke({ id: ledger, kind: "compute" }).catch((failure) =>
-                failures.push(failure),
-              )
-              streams.close()
-              await Promise.race([streams.finished, Bun.sleep(SSH_DRAIN_TIMEOUT)])
-              if (failures.length) {
-                throw new AggregateError(
-                  [error, ...failures],
-                  "SSH control process did not complete and its owned process group could not be reaped",
-                )
-              }
-              throw error
-            })
-            const drained = await Promise.race([
-              streams.finished.then(() => true),
-              streams.failed.then(() => false),
-              Bun.sleep(SSH_DRAIN_TIMEOUT).then(() => false),
-            ])
-            if (!drained || streams.state.error) {
-              streams.close()
-              throw streams.state.error ?? new Error("SSH operation output streams did not close after process exit")
-            }
-            const result = outcome.result
-            const stderr = OpenScience.redactSecrets(
-              Buffer.concat(streams.errors.chunks, streams.errors.size).toString("utf8").trim(),
-            )
-            if (result.code !== 0) throw new Error(result.error || stderr || `SSH operation exited with ${result.code}`)
-            return {
-              stdout: Buffer.concat(streams.output.chunks, streams.output.size),
-              stderr,
-            }
-          } finally {
-            clearTimeout(timer)
-            options.signal?.removeEventListener("abort", abort)
-            streams.dispose()
-            await cleanupGate(wrapped.release)
-          }
+          return { proc, streams, done, release: wrapped.release }
         }),
       )
+      const { proc, streams, done, release } = launched
+      const abort = () => {
+        const reason = options.signal?.reason
+        streams.fail(reason instanceof Error ? reason : new Error("SSH operation was aborted"))
+      }
+      const timer = setTimeout(() => streams.fail(new Error("SSH operation timed out")), options.timeout ?? 30_000)
+      options.signal?.addEventListener("abort", abort, { once: true })
+      if (options.signal?.aborted) abort()
+      try {
+        const outcome = await Promise.race([
+          done.then((result) => ({ result, error: undefined })),
+          streams.failed.then((error) => ({ result: undefined, error })),
+        ])
+        if (outcome.error) {
+          const failures: unknown[] = []
+          await CredentialProcessLedger.revoke({ id: ledger, kind: "compute" }).catch((error) => failures.push(error))
+          await Promise.race([done, Bun.sleep(SSH_DRAIN_TIMEOUT)])
+          streams.close()
+          await Promise.race([streams.finished, Bun.sleep(SSH_DRAIN_TIMEOUT)])
+          if (failures.length) {
+            throw new AggregateError(
+              [outcome.error, ...failures],
+              "SSH operation failed and its owned process group could not be reaped",
+            )
+          }
+          if (options.signal?.aborted) options.signal.throwIfAborted()
+          throw outcome.error
+        }
+        await completeCredentialProcess(ledger).catch(async (error) => {
+          const failures: unknown[] = []
+          await CredentialProcessLedger.revoke({ id: ledger, kind: "compute" }).catch((failure) =>
+            failures.push(failure),
+          )
+          streams.close()
+          await Promise.race([streams.finished, Bun.sleep(SSH_DRAIN_TIMEOUT)])
+          if (failures.length) {
+            throw new AggregateError(
+              [error, ...failures],
+              "SSH control process did not complete and its owned process group could not be reaped",
+            )
+          }
+          throw error
+        })
+        const drained = await Promise.race([
+          streams.finished.then(() => true),
+          streams.failed.then(() => false),
+          Bun.sleep(SSH_DRAIN_TIMEOUT).then(() => false),
+        ])
+        if (!drained || streams.state.error) {
+          streams.close()
+          throw streams.state.error ?? new Error("SSH operation output streams did not close after process exit")
+        }
+        const result = outcome.result
+        const stderr = OpenScience.redactSecrets(
+          Buffer.concat(streams.errors.chunks, streams.errors.size).toString("utf8").trim(),
+        )
+        if (result.code !== 0) throw new Error(result.error || stderr || `SSH operation exited with ${result.code}`)
+        return {
+          stdout: Buffer.concat(streams.output.chunks, streams.output.size),
+          stderr,
+        }
+      } finally {
+        clearTimeout(timer)
+        options.signal?.removeEventListener("abort", abort)
+        streams.dispose()
+        await cleanupGate(release)
+      }
     } finally {
       await input?.close().catch(() => undefined)
       await output?.close().catch(() => undefined)
