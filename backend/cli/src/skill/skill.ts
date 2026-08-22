@@ -35,6 +35,9 @@ export namespace Skill {
     entry: z.boolean().optional(),
   })
   export type Info = z.infer<typeof Info>
+  const Frontmatter = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).extend({
+    disabled: z.boolean().optional(),
+  })
 
   export const Event = {
     Updated: BusEvent.define("skill.updated", z.object({})),
@@ -76,10 +79,13 @@ export namespace Skill {
     })
     if (!md) return
 
-    const parsed = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).safeParse(
-      md.data,
-    )
+    const parsed = Frontmatter.safeParse(md.data)
     if (!parsed.success) return
+
+    if (parsed.data.disabled) {
+      log.info("Skipped skill disabled by frontmatter", { name: parsed.data.name, path: match })
+      return
+    }
 
     const desc = parsed.data.description.toLowerCase()
     if (desc.includes("always run this skill") || desc.includes("must always run")) {
@@ -123,8 +129,14 @@ export namespace Skill {
 
   async function compute() {
     const skills: Record<string, Info> = {}
+    const disabled = Flag.OPENSCIENCE_DISABLED_SKILLS
 
     const add = (skill: Info) => {
+      const directory = path.basename(path.dirname(skill.location))
+      if (disabled.has(skill.name) || disabled.has(directory)) {
+        log.info("Skipped skill disabled by operator policy", { name: skill.name, directory, path: skill.location })
+        return
+      }
       const existing = skills[skill.name]
       const origin = skill.origin
       if (existing && priority[existing.origin] > priority[origin]) return
@@ -351,9 +363,7 @@ export namespace Skill {
     await Bun.write(tmp, input.content, { mode: 0o600 })
     try {
       const md = await ConfigMarkdown.parse(tmp)
-      const parsed = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).safeParse(
-        md.data,
-      )
+      const parsed = Frontmatter.safeParse(md.data)
       if (!parsed.success) {
         throw new InvalidError({
           path: file,
@@ -390,7 +400,11 @@ export namespace Skill {
       await Bun.write(file, input.content, { mode: 0o600 })
       await invalidate()
       return {
-        ...parsed.data,
+        name: parsed.data.name,
+        description: parsed.data.description,
+        category: parsed.data.category,
+        tags: parsed.data.tags,
+        entry: parsed.data.entry,
         location: file,
         origin: "user",
       } satisfies Info

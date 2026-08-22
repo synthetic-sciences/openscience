@@ -198,6 +198,105 @@ test("returns empty array when no skills exist", async () => {
   })
 })
 
+test("disabled frontmatter keeps a skill out of the catalog without shadowing enabled skills", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, ".openscience", "skill", "disabled-copy", "SKILL.md"),
+        `---
+name: shared-skill
+description: This higher-priority copy is disabled.
+disabled: true
+---
+
+# Disabled copy
+`,
+      )
+      await Bun.write(
+        path.join(dir, ".claude", "skills", "enabled-copy", "SKILL.md"),
+        `---
+name: shared-skill
+description: This enabled copy remains available.
+---
+
+# Enabled copy
+`,
+      )
+      await Bun.write(
+        path.join(dir, ".openscience", "skill", "disabled-only", "SKILL.md"),
+        `---
+name: disabled-only
+description: This skill must not be visible.
+disabled: true
+---
+
+# Disabled only
+`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      expect(await Skill.get("disabled-only")).toBeUndefined()
+      expect(await Skill.all()).toEqual([
+        expect.objectContaining({
+          name: "shared-skill",
+          description: "This enabled copy remains available.",
+          origin: "project",
+        }),
+      ])
+    },
+  })
+})
+
+test("OPENSCIENCE_DISABLED_SKILLS matches trimmed frontmatter and directory names", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skills = [
+        ["different-directory", "blocked-by-name"],
+        ["blocked-by-directory", "different-name"],
+        ["still-enabled", "still-enabled"],
+      ]
+      await Promise.all(
+        skills.map(([directory, name]) =>
+          Bun.write(
+            path.join(dir, ".openscience", "skill", directory, "SKILL.md"),
+            `---
+name: ${name}
+description: Environment filtering fixture.
+---
+
+# ${name}
+`,
+          ),
+        ),
+      )
+    },
+  })
+
+  const original = process.env.OPENSCIENCE_DISABLED_SKILLS
+  process.env.OPENSCIENCE_DISABLED_SKILLS = " blocked-by-name, blocked-by-directory, ,"
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trust()
+        expect((await Skill.all()).map((skill) => skill.name)).toEqual(["still-enabled"])
+        expect(await Skill.get("blocked-by-name")).toBeUndefined()
+        expect(await Skill.get("different-name")).toBeUndefined()
+      },
+    })
+  } finally {
+    if (original === undefined) delete process.env.OPENSCIENCE_DISABLED_SKILLS
+    if (original !== undefined) process.env.OPENSCIENCE_DISABLED_SKILLS = original
+  }
+})
+
 test("every bundled skill with frontmatter parses into a loadable skill", async () => {
   const root = path.resolve(import.meta.dir, "../../skills")
   const failures: string[] = []

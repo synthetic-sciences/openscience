@@ -25,6 +25,15 @@ keyed by skill `name`:
 
 `OPENSCIENCE_DISABLE_BUNDLED_SKILLS` disables only the default release library.
 `OPENSCIENCE_DISABLE_CLAUDE_CODE_SKILLS` disables compatible Claude skill paths.
+`OPENSCIENCE_DISABLED_SKILLS=vllm,tensorrt-llm` hides individual skills from
+every source. Each comma-separated value may match either the skill's frontmatter
+`name` or its containing directory name. Empty values and surrounding whitespace
+are ignored.
+
+A skill author can set `disabled: true` in `SKILL.md` frontmatter to keep that
+specific copy out of the catalog. A disabled copy does not shadow an enabled copy
+from another source; normal project → personal → learned → installed → default
+precedence still applies among the enabled copies.
 
 ## Resolution
 

@@ -3,6 +3,15 @@ function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
+function csv(key: string) {
+  return new Set(
+    (process.env[key] ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  )
+}
+
 export namespace Flag {
   export const OPENSCIENCE_AUTO_SHARE = truthy("OPENSCIENCE_AUTO_SHARE")
   export const OPENSCIENCE_GIT_BASH_PATH = process.env["OPENSCIENCE_GIT_BASH_PATH"]
@@ -24,6 +33,7 @@ export namespace Flag {
   export const OPENSCIENCE_DISABLE_CLAUDE_CODE_SKILLS =
     OPENSCIENCE_DISABLE_CLAUDE_CODE || truthy("OPENSCIENCE_DISABLE_CLAUDE_CODE_SKILLS")
   export const OPENSCIENCE_DISABLE_BUNDLED_SKILLS = truthy("OPENSCIENCE_DISABLE_BUNDLED_SKILLS")
+  export declare const OPENSCIENCE_DISABLED_SKILLS: ReadonlySet<string>
   export declare const OPENSCIENCE_DISABLE_PROJECT_CONFIG: boolean
   export const OPENSCIENCE_FAKE_VCS = process.env["OPENSCIENCE_FAKE_VCS"]
   export const OPENSCIENCE_CLIENT = process.env["OPENSCIENCE_CLIENT"] ?? "cli"
@@ -79,6 +89,16 @@ Object.defineProperty(Flag, "OPENSCIENCE_DISABLE_PROJECT_CONFIG", {
 Object.defineProperty(Flag, "OPENSCIENCE_CONFIG_DIR", {
   get() {
     return process.env["OPENSCIENCE_CONFIG_DIR"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Read this operator policy at access time so long-running servers can refresh
+// their skill catalog after an environment/configuration reload.
+Object.defineProperty(Flag, "OPENSCIENCE_DISABLED_SKILLS", {
+  get() {
+    return csv("OPENSCIENCE_DISABLED_SKILLS")
   },
   enumerable: true,
   configurable: false,
