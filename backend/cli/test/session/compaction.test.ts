@@ -362,6 +362,12 @@ describe("util.token.estimate", () => {
   test("returns 0 for empty string", () => {
     expect(Token.estimate("")).toBe(0)
   })
+
+  test("does not estimate multilingual prompts as sparse English text", () => {
+    expect(Token.estimate("你好世界")).toBe(4)
+    expect(Token.estimate("abcd你")).toBe(2)
+    expect(Token.estimate("😀")).toBe(2)
+  })
 })
 
 describe("session.getUsage", () => {
