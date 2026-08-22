@@ -6,6 +6,7 @@ import { JsonStore } from "@/util/jsonstore"
 import type { MessageV2 } from "@/session/message-v2"
 import { SessionTraceStore } from "@/session/trace-store"
 import { Context } from "@/util/context"
+import { TokenUsage } from "@synsci/util/token-usage"
 import z from "zod"
 
 export namespace SessionResearch {
@@ -1097,16 +1098,21 @@ export namespace SessionResearch {
     reason?: string
     boundary?: "hard" | "finalization"
     finalizationCall?: number
+    textOnly?: boolean
+  }
+
+  export function exhaustionMessage(input: Pick<RuntimeDecision, "boundary" | "reason">) {
+    const reason = input.reason ?? "configured limit reached"
+    const scope =
+      "Research-runtime usage is cumulative across model calls and delegated child sessions in this bounded run; it is separate from the model's context-window limit."
+    if ((input.boundary ?? "hard") === "hard") {
+      return `This bounded research run reached its hard runtime limit: ${reason}. ${scope} Existing Results and checkpoints are preserved. Reply \`continue\` or run \`/resume\` to start a fresh bounded run from the same state.`
+    }
+    return `This bounded research run reached its finalization boundary: ${reason}. Its two reserved finalization turns are complete. ${scope} Existing Results and checkpoints are preserved. Reply \`continue\` or run \`/resume\` to start a fresh bounded run from the same state.`
   }
 
   function messageTokens(message: MessageV2.Assistant) {
-    return (
-      message.tokens.input +
-      message.tokens.output +
-      message.tokens.reasoning +
-      message.tokens.cache.read +
-      message.tokens.cache.write
-    )
+    return TokenUsage.total(message.tokens)
   }
 
   function runtimeGate(error: MessageV2.Assistant["error"]) {
@@ -1304,12 +1310,12 @@ export namespace SessionResearch {
       const used = Math.max(reserved, measured.modelCalls)
       const usage = { ...measured, modelCalls: used }
       const limits = current.budget.limits
-      const hard =
-        used >= limits.modelCalls ||
-        usage.toolCalls >= limits.toolCalls ||
-        usage.tokens >= limits.tokens ||
-        usage.wallClockMs >= limits.wallClockMs ||
-        usage.costUsd >= limits.costUsd
+      const modelHard = used >= limits.modelCalls
+      const toolHard = usage.toolCalls >= limits.toolCalls
+      const tokenHard = usage.tokens >= limits.tokens
+      const timeHard = usage.wallClockMs >= limits.wallClockMs
+      const costHard = usage.costUsd >= limits.costUsd
+      const hard = modelHard || toolHard || tokenHard || timeHard || costHard
       const reasons = [
         ...(used >= Math.max(1, limits.modelCalls - 2) ? [`model-call limit (${used}/${limits.modelCalls})`] : []),
         ...(usage.toolCalls >= limits.toolCalls * 0.9
@@ -1325,19 +1331,37 @@ export namespace SessionResearch {
       ]
       const reason = reasons.join(", ") || (legacy ? undefined : current.budget.runtimeReason)
       const finalizing = reasons.length > 0 || (!legacy && current.budget.runtimeFinalizing)
-      const decision =
-        hard || (finalizing && current.budget.runtimeFinalizationCalls >= 2)
+      const prior = current.budget.lastUsage
+      // One model/tool step can legitimately jump from below the 90% reserve
+      // straight past a token, tool, or elapsed-time ceiling. Claim one
+      // text-only emergency response atomically so the user is not stranded
+      // without a result. Cost, model-call, wallet, and provider denials never
+      // qualify: none of them may authorize another paid provider request.
+      const emergency =
+        hard &&
+        !modelHard &&
+        !costHard &&
+        current.budget.runtimeFinalizationCalls === 0 &&
+        prior !== undefined &&
+        (toolHard || tokenHard || timeHard) &&
+        (!toolHard || prior.toolCalls < limits.toolCalls * 0.9) &&
+        (!tokenHard || prior.tokens < limits.tokens * 0.9) &&
+        (!timeHard || prior.wallClockMs < limits.wallClockMs * 0.9)
+      const decision = emergency
+        ? ("finalize" as const)
+        : hard || (finalizing && current.budget.runtimeFinalizationCalls >= 2)
           ? ("block" as const)
           : finalizing
             ? ("finalize" as const)
             : ("allow" as const)
-      const boundary = hard ? ("hard" as const) : decision === "block" ? ("finalization" as const) : undefined
+      const boundary = decision === "block" ? (hard ? ("hard" as const) : ("finalization" as const)) : undefined
       const calls = used + Number(decision !== "block")
       result.decision = decision
       result.usage = { ...usage, modelCalls: calls }
       result.reason = reason
       result.boundary = boundary
       result.finalizationCall = decision === "finalize" ? current.budget.runtimeFinalizationCalls + 1 : undefined
+      result.textOnly = emergency || undefined
       return {
         ...current,
         budget: {
@@ -1404,7 +1428,7 @@ export namespace SessionResearch {
       `Objective: ${contract.objective}`,
       `Domain: ${contract.domain}`,
       `Required Results: ${contract.deliverables.map((item) => item.path).join(", ") || "none"}`,
-      `Runtime limits: ${contract.budget.limits.modelCalls} model calls; ${contract.budget.limits.toolCalls} tool calls; ${contract.budget.limits.tokens} tokens; ${Math.round(contract.budget.limits.wallClockMs / 60_000)} minutes; $${contract.budget.limits.costUsd.toFixed(2)}`,
+      `Cumulative runtime limits (all model calls and delegated child sessions; separate from the model context window): ${contract.budget.limits.modelCalls} model calls; ${contract.budget.limits.toolCalls} tool calls; ${contract.budget.limits.tokens} tokens; ${Math.round(contract.budget.limits.wallClockMs / 60_000)} minutes; $${contract.budget.limits.costUsd.toFixed(2)}`,
       "Stages:",
       stages,
       "Checks:",

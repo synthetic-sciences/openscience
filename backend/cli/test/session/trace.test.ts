@@ -10,6 +10,7 @@ import { SessionResearch } from "../../src/session/research"
 import { Provenance } from "../../src/science/provenance/store"
 import { Review } from "../../src/science/provenance/review"
 import { tmpdir } from "../fixture/fixture"
+import { TokenUsage } from "@synsci/util/token-usage"
 
 test("builds one local observable harness trace without reasoning or copied outputs", async () => {
   await using tmp = await tmpdir({ git: true })
@@ -297,6 +298,13 @@ test("builds one local observable harness trace without reasoning or copied outp
         retryCount: 1,
       })
       expect(trace.summary.toolParallelism).toBeCloseTo(362 / 312)
+      expect(trace.summary.tokens).toEqual({
+        input: 100,
+        output: 50,
+        reasoning: 20,
+        cache: { read: 10, write: 2 },
+      })
+      expect(TokenUsage.total(trace.summary.tokens)).toBe(162)
       expect(trace.inference[0]).toMatchObject({
         provider: "openai-codex",
         model: "gpt-5",

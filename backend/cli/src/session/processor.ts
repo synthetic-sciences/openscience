@@ -19,6 +19,7 @@ import { OpenScience } from "@/openscience"
 import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource, llmBillingMode } from "./billing-gate"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
+import { TokenUsage } from "@synsci/util/token-usage"
 import { ToolRetryGuard } from "./tool-retry-guard"
 import { SessionResearch } from "./research"
 import { OutboundTelemetry } from "@/telemetry/outbound"
@@ -110,6 +111,14 @@ export namespace SessionProcessor {
    * latency and contention without creating a useful revert boundary. */
   export function tracks(input: { tools: Record<string, unknown>; toolcall: boolean }) {
     return input.toolcall && Object.keys(input.tools).length > 0
+  }
+
+  /** Close a streamed part without replacing its first-output timestamp. */
+  export function finishTime(time: { start: number; end?: number } | undefined, end = Date.now()) {
+    return {
+      start: time?.start ?? end,
+      end,
+    }
   }
 
   export type Info = Awaited<ReturnType<typeof create>>
@@ -431,13 +440,7 @@ export namespace SessionProcessor {
 
             runtimeDecision = await SessionResearch.runtimePreflight(input.sessionID)
             if (runtimeDecision.decision === "block") {
-              const boundary = runtimeDecision.boundary ?? "hard"
-              const reason = runtimeDecision.reason ?? "configured limit reached"
-              const message =
-                boundary === "hard"
-                  ? `This bounded research run reached its hard runtime limit: ${reason}. Existing Results and checkpoints are preserved. Reply \`continue\` or run \`/resume\` to start a fresh bounded run from the same state.`
-                  : `This bounded research run reached its finalization boundary: ${reason}. Its two reserved finalization turns are complete, and existing Results and checkpoints are preserved. Reply \`continue\` or run \`/resume\` to start a fresh bounded run from the same state.`
-              throw new Error(message)
+              throw new Error(SessionResearch.exhaustionMessage(runtimeDecision))
             }
 
             const requestContext = {
@@ -449,6 +452,7 @@ export namespace SessionProcessor {
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const finalizing = creditDecision === "finalize" || runtimeDecision.decision === "finalize"
             const finalTurn = runtimeDecision.decision === "finalize" && runtimeDecision.finalizationCall === 2
+            const textOnly = runtimeDecision.textOnly === true || finalTurn
             const request = finalizing
               ? {
                   ...streamInput,
@@ -456,14 +460,16 @@ export namespace SessionProcessor {
                   // one is deliberately text-only so an agent cannot consume
                   // the entire reserve on another tool loop and strand the user
                   // without a usable partial result.
-                  tools: finalTurn ? {} : streamInput.tools,
+                  tools: textOnly ? {} : streamInput.tools,
                   system: [
                     ...streamInput.system,
-                    creditDecision === "finalize"
-                      ? "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now."
-                      : finalTurn
-                        ? `This is the last reserved finalization turn for the research runtime budget (${runtimeDecision.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
-                        : `The research contract runtime budget is at its finalization boundary (${runtimeDecision.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
+                    runtimeDecision.textOnly
+                      ? `Cumulative research-runtime usage jumped directly past its hard limit (${runtimeDecision.reason ?? "configured limit reached"}). This is the single emergency finalization response. No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
+                      : creditDecision === "finalize"
+                        ? "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now."
+                        : finalTurn
+                          ? `This is the last reserved finalization turn for the research runtime budget (${runtimeDecision.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
+                          : `The research contract runtime budget is at its finalization boundary (${runtimeDecision.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
                   ],
                 }
               : streamInput
@@ -517,10 +523,7 @@ export namespace SessionProcessor {
                     const part = reasoningMap[value.id]
                     // A provider signature authenticates the exact thinking bytes.
                     // Trimming even one trailing byte makes the next turn invalid.
-                    part.time = {
-                      ...part.time,
-                      end: Date.now(),
-                    }
+                    part.time = finishTime(part.time)
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
@@ -674,7 +677,7 @@ export namespace SessionProcessor {
                         service: "llm",
                         event_type: "chat",
                         model: input.model.id,
-                        tokens_used: usage.tokens.input + usage.tokens.output + usage.tokens.reasoning,
+                        tokens_used: TokenUsage.uncached(usage.tokens),
                         metadata: {
                           provider: input.model.providerID,
                           input_tokens: usage.tokens.input,
@@ -808,10 +811,7 @@ export namespace SessionProcessor {
                       { text: currentText.text },
                     )
                     currentText.text = textOutput.text
-                    currentText.time = {
-                      start: Date.now(),
-                      end: Date.now(),
-                    }
+                    currentText.time = finishTime(currentText.time)
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     await Session.updatePart(currentText)
                   }

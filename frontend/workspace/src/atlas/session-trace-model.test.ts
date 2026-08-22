@@ -170,7 +170,7 @@ describe("session trace presentation", () => {
 
   test("summarizes time, cost, tokens, and every trust count", () => {
     expect(traceMetrics(trace).map((item) => item.label)).toEqual(["first output", "total time", "model cost"])
-    expect(traceMetrics(trace)[2].detail).toBe("1.8k tokens")
+    expect(traceMetrics(trace)[2].detail).toBe("1.7k tokens")
     expect(traceCounts(trace).find((item) => item.label === "searches")).toEqual({
       label: "searches",
       value: 2,

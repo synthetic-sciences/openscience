@@ -5,6 +5,7 @@ import { Button } from "@synsci/ui/button"
 import { useParams } from "@solidjs/router"
 import { AssistantMessage, type UserMessage } from "@synsci/sdk/v2/client"
 import { findLast } from "@synsci/util/array"
+import { TokenUsage } from "@synsci/util/token-usage"
 import { Dialog } from "@synsci/ui/dialog"
 import { useDialog } from "@synsci/ui/context/dialog"
 
@@ -49,12 +50,10 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     const locale = language.locale()
     const last = findLast(messages(), (x) => {
       if (x.role !== "assistant") return false
-      const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
-      return total > 0
+      return TokenUsage.total(x.tokens) > 0
     }) as AssistantMessage
     if (!last) return
-    const total =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    const total = TokenUsage.total(last.tokens)
     const model = sync.data.provider.all.find((x) => x.id === last.providerID)?.models[last.modelID]
     return {
       tokens: total.toLocaleString(locale),

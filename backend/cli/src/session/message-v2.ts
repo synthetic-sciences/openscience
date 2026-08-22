@@ -415,6 +415,7 @@ export namespace MessageV2 {
     }),
     summary: z.boolean().optional(),
     cost: z.number(),
+    // `output` is inclusive; `reasoning` is its provider-reported subset for display.
     tokens: z.object({
       input: z.number(),
       output: z.number(),

@@ -1,4 +1,5 @@
 import type { SessionTraceResponse } from "@synsci/sdk/v2/client"
+import { TokenUsage } from "@synsci/util/token-usage"
 
 export type TraceActivity = {
   id: string
@@ -241,8 +242,7 @@ export function sourceLabel(value: SessionTraceResponse["inference"][number]["so
 }
 
 function usage(trace: SessionTraceResponse) {
-  const tokens = trace.summary.tokens
-  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+  return TokenUsage.total(trace.summary.tokens)
 }
 
 export function traceMetrics(trace: SessionTraceResponse) {

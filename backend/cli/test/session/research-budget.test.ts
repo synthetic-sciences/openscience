@@ -9,8 +9,14 @@ import { SessionTraceStore } from "../../src/session/trace-store"
 import { JsonStore } from "../../src/util/jsonstore"
 import { tmpdir } from "../fixture/fixture"
 
-function assistant(sessionID: string, id: string, tokens = 100): MessageV2.Assistant {
+function assistant(
+  sessionID: string,
+  id: string,
+  tokens: number | MessageV2.Assistant["tokens"] = 100,
+): MessageV2.Assistant {
   const now = Date.now()
+  const usage =
+    typeof tokens === "number" ? { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } : tokens
   return {
     id,
     sessionID,
@@ -22,11 +28,156 @@ function assistant(sessionID: string, id: string, tokens = 100): MessageV2.Assis
     agent: "research",
     path: { cwd: Instance.directory, root: Instance.worktree },
     cost: 0.1,
-    tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    tokens: usage,
     time: { created: now - 10, completed: now },
     finish: "stop",
   }
 }
+
+test("runtime token limits do not add the reasoning subset twice", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "reasoning budget" })
+      try {
+        await SessionResearch.define(session.id, {
+          objective: "Count normalized usage once",
+          domain: "general",
+          template: "minimal",
+          limits: { modelCalls: 100, tokens: 1_000 },
+        })
+        await Session.updateMessage(
+          assistant(session.id, "msg_assistant_reasoning", {
+            input: 200,
+            output: 500,
+            reasoning: 400,
+            cache: { read: 100, write: 0 },
+          }),
+        )
+
+        expect(await SessionResearch.runtimePreflight(session.id)).toMatchObject({
+          decision: "allow",
+          usage: { tokens: 800 },
+        })
+      } finally {
+        await SessionResearch.remove(session.id)
+        await Session.remove(session.id)
+      }
+    },
+  })
+})
+
+test("a token jump from 89% to 101% claims one text-only emergency finalization", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "token boundary jump" })
+      try {
+        await SessionResearch.define(session.id, {
+          objective: "Return a bounded result after a large model step",
+          domain: "general",
+          template: "minimal",
+          limits: { modelCalls: 100, tokens: 100 },
+        })
+        await Session.updateMessage(assistant(session.id, "msg_assistant_89", 89))
+        expect(await SessionResearch.runtimePreflight(session.id)).toMatchObject({
+          decision: "allow",
+          usage: { tokens: 89 },
+        })
+
+        await Session.updateMessage(assistant(session.id, "msg_assistant_101", 12))
+        expect(await SessionResearch.runtimePreflight(session.id)).toMatchObject({
+          decision: "finalize",
+          finalizationCall: 1,
+          textOnly: true,
+          usage: { tokens: 101 },
+        })
+        expect(await SessionResearch.runtimePreflight(session.id)).toMatchObject({
+          decision: "block",
+          boundary: "hard",
+        })
+      } finally {
+        await SessionResearch.remove(session.id)
+        await Session.remove(session.id)
+      }
+    },
+  })
+})
+
+test("parallel preflights atomically claim exactly one emergency finalization", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "concurrent token boundary jump" })
+      try {
+        await SessionResearch.define(session.id, {
+          objective: "Bound concurrent finalization",
+          domain: "general",
+          template: "minimal",
+          limits: { modelCalls: 100, tokens: 100 },
+        })
+        await Session.updateMessage(assistant(session.id, "msg_assistant_parallel_89", 89))
+        expect((await SessionResearch.runtimePreflight(session.id)).decision).toBe("allow")
+        await Session.updateMessage(assistant(session.id, "msg_assistant_parallel_101", 12))
+
+        const decisions = await Promise.all(
+          Array.from({ length: 8 }, () => SessionResearch.runtimePreflight(session.id)),
+        )
+        expect(decisions.filter((item) => item.decision === "finalize" && item.textOnly)).toHaveLength(1)
+        expect(decisions.filter((item) => item.decision === "block")).toHaveLength(7)
+        expect((await SessionResearch.read(session.id))?.budget).toMatchObject({
+          runtimeFinalizationCalls: 1,
+          runtimeExhausted: true,
+        })
+      } finally {
+        await SessionResearch.remove(session.id)
+        await Session.remove(session.id)
+      }
+    },
+  })
+})
+
+test("cost exhaustion blocks without authorizing an emergency paid call", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "cost boundary" })
+      try {
+        await SessionResearch.define(session.id, {
+          objective: "Never spend past the cost ceiling",
+          domain: "general",
+          template: "minimal",
+          limits: { modelCalls: 100, tokens: 10_000, costUsd: 0.2 },
+        })
+        await Session.updateMessage(assistant(session.id, "msg_assistant_cost_1", 10))
+        expect((await SessionResearch.runtimePreflight(session.id)).decision).toBe("allow")
+        await Session.updateMessage(assistant(session.id, "msg_assistant_cost_2", 10))
+
+        expect(await SessionResearch.runtimePreflight(session.id)).toMatchObject({
+          decision: "block",
+          boundary: "hard",
+        })
+        expect((await SessionResearch.read(session.id))?.budget.runtimeFinalizationCalls).toBe(0)
+      } finally {
+        await SessionResearch.remove(session.id)
+        await Session.remove(session.id)
+      }
+    },
+  })
+})
+
+test("runtime exhaustion explains cumulative usage without calling it context exhaustion", () => {
+  const message = SessionResearch.exhaustionMessage({
+    boundary: "hard",
+    reason: "token limit (101/100)",
+  })
+  expect(message).toContain("cumulative across model calls and delegated child sessions")
+  expect(message).toContain("separate from the model's context-window limit")
+})
 
 test("runtime limits count the complete session tree and preserve two finalization calls", async () => {
   await using tmp = await tmpdir({ git: true })

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Session } from "../../src/session/index"
+import { TokenUsage } from "@synsci/util/token-usage"
 
 const model = (): any => ({
   cost: {
@@ -20,6 +21,37 @@ const model = (): any => ({
 })
 
 describe("Session.getUsage cost/token accounting", () => {
+  for (const route of [
+    { name: "OpenAI Responses", input: 1_000, metadata: { openai: {} } },
+    { name: "OpenRouter", input: 1_000, metadata: { openrouter: {} } },
+    { name: "Google", input: 1_000, metadata: { google: {} } },
+    { name: "Anthropic", input: 800, metadata: { anthropic: {} } },
+    { name: "Amazon Bedrock", input: 800, metadata: { bedrock: { usage: {} } } },
+  ]) {
+    test(`${route.name} keeps reasoning as an output subset`, () => {
+      const result = Session.getUsage({
+        model: model(),
+        usage: {
+          inputTokens: route.input,
+          outputTokens: 500,
+          reasoningTokens: 100,
+          cachedInputTokens: 200,
+        } as any,
+        metadata: route.metadata as any,
+      })
+
+      expect(result.tokens).toEqual({
+        input: 800,
+        output: 500,
+        reasoning: 100,
+        cache: { read: 200, write: 0 },
+      })
+      expect(TokenUsage.uncached(result.tokens)).toBe(1_300)
+      expect(TokenUsage.total(result.tokens)).toBe(1_500)
+      expect(result.cost).toBeCloseTo((800 * 3 + 500 * 15 + 200 * 0.3) / 1_000_000, 8)
+    })
+  }
+
   test("over-200k tier trips on a mostly-cache-write prompt (cache.write counts toward the threshold)", () => {
     // 15k fresh input + 190k cache-creation = 205k > 200k → over-200k pricing.
     const r = Session.getUsage({
