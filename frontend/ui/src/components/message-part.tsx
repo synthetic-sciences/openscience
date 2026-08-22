@@ -932,12 +932,14 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 // providerMetadata for continuation and is never presented as readable text.
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const i18n = useI18n()
   const part = props.part as ReasoningPart
   const text = () => stripRedactedReasoning(part.text)
 
   return (
     <Show when={text()}>
-      <div data-component="reasoning-part">
+      <div data-component="reasoning-part" data-origin="provider-summary">
+        <span data-slot="reasoning-part-label">{i18n.t("ui.messagePart.reasoning.providerSummary")}</span>
         <Markdown text={text()} cacheKey={part.id} />
       </div>
     </Show>

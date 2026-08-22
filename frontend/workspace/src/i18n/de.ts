@@ -55,7 +55,7 @@ export const dict = {
   "command.terminal.new": "Neues Terminal",
   "command.terminal.new.description": "Neuen Terminal-Tab erstellen",
   "command.steps.toggle": "Schritte umschalten",
-  "command.steps.toggle.description": "Schritte für die aktuelle Nachricht anzeigen oder ausblenden",
+  "command.steps.toggle.description": "Ausführungsprotokoll für die aktuelle Nachricht anzeigen oder ausblenden",
   "command.message.previous": "Vorherige Nachricht",
   "command.message.previous.description": "Zur vorherigen Benutzernachricht gehen",
   "command.message.next": "Nächste Nachricht",

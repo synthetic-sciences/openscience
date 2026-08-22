@@ -212,6 +212,15 @@
   color: var(--text-base);
   line-height: var(--line-height-large);
 
+  [data-slot="reasoning-part-label"] {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-weaker);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.01em;
+  }
+
   [data-component="markdown"] {
     margin-top: 0;
     font-style: normal;

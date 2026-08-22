@@ -51,7 +51,7 @@ export const dict = {
   "command.terminal.new": "Новый терминал",
   "command.terminal.new.description": "Создать новую вкладку терминала",
   "command.steps.toggle": "Переключить шаги",
-  "command.steps.toggle.description": "Показать или скрыть шаги для текущего сообщения",
+  "command.steps.toggle.description": "Показать или скрыть трассировку выполнения текущего сообщения",
   "command.message.previous": "Предыдущее сообщение",
   "command.message.previous.description": "Перейти к предыдущему сообщению пользователя",
   "command.message.next": "Следующее сообщение",

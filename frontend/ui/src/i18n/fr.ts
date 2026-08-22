@@ -13,8 +13,11 @@ export const dict = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Ajouter un commentaire",
   "ui.lineComment.submit": "Commenter",
-  "ui.sessionTurn.steps.show": "Afficher les étapes",
-  "ui.sessionTurn.steps.hide": "Masquer les étapes",
+  "ui.sessionTurn.steps.show": "Afficher la trace d’exécution",
+  "ui.sessionTurn.steps.hide": "Masquer la trace d’exécution",
+  "ui.sessionTurn.trace.title": "Trace d’exécution",
+  "ui.sessionTurn.trace.detail":
+    "Activité d’outils enregistrée ; les résumés du modèle sont générés par le fournisseur.",
   "ui.sessionTurn.summary.response": "Réponse",
   "ui.sessionTurn.diff.showMore": "Afficher plus de modifications ({{count}})",
 
@@ -34,6 +37,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Examen des prochaines étapes",
 
   "ui.messagePart.diagnostic.error": "Erreur",
+  "ui.messagePart.reasoning.providerSummary": "Résumé du modèle",
   "ui.messagePart.title.edit": "Modifier",
   "ui.messagePart.title.write": "Écrire",
   "ui.messagePart.option.typeOwnAnswer": "Tapez votre propre réponse",

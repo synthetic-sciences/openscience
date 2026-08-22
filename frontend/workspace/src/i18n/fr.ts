@@ -51,7 +51,7 @@ export const dict = {
   "command.terminal.new": "Nouveau terminal",
   "command.terminal.new.description": "Créer un nouvel onglet de terminal",
   "command.steps.toggle": "Basculer les étapes",
-  "command.steps.toggle.description": "Afficher ou masquer les étapes du message actuel",
+  "command.steps.toggle.description": "Afficher ou masquer la trace d’exécution du message actuel",
   "command.message.previous": "Message précédent",
   "command.message.previous.description": "Aller au message utilisateur précédent",
   "command.message.next": "Message suivant",

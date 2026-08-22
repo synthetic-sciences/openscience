@@ -51,7 +51,7 @@ export const dict = {
   "command.terminal.new": "新しいターミナル",
   "command.terminal.new.description": "新しいターミナルタブを作成",
   "command.steps.toggle": "ステップの切り替え",
-  "command.steps.toggle.description": "現在のメッセージのステップを表示または非表示",
+  "command.steps.toggle.description": "現在のメッセージの実行トレースを表示または非表示",
   "command.message.previous": "前のメッセージ",
   "command.message.previous.description": "前のユーザーメッセージに移動",
   "command.message.next": "次のメッセージ",

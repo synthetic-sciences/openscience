@@ -16,8 +16,10 @@ export const dict: Record<Keys, string> = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Legg til kommentar",
   "ui.lineComment.submit": "Kommenter",
-  "ui.sessionTurn.steps.show": "Vis trinn",
-  "ui.sessionTurn.steps.hide": "Skjul trinn",
+  "ui.sessionTurn.steps.show": "Vis utføringsspor",
+  "ui.sessionTurn.steps.hide": "Skjul utføringsspor",
+  "ui.sessionTurn.trace.title": "Utføringsspor",
+  "ui.sessionTurn.trace.detail": "Registrert verktøyaktivitet; modellsammendrag genereres av leverandøren.",
   "ui.sessionTurn.summary.response": "Svar",
   "ui.sessionTurn.diff.showMore": "Vis flere endringer ({{count}})",
 
@@ -37,6 +39,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
 
   "ui.messagePart.diagnostic.error": "Feil",
+  "ui.messagePart.reasoning.providerSummary": "Modellsammendrag",
   "ui.messagePart.title.edit": "Rediger",
   "ui.messagePart.title.write": "Skriv",
   "ui.messagePart.option.typeOwnAnswer": "Skriv ditt eget svar",

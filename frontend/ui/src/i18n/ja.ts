@@ -13,8 +13,10 @@ export const dict = {
   "ui.lineComment.editorLabel.suffix": "へのコメントを作成中",
   "ui.lineComment.placeholder": "コメントを追加",
   "ui.lineComment.submit": "コメント",
-  "ui.sessionTurn.steps.show": "ステップを表示",
-  "ui.sessionTurn.steps.hide": "ステップを隠す",
+  "ui.sessionTurn.steps.show": "実行トレースを表示",
+  "ui.sessionTurn.steps.hide": "実行トレースを非表示",
+  "ui.sessionTurn.trace.title": "実行トレース",
+  "ui.sessionTurn.trace.detail": "記録されたツール操作。モデルの要約はプロバイダーが生成します。",
   "ui.sessionTurn.summary.response": "応答",
   "ui.sessionTurn.diff.showMore": "さらに変更を表示 ({{count}})",
 
@@ -34,6 +36,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "次のステップを検討中",
 
   "ui.messagePart.diagnostic.error": "エラー",
+  "ui.messagePart.reasoning.providerSummary": "モデルの要約",
   "ui.messagePart.title.edit": "編集",
   "ui.messagePart.title.write": "作成",
   "ui.messagePart.option.typeOwnAnswer": "自分の回答を入力",

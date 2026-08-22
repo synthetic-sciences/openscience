@@ -51,7 +51,7 @@ export const dict = {
   "command.terminal.new": "새 터미널",
   "command.terminal.new.description": "새 터미널 탭 생성",
   "command.steps.toggle": "단계 토글",
-  "command.steps.toggle.description": "현재 메시지의 단계 표시/숨기기",
+  "command.steps.toggle.description": "현재 메시지의 실행 추적 표시/숨기기",
   "command.message.previous": "이전 메시지",
   "command.message.previous.description": "이전 사용자 메시지로 이동",
   "command.message.next": "다음 메시지",

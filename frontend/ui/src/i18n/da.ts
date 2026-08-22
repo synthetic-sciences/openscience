@@ -13,8 +13,10 @@ export const dict = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Tilføj kommentar",
   "ui.lineComment.submit": "Kommenter",
-  "ui.sessionTurn.steps.show": "Vis trin",
-  "ui.sessionTurn.steps.hide": "Skjul trin",
+  "ui.sessionTurn.steps.show": "Vis udførelsesspor",
+  "ui.sessionTurn.steps.hide": "Skjul udførelsesspor",
+  "ui.sessionTurn.trace.title": "Udførelsesspor",
+  "ui.sessionTurn.trace.detail": "Registreret værktøjsaktivitet; modeloversigter genereres af udbyderen.",
   "ui.sessionTurn.summary.response": "Svar",
   "ui.sessionTurn.diff.showMore": "Vis flere ændringer ({{count}})",
 
@@ -34,6 +36,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Overvejer næste skridt",
 
   "ui.messagePart.diagnostic.error": "Fejl",
+  "ui.messagePart.reasoning.providerSummary": "Modeloversigt",
   "ui.messagePart.title.edit": "Rediger",
   "ui.messagePart.title.write": "Skriv",
   "ui.messagePart.option.typeOwnAnswer": "Skriv dit eget svar",

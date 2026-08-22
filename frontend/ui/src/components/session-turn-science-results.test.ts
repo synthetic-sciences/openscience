@@ -64,7 +64,21 @@ test("expanded steps render a semantic research trace and first-class delegation
   expect(parts).toContain('data-slot="delegation-raw"')
   expect(parts).toContain("Open agent")
   expect(parts).toContain("<Markdown text={text()} cacheKey={part.id} />")
-  expect(parts).not.toContain("Reasoning summary")
-  expect(parts).not.toContain('data-slot="reasoning-part-label"')
+  expect(parts).toContain('data-origin="provider-summary"')
+  expect(parts).toContain('data-slot="reasoning-part-label"')
+  expect(parts).toContain('i18n.t("ui.messagePart.reasoning.providerSummary")')
   expect(css).toContain('[data-component="delegation-card"]')
+})
+
+test("execution trace distinguishes recorded tools from provider-generated summaries", () => {
+  const parts = readFileSync(fileURLToPath(new URL("./message-part.tsx", import.meta.url)), "utf8")
+  const english = readFileSync(fileURLToPath(new URL("../i18n/en.ts", import.meta.url)), "utf8")
+
+  expect(source).toContain('data-slot="session-turn-trace-legend"')
+  expect(source).toContain('i18n.t("ui.sessionTurn.trace.detail")')
+  expect(parts).toContain('data-origin="provider-summary"')
+  expect(english).toContain('"ui.sessionTurn.steps.show": "Show execution trace"')
+  expect(english).toContain(
+    '"ui.sessionTurn.trace.detail": "Recorded tool activity; model summaries are provider-generated."',
+  )
 })

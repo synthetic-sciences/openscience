@@ -51,7 +51,7 @@ export const dict = {
   "command.terminal.new": "Ny terminal",
   "command.terminal.new.description": "Opret en ny terminalfane",
   "command.steps.toggle": "Skift trin",
-  "command.steps.toggle.description": "Vis eller skjul trin for den aktuelle besked",
+  "command.steps.toggle.description": "Vis eller skjul udførelsessporet for den aktuelle besked",
   "command.message.previous": "Forrige besked",
   "command.message.previous.description": "Gå til den forrige brugerbesked",
   "command.message.next": "Næste besked",

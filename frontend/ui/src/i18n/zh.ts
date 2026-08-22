@@ -17,8 +17,10 @@ export const dict = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "添加评论",
   "ui.lineComment.submit": "评论",
-  "ui.sessionTurn.steps.show": "显示步骤",
-  "ui.sessionTurn.steps.hide": "隐藏步骤",
+  "ui.sessionTurn.steps.show": "显示执行轨迹",
+  "ui.sessionTurn.steps.hide": "隐藏执行轨迹",
+  "ui.sessionTurn.trace.title": "执行轨迹",
+  "ui.sessionTurn.trace.detail": "记录的工具活动；模型摘要由提供商生成。",
   "ui.sessionTurn.summary.response": "回复",
   "ui.sessionTurn.diff.showMore": "显示更多更改（{{count}}）",
 
@@ -38,6 +40,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
 
   "ui.messagePart.diagnostic.error": "错误",
+  "ui.messagePart.reasoning.providerSummary": "模型摘要",
   "ui.messagePart.title.edit": "编辑",
   "ui.messagePart.title.write": "写入",
   "ui.messagePart.option.typeOwnAnswer": "输入自己的答案",

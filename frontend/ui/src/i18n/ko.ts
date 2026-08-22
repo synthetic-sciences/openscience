@@ -13,8 +13,10 @@ export const dict = {
   "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
   "ui.lineComment.placeholder": "댓글 추가",
   "ui.lineComment.submit": "댓글",
-  "ui.sessionTurn.steps.show": "단계 표시",
-  "ui.sessionTurn.steps.hide": "단계 숨기기",
+  "ui.sessionTurn.steps.show": "실행 추적 표시",
+  "ui.sessionTurn.steps.hide": "실행 추적 숨기기",
+  "ui.sessionTurn.trace.title": "실행 추적",
+  "ui.sessionTurn.trace.detail": "기록된 도구 활동이며, 모델 요약은 제공자가 생성합니다.",
   "ui.sessionTurn.summary.response": "응답",
   "ui.sessionTurn.diff.showMore": "변경 사항 더 보기 ({{count}})",
 
@@ -34,6 +36,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "다음 단계 고려 중",
 
   "ui.messagePart.diagnostic.error": "오류",
+  "ui.messagePart.reasoning.providerSummary": "모델 요약",
   "ui.messagePart.title.edit": "편집",
   "ui.messagePart.title.write": "작성",
   "ui.messagePart.option.typeOwnAnswer": "직접 답변 입력",

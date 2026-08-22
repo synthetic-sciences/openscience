@@ -617,6 +617,20 @@
     }
   }
 
+  [data-slot="session-turn-trace-legend"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    color: var(--text-weaker);
+    font-size: var(--font-size-small);
+
+    strong {
+      color: var(--text-weak);
+      font-weight: var(--font-weight-medium);
+    }
+  }
+
   [data-component="research-trace-group"] {
     width: 100%;
     min-width: 0;

@@ -14,8 +14,10 @@ export const dict = {
   "ui.lineComment.placeholder": "เพิ่มความคิดเห็น",
   "ui.lineComment.submit": "แสดงความคิดเห็น",
 
-  "ui.sessionTurn.steps.show": "แสดงขั้นตอน",
-  "ui.sessionTurn.steps.hide": "ซ่อนขั้นตอน",
+  "ui.sessionTurn.steps.show": "แสดงร่องรอยการทำงาน",
+  "ui.sessionTurn.steps.hide": "ซ่อนร่องรอยการทำงาน",
+  "ui.sessionTurn.trace.title": "ร่องรอยการทำงาน",
+  "ui.sessionTurn.trace.detail": "กิจกรรมเครื่องมือที่บันทึกไว้; สรุปของโมเดลสร้างโดยผู้ให้บริการ",
   "ui.sessionTurn.summary.response": "การตอบสนอง",
   "ui.sessionTurn.diff.showMore": "แสดงการเปลี่ยนแปลงเพิ่มเติม ({{count}})",
 
@@ -35,6 +37,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "พิจารณาขั้นตอนถัดไป",
 
   "ui.messagePart.diagnostic.error": "ข้อผิดพลาด",
+  "ui.messagePart.reasoning.providerSummary": "สรุปของโมเดล",
   "ui.messagePart.title.edit": "แก้ไข",
   "ui.messagePart.title.write": "เขียน",
   "ui.messagePart.option.typeOwnAnswer": "พิมพ์คำตอบของคุณเอง",

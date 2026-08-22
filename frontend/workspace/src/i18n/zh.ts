@@ -55,7 +55,7 @@ export const dict = {
   "command.terminal.new": "新建终端",
   "command.terminal.new.description": "创建新的终端标签页",
   "command.steps.toggle": "切换步骤",
-  "command.steps.toggle.description": "显示或隐藏当前消息的步骤",
+  "command.steps.toggle.description": "显示或隐藏当前消息的执行轨迹",
   "command.message.previous": "上一条消息",
   "command.message.previous.description": "跳转到上一条用户消息",
   "command.message.next": "下一条消息",

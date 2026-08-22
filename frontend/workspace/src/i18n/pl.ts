@@ -51,7 +51,7 @@ export const dict = {
   "command.terminal.new": "Nowy terminal",
   "command.terminal.new.description": "Utwórz nową kartę terminala",
   "command.steps.toggle": "Przełącz kroki",
-  "command.steps.toggle.description": "Pokaż lub ukryj kroki dla bieżącej wiadomości",
+  "command.steps.toggle.description": "Pokaż lub ukryj ślad wykonania bieżącej wiadomości",
   "command.message.previous": "Poprzednia wiadomość",
   "command.message.previous.description": "Przejdź do poprzedniej wiadomości użytkownika",
   "command.message.next": "Następna wiadomość",

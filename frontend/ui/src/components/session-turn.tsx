@@ -341,6 +341,14 @@ export function SessionTurn(
     return false
   })
 
+  const hasReasoning = createMemo(() =>
+    assistantMessages().some((message) =>
+      (data.store.part[message.id] ?? emptyParts).some(
+        (part) => part?.type === "reasoning" && stripRedactedReasoning(part.text ?? "").length > 0,
+      ),
+    ),
+  )
+
   const promoted = createMemo(() =>
     assistantMessages().flatMap((message) => {
       const parts = (data.store.part[message.id] ?? emptyParts).filter(isPromotedTool)
@@ -751,6 +759,12 @@ export function SessionTurn(
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
                       <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
+                        <Show when={hasReasoning()}>
+                          <div data-slot="session-turn-trace-legend">
+                            <strong>{i18n.t("ui.sessionTurn.trace.title")}</strong>
+                            <span>{i18n.t("ui.sessionTurn.trace.detail")}</span>
+                          </div>
+                        </Show>
                         <AssistantTrace
                           messages={assistantMessages()}
                           responsePartId={responsePartId()}

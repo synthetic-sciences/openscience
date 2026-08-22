@@ -13,8 +13,10 @@ export const dict = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Добавить комментарий",
   "ui.lineComment.submit": "Комментировать",
-  "ui.sessionTurn.steps.show": "Показать шаги",
-  "ui.sessionTurn.steps.hide": "Скрыть шаги",
+  "ui.sessionTurn.steps.show": "Показать трассировку выполнения",
+  "ui.sessionTurn.steps.hide": "Скрыть трассировку выполнения",
+  "ui.sessionTurn.trace.title": "Трассировка выполнения",
+  "ui.sessionTurn.trace.detail": "Записанные действия инструментов; сводки модели генерируются поставщиком.",
   "ui.sessionTurn.summary.response": "Ответ",
   "ui.sessionTurn.diff.showMore": "Показать ещё изменений ({{count}})",
 
@@ -34,6 +36,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Рассмотрение следующих шагов",
 
   "ui.messagePart.diagnostic.error": "Ошибка",
+  "ui.messagePart.reasoning.providerSummary": "Сводка модели",
   "ui.messagePart.title.edit": "Редактировать",
   "ui.messagePart.title.write": "Написать",
   "ui.messagePart.option.typeOwnAnswer": "Введите свой ответ",

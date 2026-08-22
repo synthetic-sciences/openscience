@@ -51,7 +51,7 @@ export const dict = {
   "command.terminal.new": "محطة طرفية جديدة",
   "command.terminal.new.description": "إنشاء علامة تبويب جديدة للمحطة الطرفية",
   "command.steps.toggle": "تبديل الخطوات",
-  "command.steps.toggle.description": "إظهار أو إخفاء خطوات الرسالة الحالية",
+  "command.steps.toggle.description": "إظهار أو إخفاء سجل تنفيذ الرسالة الحالية",
   "command.message.previous": "الرسالة السابقة",
   "command.message.previous.description": "انتقل إلى رسالة المستخدم السابقة",
   "command.message.next": "الرسالة التالية",

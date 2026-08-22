@@ -55,7 +55,7 @@ export const dict = {
   "command.terminal.new": "新增終端機",
   "command.terminal.new.description": "建立新的終端機標籤頁",
   "command.steps.toggle": "切換步驟",
-  "command.steps.toggle.description": "顯示或隱藏目前訊息的步驟",
+  "command.steps.toggle.description": "顯示或隱藏目前訊息的執行軌跡",
   "command.message.previous": "上一則訊息",
   "command.message.previous.description": "跳到上一則使用者訊息",
   "command.message.next": "下一則訊息",

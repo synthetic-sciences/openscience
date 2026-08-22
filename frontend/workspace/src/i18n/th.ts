@@ -51,7 +51,7 @@ export const dict = {
   "command.terminal.new": "เทอร์มินัลใหม่",
   "command.terminal.new.description": "สร้างแท็บเทอร์มินัลใหม่",
   "command.steps.toggle": "สลับขั้นตอน",
-  "command.steps.toggle.description": "แสดงหรือซ่อนขั้นตอนสำหรับข้อความปัจจุบัน",
+  "command.steps.toggle.description": "แสดงหรือซ่อนร่องรอยการทำงานของข้อความปัจจุบัน",
   "command.message.previous": "ข้อความก่อนหน้า",
   "command.message.previous.description": "ไปที่ข้อความผู้ใช้ก่อนหน้า",
   "command.message.next": "ข้อความถัดไป",
