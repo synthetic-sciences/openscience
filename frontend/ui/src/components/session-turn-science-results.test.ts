@@ -12,7 +12,9 @@ test("successful science results stay available in compact metadata while failur
   expect(source).toContain("Other changed files")
   expect(source).toContain("hidePromotedTools")
   expect(source).toContain(".filter(isPromotedTool)")
-  expect(source).toContain("parts.filter((part) => !isHiddenTool(part))")
+  expect(source).toContain(
+    "if (props.hidePromotedTools && isHiddenTool(part)) return [{ message, part, hidden: true }]",
+  )
   expect(source).toContain('part.state.status === "error"')
   expect(source).toContain("metadata?.ok !== false")
 
@@ -51,6 +53,8 @@ test("expanded steps render a semantic research trace and first-class delegation
   const css = readFileSync(fileURLToPath(new URL("./message-part.css", import.meta.url)), "utf8")
 
   expect(source).toContain("groupResearchTrace")
+  expect(source).toContain("props.messages.flatMap")
+  expect(source).toContain("messages={assistantMessages()}")
   expect(source).toContain('data-component="research-trace-group"')
   expect(parts).toContain('<details\n              data-component="delegation-card"')
   expect(parts).toContain('data-slot="delegation-summary"')

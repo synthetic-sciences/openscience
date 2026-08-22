@@ -136,8 +136,8 @@ function isHiddenTool(part: PartType | undefined): part is ToolPart {
   return isPromotedTool(part) || isGeneratedTool(part)
 }
 
-function AssistantMessageItem(props: {
-  message: AssistantMessage
+function AssistantTrace(props: {
+  messages: AssistantMessage[]
   responsePartId: string | undefined
   hideResponsePart: boolean
   hideReasoning: boolean
@@ -145,32 +145,20 @@ function AssistantMessageItem(props: {
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
-  const msgParts = createMemo(() => data.store.part[props.message.id] ?? emptyParts)
-  const lastTextPart = createMemo(() => lastResponseTextPart(msgParts()))
-
-  const filteredParts = createMemo(() => {
-    let parts = msgParts()
-
-    if (props.hideReasoning) {
-      parts = parts.filter((part) => part?.type !== "reasoning")
-    }
-
-    if (props.hidePromotedTools) {
-      parts = parts.filter((part) => !isHiddenTool(part))
-    }
-
-    parts = parts.filter((part) => part?.type !== "tool" || part.tool !== "todoread")
-
-    if (!props.hideResponsePart) return parts
-
-    const responsePartId = props.responsePartId
-    if (!responsePartId) return parts
-    if (responsePartId !== lastTextPart()?.id) return parts
-
-    return parts.filter((part) => part?.id !== responsePartId)
-  })
-
-  const trace = createMemo(() => groupResearchTrace(filteredParts().map((part) => ({ message: props.message, part }))))
+  const trace = createMemo(() =>
+    groupResearchTrace(
+      props.messages.flatMap((message) => {
+        const parts = data.store.part[message.id] ?? emptyParts
+        return parts.flatMap((part) => {
+          if (props.hideReasoning && part?.type === "reasoning") return []
+          if (props.hideResponsePart && props.responsePartId === part?.id) return []
+          if (props.hidePromotedTools && isHiddenTool(part)) return [{ message, part, hidden: true }]
+          if (part?.type === "tool" && part.tool === "todoread") return [{ message, part, hidden: true }]
+          return [{ message, part }]
+        })
+      }),
+    ),
+  )
 
   return (
     <For each={trace()}>
@@ -178,7 +166,10 @@ function AssistantMessageItem(props: {
         <Show
           when={item.kind === "group" ? (item as ResearchTraceGroup) : undefined}
           fallback={
-            <Part part={(item as { kind: "part"; entry: { part: PartType } }).entry.part} message={props.message} />
+            <Part
+              part={(item as { kind: "part"; entry: { part: PartType } }).entry.part}
+              message={(item as { kind: "part"; entry: { message: AssistantMessage } }).entry.message}
+            />
           }
         >
           {(group) => <ResearchTraceGroupDisplay group={group()} />}
@@ -760,17 +751,13 @@ export function SessionTurn(
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
                       <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
-                        <For each={assistantMessages()}>
-                          {(assistantMessage) => (
-                            <AssistantMessageItem
-                              message={assistantMessage}
-                              responsePartId={responsePartId()}
-                              hideResponsePart={hideResponsePart()}
-                              hideReasoning={false}
-                              hidePromotedTools
-                            />
-                          )}
-                        </For>
+                        <AssistantTrace
+                          messages={assistantMessages()}
+                          responsePartId={responsePartId()}
+                          hideResponsePart={hideResponsePart()}
+                          hideReasoning={false}
+                          hidePromotedTools
+                        />
                         <Show when={error()}>
                           <Card variant="error" class="error-card">
                             {sessionErrorText(error())}
