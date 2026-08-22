@@ -140,7 +140,12 @@ export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The path to the file to read"),
-    offset: z.coerce.number().int().nonnegative().describe("The line number to start reading from (0-based)").optional(),
+    offset: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .describe("The line number to start reading from (0-based)")
+      .optional(),
     limit: z.coerce
       .number()
       .int()

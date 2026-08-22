@@ -94,17 +94,11 @@ describe("ModalAdapter input guard", () => {
 
   test("rejects duplicate, aliased, and escaping remote paths", () => {
     expect(() =>
-      ModalAdapter.validateUploads([
-        file,
-        { ...file, canonical: path.resolve("/project/src/other.py") },
-      ]),
+      ModalAdapter.validateUploads([file, { ...file, canonical: path.resolve("/project/src/other.py") }]),
     ).toThrow("upload path is duplicated")
-    expect(() =>
-      ModalAdapter.validateUploads([
-        file,
-        { ...file, path: "src/other.py" },
-      ]),
-    ).toThrow("upload source is duplicated")
+    expect(() => ModalAdapter.validateUploads([file, { ...file, path: "src/other.py" }])).toThrow(
+      "upload source is duplicated",
+    )
     expect(() => ModalAdapter.validateUploads([{ ...file, path: "../train.py" }])).toThrow(
       "must stay inside the remote workspace",
     )
@@ -149,9 +143,7 @@ describe("ModalAdapter input guard", () => {
       ModalAdapter.preflightUploads(root, [
         { path: "source.bin", canonical: source, size: approved.size, sha256: approved.sha256 },
       ]),
-    ).rejects.toThrow(
-      "input exceeds the 100 MiB approval limit",
-    )
+    ).rejects.toThrow("input exceeds the 100 MiB approval limit")
     expect(reads).toEqual([])
     await fs.rm(root, { recursive: true, force: true })
   })

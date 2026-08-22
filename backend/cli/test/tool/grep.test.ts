@@ -87,7 +87,10 @@ describe("tool.grep", () => {
   test("stops the search process after the bounded result window", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        await Bun.write(path.join(dir, "many.txt"), Array.from({ length: 10_000 }, (_, index) => `match ${index}`).join("\n"))
+        await Bun.write(
+          path.join(dir, "many.txt"),
+          Array.from({ length: 10_000 }, (_, index) => `match ${index}`).join("\n"),
+        )
       },
     })
     await Instance.provide({

@@ -178,7 +178,10 @@ describe("filesystem source isolation", () => {
     const windows = {
       ...snapshot,
       directory: "C:\\Research\\CERBench",
-      grants: snapshot.grants.map((grant) => ({ ...grant, path: grant.path.replace("/work/alpha", "C:\\Research\\CERBench") })),
+      grants: snapshot.grants.map((grant) => ({
+        ...grant,
+        path: grant.path.replace("/work/alpha", "C:\\Research\\CERBench"),
+      })),
     }
 
     expect(
