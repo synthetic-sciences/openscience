@@ -972,7 +972,13 @@ export namespace SessionResearch {
   }
 
   export type Evidence = {
-    artifacts: Array<{ artifactID?: string; versionID?: string; path?: string; sha256?: string }>
+    artifacts: Array<{
+      artifactID?: string
+      versionID?: string
+      path?: string
+      sha256?: string
+      completedAt?: number
+    }>
     jobs: Array<{ status: string }>
     kernels: Array<{ status: string }>
     findings: Array<{ target?: string; verdict?: string; status?: string; severity?: string }>
@@ -1013,9 +1019,20 @@ export namespace SessionResearch {
         finding.status !== "confirmed" &&
         (finding.severity === "blocking" || finding.severity === "major"),
     ).length
-    const requiredArtifacts = required.flatMap((item) =>
+    const matched = required.flatMap((item) =>
       evidence.artifacts.filter((artifact) => artifact.path && match(item.path, artifact.path)),
     )
+    // A Result path may be saved repeatedly while review findings are being
+    // corrected. Completion applies to the current immutable version, not every
+    // superseded version that remains in the audit trail.
+    const current = new Map<string, (typeof matched)[number]>()
+    for (const artifact of matched) {
+      const key = artifact.path ?? artifact.artifactID ?? artifact.versionID ?? "unknown"
+      const prior = current.get(key)
+      if (prior && (prior.completedAt ?? 0) > (artifact.completedAt ?? 0)) continue
+      current.set(key, artifact)
+    }
+    const requiredArtifacts = [...current.values()]
     const targets = [
       ...new Set(
         requiredArtifacts.map((artifact) =>
@@ -1088,7 +1105,7 @@ export namespace SessionResearch {
           : reviewed
             ? "Independent review recorded a disposition for every required Result"
             : unreviewed.length
-              ? `${unreviewed.length} required ${unreviewed.length === 1 ? "Result has" : "Results have"} no structured review disposition`
+              ? `${unreviewed.length} current required ${unreviewed.length === 1 ? "Result version has" : "Result versions have"} no structured review disposition: ${unreviewed.join(", ")}`
               : "Independent review has not recorded a structured disposition",
       },
       {

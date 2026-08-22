@@ -225,7 +225,48 @@ test("review coverage requires a structured disposition for every required immut
     })
     expect(assessment.gates.find((gate) => gate.id === "review")).toMatchObject({
       status: "pending",
-      detail: "1 required Result has no structured review disposition",
+      detail: `1 current required Result version has no structured review disposition: ${target(metrics)}`,
+    })
+  } finally {
+    await SessionResearch.remove(sessionID)
+  }
+})
+
+test("review coverage follows the latest immutable version of each required Result", async () => {
+  const sessionID = `ses_research_${crypto.randomUUID()}`
+  try {
+    const contract = await SessionResearch.define(sessionID, {
+      objective: "Review the corrected result",
+      domain: "general",
+      template: "minimal",
+      deliverables: [{ path: "report.md", label: "Report", required: true }],
+    })
+    const superseded = { ...artifact("report.md", 30), completedAt: 1 }
+    const current = { ...artifact("report.md", 31), artifactID: superseded.artifactID, completedAt: 2 }
+    const assessment = SessionResearch.assess(contract, {
+      artifacts: [superseded, current],
+      jobs: [],
+      kernels: [],
+      findings: [{ target: target(current), verdict: "supports", severity: "info" }],
+      reviewed: true,
+      busy: false,
+    })
+    expect(assessment.gates.find((gate) => gate.id === "review")).toMatchObject({
+      status: "passed",
+      detail: "Independent review recorded a disposition for every required Result",
+    })
+
+    const stale = SessionResearch.assess(contract, {
+      artifacts: [superseded, current],
+      jobs: [],
+      kernels: [],
+      findings: [{ target: target(superseded), verdict: "supports", severity: "info" }],
+      reviewed: true,
+      busy: false,
+    })
+    expect(stale.gates.find((gate) => gate.id === "review")).toMatchObject({
+      status: "pending",
+      detail: `1 current required Result version has no structured review disposition: ${target(current)}`,
     })
   } finally {
     await SessionResearch.remove(sessionID)
