@@ -160,6 +160,77 @@ function hash(value: string) {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex")
 }
 
+function escape(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function authority(ctx: Tool.Context) {
+  const assistant = ctx.messages.find(
+    (message) => message.info.role === "assistant" && message.info.id === ctx.messageID,
+  )
+  const parent = assistant?.info.role === "assistant" ? assistant.info.parentID : undefined
+  const direct = parent
+    ? ctx.messages.find((message) => message.info.role === "user" && message.info.id === parent)
+    : undefined
+  const candidate =
+    direct ??
+    ctx.messages.findLast(
+      (message) =>
+        message.info.role === "user" &&
+        message.info.internal?.type !== "continuation" &&
+        message.info.internal?.type !== "compaction",
+    )
+  const epoch =
+    candidate?.info.role === "user" && candidate.info.internal?.type === "continuation"
+      ? candidate.info.internal.epoch
+      : undefined
+  const owner = epoch
+    ? ctx.messages.find((message) => message.info.role === "user" && message.info.id === epoch)
+    : candidate
+  if (owner?.info.role !== "user") return ""
+  return owner.parts
+    .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.synthetic)
+    .map((part) => part.text)
+    .join("\n")
+    .toLowerCase()
+    .replace(/(?<=\d)[,_](?=\d)/g, "")
+}
+
+function authorized(text: string, value: number, unit: RegExp) {
+  const amount = escape(String(value))
+  const pair = new RegExp(
+    `(?:${unit.source}[^,.;\\n]{0,24}(?<![\\d.])${amount}(?![\\d.])|(?<![\\d.])${amount}(?![\\d.])[^,.;\\n]{0,24}${unit.source})`,
+    "i",
+  )
+  const match = pair.exec(text)
+  if (!match) return false
+  const start = Math.max(0, match.index - 64)
+  const end = Math.min(text.length, match.index + match[0].length + 64)
+  const window = text.slice(start, end)
+  const limit =
+    /\b(max(?:imum)?|limit|cap|ceiling|budget|up to|at most|no more than|(?:do not|don't) exceed|stop after|within)\b/i
+  const denied =
+    /\b(?:(?:do not|don't)\s+(?:set|use|apply|enforce|impose|add|create)|not set|without (?:a )?(?:hard )?(?:limit|cap|ceiling|budget)|unlimited|uncapped)\b/i
+  return limit.test(window) && !denied.test(window)
+}
+
+function assertLimits(input: z.infer<typeof Define>, ctx: Tool.Context) {
+  const text = authority(ctx)
+  const limits = [
+    ["max_model_calls", input.max_model_calls, /(?:model|inference)[\s-]*calls?/i],
+    ["max_tool_calls", input.max_tool_calls, /tool[\s-]*calls?/i],
+    ["max_tokens", input.max_tokens, /tokens?/i],
+    ["max_minutes", input.max_minutes, /minutes?|mins?/i],
+    ["max_cost_usd", input.max_cost_usd, /(?:usd|dollars?|\$)/i],
+  ] as const
+  for (const [field, value, unit] of limits) {
+    if (value === undefined || authorized(text, value, unit)) continue
+    throw new Error(
+      `${field}=${value} is not an exact hard ceiling authorized by the current user request. Omit ${field} and use the runtime default.`,
+    )
+  }
+}
+
 async function evidenceContext(sessionID: string) {
   const sessions = new Set<string>()
   const visit = async (id: string): Promise<MessageV2.WithParts[]> => {
@@ -352,6 +423,7 @@ export const ResearchContractTool = Tool.define("research_contract", {
     const contract = await (async () => {
       if (params.action === "define") {
         const input = Define.parse(params)
+        assertLimits(input, ctx)
         return SessionResearch.define(ctx.sessionID, {
           objective: input.objective,
           domain: input.domain,

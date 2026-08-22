@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import { ArtifactStore } from "../../src/artifact/store"
 import { Instance } from "../../src/project/instance"
+import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionResearch } from "../../src/session/research"
 import { ResearchContractTool } from "../../src/tool/research-contract"
 import { executionSession, tmpdir } from "../fixture/fixture"
@@ -8,15 +9,89 @@ import { executionSession, tmpdir } from "../fixture/fixture"
 beforeEach(() => ArtifactStore.reset())
 afterEach(() => ArtifactStore.reset())
 
-const context = (sessionID: string) => ({
+const context = (sessionID: string, messages: MessageV2.WithParts[] = []) => ({
   sessionID,
   messageID: "msg_research_contract",
   callID: "call_research_contract",
   agent: "research",
   abort: new AbortController().signal,
-  messages: [],
+  messages,
   metadata() {},
   async ask() {},
+})
+
+function request(sessionID: string, text: string): MessageV2.WithParts {
+  const id = "msg_research_request"
+  return {
+    info: {
+      id,
+      sessionID,
+      role: "user",
+      time: { created: Date.now() },
+      agent: "research",
+      model: { providerID: "test", modelID: "test" },
+      effort: "normal",
+    },
+    parts: [{ id: "part_research_request", sessionID, messageID: id, type: "text", text }],
+  }
+}
+
+test("hard runtime ceilings require exact authority from the current user request", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await executionSession()
+      const tool = await ResearchContractTool.init()
+      try {
+        await expect(
+          tool.execute(
+            {
+              action: "define",
+              objective: "Run an extensive study",
+              max_tokens: 500_000,
+            },
+            context(session.id, [request(session.id, "Keep going for hours; do not set a token budget.")]),
+          ),
+        ).rejects.toThrow("max_tokens=500000 is not an exact hard ceiling authorized by the current user request")
+        expect(await SessionResearch.read(session.id)).toBeUndefined()
+
+        await tool.execute(
+          {
+            action: "define",
+            objective: "Run a bounded study",
+            max_model_calls: 12,
+            max_tool_calls: 200,
+            max_tokens: 500_000,
+            max_minutes: 90,
+            max_cost_usd: 25,
+          },
+          context(session.id, [
+            request(
+              session.id,
+              "Use a hard maximum of 12 model calls, a 200 tool-call cap, a 500,000 token limit, at most 90 minutes, and a $25 cost ceiling.",
+            ),
+          ]),
+        )
+        expect((await SessionResearch.read(session.id))?.budget.limits).toMatchObject({
+          modelCalls: 12,
+          toolCalls: 200,
+          tokens: 500_000,
+          wallClockMs: 90 * 60_000,
+          costUsd: 25,
+        })
+
+        await SessionResearch.remove(session.id)
+        await tool.execute(
+          { action: "define", objective: "Honor a negative-form ceiling", max_tokens: 500_000 },
+          context(session.id, [request(session.id, "Do not exceed 500,000 tokens.")]),
+        )
+        expect((await SessionResearch.read(session.id))?.budget.limits.tokens).toBe(500_000)
+      } finally {
+        await SessionResearch.remove(session.id)
+      }
+    },
+  })
 })
 
 test("research checks settle only from a runtime-verified immutable Result", async () => {
