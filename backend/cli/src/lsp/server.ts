@@ -1096,7 +1096,7 @@ export namespace LSPServer {
         currentDir = parentDir
 
         // Stop if we've gone above the app root
-        if (!currentDir.startsWith(Instance.worktree)) break
+        if (!Filesystem.contains(Instance.worktree, currentDir)) break
       }
 
       return crateRoot

@@ -1348,7 +1348,7 @@ export namespace OpenScience {
       // Arbitrary kernels must not read host Git credentials/config, so point
       // Git at an inert explicit config instead of widening the read policy.
       GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_GLOBAL: os.devNull,
       GIT_TERMINAL_PROMPT: "0",
     }
   }
@@ -1504,7 +1504,7 @@ export namespace OpenScience {
     return {
       ...withAtlasOnPath(mergeByokEnv(base, auth)),
       GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_GLOBAL: os.devNull,
       GIT_TERMINAL_PROMPT: "0",
     }
   }
