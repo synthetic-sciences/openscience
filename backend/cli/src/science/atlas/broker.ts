@@ -201,7 +201,7 @@ async function gitFiles(root: string, limit: number, signal?: AbortSignal) {
   const git = Bun.which("git")
   if (!git) return
   const base = await command({
-    args: [git, "-C", root, "rev-parse", "--show-toplevel"],
+    args: [git, "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${os.devNull}`, "-C", root, "rev-parse", "--show-toplevel"],
     maxBytes: 64 * 1024,
     signal,
   }).catch(() => undefined)
@@ -210,7 +210,22 @@ async function gitFiles(root: string, limit: number, signal?: AbortSignal) {
   if (!top || !within(top, root)) return
   const kind = top === root ? "git-root" : "git-nested"
   const listed = await command({
-    args: [git, "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "."],
+    args: [
+      git,
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      `core.hooksPath=${os.devNull}`,
+      "-C",
+      root,
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      ".",
+    ],
     maxBytes: MAX_GIT_BYTES,
     signal,
   }).catch(() => undefined)
@@ -584,6 +599,21 @@ export async function atlasRequest(method: string, path: string, body?: unknown,
 
 export namespace AtlasBroker {
   export async function run(input: AtlasBrokerInput, signal?: AbortSignal) {
+    const incoming = { transferred: false, released: false }
+    const release = () => {
+      if (!input.authorization || input.authorizationOwnership !== "owned" || incoming.released) return
+      incoming.released = true
+      SessionFilesystem.releaseAuthorization(input.authorization)
+    }
+    using cleanup = {
+      [Symbol.dispose]() {
+        if (!incoming.transferred) release()
+      },
+    }
+    const local = input.operation === "library_add_local" || input.operation === "library_sync_local"
+    if (!local && (input.authorization || input.authorizationOwnership)) {
+      throw new AtlasBrokerError("filesystem authorization is accepted only for local folder operations")
+    }
     if (input.operation === "library_list") {
       return atlasRequest(
         "GET",
@@ -668,6 +698,7 @@ export namespace AtlasBroker {
     if (input.operation === "library_add_local" || input.operation === "library_sync_local") {
       const sessionID = required(input.sessionID, "session_id")
       const folder = required(input.folder, "folder")
+      incoming.transferred = true
       using collection = await collect({
         sessionID,
         folder,

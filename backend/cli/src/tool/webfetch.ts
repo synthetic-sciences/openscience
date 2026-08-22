@@ -12,6 +12,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { ToolRetryGuard } from "@/session/tool-retry-guard"
+import { AuthoritySignal } from "@/project/authority-signal"
 
 export const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5 MiB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -103,7 +104,7 @@ export const WebFetchTool = Tool.define("webfetch", {
     }
     // Resolve the complete local write contract before asking for network or
     // tool permission. Invalid destinations must never create approval noise.
-    const download =
+    using download =
       params.output_path !== undefined ? await resolveDownloadTarget(ctx.sessionID, params.output_path) : undefined
     await ToolRetryGuard.assertWebFetch(ctx, params)
     // A domain outside the enforced allow-list asks instead of failing.
@@ -467,6 +468,8 @@ type DownloadTarget = {
   root: string
   path: string
   relative: string
+  authorization?: SessionFilesystem.Authorization
+  [Symbol.dispose](): void
 }
 
 function exactBytes(bytes: number) {
@@ -561,17 +564,27 @@ async function resolveDownloadTarget(sessionID: string, requested: string): Prom
     throw new Error("output_path must stay inside this session's workspace and name a file")
   }
   const relative = path.relative(root, target)
-  if (!relative || path.isAbsolute(relative) || relative.startsWith("..")) {
+  if (!relative || path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`)) {
     throw new Error("output_path must stay inside this session's workspace and name a file")
   }
   // Direct tool unit tests use synthetic session ids. Every production tool
   // call carries a real ses_* id and must also satisfy the durable write grant.
-  if (sessionID.startsWith("ses_")) {
+  const authorization = await (async () => {
+    if (!sessionID.startsWith("ses_")) return
     const authorized = await SessionFilesystem.authorize({ sessionID, path: target, access: "write" })
     if (authorized.path !== target) throw new Error("Download destination changed during authorization")
+    return SessionFilesystem.bindAuthorization({ sessionID, access: "write", authorized })
+  })()
+  const dispose = () => {
+    if (authorization) SessionFilesystem.releaseAuthorization(authorization)
   }
-  await SafeFileIO.absent(target)
-  return { root, path: target, relative }
+  return SafeFileIO.absent(target).then(
+    () => ({ root, path: target, relative, authorization, [Symbol.dispose]: dispose }),
+    (error) => {
+      dispose()
+      throw error
+    },
+  )
 }
 
 async function assertDownloadTarget(target: DownloadTarget) {
@@ -735,16 +748,27 @@ async function streamDownload(response: Response, target: DownloadTarget, initia
     validateDownloadedFormat(target, response, prefix.subarray(0, prefixBytes))
     await handle.sync()
     await handle.close()
-    await assertDownloadTarget(target)
-    await SafeFileIO.absent(target.path)
-    try {
-      await fs.link(staged, target.path)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-        throw new Error(`Refusing to overwrite an existing workspace file: ${target.relative}`)
+    const install = async () => {
+      if (target.authorization) {
+        const current = await SessionFilesystem.revalidateAuthorization(target.authorization, {
+          path: target.path,
+          access: "write",
+        })
+        if (current.path !== target.path) throw new Error("Download destination changed during final authorization")
       }
-      throw error
+      await assertDownloadTarget(target)
+      await SafeFileIO.absent(target.path)
+      try {
+        await fs.link(staged, target.path)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+          throw new Error(`Refusing to overwrite an existing workspace file: ${target.relative}`)
+        }
+        throw error
+      }
     }
+    if (target.authorization) await AuthoritySignal.exclusive(install)
+    else await install()
     return {
       path: target.relative,
       filename: path.basename(target.path),

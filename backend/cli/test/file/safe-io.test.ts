@@ -68,6 +68,22 @@ describe("SafeFileIO", () => {
     await expect(reader.cancel()).rejects.toThrow("changed during access")
   })
 
+  test("runs a supplied authority gate around every streamed file chunk", async () => {
+    await using tmp = await tmpdir({
+      init: (directory) => Bun.write(path.join(directory, "source.txt"), "a".repeat(256 * 1024)),
+    })
+    const gates = { value: 0 }
+    const source = await SafeFileIO.open(path.join(tmp.path, "source.txt"), {
+      during: async (action) => {
+        gates.value += 1
+        return action()
+      },
+    })
+
+    expect((await new Response(source.stream()).arrayBuffer()).byteLength).toBe(256 * 1024)
+    expect(gates.value).toBeGreaterThan(1)
+  })
+
   test("rejects an in-place rewrite even when size and mtime are restored", async () => {
     await using tmp = await tmpdir({
       init: (directory) => Bun.write(path.join(directory, "paper.pdf"), "original"),

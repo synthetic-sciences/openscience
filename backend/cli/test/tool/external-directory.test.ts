@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "path"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
@@ -185,6 +186,34 @@ describe("tool.assertExternalDirectory", () => {
         } finally {
           await Session.remove(session.id)
         }
+      },
+    })
+  })
+
+  test("rejects an internal path whose parent is swapped for an external symlink", async () => {
+    await using project = await tmpdir({
+      git: true,
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "papers", "paper.md"), "internal\n")
+      },
+    })
+    await using external = await tmpdir({
+      init: (directory) => Bun.write(path.join(directory, "paper.md"), "external\n"),
+    })
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const folder = path.join(project.path, "papers")
+        const target = path.join(folder, "paper.md")
+        using access = await assertExternalDirectory(
+          { ...baseCtx, ask: async () => {} },
+          target,
+        )
+        await fs.rename(folder, path.join(project.path, "papers-retained"))
+        await fs.symlink(external.path, folder, "dir")
+
+        await expect(access?.revalidate()).rejects.toBeInstanceOf(SessionFilesystem.InvalidPathError)
+        expect(await Bun.file(path.join(external.path, "paper.md")).text()).toBe("external\n")
       },
     })
   })

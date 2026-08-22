@@ -1145,6 +1145,52 @@ describe("file access uses session grants", () => {
     })
   })
 
+  test("lets revocation win before a brokered file read", async () => {
+    await using external = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "data.txt"), "external"),
+    })
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const target = path.join(external.path, "data.txt")
+      const grant = await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: external.path,
+        access: "read",
+        scope: "session",
+      })
+      using _ = File.testing({
+        afterReadAuthorization: () => SessionFilesystem.revoke(session.id, grant.id).then(() => undefined),
+      })
+
+      await expect(File.read(target, { sessionID: session.id })).rejects.toBeInstanceOf(
+        SessionFilesystem.DeniedError,
+      )
+      expect(await Bun.file(target).text()).toBe("external")
+    })
+  })
+
+  test("stops an open brokered raw stream after its grant is revoked", async () => {
+    await using external = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "data.bin"), Buffer.alloc(256 * 1024, 7)),
+    })
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const target = path.join(external.path, "data.bin")
+      const grant = await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: external.path,
+        access: "read",
+        scope: "session",
+      })
+      const source = await File.rawSource(target, { sessionID: session.id })
+
+      await SessionFilesystem.revoke(session.id, grant.id)
+
+      await expect(new Response(source.stream()).arrayBuffer()).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      await source.close()
+    })
+  })
+
   test("HTTP writes require a session and the wrong session cannot read or write a grant", async () => {
     await using external = await tmpdir({
       init: (dir) => Bun.write(path.join(dir, "data.txt"), "external"),

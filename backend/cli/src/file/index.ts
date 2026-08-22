@@ -30,6 +30,7 @@ export namespace File {
   const preview = 8 * 1024 * 1024
 
   type TestHooks = {
+    afterReadAuthorization?: (target: string) => void | Promise<void>
     afterWriteAuthorization?: (target: string) => void | Promise<void>
     afterRenameAuthorization?: (source: string, target: string) => void | Promise<void>
   }
@@ -284,6 +285,36 @@ export namespace File {
     throw new Error(`Access denied: path escapes project directory`)
   }
 
+  async function operate<T>(
+    file: string,
+    access: SessionFilesystem.Access,
+    options: AccessOptions | undefined,
+    action: (target: string) => Promise<T>,
+  ) {
+    if (!options?.sessionID) return action(await contained(file, access))
+    const sessionID = options.sessionID
+    const authorized = await SessionFilesystem.authorize({ sessionID, path: file, access })
+    if (FileTrash.protectedPath(authorized.path)) {
+      throw new HTTPException(403, { message: "Recovery data is protected" })
+    }
+    const binding = await SessionFilesystem.bindAuthorization({ sessionID, access, authorized })
+    try {
+      if (access === "read") await hooks.value?.afterReadAuthorization?.(authorized.path)
+      return await AuthoritySignal.exclusive(async () => {
+        const current = await SessionFilesystem.revalidateAuthorization(binding, {
+          path: authorized.path,
+          access,
+        })
+        if (FileTrash.protectedPath(current.path)) {
+          throw new HTTPException(403, { message: "Recovery data is protected" })
+        }
+        return action(current.path)
+      })
+    } finally {
+      SessionFilesystem.releaseAuthorization(binding)
+    }
+  }
+
   export async function authority(file: string, options: AccessOptions): Promise<Authority> {
     if (!options.sessionID) {
       const source = await contained(file, "read")
@@ -511,8 +542,7 @@ export namespace File {
   }
 
   export async function read(file: string, options?: AccessOptions): Promise<Content> {
-    const full = await contained(file, "read", options)
-    return readPath(file, full)
+    return operate(file, "read", options, (full) => readPath(file, full))
   }
 
   export async function inspect(file: string, options?: AccessOptions): Promise<ScienceFile.Inspection> {
@@ -521,29 +551,67 @@ export namespace File {
   }
 
   export async function raw(file: string, options?: RawOptions): Promise<Blob> {
-    const full = await contained(file, "read", options)
-    const snapshot = await SafeFileIO.optional(full, { maxBytes: options?.maxBytes }).catch((error: unknown) => {
-      if (error instanceof SafeFileIO.LimitError) {
-        throw new HTTPException(413, { message: `File exceeds the ${error.maxBytes}-byte response limit` })
-      }
-      throw error
+    return operate(file, "read", options, async (full) => {
+      const snapshot = await SafeFileIO.optional(full, { maxBytes: options?.maxBytes }).catch((error: unknown) => {
+        if (error instanceof SafeFileIO.LimitError) {
+          throw new HTTPException(413, { message: `File exceeds the ${error.maxBytes}-byte response limit` })
+        }
+        throw error
+      })
+      if (!snapshot) throw new HTTPException(404, { message: `File not found: ${file}` })
+      return new Blob([new Uint8Array(snapshot.bytes)], { type: Bun.file(full).type })
     })
-    if (!snapshot) throw new HTTPException(404, { message: `File not found: ${file}` })
-    return new Blob([new Uint8Array(snapshot.bytes)], { type: Bun.file(full).type })
   }
 
   export async function rawSource(file: string, options?: RawOptions): Promise<RawSource> {
-    const full = await contained(file, "read", options)
-    const source = await SafeFileIO.open(full, { maxBytes: options?.maxBytes }).catch((error: unknown) => {
-      if (error instanceof SafeFileIO.LimitError) {
-        throw new HTTPException(413, { message: `File exceeds the ${error.maxBytes}-byte response limit` })
-      }
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new HTTPException(404, { message: `File not found: ${file}` })
-      }
+    const open = async (full: string, sourceOptions?: Parameters<typeof SafeFileIO.open>[1]) => {
+      const source = await SafeFileIO.open(full, { ...sourceOptions, maxBytes: options?.maxBytes }).catch(
+        (error: unknown) => {
+          if (error instanceof SafeFileIO.LimitError) {
+            throw new HTTPException(413, { message: `File exceeds the ${error.maxBytes}-byte response limit` })
+          }
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            throw new HTTPException(404, { message: `File not found: ${file}` })
+          }
+          throw error
+        },
+      )
+      return { ...source, mimeType: Bun.file(full).type || "application/octet-stream" }
+    }
+    if (!options?.sessionID) return open(await contained(file, "read"))
+    const sessionID = options.sessionID
+    const authorized = await SessionFilesystem.authorize({ sessionID, path: file, access: "read" })
+    if (FileTrash.protectedPath(authorized.path)) {
+      throw new HTTPException(403, { message: "Recovery data is protected" })
+    }
+    const binding = await SessionFilesystem.bindAuthorization({ sessionID, access: "read", authorized })
+    const release = () => SessionFilesystem.releaseAuthorization(binding)
+    try {
+      await hooks.value?.afterReadAuthorization?.(authorized.path)
+      return await AuthoritySignal.exclusive(async () => {
+        const current = await SessionFilesystem.revalidateAuthorization(binding, {
+          path: authorized.path,
+          access: "read",
+        })
+        if (FileTrash.protectedPath(current.path)) {
+          throw new HTTPException(403, { message: "Recovery data is protected" })
+        }
+        return open(current.path, {
+          onClose: release,
+          during: (action) =>
+            AuthoritySignal.exclusive(async () => {
+              await SessionFilesystem.revalidateAuthorization(binding, {
+                path: current.path,
+                access: "read",
+              })
+              return action()
+            }),
+        })
+      })
+    } catch (error) {
+      release()
       throw error
-    })
-    return { ...source, mimeType: Bun.file(full).type || "application/octet-stream" }
+    }
   }
 
   export async function artifacts(options?: AccessOptions): Promise<ArtifactFile.Info[]> {

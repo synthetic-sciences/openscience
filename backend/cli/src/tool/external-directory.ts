@@ -46,7 +46,14 @@ function scope(input: {
           access: input.authorization?.access ?? "read",
         })
       }
-      if (!input.authorization) return input.path
+      if (!input.authorization) {
+        const current = await Filesystem.canonical(input.path)
+        if (current === input.path) return current
+        throw new SessionFilesystem.InvalidPathError({
+          path: input.path,
+          message: "The authorized path changed before the file operation",
+        })
+      }
       return SessionFilesystem.revalidateAuthorization(input.authorization, {
         path: input.path,
         access: input.authorization.access,

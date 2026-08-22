@@ -436,6 +436,46 @@ describe("Atlas host broker", () => {
             path: source.path,
           })
           SessionFilesystem.releaseAuthorization(borrowed)
+
+          const malformed = await bind()
+          await expect(
+            AtlasBroker.run({
+              operation: "library_add_local",
+              sessionID: session.id,
+              authorization: malformed,
+              authorizationOwnership: "owned",
+            }),
+          ).rejects.toThrow("folder is required")
+          await expect(SessionFilesystem.revalidateAuthorization(malformed)).rejects.toBeInstanceOf(
+            SessionFilesystem.DeniedError,
+          )
+
+          const unrelated = await bind()
+          await expect(
+            AtlasBroker.run({
+              operation: "brief",
+              project: "project-1",
+              authorization: unrelated,
+              authorizationOwnership: "owned",
+            }),
+          ).rejects.toThrow("only for local folder operations")
+          await expect(SessionFilesystem.revalidateAuthorization(unrelated)).rejects.toBeInstanceOf(
+            SessionFilesystem.DeniedError,
+          )
+
+          const unrelatedBorrowed = await bind()
+          await expect(
+            AtlasBroker.run({
+              operation: "brief",
+              project: "project-1",
+              authorization: unrelatedBorrowed,
+              authorizationOwnership: "borrowed",
+            }),
+          ).rejects.toThrow("only for local folder operations")
+          await expect(SessionFilesystem.revalidateAuthorization(unrelatedBorrowed)).resolves.toMatchObject({
+            path: source.path,
+          })
+          SessionFilesystem.releaseAuthorization(unrelatedBorrowed)
         } finally {
           await Session.remove(session.id)
         }

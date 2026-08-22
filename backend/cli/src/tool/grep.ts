@@ -71,7 +71,6 @@ export const GrepTool = Tool.define("grep", {
     const args = [
       "-nH",
       "--hidden",
-      "--follow",
       "--no-messages",
       "--max-columns",
       String(MAX_LINE_LENGTH),

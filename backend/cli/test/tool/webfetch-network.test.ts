@@ -14,6 +14,9 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import z from "zod"
+import { Instance } from "../../src/project/instance"
+import { Session } from "../../src/session"
+import { tmpdir } from "../fixture/fixture"
 
 const realFetch = globalThis.fetch
 
@@ -511,6 +514,76 @@ test("webfetch streams a brokered binary download through a reauthorized redirec
     workspace.mockRestore()
     await fs.rm(base, { recursive: true, force: true })
   }
+})
+
+test("webfetch accepts a contained root filename beginning with two dots", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-dot-name-"))
+  const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
+  const payload = new Uint8Array([1, 2, 3, 4])
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  globalThis.fetch = (async () =>
+    new Response(payload, {
+      headers: { "content-type": "application/octet-stream", "content-length": String(payload.byteLength) },
+    })) as unknown as typeof fetch
+
+  try {
+    const webfetch = await WebFetchTool.init()
+    await expect(
+      webfetch.execute(
+        { url: "https://example.com/data", format: "text", output_path: "..hidden.bin" },
+        context(async () => {}),
+      ),
+    ).resolves.toMatchObject({ metadata: { download: { path: "..hidden.bin", bytes: payload.byteLength } } })
+    expect(await fs.readFile(path.join(root, "..hidden.bin"))).toEqual(Buffer.from(payload))
+  } finally {
+    workspace.mockRestore()
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("webfetch revocation wins before a streamed download is installed", async () => {
+  await using project = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: project.path,
+    fn: async () => {
+      const session = await Session.create({ title: "revoked download" })
+      const workspace = await SessionFilesystem.workspace(session.id)
+      const grant = (await SessionFilesystem.list(session.id)).find((item) => item.source === "workspace")
+      if (!grant) throw new Error("missing session workspace grant")
+      await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+      const payload = new Uint8Array([1, 2, 3, 4])
+      const body = { value: undefined as ReadableStreamDefaultController<Uint8Array> | undefined }
+      globalThis.fetch = (async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              body.value = controller
+            },
+          }),
+          {
+            headers: { "content-type": "application/octet-stream", "content-length": String(payload.byteLength) },
+          },
+        )) as unknown as typeof fetch
+
+      const webfetch = await WebFetchTool.init()
+      const pending = webfetch.execute(
+        { url: "https://example.com/revoked", format: "text", output_path: "revoked.bin" },
+        { ...context(async () => {}), sessionID: session.id },
+      )
+      try {
+        await waitForStagedDownload(path.dirname(workspace))
+        await SessionFilesystem.revoke(session.id, grant.id)
+        body.value?.enqueue(payload)
+        body.value?.close()
+        await expect(pending).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+        expect(await Bun.file(path.join(workspace, "revoked.bin")).exists()).toBeFalse()
+      } finally {
+        body.value?.error(new Error("test cleanup"))
+        await pending.catch(() => undefined)
+        await Session.remove(session.id)
+      }
+    },
+  })
 })
 
 test("webfetch validates the normalized root target before permission or network access", async () => {

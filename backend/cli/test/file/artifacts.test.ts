@@ -121,6 +121,34 @@ describe("File.artifacts", () => {
 })
 
 describe("File.provenance", () => {
+  test.skipIf(process.platform === "win32")("does not execute repository-controlled fsmonitor configuration", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "results.csv"), "metric,value\naccuracy,0.9\n")
+        await $`git add results.csv`.cwd(directory).quiet()
+        await $`git -c user.name=OpenScience -c user.email=test@openscience.local commit -m baseline`
+          .cwd(directory)
+          .quiet()
+        const marker = path.join(directory, "fsmonitor-executed")
+        const hook = path.join(directory, "fsmonitor.sh")
+        await Bun.write(hook, `#!/bin/sh\nprintf executed > ${JSON.stringify(marker)}\nexit 1\n`)
+        await fs.chmod(hook, 0o755)
+        await $`git config core.fsmonitor ${hook}`.cwd(directory).quiet()
+        return marker
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await File.provenance("results.csv")
+        await ArtifactFile.audit(tmp.path)
+        expect(await Bun.file(tmp.extra).exists()).toBeFalse()
+      },
+    })
+  })
+
   test("reports branch, latest commit, and dirty state for a tracked artifact", async () => {
     await using tmp = await tmpdir({
       git: true,

@@ -213,7 +213,7 @@ export namespace Ripgrep {
     input.signal?.throwIfAborted()
 
     const args = [await filepath(), "--files", "--glob=!.git/*", "--glob=!.openscience-trash/**"]
-    if (input.follow !== false) args.push("--follow")
+    if (input.follow === true) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
     if (input.glob) {
@@ -243,13 +243,17 @@ export namespace Ripgrep {
     const reader = proc.stdout.getReader()
     const decoder = new TextDecoder()
     let buffer = ""
+    let finished = false
 
     try {
       while (true) {
         input.signal?.throwIfAborted()
 
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          finished = true
+          break
+        }
 
         buffer += decoder.decode(value, { stream: true })
         // Handle both Unix (\n) and Windows (\r\n) line endings
@@ -263,6 +267,10 @@ export namespace Ripgrep {
 
       if (buffer) yield buffer
     } finally {
+      if (!finished) {
+        proc.kill()
+        await reader.cancel().catch(() => undefined)
+      }
       reader.releaseLock()
       await proc.exited
     }
@@ -381,7 +389,7 @@ export namespace Ripgrep {
   }) {
     const executable = await filepath()
     const args = ["--json", "--hidden", "--glob=!.git/*"]
-    if (input.follow !== false) args.push("--follow")
+    if (input.follow === true) args.push("--follow")
 
     if (input.glob) {
       for (const g of input.glob) {

@@ -60,6 +60,12 @@ export namespace SafeFileIO {
     prefixBytes?: number
   }
 
+  type OpenOptions = {
+    maxBytes?: number
+    during?: <T>(action: () => Promise<T>) => Promise<T>
+    onClose?: () => void
+  }
+
   async function bounded(handle: FileHandle, size: number, position = 0) {
     const bytes = Buffer.allocUnsafe(size)
     const read = { offset: 0 }
@@ -143,13 +149,17 @@ export namespace SafeFileIO {
     }
   }
 
-  export async function open(filepath: string, options?: { maxBytes?: number }): Promise<Source> {
+  export async function open(filepath: string, options?: OpenOptions): Promise<Source> {
     const file = await opened(filepath, options)
     const state = { started: false, closed: false }
     const close = async () => {
       if (state.closed) return
       state.closed = true
-      await file.handle.close()
+      try {
+        await file.handle.close()
+      } finally {
+        options?.onClose?.()
+      }
     }
     return {
       size: file.before.size,
@@ -184,20 +194,24 @@ export namespace SafeFileIO {
         return new ReadableStream<Uint8Array>({
           async pull(controller) {
             try {
-              if (file.before.size === 0 || cursor.offset > range.end) {
+              const read = async () => {
+                if (file.before.size === 0 || cursor.offset > range.end) {
+                  await finish()
+                  controller.close()
+                  return
+                }
+                const length = Math.min(64 * 1024, range.end - cursor.offset + 1)
+                const chunk = Buffer.allocUnsafe(length)
+                const result = await file.handle.read(chunk, 0, length, cursor.offset)
+                if (!result.bytesRead) throw new Error(`Refusing to read ${filepath}: the file changed during access`)
+                cursor.offset += result.bytesRead
+                controller.enqueue(chunk.subarray(0, result.bytesRead))
+                if (cursor.offset <= range.end) return
                 await finish()
                 controller.close()
-                return
               }
-              const length = Math.min(64 * 1024, range.end - cursor.offset + 1)
-              const chunk = Buffer.allocUnsafe(length)
-              const result = await file.handle.read(chunk, 0, length, cursor.offset)
-              if (!result.bytesRead) throw new Error(`Refusing to read ${filepath}: the file changed during access`)
-              cursor.offset += result.bytesRead
-              controller.enqueue(chunk.subarray(0, result.bytesRead))
-              if (cursor.offset <= range.end) return
-              await finish()
-              controller.close()
+              if (options?.during) await options.during(read)
+              else await read()
             } catch (error) {
               await close().catch(() => undefined)
               controller.error(error)

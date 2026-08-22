@@ -1,11 +1,25 @@
 import { $ } from "bun"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { SafeFileIO } from "./safe-io"
 
 export namespace ArtifactFile {
+  const gitConfig = ["-c", "core.fsmonitor=false", "-c", `core.hooksPath=${os.devNull}`]
+
+  function gitEnv(root: string) {
+    return {
+      PATH: process.env.PATH ?? "",
+      LANG: process.env.LANG ?? "C",
+      GIT_CEILING_DIRECTORIES: path.dirname(root),
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: os.devNull,
+      GIT_TERMINAL_PROMPT: "0",
+    }
+  }
+
   export const Kind = z.enum([
     "notebook",
     "dataset",
@@ -227,8 +241,8 @@ export namespace ArtifactFile {
   }
 
   export async function provenance(root: string, file: string, display = file): Promise<Provenance> {
-    const env = { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(root) }
-    const result = await $`git rev-parse --show-toplevel`.cwd(root).env(env).quiet().nothrow()
+    const env = gitEnv(root)
+    const result = await $`git ${gitConfig} rev-parse --show-toplevel`.cwd(root).env(env).quiet().nothrow()
     const repo = result.exitCode === 0 ? (await result.text()).trim() : undefined
     const target = path.isAbsolute(file) ? file : path.resolve(root, file)
     if (!repo || !path.isAbsolute(repo) || !within(root, repo)) {
@@ -237,10 +251,10 @@ export namespace ArtifactFile {
     const relative = path.relative(repo, target)
     if (!within(repo, target)) return { path: display, tracked: false, dirty: false, status: "local" }
     const [branchResult, trackedResult, statusResult, logResult] = await Promise.all([
-      $`git branch --show-current`.cwd(repo).env(env).quiet().nothrow().text(),
-      $`git ls-files --error-unmatch -- ${relative}`.cwd(repo).env(env).quiet().nothrow(),
-      $`git status --porcelain=v1 -- ${relative}`.cwd(repo).env(env).quiet().nothrow().text(),
-      $`git log -1 --format=%H%x00%an%x00%ae%x00%aI%x00%s -- ${relative}`.cwd(repo).env(env).quiet().nothrow().text(),
+      $`git ${gitConfig} branch --show-current`.cwd(repo).env(env).quiet().nothrow().text(),
+      $`git ${gitConfig} ls-files --error-unmatch -- ${relative}`.cwd(repo).env(env).quiet().nothrow(),
+      $`git ${gitConfig} status --porcelain=v1 -- ${relative}`.cwd(repo).env(env).quiet().nothrow().text(),
+      $`git ${gitConfig} log -1 --format=%H%x00%an%x00%ae%x00%aI%x00%s -- ${relative}`.cwd(repo).env(env).quiet().nothrow().text(),
     ])
     const tracked = trackedResult.exitCode === 0
     const code = statusResult.trim().slice(0, 2)
@@ -272,7 +286,7 @@ export namespace ArtifactFile {
 
   export async function audit(root: string): Promise<Audit> {
     const artifacts = await scan(root)
-    const env = { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(root) }
+    const env = gitEnv(root)
     const notebooks = artifacts.filter((artifact) => artifact.kind === "notebook")
     const notebookBytes = { total: 0 }
     const batches = Array.from({ length: Math.ceil(notebooks.length / NOTEBOOK_CONCURRENCY) }, (_, index) =>
@@ -301,9 +315,9 @@ export namespace ArtifactFile {
       )
     }
     const [branch, commit, status, presentLocks, presentEnvironments, readme] = await Promise.all([
-      $`git branch --show-current`.cwd(root).env(env).quiet().nothrow().text(),
-      $`git rev-parse HEAD`.cwd(root).env(env).quiet().nothrow().text(),
-      $`git status --porcelain`.cwd(root).env(env).quiet().nothrow().text(),
+      $`git ${gitConfig} branch --show-current`.cwd(root).env(env).quiet().nothrow().text(),
+      $`git ${gitConfig} rev-parse HEAD`.cwd(root).env(env).quiet().nothrow().text(),
+      $`git ${gitConfig} status --porcelain`.cwd(root).env(env).quiet().nothrow().text(),
       Promise.all(lockfiles.map(async (file) => ((await Bun.file(path.join(root, file)).exists()) ? file : undefined))),
       Promise.all(
         environments.map(async (file) => ((await Bun.file(path.join(root, file)).exists()) ? file : undefined)),
