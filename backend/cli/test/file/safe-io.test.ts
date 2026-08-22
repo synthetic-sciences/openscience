@@ -51,6 +51,23 @@ describe("SafeFileIO", () => {
     await expect(new Response(source.stream()).arrayBuffer()).rejects.toThrow("changed during access")
   })
 
+  test("revalidates a partially consumed stream before cancellation returns", async () => {
+    await using tmp = await tmpdir({
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "source.txt"), "a".repeat(256 * 1024))
+      },
+    })
+    const target = path.join(tmp.path, "source.txt")
+    const source = await SafeFileIO.open(target)
+    const reader = source.stream().getReader()
+
+    expect((await reader.read()).value?.byteLength).toBeGreaterThan(0)
+    await fs.rename(target, path.join(tmp.path, "original.txt"))
+    await Bun.write(target, "replacement")
+
+    await expect(reader.cancel()).rejects.toThrow("changed during access")
+  })
+
   test("rejects an in-place rewrite even when size and mtime are restored", async () => {
     await using tmp = await tmpdir({
       init: (directory) => Bun.write(path.join(directory, "paper.pdf"), "original"),

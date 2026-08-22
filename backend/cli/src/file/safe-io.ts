@@ -204,7 +204,7 @@ export namespace SafeFileIO {
             }
           },
           async cancel() {
-            await close()
+            await finish()
           },
         })
       },
