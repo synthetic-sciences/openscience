@@ -4,6 +4,7 @@ import { Provenance } from "@/science/provenance/store"
 import type { Node, Run } from "@/science/provenance/store"
 import { ProvenanceEnvelope } from "@/science/provenance/envelope"
 import { AtlasBrokerError, atlasRequest } from "./broker"
+import { GitOutput } from "@/util/git-output"
 
 export type AtlasRecordInput = {
   project: string
@@ -25,7 +26,25 @@ const required = (value: string | undefined, name: string) => {
   return result
 }
 
-const clip = (value: string, max = 30_000) => (value.length > max ? `${value.slice(0, max)}\n\n... (truncated)` : value)
+const OUTPUT_CHARS = 30_000
+
+const clipOutput = (values: unknown[]) => {
+  const state = { text: "", truncated: false }
+  for (const value of values) {
+    if (typeof value !== "string" || !value) continue
+    const remaining = OUTPUT_CHARS - state.text.length
+    const separator = state.text ? "\n" : ""
+    const available = Math.max(0, remaining - separator.length)
+    if (value.length <= available) {
+      state.text += separator + value
+      continue
+    }
+    state.text += separator.slice(0, remaining) + value.slice(0, available)
+    state.truncated = true
+    break
+  }
+  return state.truncated ? `${state.text}\n\n... (truncated)` : state.text
+}
 
 const clean = <T>(value: T): T => JSON.parse(OpenScience.redactSecrets(JSON.stringify(value))) as T
 
@@ -33,18 +52,19 @@ const isRun = (node: Node | undefined): node is Run =>
   node?.kind === "run" && "tool" in node && typeof node.tool === "string"
 
 async function git(args: string[]) {
-  try {
-    const proc = Bun.spawn(["git", ...args], {
-      cwd: Instance.worktree,
-      stdout: "pipe",
-      stderr: "ignore",
-    })
-    const [text, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
-    if (code !== 0) return
-    return text.trim()
-  } catch {
-    return
-  }
+  return GitOutput.text(args, Instance.worktree)
+}
+
+async function dirty() {
+  const result = await GitOutput.run(
+    ["-c", "core.fsmonitor=false", "status", "--porcelain", "--untracked-files=normal"],
+    Instance.worktree,
+    { maxBytes: 1 },
+  ).catch(() => undefined)
+  if (!result || result.timedOut) return undefined
+  if (result.truncated) return true
+  if (result.code !== 0) return undefined
+  return result.bytes.byteLength > 0
 }
 
 async function code() {
@@ -52,14 +72,14 @@ async function code() {
     git(["remote", "get-url", "origin"]),
     git(["branch", "--show-current"]),
     git(["rev-parse", "HEAD"]),
-    git(["status", "--porcelain"]),
+    dirty(),
   ])
   if (!sha) return {}
   return {
     ...(repo ? { repo_url: repo } : {}),
     ...(branch ? { branch_name: branch } : {}),
     head_commit_sha: sha,
-    ...(state !== undefined ? { git_dirty: Boolean(state) } : {}),
+    ...(state !== undefined ? { git_dirty: state } : {}),
   }
 }
 
@@ -80,9 +100,7 @@ export namespace AtlasRecorder {
 
     const meta = node.meta ?? {}
     const owner = typeof meta.directory === "string" ? meta.directory : Instance.directory
-    const tail = [meta.stdout, meta.result, meta.stderr, meta.error]
-      .filter((value): value is string => typeof value === "string" && value.length > 0)
-      .join("\n")
+    const tail = clipOutput([meta.stdout, meta.result, meta.stderr, meta.error])
     const outcome =
       input.outcome ?? (node.status === "ok" ? "success" : node.status === "error" ? "failure" : "inconclusive")
     if (node.status === "error" && outcome === "success") {
@@ -130,7 +148,7 @@ export namespace AtlasRecorder {
         openscience_provenance: envelope,
       }),
       ...(input.metrics ? { metrics: clean(input.metrics) } : {}),
-      stdout_tail: clip(OpenScience.redactSecrets(tail)),
+      stdout_tail: OpenScience.redactSecrets(tail),
       ...(node.status ? { exit_code: node.status === "ok" ? 0 : 1 } : {}),
       outcome,
       ...(outcome === "failure" ? { failure_mode: input.failureMode ?? "other" } : {}),

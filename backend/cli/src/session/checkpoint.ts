@@ -6,8 +6,12 @@ import { Vcs } from "@/project/vcs"
 import { Session } from "."
 import { SessionTrace } from "./trace"
 import { Todo } from "./todo"
+import { GitOutput } from "@/util/git-output"
 
 export namespace SessionCheckpoint {
+  const IGNORE_BYTES = 64 * 1024
+  const STATUS_BYTES = 64 * 1024
+
   const clip = (value: string, size = 2_000) => (value.length <= size ? value : `${value.slice(0, size)}…`)
 
   const clean = (value: string) => value.trim().replace(/\s+/g, " ")
@@ -22,22 +26,40 @@ export namespace SessionCheckpoint {
 
   async function git(args: string[]) {
     if (Instance.project.vcs !== "git") return undefined
-    const proc = Bun.spawn(["git", ...args], {
-      cwd: Instance.worktree,
-      stdout: "pipe",
-      stderr: "ignore",
-    })
-    const [output, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
-    if (code !== 0) return undefined
-    return output.trim()
+    return GitOutput.text(args, Instance.worktree)
+  }
+
+  async function gitStatus() {
+    if (Instance.project.vcs !== "git") return undefined
+    const result = await GitOutput.run(
+      ["-c", "core.fsmonitor=false", "status", "--porcelain=v1", "--untracked-files=normal"],
+      Instance.worktree,
+      { maxBytes: STATUS_BYTES },
+    ).catch(() => undefined)
+    if (!result) return undefined
+    if (result.code !== 0 && !result.truncated && !result.timedOut) return undefined
+    const raw = result.bytes.toString()
+    const complete = result.truncated && !raw.endsWith("\n") ? raw.slice(0, raw.lastIndexOf("\n") + 1) : raw
+    const entries = complete.trim().split("\n").filter(Boolean)
+    return {
+      dirty: entries.length > 0 || result.truncated ? true : result.timedOut ? undefined : false,
+      entries,
+      timedOut: result.timedOut,
+      truncated: result.truncated,
+    }
   }
 
   async function ignore(dir: string) {
     await fs.mkdir(dir, { recursive: true, mode: 0o700 })
     const file = path.join(dir, ".gitignore")
     const content = await Bun.file(file)
+      .slice(0, IGNORE_BYTES + 1)
       .text()
       .catch(() => "")
+    if (Buffer.byteLength(content) > IGNORE_BYTES) {
+      await fs.appendFile(file, "\n*\n", { mode: 0o600 })
+      return
+    }
     if (content.split(/\r?\n/).includes("*")) return
     const prefix = content.length === 0 || content.endsWith("\n") ? content : `${content}\n`
     await fs.writeFile(file, `${prefix}*\n`, { mode: 0o600 })
@@ -55,7 +77,7 @@ export namespace SessionCheckpoint {
       SessionTrace.build(input.sessionID),
       Vcs.branch(),
       git(["rev-parse", "HEAD"]),
-      git(["status", "--porcelain=v1", "--untracked-files=normal"]),
+      gitStatus(),
     ])
     const request = messages
       .filter((message) => message.info.role === "user")
@@ -65,7 +87,7 @@ export namespace SessionCheckpoint {
         ),
       )[0]
     const objective = trace.research.contract?.objective ?? (request ? clean(clip(request)) : session.title)
-    const dirty = status === undefined ? "unknown" : status.length > 0 ? "yes" : "no"
+    const dirty = status?.dirty === undefined ? "unknown" : status.dirty ? "yes" : "no"
     const next =
       todos.find((todo) => todo.status === "in_progress")?.content ??
       todos.find((todo) => todo.status === "pending")?.content ??
@@ -99,7 +121,9 @@ export namespace SessionCheckpoint {
         `- Branch: ${branch ? `\`${branch}\`` : "unavailable"}`,
         `- Commit: ${commit ? `\`${commit}\`` : "unavailable"}`,
         `- Dirty: ${dirty}`,
-        ...(status ? status.split("\n").map((item) => `- \`${item}\``) : []),
+        ...(status?.entries.map((item) => `- \`${item}\``) ?? []),
+        ...(status?.truncated ? [`- Git status exceeded ${STATUS_BYTES} bytes; additional paths were omitted.`] : []),
+        ...(status?.timedOut ? ["- Git status timed out; the dirty state may be incomplete."] : []),
       ]),
       ...section(
         "Plan",

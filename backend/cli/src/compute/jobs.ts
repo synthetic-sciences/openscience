@@ -26,6 +26,7 @@ import { WindowsJobLauncher } from "../process/windows-job-launcher"
 import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../process/darwin-responsibility-launcher"
 import { DataRootBarrier } from "../global/data-root-barrier"
 import { SecretFile } from "../util/secret-file"
+import { ProcessOutput } from "../util/process-output"
 
 export class ComputeJobsCorruptError extends Error {
   constructor(
@@ -1347,6 +1348,7 @@ export namespace ComputeJobs {
     argv: string[],
     cwd: string,
     authority: ExecutionAuthority.Decision,
+    partial = false,
   ): Promise<string | undefined> {
     await currentAuthority(authority)
     const planned = Sandbox.wrapArgv({
@@ -1365,9 +1367,9 @@ export namespace ComputeJobs {
         stdout: "pipe",
         stderr: "ignore",
       })
-      const [code, text] = await Promise.all([proc.exited, new Response(proc.stdout).text()])
-      if (code !== 0) return
-      return text.trim() || undefined
+      const result = await ProcessOutput.collect(proc, { maxBytes: 64 * 1024, timeoutMs: 10_000 })
+      if (result.timedOut || (!partial && result.truncated) || (result.code !== 0 && !result.truncated)) return
+      return result.bytes.toString().trim() || undefined
     } finally {
       Sandbox.cleanup(planned)
     }
@@ -1556,7 +1558,7 @@ export namespace ComputeJobs {
       output(["git", "remote", "get-url", "origin"], cwd, authority),
       output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd, authority),
       output(["git", "rev-parse", "HEAD"], cwd, authority),
-      output(["git", "status", "--porcelain"], cwd, authority),
+      output(["git", "-c", "core.fsmonitor=false", "status", "--porcelain"], cwd, authority, true),
       output(["python3", "--version"], cwd, authority),
       Promise.all(lockfiles.map((file) => fingerprint(cwd, file))),
     ])

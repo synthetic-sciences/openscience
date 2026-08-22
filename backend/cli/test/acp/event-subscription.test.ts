@@ -65,6 +65,8 @@ function createEventStream() {
 function createFakeAgent() {
   const updates = new Map<string, string[]>()
   const chunks = new Map<string, string>()
+  const previews: Array<{ sessionId: string; path: string; content: string }> = []
+  const replies: Array<{ requestID: string; reply: string; directory: string }> = []
   const record = (sessionId: string, type: string) => {
     const list = updates.get(sessionId) ?? []
     list.push(type)
@@ -85,6 +87,9 @@ function createFakeAgent() {
     },
     async requestPermission(_params: RequestPermissionParams): Promise<RequestPermissionResult> {
       return { outcome: { outcome: "selected", optionId: "once" } } as RequestPermissionResult
+    },
+    async writeTextFile(params: { sessionId: string; path: string; content: string }) {
+      previews.push(params)
     },
   } as unknown as AgentSideConnection
 
@@ -133,6 +138,10 @@ function createFakeAgent() {
       },
     },
     permission: {
+      reply: async (params: { requestID: string; reply: string; directory: string }) => {
+        replies.push(params)
+        return { data: true }
+      },
       respond: async () => {
         return { data: true }
       },
@@ -189,10 +198,63 @@ function createFakeAgent() {
     ;(agent as any).eventAbort.abort()
   }
 
-  return { agent, controller, calls, updates, chunks, stop, sdk, connection }
+  return { agent, controller, calls, updates, chunks, previews, replies, stop, sdk, connection }
+}
+
+async function waitFor(check: () => boolean, attempts = 100): Promise<void> {
+  if (check()) return
+  if (attempts <= 0) throw new Error("Timed out waiting for ACP event handling")
+  await Bun.sleep(10)
+  return waitFor(check, attempts - 1)
 }
 
 describe("acp.agent event subscription", () => {
+  test("keeps ordinary edit previews but skips oversized files without withholding approval", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, previews, replies, stop } = createFakeAgent()
+        const sessionID = await agent.newSession({ cwd: tmp.path, mcpServers: [] } as any).then((x) => x.sessionId)
+        const filepath = `${tmp.path}/paper.txt`
+        const diff = "@@ -1,1 +1,1 @@\n-old\n+new\n"
+        await Bun.write(filepath, "old\n")
+
+        const permission = (id: string, metadata = { filepath, diff }) =>
+          controller.push({
+            directory: tmp.path,
+            payload: {
+              type: "permission.asked",
+              properties: {
+                id,
+                sessionID,
+                permission: "edit",
+                metadata,
+              },
+            } as any,
+          })
+
+        permission("permission-small")
+        await waitFor(() => replies.length === 1)
+        expect(previews).toEqual([{ sessionId: sessionID, path: filepath, content: "new\n" }])
+        expect(replies[0]).toMatchObject({ requestID: "permission-small", reply: "once" })
+
+        await Bun.write(filepath, `old\n${"x".repeat(ACP.MAX_EDIT_PREVIEW_BYTES)}`)
+        permission("permission-large")
+        await waitFor(() => replies.length === 2)
+        expect(previews).toHaveLength(1)
+        expect(replies[1]).toMatchObject({ requestID: "permission-large", reply: "once" })
+
+        await Bun.write(filepath, "old\n")
+        permission("permission-large-diff", { filepath, diff: "x".repeat(ACP.MAX_EDIT_DIFF_BYTES + 1) })
+        await waitFor(() => replies.length === 3)
+        expect(previews).toHaveLength(1)
+        expect(replies[2]).toMatchObject({ requestID: "permission-large-diff", reply: "once" })
+        stop()
+      },
+    })
+  })
+
   test("routes message.part.updated by the event sessionID (no cross-session pollution)", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

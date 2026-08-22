@@ -167,6 +167,32 @@ describe("stage node bridge", () => {
     })
   })
 
+  test("drops an oversized repository-controlled remote instead of buffering it into the bridge request", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir({ git: true })
+    await fs.appendFile(
+      path.join(tmp.path, ".git", "config"),
+      `\n[remote "origin"]\n\turl = https://example.com/${"x".repeat(70 * 1024)}\n`,
+    )
+
+    const request = { body: {} as Record<string, unknown> }
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      request.body = JSON.parse(String(init?.body))
+      return Response.json({ node_id: "staged-bounded", lifecycle: "staged" }, { status: 201 })
+    }) as typeof fetch
+
+    const response = await AtlasBridgeRoutes().request("/nodes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "bounded context", directory: tmp.path, parent_id: "parent-1" }),
+    })
+
+    expect(response.status).toBe(201)
+    expect(request.body.repo_url).toBeNull()
+    expect(JSON.stringify(request.body).length).toBeLessThan(10_000)
+  })
+
   test("propagates Atlas failures instead of fabricating a node id", async () => {
     await fs.mkdir(Global.Path.data, { recursive: true })
     await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))

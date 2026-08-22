@@ -1,8 +1,8 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { $ } from "bun"
 import z from "zod"
 import { Log } from "@/util/log"
+import { GitOutput } from "@/util/git-output"
 import { Instance } from "./instance"
 import { FileWatcher } from "@/file/watcher"
 import fs from "fs/promises"
@@ -11,6 +11,8 @@ import path from "path"
 const log = Log.create({ service: "vcs" })
 
 export namespace Vcs {
+  const METADATA_BYTES = 64 * 1024
+
   export const Event = {
     BranchUpdated: BusEvent.define(
       "vcs.branch.updated",
@@ -37,14 +39,18 @@ export namespace Vcs {
     const git = stat.isDirectory()
       ? marker
       : await Bun.file(marker)
+          .slice(0, METADATA_BYTES + 1)
           .text()
-          .then((value) => value.match(/^gitdir:\s*(.+)\s*$/im)?.[1])
+          .then((value) => (Buffer.byteLength(value) <= METADATA_BYTES ? value : undefined))
+          .then((value) => value?.match(/^gitdir:\s*(.+)\s*$/im)?.[1])
           .then((value) => (value ? path.resolve(path.dirname(marker), value) : undefined))
           .catch(() => undefined)
     if (!git) return
     const common = await Bun.file(path.join(git, "commondir"))
+      .slice(0, METADATA_BYTES + 1)
       .text()
-      .then((value) => path.resolve(git, value.trim()))
+      .then((value) => (Buffer.byteLength(value) <= METADATA_BYTES ? value : undefined))
+      .then((value) => (value ? path.resolve(git, value.trim()) : git))
       .catch(() => git)
     return fs.realpath(common).catch(() => path.resolve(common))
   })
@@ -56,13 +62,7 @@ export namespace Vcs {
   }
 
   async function currentBranch() {
-    return $`git rev-parse --abbrev-ref HEAD`
-      .quiet()
-      .nothrow()
-      .cwd(Instance.worktree)
-      .text()
-      .then((x) => x.trim())
-      .catch(() => undefined)
+    return GitOutput.text(["rev-parse", "--abbrev-ref", "HEAD"], Instance.worktree)
   }
 
   const state = Instance.state(

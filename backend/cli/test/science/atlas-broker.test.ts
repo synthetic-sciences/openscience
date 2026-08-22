@@ -980,6 +980,45 @@ describe("Atlas host broker", () => {
     })
   })
 
+  test("publishes bounded Git context while retaining dirty-state truth", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir({ git: true })
+    await fs.appendFile(
+      path.join(tmp.path, ".git", "config"),
+      `\n[remote "origin"]\n\turl = https://example.com/${"x".repeat(70 * 1024)}\n`,
+    )
+    await Bun.write(path.join(tmp.path, "untracked.txt"), "dirty")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const node = await Provenance.record({
+          kind: "run",
+          label: "bounded Git context",
+          tool: "notebook",
+          sessionID: "ses_bounded_git",
+          status: "ok",
+          meta: { directory: tmp.path, result: "x".repeat(100_000) },
+        } as Parameters<typeof Provenance.record>[0])
+        const request = { body: {} as Record<string, unknown> }
+        globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+          request.body = JSON.parse(String(init?.body))
+          return Response.json({ node: { id: "atlas-run-bounded" }, outcome: "success" }, { status: 201 })
+        }) as typeof fetch
+
+        await AtlasRecorder.publish({ project: "project-1", provenanceID: node.id })
+
+        expect(request.body.git_dirty).toBe(true)
+        expect(request.body).not.toHaveProperty("repo_url")
+        expect(String(request.body.stdout_tail)).toStartWith("x".repeat(1_000))
+        expect(String(request.body.stdout_tail)).toEndWith("... (truncated)")
+        expect(String(request.body.stdout_tail).length).toBeLessThanOrEqual(30_020)
+        expect(JSON.stringify(request.body).length).toBeLessThan(40_000)
+      },
+    })
+  })
+
   test("keeps a provenance record with no outcome inconclusive", async () => {
     await fs.mkdir(Global.Path.data, { recursive: true })
     await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))

@@ -1,4 +1,5 @@
 import z from "zod"
+import { GitOutput } from "@/util/git-output"
 
 export namespace ProvenanceEnvelope {
   export const Reason = z.enum([
@@ -114,35 +115,23 @@ export namespace ProvenanceEnvelope {
   }
 
   export function code(cwd: string) {
-    const binary = Bun.which("git")
-    if (!binary) return
-    const run = (args: string[]) => {
+    const repository = GitOutput.textSync(["remote", "get-url", "origin"], cwd)
+    const branch = GitOutput.textSync(["branch", "--show-current"], cwd)
+    const commit = GitOutput.textSync(["rev-parse", "HEAD"], cwd)
+    const result = (() => {
       try {
-        const proc = Bun.spawnSync([binary, ...args], {
-          cwd,
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "ignore",
-        })
-        if (!proc.success) return
-        return proc.stdout.toString().trim()
+        return GitOutput.runSync(["-c", "core.fsmonitor=false", "status", "--porcelain"], cwd, { maxBytes: 1 })
       } catch {
-        // Code-state capture is best effort. The repository/cwd may disappear,
-        // or PATH may rotate between discovery and spawn, while the owning
-        // execution remains valid and must not be aborted by provenance.
         return
       }
-    }
-    const repository = run(["remote", "get-url", "origin"])
-    const branch = run(["branch", "--show-current"])
-    const commit = run(["rev-parse", "HEAD"])
-    const state = run(["status", "--porcelain"])
+    })()
+    const state = result?.bytes.byteLength ? true : result?.code === 0 && !result.stopped ? false : undefined
     if (!repository && !branch && !commit && state === undefined) return
     return {
       repository: repository || undefined,
       branch: branch || undefined,
       commit: commit || undefined,
-      dirty: state === undefined ? undefined : Boolean(state),
+      dirty: state,
     }
   }
 
