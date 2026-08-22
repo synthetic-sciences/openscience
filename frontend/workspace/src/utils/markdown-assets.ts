@@ -1,10 +1,11 @@
-// Markdown asset resolution. Relative image references inside previewed
-// markdown or chat output would otherwise resolve against the SPA origin and
-// 404 — rewrite them to the backend /file/raw endpoint instead. Absolute
-// http(s)/data:/blob: URLs, protocol-relative URLs, anchors, and root paths
-// pass through untouched.
+// Markdown asset resolution. Local references inside previewed markdown or
+// chat output would otherwise resolve against the SPA origin and 404. Route
+// both project-relative and absolute filesystem paths through the authenticated
+// backend while leaving genuine web, email, and embedded URLs untouched.
 
-const absolute = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#|\/)/i
+const external = /^(?:https?:|mailto:|tel:|data:|blob:|\/\/|#)/i
+const scheme = /^[a-z][a-z0-9+.-]*:/i
+const windows = /^[A-Za-z]:[\\/]/
 
 function clean(path: string): string {
   return path
@@ -24,10 +25,27 @@ function decode(value: string): string {
 /** Resolve a reference against the directory containing `base`, collapsing `.` and `..`. */
 export function resolvePath(base: string, reference: string): string {
   const normalizedBase = clean(base)
-  const drive = /^([A-Za-z]:)\//.exec(normalizedBase)?.[1]
-  const rooted = !drive && normalizedBase.startsWith("/")
-  const baseBody = drive ? normalizedBase.slice(drive.length + 1) : rooted ? normalizedBase.slice(1) : normalizedBase
-  const parts = [...baseBody.split("/").slice(0, -1), ...clean(reference).split("/")]
+  const normalizedReference = clean(reference)
+  const referenceDrive = /^([A-Za-z]:)\//.exec(normalizedReference)?.[1]
+  const referenceRooted = !referenceDrive && normalizedReference.startsWith("/")
+  const baseDrive = /^([A-Za-z]:)\//.exec(normalizedBase)?.[1]
+  const baseRooted = !baseDrive && normalizedBase.startsWith("/")
+  const drive = referenceDrive ?? (referenceRooted ? undefined : baseDrive)
+  const rooted = referenceRooted || (!referenceDrive && !drive && baseRooted)
+  const baseBody = baseDrive
+    ? normalizedBase.slice(baseDrive.length + 1)
+    : baseRooted
+      ? normalizedBase.slice(1)
+      : normalizedBase
+  const referenceBody = referenceDrive
+    ? normalizedReference.slice(referenceDrive.length + 1)
+    : referenceRooted
+      ? normalizedReference.slice(1)
+      : normalizedReference
+  const parts = [
+    ...(referenceDrive || referenceRooted ? [] : baseBody.split("/").slice(0, -1)),
+    ...referenceBody.split("/"),
+  ]
   const resolved = parts
     .reduce<string[]>((result, part) => {
       if (!part || part === ".") return result
@@ -41,6 +59,34 @@ export function resolvePath(base: string, reference: string): string {
     .join("/")
   if (drive) return `${drive}/${resolved}`
   return rooted ? `/${resolved}` : resolved
+}
+
+function localFileUrl(value: string): string | undefined {
+  if (!/^file:/i.test(value)) return
+  try {
+    const url = new URL(value)
+    if (url.hostname && url.hostname !== "localhost") return
+    const pathname = decode(url.pathname)
+    return /^\/[A-Za-z]:\//.test(pathname) ? pathname.slice(1) : pathname
+  } catch {
+    return
+  }
+}
+
+/**
+ * Turn a Markdown reference into a filesystem path, or return undefined when
+ * the reference belongs to the browser (http(s), mailto, data, blob, etc.).
+ * URL query/fragment suffixes are not part of the local filename.
+ */
+export function localAssetPath(src: string, base = ""): string | undefined {
+  const value = src.trim()
+  if (!value || external.test(value)) return
+  const file = localFileUrl(value)
+  if (/^file:/i.test(value)) return file ? resolvePath("", file) : undefined
+  if (scheme.test(value) && !windows.test(value)) return
+  const target = decode(value.replace(/[?#].*$/, ""))
+  if (!target) return
+  return resolvePath(base, target)
 }
 
 /**
@@ -77,6 +123,7 @@ export function assetUrl(
   src: string,
   input: { base?: string; url: (path: string) => string; pageOrigin?: string },
 ): string {
-  if (absolute.test(src)) return src
-  return alignLoopbackAssetHost(input.url(resolvePath(input.base ?? "", decode(src))), input.pageOrigin)
+  const path = localAssetPath(src, input.base)
+  if (!path) return src
+  return alignLoopbackAssetHost(input.url(path), input.pageOrigin)
 }

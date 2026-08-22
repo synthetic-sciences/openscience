@@ -30,7 +30,7 @@ import { normalizeStoredArtifact, savedResultLabel } from "@/artifacts/store"
 import { ProjectWorkspaceFrame } from "@/atlas/ProjectWorkspaceFrame"
 import { useGlobalSync } from "@/context/global-sync"
 import { decode64, setCurrentDirectory } from "@/utils/base64"
-import { assetUrl } from "@/utils/markdown-assets"
+import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import {
   looksLikeProjectSegment,
   projectAliasID,
@@ -227,6 +227,7 @@ export default function Layout(props: ParentProps) {
                     sessionID: params.id && params.id !== "new" ? params.id : undefined,
                   }),
               })
+            const file = (href: string) => localAssetPath(href)
 
             return (
               <DataProvider
@@ -240,7 +241,7 @@ export default function Layout(props: ParentProps) {
                 onOpenArtifact={openArtifact}
                 onSaveArtifact={saveArtifact}
               >
-                <MarkdownImages resolve={image}>
+                <MarkdownImages resolve={image} resolveFile={file} openFile={openFile}>
                   <LocalProvider>
                     <TerminalProvider>
                       <FileProvider>

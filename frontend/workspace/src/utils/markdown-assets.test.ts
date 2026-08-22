@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { alignLoopbackAssetHost, assetUrl, resolvePath } from "./markdown-assets"
+import { alignLoopbackAssetHost, assetUrl, localAssetPath, resolvePath } from "./markdown-assets"
 
 const raw = (path: string) => `http://127.0.0.1:4096/file/raw?path=${encodeURIComponent(path)}&project=prj_1`
 
@@ -16,6 +16,26 @@ describe("markdown asset resolution", () => {
     expect(assetUrl("results/../output.png", { url: raw })).toBe(raw("output.png"))
   })
 
+  test("routes absolute local images through the authenticated raw-file endpoint", () => {
+    expect(assetUrl("/Users/research/CERBench/figures/result.png", { url: raw })).toBe(
+      raw("/Users/research/CERBench/figures/result.png"),
+    )
+    expect(assetUrl("file:///Users/research/CERBench/figures/result%20plot.png", { url: raw })).toBe(
+      raw("/Users/research/CERBench/figures/result plot.png"),
+    )
+  })
+
+  test("classifies relative and absolute file anchors without capturing external links", () => {
+    expect(localAssetPath("appendix.pdf", "papers/main.md")).toBe("papers/appendix.pdf")
+    expect(localAssetPath("../data/results.csv#row-10", "papers/sections/method.md")).toBe("papers/data/results.csv")
+    expect(localAssetPath("/Users/research/CERBench/paper.pdf")).toBe("/Users/research/CERBench/paper.pdf")
+    expect(localAssetPath("file:///Users/research/CERBench/paper%20draft.pdf")).toBe(
+      "/Users/research/CERBench/paper draft.pdf",
+    )
+    expect(localAssetPath("https://example.com/paper.pdf")).toBeUndefined()
+    expect(localAssetPath("mailto:author@example.com")).toBeUndefined()
+  })
+
   test("decodes markdown-encoded references before building the query", () => {
     expect(assetUrl("figures/final%20plot.png", { base: "paper.md", url: raw })).toBe(raw("figures/final plot.png"))
   })
@@ -24,7 +44,7 @@ describe("markdown asset resolution", () => {
     expect(assetUrl("figures/100%.png", { base: "paper.md", url: raw })).toBe(raw("figures/100%.png"))
   })
 
-  test("leaves absolute, data, blob, anchor, and root references untouched", () => {
+  test("leaves external, embedded, and anchor references untouched", () => {
     for (const src of [
       "https://example.com/plot.png",
       "http://example.com/plot.png",
@@ -32,7 +52,6 @@ describe("markdown asset resolution", () => {
       "blob:http://127.0.0.1/abcd",
       "//cdn.example.com/plot.png",
       "#section",
-      "/absolute/plot.png",
       "mailto:someone@example.com",
     ])
       expect(assetUrl(src, { base: "notes/paper.md", url: raw })).toBe(src)

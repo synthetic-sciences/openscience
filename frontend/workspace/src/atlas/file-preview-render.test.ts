@@ -7,13 +7,24 @@ describe("file preview markdown images", () => {
   test("markdown previews resolve relative images through the raw-file endpoint", async () => {
     const preview = await read("./FilePreview.tsx")
 
-    expect(preview).toContain('import { assetUrl } from "@/utils/markdown-assets"')
+    expect(preview).toContain('import { assetUrl, localAssetPath } from "@/utils/markdown-assets"')
     expect(preview).toContain("base: props.path")
     expect(preview).toContain("url: (path) =>")
     expect(preview).toContain('sdk.request.url("/file/raw", {')
     expect(preview).toContain("path: resolveArtifactPath(directory(), path)")
     expect(preview).toContain("sessionID: sessionID()")
-    expect(preview).toContain('<Markdown class="atlas-md" text={view.draft} resolveImage={image} />')
+    expect(preview).toContain("text={view.draft} resolveImage={image} resolveFile={file}")
+  })
+
+  test("markdown previews resolve file links relative to the document before opening the authenticated viewer", async () => {
+    const preview = await read("./FilePreview.tsx")
+    const manuscript = await read("../manuscript/ManuscriptWorkbench.tsx")
+
+    expect(preview).toContain('import { assetUrl, localAssetPath } from "@/utils/markdown-assets"')
+    expect(preview).toContain("const file = (href: string) => localAssetPath(href, props.path)")
+    expect(preview).toContain("resolveFile={file}")
+    expect(manuscript).toContain("const file = (href: string) => localAssetPath(href, props.path)")
+    expect(manuscript).toContain("text={preview()} resolveFile={file}")
   })
 
   test("ordinary Markdown remains readable and editable through the existing save path", async () => {
@@ -45,7 +56,7 @@ describe("file preview markdown images", () => {
 
     expect(layout).toContain('import { MarkdownImages } from "@synsci/ui/markdown"')
     expect(layout).toContain('sdk.request.url("/file/raw"')
-    expect(layout).toContain("<MarkdownImages resolve={image}>")
+    expect(layout).toContain("<MarkdownImages resolve={image} resolveFile={file} openFile={openFile}>")
   })
 
   test("the shared renderer rewrites image sources only after DOMPurify sanitization", async () => {

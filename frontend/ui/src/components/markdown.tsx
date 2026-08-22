@@ -68,16 +68,34 @@ export function markdownFallback(markdown: string) {
 }
 
 type Resolve = (src: string) => string
+type ResolveFile = (href: string) => string | undefined
+type OpenFile = (path: string) => void
 
-const images = createContext<Resolve>()
+const assets = createContext<{
+  resolveImage: Resolve
+  resolveFile?: ResolveFile
+  openFile?: OpenFile
+}>()
 
 /**
- * Provide a default image resolver for every Markdown rendered below — the
- * workspace uses this to point relative image references at the backend
- * /file/raw endpoint. A `resolveImage` prop on an individual Markdown wins.
+ * Provide default local-asset behavior for every Markdown rendered below.
+ * Images use the authenticated raw-file endpoint; file anchors use the
+ * contextual viewer. Per-Markdown resolvers still win.
  */
-export function MarkdownImages(props: ParentProps<{ resolve: Resolve }>) {
-  return <images.Provider value={props.resolve}>{props.children}</images.Provider>
+export function MarkdownImages(
+  props: ParentProps<{ resolve: Resolve; resolveFile?: ResolveFile; openFile?: OpenFile }>,
+) {
+  return (
+    <assets.Provider
+      value={{
+        resolveImage: props.resolve,
+        resolveFile: props.resolveFile,
+        openFile: props.openFile,
+      }}
+    >
+      {props.children}
+    </assets.Provider>
+  )
 }
 
 /**
@@ -92,6 +110,35 @@ export function resolveImages(root: ParentNode, resolve: Resolve) {
     const next = resolve(src)
     if (next !== src) img.setAttribute("src", next)
   })
+}
+
+/** Mark local Markdown anchors for the authenticated in-app file viewer. */
+export function resolveFileLinks(root: ParentNode, resolve: ResolveFile) {
+  root.querySelectorAll("a[href]").forEach((anchor) => {
+    const href = anchor.getAttribute("href")
+    if (!href) return
+    const path = resolve(href)
+    if (!path) return
+    anchor.setAttribute("data-file-link", "true")
+    anchor.setAttribute("data-file-path", path)
+    anchor.removeAttribute("target")
+    anchor.removeAttribute("rel")
+    anchor.classList.remove("external-link")
+  })
+}
+
+/** Open a marked local anchor and report whether this click was handled. */
+export function openFileLink(root: ParentNode, event: MouseEvent, open: OpenFile): boolean {
+  const target = event.target
+  if (!(target instanceof Element)) return false
+  const anchor = target.closest('a[data-file-link="true"]')
+  if (!anchor || !root.contains(anchor)) return false
+  const path = anchor.getAttribute("data-file-path")
+  if (!path) return false
+  event.preventDefault()
+  event.stopPropagation()
+  open(path)
+  return true
 }
 
 type CopyLabels = {
@@ -216,10 +263,20 @@ export function Markdown(
     class?: string
     classList?: Record<string, boolean>
     resolveImage?: Resolve
+    resolveFile?: ResolveFile
+    onOpenFile?: OpenFile
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "class", "classList", "resolveImage"])
-  const shared = useContext(images)
+  const [local, others] = splitProps(props, [
+    "text",
+    "cacheKey",
+    "class",
+    "classList",
+    "resolveImage",
+    "resolveFile",
+    "onOpenFile",
+  ])
+  const shared = useContext(assets)
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -251,6 +308,7 @@ export function Markdown(
 
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
+  let fileCleanup: (() => void) | undefined
 
   createEffect(() => {
     const container = root()
@@ -259,6 +317,10 @@ export function Markdown(
     if (isServer) return
 
     if (!content) {
+      if (fileCleanup) {
+        fileCleanup()
+        fileCleanup = undefined
+      }
       container.innerHTML = ""
       return
     }
@@ -266,8 +328,11 @@ export function Markdown(
     const temp = document.createElement("div")
     temp.innerHTML = content
 
-    const resolve = local.resolveImage ?? shared
+    const resolve = local.resolveImage ?? shared?.resolveImage
     if (resolve) resolveImages(temp, resolve)
+    const resolveFile = local.resolveFile ?? shared?.resolveFile
+    const openFile = local.onOpenFile ?? shared?.openFile
+    if (resolveFile && openFile) resolveFileLinks(temp, resolveFile)
 
     morphdom(container, temp, {
       childrenOnly: true,
@@ -317,6 +382,16 @@ export function Markdown(
       })
     })
 
+    if (fileCleanup) {
+      fileCleanup()
+      fileCleanup = undefined
+    }
+    if (resolveFile && openFile) {
+      const handler = (event: MouseEvent) => openFileLink(container, event, openFile)
+      container.addEventListener("click", handler)
+      fileCleanup = () => container.removeEventListener("click", handler)
+    }
+
     if (copySetupTimer) clearTimeout(copySetupTimer)
     copySetupTimer = setTimeout(() => {
       if (copyCleanup) copyCleanup()
@@ -330,6 +405,7 @@ export function Markdown(
   onCleanup(() => {
     if (copySetupTimer) clearTimeout(copySetupTimer)
     if (copyCleanup) copyCleanup()
+    if (fileCleanup) fileCleanup()
   })
 
   return (

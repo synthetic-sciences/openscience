@@ -37,7 +37,7 @@ import { FileToolbar } from "@/atlas/FileToolbar"
 import { uiStore } from "@/atlas/store/ui"
 import { describeFile, readFile, reconcileSavedDraft, type FileData, type FileKind } from "@/atlas/file-viewer"
 import { LANG, extension as ext } from "@/atlas/files/artifact-thumb"
-import { assetUrl } from "@/utils/markdown-assets"
+import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { recoverFileDraft, rememberFileDraft } from "@/atlas/file-drafts"
 import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
 import "./FilePreview.css"
@@ -211,6 +211,7 @@ export function FileView(props: {
       url: (path) =>
         sdk.request.url("/file/raw", { path: resolveArtifactPath(directory(), path), sessionID: sessionID() }),
     })
+  const file = (href: string) => localAssetPath(href, props.path)
 
   const badge = () => {
     const k = kind()
@@ -466,15 +467,17 @@ export function FileView(props: {
                   <article class="atlas-file-document">
                     <Show
                       when={markdown().lead}
-                      fallback={<Markdown class="atlas-md" text={view.draft} resolveImage={image} />}
+                      fallback={<Markdown class="atlas-md" text={view.draft} resolveImage={image} resolveFile={file} />}
                     >
                       {(lead) => (
                         <>
                           <div class="atlas-file-document-lead" data-align={lead().alignment}>
-                            <Markdown class="atlas-md" text={lead().text} resolveImage={image} />
+                            <Markdown class="atlas-md" text={lead().text} resolveImage={image} resolveFile={file} />
                           </div>
                           <Show when={markdown().rest}>
-                            {(rest) => <Markdown class="atlas-md" text={rest()} resolveImage={image} />}
+                            {(rest) => (
+                              <Markdown class="atlas-md" text={rest()} resolveImage={image} resolveFile={file} />
+                            )}
                           </Show>
                         </>
                       )}

@@ -16,6 +16,7 @@ import {
   rewritePreviewImages,
   type Citation,
 } from "./model"
+import { localAssetPath } from "@/utils/markdown-assets"
 
 type Panel = "citations" | "figures" | "publish"
 type PublicationFormat = "html" | "pdf" | "docx" | "latex" | "pptx"
@@ -145,6 +146,7 @@ export function ManuscriptWorkbench(props: {
   const preview = createMemo(() =>
     rewritePreviewImages(manuscript().body, props.path, (path) => sdk.request.url("/file/raw", query(path))),
   )
+  const file = (href: string) => localAssetPath(href, props.path)
 
   const toggle = (next: Panel) => setPanel((current) => (current === next ? undefined : next))
   const openPublish = () => {
@@ -491,7 +493,7 @@ export function ManuscriptWorkbench(props: {
             style={{ flex: 1, "min-height": 0, overflow: "auto", padding: "24px 28px 64px" }}
           >
             <div style={{ "max-width": "780px", margin: "0 auto" }}>
-              <Markdown class="atlas-md" text={preview()} />
+              <Markdown class="atlas-md" text={preview()} resolveFile={file} />
             </div>
           </div>
         </section>
