@@ -112,6 +112,8 @@ export namespace Session {
   const deletionKey = (projectID: string, sessionID: string) => ["session_delete", projectID, sessionID]
   const deletionLock = (projectID: string, sessionID: string) =>
     path.join(Global.Path.data, "session-delete", `${projectID}.${sessionID}.lock`)
+  const creationLock = (projectID: string, sessionID: string) =>
+    path.join(Global.Path.data, "session-create", `${projectID}.${sessionID}.lock`)
 
   async function deleting(projectID: string, sessionID: string) {
     return Storage.read<Deletion>(deletionKey(projectID, sessionID))
@@ -293,6 +295,10 @@ export namespace Session {
   }) {
     const id = Identifier.descending("session", input.id)
     const directory = Project.canonicalize(input.directory)
+    // Caller-supplied IDs are an idempotency key. Serialize the full
+    // storage-and-filesystem transaction across server processes so a retry
+    // cannot observe the session between its record and workspace setup.
+    await using lease = input.id ? await FileLease.acquire(creationLock(Instance.project.id, id), 60_000) : undefined
     if (await deleting(Instance.project.id, id)) throw new DeletingError({ sessionID: id })
     const existing = input.id
       ? await load(id).catch((error) => {
