@@ -418,7 +418,7 @@ export const STRESS_MATRIX: readonly StressScenario[] = [
     title: "Threshold starts one compaction",
     prompt: "Continue the long fixture transcript and preserve codeword MATRIX_COMPACT_CODEWORD.",
     turns: ["Return the preserved codeword and stop."],
-    config: { context: 8_000, threshold: 0.75 },
+    config: { context: 64_000, threshold: 0.75 },
     stimulus: { kind: "inspect", target: "messages" },
     expect: {
       terminal: "completed",
@@ -442,7 +442,7 @@ export const STRESS_MATRIX: readonly StressScenario[] = [
     title: "Handoff keeps the user objective",
     prompt: "Keep objective MATRIX_OBJECTIVE and do not add new work.",
     turns: ["Continue the same objective."],
-    config: { context: 8_000, threshold: 0.75 },
+    config: { context: 64_000, threshold: 0.75 },
     stimulus: { kind: "inspect", target: "messages" },
     expect: { terminal: "completed", tools: 0, artifacts: "none", contains: ["MATRIX_OBJECTIVE"] },
   }),

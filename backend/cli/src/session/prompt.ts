@@ -9,7 +9,7 @@ import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
-import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
+import { asSchema, type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
 import { SessionCompaction } from "./compaction"
 import { SessionTelemetry } from "./telemetry"
 import { Instance } from "../project/instance"
@@ -78,6 +78,8 @@ import { SessionLoopState } from "./loop-state"
 import { FileLease } from "@/util/file-lease"
 import { Global } from "@/global"
 import { TaskAttempt } from "@/tool/task-attempt"
+import { Token } from "@/util/token"
+import { Auth } from "@/auth"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -85,6 +87,7 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENSCIENCE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+  export const CONTEXT_PREFLIGHT_MARGIN = 0.9
   const LOOP_LEASE_TIMEOUT = 24 * 60 * 60 * 1_000
   // Scientific agents can still consume session-scoped artifact references.
   // Science agents that dispatch GPU/compute work and should honor billing.compute.
@@ -98,6 +101,87 @@ export namespace SessionPrompt {
         return Tool.validate(item.id, item, args)
       },
     })
+  }
+
+  async function toolTokens(tools: Record<string, AITool>) {
+    const values = await Promise.all(
+      Object.entries(tools).map(async ([name, item]) => {
+        const schema = await asSchema(item.inputSchema).jsonSchema
+        return Token.estimate(
+          JSON.stringify({
+            name,
+            description: item.description ?? "",
+            parameters: schema,
+          }),
+        )
+      }),
+    )
+    return values.reduce((sum, value) => sum + value, 0)
+  }
+
+  function fileTokens(messages: MessageV2.WithParts[]) {
+    const superseded = MessageV2.supersededOutputs(messages)
+    return messages
+      .flatMap((message) => message.parts)
+      .reduce((sum, part) => {
+        if (
+          part.type === "file" &&
+          !part.mime.startsWith("image/") &&
+          part.mime !== "text/plain" &&
+          part.mime !== "application/x-directory"
+        )
+          return sum + Token.estimate(part.url)
+        if (
+          part.type !== "tool" ||
+          part.state.status !== "completed" ||
+          part.state.time.compacted ||
+          superseded.has(part.id)
+        )
+          return sum
+        return (
+          sum +
+          (part.state.attachments ?? []).reduce(
+            (total, attachment) => total + (attachment.mime.startsWith("image/") ? 0 : Token.estimate(attachment.url)),
+            0,
+          )
+        )
+      }, 0)
+  }
+
+  /** Estimate the complete provider input assembled for this turn. The hard
+   * limit keeps explicit headroom for provider-specific wrappers and tokenizers;
+   * the softer threshold decides when reducible history should be compacted. */
+  export async function contextPreflight(input: {
+    messages: MessageV2.WithParts[]
+    current: MessageV2.User
+    system: string[]
+    tools: Record<string, AITool>
+    model: Provider.Model
+    extra?: string
+  }) {
+    const config = await Config.get()
+    const usable = SessionCompaction.usableContext(input.model, config).usable
+    const hard = Math.max(1, Math.floor(usable * CONTEXT_PREFLIGHT_MARGIN))
+    const soft = Math.min(
+      hard,
+      Math.max(1, Math.floor(usable * (config.compaction?.threshold ?? SessionCompaction.DEFAULT_THRESHOLD))),
+    )
+    const tools = await toolTokens(input.tools)
+    const extra = input.extra ? Token.estimate(input.extra) : 0
+    const composition = MessageV2.composition(input.messages, { system: input.system })
+    const current = input.messages.filter((message) => message.info.id === input.current.id)
+    const fixed = tools + extra
+    const total = composition.total + fileTokens(input.messages) + fixed
+    const newest = MessageV2.composition(current, { system: input.system }).total + fileTokens(current) + fixed
+    return {
+      total,
+      newest,
+      history: Math.max(0, total - newest),
+      usable,
+      soft,
+      hard,
+      composition,
+    }
   }
 
   const state = Instance.state(
@@ -763,14 +847,7 @@ export namespace SessionPrompt {
         break
       }
 
-      step++
-      if (step === 1)
-        ensureTitle({
-          session,
-          modelID: lastUser.model.modelID,
-          providerID: lastUser.model.providerID,
-          history: msgs,
-        }).catch((error) => log.error("failed to generate session title", { error }))
+      const nextStep = step + 1
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
         if (Provider.ModelNotFoundError.isInstance(e)) return undefined
@@ -817,6 +894,7 @@ export namespace SessionPrompt {
       // pending subtask
       // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
+        step = nextStep
         // Older saved command definitions may still name a domain-specific
         // subagent. Keep those records runnable while funnelling all new work
         // through the three bounded internal Research profiles.
@@ -1006,6 +1084,7 @@ export namespace SessionPrompt {
 
       // pending compaction
       if (task?.type === "compaction") {
+        step = nextStep
         const result = await SessionCompaction.process({
           messages: msgs,
           parentID: lastUser.id,
@@ -1080,7 +1159,14 @@ export namespace SessionPrompt {
           SessionCompaction.noteCompaction({ sessionID, before, reclaimed })
           compactionArmed = true
         }
-        if (reclaimed === 0 && (await armedCompact())) continue
+        if (reclaimed === 0 && (await armedCompact())) {
+          // Preserve the established step accounting for compaction triggered
+          // from the previous provider turn. Same-turn preflight compaction
+          // below has not dispatched anything and deliberately does not charge
+          // this prospective step.
+          step = nextStep
+          continue
+        }
         // Nothing left to prune and already compacted — fixed system+tool+summary
         // overhead exceeds the threshold, so re-compacting is futile and would loop.
         // Proceed silently; the model's real window + the overflow-error path backstop.
@@ -1105,7 +1191,7 @@ export namespace SessionPrompt {
       // normal processing
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
-      const isLastStep = step >= maxSteps
+      const isLastStep = nextStep >= maxSteps
       const reminders = await insertReminders({
         messages: msgs,
         agent,
@@ -1114,7 +1200,7 @@ export namespace SessionPrompt {
       msgs = reminders.messages
 
       const processor = SessionProcessor.create({
-        assistantMessage: (await Session.updateMessage({
+        assistantMessage: {
           id: await MessageV2.nextMessageID(sessionID),
           parentID: lastUser.id,
           role: "assistant",
@@ -1133,12 +1219,12 @@ export namespace SessionPrompt {
           },
           modelID: model.id,
           providerID: model.providerID,
-          internal: { step },
+          internal: { step: nextStep },
           time: {
             created: Date.now(),
           },
           sessionID,
-        })) as MessageV2.Assistant,
+        } as MessageV2.Assistant,
         sessionID: sessionID,
         model,
         abort,
@@ -1166,17 +1252,10 @@ export namespace SessionPrompt {
         inspection: route.inspection,
       })
 
-      if (step === 1) {
-        SessionSummary.summarize({
-          sessionID: sessionID,
-          messageID: lastUser.id,
-        })
-      }
-
       const sessionMessages = clone(msgs)
 
       const queued =
-        step > 1 &&
+        nextStep > 1 &&
         !!lastFinished &&
         sessionMessages.some(
           (message) =>
@@ -1207,10 +1286,85 @@ export namespace SessionPrompt {
           : []),
       ]
 
+      // Include the provider/agent header and tool contracts in the same-turn
+      // estimate. Previous provider usage cannot see a newly attached document,
+      // a large current prompt, or a tool/schema change.
+      const codex = LLM.isCodexSubscriptionModel(model, await Auth.get(model.providerID))
+      const providerSystem = [
+        ...(agent.prompt ? [agent.prompt] : codex ? [] : SystemPrompt.provider(model, route.direct, route.inspection)),
+        ...system,
+        ...(lastUser.system ? [lastUser.system] : []),
+        ...(await SystemPrompt.planModeInstructions()),
+        ...(codex ? [SystemPrompt.instructions(route.direct, route.inspection)] : []),
+      ]
+      const tier = ProviderTransform.tier(model, lastUser.tier)
+      const window = tier.model ? await Provider.getModel(model.providerID, tier.model) : model
+      const preflight = await contextPreflight({
+        messages: sessionMessages,
+        current: lastUser,
+        system: providerSystem,
+        tools,
+        model: window,
+        extra: isLastStep ? MAX_STEPS : undefined,
+      })
+      const config = await Config.get()
+      if (preflight.newest > preflight.hard) {
+        await failTooLarge(
+          `This message cannot fit in ${window.name}'s context window: the newest request plus required instructions and tool schemas is estimated at ${preflight.newest.toLocaleString()} tokens, above the safe input budget of ${preflight.hard.toLocaleString()}. Shorten or split the request, remove large attachments, or choose a model with a larger context window. No provider request was sent.`,
+        )
+        break
+      }
+      if (preflight.total > preflight.hard && config.compaction?.auto === false) {
+        await failTooLarge(
+          `The assembled request is estimated at ${preflight.total.toLocaleString()} tokens, above ${window.name}'s safe input budget of ${preflight.hard.toLocaleString()}, and auto-compaction is disabled. Run /compact, shorten the request, or choose a model with a larger context window. No provider request was sent.`,
+        )
+        break
+      }
+      const target = preflight.total > preflight.hard ? preflight.hard : preflight.soft
+      const reducible = preflight.history > 0 && preflight.newest <= target
+      if (preflight.total > preflight.soft && config.compaction?.auto !== false && reducible) {
+        const reclaimed = await SessionCompaction.prune({ sessionID })
+        if (reclaimed > 0) {
+          SessionTelemetry.recordCompaction({
+            sessionID,
+            trigger: "proactive",
+            mechanism: "prune",
+            before: preflight.total,
+            reclaimed,
+          })
+          continue
+        }
+        if (await armedCompact()) continue
+      }
+      if (preflight.total > preflight.hard) {
+        await failTooLarge(
+          `The assembled request is still estimated at ${preflight.total.toLocaleString()} tokens after context reduction, above ${window.name}'s safe input budget of ${preflight.hard.toLocaleString()}. Shorten the request or start a new session. No provider request was sent for this oversized attempt.`,
+        )
+        break
+      }
+
+      step = nextStep
+      await Session.updateMessage(processor.message)
+      if (step === 1) {
+        ensureTitle({
+          session,
+          modelID: lastUser.model.modelID,
+          providerID: lastUser.model.providerID,
+          history: msgs,
+        }).catch((error) => log.error("failed to generate session title", { error }))
+        SessionSummary.summarize({
+          sessionID,
+          messageID: lastUser.id,
+        })
+      }
+
       // P0.1 telemetry: record what the working context is made of, by content type,
       // for exactly the messages + system prompt about to be sent. Fire-and-forget so it
       // never adds latency to the model call.
-      SessionTelemetry.recordContext({ sessionID, composition: MessageV2.composition(sessionMessages, { system }) })
+      SessionTelemetry.recordContext({
+        sessionID,
+        composition: MessageV2.composition(sessionMessages, { system: providerSystem }),
+      })
 
       const result = await processor.process({
         user: lastUser,

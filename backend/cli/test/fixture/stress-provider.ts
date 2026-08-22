@@ -203,7 +203,12 @@ export function stressProviderConfig(baseURL: string) {
           [STRESS_PROVIDER_COMPACT_MODEL]: {
             name: "Deterministic compact-context stress model",
             tool_call: true,
-            limit: { context: 8_000, output: 4_096 },
+            // Keep the declared wire limit large enough for the real research
+            // system/tool contract. Individual compaction scenarios still
+            // report usage against their configured synthetic window, so
+            // they exercise threshold behavior without advertising an input
+            // window that the fixed harness itself cannot fit.
+            limit: { context: 64_000, output: 4_096 },
           },
         },
       },
