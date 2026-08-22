@@ -62,7 +62,13 @@ test("bounds scheduler command output and reaps its owned process group", async 
         path.join(bin, "sbatch"),
         `#!/bin/sh
 printf '%s\n' "$$" > ${JSON.stringify(pidfile)}
-python3 -c 'import os,time; time.sleep(0.1); os.write(1,b"x"*(128*1024)); time.sleep(60)' &
+python3 -c 'import os,time
+time.sleep(0.1)
+os.set_blocking(1,True)
+data=b"x"*(128*1024)
+while data:
+    data=data[os.write(1,data):]
+time.sleep(60)' &
 child=$!
 printf '%s\n' "$child" >> ${JSON.stringify(pidfile)}
 wait "$child"

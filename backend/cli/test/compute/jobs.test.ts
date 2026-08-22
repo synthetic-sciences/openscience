@@ -331,7 +331,12 @@ printf '%s\\n' '{"exists":true}'
       path.join(bin, "ssh"),
       `#!/bin/sh
 printf '%s\n' "$$" >> ${JSON.stringify(pids)}
-exec python3 -c 'import os,time; os.write(1,b"x"*(512*1024)); time.sleep(60)'
+exec python3 -c 'import os,time
+os.set_blocking(1,True)
+data=b"x"*(512*1024)
+while data:
+    data=data[os.write(1,data):]
+time.sleep(60)'
 `,
       { mode: 0o700 },
     )
@@ -414,7 +419,12 @@ exec python3 -c 'import os,time; os.write(1,b"x"*(512*1024)); time.sleep(60)'
         path.join(bin, "ssh"),
         `#!/bin/sh
 printf '%s' "$$" > ${JSON.stringify(pidfile)}
-exec python3 -c 'import os,time; os.write(1,b"x"*(128*1024)); time.sleep(60)'
+exec python3 -c 'import os,time
+os.set_blocking(1,True)
+data=b"x"*(128*1024)
+while data:
+    data=data[os.write(1,data):]
+time.sleep(60)'
 `,
         { mode: 0o700 },
       ),
