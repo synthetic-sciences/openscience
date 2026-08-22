@@ -155,7 +155,7 @@ export namespace SessionPrompt {
         "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
       ),
     effort: MessageV2.ResearchEffort.optional(),
-    /** @deprecated Research effort now controls bounded delegation. */
+    /** Controls automatic Task-tool delegation for this turn. */
     delegation: z.boolean().optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
@@ -995,6 +995,7 @@ export namespace SessionPrompt {
       const route = request(msgs, agent.name)
       const lastUserMsg = route.user
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+      const delegation = allowsDelegation(lastUser.delegation, bypassAgentCheck)
 
       const tools = await resolveTools({
         agent,
@@ -1004,6 +1005,7 @@ export namespace SessionPrompt {
         effort: MessageV2.resolveResearchEffort(lastUser.effort),
         processor,
         bypassAgentCheck,
+        delegation,
         messages: msgs,
         request: route.text,
         direct: route.direct,
@@ -1197,6 +1199,7 @@ export namespace SessionPrompt {
     effort: MessageV2.ResearchEffort
     processor: SessionProcessor.Info
     bypassAgentCheck: boolean
+    delegation: boolean
     messages: MessageV2.WithParts[]
     request?: string
     direct: boolean
@@ -1235,6 +1238,7 @@ export namespace SessionPrompt {
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
       (id) =>
+        (id !== TaskTool.id || input.delegation) &&
         ToolSelection.enabled(id, { permission: input.agent.permission, tools: input.tools }) &&
         ToolSelection.relevant(id, {
           agent: input.agent.name,
@@ -1403,9 +1407,10 @@ export namespace SessionPrompt {
     return tools
   }
 
-  /** @deprecated Both Research effort levels may delegate when it is useful. */
-  export function allowsDelegation(_enabled: boolean | undefined, _explicit: boolean) {
-    return true
+  /** The composer switch controls automatic delegation. An explicit @agent
+   * attachment remains authoritative even when automatic routing is off. */
+  export function allowsDelegation(enabled: boolean | undefined, explicit: boolean) {
+    return explicit || enabled !== false
   }
 
   export function researchEffortReminder(value: unknown) {

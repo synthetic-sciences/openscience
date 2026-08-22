@@ -1958,7 +1958,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
     }))
     const specialist = delegatedSpecialist(
-      capabilities()?.delegation_enabled ?? false,
+      capabilities()?.delegation_enabled ?? true,
       capabilities()?.delegation_specialist ?? null,
       agentAttachments.map((attachment) => attachment.name),
     )
@@ -2222,6 +2222,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         messageID,
         parts: requestParts,
         effort: researchEffort,
+        delegation: capabilities()?.delegation_enabled ?? true,
         variant,
         tier,
       }
@@ -2713,7 +2714,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         <Toggle
                           hideLabel
                           disabled={!capabilities()}
-                          checked={capabilities()?.delegation_enabled ?? false}
+                          checked={capabilities()?.delegation_enabled ?? true}
                           onChange={(checked) => saveCapabilities({ delegation_enabled: checked })}
                         >
                           Delegation

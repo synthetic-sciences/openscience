@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { SessionPrompt } from "../../src/session/prompt"
 
-describe("Research delegation compatibility", () => {
-  test("both Research efforts retain Task even for legacy switch values", () => {
+describe("Research delegation controls", () => {
+  test("disables automatic Task calls while preserving explicit @agent requests", () => {
     expect(SessionPrompt.allowsDelegation(undefined, false)).toBe(true)
     expect(SessionPrompt.allowsDelegation(true, false)).toBe(true)
     expect(SessionPrompt.allowsDelegation(false, true)).toBe(true)
-    expect(SessionPrompt.allowsDelegation(false, false)).toBe(true)
+    expect(SessionPrompt.allowsDelegation(false, false)).toBe(false)
   })
 
   test("effort reminders expose bounded Normal and Ultra behavior", () => {

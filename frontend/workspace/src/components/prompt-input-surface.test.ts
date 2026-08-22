@@ -239,6 +239,7 @@ describe("composer control consolidation", () => {
   test("sends the standard research effort through the SDK prompt", () => {
     expect(source).toContain('const researchEffort = "normal" as const')
     expect(source).toContain("effort: researchEffort")
+    expect(source).toContain("delegation: capabilities()?.delegation_enabled ?? true")
     expect(source).toContain("await client.session.prompt(request)")
   })
 
