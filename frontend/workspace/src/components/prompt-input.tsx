@@ -82,6 +82,7 @@ import {
   type ReviewPreferences,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
+import { requestFailure, requestStatus } from "@/utils/request-error"
 import {
   slashGroup,
   slashIcon,
@@ -1684,14 +1685,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (text.trim().length === 0 && images.length === 0) return
 
-    const errorMessage = (err: unknown) => {
-      if (err && typeof err === "object" && "data" in err) {
-        const data = (err as { data?: { message?: string } }).data
-        if (data?.message) return data.message
-      }
-      if (err instanceof Error) return err.message
-      return language.t("common.requestFailed")
-    }
+    const errorMessage = (err: unknown) => requestFailure(err, "Request").description
 
     const clearInput = () => {
       prompt.reset()
@@ -1844,14 +1838,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         .create({ id: candidate })
         .then((x) => x.data ?? undefined)
         .catch(async (err) => {
-          const recovered = await client.session
+          const recovery = await client.session
             .get({ sessionID: candidate })
-            .then((x) => x.data ?? undefined)
-            .catch(() => undefined)
+            .then((x) => ({ recovered: x.data ?? undefined, error: undefined as unknown }))
+            .catch((error) => ({ recovered: undefined, error }))
+          const recovered = recovery.recovered
           if (recovered) return recovered
+          const failure = requestFailure(err, "Create session", {
+            ambiguousCreate: !recovery.error || requestStatus(recovery.error) !== 404,
+            candidate,
+          })
           showToast({
-            title: language.t("prompt.toast.sessionCreateFailed.title"),
-            description: errorMessage(err),
+            title: failure.title,
+            description: failure.description,
           })
           return undefined
         })
@@ -1879,9 +1878,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           command: text,
         })
         .catch((err) => {
+          const failure = requestFailure(err, "Send shell command")
           showToast({
-            title: language.t("prompt.toast.shellSendFailed.title"),
-            description: errorMessage(err),
+            title: failure.title,
+            description: failure.description,
           })
           restoreInputAfterFailure()
         })
@@ -1912,9 +1912,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         delegation: boolean
       }
       client.session.command(request).catch((err) => {
+        const failure = requestFailure(err, `Start ${intent} mode`)
         showToast({
-          title: `Could not start ${intent} mode`,
-          description: errorMessage(err),
+          title: failure.title,
+          description: failure.description,
         })
         restoreInputAfterFailure()
       })
@@ -1949,9 +1950,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           delegation: boolean
         }
         client.session.command(request).catch((err) => {
+          const failure = requestFailure(err, "Send command")
           showToast({
-            title: language.t("prompt.toast.commandSendFailed.title"),
-            description: errorMessage(err),
+            title: failure.title,
+            description: failure.description,
           })
           restoreInputAfterFailure()
         })
@@ -2276,10 +2278,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (sessionDirectory === projectDirectory) {
         sync.set("session_status", session.id, { type: "idle" })
       }
-      showToast({
-        title: language.t("prompt.toast.promptSendFailed.title"),
-        description: errorMessage(err),
-      })
+      const failure = requestFailure(err, "Send prompt")
+      showToast({ title: failure.title, description: failure.description })
       removeOptimisticMessage()
       for (const item of commentItems) {
         prompt.context.add({
