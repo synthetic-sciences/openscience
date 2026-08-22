@@ -819,6 +819,18 @@ export namespace ComputeJobs {
             throw error
           }
           const streams = boundedChild(proc)
+          // Output can exceed its bound before Linux finishes establishing
+          // durable process ownership. Start failure publication at the
+          // stream boundary itself so slow registration or reaping can never
+          // leave the durable job queued after the transport has already
+          // failed.
+          const reported = streams.failed.then(async (error) => {
+            const failure = await Promise.resolve(options.failed?.(error)).then(
+              () => undefined,
+              (cause) => cause,
+            )
+            return { error, failure }
+          })
           const done = new Promise<{ code: number | null; error?: string }>((resolve) => {
             proc.once("error", (error) => resolve({ code: null, error: error.message }))
             proc.once("exit", (code) => resolve({ code }))
@@ -876,10 +888,10 @@ export namespace ComputeJobs {
             }
             throw error
           }
-          return { proc, streams, done, release: wrapped.release }
+          return { proc, streams, reported, done, release: wrapped.release }
         }),
       )
-      const { proc, streams, done, release } = launched
+      const { proc, streams, reported, done, release } = launched
       const abort = () => {
         const reason = options.signal?.reason
         streams.fail(reason instanceof Error ? reason : new Error("SSH operation was aborted"))
@@ -889,12 +901,11 @@ export namespace ComputeJobs {
       if (options.signal?.aborted) abort()
       try {
         const outcome = await Promise.race([
-          done.then((result) => ({ result, error: undefined })),
-          streams.failed.then((error) => ({ result: undefined, error })),
+          done.then((result) => ({ result, error: undefined, publication: undefined })),
+          reported.then((result) => ({ result: undefined, error: result.error, publication: result.failure })),
         ])
         if (outcome.error) {
-          const failures: unknown[] = []
-          await (async () => options.failed?.(outcome.error))().catch((error) => failures.push(error))
+          const failures: unknown[] = outcome.publication ? [outcome.publication] : []
           await CredentialProcessLedger.revoke({ id: ledger, kind: "compute" }).catch((error) => failures.push(error))
           await Promise.race([done, Bun.sleep(SSH_DRAIN_TIMEOUT)])
           streams.close()
@@ -930,6 +941,13 @@ export namespace ComputeJobs {
         ])
         if (!drained || streams.state.error) {
           streams.close()
+          const publication = streams.state.error ? await reported : undefined
+          if (publication?.failure) {
+            throw new AggregateError(
+              [streams.state.error, publication.failure],
+              "SSH operation output failed and its durable failure could not be published",
+            )
+          }
           throw streams.state.error ?? new Error("SSH operation output streams did not close after process exit")
         }
         const result = outcome.result
