@@ -748,6 +748,9 @@ export namespace ComputeJobs {
       /** Resolves the caller's launch handoff once this control process is
        * durably registered and its pre-exec ownership gate has opened. */
       ready?: () => void
+      /** Persists a known launch failure before potentially slow process-tree
+       * revocation. Cleanup still remains owned by this operation. */
+      failed?: (error: Error) => Promise<void> | void
     } = {},
   ) {
     if (options.authorize !== false) await currentAuthority(authority)
@@ -891,6 +894,7 @@ export namespace ComputeJobs {
         ])
         if (outcome.error) {
           const failures: unknown[] = []
+          await (async () => options.failed?.(outcome.error))().catch((error) => failures.push(error))
           await CredentialProcessLedger.revoke({ id: ledger, kind: "compute" }).catch((error) => failures.push(error))
           await Promise.race([done, Bun.sleep(SSH_DRAIN_TIMEOUT)])
           streams.close()
@@ -1866,7 +1870,13 @@ export namespace ComputeJobs {
     }
   }
 
-  async function stageSsh(job: Job, scope: Scope, files?: SshAdapter.Upload[], ready?: () => void) {
+  async function stageSsh(
+    job: Job,
+    scope: Scope,
+    files?: SshAdapter.Upload[],
+    ready?: () => void,
+    failed?: (error: Error) => Promise<void> | void,
+  ) {
     if (!job.ssh || !job.authority) throw new Error(`SSH job ${job.id} has no staging authority`)
     await fs.mkdir(logsOf(scope.root), { recursive: true })
     const spec = await sshSpec(job, scope, files)
@@ -1881,13 +1891,14 @@ export namespace ComputeJobs {
         stdin: archive,
         timeout: 120_000,
         ready,
+        failed,
       })
     } finally {
       await fs.rm(archive, { force: true })
     }
   }
 
-  async function submitSsh(job: Job, scope: Scope) {
+  async function submitSsh(job: Job, scope: Scope, failed?: (error: Error) => Promise<void> | void) {
     if (!job.ssh || !job.authority) throw new Error(`SSH job ${job.id} has no submission authority`)
     const result = await sshRun(
       scope,
@@ -1895,7 +1906,7 @@ export namespace ComputeJobs {
       job.ssh.host,
       job.authority,
       SshAdapter.invoke(await sshSpec(job, scope), "submit"),
-      { timeout: 30_000 },
+      { timeout: 30_000, failed },
     )
     // Test-only crash point: emulate the local owner disappearing after the
     // remote scheduler accepted and durably named the resource, but before
@@ -1933,13 +1944,16 @@ export namespace ComputeJobs {
   }
 
   async function startSsh(job: Job, scope: Scope, files: SshAdapter.Upload[], ready?: () => void) {
-    await stageSsh(job, scope, files, ready)
-    return submitSsh(job, scope)
+    const failed = async (error: Error) => {
+      await recordSshFailure(job, scope, error)
+    }
+    await stageSsh(job, scope, files, ready, failed)
+    return submitSsh(job, scope, failed)
   }
 
-  async function failSshStart(job: Job, scope: Scope, error: unknown) {
+  async function recordSshFailure(job: Job, scope: Scope, error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
-    const failed = await change(scope.root, (jobs) => {
+    return change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0) throw new Error(`Compute job ${job.id} was not found`)
       if (terminal.has(jobs[index]!.status)) return jobs[index]!
@@ -1953,6 +1967,10 @@ export namespace ComputeJobs {
       jobs[index] = Job.parse({ ...stopped, provenance: provenance(stopped) })
       return jobs[index]!
     })
+  }
+
+  async function failSshStart(job: Job, scope: Scope, error: unknown) {
+    const failed = await recordSshFailure(job, scope, error)
     const released = await releaseSsh(failed, scope, false).then(
       () => true,
       async (failure) => {
