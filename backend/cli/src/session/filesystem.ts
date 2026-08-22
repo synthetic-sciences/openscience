@@ -201,7 +201,14 @@ export namespace SessionFilesystem {
           "This folder is reserved for OpenScience's managed tool outputs. Choose the repository folder itself or create a managed project and connect a narrower source folder.",
       })
     }
-    return [...new Set([root, worktree])].filter((value) => !Filesystem.overlaps(output, value))
+    // A selected parent may legitimately contain the managed enclave (a
+    // legacy project rooted at the user's home is the common case). Preserve
+    // authority for benign descendants and carve the enclave out at every
+    // broker/process boundary instead of discarding the user's whole project.
+    // Targets inside the enclave still require an exact owner capability in
+    // authorize/allows/revalidateAuthorization, while native processes mask
+    // ToolOutputPath.root through OpenScience.kernelSensitivePaths().
+    return [...new Set([root, worktree])]
   }
 
   export async function validateProject(directory: string) {
@@ -377,9 +384,8 @@ export namespace SessionFilesystem {
     const root = await canonical(directory)
     const worktree = await canonical(Instance.worktree)
     // A broad legacy project such as the user's home directory may contain the
-    // managed tool-output enclave. Keep the session usable in its isolated
-    // scratch workspace, but never mint an implicit project grant that would
-    // expose broker files. Explicit grants remain fail-closed below.
+    // managed tool-output enclave. Keep its ordinary descendants usable while
+    // the enclave remains an exact, broker-only capability.
     const roots = await projectRoots(root, worktree)
     const existing = await read(sessionID).catch((error) => {
       if (Storage.NotFoundError.isInstance(error)) return

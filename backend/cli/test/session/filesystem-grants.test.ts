@@ -192,39 +192,64 @@ describe("session filesystem grants", () => {
     })
   })
 
-  test("keeps a broad legacy project usable without granting the managed broker parent", async () => {
+  test("keeps benign descendants of a broad legacy project usable while carving out the managed broker", async () => {
     await fs.mkdir(Global.Path.data, { recursive: true })
-    await Instance.provide({
-      directory: Global.Path.data,
-      fn: async () => {
-        const session = await Session.create({})
-        await using cleanup = {
-          [Symbol.asyncDispose]: () => Session.remove(session.id),
-        }
-        const workspace = await SessionFilesystem.workspace(session.id)
-        const grants = await SessionFilesystem.list(session.id)
+    const root = path.dirname(await fs.realpath(Global.Path.data))
+    const source = path.join(root, `CERBench-${crypto.randomUUID()}`)
+    const paper = path.join(source, "paper.tex")
+    const revision = path.join(source, "revision.tex")
+    await fs.mkdir(source)
+    await fs.writeFile(paper, "verified source")
+    try {
+      await Instance.provide({
+        directory: root,
+        fn: async () => {
+          const session = await Session.create({})
+          await using cleanup = {
+            [Symbol.asyncDispose]: () => Session.remove(session.id),
+          }
+          const workspace = await SessionFilesystem.workspace(session.id)
+          const grants = await SessionFilesystem.list(session.id)
 
-        expect(grants).toContainEqual(
-          expect.objectContaining({
-            path: workspace,
-            access: "write",
-            scope: "session",
-            source: "workspace",
-          }),
-        )
-        expect(grants.some((grant) => grant.source === "api")).toBe(false)
-        expect(await SessionFilesystem.processReadRoots(session.id)).toEqual([workspace])
-        await expect(
-          SessionFilesystem.grant({
-            sessionID: session.id,
-            path: Global.Path.data,
-            access: "read",
-            scope: "session",
-            source: "api",
-          }),
-        ).rejects.toBeInstanceOf(SessionFilesystem.InvalidPathError)
-      },
-    })
+          expect(grants).toContainEqual(
+            expect.objectContaining({
+              path: workspace,
+              access: "write",
+              scope: "session",
+              source: "workspace",
+            }),
+          )
+          expect(grants).toContainEqual(
+            expect.objectContaining({
+              path: root,
+              access: "write",
+              scope: "session",
+              source: "api",
+            }),
+          )
+          expect(await SessionFilesystem.processReadRoots(session.id)).toEqual(
+            expect.arrayContaining([workspace, root]),
+          )
+          await expect(
+            SessionFilesystem.authorize({ sessionID: session.id, path: paper, access: "read" }),
+          ).resolves.toMatchObject({ path: paper, grant: { source: "api" } })
+          await expect(
+            SessionFilesystem.authorize({ sessionID: session.id, path: revision, access: "write" }),
+          ).resolves.toMatchObject({ path: revision, grant: { source: "api" } })
+          await expect(
+            SessionFilesystem.grant({
+              sessionID: session.id,
+              path: Global.Path.data,
+              access: "read",
+              scope: "session",
+              source: "api",
+            }),
+          ).rejects.toBeInstanceOf(SessionFilesystem.InvalidPathError)
+        },
+      })
+    } finally {
+      await fs.rm(source, { recursive: true, force: true })
+    }
   })
 
   test("rejects the managed tool-output enclave before persisting a session", async () => {
