@@ -125,6 +125,17 @@ describe("managed project session scratch", () => {
     })
   })
 
+  test("reports scratch artifacts relative to the owning session workspace", async () => {
+    await managed(async () => {
+      const session = await Session.create({ title: "relative scratch artifacts" })
+      await File.write("nested/result.csv", "sample,value\nfirst,1\n", { sessionID: session.id })
+
+      expect((await File.artifacts({ sessionID: session.id })).map((artifact) => artifact.path)).toEqual([
+        "nested/result.csv",
+      ])
+    })
+  })
+
   test("deletes only the removed session's managed scratch directory", async () => {
     const external = await fs.mkdtemp(path.join(Global.Path.data, "managed-scratch-connected-"))
     try {

@@ -9,6 +9,8 @@ import { SessionHarness } from "./harness"
 import { SessionResearch } from "./research"
 import { Review } from "@/science/provenance/review"
 import { Instance } from "@/project/instance"
+import { TokenUsage } from "@synsci/util/token-usage"
+import { TaskAttempt } from "@/tool/task-attempt"
 import z from "zod"
 
 export namespace SessionTrace {
@@ -428,11 +430,12 @@ export namespace SessionTrace {
     const manifests = new Set(stored.harness.map((item) => item.messageID))
     const inference = assistants
       .filter((message) => {
+        if (TaskAttempt.syntheticWrapper(message)) return false
         if (runtimeGate(message.info)) return false
         if (message.info.providerID === "openscience" && message.info.modelID === "local") return false
         if (manifests.has(message.info.id)) return true
         const tokens = message.info.tokens
-        const used = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+        const used = TokenUsage.total(tokens)
         return message.info.cost > 0 || used > 0 || message.info.finish !== undefined
       })
       .map((message) => {

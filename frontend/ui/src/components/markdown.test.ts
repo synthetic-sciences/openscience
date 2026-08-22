@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test"
 import katex from "katex"
-import { resolveImages, sanitize } from "./markdown"
+import { openFileLink, resolveFileLinks, resolveImages, sanitize } from "./markdown"
 
 const tex = "\\delta\\omega/\\omega < 10^{-6}"
 
@@ -73,5 +73,48 @@ describe("resolveImages (relative image rewriting)", () => {
 
     const sources = Array.from(root.querySelectorAll("img")).map((img) => img.getAttribute("src"))
     expect(sources).toEqual(["https://example.com/a.png", "data:image/png;base64,AAAA"])
+  })
+})
+
+describe("local Markdown file links", () => {
+  test("opens relative and absolute PDF/file anchors in-app", () => {
+    const root = document.createElement("div")
+    root.innerHTML = sanitize(`
+      <a href="appendix.pdf" class="external-link" target="_blank" rel="noopener noreferrer"><span>Appendix</span></a>
+      <a href="/Users/research/CERBench/results/table.csv" class="external-link" target="_blank">Table</a>
+    `)
+    resolveFileLinks(root, (href) => (href.startsWith("/") ? href : `papers/${href}`))
+
+    const links = root.querySelectorAll("a")
+    expect(links[0].getAttribute("data-file-path")).toBe("papers/appendix.pdf")
+    expect(links[1].getAttribute("data-file-path")).toBe("/Users/research/CERBench/results/table.csv")
+    expect(Array.from(links).every((link) => !link.hasAttribute("target"))).toBe(true)
+    expect(Array.from(links).every((link) => !link.classList.contains("external-link"))).toBe(true)
+
+    const opened: string[] = []
+    root.addEventListener("click", (event) => openFileLink(root, event as MouseEvent, (path) => opened.push(path)))
+    expect(
+      links[0].querySelector("span")?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
+    ).toBe(false)
+    expect(links[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))).toBe(false)
+    expect(opened).toEqual(["papers/appendix.pdf", "/Users/research/CERBench/results/table.csv"])
+  })
+
+  test("preserves http(s) and mailto anchors as external browser links", () => {
+    const root = document.createElement("div")
+    root.innerHTML = sanitize(`
+      <a href="https://example.com/paper.pdf" class="external-link" target="_blank" rel="noopener noreferrer">Web</a>
+      <a href="mailto:author@example.com" class="external-link" target="_blank" rel="noopener noreferrer">Email</a>
+    `)
+    resolveFileLinks(root, (href) => (/^(?:https?:|mailto:)/i.test(href) ? undefined : href))
+
+    const links = root.querySelectorAll("a")
+    expect(Array.from(links).map((link) => link.getAttribute("href"))).toEqual([
+      "https://example.com/paper.pdf",
+      "mailto:author@example.com",
+    ])
+    expect(Array.from(links).every((link) => link.getAttribute("target") === "_blank")).toBe(true)
+    expect(Array.from(links).every((link) => link.classList.contains("external-link"))).toBe(true)
+    expect(Array.from(links).every((link) => !link.hasAttribute("data-file-link"))).toBe(true)
   })
 })

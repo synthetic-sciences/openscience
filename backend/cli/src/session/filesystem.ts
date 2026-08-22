@@ -47,6 +47,47 @@ export namespace SessionFilesystem {
   })
   export type Grant = z.infer<typeof Grant>
 
+  export type Authorized = {
+    path: string
+    grant: Grant
+  }
+
+  /**
+   * An in-process, operation-bound authorization. The WeakSet brand prevents a
+   * caller from constructing one from request data, while the immutable grant
+   * snapshot lets later phases revalidate a consumed one-shot grant without
+   * accidentally consuming a second grant or accepting a later replacement.
+   */
+  export type Authorization = Readonly<{
+    sessionID: string
+    path: string
+    access: Access
+    grantID: string
+    grantPath: string
+    grantAccess: Access
+    grantScope: Scope
+    grantSource: Source
+    created: number
+    consumed?: number
+  }>
+
+  const results = new WeakMap<
+    object,
+    Readonly<{
+      sessionID: string
+      path: string
+      access: Access
+      grantID: string
+      grantPath: string
+      grantAccess: Access
+      grantScope: Scope
+      grantSource: Source
+      created: number
+      consumed?: number
+    }>
+  >()
+  const bindings = new WeakSet<object>()
+
   export const State = z.object({
     version: z.literal(1),
     revision: z.number().int().positive(),
@@ -95,6 +136,7 @@ export namespace SessionFilesystem {
     "SessionFilesystemInvalidPathError",
     z.object({
       path: z.string(),
+      message: z.string().optional(),
     }),
   )
 
@@ -146,6 +188,33 @@ export namespace SessionFilesystem {
   async function assertNotToolOutput(target: string) {
     if (!Filesystem.overlaps(await toolOutputRoot(), target)) return
     throw new InvalidPathError({ path: target })
+  }
+
+  async function projectRoots(root: string, worktree: string) {
+    if (managedProject()) return []
+    const output = await toolOutputRoot()
+    const enclave = [root, worktree].find((value) => Filesystem.contains(output, value))
+    if (enclave) {
+      throw new InvalidPathError({
+        path: enclave,
+        message:
+          "This folder is reserved for OpenScience's managed tool outputs. Choose the repository folder itself or create a managed project and connect a narrower source folder.",
+      })
+    }
+    // A selected parent may legitimately contain the managed enclave (a
+    // legacy project rooted at the user's home is the common case). Preserve
+    // authority for benign descendants and carve the enclave out at every
+    // broker/process boundary instead of discarding the user's whole project.
+    // Targets inside the enclave still require an exact owner capability in
+    // authorize/allows/revalidateAuthorization, while native processes mask
+    // ToolOutputPath.root through OpenScience.kernelSensitivePaths().
+    return [...new Set([root, worktree])]
+  }
+
+  export async function validateProject(directory: string) {
+    const root = await canonical(directory)
+    const worktree = await canonical(Instance.worktree)
+    await projectRoots(root, worktree)
   }
 
   async function managedToolOutput(target: string) {
@@ -314,12 +383,10 @@ export namespace SessionFilesystem {
   export async function initialize(sessionID: string, directory: string, options: { revokeExisting?: boolean } = {}) {
     const root = await canonical(directory)
     const worktree = await canonical(Instance.worktree)
-    // The global tool-output directory is a managed broker enclave, never a
-    // project root. Refuse an imported folder (including a broad ancestor such
-    // as the data root or home directory) that would turn initialization's
-    // implicit API grant into authority over every session's broker files.
-    await assertNotToolOutput(root)
-    await assertNotToolOutput(worktree)
+    // A broad legacy project such as the user's home directory may contain the
+    // managed tool-output enclave. Keep its ordinary descendants usable while
+    // the enclave remains an exact, broker-only capability.
+    const roots = await projectRoots(root, worktree)
     const existing = await read(sessionID).catch((error) => {
       if (Storage.NotFoundError.isInstance(error)) return
       throw error
@@ -341,8 +408,8 @@ export namespace SessionFilesystem {
         source: "workspace",
         time: { created: Date.now() },
       },
-      ...(!managedProject()
-        ? [...new Set([root, worktree])].map(
+      ...(roots.length
+        ? roots.map(
             (value): Grant => ({
               id: `fsg_${crypto.randomUUID()}`,
               path: value,
@@ -617,7 +684,7 @@ export namespace SessionFilesystem {
    * canonical path callers must use, preventing a checked symlink spelling
    * from being reused for the actual I/O.
    */
-  export async function authorize(input: { sessionID: string; path: string; access: Access }) {
+  export async function authorize(input: { sessionID: string; path: string; access: Access }): Promise<Authorized> {
     const record = await state(input.sessionID)
     const target = await canonical(input.path, workspaceGrant(record)?.path ?? record.directory)
     assertPrivate(record, target, input.access)
@@ -657,6 +724,129 @@ export namespace SessionFilesystem {
       })
       grant.time.consumed = consumed
       await changed(input.sessionID, Instance.project.id, grant)
+    }
+    const result = { path: target, grant }
+    results.set(
+      result,
+      Object.freeze({
+        sessionID: input.sessionID,
+        path: target,
+        access: input.access,
+        grantID: grant.id,
+        grantPath: grant.path,
+        grantAccess: grant.access,
+        grantScope: grant.scope,
+        grantSource: grant.source,
+        created: grant.time.created,
+        ...(grant.time.consumed ? { consumed: grant.time.consumed } : {}),
+      }),
+    )
+    return result
+  }
+
+  /** Bind the exact result of `authorize` to one multi-phase broker operation. */
+  export async function bindAuthorization(input: {
+    sessionID: string
+    access: Access
+    authorized: Authorized
+  }): Promise<Authorization> {
+    const result = results.get(input.authorized)
+    if (!result || result.sessionID !== input.sessionID || (input.access === "write" && result.access !== "write")) {
+      throw new DeniedError({
+        sessionID: input.sessionID,
+        path: input.authorized.path,
+        access: input.access,
+      })
+    }
+    const record = await state(input.sessionID)
+    const grant = record.grants
+      .filter(
+        (candidate) =>
+          candidate.id === result.grantID &&
+          candidate.path === result.grantPath &&
+          candidate.access === result.grantAccess &&
+          candidate.scope === result.grantScope &&
+          candidate.source === result.grantSource &&
+          candidate.time.created === result.created &&
+          !candidate.time.revoked &&
+          (!candidate.time.consumed ||
+            (candidate.id === result.grantID && candidate.time.consumed === result.consumed)) &&
+          (input.access === "write"
+            ? candidate.access === "write"
+            : candidate.access === "read" || candidate.access === "write") &&
+          Filesystem.contains(candidate.path, result.path),
+      )
+      .toSorted((a, b) => b.path.length - a.path.length || a.id.localeCompare(b.id))[0]
+    if (!grant || (grant.scope === "once" && !grant.time.consumed)) {
+      throw new DeniedError({
+        sessionID: input.sessionID,
+        path: result.path,
+        access: input.access,
+      })
+    }
+    const binding = Object.freeze({
+      sessionID: input.sessionID,
+      path: result.path,
+      access: input.access,
+      grantID: grant.id,
+      grantPath: grant.path,
+      grantAccess: grant.access,
+      grantScope: grant.scope,
+      grantSource: grant.source,
+      created: grant.time.created,
+      ...(grant.time.consumed ? { consumed: grant.time.consumed } : {}),
+    })
+    results.delete(input.authorized)
+    bindings.add(binding)
+    return binding
+  }
+
+  /** End one broker operation's authority lifetime deterministically. */
+  export function releaseAuthorization(binding: Authorization) {
+    bindings.delete(binding)
+  }
+
+  /**
+   * Revalidate a bound operation without re-consuming a once grant. A directory
+   * binding may cover descendants used by the same operation; an exact-file
+   * binding remains exact. Revocation, replacement, path retargeting, and access
+   * escalation all fail closed.
+   */
+  export async function revalidateAuthorization(
+    binding: Authorization,
+    input?: { path?: string; access?: Access },
+  ): Promise<Authorized> {
+    const access = input?.access ?? binding.access
+    const requested = input?.path ?? binding.path
+    const denied = () => new DeniedError({ sessionID: binding.sessionID, path: requested, access })
+    if (!bindings.has(binding)) throw denied()
+    if (access === "write" && binding.access !== "write") throw denied()
+
+    const record = await state(binding.sessionID)
+    const target = await canonical(requested, workspaceGrant(record)?.path ?? record.directory).catch(() => undefined)
+    if (!target) throw denied()
+    assertPrivate(record, target, access)
+    const grant = record.grants.find((item) => item.id === binding.grantID)
+    if (
+      !grant ||
+      grant.path !== binding.grantPath ||
+      grant.access !== binding.grantAccess ||
+      grant.scope !== binding.grantScope ||
+      grant.source !== binding.grantSource ||
+      grant.time.created !== binding.created ||
+      grant.time.revoked ||
+      grant.time.consumed !== binding.consumed ||
+      (access === "write" ? grant.access !== "write" : grant.access !== "read" && grant.access !== "write")
+    ) {
+      throw denied()
+    }
+    const enclave = await managedToolOutput(target)
+    if (
+      enclave
+        ? !exactToolOutputGrant({ ...grant, time: { ...grant.time, consumed: undefined } }, target, access)
+        : !Filesystem.contains(grant.path, target)
+    ) {
+      throw denied()
     }
     return { path: target, grant }
   }

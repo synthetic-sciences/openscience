@@ -20,6 +20,7 @@ import { OpenScience, API_BASE } from "../../openscience"
 import { Log } from "../../util/log"
 import { NamedError } from "@synsci/util/error"
 import { projectSelection } from "../project-selection"
+import { GitOutput } from "../../util/git-output"
 
 const log = Log.create({ service: "atlas-bridge" })
 
@@ -77,14 +78,7 @@ async function atlas(method: string, path: string, body?: unknown): Promise<Resp
 
 // ── best-effort git repo context (mirrors the dev bridge) ────────────────
 async function git(args: string[], cwd: string): Promise<string> {
-  try {
-    const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "ignore" })
-    const out = await new Response(proc.stdout).text()
-    await proc.exited
-    return out.trim()
-  } catch {
-    return ""
-  }
+  return (await GitOutput.text(args, cwd)) ?? ""
 }
 
 function normalizeRemote(remote: string): string | null {

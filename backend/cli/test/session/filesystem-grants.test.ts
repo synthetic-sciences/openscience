@@ -192,14 +192,88 @@ describe("session filesystem grants", () => {
     })
   })
 
-  test("rejects an imported project root that contains the managed broker enclave", async () => {
-    await using tmp = await tmpdir()
+  test("keeps benign descendants of a broad legacy project usable while carving out the managed broker", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    const root = path.dirname(await fs.realpath(Global.Path.data))
+    const source = path.join(root, `CERBench-${crypto.randomUUID()}`)
+    const paper = path.join(source, "paper.tex")
+    const revision = path.join(source, "revision.tex")
+    await fs.mkdir(source)
+    await fs.writeFile(paper, "verified source")
+    try {
+      await Instance.provide({
+        directory: root,
+        fn: async () => {
+          const session = await Session.create({})
+          await using cleanup = {
+            [Symbol.asyncDispose]: () => Session.remove(session.id),
+          }
+          const workspace = await SessionFilesystem.workspace(session.id)
+          const grants = await SessionFilesystem.list(session.id)
+
+          expect(grants).toContainEqual(
+            expect.objectContaining({
+              path: workspace,
+              access: "write",
+              scope: "session",
+              source: "workspace",
+            }),
+          )
+          expect(grants).toContainEqual(
+            expect.objectContaining({
+              path: root,
+              access: "write",
+              scope: "session",
+              source: "api",
+            }),
+          )
+          expect(await SessionFilesystem.processReadRoots(session.id)).toEqual(
+            expect.arrayContaining([workspace, root]),
+          )
+          await expect(
+            SessionFilesystem.authorize({ sessionID: session.id, path: paper, access: "read" }),
+          ).resolves.toMatchObject({ path: paper, grant: { source: "api" } })
+          await expect(
+            SessionFilesystem.authorize({ sessionID: session.id, path: revision, access: "write" }),
+          ).resolves.toMatchObject({ path: revision, grant: { source: "api" } })
+          await expect(
+            SessionFilesystem.grant({
+              sessionID: session.id,
+              path: Global.Path.data,
+              access: "read",
+              scope: "session",
+              source: "api",
+            }),
+          ).rejects.toBeInstanceOf(SessionFilesystem.InvalidPathError)
+        },
+      })
+    } finally {
+      await fs.rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test("rejects the managed tool-output enclave before persisting a session", async () => {
+    await fs.mkdir(Truncate.DIR, { recursive: true })
     await Instance.provide({
-      directory: tmp.path,
+      directory: Truncate.DIR,
       fn: async () => {
-        await expect(
-          SessionFilesystem.initialize("ses_managed_broker_parent", Global.Path.data),
-        ).rejects.toBeInstanceOf(SessionFilesystem.InvalidPathError)
+        const before = await Array.fromAsync(Session.list())
+
+        const error = await Session.create({}).then(
+          () => undefined,
+          (cause) => cause,
+        )
+        expect(error).toBeInstanceOf(SessionFilesystem.InvalidPathError)
+        if (!SessionFilesystem.InvalidPathError.isInstance(error)) throw new Error("expected invalid path error")
+        const serialized = error.toObject()
+        expect(serialized).toMatchObject({
+          name: "SessionFilesystemInvalidPathError",
+          data: {
+            message: expect.stringContaining("reserved for OpenScience's managed tool outputs"),
+          },
+        })
+        expect(serialized.data.path).toBe(await fs.realpath(Truncate.DIR))
+        expect(await Array.fromAsync(Session.list())).toEqual(before)
       },
     })
   })
@@ -335,6 +409,160 @@ describe("session filesystem grants", () => {
       expect(
         (await SessionFilesystem.list(session.id)).find((item) => item.id === grant.id)?.time.consumed,
       ).toBeNumber()
+    })
+  })
+
+  test("revalidates one-shot authority only for the bound operation and rejects revocation", async () => {
+    await using external = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "paper.md"), "# Paper")
+        await Bun.write(path.join(dir, "figures", "result.png"), "figure")
+      },
+    })
+    await using outside = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "secret.txt"), "secret"),
+    })
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const grant = await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: external.path,
+        access: "read",
+        scope: "once",
+      })
+      const authorized = await SessionFilesystem.authorize({
+        sessionID: session.id,
+        path: path.join(external.path, "paper.md"),
+        access: "read",
+      })
+      const binding = await SessionFilesystem.bindAuthorization({
+        sessionID: session.id,
+        access: "read",
+        authorized,
+      })
+
+      await expect(SessionFilesystem.revalidateAuthorization(binding)).resolves.toMatchObject({
+        path: path.join(external.path, "paper.md"),
+      })
+      await expect(
+        SessionFilesystem.revalidateAuthorization(binding, {
+          path: path.join(external.path, "figures", "result.png"),
+          access: "read",
+        }),
+      ).resolves.toMatchObject({ path: path.join(external.path, "figures", "result.png") })
+      await expect(
+        SessionFilesystem.revalidateAuthorization(binding, {
+          path: path.join(outside.path, "secret.txt"),
+          access: "read",
+        }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      await expect(
+        SessionFilesystem.revalidateAuthorization(binding, {
+          path: path.join(external.path, "paper.md"),
+          access: "write",
+        }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      await expect(
+        SessionFilesystem.bindAuthorization({
+          sessionID: session.id,
+          access: "read",
+          authorized: structuredClone(authorized),
+        }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+
+      await SessionFilesystem.revoke(session.id, grant.id)
+      await expect(SessionFilesystem.revalidateAuthorization(binding)).rejects.toBeInstanceOf(
+        SessionFilesystem.DeniedError,
+      )
+    })
+  })
+
+  test("keeps an exact-file operation binding exact", async () => {
+    await using external = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "paper.md"), "# Paper")
+        await Bun.write(path.join(dir, "secret.txt"), "secret")
+      },
+    })
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: path.join(external.path, "paper.md"),
+        access: "read",
+        scope: "once",
+      })
+      const authorized = await SessionFilesystem.authorize({
+        sessionID: session.id,
+        path: path.join(external.path, "paper.md"),
+        access: "read",
+      })
+      authorized.path = external.path
+      authorized.grant.path = external.path
+      authorized.grant.access = "write"
+      await expect(
+        SessionFilesystem.bindAuthorization({
+          sessionID: session.id,
+          access: "write",
+          authorized,
+        }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      const binding = await SessionFilesystem.bindAuthorization({
+        sessionID: session.id,
+        access: "read",
+        authorized,
+      })
+
+      expect(binding.path).toBe(path.join(external.path, "paper.md"))
+      await expect(
+        SessionFilesystem.bindAuthorization({
+          sessionID: session.id,
+          access: "read",
+          authorized,
+        }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+
+      await expect(
+        SessionFilesystem.revalidateAuthorization(binding, {
+          path: path.join(external.path, "secret.txt"),
+        }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+
+      SessionFilesystem.releaseAuthorization(binding)
+      await expect(SessionFilesystem.revalidateAuthorization(binding)).rejects.toBeInstanceOf(
+        SessionFilesystem.DeniedError,
+      )
+    })
+  })
+
+  test("refuses to bind when the durable grant is replaced after authorization", async () => {
+    await using external = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "paper.md"), "# Paper"),
+    })
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const target = path.join(external.path, "paper.md")
+      const grant = await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: target,
+        access: "read",
+        scope: "session",
+      })
+      const authorized = await SessionFilesystem.authorize({ sessionID: session.id, path: target, access: "read" })
+      await Storage.update<SessionFilesystem.State>(
+        ["session_filesystem", Instance.project.id, session.id],
+        (draft) => {
+          const current = draft.grants.find((item) => item.id === grant.id)
+          if (!current) throw new Error("grant disappeared")
+          current.path = external.path
+          current.access = "write"
+          draft.revision++
+        },
+      )
+
+      await expect(
+        SessionFilesystem.bindAuthorization({ sessionID: session.id, access: "read", authorized }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
     })
   })
 
@@ -860,6 +1088,36 @@ describe("session filesystem grants", () => {
 })
 
 describe("file access uses session grants", () => {
+  test("File authority scopes release every retained read and write binding", async () => {
+    await using external = await tmpdir({
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "paper.md"), "# Paper\n")
+        await Bun.write(path.join(directory, "figure.txt"), "figure\n")
+      },
+    })
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: external.path,
+        access: "write",
+        scope: "session",
+      })
+      const source = path.join(external.path, "paper.md")
+      const output = path.join(external.path, "export.html")
+      const scope = await File.authority(source, { sessionID: session.id })
+
+      await expect(scope.read(path.join(external.path, "figure.txt"))).resolves.toBe(
+        path.join(external.path, "figure.txt"),
+      )
+      await expect(scope.write(output)).resolves.toBe(output)
+      scope[Symbol.dispose]()
+
+      await expect(scope.read(source)).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      await expect(scope.write(output)).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+    })
+  })
+
   test("File and File HTTP reads accept an explicit read grant but writes do not", async () => {
     await using external = await tmpdir({
       init: (dir) => Bun.write(path.join(dir, "data.txt"), "external"),

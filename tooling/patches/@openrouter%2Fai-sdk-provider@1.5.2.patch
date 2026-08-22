@@ -1,0 +1,22 @@
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2245,6 +2245,6 @@ var OpenRouterChatLanguageModel = class {
+                   delta: (_l = toolCallDelta.function.arguments) != null ? _l : ""
+                 });
+-                if (((_m = toolCall.function) == null ? void 0 : _m.name) != null && ((_n = toolCall.function) == null ? void 0 : _n.arguments) != null && isParsableJson(toolCall.function.arguments)) {
++                if (!toolCall.sent && ((_m = toolCall.function) == null ? void 0 : _m.name) != null && ((_n = toolCall.function) == null ? void 0 : _n.arguments) != null && isParsableJson(toolCall.function.arguments)) {
+                   controller.enqueue({
+                     type: "tool-call",
+                     toolCallId: (_o = toolCall.id) != null ? _o : generateId(),
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -2208,6 +2208,6 @@ var OpenRouterChatLanguageModel = class {
+                   delta: (_l = toolCallDelta.function.arguments) != null ? _l : ""
+                 });
+-                if (((_m = toolCall.function) == null ? void 0 : _m.name) != null && ((_n = toolCall.function) == null ? void 0 : _n.arguments) != null && isParsableJson(toolCall.function.arguments)) {
++                if (!toolCall.sent && ((_m = toolCall.function) == null ? void 0 : _m.name) != null && ((_n = toolCall.function) == null ? void 0 : _n.arguments) != null && isParsableJson(toolCall.function.arguments)) {
+                   controller.enqueue({
+                     type: "tool-call",
+                     toolCallId: (_o = toolCall.id) != null ? _o : generateId(),

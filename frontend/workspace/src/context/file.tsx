@@ -10,6 +10,7 @@ import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { createDebouncedSearch } from "./file-search"
+import { relativeLocalPath } from "@/utils/local-path"
 
 // Aborted / cancelled requests are expected when the user clicks quickly
 // (switching files or folders cancels the in-flight fetch). Surfacing those as
@@ -293,17 +294,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     function normalize(input: string) {
       const root = directory()
-      const prefix = root.endsWith("/") ? root : root + "/"
-
-      let path = unquoteGitPath(stripQueryAndHash(stripFileProtocol(input)))
-
-      if (path.startsWith(prefix)) {
-        path = path.slice(prefix.length)
-      }
-
-      if (path.startsWith(root)) {
-        path = path.slice(root.length)
-      }
+      let path = relativeLocalPath(unquoteGitPath(stripQueryAndHash(stripFileProtocol(input))), root)
 
       if (path.startsWith("./")) {
         path = path.slice(2)

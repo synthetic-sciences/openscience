@@ -134,6 +134,34 @@ describe("filesystem source isolation", () => {
     expect(connectedFilesystemGrants(parsed).map((grant) => grant.id)).toEqual(["fsg_read"])
   })
 
+  test("accepts delegated handoff authority without presenting it as a connected folder", () => {
+    const mixed = {
+      ...snapshot,
+      enforcement: { ...snapshot.enforcement, processRead: "grant_only" as const },
+      grants: [
+        snapshot.grants[0],
+        {
+          id: "fsg_handoff",
+          path: "/work/parent/evidence",
+          access: "read",
+          scope: "session",
+          source: "handoff",
+          time: { created: 2 },
+        },
+      ],
+    } satisfies FilesystemSnapshot
+
+    const parsed = parseFilesystemSnapshot(mixed, {
+      sessionID: "ses_alpha",
+      projectID: "prj_alpha",
+      directory: "/work/alpha",
+    })
+
+    expect(parsed?.grants.map((grant) => grant.source)).toEqual(["workspace", "handoff"])
+    expect(findFilesystemGrant(parsed, "/work/parent/evidence/table.csv", "read")?.id).toBe("fsg_handoff")
+    expect(connectedFilesystemGrants(parsed)).toEqual([])
+  })
+
   test("uses the durable session workspace grant as the Session files root", () => {
     expect(sessionFilesystemRoot(snapshot)).toBe("/work/alpha")
     expect(sessionFilesystemRoot()).toBeUndefined()
@@ -142,6 +170,24 @@ describe("filesystem source isolation", () => {
   test("treats the filesystem root as containing its descendants", () => {
     expect(containsFilePath("/", "/outputs/model.pt")).toBe(true)
     expect(containsFilePath("/", "relative/model.pt")).toBe(false)
+    expect(containsFilePath("C:\\Research\\CERBench", "c:\\research\\cerbench\\results.csv")).toBe(true)
+    expect(containsFilePath("C:\\Research\\CERBench", "C:\\Research\\CERBench-old\\results.csv")).toBe(false)
+  })
+
+  test("accepts a Windows filesystem snapshot when only path casing differs", () => {
+    const windows = {
+      ...snapshot,
+      directory: "C:\\Research\\CERBench",
+      grants: snapshot.grants.map((grant) => ({ ...grant, path: grant.path.replace("/work/alpha", "C:\\Research\\CERBench") })),
+    }
+
+    expect(
+      parseFilesystemSnapshot(windows, {
+        sessionID: "ses_alpha",
+        projectID: "prj_alpha",
+        directory: "c:\\research\\cerbench",
+      })?.directory,
+    ).toBe("c:/Research/CERBench")
   })
 
   test("parses project-persistent folder grants without weakening project identity checks", () => {

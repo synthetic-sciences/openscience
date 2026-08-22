@@ -74,6 +74,85 @@ describe("PublicationReview", () => {
     })
   })
 
+  test("resolves block bibliographies and reference-style or balanced figure destinations", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "refs", "paper.bib"), "@article{known2026, title={Known result}}\n")
+        await Bun.write(path.join(directory, "figures", "result_(final).png"), "figure")
+        await Bun.write(
+          path.join(directory, "report.md"),
+          [
+            "---",
+            "bibliography:",
+            "  - refs/paper.bib",
+            "---",
+            "# Result",
+            "",
+            "Prior work supports this result [@known2026].",
+            "",
+            "![Observed][result]",
+            '![Missing](<figures/missing panel.png> "Panel")',
+            "",
+            '[result]: figures/result_(final).png "Final result"',
+          ].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const report = await PublicationReview.run({ path: "report.md", actor: "Reviewer" })
+        expect(report.findings.some((finding) => finding.title.includes("known2026"))).toBe(false)
+        expect(report.findings.some((finding) => finding.title.includes("result_(final).png is missing"))).toBe(false)
+        expect(report.findings.find((finding) => finding.title.includes("missing panel.png is missing"))).toMatchObject(
+          {
+            location: { path: "report.md", line: 10 },
+          },
+        )
+      },
+    })
+  })
+
+  test("does not treat email addresses, comments, or code examples as scientific claims", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "references.bib"), "@article{known2026, title={Known result}}\n")
+        await Bun.write(
+          path.join(directory, "report.md"),
+          [
+            "---",
+            "bibliography: references.bib",
+            "contact: author@example.com",
+            "---",
+            "# Result",
+            "",
+            "Prior work is documented [@known2026]. Contact author@example.com.",
+            "",
+            "`TODO: cite a 99% result from @inlinefake`",
+            "",
+            "```text",
+            "[citation needed] 88% @fencedfake",
+            "```",
+            "",
+            "<!-- TODO: cite 77% @commentfake -->",
+          ].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const report = await PublicationReview.run({ path: "report.md", actor: "Reviewer" })
+        expect(report.findings.filter((finding) => finding.check === "citation")).toEqual([])
+        expect(report.findings.filter((finding) => finding.check === "numeric")).toEqual([])
+      },
+    })
+  })
+
   test("finalizes the exact reviewed bytes after attributed resolutions and overrides", async () => {
     await using tmp = await tmpdir({
       git: true,

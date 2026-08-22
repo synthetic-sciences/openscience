@@ -20,6 +20,7 @@ import {
 } from "@/atlas/shared/Icon"
 import { FONT_CODE, FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { resolveArtifactPath, type ArtifactContext } from "./context"
+import { downloadBlob } from "./bytes"
 import {
   filterReviewerFindings,
   inspectorTabs,
@@ -185,12 +186,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
       toast.error("Download failed", response ? `${response.status}` : "Request failed")
       return
     }
-    const object = URL.createObjectURL(await response.blob())
-    const anchor = document.createElement("a")
-    anchor.href = object
-    anchor.download = props.context.name
-    anchor.click()
-    URL.revokeObjectURL(object)
+    downloadBlob(props.context.name, await response.blob())
   }
   const mutateAnnotation = async (route: string, method: "POST" | "PATCH", body: Record<string, unknown>) => {
     const response = await sdk

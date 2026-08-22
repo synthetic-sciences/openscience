@@ -47,7 +47,7 @@ import { SessionSummary } from "./summary"
 import { NamedError } from "@synsci/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
-import { DELEGATION_PROFILES, TaskTool } from "@/tool/task"
+import { DELEGATION_PROFILES, DELEGATION_SPECIALISTS, TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
@@ -74,6 +74,10 @@ import { ComputeJobs } from "@/compute/jobs"
 import { KernelRuntime } from "@/science/kernel/registry"
 import { SessionCheckpoint } from "./checkpoint"
 import { ToolSelection } from "./tool-selection"
+import { SessionLoopState } from "./loop-state"
+import { FileLease } from "@/util/file-lease"
+import { Global } from "@/global"
+import { TaskAttempt } from "@/tool/task-attempt"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -81,6 +85,7 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENSCIENCE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+  const LOOP_LEASE_TIMEOUT = 24 * 60 * 60 * 1_000
   // Scientific agents can still consume session-scoped artifact references.
   // Science agents that dispatch GPU/compute work and should honor billing.compute.
   const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
@@ -137,7 +142,7 @@ export namespace SessionPrompt {
     if (match) throw new Session.BusyError(sessionID)
   }
 
-  export const PromptInput = z.object({
+  const RuntimePromptInput = z.object({
     sessionID: Identifier.schema("session"),
     messageID: Identifier.schema("message").optional(),
     model: z
@@ -155,7 +160,7 @@ export namespace SessionPrompt {
         "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
       ),
     effort: MessageV2.ResearchEffort.optional(),
-    /** @deprecated Research effort now controls bounded delegation. */
+    /** Controls automatic Task-tool delegation for this turn. */
     delegation: z.boolean().optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
@@ -170,7 +175,7 @@ export namespace SessionPrompt {
             id: true,
           })
           .meta({
-            ref: "TextPartInput",
+            ref: "RuntimeTextPartInput",
           }),
         MessageV2.FilePart.omit({
           messageID: true,
@@ -180,7 +185,7 @@ export namespace SessionPrompt {
             id: true,
           })
           .meta({
-            ref: "FilePartInput",
+            ref: "RuntimeFilePartInput",
           }),
         MessageV2.AgentPart.omit({
           messageID: true,
@@ -190,7 +195,7 @@ export namespace SessionPrompt {
             id: true,
           })
           .meta({
-            ref: "AgentPartInput",
+            ref: "RuntimeAgentPartInput",
           }),
         MessageV2.SubtaskPart.omit({
           messageID: true,
@@ -200,14 +205,43 @@ export namespace SessionPrompt {
             id: true,
           })
           .meta({
-            ref: "SubtaskPartInput",
+            ref: "RuntimeSubtaskPartInput",
           }),
       ]),
     ),
   })
-  export type PromptInput = z.infer<typeof PromptInput>
+  // Public clients may supply ordinary text, files, agent mentions, and
+  // explicit subtasks, but cannot mark text as synthetic/ignored or attach
+  // runtime metadata. Internal command expansion uses RuntimePromptInput.
+  export const PromptInput = RuntimePromptInput.extend({
+    parts: z.array(
+      z.discriminatedUnion("type", [
+        MessageV2.TextPart.omit({
+          messageID: true,
+          sessionID: true,
+          synthetic: true,
+          ignored: true,
+          time: true,
+          metadata: true,
+        })
+          .partial({ id: true })
+          .strict()
+          .meta({ ref: "TextPartInput" }),
+        MessageV2.FilePart.omit({ messageID: true, sessionID: true })
+          .partial({ id: true })
+          .meta({ ref: "FilePartInput" }),
+        MessageV2.AgentPart.omit({ messageID: true, sessionID: true })
+          .partial({ id: true })
+          .meta({ ref: "AgentPartInput" }),
+        MessageV2.SubtaskPart.omit({ messageID: true, sessionID: true })
+          .partial({ id: true })
+          .meta({ ref: "SubtaskPartInput" }),
+      ]),
+    ),
+  })
+  export type PromptInput = z.infer<typeof RuntimePromptInput>
 
-  export const prompt = fn(PromptInput, async (input) => {
+  export const prompt = fn(RuntimePromptInput, async (input) => {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
@@ -314,6 +348,11 @@ export namespace SessionPrompt {
     return controller.signal
   }
 
+  export function loopLeasePath(projectID: string, sessionID: string) {
+    const digest = new Bun.CryptoHasher("sha256").update(`${projectID}\0${sessionID}`).digest("hex")
+    return path.join(Global.Path.data, "session-loop", `${digest}.lock`)
+  }
+
   export function cancel(sessionID: string, owner?: AbortSignal) {
     log.info("cancel", { sessionID })
     const s = state()
@@ -342,31 +381,127 @@ export namespace SessionPrompt {
     return state()[sessionID]?.abort.signal
   }
 
-  export const loop = fn(Identifier.schema("session"), async (sessionID) => {
-    const session = await Session.get(sessionID)
-    const abort = start(sessionID)
-    if (!abort) {
-      return new Promise<MessageV2.WithParts>((resolve, reject) => {
-        const callbacks = state()[sessionID].callbacks
-        callbacks.push({ resolve, reject })
-      })
+  async function enqueue(input: {
+    user: MessageV2.User
+    kind: SessionLoopState.Continuation
+    text: string
+    epoch: string
+    agent?: string
+    model?: MessageV2.User["model"]
+  }) {
+    const id = await MessageV2.nextMessageID(input.user.sessionID)
+    const message: MessageV2.User = {
+      id,
+      sessionID: input.user.sessionID,
+      role: "user",
+      time: { created: Date.now() },
+      agent: input.agent ?? input.user.agent,
+      model: input.model ?? input.user.model,
+      effort: MessageV2.resolveResearchEffort(input.user.effort),
+      ...SessionLoopState.controls(input.user),
+      internal: SessionLoopState.intent({
+        kind: input.kind,
+        text: input.text,
+        epoch: input.epoch,
+        transaction: id,
+      }),
     }
+    await Session.updateMessage(message)
+    await Session.updatePart({
+      id: SessionLoopState.partID(id, "continuation"),
+      messageID: message.id,
+      sessionID: message.sessionID,
+      type: "text",
+      synthetic: true,
+      metadata: SessionLoopState.continuation(input.kind),
+      text: input.text,
+    } satisfies MessageV2.TextPart)
+    return message
+  }
 
-    using _ = defer(() => cancel(sessionID, abort))
+  function taskWrapper(messages: MessageV2.WithParts[], source: { messageID: string; partID: string }) {
+    for (const message of messages) {
+      if (message.info.role !== "assistant") continue
+      const part = message.parts.find((candidate): candidate is MessageV2.ToolPart => {
+        const found = TaskAttempt.wrapperSource(candidate)
+        return found?.messageID === source.messageID && found.partID === source.partID
+      })
+      if (part) return { message: message.info, part }
+    }
+  }
 
-    let step = 0
+  function pendingTaskContinuation(messages: MessageV2.WithParts[]) {
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const wrapper = messages[index]
+      if (wrapper.info.role !== "assistant" || !wrapper.info.finish || !TaskAttempt.syntheticWrapper(wrapper)) continue
+      const part = wrapper.parts.find(
+        (candidate): candidate is MessageV2.ToolPart => candidate.type === "tool" && candidate.tool === "task",
+      )
+      if (!part || part.state.status === "pending" || part.state.status === "running") continue
+      if (typeof part.state.input.command !== "string" || !part.state.input.command) continue
+      const later = messages.slice(index + 1)
+      if (later.some((message) => SessionLoopState.external(message))) return
+      if (
+        later.some((message) => message.info.role === "user" && SessionLoopState.messageKind(message.info) === "task")
+      )
+        return
+      const parentID = wrapper.info.parentID
+      const user = messages.find(
+        (message): message is MessageV2.WithParts & { info: MessageV2.User } =>
+          message.info.role === "user" && message.info.id === parentID,
+      )
+      if (!user) return
+      return { user: user.info, epoch: SessionLoopState.messageEpoch(user.info) ?? user.info.id }
+    }
+  }
+
+  async function recoverTaskContinuation(messages: MessageV2.WithParts[]) {
+    const pending = pendingTaskContinuation(messages)
+    if (!pending) return false
+    await enqueue({
+      user: pending.user,
+      kind: "task",
+      epoch: pending.epoch,
+      text: "Summarize the task tool output above and continue with your task.",
+    })
+    return true
+  }
+
+  async function execute(sessionID: string, session: Session.Info, abort: AbortSignal) {
+    const initial = await Session.messages({ sessionID })
+    const incomplete = SessionLoopState.incomplete(initial)
+    await Promise.all(
+      incomplete.map((message) => {
+        const part = SessionLoopState.repair(message.info)
+        if (!part) return
+        return Session.updatePart({
+          messageID: message.info.id,
+          sessionID,
+          ...part,
+        })
+      }),
+    )
+    const repaired = incomplete.length ? await Session.messages({ sessionID }) : initial
+    const continued = await recoverTaskContinuation(repaired)
+    const durable = continued ? await Session.messages({ sessionID }) : repaired
+    const recovered = SessionLoopState.restore(durable)
+    SessionCompaction.restoreBreaker(sessionID, durable)
+    const interrupted = SessionLoopState.pendingCompaction(durable)
+    if (interrupted) await SessionCompaction.recover(interrupted)
+    let epoch = recovered.epoch
+    let step = recovered.step
     // Consecutive context-overflow compactions for the current unanswered turn.
     // Reset on any non-overflow result; a second overflow means the pending
     // message itself is too large to ever fit.
-    let overflowCompactions = 0
+    let overflowCompactions = recovered.overflowCompactions
     // Compact once, then don't compact again until context drops back under the
     // threshold. Prevents an infinite compaction loop when fixed system+tool+
     // summary overhead alone already exceeds the 0.75 threshold.
     let compactionArmed = true
-    let outputContinuations = 0
-    let contractContinuations = 0
-    let reviewContinuations = 0
-    let summaryContinuations = 0
+    let outputContinuations = recovered.outputContinuations
+    let contractContinuations = recovered.contractContinuations
+    let reviewContinuations = recovered.reviewContinuations
+    let summaryContinuations = recovered.summaryContinuations
     const reviewLimit = 2
     const workspace = await SessionFilesystem.workspace(sessionID)
     // Text doom-loop guard (#176): weak/local models sometimes emit a near-identical
@@ -411,6 +546,19 @@ export namespace SessionPrompt {
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
       const user = lastUser
+      const current = SessionLoopState.messageEpoch(user)
+      if (current && current !== epoch) {
+        epoch = current
+        step = 0
+        overflowCompactions = 0
+        outputContinuations = 0
+        contractContinuations = 0
+        reviewContinuations = 0
+        summaryContinuations = 0
+        compactionArmed = true
+        SessionCompaction.resetBreaker(sessionID)
+      }
+      const turn = epoch ?? current ?? user.id
       // Terminal for "input exceeds the window and compaction can't help":
       // either the summarization itself overflowed, or the input is still too
       // big after one compaction. Surface an actionable error, never loop.
@@ -456,6 +604,7 @@ export namespace SessionPrompt {
           effort: MessageV2.resolveResearchEffort(user.effort),
           auto: true,
           trigger,
+          epoch: turn,
         })
       // Latched compaction: fire once, then not again until context drops back under
       // the threshold (re-arm happens in the reactive branch). Returns whether it fired.
@@ -473,6 +622,29 @@ export namespace SessionPrompt {
         return true
       }
       const bareMode = lastUser.tools?.["*"] === false
+      // Provider/auth/payment/cancellation errors are terminal for the durable
+      // attempt that produced them. A backend restart must not silently issue
+      // the same request again; a newer real prompt has a newer user id and is
+      // therefore allowed to proceed.
+      if (SessionLoopState.terminalError({ user: lastUser, assistant: lastAssistant })) break
+      // A process may stop after the provider durably records an overflow but
+      // before the outer loop queues its compaction carrier. Recover that edge
+      // from the assistant's `finish=compact` marker instead of retrying the
+      // same oversized request with freshly-reset local counters.
+      const overflowRecovery = SessionLoopState.overflowRecovery({
+        assistant: lastAssistant,
+        unanswered: !!lastAssistant && lastUser.id < lastAssistant.id,
+        attempts: overflowCompactions,
+      })
+      if (overflowRecovery === "fail") {
+        await failTooLarge()
+        break
+      }
+      if (overflowRecovery === "compact") {
+        await compact("overflow")
+        compactionArmed = false
+        continue
+      }
       // A text-only turn that finished "unknown" (no tool call to feed back) is a
       // completed turn, not a continue — otherwise the loop re-prompts the identical
       // context forever (the #176 doom loop). See MessageV2.isContinuingTurn.
@@ -492,28 +664,16 @@ export namespace SessionPrompt {
           break
         }
         outputContinuations++
-        const resume: MessageV2.User = {
-          id: await MessageV2.nextMessageID(sessionID),
-          sessionID,
-          role: "user",
-          time: { created: Date.now() },
-          agent: lastUser.agent,
-          model: lastUser.model,
-          effort: MessageV2.resolveResearchEffort(lastUser.effort),
-        }
-        await Session.updateMessage(resume)
-        await Session.updatePart({
-          id: Identifier.ascending("part"),
-          messageID: resume.id,
-          sessionID,
-          type: "text",
-          synthetic: true,
+        await enqueue({
+          user: lastUser,
+          kind: "output",
+          epoch: turn,
           text: [
             "Your previous response reached the output limit before the task completed.",
             "Continue from the existing work without repeating it. Write requested files in smaller chunks,",
             "run the saved workflow, inspect its outputs, and finish with the verified result.",
           ].join(" "),
-        } satisfies MessageV2.TextPart)
+        })
         continue
       }
       if (lastAssistant?.finish !== "length") outputContinuations = 0
@@ -534,28 +694,16 @@ export namespace SessionPrompt {
           )
           if (reviewing && owner && summaryContinuations < reviewLimit && !bareMode) {
             summaryContinuations++
-            const resume: MessageV2.User = {
-              id: await MessageV2.nextMessageID(sessionID),
-              sessionID,
-              role: "user",
-              time: { created: Date.now() },
-              agent: owner.info.agent,
-              model: owner.info.model,
-              effort: MessageV2.resolveResearchEffort(owner.info.effort),
-            }
-            await Session.updateMessage(resume)
-            await Session.updatePart({
-              id: Identifier.ascending("part"),
-              messageID: resume.id,
-              sessionID,
-              type: "text",
-              synthetic: true,
+            await enqueue({
+              user: owner.info,
+              kind: "review-summary",
+              epoch: turn,
               text: pending.length
                 ? `Independent review completed. Address these remaining completion gates without repeating verified work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}. Open findings: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ") || "none recorded"}. Correct each underlying defect before calling provenance_resolve with replacement evidence; a later reviewer must confirm it. Then return the corrected outcome.`
                 : findings.length
                   ? `Independent review completed with ${findings.length} non-blocking ${findings.length === 1 ? "finding" : "findings"}. Correct them when possible, save the corrected Result, then call provenance_resolve with replacement evidence; a later reviewer must confirm it. Disclose anything that remains: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ")}. Then return the concise verified outcome.`
                   : "Independent review completed with no recorded provenance findings. Read the reviewer's final report above and address or disclose any text-only findings or limitations it contains. Do not claim there are no open findings unless the report itself is clean. Then return the concise verified outcome and the saved Results.",
-            } satisfies MessageV2.TextPart)
+            })
             continue
           }
           const review = pending.find((gate) => gate.id === "review")
@@ -563,50 +711,27 @@ export namespace SessionPrompt {
           if (review && other.length === 0 && reviewContinuations < reviewLimit && !bareMode) {
             reviewContinuations++
             const packet = await import("./review").then((mod) => mod.SessionReview.prepare(sessionID))
-            const resume: MessageV2.User = {
-              id: await MessageV2.nextMessageID(sessionID),
-              sessionID,
-              role: "user",
-              time: { created: Date.now() },
+            await enqueue({
+              user: lastUser,
+              kind: "review",
+              epoch: turn,
               agent: packet.agent,
-              model: lastUser.model,
-              effort: MessageV2.resolveResearchEffort(lastUser.effort),
-            }
-            await Session.updateMessage(resume)
-            await Session.updatePart({
-              id: Identifier.ascending("part"),
-              messageID: resume.id,
-              sessionID,
-              type: "text",
-              synthetic: true,
               text: packet.text,
-            } satisfies MessageV2.TextPart)
+            })
             continue
           }
           if (pending.length && contractContinuations < 1 && !bareMode) {
             contractContinuations++
-            const resume: MessageV2.User = {
-              id: await MessageV2.nextMessageID(sessionID),
-              sessionID,
-              role: "user",
-              time: { created: Date.now() },
-              agent: lastUser.agent,
-              model: lastUser.model,
-              effort: MessageV2.resolveResearchEffort(lastUser.effort),
-            }
-            await Session.updateMessage(resume)
-            await Session.updatePart({
-              id: Identifier.ascending("part"),
-              messageID: resume.id,
-              sessionID,
-              type: "text",
-              synthetic: true,
+            await enqueue({
+              user: lastUser,
+              kind: "contract",
+              epoch: turn,
               text: [
                 "The durable research completion contract is not satisfied yet.",
                 `Resolve these gates without repeating completed work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}.`,
                 "Save every required Result, record deterministic checks and failed candidates truthfully, then return the verified outcome.",
               ].join(" "),
-            } satisfies MessageV2.TextPart)
+            })
             continue
           }
           if (pending.length) {
@@ -678,6 +803,7 @@ export namespace SessionPrompt {
           },
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
+          internal: { step },
           error,
           time: {
             created: Date.now(),
@@ -699,65 +825,77 @@ export namespace SessionPrompt {
           : "execute"
         const taskTool = await TaskTool.init()
         const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
-        const assistantMessage = (await Session.updateMessage({
-          id: await MessageV2.nextMessageID(sessionID),
-          role: "assistant",
-          parentID: lastUser.id,
-          sessionID,
-          mode: taskProfile,
-          agent: taskProfile,
-          path: {
-            cwd: workspace,
-            root: Instance.worktree,
-          },
-          cost: 0,
-          tokens: {
-            input: 0,
-            output: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          modelID: taskModel.id,
-          providerID: taskModel.providerID,
-          time: {
-            created: Date.now(),
-          },
-        })) as MessageV2.Assistant
-        let part = (await Session.updatePart({
-          id: Identifier.ascending("part"),
-          messageID: assistantMessage.id,
-          sessionID: assistantMessage.sessionID,
-          type: "tool",
-          callID: ulid(),
-          tool: TaskTool.id,
-          state: {
-            status: "running",
-            input: {
-              prompt: task.prompt,
-              description: task.description,
-              subagent_type: taskProfile,
-              command: task.command,
+        const source = { messageID: lastUser.id, partID: task.id }
+        const ids = TaskAttempt.wrapperIDs(source)
+        const saved = taskWrapper(msgs, source)
+        const assistantMessage =
+          saved?.message ??
+          ((await Session.updateMessage({
+            id: ids.messageID,
+            role: "assistant",
+            parentID: lastUser.id,
+            sessionID,
+            mode: taskProfile,
+            agent: taskProfile,
+            path: {
+              cwd: workspace,
+              root: Instance.worktree,
             },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            modelID: taskModel.id,
+            providerID: taskModel.providerID,
+            internal: { step },
             time: {
-              start: Date.now(),
+              created: Date.now(),
             },
-          },
-        })) as MessageV2.ToolPart
+          })) as MessageV2.Assistant)
+        const part =
+          saved?.part ??
+          ((await Session.updatePart({
+            id: ids.partID,
+            messageID: assistantMessage.id,
+            sessionID: assistantMessage.sessionID,
+            type: "tool",
+            callID: ids.callID,
+            tool: TaskTool.id,
+            metadata: TaskAttempt.wrapper(source),
+            state: {
+              status: "running",
+              input: {
+                prompt: task.prompt,
+                description: task.description,
+                subagent_type: taskProfile,
+                command: task.command,
+              },
+              time: {
+                start: Date.now(),
+              },
+            },
+          })) as MessageV2.ToolPart)
         const taskArgs = {
           prompt: task.prompt,
           description: task.description,
           subagent_type: taskProfile,
           command: task.command,
         }
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          { args: taskArgs },
-        )
+        const replayed = part.state.status === "completed" || part.state.status === "error"
+        if (!replayed) {
+          await Plugin.trigger(
+            "tool.execute.before",
+            {
+              tool: "task",
+              sessionID,
+              callID: part.id,
+            },
+            { args: taskArgs },
+          )
+        }
         let executionError: Error | undefined
         const taskAgent = await Agent.get(taskProfile)
         const taskCtx: Tool.Context = {
@@ -789,20 +927,32 @@ export namespace SessionPrompt {
             })
           },
         }
-        const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
-          executionError = error
-          log.error("subtask execution failed", { error, agent: taskProfile, description: task.description })
-          return undefined
-        })
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          result,
-        )
+        const result =
+          part.state.status === "completed"
+            ? {
+                title: part.state.title,
+                metadata: part.state.metadata,
+                output: part.state.output,
+                attachments: part.state.attachments,
+              }
+            : part.state.status === "error"
+              ? undefined
+              : await taskTool.execute(taskArgs, taskCtx).catch((error) => {
+                  executionError = error
+                  log.error("subtask execution failed", { error, agent: taskProfile, description: task.description })
+                  return undefined
+                })
+        if (!replayed) {
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: "task",
+              sessionID,
+              callID: part.id,
+            },
+            result,
+          )
+        }
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -823,7 +973,7 @@ export namespace SessionPrompt {
             },
           } satisfies MessageV2.ToolPart)
         }
-        if (!result) {
+        if (!result && part.state.status !== "error") {
           await Session.updatePart({
             ...part,
             state: {
@@ -843,26 +993,12 @@ export namespace SessionPrompt {
           // Add synthetic user message to prevent certain reasoning models from erroring
           // If we create assistant messages w/ out user ones following mid loop thinking signatures
           // will be missing and it can cause errors for models like gemini for example
-          const summaryUserMsg: MessageV2.User = {
-            id: Identifier.ascending("message"),
-            sessionID,
-            role: "user",
-            time: {
-              created: Date.now(),
-            },
-            agent: lastUser.agent,
-            model: lastUser.model,
-            effort: MessageV2.resolveResearchEffort(lastUser.effort),
-          }
-          await Session.updateMessage(summaryUserMsg)
-          await Session.updatePart({
-            id: Identifier.ascending("part"),
-            messageID: summaryUserMsg.id,
-            sessionID,
-            type: "text",
+          await enqueue({
+            user: lastUser,
+            kind: "task",
+            epoch: turn,
             text: "Summarize the task tool output above and continue with your task.",
-            synthetic: true,
-          } satisfies MessageV2.TextPart)
+          })
         }
 
         continue
@@ -879,6 +1015,7 @@ export namespace SessionPrompt {
           focus: task.focus,
           handoffFile: task.handoffFile,
           trigger: task.trigger,
+          step,
         })
         if (result === "stop") break
         // The summarization request itself exceeded the window — the pending
@@ -933,6 +1070,13 @@ export namespace SessionPrompt {
           // the threshold); prune's return value is the estimated reclaim.
           const before = lastFinished!.tokens.input + lastFinished!.tokens.cache.read + lastFinished!.tokens.output
           SessionTelemetry.recordCompaction({ sessionID, trigger: "proactive", mechanism: "prune", before, reclaimed })
+          await SessionCompaction.persistBreaker({
+            sessionID,
+            messageID: lastFinished!.parentID,
+            transaction: lastFinished!.id,
+            before,
+            reclaimed,
+          })
           SessionCompaction.noteCompaction({ sessionID, before, reclaimed })
           compactionArmed = true
         }
@@ -947,18 +1091,27 @@ export namespace SessionPrompt {
       // later, legitimately-needed compaction can still fire.
       if (!overThreshold && lastFinished && lastFinished.summary !== true) {
         compactionArmed = true
-        SessionCompaction.resetBreaker(sessionID)
+        if (SessionCompaction.breakerCount(sessionID) > 0) {
+          await SessionCompaction.persistBreaker({
+            sessionID,
+            messageID: lastFinished.parentID,
+            transaction: lastFinished.id,
+            reset: true,
+          })
+          SessionCompaction.resetBreaker(sessionID)
+        }
       }
 
       // normal processing
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
-      msgs = await insertReminders({
+      const reminders = await insertReminders({
         messages: msgs,
         agent,
         session,
       })
+      msgs = reminders.messages
 
       const processor = SessionProcessor.create({
         assistantMessage: (await Session.updateMessage({
@@ -980,6 +1133,7 @@ export namespace SessionPrompt {
           },
           modelID: model.id,
           providerID: model.providerID,
+          internal: { step },
           time: {
             created: Date.now(),
           },
@@ -995,6 +1149,7 @@ export namespace SessionPrompt {
       const route = request(msgs, agent.name)
       const lastUserMsg = route.user
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+      const delegation = allowsDelegation(lastUser.delegation, bypassAgentCheck)
 
       const tools = await resolveTools({
         agent,
@@ -1004,6 +1159,7 @@ export namespace SessionPrompt {
         effort: MessageV2.resolveResearchEffort(lastUser.effort),
         processor,
         bypassAgentCheck,
+        delegation,
         messages: msgs,
         request: route.text,
         direct: route.direct,
@@ -1019,24 +1175,17 @@ export namespace SessionPrompt {
 
       const sessionMessages = clone(msgs)
 
-      // Ephemerally wrap queued user messages with a reminder to stay on track
-      if (step > 1 && lastFinished) {
-        for (const msg of sessionMessages) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
-          for (const part of msg.parts) {
-            if (part.type !== "text" || part.ignored || part.synthetic) continue
-            if (!part.text.trim()) continue
-            part.text = [
-              "<system-reminder>",
-              "The user sent the following message:",
-              part.text,
-              "",
-              "Please address this message and continue with your tasks.",
-              "</system-reminder>",
-            ].join("\n")
-          }
-        }
-      }
+      const queued =
+        step > 1 &&
+        !!lastFinished &&
+        sessionMessages.some(
+          (message) =>
+            message.info.role === "user" &&
+            message.info.id > lastFinished.id &&
+            message.parts.some(
+              (part) => part.type === "text" && !part.ignored && !part.synthetic && !!part.text.trim(),
+            ),
+        )
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
@@ -1050,6 +1199,12 @@ export namespace SessionPrompt {
           ? [await SystemPrompt.availableSkills(agent.permission, route.text)]
           : []),
         ...(contract ? [contract] : []),
+        ...reminders.system,
+        ...(queued
+          ? [
+              "Additional user messages arrived while this turn was in progress. They remain ordinary user messages in the conversation. Address them in chronological order while continuing the current task.",
+            ]
+          : []),
       ]
 
       // P0.1 telemetry: record what the working context is made of, by content type,
@@ -1121,7 +1276,7 @@ export namespace SessionPrompt {
       if (result === "compact") await armedCompact()
       continue
     }
-    SessionCompaction.prune({ sessionID })
+    await SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
       const queued = state()[sessionID]?.callbacks ?? []
@@ -1131,6 +1286,32 @@ export namespace SessionPrompt {
       return item
     }
     throw new Error("Impossible")
+  }
+
+  export const loop = fn(Identifier.schema("session"), async (sessionID) => {
+    const session = await Session.get(sessionID)
+    const abort = start(sessionID)
+    if (!abort) {
+      return new Promise<MessageV2.WithParts>((resolve, reject) => {
+        const callbacks = state()[sessionID].callbacks
+        callbacks.push({ resolve, reject })
+      })
+    }
+
+    using _ = defer(() => cancel(sessionID, abort))
+
+    await using lease = await FileLease.acquire(loopLeasePath(session.projectID, sessionID), LOOP_LEASE_TIMEOUT, abort)
+    return lease.during(async () => {
+      try {
+        return await execute(sessionID, session, abort)
+      } finally {
+        // Streaming deltas are intentionally coalesced in-process. Do not
+        // publish the cross-process handoff until the final transcript is on
+        // disk, or the next owner can observe a finished assistant without its
+        // final text/reasoning parts.
+        await Session.flushPendingParts(sessionID)
+      }
+    })
   })
 
   async function lastModel(sessionID: string) {
@@ -1156,6 +1337,13 @@ export namespace SessionPrompt {
       return MessageV2.resolveResearchEffort(item.info.effort)
     }
     return "normal" as const
+  }
+
+  async function lastDelegation(sessionID: string) {
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role !== "user") continue
+      return item.info.delegation
+    }
   }
 
   function request(messages: MessageV2.WithParts[], agent: string) {
@@ -1197,6 +1385,7 @@ export namespace SessionPrompt {
     effort: MessageV2.ResearchEffort
     processor: SessionProcessor.Info
     bypassAgentCheck: boolean
+    delegation: boolean
     messages: MessageV2.WithParts[]
     request?: string
     direct: boolean
@@ -1205,6 +1394,7 @@ export namespace SessionPrompt {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
     if (input.direct) return tools
+    const permission = PermissionNext.merge(input.agent.permission, input.session.permission ?? [])
 
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
@@ -1235,7 +1425,8 @@ export namespace SessionPrompt {
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
       (id) =>
-        ToolSelection.enabled(id, { permission: input.agent.permission, tools: input.tools }) &&
+        (id !== TaskTool.id || input.delegation) &&
+        ToolSelection.enabled(id, { permission, tools: input.tools }) &&
         ToolSelection.relevant(id, {
           agent: input.agent.name,
           message: input.request,
@@ -1403,9 +1594,23 @@ export namespace SessionPrompt {
     return tools
   }
 
-  /** @deprecated Both Research effort levels may delegate when it is useful. */
-  export function allowsDelegation(_enabled: boolean | undefined, _explicit: boolean) {
-    return true
+  /** The composer switch controls automatic delegation. An explicit @agent
+   * attachment remains authoritative even when automatic routing is off. */
+  export function allowsDelegation(enabled: boolean | undefined, explicit: boolean) {
+    return explicit || enabled !== false
+  }
+
+  export function delegationTarget(name: string) {
+    if (DELEGATION_PROFILES.includes(name as (typeof DELEGATION_PROFILES)[number])) {
+      return { profile: name as (typeof DELEGATION_PROFILES)[number] }
+    }
+    if (DELEGATION_SPECIALISTS.includes(name as (typeof DELEGATION_SPECIALISTS)[number])) {
+      return {
+        profile: "execute" as const,
+        specialist: name as (typeof DELEGATION_SPECIALISTS)[number],
+      }
+    }
+    return { profile: "execute" as const }
   }
 
   export function researchEffortReminder(value: unknown) {
@@ -1416,10 +1621,8 @@ export namespace SessionPrompt {
         ? "Investigate additional independent branches when they can materially change the result."
         : "Stay focused; delegate only when one or two independent branches will materially help."
     return [
-      "<system-reminder>",
       `Research effort: ${effort.toUpperCase()}. ${posture}`,
       `Delegation is optional and shallow: at most ${limit} Task calls total this user turn, including continuations.`,
-      "</system-reminder>",
     ].join("\n")
   }
 
@@ -1451,6 +1654,7 @@ export namespace SessionPrompt {
       delegation: input.delegation,
       agent: agent.name,
       model,
+      internal: SessionLoopState.prompt(messageID),
       system: input.system,
       variant: input.variant,
       tier: input.tier,
@@ -1564,7 +1768,7 @@ export namespace SessionPrompt {
                 ]
               }
               break
-            case "file:":
+            case "file:": {
               log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
@@ -1725,7 +1929,6 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const file = Bun.file(filepath)
               const readCtx: Tool.Context = {
                 sessionID: input.sessionID,
                 abort: new AbortController().signal,
@@ -1736,14 +1939,16 @@ export namespace SessionPrompt {
                 metadata: async () => {},
                 ask,
               }
-              await assertExternalDirectory(readCtx, filepath)
+              using authorized = await assertExternalDirectory(readCtx, filepath)
               await readCtx.ask({
                 permission: "read",
                 patterns: [filepath],
                 always: ["*"],
                 metadata: {},
               })
-              FileTime.read(input.sessionID, filepath)
+              const readable = (await authorized?.revalidate()) ?? filepath
+              const file = Bun.file(readable)
+              FileTime.read(input.sessionID, readable)
               const bytes = await file.bytes()
               const mime = correctImageMime(part.mime, bytes)
               return [
@@ -1766,6 +1971,7 @@ export namespace SessionPrompt {
                   source: part.source,
                 },
               ]
+            }
           }
         }
 
@@ -1773,6 +1979,8 @@ export namespace SessionPrompt {
           // Check if this agent would be denied by task permission
           const perm = PermissionNext.evaluate("task", part.name, agent.permission)
           const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
+          const target = delegationTarget(part.name)
+          const specialist = target.specialist ? ` and specialist: ${target.specialist}` : ""
           return [
             {
               id: Identifier.ascending("part"),
@@ -1789,8 +1997,10 @@ export namespace SessionPrompt {
               // An extra space is added here. Otherwise the 'Use' gets appended
               // to user's last word; making a combined word
               text:
-                " Use the above message and context to generate a prompt and call the task tool with subagent: " +
-                part.name +
+                " Use the above message and context to generate a prompt and call the task tool with subagent_type: " +
+                target.profile +
+                specialist +
+                `. Preserve the requested ${part.name} capability in the child prompt` +
                 hint,
             },
           ]
@@ -1822,6 +2032,21 @@ export namespace SessionPrompt {
       },
     )
 
+    // A fresh external turn starts a new breaker epoch. The marker is bound to
+    // the server-owned prompt intent and ordered by its monotonic message ID, so
+    // restart replay clears older ineffective-compaction events before counting
+    // events from this turn.
+    parts.push({
+      id: SessionLoopState.partID(messageID, "breaker-reset"),
+      messageID,
+      sessionID: input.sessionID,
+      type: "text",
+      text: "",
+      synthetic: true,
+      ignored: true,
+      metadata: SessionLoopState.compactionReset(messageID),
+    })
+
     await Session.updateMessage(info)
     for (const part of parts) {
       await Session.updatePart(part)
@@ -1833,143 +2058,60 @@ export namespace SessionPrompt {
     }
   }
 
-  async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
+  export type InternalReminders = {
+    messages: MessageV2.WithParts[]
+    system: string[]
+  }
+
+  export function systemReminder(value: string) {
+    return value.replace(/<\/?system-reminder>/gu, "").trim()
+  }
+
+  async function insertReminders(input: {
+    messages: MessageV2.WithParts[]
+    agent: Agent.Info
+    session: Session.Info
+  }): Promise<InternalReminders> {
+    // Older builds persisted plan reminders as synthetic user text. Keep the
+    // durable record intact, but move those legacy parts to the provider's
+    // system channel so resumed sessions cannot leak them as user-authored
+    // content.
+    const legacy: string[] = []
+    const messages = input.messages.map((message) => {
+      if (message.info.role !== "user") return message
+      const parts = message.parts.filter((part) => {
+        const reminder = part.type === "text" && part.synthetic && part.text.includes("<system-reminder>")
+        if (reminder) legacy.push(systemReminder(part.text))
+        return !reminder
+      })
+      if (parts.length === message.parts.length) return message
+      return { ...message, parts }
+    })
     const route = request(input.messages, input.agent.name)
     const userMessage = route.user
-    if (!userMessage) return input.messages
+    if (!userMessage) return { messages, system: legacy }
     const effort = userMessage.info.role === "user" ? userMessage.info.effort : undefined
     const research = route.direct
       ? PROMPT_DIRECT
       : route.inspection
         ? PROMPT_INSPECTION
         : [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n")
+    const prompts = {
+      plan: PROMPT_PLAN,
+      write: PROMPT_WRITE,
+      ml: PROMPT_ML,
+      research,
+      biology: PROMPT_BIOLOGY,
+      physics: PROMPT_PHYSICS,
+    } as const
+    const selected = prompts[input.agent.name as keyof typeof prompts]
+    const system = [...legacy, ...(selected ? [systemReminder(selected)] : [])]
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE) {
-      if (input.agent.name === "plan") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_PLAN,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "write") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_WRITE,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "ml") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_ML,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "research") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: research,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "biology") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_BIOLOGY,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "physics") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_PHYSICS,
-          synthetic: true,
-        })
-      }
       const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
-      if (wasPlan && input.agent.name !== "plan") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: BUILD_SWITCH,
-          synthetic: true,
-        })
-      }
-      return input.messages
-    }
-
-    // Write mode injection (works in both experimental and non-experimental paths)
-    if (input.agent.name === "write") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_WRITE,
-        synthetic: true,
-      })
-    }
-    if (input.agent.name === "ml") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_ML,
-        synthetic: true,
-      })
-    }
-    if (input.agent.name === "research") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: research,
-        synthetic: true,
-      })
-    }
-    if (input.agent.name === "biology") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_BIOLOGY,
-        synthetic: true,
-      })
-    }
-    if (input.agent.name === "physics") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_PHYSICS,
-        synthetic: true,
-      })
+      if (wasPlan && input.agent.name !== "plan") system.push(systemReminder(BUILD_SWITCH))
+      return { messages, system }
     }
 
     // New plan mode logic when flag is enabled
@@ -1980,32 +2122,23 @@ export namespace SessionPrompt {
       const plan = Session.plan(input.session)
       const exists = await Bun.file(plan).exists()
       if (exists) {
-        const part = await Session.updatePart({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text:
-            BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`,
-          synthetic: true,
-        })
-        userMessage.parts.push(part)
+        system.push(
+          systemReminder(BUILD_SWITCH) +
+            "\n\n" +
+            `A plan file exists at ${plan}. You should execute on the plan defined within it`,
+        )
       }
-      return input.messages
+      return { messages, system }
     }
 
-    // Entering plan mode
-    if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
+    // Keep the exact plan path and write boundary in the system channel on every
+    // provider step. A plan turn can span multiple tool calls; restricting this
+    // guidance to the first step makes later provider requests ambiguous.
+    if (input.agent.name === "plan") {
       const plan = Session.plan(input.session)
       const exists = await Bun.file(plan).exists()
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
-      const part = await Session.updatePart({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: `<system-reminder>
-Plan mode is active. Do not execute commands that mutate state, edit project files, start
+      system.push(`Plan mode is active. Do not execute commands that mutate state, edit project files, start
 jobs, upload data, or spend money. The only writable file is the plan below.
 
 ${exists ? `Plan file: ${plan}. Read it and update only what the current request changes.` : `Plan file: ${plan}. Create it only after you understand the request.`}
@@ -2017,14 +2150,10 @@ delegate just to validate your own plan.
 Ask a question only when the answer cannot be discovered and would materially change the
 implementation. Then write one concise recommended plan with the outcome, critical files,
 ordered changes, risks, and end-to-end verification. Do not include discarded alternatives
-or internal reasoning. Call plan_exit when the plan is ready for approval.
-</system-reminder>`,
-        synthetic: true,
-      })
-      userMessage.parts.push(part)
-      return input.messages
+or internal reasoning. Call plan_exit when the plan is ready for approval.`)
+      return { messages, system }
     }
-    return input.messages
+    return { messages, system }
   }
 
   export const ShellInput = z.object({
@@ -2323,6 +2452,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     model: z.string().optional(),
     arguments: z.string(),
     command: z.string(),
+    effort: MessageV2.ResearchEffort.optional(),
+    delegation: z.boolean().optional(),
     variant: z.string().optional(),
     tier: z.string().optional(),
     parts: z
@@ -2372,7 +2503,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       time: { created: Date.now() },
       role: "user",
       agent,
-      effort: await lastResearchEffort(input.sessionID),
+      effort: input.effort ?? (await lastResearchEffort(input.sessionID)),
+      delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
       model: { providerID: model.providerID, modelID: model.modelID },
     }
     const line = `/${input.command}${input.arguments.trim() ? ` ${input.arguments.trim()}` : ""}`
@@ -2560,12 +2692,13 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
       const focus = input.arguments.trim()
-      const effort = await lastResearchEffort(input.sessionID)
+      const effort = input.effort ?? (await lastResearchEffort(input.sessionID))
       await SessionCompaction.create({
         sessionID: input.sessionID,
         agent: agentName,
         model: { providerID: model.providerID, modelID: model.modelID },
         effort,
+        delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
         auto: false,
         focus: focus || undefined,
         trigger: "manual",
@@ -2588,14 +2721,18 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
     if (input.command === Command.Default.HANDOFF && !userDefinedHandoff) {
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
-      const effort = await lastResearchEffort(input.sessionID)
+      const effort = input.effort ?? (await lastResearchEffort(input.sessionID))
       await SessionCompaction.create({
         sessionID: input.sessionID,
         agent: agentName,
         model: { providerID: model.providerID, modelID: model.modelID },
         effort,
+        delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
         auto: false,
-        handoffFile: input.arguments.trim() || undefined,
+        // Keep the empty string: it is the explicit `/handoff` marker for the
+        // managed per-session path. `undefined` is reserved for compaction that
+        // must stay entirely in transcript storage.
+        handoffFile: input.arguments.trim(),
         trigger: "manual",
       })
       const result = await loop(input.sessionID)
@@ -2768,6 +2905,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
       model: userModel,
       agent: userAgent,
       parts,
+      effort: input.effort ?? (await lastResearchEffort(input.sessionID)),
+      delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
       variant: input.variant,
       tier: modelTier(input.tier, selectedModel, userModel),
     })) as MessageV2.WithParts

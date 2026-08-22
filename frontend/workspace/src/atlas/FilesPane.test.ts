@@ -918,16 +918,23 @@ describe("files pane", () => {
   })
 
   test("addresses artifact bytes by version, never by the captured source path", async () => {
-    const asked: string[] = []
+    const asked: Array<{ path: string; query?: Record<string, string> }> = []
+    const downloaded: Array<{ name: string; body: string }> = []
+    let urls = 0
     const host = mount(() =>
       subject.FilesPane({
-        request: async (path) => {
-          asked.push(path)
+        request: async (path, unused, query) => {
+          asked.push({ path, query })
+          if (path === "/file/artifact-store/art_auth_bytes/raw") return new Response("immutable notes")
           if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
-          if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "notes.md")])
+          if (path.startsWith("/file/artifact-store")) return listing([saved("art_auth_bytes", "notes.md")])
           return listing([])
         },
-        url: (path, query) => `http://local${path}?versionID=${query.versionID}`,
+        url: () => {
+          urls += 1
+          return "http://local/unauthenticated"
+        },
+        onDownload: async (name, blob) => downloaded.push({ name, body: await blob.text() }),
       }),
     )
     await settle()
@@ -937,11 +944,21 @@ describe("files pane", () => {
     await settle()
 
     host.querySelector<HTMLButtonElement>("[data-card-menu]")?.click()
-    const download = host.querySelector("[data-action='download']")?.getAttribute("href")
+    host.querySelector<HTMLButtonElement>("[data-action='download']")?.click()
+    await settle()
 
-    expect(download).toContain("/file/artifact-store/art_9/raw")
-    expect(download).not.toContain("/store/notes.md")
-    expect(asked.some((path) => path.includes("/store/notes.md"))).toBe(false)
+    expect(asked).toContainEqual({
+      path: "/file/artifact-store/art_auth_bytes/raw",
+      query: { versionID: "av_art_auth_bytes" },
+    })
+    expect(asked).toContainEqual({
+      path: "/file/artifact-store/art_auth_bytes/raw",
+      query: { versionID: "av_art_auth_bytes", download: "true" },
+    })
+    expect(asked.some((call) => call.path.includes("/store/notes.md"))).toBe(false)
+    expect(downloaded).toEqual([{ name: "notes.md", body: "immutable notes" }])
+    expect(urls).toBe(0)
+    expect(host.querySelector("a[href*='/file/artifact-store']")).toBeNull()
   })
 
   test("moves an artifact to trash and tells every other surface", async () => {

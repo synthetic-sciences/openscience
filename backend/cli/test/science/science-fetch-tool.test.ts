@@ -22,6 +22,7 @@ const ctx = (sessionID: string) => ({
 const realFetch = globalThis.fetch
 let dir = ""
 let workspace = ""
+let sessionID = ""
 
 function stub(body: string, status = 200, headers?: Record<string, string>) {
   globalThis.fetch = (async () => new Response(body, { status, headers })) as unknown as typeof fetch
@@ -43,10 +44,18 @@ async function run(args: { db: string; id: string; format?: string }) {
     directory: dir,
     fn: async () => {
       const session = await executionSession()
+      sessionID = session.id
       workspace = await SessionFilesystem.workspace(session.id)
       const tool = await ScienceFetchTool.init()
       return tool.execute(args, ctx(session.id))
     },
+  })
+}
+
+async function rerun(args: { db: string; id: string; format?: string }) {
+  return Instance.provide({
+    directory: dir,
+    fn: async () => (await ScienceFetchTool.init()).execute(args, ctx(sessionID)),
   })
 }
 
@@ -75,6 +84,26 @@ describe("science_fetch record path", () => {
     const out = await run({ db: "chembl", id: "CHEMBL25" })
     // Tool.define skips Truncate.output only when metadata.truncated is set.
     expect(out.metadata.truncated).toBeDefined()
+  })
+
+  test("refuses a much larger existing spill without replacing it", async () => {
+    stub(JSON.stringify({ blob: "x".repeat(80_000) }))
+    await run({ db: "chembl", id: "CHEMBL25" })
+    const target = path.join(workspace, "science-chembl-CHEMBL25.json")
+    await fs.truncate(target, 32 * 1024 * 1024)
+
+    await expect(rerun({ db: "chembl", id: "CHEMBL25" })).rejects.toThrow("Refusing to replace")
+    expect((await fs.stat(target)).size).toBe(32 * 1024 * 1024)
+  })
+
+  test("accepts an identical existing spill after streaming its digest", async () => {
+    stub(JSON.stringify({ blob: "x".repeat(80_000) }))
+    await run({ db: "chembl", id: "CHEMBL25" })
+
+    const out = await rerun({ db: "chembl", id: "CHEMBL25" })
+
+    expect(out.metadata.disposition).toBe("spill")
+    expect((await fs.stat(path.join(workspace, "science-chembl-CHEMBL25.json"))).size).toBeGreaterThan(80_000)
   })
 })
 

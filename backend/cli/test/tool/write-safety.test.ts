@@ -6,6 +6,9 @@ import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTime } from "../../src/file/time"
+import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
+import type { Tool } from "../../src/tool/tool"
 
 const base = {
   sessionID: "test",
@@ -108,6 +111,50 @@ test("edit refuses content and symlink swaps after approval", async () => {
         ),
       ).rejects.toThrow("changed after approval")
       expect(await fs.readFile(target, "utf8")).toBe("concurrent value\n")
+    },
+  })
+})
+
+test("write and edit stop when external write authority is revoked during approval", async () => {
+  await using project = await tmpdir({ git: true })
+  await using external = await tmpdir({ init: (directory) => Bun.write(path.join(directory, "target.txt"), "old\n") })
+  await Instance.provide({
+    directory: project.path,
+    fn: async () => {
+      const session = await Session.create({ title: "revoked tool writes" })
+      try {
+        const run = async (execute: (context: Tool.Context) => Promise<unknown>) => {
+          const grant = await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: external.path,
+            access: "write",
+            scope: "session",
+          })
+          return execute({
+            ...base,
+            sessionID: session.id,
+            ask: async (request) => {
+              if (request.permission === "edit") await SessionFilesystem.revoke(session.id, grant.id)
+            },
+          })
+        }
+        const target = path.join(external.path, "target.txt")
+        FileTime.read(session.id, target)
+        await expect(
+          run(async (context) => (await WriteTool.init()).execute({ filePath: target, content: "written\n" }, context)),
+        ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+        expect(await Bun.file(target).text()).toBe("old\n")
+
+        FileTime.read(session.id, target)
+        await expect(
+          run(async (context) =>
+            (await EditTool.init()).execute({ filePath: target, oldString: "old", newString: "edited" }, context),
+          ),
+        ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+        expect(await Bun.file(target).text()).toBe("old\n")
+      } finally {
+        await Session.remove(session.id)
+      }
     },
   })
 })

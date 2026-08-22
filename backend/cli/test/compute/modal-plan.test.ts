@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { ModalPlan } from "../../src/compute/modal/plan"
+import { ModalUpload } from "../../src/compute/modal/upload"
 
 const roots: string[] = []
 
@@ -130,5 +131,67 @@ describe("ModalPlan", () => {
     const prepared = await ModalPlan.prepare({ ...input(root), uploads: ["src/**/*.py"] })
 
     expect(prepared.plan.uploads.map((file) => file.path)).toEqual(["src/train.py"])
+  })
+
+  test("rejects an oversized sparse input before reading its contents", async () => {
+    const root = await project()
+    const large = path.join(root, "src", "large.bin")
+    await fs.writeFile(large, "")
+    await fs.truncate(large, ModalUpload.LIMIT + 1)
+    const reads: string[] = []
+    using guard = ModalUpload.testing({
+      read(file) {
+        reads.push(file)
+      },
+    })
+
+    await expect(ModalPlan.prepare({ ...input(root), uploads: ["src/large.bin"] })).rejects.toThrow(
+      "input exceeds the 100 MiB approval limit",
+    )
+    expect(reads).toEqual([])
+  })
+
+  test("rejects an oversized aggregate before hashing any sparse input", async () => {
+    const root = await project()
+    const size = 60 * 1024 * 1024
+    await Promise.all([
+      fs.writeFile(path.join(root, "src", "first.bin"), ""),
+      fs.writeFile(path.join(root, "src", "second.bin"), ""),
+    ])
+    await Promise.all([
+      fs.truncate(path.join(root, "src", "first.bin"), size),
+      fs.truncate(path.join(root, "src", "second.bin"), size),
+    ])
+    const reads: string[] = []
+    using guard = ModalUpload.testing({
+      read(file) {
+        reads.push(file)
+      },
+    })
+
+    await expect(ModalPlan.prepare({ ...input(root), uploads: ["src/*.bin"] })).rejects.toThrow(
+      "uploads exceed the 100 MiB approval limit",
+    )
+    expect(reads).toEqual([])
+  })
+
+  test("deduplicates overlapping patterns and canonical symlink aliases", async () => {
+    const root = await project()
+    await fs.symlink(path.join(root, "src", "train.py"), path.join(root, "src", "alias.py"))
+    const reads: string[] = []
+    using guard = ModalUpload.testing({
+      read(file) {
+        reads.push(file)
+      },
+    })
+
+    const prepared = await ModalPlan.prepare({
+      ...input(root),
+      uploads: ["src/train.py", "src/**/*.py", "src/alias.py"],
+    })
+
+    expect(prepared.plan.uploads.map((file) => file.path)).toEqual(["src/train.py"])
+    expect(prepared.plan.upload_bytes).toBe(15)
+    expect(reads).toEqual([path.join(root, "src", "train.py")])
   })
 })

@@ -27,6 +27,15 @@ export interface FileDescription {
 
 const sources = new Set<FileKind>(["markdown", "html", "table", "scientific-data", "science", "code"])
 
+/** Raw PDF previews remain bounded even though the download endpoint itself supports larger files. */
+export const PDF_PREVIEW_LIMIT = 64 * 1024 * 1024
+
+export function pdfPreviewMode(input: { truncated: boolean; size?: number }): "inline" | "raw" | "download" {
+  if (!input.truncated) return "inline"
+  if (input.size !== undefined && input.size <= PDF_PREVIEW_LIMIT) return "raw"
+  return "download"
+}
+
 function format(value?: string) {
   return value?.trim().replace(/^\./, "").toLowerCase() ?? ""
 }

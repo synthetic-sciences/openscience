@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { DataRootBarrier } from "@/global/data-root-barrier"
+import { LockCoordination } from "@/util/lock-coordination"
 
 export namespace FileLease {
   const timeout = 10_000
@@ -37,6 +38,8 @@ export namespace FileLease {
       typeof value === "object" &&
       "pid" in value &&
       typeof value.pid === "number" &&
+      Number.isSafeInteger(value.pid) &&
+      value.pid > 0 &&
       "token" in value &&
       typeof value.token === "string" &&
       "created" in value &&
@@ -46,18 +49,50 @@ export namespace FileLease {
 
   async function abandoned(filepath: string, value: unknown) {
     const owner = value
-    if (owner && typeof owner === "object" && "pid" in owner && typeof owner.pid === "number") {
+    if (
+      owner &&
+      typeof owner === "object" &&
+      "pid" in owner &&
+      typeof owner.pid === "number" &&
+      Number.isSafeInteger(owner.pid) &&
+      owner.pid > 0
+    ) {
       return !running(owner.pid)
     }
     const stat = await fs.stat(filepath).catch(() => undefined)
     return !!stat && Date.now() - stat.mtimeMs > grace
   }
 
-  export async function acquire(filepath: string, timeoutMs = timeout): Promise<Lease> {
+  function cancelled(signal?: AbortSignal) {
+    signal?.throwIfAborted()
+  }
+
+  async function pause(signal?: AbortSignal) {
+    cancelled(signal)
+    if (!signal) return Bun.sleep(15)
+    await new Promise<void>((resolve, reject) => {
+      const done = () => {
+        clearTimeout(timer)
+        signal.removeEventListener("abort", abort)
+      }
+      const abort = () => {
+        done()
+        reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
+      }
+      const timer = setTimeout(() => {
+        done()
+        resolve()
+      }, 15)
+      signal.addEventListener("abort", abort, { once: true })
+    })
+  }
+
+  export async function acquire(filepath: string, timeoutMs = timeout, signal?: AbortSignal): Promise<Lease> {
+    cancelled(signal)
     const operation = await DataRootBarrier.enter(filepath, timeoutMs)
     try {
-      let blockedAt = Date.now()
-      let blockedOwner: string | undefined
+      cancelled(signal)
+      const blocked: { at: number; owner?: string } = { at: Date.now() }
       const token = crypto.randomUUID()
       const parent = path.dirname(filepath)
       await fs.mkdir(parent, { recursive: true })
@@ -68,41 +103,60 @@ export namespace FileLease {
       filepath = path.join(await fs.realpath(parent), path.basename(filepath))
 
       const open = async (): Promise<Awaited<ReturnType<typeof fs.open>>> => {
-        const handle = await fs.open(filepath, "wx", 0o600).catch(async (error: NodeJS.ErrnoException) => {
-          if (error.code !== "EEXIST") throw error
-          const current = await owner(filepath)
-          if (await abandoned(filepath, current)) {
+        const expired = () => {
+          if (Date.now() - blocked.at < timeoutMs) return
+          throw new Error(`Timed out waiting for another OpenScience process to release ${filepath}`)
+        }
+        while (true) {
+          cancelled(signal)
+          const attempt = await (async () => {
+            await using intent = await LockCoordination.intent(filepath, grace)
+            if (await intent.blocked()) return { status: "blocked" as const }
+            const handle = await fs.open(filepath, "wx", 0o600).catch((error: NodeJS.ErrnoException) => {
+              if (error.code === "EEXIST") return
+              throw error
+            })
+            if (handle) return { status: "acquired" as const, handle }
+            return { status: "occupied" as const }
+          })()
+          if (attempt.status === "acquired") return attempt.handle
+
+          const recovery = await (async () => {
+            const observed = await owner(filepath)
+            if (!(await abandoned(filepath, observed))) return { current: observed, reclaimed: false }
+            await using claim = await LockCoordination.claim(filepath, grace)
+            if (!(await claim.drain(blocked.at + timeoutMs, signal))) return { current: observed, reclaimed: false }
+            const current = await owner(filepath)
+            if (!(await abandoned(filepath, current))) return { current, reclaimed: false }
             const aside = `${filepath}.${crypto.randomUUID()}.dead`
-            const claimed = await fs
+            const reclaimed = await fs
               .rename(filepath, aside)
               .then(() => true)
               .catch(() => false)
-            if (claimed) await fs.rm(aside, { force: true })
-            if (claimed) return open()
-          }
+            if (reclaimed) await fs.rm(aside, { force: true })
+            return { current, reclaimed }
+          })()
+          if (recovery.reclaimed) continue
           // Timeout one unchanged owner, not the whole healthy queue. Each
           // lease writes a unique token, so an exact owner change proves that
           // the serialized operation ahead of us completed and the queue made
           // progress. A live but wedged owner still fails within timeoutMs.
-          if (exactOwner(current)) {
-            const signature = `${current.pid}\0${current.token}\0${current.created}`
-            if (signature !== blockedOwner) {
-              blockedOwner = signature
-              blockedAt = Date.now()
+          if (exactOwner(recovery.current)) {
+            const signature = `${recovery.current.pid}\0${recovery.current.token}\0${recovery.current.created}`
+            if (signature !== blocked.owner) {
+              blocked.owner = signature
+              blocked.at = Date.now()
             }
           }
-          if (Date.now() - blockedAt >= timeoutMs) {
-            throw new Error(`Timed out waiting for another OpenScience process to release ${filepath}`)
-          }
-          await Bun.sleep(15)
-          return open()
-        })
-        return handle
+          expired()
+          await pause(signal)
+        }
       }
 
       const handle = await open()
       await handle
         .writeFile(JSON.stringify({ pid: process.pid, token, created: Date.now() }))
+        .then(() => cancelled(signal))
         .then(() => handle.sync())
         .catch(async (error) => {
           await handle.close().catch(() => undefined)
@@ -145,6 +199,7 @@ export namespace FileLease {
             if (owner && typeof owner === "object" && "token" in owner && owner.token === token) {
               await fs.rm(filepath, { force: true }).catch(() => undefined)
             }
+            await LockCoordination.cleanup(filepath).catch(() => undefined)
             await Promise.resolve(operation[Symbol.asyncDispose]()).catch(() => undefined)
           })()
           return disposal

@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { Instance } from "../../src/project/instance"
 import { FileRoutes } from "../../src/server/routes/file"
+import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
+import { Provenance } from "../../src/science/provenance/store"
 import { Storage } from "../../src/storage/storage"
 import { tmpdir } from "../fixture/fixture"
 
@@ -124,6 +127,194 @@ describe("/file research routes", () => {
         const history = await FileRoutes().request("/file/reviews/history?path=report.md")
         expect(history.status).toBe(200)
         expect((await history.json()) as unknown[]).toHaveLength(1)
+      },
+    })
+  })
+
+  test("reviews connected manuscripts with read authority and requires write authority only for export", async () => {
+    await using external = await tmpdir({
+      git: true,
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "README.md"), "# Connected manuscript fixture\n")
+        await Bun.write(path.join(directory, "uv.lock"), "version = 1\n")
+        await Bun.write(path.join(directory, "pyproject.toml"), '[project]\nname = "connected-review"\n')
+        await Bun.write(path.join(directory, "figure.png"), Uint8Array.from([1, 2, 3]))
+        await Bun.write(
+          path.join(directory, "paper.md"),
+          "# Connected result\n\nAll structural checks pass.\n\n![Evidence](figure.png)\n",
+        )
+        await Bun.$`git add README.md uv.lock pyproject.toml figure.png paper.md`.cwd(directory).quiet()
+        await Bun.$`git -c user.name=OpenScience -c user.email=test@openscience.local commit -m "connected paper"`
+          .cwd(directory)
+          .quiet()
+      },
+    })
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await using cleanup = { [Symbol.asyncDispose]: () => Session.remove(session.id) }
+        await SessionFilesystem.grant({
+          sessionID: session.id,
+          path: external.path,
+          access: "read",
+          scope: "session",
+        })
+        await Provenance.record({
+          kind: "artifact",
+          label: "Connected evidence figure",
+          artifactType: "figure",
+          path: path.join(external.path, "figure.png"),
+          meta: { directory: tmp.path },
+        } as Parameters<typeof Provenance.record>[0])
+        const sessionQuery = new URLSearchParams({ sessionID: session.id })
+        const sourceQuery = new URLSearchParams({ path: path.join(external.path, "paper.md"), sessionID: session.id })
+
+        const created = await FileRoutes().request(`/file/reviews?${sessionQuery}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: path.join(external.path, "paper.md"), actor: "Connected reviewer" }),
+        })
+        expect(created.status).toBe(200)
+        const report = (await created.json()) as { id: string; path: string; findings: Array<{ title: string }> }
+        expect(report.path).toBe(path.join(external.path, "paper.md"))
+        expect(report.findings.some((finding) => finding.title.includes("has no recorded provenance"))).toBe(false)
+
+        const current = await FileRoutes().request(`/file/reviews?${sourceQuery}`)
+        expect(current.status).toBe(200)
+        expect(await current.json()).toMatchObject({ id: report.id, stale: false })
+        const history = await FileRoutes().request(`/file/reviews/history?${sourceQuery}`)
+        expect(history.status).toBe(200)
+        expect((await history.json()) as unknown[]).toHaveLength(1)
+
+        const finalized = await FileRoutes().request(`/file/reviews/${report.id}/finalize?${sessionQuery}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actor: "Connected reviewer" }),
+        })
+        expect(finalized.status).toBe(200)
+
+        const denied = await FileRoutes().request(`/file/publication?${sessionQuery}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path: path.join(external.path, "paper.md"),
+            format: "html",
+            readiness: "reviewed",
+            review_id: report.id,
+          }),
+        })
+        expect(denied.status).toBe(403)
+        expect(await Bun.file(path.join(external.path, "exports")).exists()).toBe(false)
+
+        await SessionFilesystem.grant({
+          sessionID: session.id,
+          path: external.path,
+          access: "write",
+          scope: "session",
+        })
+        const exported = await FileRoutes().request(`/file/publication?${sessionQuery}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path: path.join(external.path, "paper.md"),
+            format: "html",
+            readiness: "reviewed",
+            review_id: report.id,
+          }),
+        })
+        expect(exported.status).toBe(200)
+        const publication = (await exported.json()) as { path: string; review_id: string }
+        expect(publication.path).toStartWith(path.join(external.path, "exports"))
+        expect(publication.review_id).toBe(report.id)
+        expect(await Bun.file(publication.path).exists()).toBe(true)
+
+        const rawQuery = new URLSearchParams({ path: publication.path, sessionID: session.id })
+        const download = await FileRoutes().request(`/file/raw?${rawQuery}`)
+        expect(download.status).toBe(200)
+        expect(await download.text()).toContain("Connected result")
+      },
+    })
+  })
+
+  test("keeps an exact manuscript grant narrow until a broader read grant is added", async () => {
+    await using external = await tmpdir({
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "paper.md"), "# Exact grant\n\nPrior work [@known2026].\n")
+        await Bun.write(path.join(directory, "references.bib"), "@article{known2026, title={Private sibling}}\n")
+        await Bun.write(path.join(directory, "private.csv"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await using cleanup = { [Symbol.asyncDispose]: () => Session.remove(session.id) }
+        const paper = path.join(external.path, "paper.md")
+        await SessionFilesystem.grant({
+          sessionID: session.id,
+          path: paper,
+          access: "read",
+          scope: "session",
+        })
+        const sessionQuery = new URLSearchParams({ sessionID: session.id })
+
+        const artifacts = await FileRoutes().request(`/file/artifacts?${sessionQuery}`)
+        expect(artifacts.status).toBe(200)
+        const paths = ((await artifacts.json()) as Array<{ path: string }>).map((item) => item.path)
+        expect(paths).toContain(paper)
+        expect(paths).not.toContain(path.join(external.path, "private.csv"))
+
+        const created = await FileRoutes().request(`/file/reviews?${sessionQuery}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: paper, actor: "Exact-file reviewer" }),
+        })
+        expect(created.status).toBe(200)
+        const report = (await created.json()) as { id: string; findings: Array<{ id: string; title: string }> }
+        expect(report.findings.some((finding) => finding.title.includes("@known2026 is unresolved"))).toBe(true)
+
+        const other = await Session.create({})
+        await using otherCleanup = { [Symbol.asyncDispose]: () => Session.remove(other.id) }
+        const finding = report.findings[0]!
+        const body = JSON.stringify({
+          status: "overridden",
+          actor: "Exact-file reviewer",
+          reason: "Testing source-authorized review metadata.",
+        })
+        const unscoped = await FileRoutes().request(`/file/reviews/${report.id}/findings/${finding.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body,
+        })
+        expect(unscoped.status).toBe(403)
+        const denied = await FileRoutes().request(
+          `/file/reviews/${report.id}/findings/${finding.id}?${new URLSearchParams({ sessionID: other.id })}`,
+          { method: "PATCH", headers: { "Content-Type": "application/json" }, body },
+        )
+        expect(denied.status).toBe(403)
+        const resolved = await FileRoutes().request(
+          `/file/reviews/${report.id}/findings/${finding.id}?${sessionQuery}`,
+          { method: "PATCH", headers: { "Content-Type": "application/json" }, body },
+        )
+        expect(resolved.status).toBe(200)
+
+        await SessionFilesystem.grant({
+          sessionID: session.id,
+          path: external.path,
+          access: "read",
+          scope: "project",
+        })
+        const bounded = await FileRoutes().request(`/file/reviews?${sessionQuery}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: paper, actor: "Narrow-grant reviewer" }),
+        })
+        expect(bounded.status).toBe(200)
+        const boundedReport = (await bounded.json()) as { findings: Array<{ title: string }> }
+        expect(boundedReport.findings.some((item) => item.title.includes("@known2026 is unresolved"))).toBe(false)
       },
     })
   })

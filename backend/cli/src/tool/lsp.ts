@@ -31,7 +31,7 @@ export const LspTool = Tool.define("lsp", {
     let file = path.isAbsolute(args.filePath)
       ? args.filePath
       : path.join(await sessionToolDirectory(ctx), args.filePath)
-    const authorized = await assertExternalDirectory(ctx, file)
+    using authorized = await assertExternalDirectory(ctx, file)
     file = authorized?.path ?? file
 
     await ctx.ask({
@@ -40,6 +40,7 @@ export const LspTool = Tool.define("lsp", {
       always: ["*"],
       metadata: {},
     })
+    file = (await authorized?.revalidate()) ?? file
     const uri = pathToFileURL(file).href
     const position = {
       file,

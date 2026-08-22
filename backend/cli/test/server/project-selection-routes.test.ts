@@ -115,6 +115,31 @@ describe("pre-instance project selection routes", () => {
     })
   })
 
+  test("fails a deep session route closed when its recorded project folder is gone", async () => {
+    await using tmp = await tmpdir()
+    const created = await Project.fromDirectory(tmp.path)
+    await fs.rm(tmp.path, { recursive: true, force: true })
+
+    const response = await fetch("http://openscience.internal/session/ses_stale_deep_link", {
+      headers: {
+        "x-openscience-project": created.project.id,
+      },
+    })
+
+    expect(response.status).toBe(410)
+    expect(response.headers.get("cache-control")).toBe("no-store")
+    expect(await response.json()).toEqual({
+      name: "ProjectStaleError",
+      data: {
+        projectID: created.project.id,
+        reason: "missing_directory",
+        directory: tmp.path,
+      },
+    })
+    expect(await Bun.file(tmp.path).exists()).toBe(false)
+    expect((await Project.list()).find((project) => project.id === created.project.id)?.worktree).toBe(tmp.path)
+  })
+
   test("rejects mismatched raw directory overrides on every local pre-instance route", async () => {
     await using first = await tmpdir({ git: true })
     await using second = await tmpdir({ git: true })

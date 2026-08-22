@@ -7,6 +7,8 @@ import { toast } from "@/atlas/Toast"
 import { IconBookOpen, IconCheckCircle, IconDownload, IconFile, IconSearch } from "@/atlas/shared/Icon"
 import { FONT_CODE, FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import type { ArtifactInfo } from "@/artifacts/model"
+import { downloadBlob } from "@/artifacts/bytes"
+import { resolveArtifactPath } from "@/artifacts/context"
 import {
   figureMarkdown,
   insertSelection,
@@ -16,6 +18,8 @@ import {
   rewritePreviewImages,
   type Citation,
 } from "./model"
+import { localAssetPath } from "@/utils/markdown-assets"
+import { projectContains, projectFileQuery, rawFileQuery } from "@/utils/project-file"
 
 type Panel = "citations" | "figures" | "publish"
 type PublicationFormat = "html" | "pdf" | "docx" | "latex" | "pptx"
@@ -64,15 +68,25 @@ export function ManuscriptWorkbench(props: {
   const [editor, setEditor] = createSignal<HTMLTextAreaElement>()
   const [reviewKey, setReviewKey] = createSignal(0)
   const manuscript = createMemo(() => parseManuscript(props.text))
-  const query = (path?: string) => ({
-    path,
-    sessionID: params.id && params.id !== "new" ? params.id : undefined,
-  })
+  const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)
+  const query = (path?: string) =>
+    projectFileQuery({
+      directory: props.directory,
+      path,
+      sessionID: sessionID(),
+    })
+  const raw = (path: string, inline = true) =>
+    rawFileQuery({
+      directory: props.directory,
+      path,
+      sessionID: sessionID(),
+      inline,
+    })
 
   const [artifacts] = createResource(
-    () => props.directory,
+    () => `${props.directory}:${sessionID() ?? ""}`,
     async () => {
-      const response = await sdk.request("/file/artifacts")
+      const response = await sdk.request("/file/artifacts", undefined, query())
       if (!response.ok) throw new Error(`Artifact discovery failed (${response.status})`)
       const value: unknown = await response.json()
       if (!Array.isArray(value)) return []
@@ -81,7 +95,7 @@ export function ManuscriptWorkbench(props: {
   )
 
   const [citations] = createResource(
-    () => `${props.directory}:${props.path}:${manuscript().bibliographies.join("|")}`,
+    () => `${props.directory}:${props.path}:${sessionID() ?? ""}:${manuscript().bibliographies.join("|")}`,
     async () => {
       const rows = await Promise.all(
         manuscript().bibliographies.map(async (reference) => {
@@ -110,7 +124,7 @@ export function ManuscriptWorkbench(props: {
   )
 
   const [review, reviewApi] = createResource(
-    () => `${props.directory}:${props.path}:${reviewKey()}`,
+    () => `${props.directory}:${props.path}:${sessionID() ?? ""}:${reviewKey()}`,
     async () => {
       const response = await sdk.request("/file/reviews", undefined, query(props.path))
       if (response.status === 404) return
@@ -122,7 +136,7 @@ export function ManuscriptWorkbench(props: {
   const figures = createMemo(() => {
     const query = figureQuery().trim().toLowerCase()
     return (artifacts.latest ?? [])
-      .filter((item) => item.kind === "figure")
+      .filter((item) => item.kind === "figure" && projectContains(props.directory, item.path))
       .filter((item) => !query || `${item.name} ${item.path}`.toLowerCase().includes(query))
   })
   const filteredCitations = createMemo(() => {
@@ -143,8 +157,10 @@ export function ManuscriptWorkbench(props: {
   )
   const reviewed = createMemo(() => Boolean(review.latest?.finalized && !review.latest.stale && !props.dirty))
   const preview = createMemo(() =>
-    rewritePreviewImages(manuscript().body, props.path, (path) => sdk.request.url("/file/raw", query(path))),
+    rewritePreviewImages(manuscript().body, props.path, (path) => sdk.request.url("/file/raw", raw(path))),
   )
+  const file = (href: string) => localAssetPath(href, props.path)
+  const openFile = (path: string) => uiStore.openFile(props.directory, path)
 
   const toggle = (next: Panel) => setPanel((current) => (current === next ? undefined : next))
   const openPublish = () => {
@@ -175,7 +191,11 @@ export function ManuscriptWorkbench(props: {
     toast.success("citation inserted", `@${citation.key}`)
   }
   const addFigure = (figure: ArtifactInfo) => {
-    const markdown = figureMarkdown(alt(), props.path, figure.path)
+    const markdown = figureMarkdown(
+      alt(),
+      resolveArtifactPath(props.directory, props.path),
+      resolveArtifactPath(props.directory, figure.path),
+    )
     const prefix = props.text.endsWith("\n\n") ? "" : props.text.endsWith("\n") ? "\n" : "\n\n"
     insert(`${prefix}${markdown}`)
     setPanel(undefined)
@@ -201,16 +221,20 @@ export function ManuscriptWorkbench(props: {
     const key = `${readiness}:${format}`
     setPosting(key)
     const response = await sdk
-      .request("/file/publication", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path: props.path,
-          format,
-          readiness,
-          ...(readiness === "reviewed" && report ? { review_id: report.id } : {}),
-        }),
-      })
+      .request(
+        "/file/publication",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path: props.path,
+            format,
+            readiness,
+            ...(readiness === "reviewed" && report ? { review_id: report.id } : {}),
+          }),
+        },
+        query(),
+      )
       .catch(() => undefined)
     setPosting(undefined)
     if (!response?.ok) {
@@ -224,14 +248,9 @@ export function ManuscriptWorkbench(props: {
       uiStore.openFile(props.directory, result.path)
       return
     }
-    const raw = await sdk.request("/file/raw", undefined, query(result.path))
-    if (!raw.ok) return
-    const object = URL.createObjectURL(await raw.blob())
-    const anchor = document.createElement("a")
-    anchor.href = object
-    anchor.download = result.path.split("/").pop() || `manuscript.${result.format}`
-    anchor.click()
-    URL.revokeObjectURL(object)
+    const download = await sdk.request("/file/raw", undefined, raw(result.path, false))
+    if (!download.ok) return
+    downloadBlob(result.path.split("/").pop() || `manuscript.${result.format}`, await download.blob())
   }
 
   return (
@@ -347,7 +366,7 @@ export function ManuscriptWorkbench(props: {
                       onClick={() => addFigure(figure)}
                     >
                       <img
-                        src={sdk.request.url("/file/raw", query(figure.path))}
+                        src={sdk.request.url("/file/raw", raw(figure.path))}
                         alt=""
                         style={{ width: "50px", height: "34px", "object-fit": "cover", "border-radius": "3px" }}
                       />
@@ -491,7 +510,7 @@ export function ManuscriptWorkbench(props: {
             style={{ flex: 1, "min-height": 0, overflow: "auto", padding: "24px 28px 64px" }}
           >
             <div style={{ "max-width": "780px", margin: "0 auto" }}>
-              <Markdown class="atlas-md" text={preview()} />
+              <Markdown class="atlas-md" text={preview()} resolveFile={file} onOpenFile={openFile} />
             </div>
           </div>
         </section>

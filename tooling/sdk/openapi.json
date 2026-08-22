@@ -6381,7 +6381,8 @@
                               "project_mcp",
                               "project_formatter",
                               "project_lsp",
-                              "provider_token_command"
+                              "provider_token_command",
+                              "publication_export"
                             ]
                           },
                           "mode": {
@@ -8788,7 +8789,8 @@
                             "project_mcp",
                             "project_formatter",
                             "project_lsp",
-                            "provider_token_command"
+                            "provider_token_command",
+                            "publication_export"
                           ]
                         },
                         "mode": {
@@ -12128,7 +12130,8 @@
                             "project_mcp",
                             "project_formatter",
                             "project_lsp",
-                            "provider_token_command"
+                            "provider_token_command",
+                            "publication_export"
                           ]
                         },
                         "mode": {
@@ -14564,7 +14567,8 @@
                             "project_mcp",
                             "project_formatter",
                             "project_lsp",
-                            "provider_token_command"
+                            "provider_token_command",
+                            "publication_export"
                           ]
                         },
                         "mode": {
@@ -17000,7 +17004,8 @@
                             "project_mcp",
                             "project_formatter",
                             "project_lsp",
-                            "provider_token_command"
+                            "provider_token_command",
+                            "publication_export"
                           ]
                         },
                         "mode": {
@@ -18246,8 +18251,15 @@
                           "type": "boolean"
                         },
                         "balanceUsd": {
-                          "description": "Credit balance in USD; -1 when signed out or unavailable",
-                          "type": "number"
+                          "description": "Credit balance in USD; null when signed out or unavailable",
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -18313,8 +18325,15 @@
                           "type": "boolean"
                         },
                         "balanceUsd": {
-                          "description": "Credit balance in USD; -1 when signed out or unavailable",
-                          "type": "number"
+                          "description": "Credit balance in USD; null when signed out or unavailable",
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -18389,8 +18408,15 @@
                       "type": "boolean"
                     },
                     "balanceUsd": {
-                      "description": "Wallet balance in USD; -1 when signed out or unavailable",
-                      "type": "number"
+                      "description": "Wallet balance in USD; null when signed out or unavailable",
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "billingMode": {
                       "anyOf": [
@@ -19510,7 +19536,8 @@
                 "project_mcp",
                 "project_formatter",
                 "project_lsp",
-                "provider_token_command"
+                "provider_token_command",
+                "publication_export"
               ]
             },
             "required": true
@@ -19553,7 +19580,8 @@
                         "project_mcp",
                         "project_formatter",
                         "project_lsp",
-                        "provider_token_command"
+                        "provider_token_command",
+                        "publication_export"
                       ]
                     },
                     "mode": {
@@ -23081,7 +23109,7 @@
                                   "default": {
                                     "modelCalls": 128,
                                     "toolCalls": 1024,
-                                    "tokens": 5000000,
+                                    "tokens": 20000000,
                                     "wallClockMs": 86400000,
                                     "costUsd": 200
                                   },
@@ -23100,7 +23128,7 @@
                                       "maximum": 100000
                                     },
                                     "tokens": {
-                                      "default": 5000000,
+                                      "default": 20000000,
                                       "type": "integer",
                                       "exclusiveMinimum": 0,
                                       "maximum": 1000000000
@@ -23118,6 +23146,22 @@
                                       "maximum": 100000
                                     }
                                   }
+                                },
+                                "limitOrigins": {
+                                  "type": "object",
+                                  "properties": {
+                                    "tokens": {
+                                      "type": "string",
+                                      "enum": [
+                                        "default",
+                                        "explicit",
+                                        "unknown"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "tokens"
+                                  ]
                                 },
                                 "runtimeFinalizationCalls": {
                                   "default": 0,
@@ -25252,6 +25296,12 @@
                   "command": {
                     "type": "string"
                   },
+                  "effort": {
+                    "$ref": "#/components/schemas/ResearchEffort"
+                  },
+                  "delegation": {
+                    "type": "boolean"
+                  },
                   "variant": {
                     "type": "string"
                   },
@@ -26914,6 +26964,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "File not found"
           }
         },
         "x-codeSamples": [
@@ -27055,6 +27108,55 @@
                       "payloadPath": {
                         "type": "string"
                       },
+                      "payloadIdentity": {
+                        "type": "object",
+                        "properties": {
+                          "dev": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "ino": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "size": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "mode": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "mtimeMs": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "ctimeMs": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "file",
+                              "directory"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "dev",
+                          "ino",
+                          "size",
+                          "mode",
+                          "mtimeMs",
+                          "ctimeMs",
+                          "kind"
+                        ]
+                      },
                       "state": {
                         "type": "string",
                         "enum": [
@@ -27171,6 +27273,55 @@
                     },
                     "payloadPath": {
                       "type": "string"
+                    },
+                    "payloadIdentity": {
+                      "type": "object",
+                      "properties": {
+                        "dev": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "ino": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "mode": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "mtimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "ctimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "file",
+                            "directory"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "dev",
+                        "ino",
+                        "size",
+                        "mode",
+                        "mtimeMs",
+                        "ctimeMs",
+                        "kind"
+                      ]
                     },
                     "state": {
                       "type": "string",
@@ -27325,6 +27476,55 @@
                     "payloadPath": {
                       "type": "string"
                     },
+                    "payloadIdentity": {
+                      "type": "object",
+                      "properties": {
+                        "dev": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "ino": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "mode": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "mtimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "ctimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "file",
+                            "directory"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "dev",
+                        "ino",
+                        "size",
+                        "mode",
+                        "mtimeMs",
+                        "ctimeMs",
+                        "kind"
+                      ]
+                    },
                     "state": {
                       "type": "string",
                       "enum": [
@@ -27475,6 +27675,55 @@
                     },
                     "payloadPath": {
                       "type": "string"
+                    },
+                    "payloadIdentity": {
+                      "type": "object",
+                      "properties": {
+                        "dev": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "ino": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "mode": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "mtimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "ctimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "file",
+                            "directory"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "dev",
+                        "ino",
+                        "size",
+                        "mode",
+                        "mtimeMs",
+                        "ctimeMs",
+                        "kind"
+                      ]
                     },
                     "state": {
                       "type": "string",
@@ -27765,6 +28014,26 @@
               "type": "string",
               "pattern": "^ses.*"
             }
+          },
+          {
+            "in": "query",
+            "name": "maxBytes",
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 1073741824
+            }
+          },
+          {
+            "in": "query",
+            "name": "inline",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
           }
         ],
         "summary": "Download a file",
@@ -27772,6 +28041,18 @@
         "responses": {
           "200": {
             "description": "Raw file contents"
+          },
+          "206": {
+            "description": "Requested byte range"
+          },
+          "404": {
+            "description": "File not found"
+          },
+          "413": {
+            "description": "File exceeds the caller's byte limit"
+          },
+          "416": {
+            "description": "Requested byte range is not satisfiable"
           }
         },
         "x-codeSamples": [
@@ -31328,6 +31609,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            }
           }
         ],
         "summary": "Export a Markdown research report",
@@ -31386,6 +31675,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "The session cannot read the manuscript or write the export"
           }
         },
         "requestBody": {
@@ -31458,6 +31750,14 @@
               "maxLength": 10000
             },
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            }
           }
         ],
         "summary": "Read the current publication preflight",
@@ -31746,6 +32046,9 @@
               }
             }
           },
+          "403": {
+            "description": "The session cannot read this manuscript"
+          },
           "404": {
             "description": "No publication preflight exists for this manuscript"
           }
@@ -31765,6 +32068,14 @@
             "name": "directory",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             }
           }
         ],
@@ -32049,6 +32360,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "The session cannot read this manuscript"
           }
         },
         "requestBody": {
@@ -32104,6 +32418,14 @@
               "maxLength": 10000
             },
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            }
           }
         ],
         "summary": "List publication preflight history",
@@ -32390,6 +32712,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "The session cannot read this manuscript"
           }
         },
         "x-codeSamples": [
@@ -32428,6 +32753,14 @@
               "pattern": "^finding_.*"
             },
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            }
           }
         ],
         "summary": "Resolve or override a publication finding",
@@ -32712,6 +33045,9 @@
               }
             }
           },
+          "403": {
+            "description": "The session cannot read the reviewed manuscript"
+          },
           "409": {
             "description": "Finding cannot be updated"
           }
@@ -32776,6 +33112,14 @@
               "pattern": "^review_.*"
             },
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            }
           }
         ],
         "summary": "Finalize a publication preflight",
@@ -33059,6 +33403,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "The session cannot read the reviewed manuscript"
           },
           "409": {
             "description": "Review is blocked, stale, or already invalid"
@@ -33617,7 +33964,8 @@
                                       "project_mcp",
                                       "project_formatter",
                                       "project_lsp",
-                                      "provider_token_command"
+                                      "provider_token_command",
+                                      "publication_export"
                                     ]
                                   },
                                   "mode": {
@@ -34222,7 +34570,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -34839,7 +35188,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -35456,7 +35806,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -36217,7 +36568,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -36807,7 +37159,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -37430,7 +37783,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -38054,7 +38408,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -38888,7 +39243,8 @@
                                       "project_mcp",
                                       "project_formatter",
                                       "project_lsp",
-                                      "provider_token_command"
+                                      "provider_token_command",
+                                      "publication_export"
                                     ]
                                   },
                                   "mode": {
@@ -39493,7 +39849,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -40110,7 +40467,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -40727,7 +41085,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -41499,7 +41858,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -42089,7 +42449,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -42718,7 +43079,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -43348,7 +43710,8 @@
                                 "project_mcp",
                                 "project_formatter",
                                 "project_lsp",
-                                "provider_token_command"
+                                "provider_token_command",
+                                "publication_export"
                               ]
                             },
                             "mode": {
@@ -46562,6 +46925,112 @@
               "type": "boolean"
             }
           },
+          "internal": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "prompt"
+                  },
+                  "epoch": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "epoch"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "continuation"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "output",
+                      "contract",
+                      "review",
+                      "review-summary",
+                      "compaction",
+                      "task"
+                    ]
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "epoch": {
+                    "type": "string"
+                  },
+                  "transaction": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kind",
+                  "text",
+                  "epoch",
+                  "transaction"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "compaction"
+                  },
+                  "auto": {
+                    "type": "boolean"
+                  },
+                  "epoch": {
+                    "type": "string"
+                  },
+                  "transaction": {
+                    "type": "string"
+                  },
+                  "focus": {
+                    "type": "string"
+                  },
+                  "handoffFile": {
+                    "type": "string"
+                  },
+                  "trigger": {
+                    "type": "string",
+                    "enum": [
+                      "proactive",
+                      "overflow",
+                      "manual"
+                    ]
+                  },
+                  "before": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "headTokens": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "continuationID": {
+                    "type": "string",
+                    "pattern": "^msg.*"
+                  }
+                },
+                "required": [
+                  "type",
+                  "auto",
+                  "epoch",
+                  "transaction"
+                ]
+              }
+            ]
+          },
           "effort": {
             "$ref": "#/components/schemas/ResearchEffort"
           },
@@ -46806,6 +47275,19 @@
           },
           "providerID": {
             "type": "string"
+          },
+          "internal": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "step"
+            ]
           },
           "reasoningEffort": {
             "type": "string"
@@ -47344,6 +47826,9 @@
             },
             "additionalProperties": {}
           },
+          "raw": {
+            "type": "string"
+          },
           "title": {
             "type": "string"
           },
@@ -47385,6 +47870,9 @@
               "type": "string"
             },
             "additionalProperties": {}
+          },
+          "raw": {
+            "type": "string"
           },
           "output": {
             "type": "string"
@@ -47446,6 +47934,9 @@
               "type": "string"
             },
             "additionalProperties": {}
+          },
+          "raw": {
+            "type": "string"
           },
           "error": {
             "type": "string"
@@ -48998,7 +49489,8 @@
                   "project_mcp",
                   "project_formatter",
                   "project_lsp",
-                  "provider_token_command"
+                  "provider_token_command",
+                  "publication_export"
                 ]
               },
               "mode": {
@@ -51909,39 +52401,13 @@
           },
           "text": {
             "type": "string"
-          },
-          "synthetic": {
-            "type": "boolean"
-          },
-          "ignored": {
-            "type": "boolean"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "start": {
-                "type": "number"
-              },
-              "end": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "start"
-            ]
-          },
-          "metadata": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
           }
         },
         "required": [
           "type",
           "text"
-        ]
+        ],
+        "additionalProperties": false
       },
       "FilePartInput": {
         "type": "object",

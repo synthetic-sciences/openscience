@@ -69,6 +69,27 @@ jobs:
         shell: bash
         working-directory: backend/cli
 
+  # File writes, no-replace rename, and recoverable trash use native Windows
+  # handles to pin verified directories and reject reparse/swap races. Run the
+  # real implementation on NTFS; Linux source tests cannot exercise Win32
+  # sharing modes or SetFileInformationByHandle.
+  windows-files:
+    name: Windows safe file mutations
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - name: Configure git for file-route tests
+        run: |
+          git config --global user.email "ci@openscience.dev"
+          git config --global user.name "OpenScience CI"
+          git config --global init.defaultBranch main
+        shell: bash
+      - run: bun test test/file/safe-io.test.ts test/file/rename.test.ts test/file/trash.test.ts
+        shell: bash
+        working-directory: backend/cli
+
   # macOS responsibility IDs are the kernel-backed ownership boundary for
   # processes that setsid/double-fork away from their original PID and process
   # group. Exercise the native private ABI and both durable ledgers on an

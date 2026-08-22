@@ -5,6 +5,8 @@ import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTrash } from "../../src/file/trash"
+import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
 
 const baseCtx = {
   sessionID: "test",
@@ -370,6 +372,44 @@ describe("tool.apply_patch freeform", () => {
         const patchText = "*** Begin Patch\n*** Update File: changed.txt\n@@\n-approved\n+agent\n*** End Patch"
         await expect(execute({ patchText }, ctx)).rejects.toThrow("changed after approval")
         expect(await fs.readFile(target, "utf8")).toBe("concurrent\n")
+      },
+    })
+  })
+
+  test("does not mutate an external file after its write grant is revoked", async () => {
+    await using project = await tmpdir({ git: true })
+    await using external = await tmpdir({ init: (directory) => Bun.write(path.join(directory, "claim.txt"), "old\n") })
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({ title: "revoked patch" })
+        try {
+          const grant = await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: external.path,
+            access: "write",
+            scope: "session",
+          })
+          const target = path.join(external.path, "claim.txt")
+          const ctx: ToolCtx = {
+            ...baseCtx,
+            sessionID: session.id,
+            ask: async (input) => {
+              if (input.permission === "edit") await SessionFilesystem.revoke(session.id, grant.id)
+            },
+          }
+          await expect(
+            execute(
+              {
+                patchText: `*** Begin Patch\n*** Update File: ${target}\n@@\n-old\n+new\n*** End Patch`,
+              },
+              ctx,
+            ),
+          ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+          expect(await Bun.file(target).text()).toBe("old\n")
+        } finally {
+          await Session.remove(session.id)
+        }
       },
     })
   })

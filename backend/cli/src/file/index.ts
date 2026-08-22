@@ -23,10 +23,30 @@ import { Filesystem } from "../util/filesystem"
 import { SafeFileIO } from "./safe-io"
 import { FileTrash } from "./trash"
 import { Lock } from "@/util/lock"
+import { AuthoritySignal } from "@/project/authority-signal"
 
 export namespace File {
   const log = Log.create({ service: "file" })
   const preview = 8 * 1024 * 1024
+
+  type TestHooks = {
+    afterWriteAuthorization?: (target: string) => void | Promise<void>
+    afterRenameAuthorization?: (source: string, target: string) => void | Promise<void>
+  }
+
+  const hooks = { value: undefined as TestHooks | undefined }
+
+  /** Deterministic authority-race barriers for the real file broker. */
+  export function testing(input: TestHooks) {
+    if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("File test hooks are disabled outside tests")
+    const prior = hooks.value
+    hooks.value = input
+    return {
+      [Symbol.dispose]() {
+        if (hooks.value === input) hooks.value = prior
+      },
+    }
+  }
 
   export const Info = z
     .object({
@@ -234,6 +254,17 @@ export namespace File {
     sessionID?: string
   }
 
+  type RawOptions = AccessOptions & { maxBytes?: number }
+
+  export type RawSource = SafeFileIO.Source & {
+    mimeType: string
+  }
+
+  type Authority = PublicationFile.Authority & {
+    source: string
+    [Symbol.dispose](): void
+  }
+
   async function contained(file: string, access: SessionFilesystem.Access, options?: AccessOptions): Promise<string> {
     if (options?.sessionID) {
       const target = await SessionFilesystem.authorize({
@@ -251,6 +282,96 @@ export namespace File {
     }
     if (canonical && (await Instance.containsCanonicalPath(canonical))) return canonical
     throw new Error(`Access denied: path escapes project directory`)
+  }
+
+  export async function authority(file: string, options: AccessOptions): Promise<Authority> {
+    if (!options.sessionID) {
+      const source = await contained(file, "read")
+      const root = Filesystem.contains(Instance.directory, source) ? Instance.directory : Instance.worktree
+      return {
+        root,
+        source,
+        scan: true,
+        read: (target) => contained(target, "read"),
+        write: (target) => contained(target, "write"),
+        [Symbol.dispose]() {},
+      }
+    }
+    const sessionID = options.sessionID
+    const result = await SessionFilesystem.authorize({
+      sessionID,
+      path: file,
+      access: "read",
+    })
+    if (FileTrash.protectedPath(result.path)) throw new HTTPException(403, { message: "Recovery data is protected" })
+    const binding = await SessionFilesystem.bindAuthorization({ sessionID, access: "read", authorized: result })
+    const writes = new Map<string, SessionFilesystem.Authorization>()
+    const pending = new Map<string, Promise<SessionFilesystem.Authorization>>()
+    const state = { disposed: false }
+    const dispose = () => {
+      if (state.disposed) return
+      state.disposed = true
+      SessionFilesystem.releaseAuthorization(binding)
+      for (const current of writes.values()) SessionFilesystem.releaseAuthorization(current)
+      writes.clear()
+    }
+    const active = () => {
+      if (state.disposed) {
+        throw new SessionFilesystem.DeniedError({ sessionID, path: result.path, access: "read" })
+      }
+    }
+    const grant = await SessionFilesystem.revalidateAuthorization(binding).then(
+      (current) => current.grant,
+      (error) => {
+        dispose()
+        throw error
+      },
+    )
+    const stat = await fs.promises.stat(grant.path).catch((error) => {
+      dispose()
+      throw error
+    })
+    const scan = stat.isDirectory()
+    const root = scan ? grant.path : path.dirname(result.path)
+    const read = async (target: string) => {
+      active()
+      const absolute = path.isAbsolute(target) ? target : path.resolve(root, target)
+      const current = await SessionFilesystem.revalidateAuthorization(binding, { path: absolute, access: "read" })
+      if (FileTrash.protectedPath(current.path)) throw new HTTPException(403, { message: "Recovery data is protected" })
+      return current.path
+    }
+    const write = async (target: string) => {
+      active()
+      const absolute = path.isAbsolute(target) ? target : path.resolve(root, target)
+      const acquire = async () => {
+        const existing = writes.get(absolute)
+        if (existing) return existing
+        const running = pending.get(absolute)
+        if (running) return running
+        const created = (async () => {
+          const authorized = await SessionFilesystem.authorize({ sessionID, path: absolute, access: "write" })
+          if (FileTrash.protectedPath(authorized.path)) {
+            throw new HTTPException(403, { message: "Recovery data is protected" })
+          }
+          const current = await SessionFilesystem.bindAuthorization({ sessionID, access: "write", authorized })
+          if (!state.disposed) {
+            writes.set(absolute, current)
+            return current
+          }
+          SessionFilesystem.releaseAuthorization(current)
+          throw new SessionFilesystem.DeniedError({ sessionID, path: absolute, access: "write" })
+        })()
+        pending.set(absolute, created)
+        return created.finally(() => {
+          if (pending.get(absolute) === created) pending.delete(absolute)
+        })
+      }
+      const current = await acquire()
+      return SessionFilesystem.revalidateAuthorization(current, { path: absolute, access: "write" }).then(
+        (authorized) => authorized.path,
+      )
+    }
+    return { root, source: result.path, scan, sessionID, read, write, [Symbol.dispose]: dispose }
   }
 
   export async function status() {
@@ -288,8 +409,9 @@ export namespace File {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(path.join(Instance.directory, filepath)).text()
-          const lines = content.split("\n").length
+          const snapshot = await SafeFileIO.read(path.join(Instance.directory, filepath), { prefixBytes: preview })
+          const lines =
+            snapshot.size > snapshot.bytes.byteLength ? 0 : snapshot.bytes.toString("utf8").split("\n").length
           changedFiles.push({
             path: filepath,
             added: lines,
@@ -330,33 +452,35 @@ export namespace File {
   async function readPath(file: string, full: string): Promise<Content> {
     using _ = log.time("read", { file })
     const project = Instance.project
-
-    const snapshot = await SafeFileIO.optional(full)
-    if (!snapshot) {
-      return { type: "text", content: "" }
+    const mimeType = Bun.file(full).type || "application/octet-stream"
+    const encode = ScienceFile.binary(file) || (await shouldEncode({ type: mimeType }))
+    const snapshot = await SafeFileIO.optional(
+      full,
+      encode ? { maxBytes: 16 * 1024 * 1024 } : { prefixBytes: preview },
+    ).catch((error: unknown) => {
+      if (encode && error instanceof SafeFileIO.LimitError) return error
+      throw error
+    })
+    if (!snapshot) throw new HTTPException(404, { message: `File not found: ${file}` })
+    if (snapshot instanceof SafeFileIO.LimitError) {
+      return {
+        type: "text",
+        content: "",
+        mimeType,
+        encoding: "base64",
+        size: snapshot.size,
+        truncated: true,
+      }
     }
-    const bunFile = new Blob([new Uint8Array(snapshot.bytes)], { type: Bun.file(full).type })
-
-    const encode = ScienceFile.binary(file) || (await shouldEncode(bunFile))
+    const bunFile = new Blob([new Uint8Array(snapshot.bytes)], { type: mimeType })
 
     if (encode) {
-      if (bunFile.size > 16 * 1024 * 1024) {
-        return {
-          type: "text",
-          content: "",
-          mimeType: bunFile.type || "application/octet-stream",
-          encoding: "base64",
-          size: bunFile.size,
-          truncated: true,
-        }
-      }
       const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
       const content = Buffer.from(buffer).toString("base64")
-      const mimeType = bunFile.type || "application/octet-stream"
       return { type: "text", content, mimeType, encoding: "base64", size: bunFile.size }
     }
 
-    const truncated = bunFile.size > preview
+    const truncated = snapshot.size > snapshot.bytes.byteLength
     // Keep scientific/text previews bounded. The UI treats this response as
     // read-only, so a partial preview can never overwrite the source file.
     const content = await (truncated ? bunFile.slice(0, preview) : bunFile).text().catch(() => "")
@@ -364,7 +488,7 @@ export namespace File {
       return {
         type: "text",
         content,
-        size: bunFile.size,
+        size: snapshot.size,
         truncated: true,
       }
     }
@@ -396,21 +520,109 @@ export namespace File {
     return ScienceFile.inspect(full, file, options)
   }
 
-  export async function raw(file: string, options?: AccessOptions): Promise<Blob> {
+  export async function raw(file: string, options?: RawOptions): Promise<Blob> {
     const full = await contained(file, "read", options)
-    const snapshot = await SafeFileIO.optional(full)
+    const snapshot = await SafeFileIO.optional(full, { maxBytes: options?.maxBytes }).catch((error: unknown) => {
+      if (error instanceof SafeFileIO.LimitError) {
+        throw new HTTPException(413, { message: `File exceeds the ${error.maxBytes}-byte response limit` })
+      }
+      throw error
+    })
     if (!snapshot) throw new HTTPException(404, { message: `File not found: ${file}` })
     return new Blob([new Uint8Array(snapshot.bytes)], { type: Bun.file(full).type })
   }
 
+  export async function rawSource(file: string, options?: RawOptions): Promise<RawSource> {
+    const full = await contained(file, "read", options)
+    const source = await SafeFileIO.open(full, { maxBytes: options?.maxBytes }).catch((error: unknown) => {
+      if (error instanceof SafeFileIO.LimitError) {
+        throw new HTTPException(413, { message: `File exceeds the ${error.maxBytes}-byte response limit` })
+      }
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new HTTPException(404, { message: `File not found: ${file}` })
+      }
+      throw error
+    })
+    return { ...source, mimeType: Bun.file(full).type || "application/octet-stream" }
+  }
+
   export async function artifacts(options?: AccessOptions): Promise<ArtifactFile.Info[]> {
-    const root = options?.sessionID ? await SessionFilesystem.workspace(options.sessionID) : Instance.directory
-    return ArtifactFile.scan(root)
+    const workspace = options?.sessionID ? await SessionFilesystem.workspace(options.sessionID) : undefined
+    const roots = options?.sessionID
+      ? await SessionFilesystem.processReadRoots(options.sessionID)
+      : [Instance.directory]
+    const unique = [...new Set(roots.map((root) => path.resolve(root)))]
+      .toSorted((a, b) => a.length - b.length || a.localeCompare(b))
+      .filter((root, index, values) => !values.slice(0, index).some((parent) => Filesystem.contains(parent, root)))
+      .slice(0, 256)
+    const limits = ArtifactFile.limits()
+    const scans: Array<{ root: string; items: ArtifactFile.Info[] }> = []
+    const batches = Array.from({ length: Math.ceil(unique.length / 4) }, (_, index) =>
+      unique.slice(index * 4, (index + 1) * 4),
+    )
+    for (const batch of batches) {
+      scans.push(
+        ...(await Promise.all(
+          batch.map(async (root) => {
+            const items = await fs.promises
+              .lstat(root)
+              .then(async (stat) => {
+                if (stat.isDirectory()) return ArtifactFile.scan(root, limits)
+                if (!stat.isFile()) return []
+                limits.visits += 1
+                if (limits.artifacts >= 5_000 || limits.visits >= 50_000) return []
+                const classified = ArtifactFile.classify(path.basename(root))
+                if (!classified) return []
+                limits.artifacts += 1
+                return [
+                  {
+                    name: path.basename(root),
+                    path: root,
+                    kind: classified.kind,
+                    format: classified.format,
+                    size: stat.size,
+                    modified: stat.mtimeMs,
+                  },
+                ]
+              })
+              .catch((error: unknown) => {
+                log.warn("artifact scan skipped an unavailable root", {
+                  root,
+                  error: error instanceof Error ? error.message : String(error),
+                })
+                return []
+              })
+            return { root, items }
+          }),
+        )),
+      )
+    }
+    const artifacts = new Map<string, ArtifactFile.Info>()
+    for (const scan of scans) {
+      for (const item of scan.items) {
+        const root = scan.root
+        const absolute = path.isAbsolute(item.path) ? item.path : path.resolve(root, item.path)
+        if (artifacts.has(absolute)) continue
+        const local =
+          workspace && Filesystem.contains(workspace, absolute)
+            ? path.relative(workspace, absolute).replaceAll(path.sep, "/")
+            : Filesystem.contains(Instance.directory, absolute)
+              ? path.relative(Instance.directory, absolute).replaceAll(path.sep, "/")
+              : absolute
+        artifacts.set(absolute, { ...item, path: local })
+      }
+    }
+    return [...artifacts.values()]
+      .toSorted((a, b) => b.modified - a.modified || a.path.localeCompare(b.path))
+      .slice(0, 5_000)
   }
 
   export async function provenance(file: string, options?: AccessOptions): Promise<ArtifactFile.Provenance> {
-    await contained(file, "read", options)
-    return ArtifactFile.provenance(Instance.directory, file)
+    using scope = await authority(file, options ?? {})
+    if (!scope.scan) {
+      return { path: scope.source, tracked: false, dirty: false, status: "local" }
+    }
+    return await ArtifactFile.provenance(scope.root, scope.source, file)
   }
 
   export async function reproducibility(): Promise<ArtifactFile.Audit> {
@@ -425,98 +637,235 @@ export namespace File {
     return PublicationFile.capabilities()
   }
 
-  export async function publication(input: PublicationFile.Input): Promise<PublicationFile.Result> {
-    return PublicationFile.render(Instance.directory, input)
+  export async function publication(
+    input: PublicationFile.Input,
+    options?: AccessOptions,
+  ): Promise<PublicationFile.Result> {
+    if (!options?.sessionID) return PublicationFile.render(Instance.directory, input)
+    using scope = await authority(input.path, options)
+    return await PublicationFile.render(scope.root, { ...input, path: scope.source }, scope)
   }
 
-  export async function review(input: PublicationReview.RunInput): Promise<PublicationReview.Report> {
-    return PublicationReview.run(input)
+  export async function review(
+    input: PublicationReview.RunInput,
+    options?: AccessOptions,
+  ): Promise<PublicationReview.Report> {
+    if (!options?.sessionID) return PublicationReview.run(input)
+    using scope = await authority(input.path, options)
+    return await PublicationReview.run({ ...input, path: scope.source }, scope)
   }
 
-  export async function reviewCurrent(file: string): Promise<PublicationReview.State | undefined> {
-    return PublicationReview.current(file)
+  export async function reviewCurrent(
+    file: string,
+    options?: AccessOptions,
+  ): Promise<PublicationReview.State | undefined> {
+    if (!options?.sessionID) return PublicationReview.current(file)
+    using scope = await authority(file, options)
+    return await PublicationReview.current(scope.source, scope)
   }
 
-  export async function reviewHistory(file: string): Promise<PublicationReview.Report[]> {
-    return PublicationReview.history(file)
+  export async function reviewHistory(file: string, options?: AccessOptions): Promise<PublicationReview.Report[]> {
+    if (!options?.sessionID) return PublicationReview.history(file)
+    using scope = await authority(file, options)
+    return await PublicationReview.history(scope.source, scope)
   }
 
   export async function reviewResolve(
     id: string,
     finding: string,
     input: PublicationReview.ResolveInput,
+    options?: AccessOptions,
   ): Promise<PublicationReview.Report> {
-    return PublicationReview.resolve(id, finding, input)
+    const report = await PublicationReview.get(id)
+    const source = path.isAbsolute(report.path) ? report.path : path.resolve(Instance.worktree, report.path)
+    if (!options?.sessionID && !(await Instance.containsCanonicalPath(source))) {
+      throw new HTTPException(403, {
+        message: "A session grant is required to update this connected manuscript review",
+      })
+    }
+    if (!options?.sessionID) return PublicationReview.resolve(id, finding, input)
+    using scope = await authority(source, options)
+    return await PublicationReview.resolve(id, finding, input, scope)
   }
 
   export async function reviewFinalize(
     id: string,
     input: PublicationReview.FinalizeInput,
+    options?: AccessOptions,
   ): Promise<PublicationReview.Report> {
-    return PublicationReview.finalize(id, input)
+    const report = await PublicationReview.get(id)
+    const source = path.isAbsolute(report.path) ? report.path : path.resolve(Instance.worktree, report.path)
+    if (!options?.sessionID && !(await Instance.containsCanonicalPath(source))) {
+      throw new HTTPException(403, {
+        message: "A session grant is required to finalize this connected manuscript review",
+      })
+    }
+    if (!options?.sessionID) return PublicationReview.finalize(id, input)
+    using scope = await authority(source, options)
+    return await PublicationReview.finalize(id, input, scope)
   }
 
   export async function write(file: string, content: string, options?: AccessOptions): Promise<Content> {
     using _ = log.time("write", { file })
-    const full = await contained(file, "write", options)
-
-    const approved = await SafeFileIO.optional(full)
-    const exists = !!approved
-    await SafeFileIO.write(full, content, approved)
+    const mutate = async (full: string) => {
+      const approved = await SafeFileIO.optional(full)
+      await SafeFileIO.write(full, content, approved)
+      return { full, exists: !!approved, content: await readPath(file, full) }
+    }
+    const result = await (async () => {
+      if (!options?.sessionID) return mutate(await contained(file, "write"))
+      const sessionID = options.sessionID
+      const authorized = await SessionFilesystem.authorize({ sessionID, path: file, access: "write" })
+      if (FileTrash.protectedPath(authorized.path)) {
+        throw new HTTPException(403, { message: "Recovery data is protected" })
+      }
+      const binding = await SessionFilesystem.bindAuthorization({ sessionID, access: "write", authorized })
+      try {
+        await hooks.value?.afterWriteAuthorization?.(authorized.path)
+        return await AuthoritySignal.exclusive(async () => {
+          const current = await SessionFilesystem.revalidateAuthorization(binding, {
+            path: authorized.path,
+            access: "write",
+          })
+          if (FileTrash.protectedPath(current.path)) {
+            throw new HTTPException(403, { message: "Recovery data is protected" })
+          }
+          return mutate(current.path)
+        })
+      } finally {
+        SessionFilesystem.releaseAuthorization(binding)
+      }
+    })()
     await Bus.publish(File.Event.Edited, {
-      file: full,
+      file: result.full,
     })
     await Bus.publish(FileWatcher.Event.Updated, {
-      file: full,
-      event: exists ? "change" : "add",
+      file: result.full,
+      event: result.exists ? "change" : "add",
     })
-    return readPath(file, full)
+    return result.content
   }
 
   export async function rename(input: { from: string; to: string; sessionID: string }): Promise<Rename> {
-    const source = await SessionFilesystem.authorize({ sessionID: input.sessionID, path: input.from, access: "write" })
-    if (source.path === Instance.directory || source.path === source.grant.path) {
-      throw new HTTPException(409, { message: "The workspace root cannot be renamed" })
-    }
-    const target = await SessionFilesystem.authorize({ sessionID: input.sessionID, path: input.to, access: "write" })
-    if (FileTrash.protectedPath(source.path) || FileTrash.protectedPath(target.path)) {
-      throw new HTTPException(403, { message: "Recovery data is protected" })
-    }
-    if (source.path === target.path) {
-      const stat = await fs.promises.lstat(source.path)
-      return Rename.parse({ from: source.path, to: target.path, type: stat.isDirectory() ? "directory" : "file" })
-    }
-    if (source.grant.path !== target.grant.path) {
-      throw new HTTPException(409, { message: "Files cannot be renamed across workspace sources" })
-    }
-    const parent = await fs.promises.stat(path.dirname(target.path)).catch(() => undefined)
-    if (!parent?.isDirectory()) throw new HTTPException(400, { message: "The destination folder does not exist" })
+    const result = await (async () => {
+      const source = await SessionFilesystem.authorize({
+        sessionID: input.sessionID,
+        path: input.from,
+        access: "write",
+      })
+      const sourceBinding = await SessionFilesystem.bindAuthorization({
+        sessionID: input.sessionID,
+        access: "write",
+        authorized: source,
+      })
+      if (source.path === Instance.directory || source.path === source.grant.path) {
+        SessionFilesystem.releaseAuthorization(sourceBinding)
+        throw new HTTPException(409, { message: "The workspace root cannot be renamed" })
+      }
+      if (FileTrash.protectedPath(source.path)) {
+        SessionFilesystem.releaseAuthorization(sourceBinding)
+        throw new HTTPException(403, { message: "Recovery data is protected" })
+      }
+      const target = await SessionFilesystem.revalidateAuthorization(sourceBinding, {
+        path: input.to,
+        access: "write",
+      })
+        .then(
+          (current) => ({ current, binding: sourceBinding }),
+          async (error) => {
+            if (!SessionFilesystem.DeniedError.isInstance(error)) throw error
+            const authorized = await SessionFilesystem.authorize({
+              sessionID: input.sessionID,
+              path: input.to,
+              access: "write",
+            })
+            const binding = await SessionFilesystem.bindAuthorization({
+              sessionID: input.sessionID,
+              access: "write",
+              authorized,
+            })
+            return { current: authorized, binding }
+          },
+        )
+        .catch((error) => {
+          SessionFilesystem.releaseAuthorization(sourceBinding)
+          throw error
+        })
+      try {
+        if (source.path === Instance.directory || source.path === source.grant.path) {
+          throw new HTTPException(409, { message: "The workspace root cannot be renamed" })
+        }
+        if (FileTrash.protectedPath(source.path) || FileTrash.protectedPath(target.current.path)) {
+          throw new HTTPException(403, { message: "Recovery data is protected" })
+        }
+        if (source.grant.path !== target.current.grant.path) {
+          throw new HTTPException(409, { message: "Files cannot be renamed across workspace sources" })
+        }
+        const expected = await SafeFileIO.inspect(source.path)
+        if (expected.type === "directory" && source.path !== target.current.path) {
+          if (Filesystem.contains(source.path, target.current.path)) {
+            throw new HTTPException(409, { message: "A folder cannot be moved inside itself" })
+          }
+        }
+        await hooks.value?.afterRenameAuthorization?.(source.path, target.current.path)
 
-    using _ = await Lock.write(`file-rename:${Instance.project.id}`)
-    if (await fs.promises.lstat(target.path).catch(() => undefined)) {
-      throw new HTTPException(409, { message: `Refusing to overwrite ${target.path}` })
-    }
-    const stat = await fs.promises.lstat(source.path)
-    const type = stat.isDirectory() ? "directory" : stat.isFile() ? "file" : undefined
-    if (!type || stat.isSymbolicLink())
-      throw new HTTPException(400, { message: "Only files and folders can be renamed" })
-    if (type === "directory" && Filesystem.contains(source.path, target.path)) {
-      throw new HTTPException(409, { message: "A folder cannot be moved inside itself" })
-    }
-    await fs.promises.rename(source.path, target.path).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "EEXIST" || error.code === "ENOTEMPTY") {
-        throw new HTTPException(409, { message: `Refusing to overwrite ${target.path}` })
+        using _ = await Lock.write(`file-rename:${Instance.project.id}`)
+        return await AuthoritySignal.exclusive(async () => {
+          const currentSource = await SessionFilesystem.revalidateAuthorization(sourceBinding, {
+            path: source.path,
+            access: "write",
+          })
+          const currentTarget = await SessionFilesystem.revalidateAuthorization(target.binding, {
+            path: target.current.path,
+            access: "write",
+          })
+          if (currentSource.path === Instance.directory || currentSource.path === currentSource.grant.path) {
+            throw new HTTPException(409, { message: "The workspace root cannot be renamed" })
+          }
+          if (FileTrash.protectedPath(currentSource.path) || FileTrash.protectedPath(currentTarget.path)) {
+            throw new HTTPException(403, { message: "Recovery data is protected" })
+          }
+          if (currentSource.grant.path !== currentTarget.grant.path) {
+            throw new HTTPException(409, { message: "Files cannot be renamed across workspace sources" })
+          }
+          if (currentSource.path === currentTarget.path) {
+            const current = await SafeFileIO.inspect(currentSource.path)
+            if (current.dev !== expected.dev || current.ino !== expected.ino || current.type !== expected.type) {
+              throw new HTTPException(409, { message: "The source changed before it could be renamed" })
+            }
+            return Rename.parse({ from: currentSource.path, to: currentTarget.path, type: current.type })
+          }
+          if (expected.type === "directory" && Filesystem.contains(currentSource.path, currentTarget.path)) {
+            throw new HTTPException(409, { message: "A folder cannot be moved inside itself" })
+          }
+          await SafeFileIO.rename(currentSource.path, currentTarget.path, expected).catch(
+            (error: NodeJS.ErrnoException) => {
+              if (error.errno === 17 || error.code === "EEXIST" || error.code === "ENOTEMPTY") {
+                throw new HTTPException(409, { message: `Refusing to overwrite ${currentTarget.path}` })
+              }
+              if (error.errno === 18 || error.code === "EXDEV") {
+                throw new HTTPException(409, { message: "Files cannot be renamed across filesystems" })
+              }
+              if (error.errno === 2 || error.code === "ENOENT") {
+                throw new HTTPException(400, { message: "The source or destination folder no longer exists" })
+              }
+              throw error
+            },
+          )
+          return Rename.parse({ from: currentSource.path, to: currentTarget.path, type: expected.type })
+        })
+      } finally {
+        if (target.binding !== sourceBinding) SessionFilesystem.releaseAuthorization(target.binding)
+        SessionFilesystem.releaseAuthorization(sourceBinding)
       }
-      if (error.code === "EXDEV") {
-        throw new HTTPException(409, { message: "Files cannot be renamed across filesystems" })
-      }
-      throw error
-    })
-    await Promise.all([
-      Bus.publish(FileWatcher.Event.Updated, { file: source.path, event: "unlink" }),
-      Bus.publish(FileWatcher.Event.Updated, { file: target.path, event: "add" }),
-    ])
-    return Rename.parse({ from: source.path, to: target.path, type })
+    })()
+    if (result.from !== result.to) {
+      await Promise.all([
+        Bus.publish(FileWatcher.Event.Updated, { file: result.from, event: "unlink" }),
+        Bus.publish(FileWatcher.Event.Updated, { file: result.to, event: "add" }),
+      ])
+    }
+    return result
   }
 
   export async function list(dir?: string, options?: AccessOptions) {

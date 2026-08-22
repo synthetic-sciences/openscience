@@ -1,17 +1,16 @@
-Delegate one bounded independent unit only when parallel work materially improves the result.
+Delegate one bounded independent unit when parallel work materially improves the result.
 
 Profiles:
 {agents}
 
-Choose by work: `explore` finds evidence, `execute` implements or computes, and `review` checks a
-high-cost observable result. Lazy skills provide domain expertise; do not invent personas.
+Use `explore` for evidence, `execute` for implementation or computation, and `review` to check an
+observable result. Skills add domain expertise; do not invent personas.
 
-- Default to no children. Normal permits two calls per turn; Ultra four; continuations count.
+- Default to no children. Normal permits two calls per turn; Ultra four, including continuations.
 - Children cannot call Task. The lead owns synthesis and verification.
-- Do not delegate sequential work, small known-file edits, ceremonial review, or duplicate retrieval.
-- Task blocks the lead. Issue useful independent calls together; optional failure must not block a
-  usable result.
-- Continue a returned `session_id` only for missing work. Otherwise include objective, exact inputs
-  and references, relevant context, assumptions, exclusions, allowed actions, output, and validation.
-- A child returns a bounded handoff record; its full transcript remains in `session_id`. Preserve
-  decisive evidence and do not redo its phase.
+- Do not delegate sequential work, small edits, ceremonial review, or duplicate retrieval.
+- Task blocks the lead. Issue independent calls together; optional failure must not block the result.
+- Continue a `session_id` only for missing work. Otherwise include objective, inputs, references,
+  context, assumptions, exclusions, allowed actions, output, and validation.
+- A child returns a bounded handoff; its transcript remains in `session_id`. Preserve decisive
+  evidence and do not redo its phase.

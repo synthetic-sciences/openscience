@@ -79,4 +79,20 @@ describe("InstructionPrompt.resolve", () => {
       },
     })
   })
+
+  test("does not load instructions from a path-prefix sibling outside the project", async () => {
+    await using root = await tmpdir()
+    const project = path.join(root.path, "project")
+    const sibling = path.join(root.path, "project-private")
+    await Bun.write(path.join(project, "README.md"), "project\n")
+    await Bun.write(path.join(sibling, "AGENTS.md"), "outside instructions\n")
+    await Bun.write(path.join(sibling, "paper.md"), "outside paper\n")
+    await Instance.provide({
+      directory: project,
+      fn: async () => {
+        const results = await InstructionPrompt.resolve([], path.join(sibling, "paper.md"), "prefix-sibling")
+        expect(results).toEqual([])
+      },
+    })
+  })
 })

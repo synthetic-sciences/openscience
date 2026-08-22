@@ -321,13 +321,18 @@ export namespace Session {
         updated: Date.now(),
       },
     }
+    await SessionFilesystem.validateProject(directory)
     log.info("created", result)
     await Storage.write(["session", Instance.project.id, result.id], result)
     // No process can hold authority for a session that has not been returned
     // or announced yet. Publishing its initial workspace as a "change" would
     // schedule a redundant revocation that can race the session's first job.
     // Lazy initialization of legacy sessions keeps the default revocation.
-    await SessionFilesystem.initialize(result.id, directory, { revokeExisting: false })
+    await SessionFilesystem.initialize(result.id, directory, { revokeExisting: false }).catch(async (error) => {
+      await SessionFilesystem.remove(result.id).catch(() => undefined)
+      await Storage.remove(["session", Instance.project.id, result.id])
+      throw error
+    })
     validated().add(result.id)
     Bus.publish(Event.Created, {
       info: result,
@@ -630,9 +635,6 @@ export namespace Session {
             .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
             .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
             .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
-            // TODO: update models.dev to have better pricing model, for now:
-            // charge reasoning tokens at the same rate as output tokens
-            .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
             .toNumber(),
         ),
         tokens,

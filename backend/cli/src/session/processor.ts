@@ -19,10 +19,14 @@ import { OpenScience } from "@/openscience"
 import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource, llmBillingMode } from "./billing-gate"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
+import { TokenUsage } from "@synsci/util/token-usage"
 import { ToolRetryGuard } from "./tool-retry-guard"
 import { SessionResearch } from "./research"
 import { OutboundTelemetry } from "@/telemetry/outbound"
 import type { CredentialSource } from "./billing-gate"
+import { SearchDedupe } from "./search-dedupe"
+import { SessionLoopState } from "./loop-state"
+import { InvalidCall } from "@/tool/invalid-call"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -66,12 +70,39 @@ export namespace SessionProcessor {
     )
   }
 
+  export function isMalformedLoop(parts: MessageV2.Part[], input: unknown, threshold = 2) {
+    const calls = parts.filter(
+      (part): part is MessageV2.ToolPart =>
+        part.type === "tool" && part.tool === "invalid" && part.state.status !== "pending",
+    )
+    const last = calls.slice(-threshold)
+    if (last.length < threshold) return false
+    const signature = InvalidCall.signature(input)
+    return last.every((part) => InvalidCall.signature(part.state.input) === signature)
+  }
+
   /** Collect all assistant parts produced for one user request. The prompt loop
    * creates a new assistant message after every tool step, so checking only the
    * current message misses the most common repeated-call failure mode. */
   export function turnParts(messages: MessageV2.WithParts[], parentID: string): MessageV2.Part[] {
+    const users = new Map(
+      messages
+        .filter((message): message is MessageV2.WithParts & { info: MessageV2.User } => message.info.role === "user")
+        .map((message) => [message.info.id, message] as const),
+    )
+    const parent = users.get(parentID)
+    const epoch = parent
+      ? (SessionLoopState.messageEpoch(parent.info) ?? (SessionLoopState.external(parent) ? parent.info.id : undefined))
+      : undefined
     return messages
-      .filter((message) => message.info.role === "assistant" && message.info.parentID === parentID)
+      .filter((message) => {
+        if (message.info.role !== "assistant") return false
+        if (!epoch) return message.info.parentID === parentID
+        const owner = users.get(message.info.parentID)
+        if (!owner) return false
+        return SessionLoopState.messageEpoch(owner.info) === epoch || owner.info.id === epoch
+      })
+      .sort((left, right) => left.info.id.localeCompare(right.info.id))
       .flatMap((message) => message.parts)
   }
 
@@ -105,11 +136,30 @@ export namespace SessionProcessor {
     return Provider.isIdleTimeoutError(error) ? undefined : SessionRetry.retryable(normalized)
   }
 
+  export function providerFailureAction(
+    error: unknown,
+    normalized: ReturnType<NamedError["toObject"]>,
+    toolStarted: boolean,
+  ) {
+    const message = retryableProviderError(error, normalized)
+    if (message === undefined) return { type: "terminal" as const }
+    if (toolStarted) return { type: "drain" as const, message }
+    return { type: "retry" as const, message }
+  }
+
   /** File snapshots protect tool side effects. A model that cannot call any
    * advertised tool cannot mutate the workspace, so two Git index passes add
    * latency and contention without creating a useful revert boundary. */
   export function tracks(input: { tools: Record<string, unknown>; toolcall: boolean }) {
     return input.toolcall && Object.keys(input.tools).length > 0
+  }
+
+  /** Close a streamed part without replacing its first-output timestamp. */
+  export function finishTime(time: { start: number; end?: number } | undefined, end = Date.now()) {
+    return {
+      start: time?.start ?? end,
+      end,
+    }
   }
 
   export type Info = Awaited<ReturnType<typeof create>>
@@ -125,6 +175,13 @@ export namespace SessionProcessor {
   type ToolMetadataUpdate = {
     title?: string
     metadata?: Record<string, unknown>
+  }
+
+  export class ToolCallConflictError extends Error {
+    constructor() {
+      super("Provider reused a tool call ID with different input. No duplicate action was taken.")
+      this.name = "ToolCallConflictError"
+    }
   }
 
   /**
@@ -147,8 +204,10 @@ export namespace SessionProcessor {
       | { status: "error"; input: unknown; error: unknown; startedAt?: number; endedAt: number }
     >()
     const active = new Map<string, Promise<void>>()
+    const executions = new Map<string, { signature: string; promise: Promise<ToolExecutionOutput> }>()
     const metadataWrites = new Map<string, Promise<void>>()
     const terminalParts = new Map<string, MessageV2.ToolPart>()
+    const names = new Map<string, string>()
     const applying = new Set<string>()
     const settled = new Set<string>()
 
@@ -214,9 +273,30 @@ export namespace SessionProcessor {
       }
     }
 
+    async function complete(callID: string, args: unknown, output: ToolExecutionOutput, startedAt?: number) {
+      if (settled.has(callID)) return
+      outcomes.set(callID, { status: "completed", input: args, output, startedAt, endedAt: Date.now() })
+      await apply(callID)
+    }
+
+    async function fail(callID: string, args: unknown, error: unknown, startedAt?: number) {
+      if (settled.has(callID)) return
+      outcomes.set(callID, { status: "error", input: args, error, startedAt, endedAt: Date.now() })
+      await apply(callID)
+    }
+
     const coordinator = {
       part(callID: string) {
         return toolcalls[callID]
+      },
+      claim(callID: string, name: string) {
+        const canonical = InvalidCall.tool(name)
+        const existing = names.get(callID)
+        if (existing && existing !== canonical) throw new ToolCallConflictError()
+        names.set(callID, canonical)
+      },
+      closed(callID: string) {
+        return settled.has(callID)
       },
       pending(part: MessageV2.ToolPart) {
         toolcalls[part.callID] = part
@@ -270,27 +350,34 @@ export namespace SessionProcessor {
         })
       },
       async result(callID: string, args: unknown, output: ToolExecutionOutput, startedAt?: number) {
-        if (settled.has(callID)) return
-        outcomes.set(callID, { status: "completed", input: args, output, startedAt, endedAt: Date.now() })
-        await apply(callID)
+        if (executions.has(callID)) return
+        await complete(callID, args, output, startedAt)
       },
       async error(callID: string, args: unknown, error: unknown, startedAt?: number) {
-        if (settled.has(callID)) return
-        outcomes.set(callID, { status: "error", input: args, error, startedAt, endedAt: Date.now() })
-        await apply(callID)
+        if (executions.has(callID)) return
+        await fail(callID, args, error, startedAt)
       },
       execute<T extends ToolExecutionOutput>(callID: string, args: unknown, run: () => Promise<T>) {
+        const signature = SearchDedupe.signature(args)
+        const existing = executions.get(callID)
+        if (existing) {
+          if (existing.signature !== signature) throw new ToolCallConflictError()
+          return existing.promise as Promise<T>
+        }
         const startedAt = Date.now()
-        const execution = (async () => {
-          try {
-            const output = await run()
-            await coordinator.result(callID, args, output, startedAt)
-            return output
-          } catch (error) {
-            await coordinator.error(callID, args, error, startedAt)
-            throw error
-          }
-        })()
+        const execution = Promise.resolve()
+          .then(run)
+          .then(
+            async (output) => {
+              await complete(callID, args, output, startedAt)
+              return output
+            },
+            async (error) => {
+              await fail(callID, args, error, startedAt)
+              throw error
+            },
+          )
+        executions.set(callID, { signature, promise: execution })
         const drained = execution.then(
           () => undefined,
           () => undefined,
@@ -300,6 +387,9 @@ export namespace SessionProcessor {
           if (active.get(callID) === drained) active.delete(callID)
         })
         return execution
+      },
+      started() {
+        return executions.size > 0
       },
       async drain() {
         const pending = [...active.values()]
@@ -352,6 +442,10 @@ export namespace SessionProcessor {
       abort: input.abort,
       updatePart: Session.updatePart,
       onRejected(error) {
+        if (error instanceof InvalidCall.RepeatedError) {
+          blocked = true
+          return
+        }
         if (error instanceof PermissionNext.RejectedError || error instanceof Question.RejectedError) {
           blocked = shouldBreakOnDeny
         }
@@ -431,13 +525,7 @@ export namespace SessionProcessor {
 
             runtimeDecision = await SessionResearch.runtimePreflight(input.sessionID)
             if (runtimeDecision.decision === "block") {
-              const boundary = runtimeDecision.boundary ?? "hard"
-              const reason = runtimeDecision.reason ?? "configured limit reached"
-              const message =
-                boundary === "hard"
-                  ? `This bounded research run reached its hard runtime limit: ${reason}. Existing Results and checkpoints are preserved. Reply \`continue\` or run \`/resume\` to start a fresh bounded run from the same state.`
-                  : `This bounded research run reached its finalization boundary: ${reason}. Its two reserved finalization turns are complete, and existing Results and checkpoints are preserved. Reply \`continue\` or run \`/resume\` to start a fresh bounded run from the same state.`
-              throw new Error(message)
+              throw new Error(SessionResearch.exhaustionMessage(runtimeDecision))
             }
 
             const requestContext = {
@@ -449,6 +537,7 @@ export namespace SessionProcessor {
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const finalizing = creditDecision === "finalize" || runtimeDecision.decision === "finalize"
             const finalTurn = runtimeDecision.decision === "finalize" && runtimeDecision.finalizationCall === 2
+            const textOnly = runtimeDecision.textOnly === true || finalTurn
             const request = finalizing
               ? {
                   ...streamInput,
@@ -456,14 +545,16 @@ export namespace SessionProcessor {
                   // one is deliberately text-only so an agent cannot consume
                   // the entire reserve on another tool loop and strand the user
                   // without a usable partial result.
-                  tools: finalTurn ? {} : streamInput.tools,
+                  tools: textOnly ? {} : streamInput.tools,
                   system: [
                     ...streamInput.system,
-                    creditDecision === "finalize"
-                      ? "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now."
-                      : finalTurn
-                        ? `This is the last reserved finalization turn for the research runtime budget (${runtimeDecision.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
-                        : `The research contract runtime budget is at its finalization boundary (${runtimeDecision.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
+                    runtimeDecision.textOnly
+                      ? `Cumulative research-runtime usage jumped directly past its hard limit (${runtimeDecision.reason ?? "configured limit reached"}). This is the single emergency finalization response. No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
+                      : creditDecision === "finalize"
+                        ? "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now."
+                        : finalTurn
+                          ? `This is the last reserved finalization turn for the research runtime budget (${runtimeDecision.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
+                          : `The research contract runtime budget is at its finalization boundary (${runtimeDecision.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
                   ],
                 }
               : streamInput
@@ -517,10 +608,7 @@ export namespace SessionProcessor {
                     const part = reasoningMap[value.id]
                     // A provider signature authenticates the exact thinking bytes.
                     // Trimming even one trailing byte makes the next turn invalid.
-                    part.time = {
-                      ...part.time,
-                      end: Date.now(),
-                    }
+                    part.time = finishTime(part.time)
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
@@ -528,6 +616,8 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-input-start":
+                  toolOutcomes.claim(value.id, value.toolName)
+                  if (toolOutcomes.closed(value.id)) break
                   const part = await Session.updatePart({
                     id: toolOutcomes.part(value.id)?.id ?? Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -575,14 +665,14 @@ export namespace SessionProcessor {
 
                     const history = await Array.fromAsync(MessageV2.stream(input.sessionID))
                     const parts = turnParts(history, input.assistantMessage.parentID)
-                    const threshold = value.toolName === "invalid" ? 2 : DOOM_LOOP_THRESHOLD
+                    const repeated =
+                      value.toolName === "invalid"
+                        ? isMalformedLoop(parts, value.input)
+                        : isDoomLoop(parts, value.toolName, value.input)
 
-                    if (isDoomLoop(parts, value.toolName, value.input, threshold)) {
+                    if (repeated) {
                       if (value.toolName === "invalid") {
-                        const source =
-                          value.input && typeof value.input === "object" && "tool" in value.input
-                            ? String(value.input.tool)
-                            : "tool"
+                        const source = InvalidCall.signature(value.input).split(":", 1)[0]
                         blocked = true
                         await Session.updatePart({
                           id: Identifier.ascending("part"),
@@ -674,7 +764,7 @@ export namespace SessionProcessor {
                         service: "llm",
                         event_type: "chat",
                         model: input.model.id,
-                        tokens_used: usage.tokens.input + usage.tokens.output + usage.tokens.reasoning,
+                        tokens_used: TokenUsage.uncached(usage.tokens),
                         metadata: {
                           provider: input.model.providerID,
                           input_tokens: usage.tokens.input,
@@ -808,10 +898,7 @@ export namespace SessionProcessor {
                       { text: currentText.text },
                     )
                     currentText.text = textOutput.text
-                    currentText.time = {
-                      start: Date.now(),
-                      end: Date.now(),
-                    }
+                    currentText.time = finishTime(currentText.time)
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     await Session.updatePart(currentText)
                   }
@@ -852,30 +939,36 @@ export namespace SessionProcessor {
               // recreates the original 50-minute failure. Idle expiry is a
               // terminal, actionable outcome; other transient failures retain
               // the existing retry policy.
-              const retry = retryableProviderError(e, error)
-              if (retry !== undefined && attempt < MAX_RETRY_ATTEMPTS) {
+              const action = providerFailureAction(e, error, toolOutcomes.started())
+              if (action.type === "retry" && attempt < MAX_RETRY_ATTEMPTS) {
                 attempt++
                 const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
                 await SessionTraceStore.recordRetry({
                   sessionID: input.sessionID,
                   messageID: input.assistantMessage.id,
                   attempt,
-                  message: retry,
+                  message: action.message,
                   delayMs: delay,
                 })
                 SessionStatus.set(input.sessionID, {
                   type: "retry",
                   attempt,
-                  message: retry,
+                  message: action.message,
                   next: Date.now() + delay,
                 })
                 await SessionRetry.sleep(delay, input.abort).catch(() => {})
                 continue
               }
-              input.assistantMessage.error = error
+              if (action.type === "drain") {
+                log.warn("provider stream ended after tool execution started; draining authoritative tool outcome", {
+                  sessionID: input.sessionID,
+                  error: error.name,
+                })
+              }
+              if (action.type !== "drain") input.assistantMessage.error = error
               // A user-initiated abort is a clean cancellation, not a failure —
               // record it on the message but don't fire the session Error event.
-              if (!MessageV2.AbortedError.isInstance(error)) {
+              if (action.type !== "drain" && !MessageV2.AbortedError.isInstance(error)) {
                 Bus.publish(Session.Event.Error, {
                   sessionID: input.assistantMessage.sessionID,
                   error: input.assistantMessage.error,

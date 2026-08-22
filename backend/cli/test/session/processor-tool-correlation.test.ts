@@ -222,6 +222,76 @@ describe("SessionProcessor tool outcome correlation", () => {
     })
   })
 
+  test("executes one provider tool call ID only once for canonically equivalent input", async () => {
+    const { coordinator } = fixture()
+    const gate = Promise.withResolvers<{ title: string; output: string; metadata: Record<string, never> }>()
+    let executions = 0
+    const first = coordinator.execute("call_single_flight", { b: 2, a: 1 }, async () => {
+      executions++
+      return gate.promise
+    })
+    const second = coordinator.execute("call_single_flight", { a: 1, b: 2 }, async () => {
+      executions++
+      return { title: "Duplicate", output: "wrong", metadata: {} }
+    })
+
+    expect(coordinator.started()).toBeTrue()
+    await Bun.sleep(0)
+    expect(executions).toBe(1)
+    gate.resolve({ title: "Single flight", output: "kept", metadata: {} })
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { title: "Single flight", output: "kept", metadata: {} },
+      { title: "Single flight", output: "kept", metadata: {} },
+    ])
+    expect(executions).toBe(1)
+  })
+
+  test("fails closed when a provider reuses one call ID with different input", async () => {
+    const { coordinator } = fixture()
+    const gate = Promise.withResolvers<{ title: string; output: string; metadata: Record<string, never> }>()
+    let executions = 0
+    const first = coordinator.execute("call_conflict", { command: "pwd" }, async () => {
+      executions++
+      return gate.promise
+    })
+
+    expect(() =>
+      coordinator.execute("call_conflict", { command: "rm -rf target" }, async () => {
+        executions++
+        return { title: "Conflicting call", output: "wrong", metadata: {} }
+      }),
+    ).toThrow(SessionProcessor.ToolCallConflictError)
+    gate.resolve({ title: "Original call", output: "safe", metadata: {} })
+    await expect(first).resolves.toMatchObject({ output: "safe" })
+    expect(executions).toBe(1)
+  })
+
+  test("does not let a conflicting stream error replace an in-flight execute outcome", async () => {
+    const { coordinator, updates } = fixture()
+    const gate = Promise.withResolvers<{ title: string; output: string; metadata: Record<string, never> }>()
+    await coordinator.running(running("call_conflicting_stream", { command: "pwd" }))
+    const execution = coordinator.execute("call_conflicting_stream", { command: "pwd" }, () => gate.promise)
+
+    await coordinator.error(
+      "call_conflicting_stream",
+      { command: "different" },
+      new SessionProcessor.ToolCallConflictError(),
+    )
+    expect(updates).toHaveLength(0)
+    gate.resolve({ title: "Authoritative execute", output: "safe", metadata: {} })
+    await execution
+    expect(updates.at(-1)).toMatchObject({
+      state: { status: "completed", title: "Authoritative execute", output: "safe" },
+    })
+  })
+
+  test("fails closed when a provider reuses one call ID for a different tool", () => {
+    const { coordinator } = fixture()
+    coordinator.claim("call_tool_conflict", "BASH")
+    coordinator.claim("call_tool_conflict", "bash")
+    expect(() => coordinator.claim("call_tool_conflict", "read")).toThrow(SessionProcessor.ToolCallConflictError)
+  })
+
   test("does not let a late duplicate stream event overwrite the execute outcome", async () => {
     const { coordinator, updates } = fixture()
     await coordinator.running(running("call_duplicate"))

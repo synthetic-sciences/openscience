@@ -40,14 +40,60 @@
   align-items: center;
   margin-top: 8px;
   padding: 0 16px;
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--button-primary-base);
   color: var(--icon-invert-base);
   font-size: 14px;
   font-weight: var(--font-weight-emphasis);
   text-decoration: none;
+  cursor: pointer;
 }
 
 .app-not-found__action:hover {
   background: var(--icon-strong-hover);
+}
+
+.project-availability__loading {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-unavailable__path {
+  width: min(100%, 560px);
+  overflow: hidden;
+  padding: 10px 12px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised-base);
+  color: var(--text-weak);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-unavailable__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-not-found__action--quiet {
+  border: 1px solid var(--border-weak-base);
+  background: transparent;
+  color: var(--text-strong);
+}
+
+.app-not-found__action--quiet:hover {
+  background: var(--surface-raised-base);
+}
+
+.project-unavailable .project-unavailable__note {
+  max-width: none;
+  color: var(--text-weak);
+  font-size: 12px;
 }

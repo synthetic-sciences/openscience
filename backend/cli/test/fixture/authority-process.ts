@@ -1,5 +1,9 @@
+import fs from "node:fs/promises"
+import path from "node:path"
+import { Global } from "../../src/global"
 import { Storage } from "../../src/storage/storage"
 import { AuthoritySignal } from "../../src/project/authority-signal"
+import { LockCoordination } from "../../src/util/lock-coordination"
 
 const [mode, arg] = process.argv.slice(2)
 
@@ -66,6 +70,38 @@ if (mode === "init") {
   await AuthoritySignal.exclusive(async () => {
     await Bun.write(arg!, "acquired")
   })
+} else if (mode === "hold-storage") {
+  const [name, ready] = process.argv.slice(3)
+  const lockfile = path.join(Global.Path.data, "storage", "interprocess", `${name}.json.lock`)
+  await fs.mkdir(path.dirname(lockfile), { recursive: true })
+  const handle = await fs.open(lockfile, "wx", 0o600)
+  await handle.writeFile(JSON.stringify({ pid: process.pid, created: Date.now() }))
+  await Bun.write(ready!, "ready")
+  await new Promise(() => {})
+  void handle
+} else if (mode === "hold-storage-intent") {
+  const [name, ready] = process.argv.slice(3)
+  const lockfile = path.join(Global.Path.data, "storage", "interprocess", `${name}.json.lock`)
+  await using intent = await LockCoordination.intent(lockfile, 30_000)
+  await Bun.write(ready!, "ready")
+  await new Promise(() => {})
+  void intent
+} else if (mode === "replace-storage") {
+  const [name, ready] = process.argv.slice(3)
+  const lockfile = path.join(Global.Path.data, "storage", "interprocess", `${name}.json.lock`)
+  const aside = `${lockfile}.${crypto.randomUUID()}.dead`
+  await fs.rename(lockfile, aside)
+  await fs.rm(aside, { force: true })
+  const handle = await fs.open(lockfile, "wx", 0o600)
+  await handle.writeFile(JSON.stringify({ pid: process.pid, token: crypto.randomUUID(), created: Date.now() }))
+  await handle.sync()
+  await Bun.write(ready!, "ready")
+  await new Promise(() => {})
+  void handle
+} else if (mode === "write-storage") {
+  const [name, done] = process.argv.slice(3)
+  await Storage.write(["interprocess", name!], { recovered: true })
+  await Bun.write(done!, "written")
 } else {
   throw new Error(`unknown mode: ${mode}`)
 }

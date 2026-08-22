@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, resolver } from "hono-openapi"
 import z from "zod"
+import { TokenUsage } from "@synsci/util/token-usage"
 import { Session } from "../../../session"
 import { lazy } from "../../../util/lazy"
 import { Log } from "../../../util/log"
@@ -71,7 +72,7 @@ export const SettingsUsageRoutes = lazy(() =>
           for (const { info } of msgs) {
             if (info.role !== "assistant") continue
             const t = info.tokens
-            const tokenCount = t.input + t.output + t.reasoning + t.cache.read + t.cache.write
+            const tokenCount = TokenUsage.total(t)
             total.cost += info.cost
             total.tokens.input += t.input
             total.tokens.output += t.output

@@ -25,6 +25,7 @@ import { buildSources, type PaneSource } from "@/atlas/files/sources"
 import { readSource, writeSource } from "@/atlas/files/last-source"
 import { RemoteFileView, type RemoteFile } from "@/atlas/files/RemoteFileView"
 import { remotePreview } from "@/atlas/files/remote-preview"
+import { downloadBlob, requestStoredArtifact } from "@/artifacts/bytes"
 import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/resource"
 import type { StoredArtifact } from "@/artifacts/store"
 import { uiStore } from "@/atlas/store/ui"
@@ -206,15 +207,10 @@ export function FilesPane(
     directory?: string
     /** Test/integration seam. Production delegates to uiStore.openFile. */
     onOpenFile?: (file: PaneFile) => void
-    /**
-     * Builds an absolute URL for browser-native downloads and artifact bytes.
-     * `sdk.request.url` supplies it in production; a standalone mount has no SDK,
-     * and `transport` returns a Response rather than a URL, so direct browser
-     * surfaces need this seam.
-     */
+    /** Builds an absolute URL for the legacy remote-volume download surface. */
     url?: (path: string, query: Record<string, string>) => string
     onOpenArtifact?: (artifact: StoredArtifact) => void
-    /** Bounded test/integration seam. Production downloads through a direct browser navigation. */
+    /** Bounded test/integration seam. Production downloads authenticated bytes. */
     onDownload?: (name: string, blob: Blob) => void
     onRenameArtifact?: (artifact: StoredArtifact, submit: (title: string) => Promise<unknown>) => void
     onRenameFile?: (file: FileRow, submit: (name: string) => Promise<unknown>) => void
@@ -578,23 +574,24 @@ export function FilesPane(
 
   // An artifact's bytes are addressed by id and version, never by the source
   // path they were captured from — that file keeps changing after capture.
-  // Called during render, for an <img src> and the Download href. A standalone
-  // mount has no SDK, and throwing here would take the whole card down with it,
-  // so an absent builder yields no URL rather than an exception.
-  const artifactUrl = (artifact: StoredArtifact, download?: boolean) => {
-    const path = `/file/artifact-store/${encodeURIComponent(artifact.id)}/raw`
-    const query = { versionID: artifact.current.id, ...(download ? { download: "true" } : {}) }
-    const build = props.url ?? sdk?.request.url
-    return build ? build(path, query) : ""
-  }
-
+  // The authenticated request transport is mandatory: a raw browser URL does
+  // not carry the desktop client's auth headers.
   const readArtifact = (artifact: StoredArtifact) =>
-    transport(`/file/artifact-store/${encodeURIComponent(artifact.id)}/raw`, undefined, {
-      versionID: artifact.current.id,
-    }).then((response) => {
-      if (!response.ok) throw new Error(`Artifact unavailable (${response.status})`)
-      return response.text()
-    })
+    requestStoredArtifact(transport, artifact.id, artifact.current.id).then((response) => response.blob())
+
+  const downloadArtifact = (artifact: StoredArtifact) => {
+    if (busy()) return
+    setBusy(true)
+    return requestStoredArtifact(transport, artifact.id, artifact.current.id, true)
+      .then((response) => response.blob())
+      .then((blob) => {
+        if (props.onDownload) return props.onDownload(artifact.current.filename, blob)
+        downloadBlob(artifact.current.filename, blob)
+      })
+      .then(() => setError(""))
+      .catch((value) => setError(`${artifact.current.filename} could not be downloaded. ${concise(value)}`))
+      .finally(() => setBusy(false))
+  }
 
   const openArtifact = (artifact: StoredArtifact) => {
     if (props.onOpenArtifact) return props.onOpenArtifact(artifact)
@@ -1130,9 +1127,9 @@ export function FilesPane(
             filtered={Boolean(filter().trim())}
             loading={sourceLoading()}
             unavailable={Boolean(sourceError())}
-            url={artifactUrl}
             read={readArtifact}
             onOpen={openArtifact}
+            onDownload={(artifact) => void downloadArtifact(artifact)}
             onRename={renameArtifact}
             onTrash={(artifact) => void trashArtifact(artifact)}
           />

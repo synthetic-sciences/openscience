@@ -18,6 +18,7 @@ export interface GridProps extends Omit<ThumbProps, "artifact"> {
   loading?: boolean
   unavailable?: boolean
   onOpen: (artifact: StoredArtifact) => void
+  onDownload: (artifact: StoredArtifact) => void
   onRename: (artifact: StoredArtifact) => void
   onTrash: (artifact: StoredArtifact) => void
 }
@@ -71,10 +72,10 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
       artifact={artifact}
       layout={layout()}
       sizes={sizes()}
-      url={props.url}
       read={props.read}
       highlight={props.highlight}
       onOpen={props.onOpen}
+      onDownload={props.onDownload}
       onRename={props.onRename}
       onTrash={props.onTrash}
     />

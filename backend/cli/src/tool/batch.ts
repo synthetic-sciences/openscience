@@ -1,9 +1,10 @@
 import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./batch.txt"
+import { InvalidCall } from "./invalid-call"
+import { InvalidTool } from "./invalid"
 
 const DISALLOWED = new Set(["batch"])
-const FILTERED_FROM_SUGGESTIONS = new Set(["invalid", "patch", ...DISALLOWED])
 
 const BatchParameters = z.object({
   tool_calls: z
@@ -44,24 +45,97 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
       const aliases = new Set(["notebook", "rkernel", "websearch"])
 
-      const executeCall = async (call: (typeof toolCalls)[0]) => {
-        const callStartTime = Date.now()
-        const partID = Identifier.ascending("part")
-
-        try {
-          if (DISALLOWED.has(call.tool)) {
-            throw new Error(
-              `Tool '${call.tool}' is not allowed in batch. Disallowed tools: ${Array.from(DISALLOWED).join(", ")}`,
-            )
+      const prepared = await Promise.all(
+        toolCalls.map(async (call) => {
+          const name = InvalidCall.tool(call.tool)
+          if (DISALLOWED.has(name)) return { type: "disallowed" as const, call: { ...call, tool: name } }
+          if (name === "invalid") {
+            return {
+              type: "invalid" as const,
+              call,
+              payload: InvalidCall.payload("batch", "invalid_input"),
+            }
           }
-
           const tool =
             toolMap.get(call.tool) ??
-            (aliases.has(call.tool) ? await ToolRegistry.resolve(call.tool, model, initCtx?.agent) : undefined)
+            toolMap.get(name) ??
+            (aliases.has(name) ? await ToolRegistry.resolve(name, model, initCtx?.agent) : undefined)
           if (!tool) {
-            const availableToolsList = Array.from(toolMap.keys()).filter((name) => !FILTERED_FROM_SUGGESTIONS.has(name))
+            return {
+              type: "invalid" as const,
+              call,
+              payload: InvalidCall.payload(name, "unknown_tool"),
+            }
+          }
+          const parsed = Tool.validate(tool.id, tool, call.parameters)
+          if (!parsed.success) {
+            return {
+              type: "invalid" as const,
+              call,
+              payload: InvalidCall.payload(tool.id, "invalid_input"),
+            }
+          }
+          return {
+            type: "ready" as const,
+            call: { ...call, tool: tool.id },
+            tool,
+          }
+        }),
+      )
+
+      const history = await Session.messages({ sessionID: ctx.sessionID })
+      const current = history.find((message) => message.info.id === ctx.messageID)
+      const { SessionProcessor } = await import("../session/processor")
+      const parts =
+        current?.info.role === "assistant"
+          ? SessionProcessor.turnParts(history, current.info.parentID)
+          : ctx.messages.flatMap((message) => message.parts)
+      const invalid = await InvalidTool.init({ agent: initCtx?.agent, model })
+      const recovered = [] as Array<{
+        success: false
+        tool: string
+        error: Error
+      }>
+
+      for (const item of prepared) {
+        if (item.type !== "invalid") continue
+        const now = Date.now()
+        const partID = Identifier.ascending("part")
+        const result = await invalid.execute(item.payload, { ...ctx, callID: partID })
+        const part = await Session.updatePart({
+          id: partID,
+          messageID: ctx.messageID,
+          sessionID: ctx.sessionID,
+          type: "tool",
+          tool: "invalid",
+          callID: partID,
+          state: {
+            status: "completed",
+            input: item.payload,
+            output: result.output,
+            title: result.title,
+            metadata: result.metadata,
+            attachments: result.attachments,
+            time: { start: now, end: Date.now() },
+          },
+        })
+        parts.push(part)
+        recovered.push({ success: false, tool: item.payload.tool, error: new Error(item.payload.error) })
+        if (SessionProcessor.isMalformedLoop(parts, item.payload)) {
+          throw new InvalidCall.RepeatedError(item.payload.tool)
+        }
+      }
+
+      const executeCall = async (item: Exclude<(typeof prepared)[number], { type: "invalid" }>) => {
+        const callStartTime = Date.now()
+        const partID = Identifier.ascending("part")
+        const call = item.call
+        const parameters = call.parameters as Record<string, unknown>
+
+        try {
+          if (item.type === "disallowed") {
             throw new Error(
-              `Tool '${call.tool}' not in registry. External tools (MCP, environment) cannot be batched - call them directly. Available tools: ${availableToolsList.join(", ")}`,
+              `Tool '${call.tool}' is not allowed in batch. Disallowed tools: ${Array.from(DISALLOWED).join(", ")}`,
             )
           }
           await Session.updatePart({
@@ -73,17 +147,14 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
             callID: partID,
             state: {
               status: "running",
-              input: call.parameters,
+              input: parameters,
               time: {
                 start: callStartTime,
               },
             },
           })
 
-          // Tool.define owns normalization, canonical validation, defaults,
-          // dedupe, and tool-specific repair errors. Pre-parsing here bypasses
-          // that contract for batched calls (notably compute_job recovery).
-          const result = await tool.execute(call.parameters, { ...ctx, callID: partID })
+          const result = await item.tool.execute(parameters, { ...ctx, callID: partID })
 
           await Session.updatePart({
             id: partID,
@@ -94,7 +165,7 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
             callID: partID,
             state: {
               status: "completed",
-              input: call.parameters,
+              input: parameters,
               output: result.output,
               title: result.title,
               metadata: result.metadata,
@@ -117,7 +188,7 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
             callID: partID,
             state: {
               status: "error",
-              input: call.parameters,
+              input: parameters,
               error: error instanceof Error ? error.message : String(error),
               time: {
                 start: callStartTime,
@@ -130,29 +201,33 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
         }
       }
 
-      const results = await Promise.all(toolCalls.map((call) => executeCall(call)))
+      const runnable = prepared.filter(
+        (item): item is Exclude<typeof item, { type: "invalid" }> => item.type !== "invalid",
+      )
+      const results = [...recovered, ...(await Promise.all(runnable.map((item) => executeCall(item))))]
 
       // Add discarded calls as errors
       const now = Date.now()
       for (const call of discardedCalls) {
         const partID = Identifier.ascending("part")
+        const name = InvalidCall.tool(call.tool)
         await Session.updatePart({
           id: partID,
           messageID: ctx.messageID,
           sessionID: ctx.sessionID,
           type: "tool",
-          tool: call.tool,
+          tool: name,
           callID: partID,
           state: {
             status: "error",
-            input: call.parameters,
+            input: {},
             error: "Maximum of 25 tools allowed in batch",
             time: { start: now, end: now },
           },
         })
         results.push({
           success: false as const,
-          tool: call.tool,
+          tool: name,
           error: new Error("Maximum of 25 tools allowed in batch"),
         })
       }
@@ -173,7 +248,7 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
           totalCalls: results.length,
           successful: successfulCalls,
           failed: failedCalls,
-          tools: params.tool_calls.map((c) => c.tool),
+          tools: params.tool_calls.map((call) => InvalidCall.tool(call.tool)),
           details: results.map((r) => ({ tool: r.tool, success: r.success })),
         },
       }

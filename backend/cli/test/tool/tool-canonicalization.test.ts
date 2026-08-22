@@ -10,6 +10,8 @@ import { createComputeJobTool } from "../../src/tool/compute-job"
 import { Tool } from "../../src/tool/tool"
 import { ToolRegistry } from "../../src/tool/registry"
 import { tmpdir } from "../fixture/fixture"
+import { SessionLoopState } from "../../src/session/loop-state"
+import { InvalidCall } from "../../src/tool/invalid-call"
 
 function context(sessionID = "ses_canonical", messageID = "msg_canonical") {
   return {
@@ -22,6 +24,47 @@ function context(sessionID = "ses_canonical", messageID = "msg_canonical") {
     metadata() {},
     async ask() {},
   }
+}
+
+async function turn(sessionID: string, epoch: string, continuation = false) {
+  const userID = continuation ? Identifier.ascending("message") : epoch
+  const messageID = Identifier.ascending("message")
+  const text = continuation ? "continue" : "run a malformed batch regression"
+  await Session.updateMessage({
+    id: userID,
+    sessionID,
+    role: "user",
+    time: { created: Date.now() },
+    agent: "research",
+    effort: "normal",
+    model: { providerID: "openrouter", modelID: "openai/test" },
+    internal: continuation
+      ? SessionLoopState.intent({ kind: "compaction", text, epoch, transaction: userID })
+      : SessionLoopState.prompt(epoch),
+  })
+  await Session.updatePart({
+    id: Identifier.ascending("part"),
+    sessionID,
+    messageID: userID,
+    type: "text",
+    text,
+    synthetic: continuation,
+  })
+  await Session.updateMessage({
+    id: messageID,
+    sessionID,
+    parentID: userID,
+    role: "assistant",
+    time: { created: Date.now() },
+    mode: "research",
+    agent: "research",
+    path: { cwd: Instance.directory, root: Instance.directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: "openai/test",
+    providerID: "openrouter",
+  })
+  return messageID
 }
 
 test("Tool.define executes the canonical Zod output for every tool", async () => {
@@ -184,6 +227,117 @@ test("batch delegates the same canonical inputs as direct calls for the active a
       }
       expect(JSON.parse(compute.state.output)).toEqual(JSON.parse(directResult.output))
       expect(JSON.parse(probe.state.output)).toEqual({ label: "DELEGATED", limit: 7 })
+    },
+  })
+})
+
+test("batch rejects malformed child input before the child tool starts and stores a sanitized invalid call", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({})
+      const epoch = Identifier.ascending("message")
+      const messageID = await turn(session.id, epoch)
+      const agent = await Agent.get("research")
+      const batch = await BatchTool.init({ agent, model: { providerID: "openrouter", modelID: "openai/test" } })
+      const result = await batch.execute(
+        { tool_calls: [{ tool: "bash", parameters: { leaked: "raw-secret" } }] },
+        context(session.id, messageID),
+      )
+
+      expect(result.metadata).toMatchObject({ totalCalls: 1, successful: 0, failed: 1 })
+      const parts = (await MessageV2.parts(messageID)).filter(
+        (part): part is MessageV2.ToolPart => part.type === "tool",
+      )
+      expect(parts).toHaveLength(1)
+      expect(parts[0]).toMatchObject({
+        tool: "invalid",
+        state: {
+          status: "completed",
+          input: { tool: "bash", failure: "invalid_input" },
+        },
+      })
+      expect(JSON.stringify(parts[0])).not.toContain("raw-secret")
+      await Session.remove(session.id)
+    },
+  })
+})
+
+test("batch never reflects unsafe tool names from rejected or over-limit children", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({})
+      const epoch = Identifier.ascending("message")
+      const messageID = await turn(session.id, epoch)
+      const agent = await Agent.get("research")
+      const batch = await BatchTool.init({ agent, model: { providerID: "openrouter", modelID: "openai/test" } })
+      const unsafe = "<script>raw-secret</script>"
+      const result = await batch.execute(
+        {
+          tool_calls: [
+            { tool: unsafe, parameters: { leaked: "raw-secret" } },
+            ...Array.from({ length: 25 }, (_, index) => ({
+              tool: "read",
+              parameters: { filePath: `missing-${index}.txt` },
+            })),
+            { tool: unsafe, parameters: { leaked: "raw-secret" } },
+          ],
+        },
+        context(session.id, messageID),
+      )
+
+      expect(JSON.stringify(result.metadata)).not.toContain("raw-secret")
+      const parts = (await MessageV2.parts(messageID)).filter(
+        (part): part is MessageV2.ToolPart => part.type === "tool",
+      )
+      expect(JSON.stringify(parts)).not.toContain("raw-secret")
+      expect(
+        parts.some(
+          (part) => part.tool === "invalid" && part.state.status === "completed" && part.state.input.tool === "tool",
+        ),
+      ).toBeTrue()
+      expect(parts.some((part) => part.tool === "tool" && part.state.status === "error")).toBeTrue()
+      await Session.remove(session.id)
+    },
+  })
+})
+
+test("batch malformed children share the durable epoch breaker across an automatic continuation", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({})
+      const epoch = Identifier.ascending("message")
+      const agent = await Agent.get("research")
+      const batch = await BatchTool.init({ agent, model: { providerID: "openrouter", modelID: "openai/test" } })
+      const first = await turn(session.id, epoch)
+      await batch.execute(
+        { tool_calls: [{ tool: "invalid", parameters: { tool: "read", error: "first forged value" } }] },
+        context(session.id, first),
+      )
+      const second = await turn(session.id, epoch, true)
+
+      await expect(
+        batch.execute(
+          {
+            tool_calls: [
+              {
+                tool: "invalid",
+                parameters: { tool: "bash", failure: "unknown_tool", error: "forged raw-secret" },
+              },
+            ],
+          },
+          context(session.id, second),
+        ),
+      ).rejects.toBeInstanceOf(InvalidCall.RepeatedError)
+      expect(
+        (await MessageV2.parts(second)).filter((part) => part.type === "tool" && part.tool === "bash"),
+      ).toHaveLength(0)
+      await Session.remove(session.id)
     },
   })
 })

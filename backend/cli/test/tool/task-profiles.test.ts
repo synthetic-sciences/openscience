@@ -8,6 +8,7 @@ import {
   summarizeTurn,
   taskHandoff,
   taskDispatchBudget,
+  taskText,
   TASK_HANDOFF_CHARS,
   TASK_WALL_CLOCK_MS,
   TaskTool,
@@ -18,7 +19,7 @@ import { tmpdir } from "../fixture/fixture"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { Session } from "../../src/session"
 
-test("Task advertises only generic internal profiles while legacy agents remain retrievable", async () => {
+test("Task advertises generic phases and accepts an explicit domain specialist lens", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
@@ -32,6 +33,22 @@ test("Task advertises only generic internal profiles while legacy agents remain 
       expect(task.description).not.toContain("- biology:")
       expect(task.description).not.toContain("- physics:")
       expect(task.description).not.toContain("- literature-review:")
+
+      expect(
+        task.parameters.safeParse({
+          description: "Inspect biology evidence",
+          prompt: "Check the supplied assay results.",
+          subagent_type: "execute",
+          specialist: "biology",
+        }).success,
+      ).toBe(true)
+      expect(
+        task.parameters.safeParse({
+          description: "Invalid phase",
+          prompt: "Check the supplied assay results.",
+          subagent_type: "biology",
+        }).success,
+      ).toBe(false)
 
       expect(await Agent.get("biology")).toBeDefined()
       expect(await Agent.get("reviewer")).toBeDefined()
@@ -170,6 +187,46 @@ test("Task summaries expose command and runtime failures carried in completed me
     { tool: "bash", status: "error" },
     { tool: "python", status: "error" },
   ])
+})
+
+test("Task handoffs join every nonempty child text part in chronological order", () => {
+  const message = (id: string, created: number, parts: Array<{ id: string; text: string }>): MessageV2.WithParts => ({
+    info: {
+      id,
+      sessionID: "ses_child",
+      role: "assistant",
+      time: { created, completed: created + 1 },
+      parentID: "msg_user",
+      modelID: "model",
+      providerID: "provider",
+      mode: "execute",
+      agent: "execute",
+      path: { cwd: "/tmp", root: "/tmp" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    },
+    parts: parts.map((part) => ({
+      ...part,
+      sessionID: "ses_child",
+      messageID: id,
+      type: "text" as const,
+    })),
+  })
+  const messages = [
+    message("msg_later", 20, [
+      { id: "prt_second", text: "second conclusion" },
+      { id: "prt_empty", text: "   " },
+    ]),
+    message("msg_earlier", 10, [
+      { id: "prt_a_opening", text: "opening evidence" },
+      { id: "prt_b_detail", text: "supporting detail" },
+    ]),
+    message("msg_historical", 1, [{ id: "prt_old", text: "old result" }]),
+  ]
+
+  expect(taskText(messages, new Set(["msg_historical"]))).toBe(
+    "opening evidence\n\nsupporting detail\n\nsecond conclusion",
+  )
 })
 
 test("Task handoffs stay bounded while preserving findings and the final conclusion", () => {

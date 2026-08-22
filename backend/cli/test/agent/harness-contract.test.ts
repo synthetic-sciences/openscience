@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test"
+import path from "node:path"
+import { Instance } from "../../src/project/instance"
+import { SessionPrompt } from "../../src/session/prompt"
 import { SystemPrompt } from "../../src/session/system"
 import {
   DELEGATION_PROFILES,
@@ -7,6 +10,7 @@ import {
   TASK_WALL_CLOCK_MS,
   isComputeDelegationProfile,
 } from "../../src/tool/task"
+import { tmpdir } from "../fixture/fixture"
 
 const root = new URL("../../src/", import.meta.url)
 const read = (path: string) => Bun.file(new URL(path, root)).text()
@@ -133,9 +137,9 @@ test("delegation is rare, bounded, and observable", async () => {
   expect(prompt).toContain("Default to no children")
   expect(prompt).toContain("Normal permits two calls per turn")
   expect(prompt).toContain("Ultra four")
-  expect(prompt).toContain("continuations count")
+  expect(prompt).toContain("including continuations")
   expect(prompt).toContain("optional failure must not block")
-  expect(prompt).toContain("bounded handoff record")
+  expect(prompt).toContain("bounded handoff")
   expect(prompt).not.toContain("trusted")
   expect(source).toContain("durationMs")
   expect(source).toContain("failedToolCalls")
@@ -144,9 +148,28 @@ test("delegation is rare, bounded, and observable", async () => {
   expect(source).toContain("system: childGuidance")
   expect(source).toContain("Your final response is a decision-ready handoff")
   expect(source).toContain("handoff: memory.text")
-  expect(source).toContain("parts: promptParts")
   expect(source).not.toContain('"<system-reminder>",\n          `Research effort is')
   expect(source).not.toContain("<task_result>")
+})
+
+test("durable child prompts resolve referenced context into prompt parts", async () => {
+  await using tmp = await tmpdir()
+  const evidence = path.join(tmp.path, "evidence.txt")
+  await Bun.write(evidence, "verified evidence")
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parts = await SessionPrompt.resolvePromptParts("Inspect @evidence.txt and return the finding.")
+      expect(parts[0]).toEqual({ type: "text", text: "Inspect @evidence.txt and return the finding." })
+      expect(parts).toContainEqual({
+        type: "file",
+        url: `file://${evidence}`,
+        filename: "evidence.txt",
+        mime: "text/plain",
+      })
+    },
+  })
 })
 
 test("Plan and Review use the observable record without mandatory delegation", async () => {

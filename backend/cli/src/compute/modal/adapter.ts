@@ -1,7 +1,9 @@
 import path from "path"
 import crypto from "crypto"
+import fs from "fs/promises"
 import { ModalClient, type Sandbox } from "modal"
 import { Filesystem } from "../../util/filesystem"
+import { ModalUpload } from "./upload"
 import { ModalVolume } from "./volume"
 
 export namespace ModalAdapter {
@@ -115,11 +117,6 @@ export namespace ModalAdapter {
     return recovered
   }
 
-  async function hash(file: string) {
-    const data = await Bun.file(file).arrayBuffer()
-    return new Bun.CryptoHasher("sha256").update(data).digest("hex")
-  }
-
   async function outcome(sandbox: Sandbox, output: Hooks["output"]) {
     const state = { value: "" }
     const emit = async () => {
@@ -200,15 +197,46 @@ export namespace ModalAdapter {
     return { code, outputs, log: await Bun.file(logged.staging).text() }
   }
 
-  async function upload(sandbox: Sandbox, spec: Spec) {
-    await sandbox.filesystem.makeDirectory(ROOT)
-    for (const file of spec.uploads) {
+  export function validateUploads(files: File[]) {
+    return ModalUpload.validate(files)
+  }
+
+  export async function preflightUploads(project: string, files: File[]) {
+    validateUploads(files)
+    const root = await Filesystem.canonical(project)
+    if (!root) throw new Error(`Modal project directory is unavailable before upload: ${project}`)
+    const result: (File & { snapshot: ModalUpload.Snapshot })[] = []
+    for (const file of files) {
       const current = await Filesystem.canonical(file.canonical)
-      if (!current || !Filesystem.contains(spec.project, current)) {
+      if (!current || current !== file.canonical || !Filesystem.contains(root, current)) {
         throw new Error(`Modal input changed or escaped the project before upload: ${file.path}`)
       }
-      if ((await hash(current)) !== file.sha256) throw new Error(`Modal input changed after approval: ${file.path}`)
-      await sandbox.filesystem.copyFromLocal(current, path.posix.join(ROOT, file.path))
+      const snapshot = await ModalUpload.inspect(current)
+      if (snapshot.size !== file.size) throw new Error(`Modal input changed after approval: ${file.path}`)
+      result.push({ ...file, snapshot })
+    }
+    ModalUpload.validate(result)
+    return result
+  }
+
+  async function upload(sandbox: Sandbox, spec: Spec) {
+    const approved = await preflightUploads(spec.project, spec.uploads)
+    await fs.mkdir(spec.staging, { recursive: true, mode: 0o700 })
+    const base = await Filesystem.canonical(spec.staging)
+    if (!base) throw new Error(`Modal input staging directory is unavailable: ${spec.staging}`)
+    const staging = await fs.mkdtemp(path.join(base, ".inputs-"))
+    await fs.chmod(staging, 0o700)
+    try {
+      await sandbox.filesystem.makeDirectory(ROOT)
+      for (const [index, file] of approved.entries()) {
+        const local = path.join(staging, String(index))
+        await ModalUpload.stage(file.canonical, local, { ...file.snapshot, sha256: file.sha256 })
+        const remote = path.posix.join(ROOT, file.path)
+        await sandbox.filesystem.copyFromLocal(local, remote)
+        await ModalUpload.hash(local, { size: file.size, sha256: file.sha256 })
+      }
+    } finally {
+      await fs.rm(staging, { recursive: true, force: true })
     }
     await sandbox.filesystem.writeText("approved\n", path.posix.join(ROOT, ".openscience-ready"))
   }
@@ -282,7 +310,10 @@ export namespace ModalAdapter {
           throw error
         })
         await hooks.log(`Sandbox ready: ${sandbox.sandboxId}`)
-        await upload(sandbox, spec)
+        await upload(sandbox, spec).catch(async (error) => {
+          await sandbox.terminate().catch(() => undefined)
+          throw error
+        })
         await hooks.log(
           `Uploaded ${spec.uploads.length} input file${spec.uploads.length === 1 ? "" : "s"} (${spec.uploads.reduce((sum, file) => sum + file.size, 0)} bytes)`,
         )

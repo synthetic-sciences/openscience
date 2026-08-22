@@ -91,7 +91,17 @@ describe("tool selection", () => {
         fresh: true,
       }),
     ).toBe(true)
+    expect(
+      ToolSelection.direct({
+        agent: "research",
+        message: "In two sentences, explain why binary search is logarithmic.",
+        fresh: true,
+      }),
+    ).toBe(true)
     expect(ToolSelection.direct({ agent: "research", message: "What is a p-value?", fresh: true })).toBe(true)
+    expect(
+      ToolSelection.direct({ agent: "research", message: "Explain the search for those records.", fresh: true }),
+    ).toBe(false)
     expect(ToolSelection.direct({ agent: "research", message: "What is the latest trial result?", fresh: true })).toBe(
       false,
     )

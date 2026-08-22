@@ -1,13 +1,23 @@
 import path from "node:path"
 import { ulid } from "ulid"
 import z from "zod"
+import { AuthoritySignal } from "../project/authority-signal"
 import { Instance } from "../project/instance"
 import { ProjectLegacy } from "../project/legacy"
 import { Provenance } from "../science/provenance/store"
 import { Storage } from "../storage/storage"
 import { ArtifactFile } from "./artifacts"
+import { SafeFileIO } from "./safe-io"
+import { markdownImages } from "@synsci/util/markdown"
 
 export namespace PublicationReview {
+  export type Authority = {
+    root: string
+    scan: boolean
+    sessionID?: string
+    read(file: string): Promise<string>
+  }
+
   export const Check = z.enum(["citation", "numeric", "figure", "provenance"])
   export type Check = z.infer<typeof Check>
 
@@ -115,6 +125,8 @@ export namespace PublicationReview {
 
   const prefix = () => ["publication_review", Instance.project.id]
   const key = (id: string) => [...prefix(), id]
+  const sourceLimit = 32 * 1024 * 1024
+  const bibliographyLimit = 16 * 1024 * 1024
 
   async function migrate() {
     await ProjectLegacy.adopt("publication_review", Instance.project.id, (value, projectID) => ({
@@ -123,30 +135,34 @@ export namespace PublicationReview {
     }))
   }
 
-  export async function run(input: RunInput): Promise<Report> {
+  export async function run(input: RunInput, authority?: Authority): Promise<Report> {
     await migrate()
     const parsed = RunInput.parse(input)
-    const source = await target(parsed.path)
+    const source = await target(parsed.path, authority)
     if (![".md", ".markdown"].includes(path.extname(source.absolute).toLowerCase())) {
       throw new Error("Publication preflight currently requires a Markdown manuscript")
     }
-    if (!(await Bun.file(source.absolute).exists())) {
-      throw new Error(`Publication manuscript not found: ${parsed.path}`)
-    }
-    const [text, artifactHash, graph, provenance, audit] = await Promise.all([
-      Bun.file(source.absolute).text(),
-      digest(source.absolute),
-      Provenance.project({
-        projectID: Instance.project.id,
-        directory: Instance.directory,
-      }),
-      ArtifactFile.provenance(Instance.worktree, source.relative),
-      ArtifactFile.audit(Instance.worktree),
+    const snapshot = await SafeFileIO.optional(source.absolute, { maxBytes: sourceLimit })
+    if (!snapshot) throw new Error(`Publication manuscript not found: ${parsed.path}`)
+    const text = snapshot.bytes.toString("utf8")
+    const artifactHash = byteHash(snapshot.bytes)
+    const scan = !authority || authority.scan
+    const [graph, provenance, audit] = await Promise.all([
+      scan
+        ? Provenance.project({
+            projectID: Instance.project.id,
+            directory: Instance.directory,
+          })
+        : Promise.resolve({ nodes: [], edges: [] }),
+      scan
+        ? ArtifactFile.provenance(source.root, source.local)
+        : Promise.resolve({ path: source.local, tracked: false, dirty: false, status: "local" as const }),
+      scan ? ArtifactFile.audit(source.root) : Promise.resolve(undefined),
     ])
     const findings = [
-      ...(await citations(text, source)),
+      ...(await citations(text, source, authority)),
       ...(await numbers(text, source)),
-      ...(await figures(text, source, graph.nodes)),
+      ...(await figures(text, source, graph.nodes, authority)),
       ...(await reproducibility(source, provenance, audit)),
     ]
     const now = Date.now()
@@ -164,27 +180,33 @@ export namespace PublicationReview {
       createdAt: now,
       updatedAt: now,
     }
-    await Storage.write(key(report.id), report)
+    const save = async () => {
+      const current = authority ? await authority.read(source.absolute) : source.absolute
+      if (current !== source.absolute || (await digest(current)) !== artifactHash) {
+        throw new Error("The manuscript changed while its publication preflight was being generated; retry it")
+      }
+      await Storage.write(key(report.id), report)
+    }
+    if (authority) await AuthoritySignal.exclusive(save)
+    else await save()
     return Report.parse(report)
   }
 
-  export async function latest(filepath: string): Promise<Report | undefined> {
-    return (await history(filepath)).at(-1)
+  export async function latest(filepath: string, authority?: Authority): Promise<Report | undefined> {
+    return (await history(filepath, authority)).at(-1)
   }
 
-  export async function current(filepath: string): Promise<State | undefined> {
-    const report = await latest(filepath)
+  export async function current(filepath: string, authority?: Authority): Promise<State | undefined> {
+    const report = await latest(filepath, authority)
     if (!report) return
-    const source = await target(filepath)
-    const stale =
-      !(await Bun.file(source.absolute).exists()) ||
-      (await digest(source.absolute).catch(() => "")) !== report.artifactHash
+    const source = await target(filepath, authority)
+    const stale = (await digest(source.absolute).catch(() => "")) !== report.artifactHash
     return State.parse({ ...report, stale })
   }
 
-  export async function history(filepath: string): Promise<Report[]> {
+  export async function history(filepath: string, authority?: Authority): Promise<Report[]> {
     await migrate()
-    const source = await target(filepath)
+    const source = await target(filepath, authority)
     const keys = await Storage.list(prefix())
     const reports = await Promise.all(
       keys.map((item) => Storage.read<unknown>(item).then((value) => Report.parse(value))),
@@ -199,71 +221,96 @@ export namespace PublicationReview {
     return Report.parse(await Storage.read<unknown>(key(id)))
   }
 
-  export async function resolve(id: string, findingID: string, input: ResolveInput): Promise<Report> {
+  export async function resolve(
+    id: string,
+    findingID: string,
+    input: ResolveInput,
+    authority?: Authority,
+  ): Promise<Report> {
     await migrate()
     const parsed = ResolveInput.parse(input)
-    return Report.parse(
-      await Storage.update<Report>(key(id), (report) => {
-        if (report.finalized) throw new Error("A finalized publication preflight cannot be changed")
-        const finding = report.findings.find((item) => item.id === findingID)
-        if (!finding) throw new Error(`Review finding ${findingID} was not found`)
-        const now = Date.now()
-        finding.status = parsed.status
-        finding.resolution = {
-          kind: parsed.status,
-          actor: parsed.actor,
-          reason: parsed.reason,
-          at: now,
-        }
-        report.version += 1
-        report.updatedAt = now
-        report.status = status(report.findings)
-        report.summary = summary(report.findings)
-        report.events.push({
-          version: report.version,
-          type: parsed.status,
-          actor: parsed.actor,
-          at: now,
-          findingID,
-          reason: parsed.reason,
-        })
-      }),
-    )
-  }
-
-  export async function finalize(id: string, input: FinalizeInput): Promise<Report> {
-    const parsed = FinalizeInput.parse(input)
-    const current = await get(id)
-    await assertCurrent(current)
-    if (current.findings.some((finding) => finding.severity === "blocking" && finding.status === "open")) {
-      throw new Error("Resolve or explicitly override all blocking findings before finalization")
+    const update = async () => {
+      if (authority) {
+        const report = await get(id)
+        const requested = path.isAbsolute(report.path) ? report.path : path.resolve(Instance.worktree, report.path)
+        const source = await target(requested, authority)
+        if (source.relative !== report.path)
+          throw new Error("The publication preflight belongs to a different manuscript")
+      }
+      return Report.parse(
+        await Storage.update<Report>(key(id), (report) => {
+          if (report.finalized) throw new Error("A finalized publication preflight cannot be changed")
+          const finding = report.findings.find((item) => item.id === findingID)
+          if (!finding) throw new Error(`Review finding ${findingID} was not found`)
+          const now = Date.now()
+          finding.status = parsed.status
+          finding.resolution = {
+            kind: parsed.status,
+            actor: parsed.actor,
+            reason: parsed.reason,
+            at: now,
+          }
+          report.version += 1
+          report.updatedAt = now
+          report.status = status(report.findings)
+          report.summary = summary(report.findings)
+          report.events.push({
+            version: report.version,
+            type: parsed.status,
+            actor: parsed.actor,
+            at: now,
+            findingID,
+            reason: parsed.reason,
+          })
+        }),
+      )
     }
-    return Report.parse(
-      await Storage.update<Report>(key(id), (report) => {
-        if (report.finalized) return
-        const now = Date.now()
-        report.version += 1
-        report.updatedAt = now
-        report.finalized = {
-          actor: parsed.actor,
-          at: now,
-          artifactHash: report.artifactHash,
-        }
-        report.events.push({
-          version: report.version,
-          type: "finalized",
-          actor: parsed.actor,
-          at: now,
-        })
-      }),
-    )
+    if (!authority) return update()
+    return AuthoritySignal.exclusive(update)
   }
 
-  export async function assertReady(filepath: string, id: string, artifactHash?: string): Promise<Report> {
+  export async function finalize(id: string, input: FinalizeInput, authority?: Authority): Promise<Report> {
+    const parsed = FinalizeInput.parse(input)
+    const update = async () => {
+      const current = await get(id)
+      await assertCurrent(current, undefined, authority)
+      if (current.findings.some((finding) => finding.severity === "blocking" && finding.status === "open")) {
+        throw new Error("Resolve or explicitly override all blocking findings before finalization")
+      }
+      return Report.parse(
+        await Storage.update<Report>(key(id), (report) => {
+          if (report.finalized) return
+          const now = Date.now()
+          report.version += 1
+          report.updatedAt = now
+          report.finalized = {
+            actor: parsed.actor,
+            at: now,
+            artifactHash: report.artifactHash,
+          }
+          report.events.push({
+            version: report.version,
+            type: "finalized",
+            actor: parsed.actor,
+            at: now,
+          })
+        }),
+      )
+    }
+    if (!authority) return update()
+    return AuthoritySignal.exclusive(update)
+  }
+
+  export async function assertReady(
+    filepath: string,
+    id: string,
+    artifactHash?: string,
+    authority?: Authority,
+  ): Promise<Report> {
     const report = await get(id)
-    const source = await target(filepath)
+    const source = await target(filepath, authority)
     if (report.path !== source.relative) throw new Error("The publication preflight belongs to a different manuscript")
-    await assertCurrent(report, artifactHash)
+    await assertCurrent(report, artifactHash, authority)
     if (!report.finalized) throw new Error("The publication preflight has not been finalized")
     if (report.findings.some((finding) => finding.severity === "blocking" && finding.status === "open")) {
       throw new Error("The publication preflight still has open blocking findings")
@@ -271,30 +318,33 @@ export namespace PublicationReview {
     return report
   }
 
-  async function citations(text: string, source: Awaited<ReturnType<typeof target>>): Promise<Finding[]> {
-    const lines = text.split(/\r?\n/)
+  async function citations(
+    text: string,
+    source: Awaited<ReturnType<typeof target>>,
+    authority?: Authority,
+  ): Promise<Finding[]> {
+    const lines = prose(text)
     const definitions = new Set(
-      lines.map((line) => /^\s*\[\^([^\]]+)\]:/.exec(line)?.[1]).filter((value): value is string => Boolean(value)),
+      lines
+        .map((line) => /^\s*\[\^([^\]]+)\]:/.exec(line.text)?.[1])
+        .filter((value): value is string => Boolean(value)),
     )
     const references = new Set<string>()
-    for (const [index, line] of lines.entries()) {
-      for (const match of line.matchAll(/\[\^([^\]]+)\](?!:)/g)) {
+    for (const line of lines) {
+      for (const match of line.text.matchAll(/\[\^([^\]]+)\](?!:)/g)) {
         if (definitions.has(match[1]!)) continue
-        references.add(`${match[1]}\0${index + 1}`)
+        references.add(`${match[1]}\0${line.line}`)
       }
     }
-    const bib = await bibliography(text, source)
+    const bib = await bibliography(text, source, authority)
     const keys = new Set<string>()
-    for (const file of bib) {
-      const value = await Bun.file(file)
-        .text()
-        .catch(() => "")
-      for (const match of value.matchAll(/@\w+\s*\{\s*([^,\s]+)\s*,/g)) keys.add(match[1]!)
+    for (const item of bib) {
+      for (const match of item.text.matchAll(/@\w+\s*\{\s*([^,\s]+)\s*,/g)) keys.add(match[1]!)
     }
     const cites = new Map<string, number>()
-    for (const [index, line] of lines.entries()) {
-      for (const match of line.matchAll(/@([A-Za-z][A-Za-z0-9_.:+/-]*)/g)) {
-        if (!cites.has(match[1]!)) cites.set(match[1]!, index + 1)
+    for (const line of lines) {
+      for (const match of line.text.matchAll(/(?<![A-Za-z0-9._%+])@([A-Za-z][A-Za-z0-9_.:+/-]*)/g)) {
+        if (!cites.has(match[1]!)) cites.set(match[1]!, line.line)
       }
     }
     const missing = await Promise.all(
@@ -307,7 +357,7 @@ export namespace PublicationReview {
             title: `Bibliography key @${key} is unresolved`,
             detail: "The manuscript cites a key that is absent from its local bibliography files.",
             evidence: bib.length
-              ? bib.map((file) => path.relative(Instance.worktree, file).replaceAll("\\", "/"))
+              ? bib.map((item) => path.relative(source.root, item.file).replaceAll("\\", "/"))
               : ["No local bibliography file was found."],
             location: { path: source.relative, line },
           }),
@@ -327,16 +377,16 @@ export namespace PublicationReview {
       }),
     )
     const placeholders = await Promise.all(
-      lines.flatMap((line, index) => {
-        if (!/\[(?:citation needed|cite|reference needed)\]|\bTODO\s*:?\s*cite\b/i.test(line)) return []
+      lines.flatMap((line) => {
+        if (!/\[(?:citation needed|cite|reference needed)\]|\bTODO\s*:?\s*cite\b/i.test(line.text)) return []
         return [
           finding({
             check: "citation",
             severity: "blocking",
             title: "Citation placeholder remains in the manuscript",
             detail: "Replace the placeholder with a resolvable source before publication.",
-            evidence: [line.trim()],
-            location: { path: source.relative, line: index + 1 },
+            evidence: [line.text.trim()],
+            location: { path: source.relative, line: line.line },
           }),
         ]
       }),
@@ -345,19 +395,19 @@ export namespace PublicationReview {
   }
 
   async function numbers(text: string, source: Awaited<ReturnType<typeof target>>): Promise<Finding[]> {
-    const lines = text.split(/\r?\n/)
+    const lines = prose(text)
     return Promise.all(
-      lines.flatMap((line, index) => {
+      lines.flatMap((line) => {
         const claim =
-          /\b\d+(?:\.\d+)?\s*%/.test(line) ||
-          /\bp\s*(?:<|>|=|≤|≥)\s*0?\.\d+/i.test(line) ||
-          /\b(?:confidence interval|CI)\b/i.test(line) ||
-          /\b\d+(?:\.\d+)?\s*(?:mg|µg|μg|ng|kg|mL|µL|μL|mm|cm|nm|µm|μm|Hz|kDa)\b/.test(line)
+          /\b\d+(?:\.\d+)?\s*%/.test(line.text) ||
+          /\bp\s*(?:<|>|=|≤|≥)\s*0?\.\d+/i.test(line.text) ||
+          /\b(?:confidence interval|CI)\b/i.test(line.text) ||
+          /\b\d+(?:\.\d+)?\s*(?:mg|µg|μg|ng|kg|mL|µL|μL|mm|cm|nm|µm|μm|Hz|kDa)\b/.test(line.text)
         if (!claim) return []
         const traced =
-          /@[A-Za-z][A-Za-z0-9_.:+/-]*/.test(line) ||
-          /\b(?:figure|fig\.?|table|supplement(?:ary)?)\s*[A-Za-z0-9]/i.test(line) ||
-          /\[[^\]]+\]\([^)]*\.(?:csv|tsv|json|jsonl|parquet|arrow|xlsx?|ipynb)(?:[?#][^)]*)?\)/i.test(line)
+          /(?<![A-Za-z0-9._%+])@[A-Za-z][A-Za-z0-9_.:+/-]*/.test(line.text) ||
+          /\b(?:figure|fig\.?|table|supplement(?:ary)?)\s*[A-Za-z0-9]/i.test(line.text) ||
+          /\[[^\]]+\]\([^)]*\.(?:csv|tsv|json|jsonl|parquet|arrow|xlsx?|ipynb)(?:[?#][^)]*)?\)/i.test(line.text)
         if (traced) return []
         return [
           finding({
@@ -366,8 +416,8 @@ export namespace PublicationReview {
             title: "Numeric claim has no inline evidence trace",
             detail:
               "Link this reported value to a citation, table, figure, notebook, or local data artifact so it can be independently checked.",
-            evidence: [line.trim()],
-            location: { path: source.relative, line: index + 1 },
+            evidence: [line.text.trim()],
+            location: { path: source.relative, line: line.line },
           }),
         ]
       }),
@@ -378,63 +428,67 @@ export namespace PublicationReview {
     text: string,
     source: Awaited<ReturnType<typeof target>>,
     nodes: Awaited<ReturnType<typeof Provenance.project>>["nodes"],
+    authority?: Authority,
   ): Promise<Finding[]> {
-    const lines = text.split(/\r?\n/)
     const output: Finding[] = []
-    for (const [index, line] of lines.entries()) {
-      for (const match of line.matchAll(/!\[([^\]]*)\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+["'][^"']*["'])?\s*\)/g)) {
-        const alt = match[1]!.trim()
-        const value = (match[2] ?? match[3]!).trim()
-        if (/^(?:https?:|data:)/i.test(value)) continue
-        const absolute = path.resolve(path.dirname(source.absolute), decodeURIComponent(value.split(/[?#]/)[0]!))
-        const relative = path.relative(Instance.worktree, absolute).replaceAll("\\", "/")
-        const inside = await Instance.containsCanonicalPath(absolute)
-        const exists = inside && (await Bun.file(absolute).exists())
-        if (!exists) {
-          output.push(
-            await finding({
-              check: "figure",
-              severity: "blocking",
-              title: `Figure ${value} is missing`,
-              detail: inside
-                ? "The local figure referenced by this manuscript does not exist."
-                : "The figure reference resolves outside the opened project.",
-              evidence: [relative],
-              location: { path: source.relative, line: index + 1 },
-            }),
-          )
-          continue
-        }
-        if (!alt) {
-          output.push(
-            await finding({
-              check: "figure",
-              severity: "minor",
-              title: `Figure ${value} has no alternative text`,
-              detail: "Add concise alternative text describing the scientific content of the figure.",
-              evidence: [relative],
-              location: { path: source.relative, line: index + 1 },
-            }),
-          )
-        }
-        const recorded = nodes.some((node) => {
-          if (node.kind !== "artifact" || !("path" in node) || !node.path) return false
-          const owner = typeof node.meta?.directory === "string" ? node.meta.directory : Instance.worktree
-          const nodePath = path.isAbsolute(node.path) ? node.path : path.resolve(owner, node.path)
-          return path.resolve(nodePath) === path.resolve(absolute)
-        })
-        if (recorded) continue
+    for (const image of markdownImages(text)) {
+      const alt = image.alt.trim()
+      const value = image.target.trim()
+      if (/^(?:https?:|data:|blob:)/i.test(value)) continue
+      const requested = path.resolve(path.dirname(source.absolute), decode(value.split(/[?#]/)[0]!))
+      const absolute = authority
+        ? await authority.read(requested).catch(() => undefined)
+        : (await Instance.containsCanonicalPath(requested))
+          ? requested
+          : undefined
+      const relative = path.relative(source.root, requested).replaceAll("\\", "/")
+      const inside = Boolean(absolute)
+      const opened = absolute ? await SafeFileIO.open(absolute).catch(() => undefined) : undefined
+      await opened?.close()
+      if (!absolute || !opened) {
         output.push(
           await finding({
             check: "figure",
-            severity: "major",
-            title: `Figure ${value} has no recorded provenance`,
-            detail: "Record the generating run, code, and source inputs for this local figure.",
-            evidence: [relative, "No matching artifact node exists in the project provenance graph."],
-            location: { path: source.relative, line: index + 1 },
+            severity: "blocking",
+            title: `Figure ${value} is missing`,
+            detail: inside
+              ? "The local figure referenced by this manuscript does not exist."
+              : "The figure reference resolves outside the opened project.",
+            evidence: [relative],
+            location: { path: source.relative, line: image.line },
+          }),
+        )
+        continue
+      }
+      if (!alt) {
+        output.push(
+          await finding({
+            check: "figure",
+            severity: "minor",
+            title: `Figure ${value} has no alternative text`,
+            detail: "Add concise alternative text describing the scientific content of the figure.",
+            evidence: [relative],
+            location: { path: source.relative, line: image.line },
           }),
         )
       }
+      const recorded = nodes.some((node) => {
+        if (node.kind !== "artifact" || !("path" in node) || !node.path) return false
+        const owner = typeof node.meta?.directory === "string" ? node.meta.directory : source.root
+        const nodePath = path.isAbsolute(node.path) ? node.path : path.resolve(owner, node.path)
+        return path.resolve(nodePath) === path.resolve(absolute)
+      })
+      if (recorded) continue
+      output.push(
+        await finding({
+          check: "figure",
+          severity: "major",
+          title: `Figure ${value} has no recorded provenance`,
+          detail: "Record the generating run, code, and source inputs for this local figure.",
+          evidence: [relative, "No matching artifact node exists in the project provenance graph."],
+          location: { path: source.relative, line: image.line },
+        }),
+      )
     }
     return output
   }
@@ -442,7 +496,7 @@ export namespace PublicationReview {
   async function reproducibility(
     source: Awaited<ReturnType<typeof target>>,
     provenance: ArtifactFile.Provenance,
-    audit: ArtifactFile.Audit,
+    audit?: ArtifactFile.Audit,
   ): Promise<Finding[]> {
     const output: Finding[] = []
     if (!provenance.tracked || !provenance.commit) {
@@ -468,7 +522,7 @@ export namespace PublicationReview {
         }),
       )
     }
-    const failures = audit.checks.filter((check) => check.status === "fail")
+    const failures = (audit?.checks ?? []).filter((check) => check.status === "fail")
     for (const check of failures) {
       if (check.id === "git-repository" || check.id === "git-commit") continue
       output.push(
@@ -482,7 +536,7 @@ export namespace PublicationReview {
         }),
       )
     }
-    const warnings = audit.checks.filter((check) => check.status === "warn")
+    const warnings = (audit?.checks ?? []).filter((check) => check.status === "warn")
     for (const check of warnings) {
       if (check.id === "git-clean" && provenance.dirty) continue
       output.push(
@@ -499,56 +553,61 @@ export namespace PublicationReview {
     return output
   }
 
-  async function bibliography(text: string, source: Awaited<ReturnType<typeof target>>): Promise<string[]> {
+  async function bibliography(text: string, source: Awaited<ReturnType<typeof target>>, authority?: Authority) {
     const frontmatter = /^---\s*\n([\s\S]*?)\n---/m.exec(text)?.[1] ?? ""
-    const declared = frontmatter.split(/\r?\n/).flatMap((line) => {
-      const value = /^\s*bibliography\s*:\s*(.+)\s*$/i.exec(line)?.[1]
-      if (!value) return []
-      return value
-        .replace(/^\[|\]$/g, "")
-        .split(",")
-        .map((item) => item.trim().replace(/^["']|["']$/g, ""))
-        .filter(Boolean)
-    })
+    const lines = frontmatter.split(/\r?\n/)
+    const row = lines.findIndex((line) => /^\s*bibliography\s*:/.test(line))
+    const value = row < 0 ? "" : lines[row]!.replace(/^\s*bibliography\s*:\s*/, "").trim()
+    const inline = value.startsWith("[") && value.endsWith("]") ? value.slice(1, -1).split(",") : value ? [value] : []
+    const tail = row < 0 ? [] : lines.slice(row + 1)
+    const stop = tail.findIndex((line) => !/^\s+-\s+/.test(line))
+    const block = value ? [] : tail.slice(0, stop < 0 ? tail.length : stop).map((line) => line.replace(/^\s+-\s+/, ""))
+    const declared = [...inline, ...block].map((item) => item.trim().replace(/^(['"])(.*)\1$/, "$2")).filter(Boolean)
     const candidates = [
       ...declared.map((file) => path.resolve(path.dirname(source.absolute), file)),
       path.join(path.dirname(source.absolute), "references.bib"),
       path.join(path.dirname(source.absolute), "bibliography.bib"),
       path.join(path.dirname(source.absolute), "refs.bib"),
-      path.join(Instance.directory, "references.bib"),
-      path.join(Instance.directory, "bibliography.bib"),
-      path.join(Instance.directory, "refs.bib"),
-      path.join(Instance.worktree, "references.bib"),
-      path.join(Instance.worktree, "bibliography.bib"),
-      path.join(Instance.worktree, "refs.bib"),
+      path.join(source.root, "references.bib"),
+      path.join(source.root, "bibliography.bib"),
+      path.join(source.root, "refs.bib"),
     ]
     const unique = [...new Set(candidates)]
     const safe = await Promise.all(
-      unique.map(async (file) =>
-        (await Instance.containsCanonicalPath(file)) && (await Bun.file(file).exists()) ? file : undefined,
-      ),
+      unique.map(async (file) => {
+        const authorized = authority
+          ? await authority.read(file).catch(() => undefined)
+          : (await Instance.containsCanonicalPath(file))
+            ? file
+            : undefined
+        if (!authorized) return
+        const snapshot = await SafeFileIO.optional(authorized, { maxBytes: bibliographyLimit }).catch(() => undefined)
+        return snapshot ? { file: authorized, text: snapshot.bytes.toString("utf8") } : undefined
+      }),
     )
-    return safe.filter((file): file is string => Boolean(file))
+    return safe.filter((item): item is { file: string; text: string } => Boolean(item))
   }
 
-  async function target(value: string) {
-    const absolute = path.resolve(Instance.directory, value)
-    if (!(await Instance.containsCanonicalPath(absolute))) {
+  async function target(value: string, authority?: Authority) {
+    const requested = path.isAbsolute(value) ? value : path.resolve(authority?.root ?? Instance.directory, value)
+    const absolute = authority ? await authority.read(requested) : requested
+    if (!authority && !(await Instance.containsCanonicalPath(absolute))) {
       throw new Error(`Publication preflight target is outside the project: ${value}`)
     }
+    const project = await Instance.containsCanonicalPath(absolute)
+    const root = authority?.root ?? Instance.worktree
     return {
       absolute,
-      relative: path.relative(Instance.worktree, absolute).replaceAll("\\", "/"),
+      root,
+      local: path.relative(root, absolute).replaceAll("\\", "/"),
+      relative: project ? path.relative(Instance.worktree, absolute).replaceAll("\\", "/") : absolute,
     }
   }
 
-  async function assertCurrent(report: Report, artifactHash?: string) {
-    const absolute = path.resolve(Instance.worktree, report.path)
-    if (!(await Instance.containsCanonicalPath(absolute))) {
-      throw new Error("The preflight-checked manuscript is outside the current project")
-    }
-    if (!(await Bun.file(absolute).exists())) throw new Error("The preflight-checked manuscript no longer exists")
-    if ((artifactHash ?? (await digest(absolute))) !== report.artifactHash) {
+  async function assertCurrent(report: Report, artifactHash?: string, authority?: Authority) {
+    const requested = path.isAbsolute(report.path) ? report.path : path.resolve(Instance.worktree, report.path)
+    const source = await target(requested, authority)
+    if ((artifactHash ?? (await digest(source.absolute).catch(() => ""))) !== report.artifactHash) {
       throw new Error("The manuscript changed after this publication preflight was generated")
     }
   }
@@ -598,16 +657,78 @@ export namespace PublicationReview {
   }
 
   async function digest(file: string) {
+    return byteHash((await SafeFileIO.read(file, { maxBytes: sourceLimit })).bytes)
+  }
+
+  function byteHash(bytes: Uint8Array) {
     const hasher = new Bun.CryptoHasher("sha256")
-    const reader = Bun.file(file).stream().getReader()
-    const feed = async (): Promise<void> => {
-      const chunk = await reader.read()
-      if (chunk.done) return
-      hasher.update(chunk.value)
-      return feed()
-    }
-    await feed()
+    hasher.update(bytes)
     return hasher.digest("hex")
+  }
+
+  function decode(value: string) {
+    try {
+      return decodeURIComponent(value)
+    } catch {
+      return value
+    }
+  }
+
+  function prose(text: string) {
+    const lines = text.split(/\r?\n/)
+    const state = {
+      frontmatter: /^---\s*$/.test(lines[0] ?? ""),
+      fence: "",
+      size: 0,
+      comment: false,
+    }
+    return lines.map((value, index) => {
+      if (state.frontmatter) {
+        if (index > 0 && /^---\s*$/.test(value)) state.frontmatter = false
+        return { text: "", line: index + 1 }
+      }
+      const marker = /^[ \t]{0,3}(`{3,}|~{3,})/.exec(value)?.[1]
+      if (marker) {
+        const char = marker[0]!
+        if (!state.fence) {
+          state.fence = char
+          state.size = marker.length
+        } else if (state.fence === char && marker.length >= state.size) {
+          state.fence = ""
+          state.size = 0
+        }
+        return { text: "", line: index + 1 }
+      }
+      if (state.fence || /^(?: {4}|\t)/.test(value)) return { text: "", line: index + 1 }
+      const visible = uncomment(value, state)
+      return {
+        text: visible.replace(/(`+)(.*?)\1/g, (match) => " ".repeat(match.length)),
+        line: index + 1,
+      }
+    })
+  }
+
+  function uncomment(value: string, state: { comment: boolean }) {
+    const output: string[] = []
+    const cursor = { value: 0 }
+    while (cursor.value < value.length) {
+      if (state.comment) {
+        const end = value.indexOf("-->", cursor.value)
+        if (end < 0) return output.join("")
+        state.comment = false
+        cursor.value = end + 3
+        continue
+      }
+      const start = value.indexOf("<!--", cursor.value)
+      if (start < 0) {
+        output.push(value.slice(cursor.value))
+        break
+      }
+      output.push(value.slice(cursor.value, start))
+      state.comment = true
+      cursor.value = start + 4
+    }
+    return output.join("")
   }
 
   async function hash(value: string) {

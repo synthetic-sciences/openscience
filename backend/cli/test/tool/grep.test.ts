@@ -83,6 +83,43 @@ describe("tool.grep", () => {
       },
     })
   })
+
+  test("stops the search process after the bounded result window", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "many.txt"), Array.from({ length: 10_000 }, (_, index) => `match ${index}`).join("\n"))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const grep = await GrepTool.init()
+        const result = await grep.execute({ pattern: "match", path: tmp.path }, ctx)
+
+        expect(result.metadata).toMatchObject({ matches: 100, truncated: true })
+        expect(result.output).toContain("Found 100 matches")
+        expect(result.output.length).toBeLessThan(30_000)
+      },
+    })
+  })
+
+  test("bounds individual matching lines before collecting them", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "wide.txt"), `needle ${"x".repeat(2_000_000)}`)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const grep = await GrepTool.init()
+        const result = await grep.execute({ pattern: "needle", path: tmp.path }, ctx)
+
+        expect(result.metadata.matches).toBe(1)
+        expect(result.output.length).toBeLessThan(10_000)
+      },
+    })
+  })
 })
 
 describe("CRLF regex handling", () => {

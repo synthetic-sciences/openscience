@@ -29,8 +29,13 @@ import { artifactContext } from "@/artifacts/context"
 import { normalizeStoredArtifact, savedResultLabel } from "@/artifacts/store"
 import { ProjectWorkspaceFrame } from "@/atlas/ProjectWorkspaceFrame"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLayout } from "@/context/layout"
 import { decode64, setCurrentDirectory } from "@/utils/base64"
-import { assetUrl } from "@/utils/markdown-assets"
+import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
+import { rawFileQuery } from "@/utils/project-file"
+import { projectPrefs } from "@/atlas/store/projectPrefs"
+import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
+import { missingProject, ProjectUnavailable } from "./project-availability"
 import {
   looksLikeProjectSegment,
   projectAliasID,
@@ -47,6 +52,7 @@ export default function Layout(props: ParentProps) {
   const navigate = useNavigate()
   const language = useLanguage()
   const global = useGlobalSync()
+  const layout = useLayout()
   const route = createMemo(() => resolveProjectRoute(params.dir, global.data.project))
   const aliasID = createMemo(() => {
     if (!global.ready || route()) return
@@ -79,6 +85,25 @@ export default function Layout(props: ParentProps) {
     return resolveProjectRoute(params.dir, [current.project])
   })
   const active = createMemo(() => route() ?? recovered() ?? recoveredLegacy())
+  const availabilityID = createMemo(() => route()?.projectID)
+  const [availability] = createResource(availabilityID, async (projectID) => ({
+    projectID,
+    missing: await global.project.resolveID(projectID).then(
+      () => undefined,
+      (error) => missingProject(error),
+    ),
+  }))
+  const unavailable = createMemo(() => {
+    const current = route()
+    const result = availability.latest
+    if (!current || result?.projectID !== current.projectID || !result.missing) return
+    return { directory: result.missing.directory ?? current.directory }
+  })
+  const available = createMemo(() => {
+    const current = route()
+    if (!current) return true
+    return availability.latest?.projectID === current.projectID
+  })
   // A legacy base64 route carries only a directory. Resolve its opaque project
   // capability before mounting project-scoped providers; otherwise children
   // can synchronously build requests without the required project selector.
@@ -98,7 +123,7 @@ export default function Layout(props: ParentProps) {
 
   createEffect(() => {
     const value = directory()
-    if (!value) return
+    if (!value || !available() || unavailable()) return
     const clear = setCurrentDirectory(value, projectID())
     onCleanup(clear)
   })
@@ -122,148 +147,186 @@ export default function Layout(props: ParentProps) {
     })
     navigate("/")
   })
+
+  const home = () => navigate("/", { replace: true })
+  const remove = () => {
+    const current = active()
+    if (current) {
+      projectPrefs.hide(current.projectID, current.project.worktree)
+      layout.projects.close(current.project.worktree)
+      showToast({ variant: "success", title: "Project removed from home" })
+    }
+    home()
+  }
+
   return (
-    <Show when={directory()}>
-      <SDKProvider directory={directory()} projectID={projectID()} scope={scope()}>
-        <SyncProvider>
-          {iife(() => {
-            const sync = useSync()
-            const sdk = useSDK()
-
-            const respond = (input: {
-              sessionID: string
-              permissionID: string
-              response: "once" | "session" | "project" | "always" | "reject"
-            }) => sdk.client.permission.respond(input)
-
-            const replyToQuestion = (input: { requestID: string; answers: QuestionAnswer[] }) =>
-              sdk.client.question.reply(input)
-
-            const rejectQuestion = (input: { requestID: string }) => sdk.client.question.reject(input)
-
-            const navigateToSession = (sessionID: string) => {
-              navigate(`/${params.dir}/session/${sessionID}`)
-            }
-
-            // Tool cards and diffs share the contextual Files surface with the
-            // explorer. Selecting one opens the right pane without replacing the
-            // conversation in the center.
-            const openFile = (path: string) => {
-              const dir = directory()
-              uiStore.openFile(dir, path)
-            }
-
-            const openArtifact = (id: string) => {
-              void sdk
-                .request(`/file/artifact-store/${encodeURIComponent(id)}`)
-                .then(async (response) => {
-                  if (!response.ok) throw new Error(`artifact could not be opened (${response.status})`)
-                  const artifact = normalizeStoredArtifact(await response.json())
-                  if (!artifact) throw new Error("artifact metadata is invalid")
-                  uiStore.openSaved(artifact)
-                })
-                .catch((error: unknown) => {
-                  showToast({
-                    variant: "error",
-                    title: "artifact could not be opened",
-                    description: error instanceof Error ? error.message : String(error),
-                  })
-                })
-            }
-
-            // "Save as Result…" at the end of an assistant turn promotes a
-            // written scratch file into a durable Result via the explicit-save route.
-            const saveArtifact = (path: string) => {
-              const session = params.id && params.id !== "new" ? params.id : undefined
-              if (!session) {
-                const error = new Error("No active session.")
-                showToast({ variant: "error", title: "artifact save failed", description: error.message })
-                return Promise.reject(error)
-              }
-              return sdk
-                .request("/file/artifact", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ path, sessionID: session }),
-                })
-                .then(async (response) => {
-                  if (!response.ok) throw new Error(`artifact save failed (${response.status})`)
-                  const name = path.split("/").filter(Boolean).at(-1) || "Result"
-                  const saved = normalizeStoredArtifact(await response.json().catch(() => undefined))
-                  window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
-                  showToast({
-                    variant: "success",
-                    title: "Saved to Results",
-                    description: saved ? savedResultLabel(saved) : name,
-                    actions: saved
-                      ? [
-                          {
-                            label: "Open",
-                            onClick: () => uiStore.openSaved(saved),
-                          },
-                        ]
-                      : undefined,
-                  })
-                })
-                .catch((error: unknown) => {
-                  showToast({
-                    variant: "error",
-                    title: "artifact save failed",
-                    description: error instanceof Error ? error.message : String(error),
-                  })
-                  throw error
-                })
-            }
-
-            // Chat markdown may reference workspace files (figures/plot.png).
-            // Resolve relative images against the project root through the
-            // backend raw-file endpoint so they render instead of 404ing on
-            // the SPA origin. Absolute http(s)/data: URLs pass through.
-            const image = (src: string) =>
-              assetUrl(src, {
-                url: (path) =>
-                  sdk.request.url("/file/raw", {
-                    path,
-                    sessionID: params.id && params.id !== "new" ? params.id : undefined,
-                  }),
-              })
-
-            return (
-              <DataProvider
-                data={sync.data}
-                directory={directory()}
-                onPermissionRespond={respond}
-                onQuestionReply={replyToQuestion}
-                onQuestionReject={rejectQuestion}
-                onNavigateToSession={navigateToSession}
-                onOpenFile={openFile}
-                onOpenArtifact={openArtifact}
-                onSaveArtifact={saveArtifact}
+    <Show
+      when={unavailable()}
+      fallback={
+        <Show
+          when={available() && directory()}
+          fallback={
+            <Show when={directory()}>
+              <div
+                class="project-availability__loading"
+                role="status"
+                aria-label="Checking project folder availability"
               >
-                <MarkdownImages resolve={image}>
-                  <LocalProvider>
-                    <TerminalProvider>
-                      <FileProvider>
-                        <PromptProvider>
-                          <ProjectWorkspaceFrame
-                            inspector={
-                              <Suspense>
-                                <ProjectRightPane project={sdk.scope} session={params.id ?? "new"} />
-                              </Suspense>
-                            }
-                          >
-                            {props.children}
-                          </ProjectWorkspaceFrame>
-                        </PromptProvider>
-                      </FileProvider>
-                    </TerminalProvider>
-                  </LocalProvider>
-                </MarkdownImages>
-              </DataProvider>
-            )
-          })}
-        </SyncProvider>
-      </SDKProvider>
+                <AsciiSpinner label="checking folder…" color="var(--color-text-faint)" />
+              </div>
+            </Show>
+          }
+        >
+          <SDKProvider directory={directory()} projectID={projectID()} scope={scope()}>
+            <SyncProvider>
+              {iife(() => {
+                const sync = useSync()
+                const sdk = useSDK()
+
+                const respond = (input: {
+                  sessionID: string
+                  permissionID: string
+                  response: "once" | "session" | "project" | "always" | "reject"
+                }) => sdk.client.permission.respond(input)
+
+                const replyToQuestion = (input: { requestID: string; answers: QuestionAnswer[] }) =>
+                  sdk.client.question.reply(input)
+
+                const rejectQuestion = (input: { requestID: string }) => sdk.client.question.reject(input)
+
+                const navigateToSession = (sessionID: string) => {
+                  navigate(`/${params.dir}/session/${sessionID}`)
+                }
+
+                // Tool cards and diffs share the contextual Files surface with the
+                // explorer. Selecting one opens the right pane without replacing the
+                // conversation in the center.
+                const openFile = (path: string) => {
+                  const dir = directory()
+                  uiStore.openFile(dir, path)
+                }
+
+                const openArtifact = (id: string) => {
+                  void sdk
+                    .request(`/file/artifact-store/${encodeURIComponent(id)}`)
+                    .then(async (response) => {
+                      if (!response.ok) throw new Error(`artifact could not be opened (${response.status})`)
+                      const artifact = normalizeStoredArtifact(await response.json())
+                      if (!artifact) throw new Error("artifact metadata is invalid")
+                      uiStore.openSaved(artifact)
+                    })
+                    .catch((error: unknown) => {
+                      showToast({
+                        variant: "error",
+                        title: "artifact could not be opened",
+                        description: error instanceof Error ? error.message : String(error),
+                      })
+                    })
+                }
+
+                // "Save as Result…" at the end of an assistant turn promotes a
+                // written scratch file into a durable Result via the explicit-save route.
+                const saveArtifact = (path: string) => {
+                  const session = params.id && params.id !== "new" ? params.id : undefined
+                  if (!session) {
+                    const error = new Error("No active session.")
+                    showToast({ variant: "error", title: "artifact save failed", description: error.message })
+                    return Promise.reject(error)
+                  }
+                  return sdk
+                    .request("/file/artifact", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ path, sessionID: session }),
+                    })
+                    .then(async (response) => {
+                      if (!response.ok) throw new Error(`artifact save failed (${response.status})`)
+                      const name = path.split("/").filter(Boolean).at(-1) || "Result"
+                      const saved = normalizeStoredArtifact(await response.json().catch(() => undefined))
+                      window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
+                      showToast({
+                        variant: "success",
+                        title: "Saved to Results",
+                        description: saved ? savedResultLabel(saved) : name,
+                        actions: saved
+                          ? [
+                              {
+                                label: "Open",
+                                onClick: () => uiStore.openSaved(saved),
+                              },
+                            ]
+                          : undefined,
+                      })
+                    })
+                    .catch((error: unknown) => {
+                      showToast({
+                        variant: "error",
+                        title: "artifact save failed",
+                        description: error instanceof Error ? error.message : String(error),
+                      })
+                      throw error
+                    })
+                }
+
+                // Chat markdown may reference workspace files (figures/plot.png).
+                // Resolve relative images against the project root through the
+                // backend raw-file endpoint so they render instead of 404ing on
+                // the SPA origin. Absolute http(s)/data: URLs pass through.
+                const image = (src: string) =>
+                  assetUrl(src, {
+                    url: (path) =>
+                      sdk.request.url(
+                        "/file/raw",
+                        rawFileQuery({
+                          directory: directory(),
+                          path,
+                          sessionID: params.id && params.id !== "new" ? params.id : undefined,
+                          inline: true,
+                        }),
+                      ),
+                  })
+                const file = (href: string) => localAssetPath(href)
+
+                return (
+                  <DataProvider
+                    data={sync.data}
+                    directory={directory()}
+                    onPermissionRespond={respond}
+                    onQuestionReply={replyToQuestion}
+                    onQuestionReject={rejectQuestion}
+                    onNavigateToSession={navigateToSession}
+                    onOpenFile={openFile}
+                    onOpenArtifact={openArtifact}
+                    onSaveArtifact={saveArtifact}
+                  >
+                    <MarkdownImages resolve={image} resolveFile={file} openFile={openFile}>
+                      <LocalProvider>
+                        <TerminalProvider>
+                          <FileProvider>
+                            <PromptProvider>
+                              <ProjectWorkspaceFrame
+                                inspector={
+                                  <Suspense>
+                                    <ProjectRightPane project={sdk.scope} session={params.id ?? "new"} />
+                                  </Suspense>
+                                }
+                              >
+                                {props.children}
+                              </ProjectWorkspaceFrame>
+                            </PromptProvider>
+                          </FileProvider>
+                        </TerminalProvider>
+                      </LocalProvider>
+                    </MarkdownImages>
+                  </DataProvider>
+                )
+              })}
+            </SyncProvider>
+          </SDKProvider>
+        </Show>
+      }
+    >
+      {(missing) => <ProjectUnavailable directory={missing().directory} onBack={home} onRemove={remove} />}
     </Show>
   )
 }

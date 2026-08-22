@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { PREVIEW_LIMIT, extension, thumbKind, thumbLanguage } from "./artifact-thumb"
+import { STORED_ARTIFACT_PREVIEW_LIMIT } from "@/artifacts/bytes"
 import type { StoredArtifactVersion } from "@/artifacts/store"
 
 const version = (over: Partial<StoredArtifactVersion>): StoredArtifactVersion => ({
@@ -33,11 +34,17 @@ describe("artifact thumbnails", () => {
     expect(thumbKind(version({ filename: "paper.pdf", mimeType: "application/pdf" }))).toBe("binary")
   })
 
-  test("refuses to preview text past the size limit, but never an image", () => {
+  test("bounds both text and in-memory image previews", () => {
     expect(thumbKind(version({ filename: "big.md", mimeType: "text/markdown", size: PREVIEW_LIMIT + 1 }))).toBe(
       "binary",
     )
     expect(thumbKind(version({ filename: "plot.png", mimeType: "image/png", size: 5_000_000 }))).toBe("image")
+    expect(
+      thumbKind({
+        ...version({ filename: "huge.png", mimeType: "image/png" }),
+        size: STORED_ARTIFACT_PREVIEW_LIMIT + 1,
+      }),
+    ).toBe("binary")
   })
 
   test("maps a filename to a shiki grammar, defaulting to plain text", () => {

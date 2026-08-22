@@ -303,6 +303,7 @@
     "@ai-sdk/xai@2.0.51": "tooling/patches/@ai-sdk%2Fxai@2.0.51.patch",
     "@ai-sdk/anthropic@2.0.57": "tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch",
     "ghostty-web@0.3.0": "tooling/patches/ghostty-web@0.3.0.patch",
+    "@openrouter/ai-sdk-provider@1.5.2": "tooling/patches/@openrouter%2Fai-sdk-provider@1.5.2.patch",
   },
   "overrides": {
     "@babel/core": "7.29.6",
@@ -317,7 +318,7 @@
     "postcss": "8.5.23",
     "socket.io-parser": "4.2.7",
     "tar": "7.5.21",
-    "undici": "6.28.0",
+    "undici": "7.25.0",
     "ws": "8.21.0",
   },
   "catalog": {
@@ -2006,7 +2007,7 @@
 
     "ulid": ["ulid@3.0.1", "", { "bin": { "ulid": "dist/cli.js" } }, "sha512-dPJyqPzx8preQhqq24bBG1YNkvigm87K8kVEHCD+ruZg24t6IFEFv00xMWfxcC4djmFtiTLdFuADn4+DOz6R7Q=="],
 
-    "undici": ["undici@6.28.0", "", {}, "sha512-LIY910g9TI13YS95lrMFrs8Rm/u/irgHeTWoKCoteeJ04CUJ92eEfj0rVn+7VKMPBpUPiUoBKfhNyLI23EE/KA=="],
+    "undici": ["undici@7.25.0", "", {}, "sha512-xXnp4kTyor2Zq+J1FfPI6Eq3ew5h6Vl0F/8d9XU5zZQf1tX9s2Su1/3PiMmUANFULpmksxkClamIZcaUqryHsQ=="],
 
     "undici-types": ["undici-types@6.20.0", "", {}, "sha512-Ny6QZ2Nju20vw1SRHe3d9jVu6gJ+4e3+MMpqu7pqE5HT6WsTSlce++GQmK5UXS8mzV8DSYHrQH+Xrf2jVcuKNg=="],
 

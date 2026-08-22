@@ -1,4 +1,4 @@
-import { hostname } from "node:os"
+import { devNull, hostname } from "node:os"
 
 const inherited = new Set([
   "SHELL_SESSION_DIR",
@@ -36,7 +36,7 @@ export function terminalEnv(
     ...prompt,
     ...(shell === "bash" ? { BASH_SILENCE_DEPRECATION_WARNING: "1" } : {}),
     TERM: "xterm-256color",
-    HISTFILE: "/dev/null",
+    HISTFILE: devNull,
     SHELL_SESSIONS_DISABLE: "1",
     OPENSCIENCE_TERMINAL: "1",
     OPENSCIENCE_PROJECT_ID: projectID,

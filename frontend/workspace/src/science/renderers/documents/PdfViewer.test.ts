@@ -28,6 +28,7 @@ describe("PDF preview workbench", () => {
     expect(source).toContain('aria-label="Zoom in"')
     expect(source).toContain('behavior: "auto"')
     expect(css).toMatch(/\.pdf-viewer-body\s*\{[^}]*overflow: auto/s)
+    expect(css).toMatch(/\.pdf-viewer-pages\s*\{[^}]*width: max-content[^}]*margin-inline: auto/s)
     expect(css).toContain("min-width: 32px")
     expect(css).toMatch(/@media \(pointer: coarse\)[\s\S]*min-width: 44px/s)
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/)

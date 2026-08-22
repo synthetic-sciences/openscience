@@ -3,6 +3,7 @@ import type { AssistantMessage, Part, ToolPart } from "@synsci/sdk/v2/client"
 export type ResearchTraceEntry = {
   message: AssistantMessage
   part: Part
+  hidden?: boolean
 }
 
 export type ResearchTraceGroup = {
@@ -93,44 +94,118 @@ function grouped(part: Part): part is ToolPart {
   return traceFamily(part.tool) !== "other"
 }
 
+function narrative(part: Part) {
+  return part.type === "reasoning" || part.type === "text"
+}
+
+function lifecycle(part: Part) {
+  return part.type === "step-start" || part.type === "step-finish" || part.type === "snapshot" || part.type === "patch"
+}
+
 /**
- * Turns consecutive low-level operations into a compact, observable research
- * activity. A single operation remains untouched, and delegation/planning
- * tools always retain their dedicated renderers.
+ * Turns a chronological turn transcript into compact semantic phases. Provider-
+ * visible reasoning and intermediate text stay byte-for-byte in their original
+ * position inside a phase; invisible step bookkeeping and assistant-message
+ * boundaries do not fragment related work. A different tool family or a first-
+ * class operation (delegation, planning, a failure, and so on) starts a new
+ * phase. A lone operation remains untouched.
  */
 export function groupResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceItem[] {
   const output: ResearchTraceItem[] = []
-  const flush = (pending: ResearchTraceEntry[]) => {
-    if (pending.length === 0) return
-    if (pending.length === 1) {
-      output.push({ kind: "part", entry: pending[0] })
-      return
-    }
-    const first = pending[0].part as ToolPart
-    const family = traceFamily(first.tool)
-    output.push({
-      kind: "group",
-      id: `trace-${pending[0].part.id}-${pending.at(-1)!.part.id}`,
-      family,
-      label: traceLabel(family, pending.length),
-      detail: compact(pending.map((entry) => toolTitle(entry.part as ToolPart))),
-      entries: pending,
-    })
+  const state = {
+    phase: undefined as
+      | {
+          family: TraceFamily
+          entries: ResearchTraceEntry[]
+          tools: ResearchTraceEntry[]
+        }
+      | undefined,
+    bridge: [] as ResearchTraceEntry[],
   }
 
-  const pending = entries.reduce<ResearchTraceEntry[]>((pending, entry) => {
-    if (!grouped(entry.part)) {
-      flush(pending)
-      output.push({ kind: "part", entry })
-      return []
+  const parts = (items: ResearchTraceEntry[]) => {
+    for (const entry of items) output.push({ kind: "part", entry })
+  }
+
+  const flush = () => {
+    const phase = state.phase
+    if (!phase) return
+    if (phase.tools.length === 1) {
+      parts(phase.entries)
+      state.phase = undefined
+      return
     }
+
+    output.push({
+      kind: "group",
+      id: `trace-${phase.tools[0].part.id}-${phase.tools.at(-1)!.part.id}`,
+      family: phase.family,
+      label: traceLabel(phase.family, phase.tools.length),
+      detail: compact(phase.tools.map((entry) => toolTitle(entry.part as ToolPart))),
+      entries: phase.entries,
+    })
+    state.phase = undefined
+  }
+
+  for (const entry of entries) {
+    if (lifecycle(entry.part)) continue
+
+    if (entry.hidden) {
+      if (state.phase) {
+        state.phase.entries.push(...state.bridge)
+        state.bridge = []
+        flush()
+      } else {
+        parts(state.bridge)
+        state.bridge = []
+      }
+      continue
+    }
+
+    if (narrative(entry.part)) {
+      state.bridge.push(entry)
+      continue
+    }
+
+    if (!grouped(entry.part)) {
+      if (state.phase) {
+        state.phase.entries.push(...state.bridge)
+        state.bridge = []
+        flush()
+      } else {
+        parts(state.bridge)
+        state.bridge = []
+      }
+      output.push({ kind: "part", entry })
+      continue
+    }
+
     const family = traceFamily(entry.part.tool)
-    const previous = pending.at(-1)
-    if (!previous || traceFamily((previous.part as ToolPart).tool) === family) return [...pending, entry]
-    flush(pending)
-    return [entry]
-  }, [])
-  flush(pending)
+    if (!state.phase) {
+      state.phase = { family, entries: [...state.bridge, entry], tools: [entry] }
+      state.bridge = []
+      continue
+    }
+
+    if (state.phase.family === family) {
+      state.phase.entries.push(...state.bridge, entry)
+      state.phase.tools.push(entry)
+      state.bridge = []
+      continue
+    }
+
+    flush()
+    state.phase = { family, entries: [...state.bridge, entry], tools: [entry] }
+    state.bridge = []
+  }
+
+  if (state.phase) {
+    state.phase.entries.push(...state.bridge)
+    state.bridge = []
+    flush()
+  } else {
+    parts(state.bridge)
+  }
   return output
 }
 

@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { HTTPException } from "hono/http-exception"
 import { stream } from "hono/streaming"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
@@ -20,6 +21,7 @@ import { SessionFilesystem } from "../../session/filesystem"
 import { SessionReview } from "../../session/review"
 import { SessionTrace } from "../../session/trace"
 import { RuntimeEvents } from "../../runtime/events"
+import { SessionLoopState } from "../../session/loop-state"
 
 const log = Log.create({ service: "server" })
 
@@ -776,6 +778,12 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
+        const message = await MessageV2.get({ sessionID: params.sessionID, messageID: params.messageID })
+        const reason = SessionLoopState.validatePartDelete({
+          message: message.info,
+          part: message.parts.find((part) => part.id === params.partID),
+        })
+        if (reason) throw new HTTPException(400, { message: reason })
         await Session.removePart({
           sessionID: params.sessionID,
           messageID: params.messageID,
@@ -818,6 +826,13 @@ export const SessionRoutes = lazy(() =>
             `Part mismatch: body.id='${body.id}' vs partID='${params.partID}', body.messageID='${body.messageID}' vs messageID='${params.messageID}', body.sessionID='${body.sessionID}' vs sessionID='${params.sessionID}'`,
           )
         }
+        const message = await MessageV2.get({ sessionID: params.sessionID, messageID: params.messageID })
+        const reason = SessionLoopState.validatePartUpdate({
+          message: message.info,
+          previous: message.parts.find((part) => part.id === params.partID),
+          next: body,
+        })
+        if (reason) throw new HTTPException(400, { message: reason })
         const part = await Session.updatePart(body)
         return c.json(part)
       },

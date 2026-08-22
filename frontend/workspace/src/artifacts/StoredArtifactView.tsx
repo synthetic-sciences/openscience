@@ -21,6 +21,15 @@ import { toast } from "@/atlas/Toast"
 import { uiStore } from "@/atlas/store/ui"
 import { PdfViewer } from "@/science/renderers/documents/PdfViewer"
 import {
+  downloadBlob,
+  loadStoredArtifactPreview,
+  requestStoredArtifact,
+  STORED_ARTIFACT_PREVIEW_LIMIT,
+  STORED_PDF_PREVIEW_LIMIT,
+  storedArtifactPreviewKind,
+  type StoredArtifactPreview,
+} from "@/artifacts/bytes"
+import {
   normalizeStoredArtifact,
   normalizeStoredArtifactDetail,
   type StoredArtifact,
@@ -35,14 +44,6 @@ function size(bytes: number) {
   const tier = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length)
   const value = bytes / 1024 ** tier
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[tier - 1]}`
-}
-
-function text(version: StoredArtifactVersion) {
-  return (
-    version.mimeType.startsWith("text/") ||
-    version.mimeType.includes("json") ||
-    /\.(md|markdown|txt|csv|tsv|json|jsonl|yaml|yml|toml|py|r|jl|tex)$/i.test(version.filename)
-  )
 }
 
 function markdown(version: StoredArtifactVersion) {
@@ -61,6 +62,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
   const [action, setAction] = createSignal<Action>()
   const [name, setName] = createSignal(props.artifact.title)
   const [busy, setBusy] = createSignal(false)
+  const [downloading, setDownloading] = createSignal(false)
   const [detail, detailActions] = createResource(
     () => props.artifact.id,
     async (id) => {
@@ -87,24 +89,39 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
     window.addEventListener("openscience:artifacts-changed", refresh)
     onCleanup(() => window.removeEventListener("openscience:artifacts-changed", refresh))
   })
-  const selected = createMemo(() => detail.latest?.current)
-  const raw = (version: StoredArtifactVersion, download = false) =>
-    sdk.request.url(`/file/artifact-store/${encodeURIComponent(props.artifact.id)}/raw`, {
-      versionID: version.id,
-      ...(download ? { download: "true" } : {}),
-    })
-  const [content] = createResource(
+  const selected = createMemo(() => {
+    const current = detail.latest
+    if (!current || current.id !== props.artifact.id) return
+    return current.current
+  })
+  const previewAbort = { current: undefined as AbortController | undefined }
+  createEffect(() => {
+    props.artifact.id
+    previewAbort.current?.abort()
+  })
+  const [preview] = createResource(
     () => {
       const version = selected()
-      if (!version || !text(version) || version.size > 8 * 1024 * 1024) return
-      return [version.id, raw(version)] as const
+      if (!version) return
+      return [props.artifact.id, version] as const
     },
-    async ([, url]) => {
-      const response = await fetch(url)
-      if (!response.ok) throw new Error(`Preview unavailable (${response.status})`)
-      return response.text()
+    ([artifactID, version]) => {
+      previewAbort.current?.abort()
+      const controller = new AbortController()
+      previewAbort.current = controller
+      return loadStoredArtifactPreview(sdk.request, artifactID, version, controller.signal)
     },
   )
+  onCleanup(() => previewAbort.current?.abort())
+  const download = async (version: StoredArtifactVersion) => {
+    if (downloading()) return
+    setDownloading(true)
+    return requestStoredArtifact(sdk.request, props.artifact.id, version.id, true)
+      .then((response) => response.blob())
+      .then((blob) => downloadBlob(version.filename, blob))
+      .catch((error) => toast.error("download failed", error instanceof Error ? error.message : String(error)))
+      .finally(() => setDownloading(false))
+  }
   const rename = (event: SubmitEvent) => {
     event.preventDefault()
     const title = name().trim()
@@ -171,16 +188,16 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
         </span>
         <Show when={selected()}>
           {(version) => (
-            <a
-              href={raw(version(), true)}
-              download={version().filename}
-              data-component="button"
-              data-size="small"
-              data-variant="secondary"
+            <Button
+              type="button"
+              size="small"
+              variant="secondary"
+              disabled={downloading()}
+              onClick={() => void download(version())}
             >
               <IconDownload size={14} strokeWidth={1.6} />
-              Download
-            </a>
+              {downloading() ? "Downloading…" : "Download"}
+            </Button>
           )}
         </Show>
         <Button
@@ -299,7 +316,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
             }
           >
             {(version) => (
-              <Preview version={version()} url={raw(version())} content={content.latest} loading={content.loading} />
+              <Preview version={version()} data={preview.latest} loading={preview.loading} error={preview.error} />
             )}
           </Show>
         </Show>
@@ -310,37 +327,57 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
 
 function Preview(props: {
   version: StoredArtifactVersion
-  url: string
-  content?: string
+  data?: StoredArtifactPreview
   loading: boolean
+  error?: unknown
 }): JSX.Element {
-  if (props.version.mimeType.startsWith("image/")) {
-    return <img src={props.url} alt={props.version.filename} style={image()} />
-  }
-  if (props.version.mimeType === "application/pdf" || props.version.filename.toLowerCase().endsWith(".pdf")) {
-    return <PdfViewer kind="pdf" data={{ url: props.url, maxPages: 40 }} />
-  }
-  if (text(props.version) && props.version.size > 8 * 1024 * 1024) {
-    return (
-      <p style={empty()}>This text Result is larger than the 8 MB preview limit. Download preserves exact bytes.</p>
-    )
-  }
-  if (text(props.version)) {
-    return (
-      <Show when={!props.loading} fallback={<p style={empty()}>Loading preview…</p>}>
-        <Show when={markdown(props.version)} fallback={<pre style={pre()}>{props.content ?? ""}</pre>}>
-          <article class="markdown-body" style={document()}>
-            <Markdown text={props.content ?? ""} />
-          </article>
-        </Show>
-      </Show>
-    )
-  }
+  const kind = () => storedArtifactPreviewKind(props.version)
+  const limit = () => (kind() === "pdf" ? STORED_PDF_PREVIEW_LIMIT : STORED_ARTIFACT_PREVIEW_LIMIT)
+  const error = () =>
+    props.error instanceof Error ? props.error.message : String(props.error || "Preview unavailable.")
   return (
-    <section style={section()}>
-      <h3 style={heading()}>Preview is not available for {props.version.mimeType}</h3>
-      <p style={copy()}>The immutable bytes are stored safely and can be downloaded without conversion.</p>
-    </section>
+    <Switch
+      fallback={
+        <p role="alert" style={empty()}>
+          Preview unavailable.
+        </p>
+      }
+    >
+      <Match when={!kind()}>
+        <section style={section()}>
+          <h3 style={heading()}>Preview is not available for {props.version.mimeType}</h3>
+          <p style={copy()}>The immutable bytes are stored safely and can be downloaded without conversion.</p>
+        </section>
+      </Match>
+      <Match when={props.version.size > limit()}>
+        <p style={empty()}>
+          This Result is larger than the {size(limit())} browser preview limit. Download preserves exact bytes.
+        </p>
+      </Match>
+      <Match when={props.error !== undefined}>
+        <p role="alert" style={empty()}>
+          {error()}
+        </p>
+      </Match>
+      <Match when={props.loading}>
+        <p style={empty()}>Loading preview…</p>
+      </Match>
+      <Match when={props.data?.kind === "image" ? props.data : undefined}>
+        {(data) => <img src={data().data} alt={props.version.filename} style={image()} />}
+      </Match>
+      <Match when={props.data?.kind === "pdf" ? props.data : undefined}>
+        {(data) => <PdfViewer kind="pdf" data={{ bytes: data().data, maxPages: 40 }} />}
+      </Match>
+      <Match when={props.data?.kind === "text" ? props.data : undefined}>
+        {(data) => (
+          <Show when={markdown(props.version)} fallback={<pre style={pre()}>{data().data}</pre>}>
+            <article class="markdown-body" style={document()}>
+              <Markdown text={data().data} />
+            </article>
+          </Show>
+        )}
+      </Match>
+    </Switch>
   )
 }
 

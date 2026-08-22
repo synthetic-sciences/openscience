@@ -10,7 +10,9 @@ import {
   type ToolSet,
   tool,
   jsonSchema,
+  type ToolCallRepairFunction,
 } from "ai"
+import { safeParseJSON } from "@ai-sdk/provider-utils"
 import { clone, mergeDeep } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -25,6 +27,7 @@ import { SessionHarness } from "./harness"
 import { SessionTraceStore } from "./trace-store"
 import { ToolSelection } from "./tool-selection"
 import { OutboundTelemetry } from "@/telemetry/outbound"
+import { InvalidCall } from "@/tool/invalid-call"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -49,6 +52,29 @@ export namespace LLM {
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
+
+  export async function repairToolCall(failed: Parameters<ToolCallRepairFunction<ToolSet>>[0], tools: ToolSet) {
+    const source = InvalidCall.tool(failed.toolCall.toolName)
+    const name = tools[failed.toolCall.toolName] ? failed.toolCall.toolName : tools[source] ? source : undefined
+    if (name) {
+      const parsed = await safeParseJSON({
+        text: failed.toolCall.input,
+        schema: tools[name].inputSchema,
+      })
+      if (parsed.success) {
+        return {
+          ...failed.toolCall,
+          toolName: name,
+        }
+      }
+    }
+    const reason = name ? "invalid_input" : "unknown_tool"
+    return {
+      ...failed.toolCall,
+      input: JSON.stringify(InvalidCall.payload(name ?? source, reason)),
+      toolName: "invalid",
+    }
+  }
 
   export async function stream(input: StreamInput) {
     const tier = input.small
@@ -229,33 +255,19 @@ export namespace LLM {
         })
       },
       async experimental_repairToolCall(failed) {
-        const lower = failed.toolCall.toolName.toLowerCase()
-        if (lower !== failed.toolCall.toolName && tools[lower]) {
+        const repaired = await repairToolCall(failed, tools)
+        if (repaired.toolName !== "invalid") {
           l.info("repairing tool call", {
             tool: failed.toolCall.toolName,
-            repaired: lower,
+            repaired: repaired.toolName,
           })
-          return {
-            ...failed.toolCall,
-            toolName: lower,
-          }
+          return repaired
         }
-        const name = tools[failed.toolCall.toolName] ? failed.toolCall.toolName : lower
-        const message = tools[name]
-          ? `OpenScience caught an incomplete ${name} call before execution. ${failed.error.message}`
-          : `OpenScience caught a call to the unavailable tool ${failed.toolCall.toolName}. No action was taken.`
         l.warn("replacing invalid tool call", {
-          tool: failed.toolCall.toolName,
-          error: failed.error.message,
+          tool: InvalidCall.tool(failed.toolCall.toolName),
+          failure: JSON.parse(repaired.input).failure,
         })
-        return {
-          ...failed.toolCall,
-          input: JSON.stringify({
-            tool: failed.toolCall.toolName,
-            error: message,
-          }),
-          toolName: "invalid",
-        }
+        return repaired
       },
       temperature: params.temperature,
       topP: params.topP,

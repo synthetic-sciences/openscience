@@ -6,6 +6,7 @@ import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
 import { checksum } from "@synsci/util/encode"
 import { findLast } from "@synsci/util/array"
+import { TokenUsage } from "@synsci/util/token-usage"
 import { Icon } from "@synsci/ui/icon"
 import { Accordion } from "@synsci/ui/accordion"
 import { StickyAccordionHeader } from "@synsci/ui/sticky-accordion-header"
@@ -37,8 +38,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const ctx = createMemo(() => {
     const last = findLast(props.messages(), (x) => {
       if (x.role !== "assistant") return false
-      const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
-      return total > 0
+      return TokenUsage.total(x.tokens) > 0
     }) as AssistantMessage
     if (!last) return
 
@@ -51,7 +51,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
     const reasoning = last.tokens.reasoning
     const cacheRead = last.tokens.cache.read
     const cacheWrite = last.tokens.cache.write
-    const total = input + output + reasoning + cacheRead + cacheWrite
+    const total = TokenUsage.total(last.tokens)
     const usage = limit ? Math.round((total / limit) * 100) : null
 
     return {

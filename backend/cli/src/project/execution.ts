@@ -30,6 +30,7 @@ export namespace ExecutionAuthority {
     "project_formatter",
     "project_lsp",
     "provider_token_command",
+    "publication_export",
   ])
   export type Capability = z.infer<typeof Capability>
 
@@ -99,6 +100,8 @@ export namespace ExecutionAuthority {
         return "start a project language server"
       case "provider_token_command":
         return "run a provider token command"
+      case "publication_export":
+        return "export a publication with local conversion tools"
     }
   }
 

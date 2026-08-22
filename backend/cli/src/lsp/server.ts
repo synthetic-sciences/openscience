@@ -17,6 +17,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { Sandbox } from "../sandbox/sandbox"
 import { AuthoritySignal } from "../project/authority-signal"
 import { WindowsJobLauncher } from "../process/windows-job-launcher"
+import { SafeFileIO } from "../file/safe-io"
 
 interface LaunchContext {
   root: string
@@ -1083,7 +1084,7 @@ export namespace LSPServer {
         // Stop at filesystem root
         const cargoTomlPath = path.join(currentDir, "Cargo.toml")
         try {
-          const cargoTomlContent = await Bun.file(cargoTomlPath).text()
+          const cargoTomlContent = (await SafeFileIO.read(cargoTomlPath, { maxBytes: 1024 * 1024 })).bytes.toString()
           if (cargoTomlContent.includes("[workspace]")) {
             return currentDir
           }
@@ -1096,7 +1097,7 @@ export namespace LSPServer {
         currentDir = parentDir
 
         // Stop if we've gone above the app root
-        if (!currentDir.startsWith(Instance.worktree)) break
+        if (!Filesystem.contains(Instance.worktree, currentDir)) break
       }
 
       return crateRoot

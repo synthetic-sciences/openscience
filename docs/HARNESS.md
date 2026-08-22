@@ -97,6 +97,9 @@ ordinary questions or code work. Contracted runs add three fail-closed guarantee
   finalization calls remain for preserving outputs and returning a verified or explicitly partial
   result; further inference fails closed while Results and checkpoints remain available.
   Redefining an active contract can tighten limits but cannot raise them or reset recorded usage.
+  New contracts record whether their token ceiling was defaulted or explicit. Legacy 5M-token
+  contracts migrate to the current 20M default only when persisted `research_contract` history
+  proves `max_tokens` was omitted; explicit and ambiguous legacy ceilings remain unchanged.
 
 Quantitative trials may also record a named metric, direction, baseline, target, and unit. When a
 baseline is present, the runtime rejects an `advanced` or `regressed` label that contradicts the

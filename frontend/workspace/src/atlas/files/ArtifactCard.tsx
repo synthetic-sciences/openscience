@@ -9,6 +9,7 @@ export interface CardProps extends ThumbProps {
   layout: "grid" | "list"
   sizes: boolean
   onOpen: (artifact: StoredArtifact) => void
+  onDownload: (artifact: StoredArtifact) => void
   onRename: (artifact: StoredArtifact) => void
   onTrash: (artifact: StoredArtifact) => void
 }
@@ -75,7 +76,7 @@ export function ArtifactCard(props: CardProps): JSX.Element {
         aria-label={`Open ${props.artifact.title}, ${version().toLowerCase()}`}
         onClick={() => props.onOpen(props.artifact)}
       >
-        <ArtifactThumb artifact={props.artifact} url={props.url} read={props.read} highlight={props.highlight} />
+        <ArtifactThumb artifact={props.artifact} read={props.read} highlight={props.highlight} />
         <span class="artifact-card__label">
           <span class="artifact-card__name">{props.artifact.title}</span>
           <span class="artifact-card__sub" data-card-meta>
@@ -122,16 +123,10 @@ export function ArtifactCard(props: CardProps): JSX.Element {
             <IconExpand size={14} strokeWidth={1.5} />
             Open in tab
           </button>
-          <a
-            role="menuitem"
-            data-action="download"
-            href={props.url(props.artifact, true)}
-            download={props.artifact.current.filename}
-            onClick={() => setOpen(false)}
-          >
+          <button type="button" role="menuitem" data-action="download" onClick={() => act(props.onDownload)}>
             <IconDownload size={14} strokeWidth={1.5} />
             Download
-          </a>
+          </button>
           <button type="button" role="menuitem" data-action="rename" onClick={() => act(props.onRename)}>
             <IconEdit size={14} strokeWidth={1.5} />
             Rename…

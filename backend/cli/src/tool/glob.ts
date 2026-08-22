@@ -31,8 +31,9 @@ export const GlobTool = Tool.define("glob", {
     const directory = await sessionToolDirectory(ctx)
     let search = params.path ?? directory
     search = path.isAbsolute(search) ? search : path.resolve(directory, search)
-    const authorized = await assertExternalDirectory(ctx, search, { kind: "directory" })
+    using authorized = await assertExternalDirectory(ctx, search, { kind: "directory" })
     search = authorized?.path ?? search
+    search = (await authorized?.revalidate()) ?? search
 
     const limit = 100
     const files = []

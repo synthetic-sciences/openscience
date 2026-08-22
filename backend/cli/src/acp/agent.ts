@@ -40,6 +40,7 @@ import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { Event, OpenScienceClient, SessionMessageResponse } from "@synsci/sdk/v2"
 import { applyPatch } from "diff"
+import fs from "node:fs/promises"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
@@ -47,7 +48,40 @@ type ModelOption = { modelId: string; name: string }
 const DEFAULT_VARIANT_VALUE = "default"
 
 export namespace ACP {
+  export const MAX_EDIT_DIFF_BYTES = 2 * 1024 * 1024
+  export const MAX_EDIT_PREVIEW_BYTES = 8 * 1024 * 1024
+
   const log = Log.create({ service: "acp-agent" })
+
+  async function editPreview(filepath: string, diff: string) {
+    if (!filepath || !diff) return undefined
+    if (Buffer.byteLength(diff) > MAX_EDIT_DIFF_BYTES) {
+      log.warn("skipping oversized ACP edit preview", { filepath, limit: MAX_EDIT_DIFF_BYTES, source: "diff" })
+      return undefined
+    }
+    const info = await fs.stat(filepath).catch(() => undefined)
+    if (!info?.isFile()) {
+      log.warn("skipping unavailable ACP edit preview", { filepath })
+      return undefined
+    }
+    if (info.size > MAX_EDIT_PREVIEW_BYTES) {
+      log.warn("skipping oversized ACP edit preview", { filepath, limit: MAX_EDIT_PREVIEW_BYTES, source: "file" })
+      return undefined
+    }
+    const content = await Bun.file(filepath)
+      .slice(0, MAX_EDIT_PREVIEW_BYTES + 1)
+      .text()
+      .catch((error) => {
+        log.warn("could not read ACP edit preview", { error, filepath })
+        return undefined
+      })
+    if (content !== undefined && Buffer.byteLength(content) > MAX_EDIT_PREVIEW_BYTES) {
+      log.warn("skipping concurrently enlarged ACP edit preview", { filepath, limit: MAX_EDIT_PREVIEW_BYTES })
+      return undefined
+    }
+    if (content === undefined) return undefined
+    return getNewContent(content, diff)
+  }
 
   export async function init({ sdk: _sdk }: { sdk: OpenScienceClient }) {
     return {
@@ -159,8 +193,7 @@ export namespace ACP {
                 const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
                 const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
 
-                const content = await Bun.file(filepath).text()
-                const newContent = getNewContent(content, diff)
+                const newContent = await editPreview(filepath, diff)
 
                 if (newContent) {
                   this.connection.writeTextFile({

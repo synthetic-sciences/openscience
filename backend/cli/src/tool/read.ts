@@ -28,22 +28,135 @@ function usesAnthropicImageLimit(ctx: Tool.Context) {
   return provider === "anthropic" || id.includes("anthropic/") || id.includes("claude")
 }
 
+async function missing(filepath: string): Promise<never> {
+  const dir = path.dirname(filepath)
+  const base = path.basename(filepath).toLowerCase()
+  const suggestions: string[] = []
+  const entries = await fs.promises.opendir(dir).catch(() => undefined)
+  if (entries) {
+    const visited = { count: 0 }
+    for await (const entry of entries) {
+      if (visited.count++ >= 10_000 || suggestions.length >= 3) break
+      const name = entry.name.toLowerCase()
+      if (!name.includes(base) && !base.includes(name)) continue
+      suggestions.push(path.join(dir, entry.name))
+    }
+  }
+  if (suggestions.length) {
+    throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
+  }
+  throw new Error(`File not found: ${filepath}`)
+}
+
+async function textWindow(filepath: string, offset: number, limit: number) {
+  if (isBinaryFile(filepath, new Uint8Array())) throw new Error(`Cannot read binary file: ${filepath}`)
+  const source = await SafeFileIO.open(filepath)
+  const reader = source.stream().getReader()
+  const decoder = new TextDecoder()
+  const state = {
+    binaryChecked: false,
+    bytes: 0,
+    hasMore: false,
+    line: "",
+    lineNumber: 0,
+    lineWide: false,
+    raw: [] as string[],
+    stopped: false,
+    truncatedByBytes: false,
+  }
+  const append = (value: string) => {
+    const remaining = MAX_LINE_LENGTH - state.line.length
+    if (remaining > 0) state.line += value.slice(0, remaining)
+    if (value.length > remaining) state.lineWide = true
+  }
+  const finishLine = () => {
+    const current = state.lineNumber++
+    if (current < offset) {
+      state.line = ""
+      state.lineWide = false
+      return false
+    }
+    if (state.raw.length >= limit) {
+      state.hasMore = true
+      return true
+    }
+    const plain = state.line.endsWith("\r") ? state.line.slice(0, -1) : state.line
+    const line = state.lineWide ? `${plain}...` : plain
+    const size = Buffer.byteLength(line, "utf8") + (state.raw.length ? 1 : 0)
+    if (state.bytes + size > MAX_BYTES) {
+      state.truncatedByBytes = true
+      state.hasMore = true
+      return true
+    }
+    state.raw.push(line)
+    state.bytes += size
+    state.line = ""
+    state.lineWide = false
+    return false
+  }
+  const consume = (value: string) => {
+    const cursor = { value: 0 }
+    while (cursor.value < value.length) {
+      const newline = value.indexOf("\n", cursor.value)
+      const end = newline === -1 ? value.length : newline
+      append(value.slice(cursor.value, end))
+      if (newline === -1) return false
+      if (finishLine()) return true
+      cursor.value = newline + 1
+    }
+    return false
+  }
+  try {
+    while (!state.stopped) {
+      const chunk = await reader.read()
+      if (chunk.done) {
+        state.stopped = consume(decoder.decode()) || finishLine()
+        break
+      }
+      if (!state.binaryChecked) {
+        state.binaryChecked = true
+        if (isBinaryFile(filepath, chunk.value.subarray(0, 4_096))) {
+          throw new Error(`Cannot read binary file: ${filepath}`)
+        }
+      }
+      state.stopped = consume(decoder.decode(chunk.value, { stream: true }))
+    }
+    if (state.hasMore) await reader.cancel()
+    return {
+      raw: state.raw,
+      hasMoreLines: state.hasMore,
+      totalLines: state.lineNumber,
+      truncatedByBytes: state.truncatedByBytes,
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined)
+    throw error
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The path to the file to read"),
-    offset: z.coerce.number().describe("The line number to start reading from (0-based)").optional(),
-    limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
+    offset: z.coerce.number().int().nonnegative().describe("The line number to start reading from (0-based)").optional(),
+    limit: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .max(10_000)
+      .describe("The number of lines to read (defaults to 2000)")
+      .optional(),
   }),
   async execute(params, ctx) {
     const directory = await sessionToolDirectory(ctx)
     const requested = path.isAbsolute(params.filePath) ? params.filePath : path.resolve(directory, params.filePath)
-    const authorized = await assertExternalDirectory(ctx, requested, {
+    using authorized = await assertExternalDirectory(ctx, requested, {
       bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
       access: "read",
     })
-    const filepath = authorized?.path ?? requested
-    const title = path.relative(Instance.worktree, filepath)
+    let filepath = authorized?.path ?? requested
 
     if (!authorized?.managedToolOutput) {
       await ctx.ask({
@@ -54,46 +167,33 @@ export const ReadTool = Tool.define("read", {
       })
     }
 
-    const snapshot = await SafeFileIO.optional(filepath)
-    if (!snapshot) {
-      const dir = path.dirname(filepath)
-      const base = path.basename(filepath)
+    filepath = (await authorized?.revalidate()) ?? filepath
+    const title = path.relative(Instance.worktree, filepath)
 
-      const dirEntries = fs.readdirSync(dir)
-      const suggestions = dirEntries
-        .filter(
-          (entry) =>
-            entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
-        )
-        .map((entry) => path.join(dir, entry))
-        .slice(0, 3)
-
-      if (suggestions.length > 0) {
-        throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
-      }
-
-      throw new Error(`File not found: ${filepath}`)
-    }
     const file = Bun.file(filepath)
-
-    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
-
     // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
     const isImage =
       file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
     const isPdf = file.type === "application/pdf"
     if (isImage || isPdf) {
       const kind = isImage ? "Image" : "PDF"
-      if (snapshot.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-        throw new Error(
-          `${kind} too large to attach (${snapshot.bytes.byteLength} bytes > ${MAX_ATTACHMENT_BYTES}). ` +
-            `The harness caps base64 attachments at 32 MiB. ` +
-            (isPdf
-              ? "Use the liteparse skill to extract text via the `lit` CLI instead " +
-                "(install with `npm i -g @llamaindex/liteparse` if missing)."
-              : "Crop or downscale the image."),
-        )
-      }
+      const snapshot = await SafeFileIO.optional(filepath, { maxBytes: MAX_ATTACHMENT_BYTES }).catch(
+        (error: unknown) => {
+          if (error instanceof SafeFileIO.LimitError) {
+            throw new Error(
+              `${kind} too large to attach (${error.size} bytes > ${MAX_ATTACHMENT_BYTES}). ` +
+                `The harness caps base64 attachments at 32 MiB. ` +
+                (isPdf
+                  ? "Use the liteparse skill to extract text via the `lit` CLI instead " +
+                    "(install with `npm i -g @llamaindex/liteparse` if missing)."
+                  : "Crop or downscale the image."),
+            )
+          }
+          throw error
+        },
+      )
+      if (!snapshot) return missing(filepath)
+      const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
       const mime = file.type
       const fileBytes = snapshot.bytes
       if (isImage) {
@@ -129,26 +229,14 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const isBinary = isBinaryFile(filepath, snapshot.bytes)
-    if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
-
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
-    const lines = snapshot.bytes.toString("utf8").split("\n")
-
-    const raw: string[] = []
-    let bytes = 0
-    let truncatedByBytes = false
-    for (let i = offset; i < Math.min(lines.length, offset + limit); i++) {
-      const line = lines[i].length > MAX_LINE_LENGTH ? lines[i].substring(0, MAX_LINE_LENGTH) + "..." : lines[i]
-      const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
-      if (bytes + size > MAX_BYTES) {
-        truncatedByBytes = true
-        break
-      }
-      raw.push(line)
-      bytes += size
-    }
+    const window = await textWindow(filepath, offset, limit).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return missing(filepath)
+      throw error
+    })
+    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
+    const raw = window.raw
 
     const content = raw.map((line, index) => {
       return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
@@ -158,12 +246,12 @@ export const ReadTool = Tool.define("read", {
     let output = "<file>\n"
     output += content.join("\n")
 
-    const totalLines = lines.length
+    const totalLines = window.totalLines
     const lastReadLine = offset + raw.length
-    const hasMoreLines = totalLines > lastReadLine
-    const truncated = hasMoreLines || truncatedByBytes
+    const hasMoreLines = window.hasMoreLines
+    const truncated = hasMoreLines || window.truncatedByBytes
 
-    if (truncatedByBytes) {
+    if (window.truncatedByBytes) {
       output += `\n\n(Output truncated at ${MAX_BYTES} bytes. Use 'offset' parameter to read beyond line ${lastReadLine})`
     } else if (hasMoreLines) {
       output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`

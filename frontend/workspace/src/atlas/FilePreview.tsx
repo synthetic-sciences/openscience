@@ -1,15 +1,4 @@
-import {
-  createSignal,
-  createEffect,
-  createMemo,
-  onMount,
-  onCleanup,
-  untrack,
-  type JSX,
-  Show,
-  Switch,
-  Match,
-} from "solid-js"
+import { createSignal, createEffect, createMemo, onMount, onCleanup, type JSX, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -28,6 +17,7 @@ import type { TableFormat } from "@/data/table"
 import { ManuscriptWorkbench } from "@/manuscript/ManuscriptWorkbench"
 import { parseManuscript } from "@/manuscript/model"
 import { artifactContext, createArtifactContext, resolveArtifactPath } from "@/artifacts/context"
+import { downloadBlob } from "@/artifacts/bytes"
 import { normalizeStoredArtifact, savedResultLabel } from "@/artifacts/store"
 import type { ArtifactInspection } from "@/science/renderers"
 import { toast } from "@/atlas/Toast"
@@ -35,11 +25,21 @@ import { showToast } from "@synsci/ui/toast"
 import { IconFile } from "@/atlas/shared/Icon"
 import { FileToolbar } from "@/atlas/FileToolbar"
 import { uiStore } from "@/atlas/store/ui"
-import { describeFile, readFile, reconcileSavedDraft, type FileData, type FileKind } from "@/atlas/file-viewer"
+import {
+  describeFile,
+  PDF_PREVIEW_LIMIT,
+  pdfPreviewMode,
+  readFile,
+  reconcileSavedDraft,
+  type FileData,
+  type FileKind,
+} from "@/atlas/file-viewer"
 import { LANG, extension as ext } from "@/atlas/files/artifact-thumb"
-import { assetUrl } from "@/utils/markdown-assets"
+import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { recoverFileDraft, rememberFileDraft } from "@/atlas/file-drafts"
 import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
+import { rawFileQuery } from "@/utils/project-file"
+import { HTML_STYLESHEET_BYTES, htmlStylesheets, loadHtmlStylesheets, rewriteHtmlAssets } from "@/utils/html-assets"
 import "./FilePreview.css"
 
 /**
@@ -79,6 +79,17 @@ interface ViewState {
   inspection?: ArtifactInspection
 }
 
+interface PdfState {
+  status: "idle" | "loading" | "ready" | "error"
+  bytes?: Uint8Array
+  error?: string
+}
+
+interface HtmlState {
+  status: "idle" | "loading" | "ready"
+  value: string
+}
+
 /**
  * Inline file view — header (icon + name + subtitle + controls) over the
  * type-aware renderer body. This is the single source of truth for the
@@ -111,12 +122,18 @@ export function FileView(props: {
     refresh: 0,
     status: "loading",
   })
+  const [pdf, setPdf] = createStore<PdfState>({ status: "idle" })
+  const [htmlView, setHtmlView] = createStore<HtmlState>({ status: "idle", value: "" })
   const request = { current: 0 }
+  const pdfRequest = { current: 0 }
+  const pdfAbort = { current: undefined as AbortController | undefined }
+  const htmlRequest = { current: 0 }
+  const htmlAbort = { current: undefined as AbortController | undefined }
 
   createEffect(() => {
     const dir = directory()
     const path = requestPath()
-    const activeSession = untrack(sessionID)
+    const activeSession = sessionID()
     view.refresh
     const id = ++request.current
     setView({
@@ -202,15 +219,81 @@ export function FileView(props: {
     // KaTeX, which blanks on a full \documentclass document.
     return "code"
   })
+  const pdfMode = createMemo(() => pdfPreviewMode({ truncated: truncated(), size: data()?.size }))
   const manuscript = createMemo(() => parseManuscript(view.draft).bibliographies.length > 0)
   // Relative image references in previewed markdown resolve against the
   // file's own directory through the backend raw-file endpoint.
+  const rawUrl = (path: string, dir = directory(), session = sessionID()) =>
+    sdk.request.url("/file/raw", rawFileQuery({ directory: dir, path, sessionID: session, inline: true }))
   const image = (src: string) =>
     assetUrl(src, {
       base: props.path,
-      url: (path) =>
-        sdk.request.url("/file/raw", { path: resolveArtifactPath(directory(), path), sessionID: sessionID() }),
+      url: (path) => rawUrl(path),
     })
+  const file = (href: string) => localAssetPath(href, props.path)
+  const openFile = (path: string) => uiStore.openFile(directory(), path)
+  const html = () => htmlView.value
+
+  createEffect(() => {
+    const source = view.draft
+    const dir = directory()
+    const session = sessionID()
+    const base = props.path
+    const active = view.status === "ready" && kind() === "html" && !view.source
+    const id = ++htmlRequest.current
+    htmlAbort.current?.abort()
+    htmlAbort.current = undefined
+    if (!active) {
+      setHtmlView("status", "idle")
+      return
+    }
+    const url = (path: string) => rawUrl(path, dir, session)
+    const resolve = (value: string) => assetUrl(value, { base, url })
+    const fallback = rewriteHtmlAssets(source, resolve)
+    setHtmlView({ status: "loading", value: fallback })
+    const local = (href: string) => localAssetPath(href, base) !== undefined
+    if (!htmlStylesheets(source).some(local)) {
+      setHtmlView("status", "ready")
+      return
+    }
+    const controller = new AbortController()
+    htmlAbort.current = controller
+    void loadHtmlStylesheets(
+      source,
+      async (href) => {
+        const path = localAssetPath(href, base)
+        if (!path) return
+        const response = await sdk.request(
+          "/file/raw",
+          { signal: controller.signal },
+          rawFileQuery({ directory: dir, path, sessionID: session, maxBytes: HTML_STYLESHEET_BYTES }),
+        )
+        if (!response.ok) return
+        return response.text()
+      },
+      local,
+      (stylesheet, value) => localAssetPath(value, stylesheet),
+    ).then(
+      (stylesheets) => {
+        if (htmlRequest.current !== id || controller.signal.aborted) return
+        setHtmlView({
+          status: "ready",
+          value: rewriteHtmlAssets(source, resolve, {
+            stylesheets,
+            resolveStylesheetPath: (stylesheet, value) => localAssetPath(value, stylesheet),
+            resolveStylesheet: (stylesheet, value) => {
+              const path = localAssetPath(stylesheet, base)
+              return path ? assetUrl(value, { base: path, url }) : resolve(value)
+            },
+          }),
+        })
+      },
+      () => {
+        if (htmlRequest.current !== id || controller.signal.aborted) return
+        setHtmlView("status", "ready")
+      },
+    )
+  })
 
   const badge = () => {
     const k = kind()
@@ -241,6 +324,45 @@ export function FileView(props: {
   const markdown = createMemo(() => splitAlignedMarkdown(view.draft))
 
   createEffect(() => {
+    const mode = kind() === "pdf" ? pdfMode() : "inline"
+    const path = requestPath()
+    const session = sessionID()
+    const id = ++pdfRequest.current
+    pdfAbort.current?.abort()
+    pdfAbort.current = undefined
+    setPdf({ status: "idle", bytes: undefined, error: undefined })
+    if (view.status !== "ready" || mode !== "raw" || !path) return
+    const controller = new AbortController()
+    pdfAbort.current = controller
+    setPdf({ status: "loading" })
+    void sdk
+      .request(
+        "/file/raw",
+        { signal: controller.signal },
+        rawFileQuery({ directory: directory(), path, sessionID: session, maxBytes: PDF_PREVIEW_LIMIT }),
+      )
+      .then(async (response) => {
+        if (response.ok) return new Uint8Array(await response.arrayBuffer())
+        const detail = (await response.text().catch(() => "")).trim()
+        throw new Error(detail || `PDF preview failed (${response.status})`)
+      })
+      .then(
+        (bytes) => {
+          if (pdfRequest.current !== id || controller.signal.aborted) return
+          setPdf({ status: "ready", bytes, error: undefined })
+        },
+        (error: unknown) => {
+          if (pdfRequest.current !== id || controller.signal.aborted) return
+          setPdf({
+            status: "error",
+            bytes: undefined,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        },
+      )
+  })
+
+  createEffect(() => {
     const current = context()
     if (props.active === false) {
       artifactContext.clear(current.id)
@@ -250,6 +372,12 @@ export function FileView(props: {
   })
 
   onCleanup(() => artifactContext.clear(context().id))
+  onCleanup(() => {
+    pdfRequest.current += 1
+    pdfAbort.current?.abort()
+    htmlRequest.current += 1
+    htmlAbort.current?.abort()
+  })
 
   const save = async () => {
     if (view.saving || isBinary() || truncated() || !dirty()) return
@@ -350,17 +478,13 @@ export function FileView(props: {
   const download = async () => {
     try {
       const session = sessionID()
-      const response = await sdk.request("/file/raw", undefined, {
-        path: requestPath(),
-        sessionID: session,
-      })
+      const response = await sdk.request(
+        "/file/raw",
+        undefined,
+        rawFileQuery({ directory: directory(), path: requestPath(), sessionID: session }),
+      )
       if (!response.ok) throw new Error(`download failed (${response.status})`)
-      const object = URL.createObjectURL(await response.blob())
-      const anchor = document.createElement("a")
-      anchor.href = object
-      anchor.download = name()
-      anchor.click()
-      URL.revokeObjectURL(object)
+      downloadBlob(name(), await response.blob())
     } catch (error) {
       toast.error("download failed", error instanceof Error ? error.message : String(error))
     }
@@ -437,7 +561,7 @@ export function FileView(props: {
               }}
             >
               <Switch>
-                <Match when={truncated()}>
+                <Match when={truncated() && kind() !== "pdf"}>
                   <div class="atlas-file-source atlas-file-truncated">
                     <div class="atlas-file-notice" role="status">
                       Preview limited to 8 MB of {formatBytes(data()?.size ?? 0)}. Download the file or use a compute
@@ -466,15 +590,37 @@ export function FileView(props: {
                   <article class="atlas-file-document">
                     <Show
                       when={markdown().lead}
-                      fallback={<Markdown class="atlas-md" text={view.draft} resolveImage={image} />}
+                      fallback={
+                        <Markdown
+                          class="atlas-md"
+                          text={view.draft}
+                          resolveImage={image}
+                          resolveFile={file}
+                          onOpenFile={openFile}
+                        />
+                      }
                     >
                       {(lead) => (
                         <>
                           <div class="atlas-file-document-lead" data-align={lead().alignment}>
-                            <Markdown class="atlas-md" text={lead().text} resolveImage={image} />
+                            <Markdown
+                              class="atlas-md"
+                              text={lead().text}
+                              resolveImage={image}
+                              resolveFile={file}
+                              onOpenFile={openFile}
+                            />
                           </div>
                           <Show when={markdown().rest}>
-                            {(rest) => <Markdown class="atlas-md" text={rest()} resolveImage={image} />}
+                            {(rest) => (
+                              <Markdown
+                                class="atlas-md"
+                                text={rest()}
+                                resolveImage={image}
+                                resolveFile={file}
+                                onOpenFile={openFile}
+                              />
+                            )}
                           </Show>
                         </>
                       )}
@@ -485,7 +631,7 @@ export function FileView(props: {
                 {/* HTML documents render fully sandboxed — no scripts, no same-origin access */}
                 <Match when={kind() === "html" && !view.source}>
                   <div class="atlas-file-html">
-                    <iframe class="atlas-file-html-frame" sandbox="" srcdoc={view.draft} title={name()} />
+                    <iframe class="atlas-file-html-frame" sandbox="" srcdoc={html()} title={name()} />
                   </div>
                 </Match>
 
@@ -520,7 +666,35 @@ export function FileView(props: {
                 {/* pdf */}
                 <Match when={kind() === "pdf"}>
                   <div class="atlas-file-pdf">
-                    <PdfViewer kind="pdf" data={{ base64: b64(), maxPages: 40 }} />
+                    <Switch>
+                      <Match when={pdfMode() === "inline"}>
+                        <PdfViewer kind="pdf" data={{ base64: b64(), maxPages: 40 }} />
+                      </Match>
+                      <Match when={pdfMode() === "raw" && pdf.status === "ready"}>
+                        <Show when={pdf.bytes}>
+                          {(bytes) => <PdfViewer kind="pdf" data={{ bytes: bytes(), maxPages: 40 }} />}
+                        </Show>
+                      </Match>
+                      <Match when={pdfMode() === "raw" && pdf.status === "loading"}>
+                        <div class="atlas-file-loading" role="status" aria-live="polite">
+                          <div class="atlas-file-loading-heading" />
+                          <div class="atlas-file-loading-line" />
+                          <div class="atlas-file-loading-line is-short" />
+                          <span>Loading the complete {formatBytes(data()?.size ?? 0)} PDF…</span>
+                        </div>
+                      </Match>
+                      <Match when={pdfMode() === "raw" && pdf.status === "error"}>
+                        <div class="atlas-file-notice" role="alert">
+                          Couldn’t load the PDF preview. {pdf.error} Use Download above to open the original file.
+                        </div>
+                      </Match>
+                      <Match when={pdfMode() === "download"}>
+                        <div class="atlas-file-notice" role="status">
+                          This {formatBytes(data()?.size ?? 0)} PDF exceeds the {formatBytes(PDF_PREVIEW_LIMIT)} browser
+                          preview limit. Use Download above to open the original file.
+                        </div>
+                      </Match>
+                    </Switch>
                   </div>
                 </Match>
 

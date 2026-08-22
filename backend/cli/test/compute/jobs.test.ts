@@ -664,6 +664,35 @@ describe("ComputeJobs local lifecycle", () => {
     expect(await Bun.file(path.join(job.cwd!, "result.txt")).exists()).toBe(true)
   })
 
+  test("bounds repository-controlled metadata while retaining dirty-state truth", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const root = path.join(tmp.path, "state")
+    await fs.appendFile(
+      path.join(tmp.path, ".git", "config"),
+      `\n[remote "origin"]\n\turl = https://example.com/${"x".repeat(70 * 1024)}\n`,
+    )
+    await Promise.all(
+      Array.from({ length: 400 }, (_, index) =>
+        Bun.write(path.join(tmp.path, `untracked-${String(index).padStart(4, "0")}-${"x".repeat(180)}.txt`), ""),
+      ),
+    )
+
+    const job = await start(
+      {
+        name: "bounded code state",
+        command: "true",
+        cwd: tmp.path,
+        target: { kind: "local" },
+      },
+      { root, workspace: tmp.path },
+    )
+
+    expect(job.reproducibility?.git?.dirty).toBe(true)
+    expect(job.reproducibility?.git?.repository).toBeUndefined()
+    expect(JSON.stringify(job.reproducibility).length).toBeLessThan(100_000)
+    expect((await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })).status).toBe("succeeded")
+  })
+
   test("redacts command and env-like job fields before durable persistence", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")

@@ -6,6 +6,7 @@ import { UI } from "../ui"
 import { OpenScience, API_BASE } from "../../openscience"
 import { computeDedupeKey, initProjectDetailed } from "../../server/routes/atlas-bridge"
 import type { InitProjectFailure } from "../../server/routes/atlas-bridge"
+import { GitOutput } from "../../util/git-output"
 
 /**
  * `openscience project` — manage the Atlas project root for a folder.
@@ -106,14 +107,7 @@ function reportInitFailure(failure: InitProjectFailure | undefined) {
 }
 
 async function git(args: string[], cwd: string): Promise<string> {
-  try {
-    const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "ignore" })
-    const out = await new Response(proc.stdout).text()
-    await proc.exited
-    return out.trim()
-  } catch {
-    return ""
-  }
+  return (await GitOutput.text(args, cwd)) ?? ""
 }
 
 function normalizeRemote(remote: string): string | null {

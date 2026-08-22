@@ -5,6 +5,9 @@ import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
 import type { PermissionNext } from "../../src/permission/next"
 import { Filesystem } from "../../src/util/filesystem"
+import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
+import { tmpdir } from "../fixture/fixture"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: "test",
@@ -124,5 +127,65 @@ describe("tool.assertExternalDirectory", () => {
     })
 
     expect(requests.length).toBe(0)
+  })
+
+  test("releases owned bindings after success, error, and abort", async () => {
+    await using project = await tmpdir({ git: true })
+    await using external = await tmpdir({ init: (directory) => Bun.write(path.join(directory, "paper.md"), "paper\n") })
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({ title: "external scope lifecycle" })
+        try {
+          await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: external.path,
+            access: "read",
+            scope: "session",
+          })
+          const target = path.join(external.path, "paper.md")
+          const bindings: SessionFilesystem.Authorization[] = []
+          const context = (abort = AbortSignal.any([])): Tool.Context => ({
+            ...baseCtx,
+            sessionID: session.id,
+            abort,
+            ask: async () => {},
+          })
+
+          await (async () => {
+            using access = await assertExternalDirectory(context(), target)
+            expect(access?.authorizationOwnership).toBe("owned")
+            bindings.push(access!.authorization!)
+            await expect(access?.revalidate()).resolves.toBe(target)
+          })()
+
+          await expect(
+            (async () => {
+              using access = await assertExternalDirectory(context(), target)
+              bindings.push(access!.authorization!)
+              throw new Error("injected consumer failure")
+            })(),
+          ).rejects.toThrow("injected consumer failure")
+
+          const controller = new AbortController()
+          await expect(
+            (async () => {
+              using access = await assertExternalDirectory(context(controller.signal), target)
+              bindings.push(access!.authorization!)
+              controller.abort()
+              controller.signal.throwIfAborted()
+            })(),
+          ).rejects.toBeInstanceOf(DOMException)
+
+          for (const binding of bindings) {
+            await expect(SessionFilesystem.revalidateAuthorization(binding)).rejects.toBeInstanceOf(
+              SessionFilesystem.DeniedError,
+            )
+          }
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
   })
 })

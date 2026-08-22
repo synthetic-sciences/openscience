@@ -45,6 +45,23 @@ describe("Project.fromDirectory", () => {
     const openscienceFile = path.join(tmp.path, ".git", "openscience")
     expect(await Bun.file(openscienceFile).exists()).toBe(false)
   })
+
+  test("honors Git's discovery ceiling for an isolated folder below another checkout", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const isolated = path.join(tmp.path, "isolated")
+    await fs.mkdir(isolated)
+    const previous = process.env.GIT_CEILING_DIRECTORIES
+    process.env.GIT_CEILING_DIRECTORIES = isolated
+    try {
+      const { project, sandbox } = await Project.fromDirectory(isolated)
+      expect(project.vcs).toBeUndefined()
+      expect(project.worktree).toBe(isolated)
+      expect(sandbox).toBe(isolated)
+    } finally {
+      if (previous === undefined) delete process.env.GIT_CEILING_DIRECTORIES
+      if (previous !== undefined) process.env.GIT_CEILING_DIRECTORIES = previous
+    }
+  })
 })
 
 describe("Project identity is stable", () => {

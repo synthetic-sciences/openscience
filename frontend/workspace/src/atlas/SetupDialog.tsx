@@ -95,8 +95,10 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
       // reload (the backend already resynced services + rebuilt the provider
       // cache).
       await sdk.client.global.sync().catch(() => {})
-      const wallet = await settingsApi<{ balanceUsd: number }>(base(), fetchFn(), "/settings/wallet").catch(() => null)
-      if (wallet && wallet.balanceUsd >= 0) setBalance(wallet.balanceUsd)
+      const wallet = await settingsApi<{ balanceUsd: number | null }>(base(), fetchFn(), "/settings/wallet").catch(
+        () => null,
+      )
+      if (wallet?.balanceUsd !== null && wallet?.balanceUsd !== undefined) setBalance(wallet.balanceUsd)
       setView("done")
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

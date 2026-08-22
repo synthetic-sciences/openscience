@@ -114,7 +114,7 @@ export namespace SystemPrompt {
         ]
       : []
     const names = new Set(skills.map((skill) => skill.name))
-    const invoked = [...(message ?? "").matchAll(/(?:^|[\s([{])\/([a-z0-9][a-z0-9_-]*)(?=\s|$)/gi)]
+    const invoked = [...(message ?? "").matchAll(/(?:^|[\s([{'\"])\/([a-z0-9][a-z0-9_-]*)(?=$|[^a-z0-9_/-])/gi)]
       .map((match) => match[1].toLowerCase())
       .filter((name, index, all) => names.has(name) && all.indexOf(name) === index)
     const route = [

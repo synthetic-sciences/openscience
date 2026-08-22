@@ -2,6 +2,8 @@ import { $ } from "bun"
 import fs from "node:fs"
 import path from "node:path"
 import z from "zod"
+import { Filesystem } from "../util/filesystem"
+import { SafeFileIO } from "./safe-io"
 
 export namespace ArtifactFile {
   export const Kind = z.enum([
@@ -127,6 +129,10 @@ export namespace ArtifactFile {
   ])
   const LIMIT = 5_000
   const DEPTH = 16
+  const VISITS = 50_000
+  const NOTEBOOK_LIMIT = 32 * 1024 * 1024
+  const NOTEBOOK_TOTAL = 256 * 1024 * 1024
+  const NOTEBOOK_CONCURRENCY = 2
   const lockfiles = [
     "bun.lock",
     "bun.lockb",
@@ -160,48 +166,81 @@ export namespace ArtifactFile {
     return { kind, format }
   }
 
-  export async function scan(root: string): Promise<Info[]> {
+  export type ScanLimits = { artifacts: number; visits: number }
+
+  export function limits(): ScanLimits {
+    return { artifacts: 0, visits: 0 }
+  }
+
+  export async function scan(root: string, shared: ScanLimits = limits()): Promise<Info[]> {
     const artifacts: Info[] = []
     const walk = async (directory: string, relative: string, depth: number): Promise<void> => {
-      if (depth > DEPTH || artifacts.length >= LIMIT) return
-      const entries = await fs.promises.readdir(directory, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
-      for (const entry of entries) {
-        if (artifacts.length >= LIMIT) return
-        if (entry.isDirectory()) {
-          if (excluded.has(entry.name) || entry.name.startsWith(".")) continue
-          await walk(path.join(directory, entry.name), path.join(relative, entry.name), depth + 1)
-          continue
-        }
-        if (!entry.isFile()) continue
-        const classified = classify(entry.name)
-        if (!classified) continue
-        const full = path.join(directory, entry.name)
-        const stat = await fs.promises.stat(full).catch(() => undefined)
-        if (!stat) continue
-        artifacts.push({
-          name: entry.name,
-          path: path.join(relative, entry.name).replaceAll(path.sep, "/").replace(/^\.\//, ""),
-          kind: classified.kind,
-          format: classified.format,
-          size: stat.size,
-          modified: stat.mtimeMs,
-        })
+      if (depth > DEPTH || shared.artifacts >= LIMIT || shared.visits >= VISITS) return
+      const [canonical, info] = await Promise.all([
+        fs.promises.realpath(directory).catch(() => undefined),
+        fs.promises.lstat(directory).catch(() => undefined),
+      ])
+      if (depth === 0 && info && !info.isDirectory()) {
+        throw Object.assign(new Error(`Artifact root is not a directory: ${directory}`), { code: "ENOTDIR" })
       }
+      if (!canonical || canonical !== path.resolve(directory) || !info?.isDirectory() || info.isSymbolicLink()) {
+        if (depth === 0) throw new Error(`Artifact root is unavailable or indirect: ${directory}`)
+        return
+      }
+      const entries = await fs.promises.opendir(directory).catch((error) => {
+        if (depth === 0) throw error
+        return undefined
+      })
+      if (!entries) return
+      await (async () => {
+        for await (const entry of entries) {
+          shared.visits += 1
+          if (shared.artifacts >= LIMIT || shared.visits >= VISITS) return
+          if (entry.isDirectory()) {
+            if (excluded.has(entry.name) || entry.name.startsWith(".")) continue
+            await walk(path.join(directory, entry.name), path.join(relative, entry.name), depth + 1)
+            continue
+          }
+          if (!entry.isFile()) continue
+          const classified = classify(entry.name)
+          if (!classified) continue
+          const full = path.join(directory, entry.name)
+          const stat = await fs.promises.lstat(full).catch(() => undefined)
+          if (!stat?.isFile()) continue
+          if (shared.artifacts >= LIMIT) return
+          shared.artifacts += 1
+          artifacts.push({
+            name: entry.name,
+            path: path.join(relative, entry.name).replaceAll(path.sep, "/").replace(/^\.\//, ""),
+            kind: classified.kind,
+            format: classified.format,
+            size: stat.size,
+            modified: stat.mtimeMs,
+          })
+        }
+      })().catch((error) => {
+        if (depth === 0) throw error
+      })
     }
     await walk(root, ".", 0)
     return artifacts.toSorted((a, b) => b.modified - a.modified || a.path.localeCompare(b.path))
   }
 
-  export async function provenance(root: string, file: string): Promise<Provenance> {
-    const inside = await $`git rev-parse --is-inside-work-tree`.cwd(root).quiet().nothrow()
-    if (inside.exitCode !== 0) {
-      return { path: file, tracked: false, dirty: false, status: "local" }
+  export async function provenance(root: string, file: string, display = file): Promise<Provenance> {
+    const env = { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(root) }
+    const result = await $`git rev-parse --show-toplevel`.cwd(root).env(env).quiet().nothrow()
+    const repo = result.exitCode === 0 ? (await result.text()).trim() : undefined
+    const target = path.isAbsolute(file) ? file : path.resolve(root, file)
+    if (!repo || !path.isAbsolute(repo) || !within(root, repo)) {
+      return { path: display, tracked: false, dirty: false, status: "local" }
     }
+    const relative = path.relative(repo, target)
+    if (!within(repo, target)) return { path: display, tracked: false, dirty: false, status: "local" }
     const [branchResult, trackedResult, statusResult, logResult] = await Promise.all([
-      $`git branch --show-current`.cwd(root).quiet().nothrow().text(),
-      $`git ls-files --error-unmatch -- ${file}`.cwd(root).quiet().nothrow(),
-      $`git status --porcelain=v1 -- ${file}`.cwd(root).quiet().nothrow().text(),
-      $`git log -1 --format=%H%x00%an%x00%ae%x00%aI%x00%s -- ${file}`.cwd(root).quiet().nothrow().text(),
+      $`git branch --show-current`.cwd(repo).env(env).quiet().nothrow().text(),
+      $`git ls-files --error-unmatch -- ${relative}`.cwd(repo).env(env).quiet().nothrow(),
+      $`git status --porcelain=v1 -- ${relative}`.cwd(repo).env(env).quiet().nothrow().text(),
+      $`git log -1 --format=%H%x00%an%x00%ae%x00%aI%x00%s -- ${relative}`.cwd(repo).env(env).quiet().nothrow().text(),
     ])
     const tracked = trackedResult.exitCode === 0
     const code = statusResult.trim().slice(0, 2)
@@ -218,7 +257,7 @@ export namespace ArtifactFile {
           }
         : undefined
     return {
-      path: file,
+      path: display,
       tracked,
       dirty: status !== "clean",
       status,
@@ -227,26 +266,44 @@ export namespace ArtifactFile {
     }
   }
 
+  function within(root: string, target: string) {
+    return Filesystem.contains(root, target)
+  }
+
   export async function audit(root: string): Promise<Audit> {
     const artifacts = await scan(root)
+    const env = { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(root) }
     const notebooks = artifacts.filter((artifact) => artifact.kind === "notebook")
-    const invalid = (
-      await Promise.all(
-        notebooks.map(async (notebook) => {
-          const value = await Bun.file(path.join(root, notebook.path))
-            .json()
-            .catch(() => undefined)
-          if (!value || typeof value !== "object") return notebook.path
-          const record = value as Record<string, unknown>
-          if (typeof record.nbformat !== "number" || !Array.isArray(record.cells)) return notebook.path
-          return undefined
-        }),
+    const notebookBytes = { total: 0 }
+    const batches = Array.from({ length: Math.ceil(notebooks.length / NOTEBOOK_CONCURRENCY) }, (_, index) =>
+      notebooks.slice(index * NOTEBOOK_CONCURRENCY, (index + 1) * NOTEBOOK_CONCURRENCY),
+    )
+    const invalid: string[] = []
+    for (const batch of batches) {
+      invalid.push(
+        ...(
+          await Promise.all(
+            batch.map(async (notebook) => {
+              if (notebook.size > NOTEBOOK_LIMIT || notebookBytes.total + notebook.size > NOTEBOOK_TOTAL) {
+                return notebook.path
+              }
+              notebookBytes.total += notebook.size
+              const value = await SafeFileIO.optional(path.join(root, notebook.path), { maxBytes: NOTEBOOK_LIMIT })
+                .then((snapshot) => (snapshot ? JSON.parse(snapshot.bytes.toString("utf8")) : undefined))
+                .catch(() => undefined)
+              if (!value || typeof value !== "object") return notebook.path
+              const record = value as Record<string, unknown>
+              if (typeof record.nbformat !== "number" || !Array.isArray(record.cells)) return notebook.path
+              return undefined
+            }),
+          )
+        ).filter((file): file is string => !!file),
       )
-    ).filter((file): file is string => !!file)
+    }
     const [branch, commit, status, presentLocks, presentEnvironments, readme] = await Promise.all([
-      $`git branch --show-current`.cwd(root).quiet().nothrow().text(),
-      $`git rev-parse HEAD`.cwd(root).quiet().nothrow().text(),
-      $`git status --porcelain`.cwd(root).quiet().nothrow().text(),
+      $`git branch --show-current`.cwd(root).env(env).quiet().nothrow().text(),
+      $`git rev-parse HEAD`.cwd(root).env(env).quiet().nothrow().text(),
+      $`git status --porcelain`.cwd(root).env(env).quiet().nothrow().text(),
       Promise.all(lockfiles.map(async (file) => ((await Bun.file(path.join(root, file)).exists()) ? file : undefined))),
       Promise.all(
         environments.map(async (file) => ((await Bun.file(path.join(root, file)).exists()) ? file : undefined)),
@@ -369,9 +426,15 @@ export namespace ArtifactFile {
     for (const batch of batches) {
       hashed.push(
         ...(await Promise.all(
-          batch.map(async (artifact) =>
-            ManifestArtifact.parse({ ...artifact, sha256: await hash(path.join(root, artifact.path)) }),
-          ),
+          batch.map(async (artifact) => {
+            const current = await hash(path.join(root, artifact.path))
+            return ManifestArtifact.parse({
+              ...artifact,
+              size: current.size,
+              modified: current.modified,
+              sha256: current.sha256,
+            })
+          }),
         )),
       )
     }
@@ -391,10 +454,21 @@ export namespace ArtifactFile {
     return { id, label, status, detail, weight }
   }
 
-  async function hash(file: string): Promise<string> {
+  async function hash(file: string) {
+    const source = await SafeFileIO.open(file)
     const digest = new Bun.CryptoHasher("sha256")
-    for await (const chunk of fs.createReadStream(file)) digest.update(chunk)
-    return digest.digest("hex")
+    const reader = source.stream().getReader()
+    try {
+      while (true) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        digest.update(chunk.value)
+      }
+      return { sha256: digest.digest("hex"), size: source.size, modified: source.mtimeMs }
+    } finally {
+      reader.releaseLock()
+      await source.close()
+    }
   }
 
   function statusOf(code: string, tracked: boolean): Provenance["status"] {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "node:path"
 import { Command } from "../../src/command"
 import { Identifier } from "../../src/id/id"
@@ -148,6 +149,39 @@ describe("research slash commands", () => {
     })
   })
 
+  test("checkpoint bounds a repository-controlled porcelain listing", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "Large worktree recovery" })
+        await seed(session.id)
+        const ignore = path.join(tmp.path, ".openscience/checkpoints/.gitignore")
+        await fs.mkdir(path.dirname(ignore), { recursive: true })
+        await fs.writeFile(ignore, "#".repeat(70 * 1024))
+        await Promise.all(
+          Array.from({ length: 400 }, (_, index) =>
+            fs.writeFile(path.join(tmp.path, `untracked-${String(index).padStart(4, "0")}-${"x".repeat(180)}.txt`), ""),
+          ),
+        )
+
+        const response = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "checkpoint",
+          arguments: "before large status",
+        })
+        const text = response.parts.find((part) => part.type === "text")
+        const match = text?.type === "text" ? text.text.match(/`([^`]+\.md)`/) : undefined
+        const content = await Bun.file(path.join(tmp.path, match?.[1] ?? "missing")).text()
+
+        expect(content).toContain("- Dirty: yes")
+        expect(content).toContain("Git status exceeded 65536 bytes; additional paths were omitted.")
+        expect(Buffer.byteLength(content)).toBeLessThan(96 * 1024)
+        expect(await Bun.file(ignore).text()).toEndWith("\n*\n")
+      },
+    })
+  })
+
   test("status and context are deterministic zero-cost session readouts", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
@@ -186,6 +220,28 @@ describe("research slash commands", () => {
         expect(contextText?.type === "text" ? contextText.text : "").toContain("Conversation estimate")
         expect(contextText?.type === "text" ? contextText.text : "").toContain("deterministic conversation estimate")
         expect(MessageV2.composition(await Session.messages({ sessionID: session.id })).total).toBe(before.total)
+      },
+    })
+  })
+
+  test("command dispatch preserves research effort and delegation controls", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "Command controls" })
+        await seed(session.id)
+        await SessionPrompt.command({
+          sessionID: session.id,
+          command: "status",
+          arguments: "",
+          effort: "ultra",
+          delegation: false,
+        })
+        const latest = (await Session.messages({ sessionID: session.id })).findLast(
+          (message) => message.info.role === "user",
+        )
+        expect(latest?.info).toMatchObject({ role: "user", effort: "ultra", delegation: false })
       },
     })
   })

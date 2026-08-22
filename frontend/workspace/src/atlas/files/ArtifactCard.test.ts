@@ -64,10 +64,10 @@ const props = (over: Record<string, unknown> = {}) => ({
   artifact: artifact({ filename: "train.py" }),
   layout: "grid" as const,
   sizes: false,
-  url: () => "http://local/raw",
-  read: async () => "import numpy",
+  read: async () => new Blob(["import numpy"]),
   highlight: async (code: string) => code,
   onOpen: () => {},
+  onDownload: () => {},
   onRename: () => {},
   onTrash: () => {},
   ...over,
@@ -137,23 +137,21 @@ describe("artifact card", () => {
     expect(Number.parseFloat(menu.style.left)).toBeGreaterThanOrEqual(0)
   })
 
-  test("points Download at the raw route with download set", () => {
-    const asked: Array<boolean | undefined> = []
+  test("delegates Download without exposing a raw artifact URL", () => {
+    const asked: string[] = []
     const host = mount(() =>
       subject.ArtifactCard(
         props({
-          url: (unused: unknown, download?: boolean) => {
-            asked.push(download)
-            return download ? "http://local/raw?download=true" : "http://local/raw"
-          },
+          onDownload: (item: { id: string }) => asked.push(item.id),
         }) as never,
       ),
     )
     host.querySelector<HTMLButtonElement>("[data-card-menu]")!.click()
+    host.querySelector<HTMLButtonElement>("[data-action='download']")!.click()
 
-    expect(host.querySelector("[data-action='download']")?.getAttribute("href")).toBe("http://local/raw?download=true")
-    expect(host.querySelector("[data-action='download']")?.getAttribute("download")).toBe("train.py")
-    expect(asked).toContain(true)
+    expect(asked).toEqual(["art_1"])
+    expect(host.querySelector("[data-action='download']")).toBeNull()
+    expect(host.querySelector("a[href*='/raw']")).toBeNull()
   })
 
   test("shows the size only when asked", () => {
