@@ -3,6 +3,7 @@ import { APICallError } from "ai"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 import { NamedError } from "@synsci/util/error"
+import { SessionProcessor } from "../../src/session/processor"
 
 function apiError(headers?: Record<string, string>): MessageV2.APIError {
   return new MessageV2.APIError({
@@ -131,6 +132,14 @@ describe("session.retry.retryable", () => {
     ["unavailable", { error: { code: "service_unavailable" } }, "Provider is overloaded"],
   ])("retries positive transient %s signals", (_label, body, expected) => {
     expect(SessionRetry.retryable(wrap(JSON.stringify(body)))).toBe(expected)
+  })
+})
+
+describe("SessionProcessor.providerFailureAction", () => {
+  test("drains the authoritative tool outcome instead of replaying a provider request", () => {
+    const error = apiError()
+    expect(SessionProcessor.providerFailureAction(error, error, false)).toEqual({ type: "retry", message: "boom" })
+    expect(SessionProcessor.providerFailureAction(error, error, true)).toEqual({ type: "drain", message: "boom" })
   })
 })
 
