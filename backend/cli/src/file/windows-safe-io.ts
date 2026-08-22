@@ -100,6 +100,7 @@ export namespace WindowsSafeIO {
   const ERROR_NOT_SAME_DEVICE = 17
   const ERROR_SHARING_VIOLATION = 32
   const ERROR_FILE_EXISTS = 80
+  const ERROR_INVALID_PARAMETER = 87
   const ERROR_DIR_NOT_EMPTY = 145
   const ERROR_ALREADY_EXISTS = 183
 
@@ -394,15 +395,15 @@ export namespace WindowsSafeIO {
     )
   }
 
-  function renameBuffer(parent: Handle, target: string, replace: boolean) {
-    const value = Buffer.from(safeName(target), "utf16le")
+  function renameBuffer(parent: Handle | undefined, target: string, replace: boolean) {
+    const value = Buffer.from(parent === undefined ? path.resolve(target) : safeName(target), "utf16le")
     // FILE_RENAME_INFO has a 24-byte sizeof on 64-bit Windows even though
     // FileName begins at offset 20. SetFileInformationByHandle requires the
     // full structure size plus the variable name, not merely offset+length.
     // The four zeroed trailing bytes also leave the documented NUL/padding.
     const buffer = Buffer.alloc(24 + value.byteLength)
     buffer.writeUInt8(replace ? 1 : 0, 0)
-    buffer.writeBigUInt64LE(BigInt(parent), 8)
+    buffer.writeBigUInt64LE(parent === undefined ? 0n : BigInt(parent), 8)
     buffer.writeUInt32LE(value.byteLength, 16)
     value.copy(buffer, 20)
     return buffer
@@ -438,7 +439,18 @@ export namespace WindowsSafeIO {
     const target = path.join(parent.path, child)
     const relative = renameBuffer(parent.handle, child, replace)
     if (api().SetFileInformationByHandle(source.handle, FILE_RENAME_INFO, relative, relative.byteLength)) return
-    const error = code()
+    const initial = code()
+    // Some Windows filesystems reject a non-null RootDirectory through the
+    // Win32 FileRenameInfo adapter even though the structure permits it. The
+    // parent remains locked against rename/delete, so resolving the verified
+    // direct child as an absolute path preserves the same safety boundary.
+    const error = (() => {
+      if (initial !== ERROR_INVALID_PARAMETER) return initial
+      const absolute = renameBuffer(undefined, target, replace)
+      if (api().SetFileInformationByHandle(source.handle, FILE_RENAME_INFO, absolute, absolute.byteLength)) return 0
+      return code()
+    })()
+    if (!error) return
     if (!replace && (error === ERROR_ACCESS_DENIED || error === ERROR_SHARING_VIOLATION)) {
       const exists = await fs.lstat(target).then(
         () => true,
