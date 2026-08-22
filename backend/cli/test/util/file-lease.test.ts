@@ -41,6 +41,29 @@ test("a waiter still fails closed when one live owner stops making progress", as
   )
 }, 5_000)
 
+test("cancelling a waiter leaves the healthy owner intact", async () => {
+  await using tmp = await tmpdir()
+  const filepath = path.join(tmp.path, "cancelled-waiter.lock")
+  const owner = await FileLease.acquire(filepath, 2_000)
+  const controller = new AbortController()
+  const waiting = FileLease.acquire(filepath, 2_000, controller.signal)
+
+  try {
+    await Bun.sleep(50)
+    controller.abort(new Error("cancelled lease wait"))
+    await expect(waiting).rejects.toThrow("cancelled lease wait")
+    expect(await Bun.file(filepath).exists()).toBe(true)
+  } finally {
+    controller.abort()
+    await Promise.resolve(owner[Symbol.asyncDispose]()).catch(() => undefined)
+    await waiting.catch(() => undefined)
+  }
+
+  await using next = await FileLease.acquire(filepath, 2_000)
+  expect(await Bun.file(filepath).exists()).toBe(true)
+  void next
+})
+
 test("a structured lease admits a nested writer after relocation intent without a coverage gap", async () => {
   await using tmp = await tmpdir()
   const config = path.join(tmp.path, "config")

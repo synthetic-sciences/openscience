@@ -75,6 +75,8 @@ import { KernelRuntime } from "@/science/kernel/registry"
 import { SessionCheckpoint } from "./checkpoint"
 import { ToolSelection } from "./tool-selection"
 import { SessionLoopState } from "./loop-state"
+import { FileLease } from "@/util/file-lease"
+import { Global } from "@/global"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -82,6 +84,7 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENSCIENCE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+  const LOOP_LEASE_TIMEOUT = 24 * 60 * 60 * 1_000
   // Scientific agents can still consume session-scoped artifact references.
   // Science agents that dispatch GPU/compute work and should honor billing.compute.
   const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
@@ -344,6 +347,11 @@ export namespace SessionPrompt {
     return controller.signal
   }
 
+  export function loopLeasePath(projectID: string, sessionID: string) {
+    const digest = new Bun.CryptoHasher("sha256").update(`${projectID}\0${sessionID}`).digest("hex")
+    return path.join(Global.Path.data, "session-loop", `${digest}.lock`)
+  }
+
   export function cancel(sessionID: string, owner?: AbortSignal) {
     log.info("cancel", { sessionID })
     const s = state()
@@ -410,18 +418,7 @@ export namespace SessionPrompt {
     return message
   }
 
-  export const loop = fn(Identifier.schema("session"), async (sessionID) => {
-    const session = await Session.get(sessionID)
-    const abort = start(sessionID)
-    if (!abort) {
-      return new Promise<MessageV2.WithParts>((resolve, reject) => {
-        const callbacks = state()[sessionID].callbacks
-        callbacks.push({ resolve, reject })
-      })
-    }
-
-    using _ = defer(() => cancel(sessionID, abort))
-
+  async function execute(sessionID: string, session: Session.Info, abort: AbortSignal) {
     const initial = await Session.messages({ sessionID })
     const incomplete = SessionLoopState.incomplete(initial)
     await Promise.all(
@@ -1205,7 +1202,7 @@ export namespace SessionPrompt {
       if (result === "compact") await armedCompact()
       continue
     }
-    SessionCompaction.prune({ sessionID })
+    await SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
       const queued = state()[sessionID]?.callbacks ?? []
@@ -1215,6 +1212,32 @@ export namespace SessionPrompt {
       return item
     }
     throw new Error("Impossible")
+  }
+
+  export const loop = fn(Identifier.schema("session"), async (sessionID) => {
+    const session = await Session.get(sessionID)
+    const abort = start(sessionID)
+    if (!abort) {
+      return new Promise<MessageV2.WithParts>((resolve, reject) => {
+        const callbacks = state()[sessionID].callbacks
+        callbacks.push({ resolve, reject })
+      })
+    }
+
+    using _ = defer(() => cancel(sessionID, abort))
+
+    await using lease = await FileLease.acquire(loopLeasePath(session.projectID, sessionID), LOOP_LEASE_TIMEOUT, abort)
+    return lease.during(async () => {
+      try {
+        return await execute(sessionID, session, abort)
+      } finally {
+        // Streaming deltas are intentionally coalesced in-process. Do not
+        // publish the cross-process handoff until the final transcript is on
+        // disk, or the next owner can observe a finished assistant without its
+        // final text/reasoning parts.
+        await Session.flushPendingParts(sessionID)
+      }
+    })
   })
 
   async function lastModel(sessionID: string) {
