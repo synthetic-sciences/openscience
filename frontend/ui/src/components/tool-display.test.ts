@@ -152,6 +152,10 @@ describe("stripRedactedReasoning", () => {
   test("leaves normal reasoning untouched", () => {
     expect(stripRedactedReasoning("plain reasoning text")).toBe("plain reasoning text")
   })
+  test("preserves provider-visible reasoning byte-for-byte", () => {
+    expect(stripRedactedReasoning("  raw provider reasoning\n")).toBe("  raw provider reasoning\n")
+    expect(stripRedactedReasoning("  readable summary[REDACTED]\n")).toBe("  readable summary\n")
+  })
 })
 
 describe("toolErrorDisplay", () => {

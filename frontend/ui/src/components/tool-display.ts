@@ -23,7 +23,8 @@ export function humanizeToolName(tool: string): string {
 // continuity, never meant for display. Strip the placeholder from reasoning text.
 // (Tool output keeps its own "[REDACTED]" secret masking; this is reasoning-only.)
 export function stripRedactedReasoning(text: string): string {
-  return (text ?? "").replaceAll("[REDACTED]", "").trim()
+  const visible = (text ?? "").replaceAll("[REDACTED]", "")
+  return visible.trim() ? visible : ""
 }
 
 export function toolErrorDisplay(tool: string, value: string) {
