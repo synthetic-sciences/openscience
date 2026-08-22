@@ -16,10 +16,10 @@ function verified(label: string): SessionResearch.EvidenceReference {
 function artifact(path: string, index: number) {
   const sha256 = index.toString(16).padStart(64, "0")
   const versionID = `ver-${index}`
-  return { path, artifactID: `art-${index}`, versionID, sha256 }
+  return { path, artifactID: `art-${index}`, versionID, sha256, provenanceID: `run-${index}` }
 }
 
-function target(item: ReturnType<typeof artifact>) {
+function target(item: { versionID: string; sha256: string }) {
   return `artifact-version:${item.versionID}:${item.sha256.slice(0, 16)}`
 }
 
@@ -268,6 +268,37 @@ test("review coverage follows the latest immutable version of each required Resu
       status: "pending",
       detail: `1 current required Result version has no structured review disposition: ${target(current)}`,
     })
+  } finally {
+    await SessionResearch.remove(sessionID)
+  }
+})
+
+test("empirical readiness requires immutable producing-run lineage for every current Result", async () => {
+  const sessionID = `ses_research_${crypto.randomUUID()}`
+  try {
+    const contract = await SessionResearch.define(sessionID, {
+      objective: "Measure a calibrated estimator",
+      domain: "statistics",
+      template: "empirical",
+      deliverables: [{ path: "metrics.json", label: "Metrics", required: true }],
+    })
+    const metrics = { ...artifact("metrics.json", 40), provenanceID: undefined }
+    const assessment = SessionResearch.assess(contract, {
+      artifacts: [metrics],
+      jobs: [],
+      kernels: [],
+      findings: [{ target: target(metrics), verdict: "supports", severity: "info" }],
+      reviewed: true,
+      busy: false,
+    })
+    expect(assessment.gates.find((gate) => gate.id === "deliverables")).toMatchObject({
+      status: "pending",
+      complete: 0,
+      detail: "1 current empirical Result has no immutable producing-run lineage: metrics.json",
+    })
+    expect(await SessionResearch.prompt(sessionID)).toContain(
+      "every required empirical Result must be saved with artifact provenance_id",
+    )
   } finally {
     await SessionResearch.remove(sessionID)
   }

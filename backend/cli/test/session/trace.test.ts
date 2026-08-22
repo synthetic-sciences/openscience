@@ -12,6 +12,7 @@ import { Review } from "../../src/science/provenance/review"
 import { tmpdir } from "../fixture/fixture"
 import { TokenUsage } from "@synsci/util/token-usage"
 import { TaskAttempt } from "../../src/tool/task-attempt"
+import { ArtifactStore } from "../../src/artifact/store"
 
 test("builds one local observable harness trace without reasoning or copied outputs", async () => {
   await using tmp = await tmpdir({ git: true })
@@ -142,7 +143,9 @@ test("builds one local observable harness trace without reasoning or copied outp
             input: { action: "save_file", path: "result.csv" },
             output: "saved",
             title: "Registered artifact",
-            metadata: { savedArtifact: { id: "artifact_1", versionID: "version_1" } },
+            metadata: {
+              savedArtifact: { id: "artifact_1", versionID: "version_1", sha256: "e".repeat(64) },
+            },
             time: { start: started + 290, end: started + 320 },
           },
         },
@@ -279,6 +282,25 @@ test("builds one local observable harness trace without reasoning or copied outp
         template: "minimal",
         deliverables: [{ path: "result.csv", label: "Result table", required: true }],
       })
+      const scope = { projectID: Instance.project.id, directory: Instance.directory }
+      const run = await Provenance.recordOwned(scope, {
+        id: "run_artifact_trace",
+        kind: "run",
+        label: "Produce trace result",
+        tool: "python",
+        sessionID: session.id,
+        meta: { sessionID: session.id, projectID: Instance.project.id },
+      } as Parameters<typeof Provenance.record>[0])
+      const target = ArtifactStore.reviewTargetID("version_1", "e".repeat(64))
+      await Provenance.recordOwned(scope, {
+        id: target,
+        kind: "artifact",
+        label: "Trace result",
+        artifactType: "dataset",
+        contentHash: "e".repeat(64),
+        meta: { sessionID: session.id, projectID: Instance.project.id },
+      } as Parameters<typeof Provenance.record>[0])
+      await Provenance.linkOwned(scope, { from: run.id, to: target, relation: "produced" })
 
       const trace = await SessionTrace.build(session.id)
       expect(trace.summary).toMatchObject({
@@ -337,6 +359,7 @@ test("builds one local observable harness trace without reasoning or copied outp
         artifactID: "artifact_1",
         versionID: "version_1",
         path: "result.csv",
+        provenanceID: run.id,
       })
       expect(trace.reviewerFindings[0]).toMatchObject({
         claim: "accuracy is 99%",

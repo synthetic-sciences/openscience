@@ -977,6 +977,7 @@ export namespace SessionResearch {
       versionID?: string
       path?: string
       sha256?: string
+      provenanceID?: string
       completedAt?: number
     }>
     jobs: Array<{ status: string }>
@@ -1033,6 +1034,8 @@ export namespace SessionResearch {
       current.set(key, artifact)
     }
     const requiredArtifacts = [...current.values()]
+    const unlinked =
+      contract.template === "empirical" ? requiredArtifacts.filter((artifact) => !artifact.provenanceID) : []
     const targets = [
       ...new Set(
         requiredArtifacts.map((artifact) =>
@@ -1077,12 +1080,14 @@ export namespace SessionResearch {
       {
         id: "deliverables",
         label: "Required Results",
-        status: missing.length ? "pending" : "passed",
-        complete: required.length - missing.length,
+        status: missing.length || unlinked.length ? "pending" : "passed",
+        complete: Math.max(0, required.length - missing.length - unlinked.length),
         total: required.length,
         detail: missing.length
           ? `${missing.length} required ${missing.length === 1 ? "Result" : "Results"} missing`
-          : "All required Results saved",
+          : unlinked.length
+            ? `${unlinked.length} current empirical ${unlinked.length === 1 ? "Result has" : "Results have"} no immutable producing-run lineage: ${unlinked.map((artifact) => artifact.path ?? artifact.versionID ?? "unknown").join(", ")}`
+            : "All required Results saved",
       },
       {
         id: "checks",
@@ -1534,6 +1539,11 @@ export namespace SessionResearch {
       `Objective: ${contract.objective}`,
       `Domain: ${contract.domain}`,
       `Required Results: ${contract.deliverables.map((item) => item.path).join(", ") || "none"}`,
+      ...(contract.template === "empirical" && contract.deliverables.some((item) => item.required)
+        ? [
+            "Result lineage: every required empirical Result must be saved with artifact provenance_id bound to its actual producing run; an unlinked Result cannot pass completion.",
+          ]
+        : []),
       `Cumulative runtime limits (all model calls and delegated child sessions; separate from the model context window): ${contract.budget.limits.modelCalls} model calls; ${contract.budget.limits.toolCalls} tool calls; ${contract.budget.limits.tokens} tokens; ${Math.round(contract.budget.limits.wallClockMs / 60_000)} minutes; $${contract.budget.limits.costUsd.toFixed(2)}`,
       "Stages:",
       stages,

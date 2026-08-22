@@ -102,7 +102,7 @@ async function traceSavedArtifact(saved: ArtifactStore.Artifact, run?: Run) {
 
 export const ArtifactTool = Tool.define("artifact", {
   description:
-    "Save an important workspace file as a durable Result with a stable identity, immutable versions, and optional execution provenance. Keep drafts and large mutable working data in the workspace instead.",
+    "Save an important workspace file as a durable Result with a stable identity, immutable versions, and optional execution provenance. Empirical contract Results need provenance_id to pass completion. Keep drafts and large mutable working data in the workspace instead.",
   parameters: z.object({
     action: z.literal("save_file").describe("Save a workspace file as a durable Result"),
     path: z.string().trim().min(1).max(10_000).describe("Workspace file path"),
@@ -111,7 +111,7 @@ export const ArtifactTool = Tool.define("artifact", {
       .string()
       .optional()
       .describe(
-        "Optional producing run provenance ID from this project and session, including a manually recorded run",
+        "Producing run provenance ID from this project and session. Required for empirical contract Results to pass completion; may reference a manually recorded run.",
       ),
   }),
   async execute(params, ctx) {
@@ -217,6 +217,7 @@ export const ArtifactTool = Tool.define("artifact", {
             mimeType: saved.current.mimeType,
             size: saved.current.size,
             sha256: saved.current.sha256,
+            ...(entry ? { provenanceID: entry.id } : {}),
             ...(preview ? { preview } : {}),
           },
         },

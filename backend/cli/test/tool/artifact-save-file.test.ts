@@ -136,6 +136,7 @@ test("artifact save_file binds the immutable result to its exact producing execu
         context(session.id),
       )
       const saved = response.metadata.savedArtifact as { id: string; versionID: string }
+      expect(response.metadata.savedArtifact).toMatchObject({ provenanceID: run.id })
       const detail = await ArtifactStore.get(Instance.project.id, saved.id)
       expect(detail?.execution).toMatchObject({
         command: "python",
