@@ -27,7 +27,12 @@ const cache = new Map<string, Entry>()
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
     if (!(node instanceof HTMLAnchorElement)) return
-    if (node.target !== "_blank") return
+    const target = node.getAttribute("target")
+    if (!target) return
+    if (target !== "_blank") {
+      node.removeAttribute("target")
+      return
+    }
 
     const rel = node.getAttribute("rel") ?? ""
     const set = new Set(rel.split(/\s+/).filter(Boolean))
@@ -43,7 +48,7 @@ const config = {
   FORBID_TAGS: ["style"],
   FORBID_CONTENTS: ["style", "script"],
   ADD_TAGS: ["semantics", "annotation", "annotation-xml"],
-  ADD_ATTR: ["encoding"],
+  ADD_ATTR: ["encoding", "target"],
 }
 
 const iconPaths = {

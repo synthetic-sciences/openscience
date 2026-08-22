@@ -117,4 +117,18 @@ describe("local Markdown file links", () => {
     expect(Array.from(links).every((link) => link.classList.contains("external-link"))).toBe(true)
     expect(Array.from(links).every((link) => !link.hasAttribute("data-file-link"))).toBe(true)
   })
+
+  test("keeps only safe new-tab targets and hardens their opener relationship", () => {
+    const safe = sanitize(`
+      <a href="https://example.com" target="_blank">Safe</a>
+      <a href="https://example.com/profile" target="named-window">Named</a>
+    `)
+    const root = document.createElement("div")
+    root.innerHTML = safe
+    const links = root.querySelectorAll("a")
+
+    expect(links[0].getAttribute("target")).toBe("_blank")
+    expect(new Set((links[0].getAttribute("rel") ?? "").split(/\s+/))).toEqual(new Set(["noopener", "noreferrer"]))
+    expect(links[1].hasAttribute("target")).toBe(false)
+  })
 })
