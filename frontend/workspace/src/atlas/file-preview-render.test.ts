@@ -10,10 +10,11 @@ describe("file preview markdown images", () => {
     expect(preview).toContain('import { assetUrl, localAssetPath } from "@/utils/markdown-assets"')
     expect(preview).toContain("base: props.path")
     expect(preview).toContain("url: (path) =>")
-    expect(preview).toContain('sdk.request.url("/file/raw", {')
-    expect(preview).toContain("path: resolveArtifactPath(directory(), path)")
-    expect(preview).toContain("sessionID: sessionID()")
-    expect(preview).toContain("text={view.draft} resolveImage={image} resolveFile={file}")
+    expect(preview).toContain("rawFileQuery({ directory: dir, path, sessionID: session, inline: true })")
+    expect(preview).toContain("const sessionID = () =>")
+    expect(preview).toContain("resolveImage={image}")
+    expect(preview).toContain("resolveFile={file}")
+    expect(preview).toContain("onOpenFile={openFile}")
   })
 
   test("markdown previews resolve file links relative to the document before opening the authenticated viewer", async () => {
@@ -24,7 +25,7 @@ describe("file preview markdown images", () => {
     expect(preview).toContain("const file = (href: string) => localAssetPath(href, props.path)")
     expect(preview).toContain("resolveFile={file}")
     expect(manuscript).toContain("const file = (href: string) => localAssetPath(href, props.path)")
-    expect(manuscript).toContain("text={preview()} resolveFile={file}")
+    expect(manuscript).toContain("text={preview()} resolveFile={file} onOpenFile={openFile}")
   })
 
   test("ordinary Markdown remains readable and editable through the existing save path", async () => {
@@ -45,8 +46,8 @@ describe("file preview markdown images", () => {
 
     expect(preview).toContain('import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"')
     expect(preview).toContain("data-align={lead().alignment}")
-    expect(preview).toContain("text={lead().text} resolveImage={image}")
-    expect(preview).toContain("text={rest()} resolveImage={image}")
+    expect(preview).toContain("text={lead().text}")
+    expect(preview).toContain("text={rest()}")
     expect(css).toContain('.atlas-file-document-lead[data-align="center"]')
     expect(css).toContain("p:has(a > img)")
   })
@@ -55,7 +56,8 @@ describe("file preview markdown images", () => {
     const layout = await read("../pages/directory-layout.tsx")
 
     expect(layout).toContain('import { MarkdownImages } from "@synsci/ui/markdown"')
-    expect(layout).toContain('sdk.request.url("/file/raw"')
+    expect(layout).toContain("rawFileQuery({")
+    expect(layout).toContain("directory: directory()")
     expect(layout).toContain("<MarkdownImages resolve={image} resolveFile={file} openFile={openFile}>")
   })
 
@@ -75,7 +77,12 @@ describe("file preview sandboxed html", () => {
 
     expect(preview).toContain('if (x === "html" || x === "htm") return "html"')
     expect(preview).toContain('sandbox=""')
-    expect(preview).toContain("srcdoc={view.draft}")
+    expect(preview).toContain("rewriteHtmlAssets")
+    expect(preview).toContain('from "@/utils/html-assets"')
+    expect(preview).toContain("srcdoc={html()}")
+    expect(preview).toContain("loadHtmlStylesheets(")
+    expect(preview).toContain("HTML_STYLESHEET_BYTES")
+    expect(preview).toContain("resolveStylesheet:")
     expect(preview).toContain('<Match when={kind() === "html" && !view.source}>')
     // sandbox must stay fully locked down — never allow scripts or same-origin
     expect(preview).not.toContain("allow-scripts")
@@ -96,5 +103,14 @@ describe("file preview sandboxed html", () => {
       copy: true,
       download: true,
     })
+  })
+
+  test("stale full-PDF and stylesheet reads are actively cancelled when the file changes", async () => {
+    const preview = await read("./FilePreview.tsx")
+
+    expect(preview).toContain("pdfAbort.current?.abort()")
+    expect(preview).toContain("htmlAbort.current?.abort()")
+    expect(preview).toContain("{ signal: controller.signal }")
+    expect(preview).toContain("controller.signal.aborted")
   })
 })

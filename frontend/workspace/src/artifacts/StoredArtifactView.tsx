@@ -25,6 +25,7 @@ import {
   loadStoredArtifactPreview,
   requestStoredArtifact,
   STORED_ARTIFACT_PREVIEW_LIMIT,
+  STORED_PDF_PREVIEW_LIMIT,
   storedArtifactPreviewKind,
   type StoredArtifactPreview,
 } from "@/artifacts/bytes"
@@ -88,15 +89,30 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
     window.addEventListener("openscience:artifacts-changed", refresh)
     onCleanup(() => window.removeEventListener("openscience:artifacts-changed", refresh))
   })
-  const selected = createMemo(() => detail.latest?.current)
+  const selected = createMemo(() => {
+    const current = detail.latest
+    if (!current || current.id !== props.artifact.id) return
+    return current.current
+  })
+  const previewAbort = { current: undefined as AbortController | undefined }
+  createEffect(() => {
+    props.artifact.id
+    previewAbort.current?.abort()
+  })
   const [preview] = createResource(
     () => {
       const version = selected()
       if (!version) return
       return [props.artifact.id, version] as const
     },
-    ([artifactID, version]) => loadStoredArtifactPreview(sdk.request, artifactID, version),
+    ([artifactID, version]) => {
+      previewAbort.current?.abort()
+      const controller = new AbortController()
+      previewAbort.current = controller
+      return loadStoredArtifactPreview(sdk.request, artifactID, version, controller.signal)
+    },
   )
+  onCleanup(() => previewAbort.current?.abort())
   const download = async (version: StoredArtifactVersion) => {
     if (downloading()) return
     setDownloading(true)
@@ -316,6 +332,7 @@ function Preview(props: {
   error?: unknown
 }): JSX.Element {
   const kind = () => storedArtifactPreviewKind(props.version)
+  const limit = () => (kind() === "pdf" ? STORED_PDF_PREVIEW_LIMIT : STORED_ARTIFACT_PREVIEW_LIMIT)
   const error = () =>
     props.error instanceof Error ? props.error.message : String(props.error || "Preview unavailable.")
   return (
@@ -332,8 +349,10 @@ function Preview(props: {
           <p style={copy()}>The immutable bytes are stored safely and can be downloaded without conversion.</p>
         </section>
       </Match>
-      <Match when={props.version.size > STORED_ARTIFACT_PREVIEW_LIMIT}>
-        <p style={empty()}>This Result is larger than the 8 MB preview limit. Download preserves exact bytes.</p>
+      <Match when={props.version.size > limit()}>
+        <p style={empty()}>
+          This Result is larger than the {size(limit())} browser preview limit. Download preserves exact bytes.
+        </p>
       </Match>
       <Match when={props.error !== undefined}>
         <p role="alert" style={empty()}>

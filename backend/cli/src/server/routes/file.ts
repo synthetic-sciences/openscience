@@ -48,6 +48,34 @@ const Lineage = z.object({
 const unwrap = <T>(value?: { status: "available"; value: T } | { status: "unavailable"; reason: string }) =>
   value?.status === "available" ? value.value : undefined
 
+const authorized = <T>(promise: Promise<T>) =>
+  promise.catch((error: unknown) => {
+    if (SessionFilesystem.DeniedError.isInstance(error)) {
+      throw new HTTPException(403, { message: error.message })
+    }
+    throw error
+  })
+
+const byteRange = (value: string | undefined, size: number) => {
+  if (!value) return
+  const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim())
+  if (!match || (!match[1] && !match[2]) || size === 0) return "invalid" as const
+  const suffix = match[1] ? undefined : Number(match[2])
+  const start = match[1] ? Number(match[1]) : Math.max(0, size - (suffix ?? 0))
+  const end = match[2] && match[1] ? Math.min(Number(match[2]), size - 1) : size - 1
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    (suffix !== undefined && (!Number.isSafeInteger(suffix) || suffix <= 0)) ||
+    start < 0 ||
+    start >= size ||
+    end < start
+  ) {
+    return "invalid" as const
+  }
+  return { start, end }
+}
+
 export const FileRoutes = lazy(() =>
   new Hono()
     .get(
@@ -200,6 +228,9 @@ export const FileRoutes = lazy(() =>
               },
             },
           },
+          404: {
+            description: "File not found",
+          },
         },
       }),
       validator(
@@ -294,11 +325,19 @@ export const FileRoutes = lazy(() =>
         if (authorized.path === Instance.directory || authorized.path === authorized.grant.path) {
           throw new HTTPException(409, { message: "The workspace root cannot be moved to trash" })
         }
+        const authorization = await SessionFilesystem.bindAuthorization({
+          sessionID: body.sessionID,
+          access: "write",
+          authorized,
+        })
         const record = await FileTrash.trash({
           projectID: Instance.project.id,
           sessionID: body.sessionID,
           path: authorized.path,
+          requestedPath: body.path,
           root: authorized.grant.path,
+          authorization,
+          authorizationOwnership: "owned",
         })
         return c.json(record)
       },
@@ -421,6 +460,18 @@ export const FileRoutes = lazy(() =>
           200: {
             description: "Raw file contents",
           },
+          206: {
+            description: "Requested byte range",
+          },
+          404: {
+            description: "File not found",
+          },
+          413: {
+            description: "File exceeds the caller's byte limit",
+          },
+          416: {
+            description: "Requested byte range is not satisfiable",
+          },
         },
       }),
       validator(
@@ -428,16 +479,44 @@ export const FileRoutes = lazy(() =>
         z.object({
           path: z.string(),
           sessionID: Identifier.schema("session").optional(),
+          maxBytes: z.coerce
+            .number()
+            .int()
+            .positive()
+            .max(1024 * 1024 * 1024)
+            .optional(),
+          inline: z.enum(["true", "false"]).optional(),
         }),
       ),
       async (c) => {
         const query = c.req.valid("query")
-        const content = await File.raw(query.path, { sessionID: query.sessionID })
-        return new Response(content, {
+        const source = await File.rawSource(query.path, { sessionID: query.sessionID, maxBytes: query.maxBytes })
+        const range = byteRange(c.req.header("Range"), source.size)
+        if (range === "invalid") {
+          await source.close()
+          return new Response(null, {
+            status: 416,
+            headers: {
+              "Content-Range": `bytes */${source.size}`,
+              "Accept-Ranges": "bytes",
+              "Cache-Control": "no-store, max-age=0",
+            },
+          })
+        }
+        const length = range ? range.end - range.start + 1 : source.size
+        return new Response(source.stream(range), {
+          status: range ? 206 : 200,
           headers: {
-            "Content-Type": content.type || "application/octet-stream",
-            "Content-Length": String(content.size),
-            "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(query.path.split("/").pop() || "download")}`,
+            "Content-Type": source.mimeType,
+            "Content-Length": String(length),
+            "Content-Disposition": `${query.inline === "true" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(path.basename(query.path) || "download")}`,
+            "Cache-Control": "no-store, max-age=0",
+            "Accept-Ranges": "bytes",
+            "X-Content-Type-Options": "nosniff",
+            ...(query.inline === "true"
+              ? { "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:" }
+              : {}),
+            ...(range ? { "Content-Range": `bytes ${range.start}-${range.end}/${source.size}` } : {}),
           },
         })
       },
@@ -495,23 +574,18 @@ export const FileRoutes = lazy(() =>
       ),
       async (c) => {
         const body = c.req.valid("json")
-        // Same containment as every other file route: File.raw resolves the
-        // path through the session filesystem grants / project boundary.
-        const file = await File.raw(body.path, { sessionID: body.sessionID }).then(
+        // Resolve and size-check before any bytes are buffered. The immutable
+        // store consumes the stable no-follow source as a bounded stream.
+        const file = await File.rawSource(body.path, {
+          sessionID: body.sessionID,
+          maxBytes: ArtifactStore.MAX_VERSION_BYTES,
+        }).then(
           (value) => ({ value }),
           (error: unknown) => ({ error }),
         )
         if ("error" in file) {
           if (file.error instanceof HTTPException) throw file.error
           return c.json({ error: file.error instanceof Error ? file.error.message : String(file.error) }, 403)
-        }
-        if (file.value.size > ArtifactStore.MAX_VERSION_BYTES) {
-          return c.json(
-            {
-              error: `File is ${file.value.size} bytes; the artifact version limit is ${ArtifactStore.MAX_VERSION_BYTES} bytes`,
-            },
-            413,
-          )
         }
         const name = path.basename(body.path)
         const classified = ArtifactFile.classify(name)
@@ -523,18 +597,20 @@ export const FileRoutes = lazy(() =>
           kind: classified?.kind ?? "file",
           content: file.value,
           title: body.summary ?? name,
-          mimeType: file.value.type,
+          mimeType: file.value.mimeType,
           messageID: body.messageID,
           captureQuality: "declared",
-        }).catch((error) => {
-          if (error instanceof ArtifactStore.LimitError) {
-            return c.json({ error: error.message }, 413)
-          }
-          if (error instanceof ArtifactStore.CapacityError) {
-            return c.json({ error: error.message }, 507)
-          }
-          throw error
         })
+          .catch((error) => {
+            if (error instanceof ArtifactStore.LimitError) {
+              return c.json({ error: error.message }, 413)
+            }
+            if (error instanceof ArtifactStore.CapacityError) {
+              return c.json({ error: error.message }, 507)
+            }
+            throw error
+          })
+          .finally(() => file.value.close())
         if (saved instanceof Response) return saved
         return c.json(saved)
       },
@@ -674,6 +750,11 @@ export const FileRoutes = lazy(() =>
             "Content-Length": String(result.info.size),
             "Content-Disposition": `${query.download === "true" ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(result.info.filename)}`,
             ETag: `"sha256:${result.info.sha256}"`,
+            "Cache-Control": "private, no-store, max-age=0",
+            "X-Content-Type-Options": "nosniff",
+            ...(query.download === "true"
+              ? {}
+              : { "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:" }),
           },
         })
       },
@@ -956,10 +1037,15 @@ export const FileRoutes = lazy(() =>
             description: "Created publication artifact",
             content: { "application/json": { schema: resolver(PublicationFile.Result) } },
           },
+          403: { description: "The session cannot read the manuscript or write the export" },
         },
       }),
+      validator("query", z.object({ sessionID: Identifier.schema("session").optional() })),
       validator("json", PublicationFile.Input),
-      async (c) => c.json(await File.publication(c.req.valid("json"))),
+      async (c) => {
+        const query = c.req.valid("query")
+        return c.json(await authorized(File.publication(c.req.valid("json"), { sessionID: query.sessionID })))
+      },
     )
     .get(
       "/file/reviews",
@@ -974,11 +1060,19 @@ export const FileRoutes = lazy(() =>
             content: { "application/json": { schema: resolver(PublicationReview.State) } },
           },
           404: { description: "No publication preflight exists for this manuscript" },
+          403: { description: "The session cannot read this manuscript" },
         },
       }),
-      validator("query", z.object({ path: z.string().trim().min(1).max(10_000) })),
+      validator(
+        "query",
+        z.object({
+          path: z.string().trim().min(1).max(10_000),
+          sessionID: Identifier.schema("session").optional(),
+        }),
+      ),
       async (c) => {
-        const report = await File.reviewCurrent(c.req.valid("query").path)
+        const query = c.req.valid("query")
+        const report = await authorized(File.reviewCurrent(query.path, { sessionID: query.sessionID }))
         if (!report) return c.json({ error: "No publication preflight exists for this manuscript" }, 404)
         return c.json(report)
       },
@@ -994,10 +1088,20 @@ export const FileRoutes = lazy(() =>
             description: "Publication preflight history",
             content: { "application/json": { schema: resolver(PublicationReview.Report.array()) } },
           },
+          403: { description: "The session cannot read this manuscript" },
         },
       }),
-      validator("query", z.object({ path: z.string().trim().min(1).max(10_000) })),
-      async (c) => c.json(await File.reviewHistory(c.req.valid("query").path)),
+      validator(
+        "query",
+        z.object({
+          path: z.string().trim().min(1).max(10_000),
+          sessionID: Identifier.schema("session").optional(),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+        return c.json(await authorized(File.reviewHistory(query.path, { sessionID: query.sessionID })))
+      },
     )
     .post(
       "/file/reviews",
@@ -1011,10 +1115,15 @@ export const FileRoutes = lazy(() =>
             description: "Generated publication preflight",
             content: { "application/json": { schema: resolver(PublicationReview.Report) } },
           },
+          403: { description: "The session cannot read this manuscript" },
         },
       }),
+      validator("query", z.object({ sessionID: Identifier.schema("session").optional() })),
       validator("json", PublicationReview.RunInput),
-      async (c) => c.json(await File.review(c.req.valid("json"))),
+      async (c) => {
+        const query = c.req.valid("query")
+        return c.json(await authorized(File.review(c.req.valid("json"), { sessionID: query.sessionID })))
+      },
     )
     .patch(
       "/file/reviews/:id/findings/:finding",
@@ -1027,6 +1136,7 @@ export const FileRoutes = lazy(() =>
             description: "Updated publication preflight",
             content: { "application/json": { schema: resolver(PublicationReview.Report) } },
           },
+          403: { description: "The session cannot read the reviewed manuscript" },
           409: { description: "Finding cannot be updated" },
         },
       }),
@@ -1037,14 +1147,24 @@ export const FileRoutes = lazy(() =>
           finding: z.string().startsWith("finding_"),
         }),
       ),
+      validator("query", z.object({ sessionID: Identifier.schema("session").optional() })),
       validator("json", PublicationReview.ResolveInput),
       async (c) => {
         const params = c.req.valid("param")
-        const result = await File.reviewResolve(params.id, params.finding, c.req.valid("json")).then(
+        const query = c.req.valid("query")
+        const result = await File.reviewResolve(params.id, params.finding, c.req.valid("json"), {
+          sessionID: query.sessionID,
+        }).then(
           (value) => ({ value }),
-          (error) => ({ error: error instanceof Error ? error.message : String(error) }),
+          (error) => ({ error }),
         )
-        if ("error" in result) return c.json({ error: result.error }, 409)
+        if ("error" in result && SessionFilesystem.DeniedError.isInstance(result.error)) {
+          return c.json({ error: result.error.message }, 403)
+        }
+        if ("error" in result && result.error instanceof HTTPException) return result.error.getResponse()
+        if ("error" in result) {
+          return c.json({ error: result.error instanceof Error ? result.error.message : String(result.error) }, 409)
+        }
         return c.json(result.value)
       },
     )
@@ -1060,17 +1180,28 @@ export const FileRoutes = lazy(() =>
             description: "Finalized publication preflight",
             content: { "application/json": { schema: resolver(PublicationReview.Report) } },
           },
+          403: { description: "The session cannot read the reviewed manuscript" },
           409: { description: "Review is blocked, stale, or already invalid" },
         },
       }),
       validator("param", z.object({ id: z.string().startsWith("review_") })),
+      validator("query", z.object({ sessionID: Identifier.schema("session").optional() })),
       validator("json", PublicationReview.FinalizeInput),
       async (c) => {
-        const result = await File.reviewFinalize(c.req.valid("param").id, c.req.valid("json")).then(
+        const query = c.req.valid("query")
+        const result = await File.reviewFinalize(c.req.valid("param").id, c.req.valid("json"), {
+          sessionID: query.sessionID,
+        }).then(
           (value) => ({ value }),
-          (error) => ({ error: error instanceof Error ? error.message : String(error) }),
+          (error) => ({ error }),
         )
-        if ("error" in result) return c.json({ error: result.error }, 409)
+        if ("error" in result && SessionFilesystem.DeniedError.isInstance(result.error)) {
+          return c.json({ error: result.error.message }, 403)
+        }
+        if ("error" in result && result.error instanceof HTTPException) return result.error.getResponse()
+        if ("error" in result) {
+          return c.json({ error: result.error instanceof Error ? result.error.message : String(result.error) }, 409)
+        }
         return c.json(result.value)
       },
     )

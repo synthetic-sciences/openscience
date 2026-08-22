@@ -11,12 +11,13 @@ test("keeps text preview loading state reactive", () => {
 test("refreshes an open artifact record after a new immutable version is saved", () => {
   expect(source).toContain('window.addEventListener("openscience:artifacts-changed", refresh)')
   expect(source).toContain("void detailActions.refetch()")
-  expect(source).toContain("const selected = createMemo(() => detail.latest?.current)")
+  expect(source).toContain("const selected = createMemo(() =>")
+  expect(source).toContain("current.id !== props.artifact.id")
 })
 
 test("keeps the saved artifact surface focused on preview while provenance UI is deferred", () => {
   expect(source).toContain("<Preview")
-  expect(source).toContain("loadStoredArtifactPreview(sdk.request, artifactID, version)")
+  expect(source).toContain("loadStoredArtifactPreview(sdk.request, artifactID, version, controller.signal)")
   expect(source).toContain("requestStoredArtifact(sdk.request, props.artifact.id, version.id, true)")
   expect(source).not.toContain("Versions")
   expect(source).not.toContain("How made")
@@ -34,6 +35,8 @@ test("renders saved PDFs with the same first-party viewer used by project files"
   expect(source).toContain('<PdfViewer kind="pdf" data={{ bytes: data().data, maxPages: 40 }} />')
   expect(source).not.toContain("<iframe")
   expect(source).toContain('return "PDF"')
+  expect(source).toContain("STORED_PDF_PREVIEW_LIMIT")
+  expect(source).toContain("previewAbort.current?.abort()")
 })
 
 test("never hands protected artifact URLs to browser-native readers", () => {

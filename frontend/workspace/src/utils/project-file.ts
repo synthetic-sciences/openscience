@@ -39,9 +39,16 @@ export function projectFileQuery(input: { directory: string; path?: string; sess
 }
 
 /** Build a raw-file query whose path remains project-relative in meaning even when a session grant is present. */
-export function rawFileQuery(input: { directory: string; path: string; sessionID?: string; maxBytes?: number }) {
+export function rawFileQuery(input: {
+  directory: string
+  path: string
+  sessionID?: string
+  maxBytes?: number
+  inline?: boolean
+}) {
   return {
     ...projectFileQuery(input),
     ...(input.maxBytes !== undefined ? { maxBytes: input.maxBytes } : {}),
+    ...(input.inline !== undefined ? { inline: input.inline ? "true" : "false" } : {}),
   }
 }

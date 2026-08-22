@@ -24,10 +24,12 @@ describe("project file requests", () => {
         directory: "/work/CERBench",
         path: "figures/results.png",
         sessionID: "ses_research",
+        inline: true,
       }),
     ).toEqual({
       path: "/work/CERBench/figures/results.png",
       sessionID: "ses_research",
+      inline: "true",
     })
   })
 
@@ -38,11 +40,13 @@ describe("project file requests", () => {
         path: "/external/paper.pdf",
         sessionID: "ses_research",
         maxBytes: 64 * 1024 * 1024,
+        inline: false,
       }),
     ).toEqual({
       path: "/external/paper.pdf",
       sessionID: "ses_research",
       maxBytes: 64 * 1024 * 1024,
+      inline: "false",
     })
   })
 

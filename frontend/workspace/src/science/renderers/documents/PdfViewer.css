@@ -138,9 +138,11 @@
 
 .pdf-viewer-pages {
   display: grid;
+  width: max-content;
   min-width: min-content;
   justify-content: center;
   gap: 14px;
+  margin-inline: auto;
 }
 
 .pdf-viewer-page {

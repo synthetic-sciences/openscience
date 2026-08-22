@@ -281,6 +281,7 @@ export default function Layout(props: ParentProps) {
                           directory: directory(),
                           path,
                           sessionID: params.id && params.id !== "new" ? params.id : undefined,
+                          inline: true,
                         }),
                       ),
                   })

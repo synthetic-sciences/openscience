@@ -4,6 +4,7 @@ import {
   loadStoredArtifactPreview,
   requestStoredArtifact,
   STORED_ARTIFACT_PREVIEW_LIMIT,
+  STORED_PDF_PREVIEW_LIMIT,
   type ArtifactTransport,
 } from "./bytes"
 
@@ -72,6 +73,48 @@ describe("stored artifact bytes", () => {
 
     expect(preview).toBeUndefined()
     expect(calls).toBe(0)
+
+    const pdf = await loadStoredArtifactPreview(
+      request,
+      "art_1",
+      version({ filename: "huge.pdf", mimeType: "application/pdf", size: STORED_PDF_PREVIEW_LIMIT + 1 }),
+    )
+    expect(pdf).toBeUndefined()
+    expect(calls).toBe(0)
+  })
+
+  test("allows submission-sized PDFs up to the dedicated 64 MB preview cap", async () => {
+    const request: ArtifactTransport = async () => new Response(Uint8Array.from([37, 80, 68, 70]))
+    const preview = await loadStoredArtifactPreview(
+      request,
+      "art_1",
+      version({
+        filename: "paper.pdf",
+        mimeType: "application/pdf",
+        size: STORED_ARTIFACT_PREVIEW_LIMIT + 1,
+      }),
+    )
+
+    expect(preview?.kind).toBe("pdf")
+  })
+
+  test("rejects a transport body that exceeds the metadata-backed browser cap", async () => {
+    const request: ArtifactTransport = async () =>
+      new Response("small", { headers: { "Content-Length": String(STORED_ARTIFACT_PREVIEW_LIMIT + 1) } })
+
+    await expect(loadStoredArtifactPreview(request, "art_1", version({ size: 5 }))).rejects.toThrow("browser limit")
+  })
+
+  test("threads cancellation through the authenticated artifact transport", async () => {
+    const controller = new AbortController()
+    const signals: Array<AbortSignal | null | undefined> = []
+    const request: ArtifactTransport = async (path, init) => {
+      signals.push(init?.signal)
+      return new Response("hello")
+    }
+
+    await loadStoredArtifactPreview(request, "art_1", version(), controller.signal)
+    expect(signals).toEqual([controller.signal])
   })
 
   test("surfaces response errors and requests downloads explicitly", async () => {

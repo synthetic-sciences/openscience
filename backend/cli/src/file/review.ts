@@ -221,7 +221,12 @@ export namespace PublicationReview {
     return Report.parse(await Storage.read<unknown>(key(id)))
   }
 
-  export async function resolve(id: string, findingID: string, input: ResolveInput, authority?: Authority): Promise<Report> {
+  export async function resolve(
+    id: string,
+    findingID: string,
+    input: ResolveInput,
+    authority?: Authority,
+  ): Promise<Report> {
     await migrate()
     const parsed = ResolveInput.parse(input)
     const update = async () => {
@@ -229,7 +234,8 @@ export namespace PublicationReview {
         const report = await get(id)
         const requested = path.isAbsolute(report.path) ? report.path : path.resolve(Instance.worktree, report.path)
         const source = await target(requested, authority)
-        if (source.relative !== report.path) throw new Error("The publication preflight belongs to a different manuscript")
+        if (source.relative !== report.path)
+          throw new Error("The publication preflight belongs to a different manuscript")
       }
       return Report.parse(
         await Storage.update<Report>(key(id), (report) => {
@@ -401,9 +407,7 @@ export namespace PublicationReview {
         const traced =
           /(?<![A-Za-z0-9._%+])@[A-Za-z][A-Za-z0-9_.:+/-]*/.test(line.text) ||
           /\b(?:figure|fig\.?|table|supplement(?:ary)?)\s*[A-Za-z0-9]/i.test(line.text) ||
-          /\[[^\]]+\]\([^)]*\.(?:csv|tsv|json|jsonl|parquet|arrow|xlsx?|ipynb)(?:[?#][^)]*)?\)/i.test(
-            line.text,
-          )
+          /\[[^\]]+\]\([^)]*\.(?:csv|tsv|json|jsonl|parquet|arrow|xlsx?|ipynb)(?:[?#][^)]*)?\)/i.test(line.text)
         if (traced) return []
         return [
           finding({

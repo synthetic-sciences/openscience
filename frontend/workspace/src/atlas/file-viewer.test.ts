@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import {
   artifactControl,
   describeFile,
+  PDF_PREVIEW_LIMIT,
+  pdfPreviewMode,
   readFile,
   reconcileSavedDraft,
   sourceViews,
@@ -143,5 +145,18 @@ describe("file viewer reads", () => {
     expect(result.data).toBeUndefined()
     expect(result.error).toBeInstanceOf(Error)
     expect(result.error?.message).toBe("file access denied")
+  })
+})
+
+describe("PDF preview limits", () => {
+  test("uses embedded JSON bytes for small PDFs and bounded raw bytes for larger previews", () => {
+    expect(pdfPreviewMode({ truncated: false, size: 4 * 1024 * 1024 })).toBe("inline")
+    expect(pdfPreviewMode({ truncated: true, size: 16 * 1024 * 1024 + 1 })).toBe("raw")
+    expect(pdfPreviewMode({ truncated: true, size: PDF_PREVIEW_LIMIT })).toBe("raw")
+  })
+
+  test("falls back to an explicit download when the PDF cannot be safely buffered", () => {
+    expect(pdfPreviewMode({ truncated: true })).toBe("download")
+    expect(pdfPreviewMode({ truncated: true, size: PDF_PREVIEW_LIMIT + 1 })).toBe("download")
   })
 })

@@ -410,7 +410,8 @@ export namespace File {
       for (const filepath of untrackedFiles) {
         try {
           const snapshot = await SafeFileIO.read(path.join(Instance.directory, filepath), { prefixBytes: preview })
-          const lines = snapshot.size > snapshot.bytes.byteLength ? 0 : snapshot.bytes.toString("utf8").split("\n").length
+          const lines =
+            snapshot.size > snapshot.bytes.byteLength ? 0 : snapshot.bytes.toString("utf8").split("\n").length
           changedFiles.push({
             path: filepath,
             added: lines,

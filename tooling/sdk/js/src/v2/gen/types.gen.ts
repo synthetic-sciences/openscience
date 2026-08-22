@@ -193,6 +193,30 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
+  internal?:
+    | {
+        type: "prompt"
+        epoch: string
+      }
+    | {
+        type: "continuation"
+        kind: "output" | "contract" | "review" | "review-summary" | "compaction" | "task"
+        text: string
+        epoch: string
+        transaction: string
+      }
+    | {
+        type: "compaction"
+        auto: boolean
+        epoch: string
+        transaction: string
+        focus?: string
+        handoffFile?: string
+        trigger?: "proactive" | "overflow" | "manual"
+        before?: number
+        headTokens?: number
+        continuationID?: string
+      }
   effort?: ResearchEffort
   delegation?: boolean
   variant?: string
@@ -260,6 +284,9 @@ export type AssistantMessage = {
   parentID: string
   modelID: string
   providerID: string
+  internal?: {
+    step: number
+  }
   reasoningEffort?: string
   mode: string
   agent: string
@@ -411,6 +438,7 @@ export type ToolStateRunning = {
   input: {
     [key: string]: unknown
   }
+  raw?: string
   title?: string
   metadata?: {
     [key: string]: unknown
@@ -425,6 +453,7 @@ export type ToolStateCompleted = {
   input: {
     [key: string]: unknown
   }
+  raw?: string
   output: string
   title: string
   metadata: {
@@ -443,6 +472,7 @@ export type ToolStateError = {
   input: {
     [key: string]: unknown
   }
+  raw?: string
   error: string
   metadata?: {
     [key: string]: unknown
@@ -910,6 +940,7 @@ export type Pty = {
       | "project_formatter"
       | "project_lsp"
       | "provider_token_command"
+      | "publication_export"
     mode: "read_only" | "sandboxed" | "host"
     projectID: string
     sessionID: string
@@ -2168,15 +2199,6 @@ export type TextPartInput = {
   id?: string
   type: "text"
   text: string
-  synthetic?: boolean
-  ignored?: boolean
-  time?: {
-    start: number
-    end?: number
-  }
-  metadata?: {
-    [key: string]: unknown
-  }
 }
 
 export type FilePartInput = {
@@ -4431,6 +4453,7 @@ export type SettingsComputeJobsListResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -5181,6 +5204,7 @@ export type SettingsComputeJobsStartResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -6130,6 +6154,7 @@ export type SettingsComputeJobsRetryResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -6851,6 +6876,7 @@ export type SettingsComputeJobsReleaseResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -7568,6 +7594,7 @@ export type SettingsComputeJobsCancelResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -8357,6 +8384,7 @@ export type ProjectExecutionData = {
       | "project_formatter"
       | "project_lsp"
       | "provider_token_command"
+      | "publication_export"
   }
   url: "/project/{projectID}/execution"
 }
@@ -8390,6 +8418,7 @@ export type ProjectExecutionResponses = {
       | "project_formatter"
       | "project_lsp"
       | "provider_token_command"
+      | "publication_export"
     mode: "read_only" | "sandboxed" | "host"
     projectID: string
     sessionID: string
@@ -9575,6 +9604,9 @@ export type SessionTraceResponses = {
             wallClockMs?: number
             costUsd?: number
           }
+          limitOrigins?: {
+            tokens: "default" | "explicit" | "unknown"
+          }
           runtimeFinalizationCalls?: number
           runtimeModelCalls?: number
           runtimeFinalizing?: boolean
@@ -10351,6 +10383,8 @@ export type SessionCommandData = {
     model?: string
     arguments: string
     command: string
+    effort?: ResearchEffort
+    delegation?: boolean
     variant?: string
     tier?: string
     parts?: Array<{
@@ -11080,6 +11114,13 @@ export type FileReadData = {
   url: "/file/content"
 }
 
+export type FileReadErrors = {
+  /**
+   * File not found
+   */
+  404: unknown
+}
+
 export type FileReadResponses = {
   /**
    * File content
@@ -11136,6 +11177,15 @@ export type FileTrashListResponses = {
     kind?: "file" | "directory"
     store?: "data" | "workspace"
     payloadPath?: string
+    payloadIdentity?: {
+      dev: number
+      ino: number
+      size: number
+      mode: number
+      mtimeMs: number
+      ctimeMs: number
+      kind: "file" | "directory"
+    }
     state: "trash" | "restored"
     trashedAt: number
     expiresAt: number
@@ -11180,6 +11230,15 @@ export type FileTrashCreateResponses = {
     kind?: "file" | "directory"
     store?: "data" | "workspace"
     payloadPath?: string
+    payloadIdentity?: {
+      dev: number
+      ino: number
+      size: number
+      mode: number
+      mtimeMs: number
+      ctimeMs: number
+      kind: "file" | "directory"
+    }
     state: "trash" | "restored"
     trashedAt: number
     expiresAt: number
@@ -11229,6 +11288,15 @@ export type FileTrashRestoreResponses = {
     kind?: "file" | "directory"
     store?: "data" | "workspace"
     payloadPath?: string
+    payloadIdentity?: {
+      dev: number
+      ino: number
+      size: number
+      mode: number
+      mtimeMs: number
+      ctimeMs: number
+      kind: "file" | "directory"
+    }
     state: "trash" | "restored"
     trashedAt: number
     expiresAt: number
@@ -11274,6 +11342,15 @@ export type FileTrashPurgeResponses = {
     kind?: "file" | "directory"
     store?: "data" | "workspace"
     payloadPath?: string
+    payloadIdentity?: {
+      dev: number
+      ino: number
+      size: number
+      mode: number
+      mtimeMs: number
+      ctimeMs: number
+      kind: "file" | "directory"
+    }
     state: "trash" | "restored"
     trashedAt: number
     expiresAt: number
@@ -11358,8 +11435,25 @@ export type FileRawData = {
     directory?: string
     path: string
     sessionID?: string
+    maxBytes?: number
+    inline?: "true" | "false"
   }
   url: "/file/raw"
+}
+
+export type FileRawErrors = {
+  /**
+   * File not found
+   */
+  404: unknown
+  /**
+   * File exceeds the caller's byte limit
+   */
+  413: unknown
+  /**
+   * Requested byte range is not satisfiable
+   */
+  416: unknown
 }
 
 export type FileRawResponses = {
@@ -11367,6 +11461,10 @@ export type FileRawResponses = {
    * Raw file contents
    */
   200: unknown
+  /**
+   * Requested byte range
+   */
+  206: unknown
 }
 
 export type FileArtifactsData = {
@@ -12373,8 +12471,16 @@ export type FilePublicationData = {
   path?: never
   query?: {
     directory?: string
+    sessionID?: string
   }
   url: "/file/publication"
+}
+
+export type FilePublicationErrors = {
+  /**
+   * The session cannot read the manuscript or write the export
+   */
+  403: unknown
 }
 
 export type FilePublicationResponses = {
@@ -12400,11 +12506,16 @@ export type FileReviewsCurrentData = {
   query: {
     directory?: string
     path: string
+    sessionID?: string
   }
   url: "/file/reviews"
 }
 
 export type FileReviewsCurrentErrors = {
+  /**
+   * The session cannot read this manuscript
+   */
+  403: unknown
   /**
    * No publication preflight exists for this manuscript
    */
@@ -12481,8 +12592,16 @@ export type FileReviewsRunData = {
   path?: never
   query?: {
     directory?: string
+    sessionID?: string
   }
   url: "/file/reviews"
+}
+
+export type FileReviewsRunErrors = {
+  /**
+   * The session cannot read this manuscript
+   */
+  403: unknown
 }
 
 export type FileReviewsRunResponses = {
@@ -12552,8 +12671,16 @@ export type FileReviewsHistoryData = {
   query: {
     directory?: string
     path: string
+    sessionID?: string
   }
   url: "/file/reviews/history"
+}
+
+export type FileReviewsHistoryErrors = {
+  /**
+   * The session cannot read this manuscript
+   */
+  403: unknown
 }
 
 export type FileReviewsHistoryResponses = {
@@ -12629,11 +12756,16 @@ export type FileReviewsResolveData = {
   }
   query?: {
     directory?: string
+    sessionID?: string
   }
   url: "/file/reviews/{id}/findings/{finding}"
 }
 
 export type FileReviewsResolveErrors = {
+  /**
+   * The session cannot read the reviewed manuscript
+   */
+  403: unknown
   /**
    * Finding cannot be updated
    */
@@ -12710,11 +12842,16 @@ export type FileReviewsFinalizeData = {
   }
   query?: {
     directory?: string
+    sessionID?: string
   }
   url: "/file/reviews/{id}/finalize"
 }
 
 export type FileReviewsFinalizeErrors = {
+  /**
+   * The session cannot read the reviewed manuscript
+   */
+  403: unknown
   /**
    * Review is blocked, stale, or already invalid
    */
@@ -12954,6 +13091,7 @@ export type KernelsListResponses = {
           | "project_formatter"
           | "project_lsp"
           | "provider_token_command"
+          | "publication_export"
         mode: "read_only" | "sandboxed" | "host"
         projectID: string
         sessionID: string
@@ -13083,6 +13221,7 @@ export type KernelsRestartByIdResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -13211,6 +13350,7 @@ export type KernelsStopByIdResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -13339,6 +13479,7 @@ export type KernelsInterruptByIdResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -13511,6 +13652,7 @@ export type KernelsStatusResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -13639,6 +13781,7 @@ export type KernelsRestartResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -13767,6 +13910,7 @@ export type KernelsStopResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -13895,6 +14039,7 @@ export type KernelsInterruptResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -14101,6 +14246,7 @@ export type NotebookKernelsResponses = {
           | "project_formatter"
           | "project_lsp"
           | "provider_token_command"
+          | "publication_export"
         mode: "read_only" | "sandboxed" | "host"
         projectID: string
         sessionID: string
@@ -14230,6 +14376,7 @@ export type NotebookKernelRestartResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -14358,6 +14505,7 @@ export type NotebookKernelStopResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -14486,6 +14634,7 @@ export type NotebookKernelInterruptResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -14659,6 +14808,7 @@ export type NotebookStatusResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -14788,6 +14938,7 @@ export type NotebookRestartResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -14917,6 +15068,7 @@ export type NotebookStopResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string
@@ -15046,6 +15198,7 @@ export type NotebookInterruptResponses = {
         | "project_formatter"
         | "project_lsp"
         | "provider_token_command"
+        | "publication_export"
       mode: "read_only" | "sandboxed" | "host"
       projectID: string
       sessionID: string

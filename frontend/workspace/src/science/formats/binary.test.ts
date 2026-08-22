@@ -68,7 +68,8 @@ describe("binary scientific workbench integration", () => {
 
     expect(preview).toContain('import { BinaryScienceView } from "@/science/formats/BinaryScienceView"')
     expect(preview).toContain('return "scientific-binary"')
-    expect(preview).toContain('sdk.request("/file/raw"')
+    expect(preview).toContain('"/file/raw",')
+    expect(preview).toContain("rawFileQuery({")
     expect(view).toContain('sdk.request("/file/inspect"')
     expect(view).toContain("Dataset inventory")
     expect(view).toContain("Reference coverage")

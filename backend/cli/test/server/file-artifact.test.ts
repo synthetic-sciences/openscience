@@ -111,7 +111,16 @@ describe("/file/artifact", () => {
         expect(raw.status).toBe(200)
         expect(raw.headers.get("content-disposition")).toStartWith("inline;")
         expect(raw.headers.get("etag")).toBe(`"sha256:${saved.current.sha256}"`)
+        expect(raw.headers.get("cache-control")).toBe("private, no-store, max-age=0")
+        expect(raw.headers.get("x-content-type-options")).toBe("nosniff")
+        expect(raw.headers.get("content-security-policy")).toContain("sandbox")
         expect(await raw.text()).toBe("# Findings\n\nSignal detected.\n")
+
+        const download = await FileRoutes().request(
+          `/file/artifact-store/${saved.id}/raw?versionID=${saved.currentVersionID}&download=true`,
+        )
+        expect(download.headers.get("content-disposition")).toStartWith("attachment;")
+        expect(download.headers.has("content-security-policy")).toBe(false)
       },
     })
   })

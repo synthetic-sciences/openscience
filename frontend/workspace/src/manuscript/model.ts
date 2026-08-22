@@ -1,4 +1,5 @@
-import { resolvePath } from "@/utils/markdown-assets"
+import { localAssetPath, resolvePath } from "@/utils/markdown-assets"
+import { rewriteMarkdownImages } from "@synsci/util/markdown"
 
 export interface Manuscript {
   frontmatter: string
@@ -59,6 +60,11 @@ export function parseBibtex(source: string): Citation[] {
 }
 
 export function relativeArtifactPath(manuscript: string, artifact: string): string {
+  const manuscriptDrive = /^([A-Za-z]:)[\\/]/.exec(manuscript)?.[1]?.toLowerCase()
+  const artifactDrive = /^([A-Za-z]:)[\\/]/.exec(artifact)?.[1]?.toLowerCase()
+  if (manuscriptDrive && artifactDrive && manuscriptDrive !== artifactDrive) {
+    throw new Error("A manuscript cannot reference a figure from another drive")
+  }
   const from = cleanPath(manuscript).split("/").slice(0, -1)
   const target = cleanPath(artifact).split("/")
   const shared = from.findIndex((part, index) => part !== target[index])
@@ -73,10 +79,9 @@ export function resolveReferencePath(manuscript: string, reference: string): str
 }
 
 export function rewritePreviewImages(markdown: string, manuscript: string, asset: (path: string) => string): string {
-  return markdown.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (match, alt: string, target: string) => {
-    if (/^(?:[a-z][a-z0-9+.-]*:|#|\/)/i.test(target)) return match
-    const decoded = decodeURIComponent(target.replace(/^<|>$/g, ""))
-    return `![${alt}](${asset(resolveReferencePath(manuscript, decoded))})`
+  return rewriteMarkdownImages(markdown, (image) => {
+    const path = localAssetPath(image.target, manuscript)
+    return path ? asset(path) : undefined
   })
 }
 

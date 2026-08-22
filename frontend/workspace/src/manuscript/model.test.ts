@@ -84,6 +84,12 @@ Body`).bibliographies,
     expect(figureMarkdown("Primary endpoint", "reports/paper.md", "figures/result plot.svg")).toBe(
       "![Primary endpoint](../figures/result%20plot.svg)",
     )
+    expect(
+      figureMarkdown("Primary endpoint", "/work/project/reports/paper.md", "/work/project/figures/result plot.svg"),
+    ).toBe("![Primary endpoint](../figures/result%20plot.svg)")
+    expect(() => figureMarkdown("Cross drive", "C:\\work\\paper.md", "D:\\figures\\result.svg")).toThrow(
+      "another drive",
+    )
   })
 
   test("rewrites local preview images through the file server without touching remote assets", () => {
@@ -100,6 +106,50 @@ Body`).bibliographies,
         "![Inline](data:image/png;base64,abc)",
       ].join("\n"),
     )
+  })
+
+  test("rewrites titled, balanced, and reference-style local images but ignores code", () => {
+    const markdown = [
+      '![Titled](<../figures/result plot.svg> "Plot")',
+      "![Balanced](../figures/result_(final).png)",
+      "![Reference][result]",
+      '[result]: ../figures/reference.png "Reference"',
+      "`![Code](../figures/code.png)`",
+      "```md",
+      "![Fence](../figures/fence.png)",
+      "```",
+    ].join("\n")
+    const rewritten = rewritePreviewImages(
+      markdown,
+      "reports/paper.md",
+      (path) => `/raw?path=${encodeURIComponent(path)}`,
+    )
+    expect(rewritten).toContain("![Titled](/raw?path=figures%2Fresult%20plot.svg)")
+    expect(rewritten).toContain("![Balanced](</raw?path=figures%2Fresult_(final).png>)")
+    expect(rewritten).toContain("![Reference](/raw?path=figures%2Freference.png)")
+    expect(rewritten).toContain("`![Code](../figures/code.png)`")
+    expect(rewritten).toContain("![Fence](../figures/fence.png)")
+  })
+
+  test("preserves CRLF offsets and ignores reference definitions inside code blocks", () => {
+    const markdown = [
+      "First line",
+      "![Local][result]",
+      "```md",
+      "[result]: ../figures/fenced.png",
+      "```",
+      "[result]: ../figures/real.png",
+      "    ![Indented](../figures/indented.png)",
+    ].join("\r\n")
+    const rewritten = rewritePreviewImages(
+      markdown,
+      "reports/paper.md",
+      (path) => `/raw?path=${encodeURIComponent(path)}`,
+    )
+
+    expect(rewritten).toContain("First line\r\n![Local](/raw?path=figures%2Freal.png)\r\n```md")
+    expect(rewritten).toContain("    ![Indented](../figures/indented.png)")
+    expect(rewritten).not.toContain("/raw?path=figures%2Ffenced.png")
   })
 
   test("replaces the current editor selection and returns the next caret", () => {
