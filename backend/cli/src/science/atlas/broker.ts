@@ -201,7 +201,17 @@ async function gitFiles(root: string, limit: number, signal?: AbortSignal) {
   const git = Bun.which("git")
   if (!git) return
   const base = await command({
-    args: [git, "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${os.devNull}`, "-C", root, "rev-parse", "--show-toplevel"],
+    args: [
+      git,
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      `core.hooksPath=${os.devNull}`,
+      "-C",
+      root,
+      "rev-parse",
+      "--show-toplevel",
+    ],
     maxBytes: 64 * 1024,
     signal,
   }).catch(() => undefined)

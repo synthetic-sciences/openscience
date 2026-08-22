@@ -1162,9 +1162,7 @@ describe("file access uses session grants", () => {
         afterReadAuthorization: () => SessionFilesystem.revoke(session.id, grant.id).then(() => undefined),
       })
 
-      await expect(File.read(target, { sessionID: session.id })).rejects.toBeInstanceOf(
-        SessionFilesystem.DeniedError,
-      )
+      await expect(File.read(target, { sessionID: session.id })).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
       expect(await Bun.file(target).text()).toBe("external")
     })
   })

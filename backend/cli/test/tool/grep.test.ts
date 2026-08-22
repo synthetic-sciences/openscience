@@ -125,25 +125,28 @@ describe("tool.grep", () => {
     })
   })
 
-  test.skipIf(process.platform === "win32")("does not follow a nested symlink outside the authorized search root", async () => {
-    await using external = await tmpdir({
-      init: (dir) => Bun.write(path.join(dir, "secret.txt"), "outside needle\n"),
-    })
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "inside.txt"), "inside value\n")
-        await fs.symlink(external.path, path.join(dir, "escape"), "dir")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const result = await (await GrepTool.init()).execute({ pattern: "outside needle", path: tmp.path }, ctx)
-        expect(result.metadata.matches).toBe(0)
-        expect(result.output).toBe("No files found")
-      },
-    })
-  })
+  test.skipIf(process.platform === "win32")(
+    "does not follow a nested symlink outside the authorized search root",
+    async () => {
+      await using external = await tmpdir({
+        init: (dir) => Bun.write(path.join(dir, "secret.txt"), "outside needle\n"),
+      })
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "inside.txt"), "inside value\n")
+          await fs.symlink(external.path, path.join(dir, "escape"), "dir")
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await (await GrepTool.init()).execute({ pattern: "outside needle", path: tmp.path }, ctx)
+          expect(result.metadata.matches).toBe(0)
+          expect(result.output).toBe("No files found")
+        },
+      })
+    },
+  )
 })
 
 describe("CRLF regex handling", () => {

@@ -205,10 +205,7 @@ describe("tool.assertExternalDirectory", () => {
       fn: async () => {
         const folder = path.join(project.path, "papers")
         const target = path.join(folder, "paper.md")
-        using access = await assertExternalDirectory(
-          { ...baseCtx, ask: async () => {} },
-          target,
-        )
+        using access = await assertExternalDirectory({ ...baseCtx, ask: async () => {} }, target)
         await fs.rename(folder, path.join(project.path, "papers-retained"))
         await fs.symlink(external.path, folder, "dir")
 

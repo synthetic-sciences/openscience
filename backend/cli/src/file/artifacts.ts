@@ -254,7 +254,12 @@ export namespace ArtifactFile {
       $`git ${gitConfig} branch --show-current`.cwd(repo).env(env).quiet().nothrow().text(),
       $`git ${gitConfig} ls-files --error-unmatch -- ${relative}`.cwd(repo).env(env).quiet().nothrow(),
       $`git ${gitConfig} status --porcelain=v1 -- ${relative}`.cwd(repo).env(env).quiet().nothrow().text(),
-      $`git ${gitConfig} log -1 --format=%H%x00%an%x00%ae%x00%aI%x00%s -- ${relative}`.cwd(repo).env(env).quiet().nothrow().text(),
+      $`git ${gitConfig} log -1 --format=%H%x00%an%x00%ae%x00%aI%x00%s -- ${relative}`
+        .cwd(repo)
+        .env(env)
+        .quiet()
+        .nothrow()
+        .text(),
     ])
     const tracked = trackedResult.exitCode === 0
     const code = statusResult.trim().slice(0, 2)
