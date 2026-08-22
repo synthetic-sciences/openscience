@@ -162,6 +162,10 @@ describe("Atlas host broker", () => {
           await Bun.write(path.join(tmp.path, "README.md"), "safe research text\n")
           await Bun.write(path.join(tmp.path, ".env"), "OPENAI_API_KEY=must-not-leak\n")
           await Bun.write(path.join(tmp.path, ".env.sample"), "OPENAI_API_KEY=replace-me\n")
+          await Bun.write(path.join(tmp.path, ".npmrc"), "//registry.example.test/:_authToken=must-not-leak\n")
+          await Bun.write(path.join(tmp.path, "service.pem"), "PRIVATE KEY must-not-leak\n")
+          await fs.mkdir(path.join(tmp.path, ".ssh"))
+          await Bun.write(path.join(tmp.path, ".ssh", "config"), "IdentityFile must-not-leak\n")
           await Bun.write(path.join(tmp.path, "binary.dat"), new Uint8Array([1, 0, 2]))
           await Bun.write(outside, "sibling private text\n")
           await fs.symlink(outside, path.join(tmp.path, "escape.txt"))
@@ -204,7 +208,7 @@ describe("Atlas host broker", () => {
           expect(added).toMatchObject({
             collection: {
               files: 2,
-              omitted: { binary: 1, secret: 1, symlink: 1 },
+              omitted: { binary: 1, secret: 4, symlink: 1 },
             },
           })
         } finally {

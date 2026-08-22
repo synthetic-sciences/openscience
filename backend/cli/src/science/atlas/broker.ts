@@ -125,10 +125,18 @@ const within = (root: string, target: string) => {
 }
 
 const secret = (relative: string) => {
-  const name = path.basename(relative).toLowerCase()
+  const normalized = relative.replaceAll("\\", "/").toLowerCase()
+  const segments = normalized.split("/")
+  const name = segments.at(-1) ?? ""
   if (name === ".env") return true
   if (name.startsWith(".env.") && !name.endsWith(".example") && !name.endsWith(".sample")) return true
-  return [".netrc", ".npmrc", ".pypirc", "credentials.json", "id_ed25519", "id_rsa"].includes(name)
+  if ([".netrc", ".npmrc", ".pypirc", ".git-credentials", "credentials.json", "id_ed25519", "id_rsa"].includes(name)) {
+    return true
+  }
+  if ([".pem", ".key", ".p12", ".pfx"].some((extension) => name.endsWith(extension))) return true
+  if ([".ssh", ".gnupg", ".aws"].some((directory) => segments.includes(directory))) return true
+  if (normalized.endsWith(".docker/config.json")) return true
+  return normalized.includes(".config/gcloud/")
 }
 
 const binary = (bytes: Uint8Array) => bytes.subarray(0, 8_000).includes(0)
