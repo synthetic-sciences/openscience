@@ -218,10 +218,12 @@ export namespace SessionCompaction {
       .map((part) => (part.type === "text" ? part.text : ""))
       .join("")
       .trim()
-    if (!summary) {
+    const truncated = current.summary.info.finish === "length"
+    if (!summary || truncated) {
       const error = new NamedError.Unknown({
-        message:
-          "Compaction finished without producing a usable summary. OpenScience stopped this turn and preserved the original context. Retry /compact with a different model, shorten the request, or start a new session.",
+        message: truncated
+          ? "Compaction reached the model output limit before the handoff was complete. OpenScience stopped this turn and preserved the original context. Retry /compact with a model that supports a larger output, shorten the request, or start a new session."
+          : "Compaction finished without producing a usable summary. OpenScience stopped this turn and preserved the original context. Retry /compact with a different model, shorten the request, or start a new session.",
       }).toObject()
       current.summary.info.error = error
       current.summary.info.finish = "stop"
@@ -278,7 +280,14 @@ export namespace SessionCompaction {
   export function previousSummary(messages: MessageV2.WithParts[]): string | undefined {
     for (let i = messages.length - 1; i >= 0; i--) {
       const info = messages[i].info
-      if (info.role === "assistant" && info.summary) {
+      if (
+        info.role === "assistant" &&
+        info.summary &&
+        info.finish &&
+        info.finish !== "compact" &&
+        info.finish !== "length" &&
+        !info.error
+      ) {
         const text = messages[i].parts
           .filter((p) => p.type === "text")
           .map((p) => (p.type === "text" ? p.text : ""))

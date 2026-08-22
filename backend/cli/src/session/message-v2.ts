@@ -1183,6 +1183,9 @@ export namespace MessageV2 {
         msg.info.role === "assistant" &&
         msg.info.summary &&
         msg.info.finish &&
+        msg.info.finish !== "compact" &&
+        msg.info.finish !== "length" &&
+        !msg.info.error &&
         msg.parts.some((p) => p.type === "text" && p.text.trim())
       ) {
         completed.add(msg.info.parentID)

@@ -55,7 +55,13 @@ async function withSession<T>(directory: string, fn: (session: Session.Info) => 
   })
 }
 
-async function finishSummary(input: { session: Session.Info; carrier: MessageV2.User; text: string; step?: number }) {
+async function finishSummary(input: {
+  session: Session.Info
+  carrier: MessageV2.User
+  text: string
+  step?: number
+  finish?: string
+}) {
   const id = await MessageV2.nextMessageID(input.session.id)
   const message = await Session.updateMessage({
     id,
@@ -71,7 +77,7 @@ async function finishSummary(input: { session: Session.Info; carrier: MessageV2.
     modelID: "test-model",
     providerID: "test",
     internal: { step: input.step ?? 1 },
-    finish: "stop",
+    finish: input.finish ?? "stop",
     summary: true,
   })
   await Session.updatePart({
@@ -489,14 +495,19 @@ describe("session.getUsage", () => {
 })
 
 describe("session.compaction.previousSummary", () => {
-  const asstSummary = (id: string, text: string): MessageV2.WithParts =>
+  const asstSummary = (
+    id: string,
+    text: string,
+    input?: { finish?: string; error?: MessageV2.Assistant["error"] },
+  ): MessageV2.WithParts =>
     ({
       info: {
         id,
         sessionID: "s",
         role: "assistant",
         summary: true,
-        finish: "stop",
+        finish: input?.finish ?? "stop",
+        error: input?.error,
         parentID: "p",
         modelID: "m",
         providerID: "p",
@@ -528,6 +539,16 @@ describe("session.compaction.previousSummary", () => {
   })
   test("returns undefined when there is no prior summary", () => {
     expect(SessionCompaction.previousSummary([userMsg("u1")])).toBeUndefined()
+  })
+  test("ignores truncated and failed summaries when selecting a prior handoff", () => {
+    const msgs = [
+      asstSummary("a1", "LAST VERIFIED HANDOFF"),
+      asstSummary("a2", "TRUNCATED HANDOFF", { finish: "length" }),
+      asstSummary("a3", "FAILED HANDOFF", {
+        error: { name: "UnknownError", data: { message: "summary rejected" } },
+      }),
+    ]
+    expect(SessionCompaction.previousSummary(msgs)).toBe("LAST VERIFIED HANDOFF")
   })
 })
 
@@ -912,6 +933,79 @@ describe("session.compaction durable finalization", () => {
         ),
       ).toBe(true)
       expect(SessionLoopState.terminalError({ user: carrier.info, assistant: summary.info })).toBe(true)
+    })
+  })
+
+  test("does not finalize a handoff truncated by the model output limit", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const model = { providerID: "test", modelID: "test-model" }
+      const sourceID = await MessageV2.nextMessageID(session.id)
+      const source = await Session.updateMessage({
+        id: sourceID,
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "research",
+        model,
+        effort: "normal",
+        internal: SessionLoopState.prompt(sourceID),
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: source.id,
+        sessionID: session.id,
+        type: "text",
+        text: "critical evidence that must survive compaction",
+      })
+      await SessionCompaction.create({
+        sessionID: session.id,
+        agent: "research",
+        model,
+        auto: true,
+        epoch: source.id,
+        trigger: "proactive",
+      })
+      const created = await Session.messages({ sessionID: session.id })
+      const carrier = created.find(
+        (message): message is MessageV2.WithParts & { info: MessageV2.User } =>
+          message.info.role === "user" && message.info.internal?.type === "compaction",
+      )
+      if (!carrier) throw new Error("missing carrier")
+      await finishSummary({
+        session,
+        carrier: carrier.info,
+        text: "## Objective\n- partially emitted handoff",
+        finish: "length",
+      })
+
+      const pending = SessionLoopState.pendingCompaction(await Session.messages({ sessionID: session.id }))
+      if (!pending) throw new Error("missing truncated summary")
+      expect(await SessionCompaction.recover(pending)).toBe("stop")
+
+      const stored = await Session.messages({ sessionID: session.id })
+      const summary = stored.find((message) => message.info.id === pending.summary.info.id)
+      expect(summary?.info.role).toBe("assistant")
+      if (summary?.info.role !== "assistant") throw new Error("missing summary")
+      expect(summary.info.error?.data.message).toContain("output limit")
+      expect(
+        stored
+          .find((message) => message.info.id === carrier.info.id)
+          ?.parts.filter((part) => part.id === SessionLoopState.partID(carrier.info.id, "finalization")),
+      ).toHaveLength(0)
+      expect(
+        stored.filter(
+          (message) =>
+            message.info.role === "user" &&
+            message.info.internal?.type === "continuation" &&
+            message.info.internal.kind === "compaction",
+        ),
+      ).toHaveLength(0)
+      expect(
+        (await MessageV2.filterCompacted(MessageV2.stream(session.id))).some(
+          (message) => message.info.id === source.id,
+        ),
+      ).toBe(true)
     })
   })
 })

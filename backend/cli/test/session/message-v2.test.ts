@@ -1080,6 +1080,39 @@ describe("session.message-v2.filterCompacted — verbatim tail (P3.2)", () => {
     expect(ids).toContain("a1")
   })
 
+  test("a nonempty summary truncated by its output limit is not a compaction boundary", async () => {
+    const msgs: MessageV2.WithParts[] = [
+      mk("sum", "assistant", [txt("sum", "## Objective\n- incomplete")], {
+        summary: true,
+        finish: "length",
+        parentID: "cc",
+      }),
+      compactionCarrier("cc"),
+      mk("a1", "assistant", [txt("a1", "critical evidence")], { finish: "stop", parentID: "u1" }),
+      mk("u1", "user", [txt("u1", "real request")]),
+    ]
+
+    const out = await MessageV2.filterCompacted(streamOf(msgs))
+    expect(out.map((message) => message.info.id)).toEqual(["u1", "a1", "cc", "sum"])
+  })
+
+  test("a nonempty failed summary is not a compaction boundary", async () => {
+    const msgs: MessageV2.WithParts[] = [
+      mk("sum", "assistant", [txt("sum", "partial handoff")], {
+        summary: true,
+        finish: "stop",
+        parentID: "cc",
+        error: { name: "UnknownError", data: { message: "summary rejected" } },
+      }),
+      compactionCarrier("cc"),
+      mk("a1", "assistant", [txt("a1", "critical evidence")], { finish: "stop", parentID: "u1" }),
+      mk("u1", "user", [txt("u1", "real request")]),
+    ]
+
+    const out = await MessageV2.filterCompacted(streamOf(msgs))
+    expect(out.map((message) => message.info.id)).toEqual(["u1", "a1", "cc", "sum"])
+  })
+
   test("a missing tailStartId falls back to [carrier, summary, continuation] — never the whole history", async () => {
     // The summary references a tail anchor that is no longer in the stream (e.g. the tail
     // messages were reverted/migrated away). The retain scan can't find it; the re-splice
