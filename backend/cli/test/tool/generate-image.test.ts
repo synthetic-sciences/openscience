@@ -1,12 +1,107 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
+import { Instance } from "../../src/project/instance"
+import { Provider } from "../../src/provider/provider"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import {
+  GenerateImageTool,
   extractGeneratedImage,
   extractGeneratedImageURL,
   generatedImageAttachments,
   readBoundedImageResponse,
 } from "../../src/tool/generate-image"
+import type { Tool } from "../../src/tool/tool"
+import { executionSession, tmpdir } from "../fixture/fixture"
 
 describe("generate_image response parsing", () => {
+  test("executes the native BYOK image route and writes its result into the session workspace", async () => {
+    const requests: Array<{ url: string; authorization: string | null; body: Record<string, unknown> }> = []
+    const image = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    )
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        requests.push({
+          url: new URL(request.url).pathname,
+          authorization: request.headers.get("authorization"),
+          body: (await request.json()) as Record<string, unknown>,
+        })
+        return Response.json({ data: [{ b64_json: image.toString("base64"), media_type: "image/png" }] })
+      },
+    })
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: {
+          provider: {
+            openrouter: {
+              options: {
+                apiKey: "sk-local-image-route",
+                baseURL: `http://127.0.0.1:${server.port}/v1`,
+              },
+            },
+          },
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => Provider.invalidate(),
+        fn: async () => {
+          const session = await executionSession()
+          const workspace = await SessionFilesystem.workspace(session.id)
+          const asks: Parameters<Tool.Context["ask"]>[0][] = []
+          const tool = await GenerateImageTool.init()
+          const result = await tool.execute(
+            {
+              prompt: "A precise monochrome benchmark schematic",
+              output_path: "figures/benchmark.png",
+              model: "google/gemini-3-pro-image",
+              aspect_ratio: "16:9",
+            },
+            {
+              sessionID: session.id,
+              messageID: "msg_generate_image",
+              callID: "call_generate_image",
+              agent: "research",
+              abort: new AbortController().signal,
+              messages: [],
+              metadata() {},
+              async ask(input) {
+                asks.push(input)
+              },
+            },
+          )
+
+          expect(requests).toHaveLength(1)
+          expect(requests[0]).toMatchObject({
+            url: "/v1/images",
+            authorization: "Bearer sk-local-image-route",
+            body: {
+              model: "google/gemini-3-pro-image",
+              prompt: "A precise monochrome benchmark schematic",
+              n: 1,
+              output_format: "png",
+              aspect_ratio: "16:9",
+            },
+          })
+          expect(asks.map((request) => request.permission)).toEqual(["generate_image", "edit"])
+          expect(await Bun.file(path.join(workspace, "figures", "benchmark.png")).arrayBuffer()).toEqual(
+            image.buffer.slice(image.byteOffset, image.byteOffset + image.byteLength),
+          )
+          expect(result).toMatchObject({
+            title: "figures/benchmark.png",
+            metadata: { route: "byok", mime: "image/png", size: image.byteLength, attachment: "inline" },
+          })
+          expect(result.attachments).toHaveLength(1)
+        },
+      })
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test("extracts the dedicated OpenRouter Image API response", () => {
     const bytes = Buffer.from("dedicated-image-bytes")
     const image = extractGeneratedImage({
