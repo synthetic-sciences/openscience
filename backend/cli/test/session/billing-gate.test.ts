@@ -8,9 +8,64 @@ import {
 } from "../../src/session/billing-gate"
 import { Auth } from "../../src/auth"
 import { Instance } from "../../src/project/instance"
+import { Provider } from "../../src/provider/provider"
 import { tmpdir } from "../fixture/fixture"
 
 describe("billing-gate", () => {
+  test("an auth.json BYOK key wins over a stale unused managed environment key", async () => {
+    await using tmp = await tmpdir()
+    const previous = await Auth.get("openrouter")
+    const stale = process.env.OPENROUTER_API_KEY
+    try {
+      process.env.OPENROUTER_API_KEY = "thk_stale-unused-value"
+      await Auth.set("openrouter", { type: "api", key: "sk-user-owned" })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const provider = await Provider.getProvider("openrouter")
+          expect(provider).toBeDefined()
+          if (!provider) throw new Error("OpenRouter provider is unavailable")
+          expect(Provider.effectiveKey(provider)).toBe("sk-user-owned")
+          const source = await resolveCredentialSource("openrouter", "openai/gpt-5.6")
+          expect(source).toBe("byok")
+          expect(requiresWalletBalance(source)).toBe(false)
+          expect(shouldReportUsage(source)).toBe(false)
+        },
+      })
+    } finally {
+      if (stale === undefined) delete process.env.OPENROUTER_API_KEY
+      else process.env.OPENROUTER_API_KEY = stale
+      if (previous) await Auth.set("openrouter", previous)
+      else await Auth.remove("openrouter")
+    }
+  })
+
+  test("the effective managed option still wins over a losing BYOK auth key", async () => {
+    await using tmp = await tmpdir({
+      config: { provider: { openrouter: { options: { apiKey: "thk_effective-managed-value" } } } },
+    })
+    const previous = await Auth.get("openrouter")
+    try {
+      await Auth.set("openrouter", { type: "api", key: "sk-losing-user-key" })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const provider = await Provider.getProvider("openrouter")
+          expect(provider).toBeDefined()
+          if (!provider) throw new Error("OpenRouter provider is unavailable")
+          expect(Provider.effectiveKey(provider)).toBe("thk_effective-managed-value")
+          const source = await resolveCredentialSource("openrouter", "openai/gpt-5.6")
+          expect(source).toBe("managed")
+          expect(requiresWalletBalance(source)).toBe(true)
+          expect(shouldReportUsage(source)).toBe(true)
+        },
+      })
+    } finally {
+      if (previous) await Auth.set("openrouter", previous)
+      else await Auth.remove("openrouter")
+    }
+  })
+
   test("ChatGPT-plan Codex OAuth bypasses managed wallet gates even with stale managed-shaped config", async () => {
     await using tmp = await tmpdir({
       config: {

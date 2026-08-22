@@ -16,7 +16,6 @@
 
 import { Auth } from "@/auth"
 import { Config } from "@/config/config"
-import { Env } from "@/env"
 import { Provider } from "@/provider/provider"
 import { OpenScience } from "@/openscience"
 
@@ -84,20 +83,16 @@ export async function resolveCredentialSource(providerID: string, _modelID: stri
   //    "managed" wallet-gated and billed BYOK keys — exactly what this
   //    module's contract forbids. It was also boot-order dependent (the
   //    synced-secret set is empty until an in-process sync runs).
-  const optionKey = provider?.options?.["apiKey"]
-  const resolvedKey = typeof provider?.key === "string" ? provider.key : undefined
-  const explicitKey = typeof optionKey === "string" ? optionKey : undefined
-  if (OpenScience.isManagedKeyValue(resolvedKey) || OpenScience.isManagedKeyValue(explicitKey)) {
-    return "managed"
-  }
-  const envKeys = provider?.env ?? []
-  for (const key of envKeys) {
-    if (OpenScience.isManagedKeyValue(Env.get(key))) return "managed"
-  }
+  // Classify the one credential the provider will actually send. Raw losing
+  // env values must not influence billing: auth.json intentionally overrides
+  // environment credentials, and a stale thk_* next to a winning BYOK key is
+  // not a managed request.
+  const effective = provider ? Provider.effectiveKey(provider) : undefined
+  if (OpenScience.isManagedKeyValue(effective)) return "managed"
 
   // 2) OAuth-free: a first-party OAuth subscription (user's own account).
   if (auth?.type === "oauth") return "oauth-free"
-  if (OAUTH_FREE_PROVIDERS.has(providerID) && !resolvedKey && !explicitKey && !auth) return "oauth-free"
+  if (OAUTH_FREE_PROVIDERS.has(providerID) && !effective && !auth) return "oauth-free"
 
   // 3) BYOK: the user's own key (or the zero-cost public demo). Never billable.
   return "byok"
