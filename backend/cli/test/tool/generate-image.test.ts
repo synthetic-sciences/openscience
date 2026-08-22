@@ -102,6 +102,93 @@ describe("generate_image response parsing", () => {
     }
   })
 
+  test("rejects a managed wallet token pointed at a non-Atlas image host", async () => {
+    const requests = { value: 0 }
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        requests.value++
+        return Response.json({ data: [] })
+      },
+    })
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: {
+          provider: {
+            openrouter: {
+              options: {
+                apiKey: "thk_managed-image-route",
+                baseURL: `http://127.0.0.1:${server.port}/v1`,
+              },
+            },
+          },
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => Provider.invalidate(),
+        fn: async () => {
+          const session = await executionSession()
+          const tool = await GenerateImageTool.init()
+          await expect(
+            tool.execute(
+              {
+                prompt: "A benchmark schematic",
+                output_path: "figure.png",
+                model: "google/gemini-3-pro-image",
+              },
+              {
+                sessionID: session.id,
+                messageID: "msg_managed_image",
+                callID: "call_managed_image",
+                agent: "research",
+                abort: new AbortController().signal,
+                messages: [],
+                metadata() {},
+                async ask() {},
+              },
+            ),
+          ).rejects.toThrow("refused to send the wallet credential outside its managed image proxy")
+          expect(requests.value).toBe(0)
+        },
+      })
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("rejects GIF output before constructing an unsupported OpenRouter request", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => Provider.invalidate(),
+      fn: async () => {
+        const session = await executionSession()
+        const tool = await GenerateImageTool.init()
+        await expect(
+          tool.execute(
+            {
+              prompt: "A benchmark schematic",
+              output_path: "figure.gif",
+              model: "google/gemini-3-pro-image",
+            },
+            {
+              sessionID: session.id,
+              messageID: "msg_gif_image",
+              callID: "call_gif_image",
+              agent: "research",
+              abort: new AbortController().signal,
+              messages: [],
+              metadata() {},
+              async ask() {},
+            },
+          ),
+        ).rejects.toThrow("output_path must end in .png, .jpg, .jpeg, or .webp")
+      },
+    })
+  })
+
   test("extracts the dedicated OpenRouter Image API response", () => {
     const bytes = Buffer.from("dedicated-image-bytes")
     const image = extractGeneratedImage({

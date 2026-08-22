@@ -2,7 +2,6 @@ import path from "node:path"
 import z from "zod"
 import { Tool } from "./tool"
 import { Provider } from "@/provider/provider"
-import { resolveCredentialSource, requiresWalletBalance } from "@/session/billing-gate"
 import { OpenScience } from "@/openscience"
 import { Instance } from "@/project/instance"
 import { SafeFileIO } from "@/file/safe-io"
@@ -248,7 +247,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
       .min(1)
       .max(10_000)
       .default("generated-image.png")
-      .describe("PNG, JPEG, WebP, or GIF destination in the connected workspace"),
+      .describe("PNG, JPEG, or WebP destination in the connected workspace"),
     input_path: z
       .string()
       .trim()
@@ -270,8 +269,8 @@ export const GenerateImageTool = Tool.define("generate_image", {
     using outputAccess = await assertExternalDirectory(ctx, requested, { access: "write" })
     const output = outputAccess?.path ?? requested
     const extension = path.extname(output).toLowerCase()
-    if (![".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(extension)) {
-      throw new Error("output_path must end in .png, .jpg, .jpeg, .webp, or .gif")
+    if (![".png", ".jpg", ".jpeg", ".webp"].includes(extension)) {
+      throw new Error("output_path must end in .png, .jpg, .jpeg, or .webp")
     }
     const approved = await SafeFileIO.optional(output, { maxBytes: MAX_IMAGE_BYTES }).catch((error) => {
       if (error instanceof SafeFileIO.LimitError) {
@@ -321,8 +320,22 @@ export const GenerateImageTool = Tool.define("generate_image", {
       )
     }
 
-    const credential = await resolveCredentialSource("openrouter", params.model)
-    const managed = requiresWalletBalance(credential)
+    // This tool calls fetch directly instead of going through Provider.getSDK(),
+    // so enforce the same credential/host invariant here. The effective token,
+    // not the spend-toggle label, determines whether this is a wallet request.
+    // Otherwise a custom/stale base URL could receive the scoped thk_* token.
+    const managed = OpenScience.isManagedKeyValue(key)
+    const proxy = Provider.isAtlasProxyBaseURL(base)
+    if (managed && !proxy) {
+      throw new Error(
+        "OpenScience refused to send the wallet credential outside its managed image proxy. Run openscience sync and retry.",
+      )
+    }
+    if (!managed && proxy) {
+      throw new Error(
+        "OpenScience refused to send your connected OpenRouter key to the managed wallet proxy. Reconnect OpenRouter and retry.",
+      )
+    }
     if (managed) {
       const balance = await OpenScience.getBalance().catch(() => null)
       if (balance !== null && balance <= 0) {
