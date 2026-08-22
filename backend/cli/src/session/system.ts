@@ -113,10 +113,12 @@ export namespace SystemPrompt {
           ),
         ]
       : []
-    const names = new Set(skills.map((skill) => skill.name))
+    const names = new Map(skills.map((skill) => [skill.name.toLowerCase(), skill.name]))
     const invoked = [...(message ?? "").matchAll(/(?:^|[\s([{'\"])\/([a-z0-9][a-z0-9_-]*)(?=$|[^a-z0-9_/-])/gi)]
       .map((match) => match[1].toLowerCase())
-      .filter((name, index, all) => names.has(name) && all.indexOf(name) === index)
+      .map((name) => names.get(name))
+      .filter((name): name is string => !!name)
+      .filter((name, index, all) => all.indexOf(name) === index)
     const route = [
       {
         when: "Venue-specific paper formatting, submission checks, or page limits",
@@ -139,7 +141,10 @@ export namespace SystemPrompt {
         skills: ["generate-image"],
       },
     ]
-      .map((item) => ({ ...item, skills: item.skills.filter((skill) => names.has(skill)) }))
+      .map((item) => ({
+        ...item,
+        skills: item.skills.map((skill) => names.get(skill)).filter((skill): skill is string => !!skill),
+      }))
       .filter((item) => item.skills.length > 0)
     const routing = route.length
       ? [

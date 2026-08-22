@@ -229,6 +229,14 @@ export const STRESS_MATRIX: readonly StressScenario[] = [
     expect: { terminal: "completed", tools: 1, artifacts: "none" },
   }),
   clean({
+    id: "skills.direct-inline",
+    category: "skills",
+    title: "Slash skill overrides direct-answer narrowing",
+    prompt: "What is the bounded fixture result? /fixture-skill",
+    stimulus: { kind: "tool", name: "skill", input: { name: "fixture-skill" } },
+    expect: { terminal: "completed", tools: 1, artifacts: "none" },
+  }),
+  clean({
     id: "skills.unknown",
     category: "skills",
     title: "Unknown slash token is harmless",

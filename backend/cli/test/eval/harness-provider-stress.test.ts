@@ -39,6 +39,7 @@ const CAMPAIGN_IDS = [
   "skills.prefix",
   "skills.inline",
   "skills.punctuated",
+  "skills.direct-inline",
   "skills.unknown",
   "skills.disabled",
   "delegation.auto-on",
@@ -234,7 +235,7 @@ async function execute(scenario: StressScenario, externalFile: string): Promise<
 describe("provider-driven harness stress campaign", () => {
   test("runs dozens of isolated real SessionPrompt turns through a local OpenAI-compatible provider", async () => {
     const scenarios = selected()
-    expect(scenarios).toHaveLength(49)
+    expect(scenarios).toHaveLength(50)
     const provider = startStressProvider(scenarios)
     const fetch = globalThis.fetch
     const session = path.join(Global.Path.data, "openscience-session.json")
@@ -294,7 +295,7 @@ describe("provider-driven harness stress campaign", () => {
           }
           await provider.quiet()
 
-          expect(outcomes).toHaveLength(49)
+          expect(outcomes).toHaveLength(50)
           expect(new Set(outcomes.map((outcome) => outcome.session.id)).size).toBe(outcomes.length)
           expect(new Set(outcomes.map((outcome) => outcome.workspace)).size).toBe(outcomes.length)
           for (const scenario of scenarios) {
@@ -352,7 +353,7 @@ describe("provider-driven harness stress campaign", () => {
           expect(followup[1]?.text).toContain("What codeword did I give you?")
           expect(followup[1]?.text).toContain("juniper")
 
-          for (const id of ["skills.prefix", "skills.inline", "skills.punctuated"]) {
+          for (const id of ["skills.prefix", "skills.inline", "skills.punctuated", "skills.direct-inline"]) {
             const request = provider.main(id)[0]
             expect(request?.tools).toContain("skill")
             expect(request?.text).toContain("<slash-skill-invocation>")

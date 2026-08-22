@@ -83,6 +83,7 @@ test("availableSkills injects call-first routing only for a known slash skill", 
     git: true,
     init: async (dir) => {
       await writeSkill(dir, "scanpy", "biology")
+      await writeSkill(dir, "ML-Drawing", "visualization")
     },
   })
 
@@ -96,6 +97,7 @@ test("availableSkills injects call-first routing only for a known slash skill", 
       const punctuated = await SystemPrompt.availableSkills([], "Please plot this (/scanpy when useful)")
       const closed = await SystemPrompt.availableSkills([], "Please plot this (/scanpy), then answer")
       const quoted = await SystemPrompt.availableSkills([], 'Please use "/scanpy", then answer')
+      const canonical = await SystemPrompt.availableSkills([], "Explain this with /ml-drawing, please")
       const path = await SystemPrompt.availableSkills([], "Read /scanpy/reference without loading a skill")
       const unknown = await SystemPrompt.availableSkills([], "/not-a-skill")
       expect(Buffer.byteLength(known)).toBeLessThanOrEqual(700)
@@ -106,6 +108,7 @@ test("availableSkills injects call-first routing only for a known slash skill", 
       expect(punctuated).toContain('skill({name:"scanpy"})')
       expect(closed).toContain('skill({name:"scanpy"})')
       expect(quoted).toContain('skill({name:"scanpy"})')
+      expect(canonical).toContain('skill({name:"ML-Drawing"})')
       expect(path).not.toContain("slash-skill-invocation")
       expect(unknown).not.toContain("slash-skill-invocation")
     },

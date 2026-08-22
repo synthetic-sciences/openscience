@@ -100,6 +100,15 @@ describe("tool selection", () => {
     ).toBe(true)
     expect(ToolSelection.direct({ agent: "research", message: "What is a p-value?", fresh: true })).toBe(true)
     expect(
+      ToolSelection.direct({
+        agent: "research",
+        message: "What is a p-value? /fixture-skill",
+        fresh: true,
+      }),
+    ).toBe(false)
+    expect(ToolSelection.slashInvocation("Explain this (/fixture-skill), then answer.")).toBe(true)
+    expect(ToolSelection.slashInvocation("Read /fixture-skill/reference.")).toBe(false)
+    expect(
       ToolSelection.direct({ agent: "research", message: "Explain the search for those records.", fresh: true }),
     ).toBe(false)
     expect(ToolSelection.direct({ agent: "research", message: "What is the latest trial result?", fresh: true })).toBe(
@@ -211,6 +220,13 @@ describe("tool selection", () => {
         message,
         fresh: true,
         tools: { bash: true },
+      }),
+    ).toBe(false)
+    expect(
+      ToolSelection.inspection({
+        agent: "research",
+        message: `${message} /fixture-skill`,
+        fresh: true,
       }),
     ).toBe(false)
   })

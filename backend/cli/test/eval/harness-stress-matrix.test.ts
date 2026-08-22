@@ -20,7 +20,7 @@ describe("deterministic harness stress matrix", () => {
   test("declares dozens of unique sessions across every required failure surface", () => {
     const report = validateStressMatrix()
 
-    expect(report.count).toBe(56)
+    expect(report.count).toBe(57)
     expect(report.unique).toBe(true)
     expect(report.missing).toEqual([])
     expect(report.invalid).toEqual([])

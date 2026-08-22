@@ -1115,11 +1115,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   createEffect(
-    on(
-      () => sync.data.command,
-      () => slashRefetch(),
-      { defer: true },
-    ),
+    on([() => sync.data.command, () => sync.data.skill, () => sync.data.config.permission], () => slashRefetch(), {
+      defer: true,
+    }),
   )
 
   const scrollSlashActive = () => {

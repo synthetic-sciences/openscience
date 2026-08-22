@@ -27,6 +27,7 @@ export namespace ToolSelection {
   const work =
     /\b(?:analy[sz]e|attached|calculate|cite|create|current|dataset|document|download|fetch|file|find|inspect|latest|load|look up|open|paper|plot|read|review|run|save|source|today|verify|write)\b|\bsearch\s+(?:for|my|our|the|this|these|those)\b|https?:\/\/|\.[a-z0-9]{1,5}\b/i
   const browse = new Set(["glob", "grep", "invalid", "read"])
+  const slash = /(?:^|[\s([{'\"])\/([a-z0-9][a-z0-9_-]*)(?=$|[^a-z0-9_/-])/i
   const descriptions: Record<string, string> = {
     glob: "Find local files by glob pattern. Omit path for the workspace or provide a directory to constrain the search. Returns up to 100 paths.",
     grep: "Search local file contents with a regular expression. Constrain the directory with path and file globs with include. Returns matching lines with paths and line numbers.",
@@ -35,6 +36,12 @@ export namespace ToolSelection {
 
   export function fresh(roles: string[]) {
     return roles.filter((role) => role === "user").length === 1
+  }
+
+  /** A slash token is an explicit request for a command or skill, even when
+   *  the surrounding prose otherwise looks like a tool-free direct answer. */
+  export function slashInvocation(message?: string) {
+    return slash.test(message ?? "")
   }
 
   export function description(tool: string, value: string, inspection = false) {
@@ -83,6 +90,7 @@ export namespace ToolSelection {
       input.agent !== "research" ||
       !input.fresh ||
       input.attachments ||
+      slashInvocation(input.message) ||
       Object.values(input.tools ?? {}).some((enabled) => enabled)
     )
       return false
@@ -104,6 +112,7 @@ export namespace ToolSelection {
       input.agent !== "research" ||
       !input.fresh ||
       input.attachments ||
+      slashInvocation(input.message) ||
       Object.values(input.tools ?? {}).some((enabled) => enabled)
     )
       return false

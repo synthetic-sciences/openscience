@@ -199,8 +199,24 @@ export namespace Skill {
       }
     }
 
+    // Config caches directories for the lifetime of a project instance. A
+    // project may create its first .openscience/skills directory after a chat
+    // has already started, so discover trusted project roots again whenever
+    // the skill catalog itself is invalidated.
+    const projectDirs =
+      !Flag.OPENSCIENCE_DISABLE_PROJECT_CONFIG && (await ProjectTrust.allowed(Instance.project))
+        ? await Array.fromAsync(
+            Filesystem.up({
+              targets: [".openscience", ".synsc"],
+              start: Instance.directory,
+              stop: Instance.worktree,
+            }),
+          )
+        : []
+    const directories = new Set([...(await Config.executableDirectories()), ...projectDirs])
+
     // Scan .openscience/skill/ directories
-    for (const dir of await Config.executableDirectories()) {
+    for (const dir of directories) {
       for await (const match of OPENSCIENCE_SKILL_GLOB.scan({
         cwd: dir,
         absolute: true,
