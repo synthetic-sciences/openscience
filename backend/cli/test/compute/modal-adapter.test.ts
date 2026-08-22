@@ -114,7 +114,9 @@ describe("ModalAdapter input guard", () => {
   })
 
   test("stages only the content bound by the approved size and checksum", async () => {
-    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-input-"))
+    const root = await fs.realpath(
+      await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-input-")),
+    )
     const source = path.join(root, "source.bin")
     const target = path.join(root, "staged.bin")
     await fs.writeFile(source, "approved")
@@ -127,7 +129,9 @@ describe("ModalAdapter input guard", () => {
   })
 
   test("rejects a post-approval sparse growth before staging reads any content", async () => {
-    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-input-"))
+    const root = await fs.realpath(
+      await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-input-")),
+    )
     const source = path.join(root, "source.bin")
     await fs.writeFile(source, "approved")
     const approved = await ModalUpload.hash(source)
@@ -149,7 +153,9 @@ describe("ModalAdapter input guard", () => {
   })
 
   test("stages approved bytes through a bounded stream", async () => {
-    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-input-"))
+    const root = await fs.realpath(
+      await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-input-")),
+    )
     const source = path.join(root, "source.bin")
     const target = path.join(root, "staged.bin")
     await fs.writeFile(source, "approved")

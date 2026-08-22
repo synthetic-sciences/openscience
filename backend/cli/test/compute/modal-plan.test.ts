@@ -12,7 +12,7 @@ afterEach(async () => {
 })
 
 async function project() {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-modal-plan-"))
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "openscience-modal-plan-")))
   roots.push(root)
   await fs.mkdir(path.join(root, "src"), { recursive: true })
   await fs.writeFile(path.join(root, "src", "train.py"), "print('ready')\n")
