@@ -761,8 +761,13 @@ describe("durable Task attempts across Bun processes", () => {
         expect.objectContaining({ acquired: true }),
       ])
       expect(await Bun.file(slot).exists()).toBe(false)
-      expect(await fs.readdir(LockCoordination.directory(slot, "claim"))).toEqual([])
-      expect(await fs.readdir(LockCoordination.directory(slot, "intent"))).toEqual([])
+      const markers = (kind: LockCoordination.Kind) =>
+        fs.readdir(LockCoordination.directory(slot, kind)).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return []
+          throw error
+        })
+      expect(await markers("claim")).toEqual([])
+      expect(await markers("intent")).toEqual([])
     } finally {
       for (const proc of processes) {
         try {
