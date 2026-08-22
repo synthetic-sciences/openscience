@@ -1,7 +1,7 @@
 diff --git a/dist/index.js b/dist/index.js
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -2244,6 +2244,6 @@ var OpenRouterChatLanguageModel = class {
+@@ -2245,6 +2245,6 @@ var OpenRouterChatLanguageModel = class {
                    delta: (_l = toolCallDelta.function.arguments) != null ? _l : ""
                  });
 -                if (((_m = toolCall.function) == null ? void 0 : _m.name) != null && ((_n = toolCall.function) == null ? void 0 : _n.arguments) != null && isParsableJson(toolCall.function.arguments)) {
@@ -12,7 +12,7 @@ diff --git a/dist/index.js b/dist/index.js
 diff --git a/dist/index.mjs b/dist/index.mjs
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -2207,6 +2207,6 @@ var OpenRouterChatLanguageModel = class {
+@@ -2208,6 +2208,6 @@ var OpenRouterChatLanguageModel = class {
                    delta: (_l = toolCallDelta.function.arguments) != null ? _l : ""
                  });
 -                if (((_m = toolCall.function) == null ? void 0 : _m.name) != null && ((_n = toolCall.function) == null ? void 0 : _n.arguments) != null && isParsableJson(toolCall.function.arguments)) {
