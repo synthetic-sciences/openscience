@@ -218,6 +218,478 @@ describe("Atlas host broker", () => {
     })
   })
 
+  test("indexes an explicitly selected folder ignored by its parent repository", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "nested ignored indexing" })
+        try {
+          const folder = path.join(tmp.path, "ignored", "CERBench")
+          await fs.mkdir(folder, { recursive: true })
+          await Bun.write(path.join(tmp.path, ".gitignore"), "ignored/\n")
+          await Bun.write(path.join(folder, "paper.md"), "# Explicitly selected paper\n")
+          const request = { body: {} as Record<string, unknown> }
+          globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+            request.body = JSON.parse(String(init?.body))
+            return Response.json({ source_id: "nested-ignored" }, { status: 201 })
+          }) as typeof fetch
+
+          const result = await AtlasBroker.run({
+            operation: "library_add_local",
+            sessionID: session.id,
+            folder,
+          })
+
+          expect(request.body.files).toEqual([{ path: "paper.md", content: "# Explicitly selected paper\n" }])
+          expect(result).toMatchObject({
+            collection: {
+              files: 1,
+              discovery: { method: "walk-nested-fallback", truncated: false },
+            },
+          })
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("uses one consumed external-folder grant for one Atlas upload", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using project = await tmpdir({ git: true })
+    await using source = await tmpdir()
+    await Bun.write(path.join(source.path, "paper.md"), "# One-shot source\n")
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({ title: "one-shot indexing" })
+        try {
+          const calls = { external: 0, network: 0 }
+          globalThis.fetch = (async () => {
+            calls.network++
+            return Response.json({ source_id: "one-shot-source" }, { status: 201 })
+          }) as unknown as typeof fetch
+
+          const result = await (
+            await AtlasTool.init()
+          ).execute(
+            { operation: "library_add_local", folder: source.path },
+            {
+              sessionID: session.id,
+              messageID: "msg_atlas_once",
+              callID: "call_atlas_once",
+              agent: "research",
+              abort: AbortSignal.any([]),
+              messages: [],
+              metadata: () => undefined,
+              ask: async (input) => {
+                if (input.permission !== "external_directory") return
+                calls.external++
+                await SessionFilesystem.grant({
+                  sessionID: session.id,
+                  path: source.path,
+                  access: "read",
+                  scope: "once",
+                  source: "permission",
+                })
+              },
+            },
+          )
+
+          expect(calls).toEqual({ external: 1, network: 1 })
+          expect(JSON.parse(result.output)).toMatchObject({
+            source: { source_id: "one-shot-source" },
+            collection: { files: 1 },
+          })
+          expect(
+            (await SessionFilesystem.list(session.id)).find((item) => item.scope === "once")?.time.consumed,
+          ).toBeNumber()
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("rejects a copied folder authorization before any upload", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using project = await tmpdir({ git: true })
+    await using source = await tmpdir()
+    await Bun.write(path.join(source.path, "paper.md"), "must remain local\n")
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({ title: "forged indexing authority" })
+        try {
+          await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: source.path,
+            access: "read",
+            scope: "session",
+          })
+          const authorized = await SessionFilesystem.authorize({
+            sessionID: session.id,
+            path: source.path,
+            access: "read",
+          })
+          const authorization = await SessionFilesystem.bindAuthorization({
+            sessionID: session.id,
+            access: "read",
+            authorized,
+          })
+          const copied = { ...authorization }
+          const calls = { network: 0 }
+          globalThis.fetch = (async () => {
+            calls.network++
+            return Response.json({})
+          }) as unknown as typeof fetch
+
+          await expect(
+            AtlasBroker.run({
+              operation: "library_add_local",
+              sessionID: session.id,
+              folder: source.path,
+              authorization: copied,
+            }),
+          ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+          expect(calls.network).toBe(0)
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("releases transferred folder authority on success, request failure, and abort while preserving borrowed authority", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using project = await tmpdir({ git: true })
+    await using source = await tmpdir({ init: (directory) => Bun.write(path.join(directory, "paper.md"), "paper\n") })
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({ title: "indexing authority ownership" })
+        try {
+          await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: source.path,
+            access: "read",
+            scope: "session",
+          })
+          const bind = async () => {
+            const authorized = await SessionFilesystem.authorize({
+              sessionID: session.id,
+              path: source.path,
+              access: "read",
+            })
+            return SessionFilesystem.bindAuthorization({ sessionID: session.id, access: "read", authorized })
+          }
+          const run = (
+            authorization: SessionFilesystem.Authorization,
+            ownership: "borrowed" | "owned",
+            signal?: AbortSignal,
+          ) =>
+            AtlasBroker.run(
+              {
+                operation: "library_add_local",
+                sessionID: session.id,
+                folder: source.path,
+                authorization,
+                authorizationOwnership: ownership,
+              },
+              signal,
+            )
+
+          globalThis.fetch = (async () =>
+            Response.json({ source_id: "owned-success" }, { status: 201 })) as unknown as typeof fetch
+          const owned = await bind()
+          await run(owned, "owned")
+          await expect(SessionFilesystem.revalidateAuthorization(owned)).rejects.toBeInstanceOf(
+            SessionFilesystem.DeniedError,
+          )
+
+          globalThis.fetch = (async () => new Response("injected failure", { status: 500 })) as unknown as typeof fetch
+          const failed = await bind()
+          await expect(run(failed, "owned")).rejects.toThrow("injected failure")
+          await expect(SessionFilesystem.revalidateAuthorization(failed)).rejects.toBeInstanceOf(
+            SessionFilesystem.DeniedError,
+          )
+
+          const aborted = await bind()
+          const controller = new AbortController()
+          controller.abort()
+          await expect(run(aborted, "owned", controller.signal)).rejects.toBeInstanceOf(DOMException)
+          await expect(SessionFilesystem.revalidateAuthorization(aborted)).rejects.toBeInstanceOf(
+            SessionFilesystem.DeniedError,
+          )
+
+          globalThis.fetch = (async () =>
+            Response.json({ source_id: "borrowed-success" }, { status: 201 })) as unknown as typeof fetch
+          const borrowed = await bind()
+          await run(borrowed, "borrowed")
+          await expect(SessionFilesystem.revalidateAuthorization(borrowed)).resolves.toMatchObject({
+            path: source.path,
+          })
+          SessionFilesystem.releaseAuthorization(borrowed)
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("serializes the final folder revalidation and upload against grant revocation", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using project = await tmpdir({ git: true })
+    await using source = await tmpdir({ init: (directory) => Bun.write(path.join(directory, "paper.md"), "paper\n") })
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({ title: "serialized indexing upload" })
+        try {
+          const grant = await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: source.path,
+            access: "read",
+            scope: "session",
+          })
+          const state = { settled: false, revocation: undefined as Promise<unknown> | undefined }
+          globalThis.fetch = (async () => {
+            state.revocation = SessionFilesystem.revoke(session.id, grant.id).then((value) => {
+              state.settled = true
+              return value
+            })
+            await Bun.sleep(25)
+            expect(state.settled).toBe(false)
+            return Response.json({ source_id: "serialized-source" }, { status: 201 })
+          }) as unknown as typeof fetch
+
+          await AtlasBroker.run({
+            operation: "library_add_local",
+            sessionID: session.id,
+            folder: source.path,
+          })
+          await state.revocation
+          expect(state.settled).toBe(true)
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("aborts before upload when folder authority is revoked during collection", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using project = await tmpdir({ git: true })
+    await using source = await tmpdir()
+    for (const index of Array.from({ length: 1_200 }, (_, value) => value)) {
+      await Bun.write(path.join(source.path, `paper-${String(index).padStart(4, "0")}.md`), `claim ${index}\n`)
+    }
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({ title: "revoked indexing" })
+        try {
+          const grant = await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: source.path,
+            access: "read",
+            scope: "session",
+          })
+          const authorized = await SessionFilesystem.authorize({
+            sessionID: session.id,
+            path: source.path,
+            access: "read",
+          })
+          const authorization = await SessionFilesystem.bindAuthorization({
+            sessionID: session.id,
+            access: "read",
+            authorized,
+          })
+          const calls = { network: 0 }
+          globalThis.fetch = (async () => {
+            calls.network++
+            return Response.json({ source_id: "must-not-upload" }, { status: 201 })
+          }) as unknown as typeof fetch
+
+          const pending = AtlasBroker.run({
+            operation: "library_add_local",
+            sessionID: session.id,
+            folder: source.path,
+            authorization,
+          }).then(
+            (value) => ({ value }),
+            (error: unknown) => ({ error }),
+          )
+          await Bun.sleep(20)
+          await SessionFilesystem.revoke(session.id, grant.id)
+          const outcome = await pending
+
+          expect("error" in outcome).toBe(true)
+          if ("error" in outcome) expect(outcome.error).toBeInstanceOf(SessionFilesystem.DeniedError)
+          expect(calls.network).toBe(0)
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("never uploads bytes reached through a concurrent symlink swap", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "symlink-race indexing" })
+        const state = { stop: false }
+        const folder = path.join(tmp.path, "source")
+        const victim = path.join(folder, "zz-victim.md")
+        const outside = path.join(tmp.path, "outside-secret.md")
+        try {
+          await fs.mkdir(folder)
+          await Bun.write(path.join(folder, "000-keep.md"), "safe stable text\n")
+          await Bun.write(victim, "safe transient text\n")
+          await Bun.write(outside, "OUTSIDE_SECRET_MUST_NOT_LEAK\n")
+          for (const index of Array.from({ length: 300 }, (_, value) => value)) {
+            await Bun.write(path.join(folder, `filler-${String(index).padStart(3, "0")}.md`), `safe ${index}\n`)
+          }
+          const request = { body: {} as Record<string, unknown> }
+          globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+            request.body = JSON.parse(String(init?.body))
+            return Response.json({ source_id: "race-safe" }, { status: 201 })
+          }) as typeof fetch
+          const swapping = (async () => {
+            while (!state.stop) {
+              await fs.unlink(victim).catch(() => undefined)
+              await fs.symlink(outside, victim).catch(() => undefined)
+              await Bun.sleep(0)
+              await fs.unlink(victim).catch(() => undefined)
+              await Bun.write(victim, "safe transient text\n")
+              await Bun.sleep(0)
+            }
+          })()
+
+          try {
+            await AtlasBroker.run({
+              operation: "library_add_local",
+              sessionID: session.id,
+              folder,
+            })
+          } finally {
+            state.stop = true
+            await swapping
+          }
+
+          expect(JSON.stringify(request.body)).not.toContain("OUTSIDE_SECRET_MUST_NOT_LEAK")
+          expect(request.body.files).toContainEqual({ path: "000-keep.md", content: "safe stable text\n" })
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("preserves readable files when another subtree is stale or unreadable", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using project = await tmpdir({ git: true })
+    await using source = await tmpdir()
+    const locked = path.join(source.path, "locked")
+    await fs.mkdir(locked)
+    await Bun.write(path.join(locked, "hidden.md"), "unavailable text\n")
+    await Bun.write(path.join(source.path, "paper.md"), "readable text\n")
+    await fs.symlink(path.join(source.path, "missing"), path.join(source.path, "stale"))
+    await fs.chmod(locked, 0)
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({ title: "partial indexing" })
+        try {
+          await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: source.path,
+            access: "read",
+            scope: "session",
+          })
+          const request = { body: {} as Record<string, unknown> }
+          globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+            request.body = JSON.parse(String(init?.body))
+            return Response.json({ source_id: "partial-source" }, { status: 201 })
+          }) as typeof fetch
+
+          const result = await AtlasBroker.run({
+            operation: "library_add_local",
+            sessionID: session.id,
+            folder: source.path,
+          })
+
+          expect(request.body.files).toContainEqual({ path: "paper.md", content: "readable text\n" })
+          expect(result).toMatchObject({
+            collection: {
+              discovery: { unavailable: 1 },
+              omitted: { symlink: 1, unavailable: 1 },
+            },
+          })
+        } finally {
+          await fs.chmod(locked, 0o700)
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("bounds candidate enumeration and reports truncation", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using project = await tmpdir({ git: true })
+    await using source = await tmpdir()
+    for (const index of Array.from({ length: 1_100 }, (_, value) => value)) {
+      await Bun.write(path.join(source.path, `item-${String(index).padStart(4, "0")}.md`), `${index}\n`)
+    }
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({ title: "bounded indexing" })
+        try {
+          await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: source.path,
+            access: "read",
+            scope: "session",
+          })
+          globalThis.fetch = (async () =>
+            Response.json({ source_id: "bounded-source" }, { status: 201 })) as unknown as typeof fetch
+
+          const result = await AtlasBroker.run({
+            operation: "library_add_local",
+            sessionID: session.id,
+            folder: source.path,
+            maxFiles: 1,
+          })
+
+          expect(result).toMatchObject({
+            collection: {
+              files: 1,
+              discovery: { candidates: 1_024, truncated: true },
+              omitted: { enumeration_limit: 1, file_limit: 1_023 },
+            },
+          })
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
   test("refuses to index another session's private workspace before any network request", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

@@ -13,6 +13,7 @@ import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
 import { SafeFileIO } from "@/file/safe-io"
+import { AuthoritySignal } from "@/project/authority-signal"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -26,7 +27,8 @@ export const WriteTool = Tool.define("write", {
   async execute(params, ctx) {
     const directory = await sessionToolDirectory(ctx)
     const requested = path.isAbsolute(params.filePath) ? params.filePath : path.join(directory, params.filePath)
-    const filepath = (await assertExternalDirectory(ctx, requested, { access: "write" }))?.path ?? requested
+    using access = await assertExternalDirectory(ctx, requested, { access: "write" })
+    const filepath = access?.path ?? requested
 
     const approved = await SafeFileIO.optional(filepath)
     const exists = !!approved
@@ -44,7 +46,11 @@ export const WriteTool = Tool.define("write", {
       },
     })
 
-    await SafeFileIO.write(filepath, params.content, approved)
+    await AuthoritySignal.exclusive(async () => {
+      const current = (await access?.revalidate()) ?? filepath
+      if (current !== filepath) throw new Error("File authority changed before the write")
+      await SafeFileIO.write(current, params.content, approved)
+    })
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

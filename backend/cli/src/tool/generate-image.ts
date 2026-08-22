@@ -7,6 +7,7 @@ import { OpenScience } from "@/openscience"
 import { Instance } from "@/project/instance"
 import { SafeFileIO } from "@/file/safe-io"
 import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
+import { AuthoritySignal } from "@/project/authority-signal"
 import { Identifier } from "@/id/id"
 import { Bus } from "@/bus"
 import { File } from "@/file"
@@ -180,22 +181,22 @@ export const GenerateImageTool = Tool.define("generate_image", {
     const requested = path.isAbsolute(params.output_path)
       ? params.output_path
       : path.join(directory, params.output_path)
-    const output = (await assertExternalDirectory(ctx, requested, { access: "write" }))?.path ?? requested
+    using outputAccess = await assertExternalDirectory(ctx, requested, { access: "write" })
+    const output = outputAccess?.path ?? requested
     const extension = path.extname(output).toLowerCase()
     if (![".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(extension)) {
       throw new Error("output_path must end in .png, .jpg, .jpeg, .webp, or .gif")
     }
     const approved = await SafeFileIO.optional(output)
-    const source = params.input_path
-      ? (
-          await assertExternalDirectory(
-            ctx,
-            path.isAbsolute(params.input_path) ? params.input_path : path.join(directory, params.input_path),
-            { access: "read" },
-          )
-        )?.path
+    using inputAccess = params.input_path
+      ? await assertExternalDirectory(
+          ctx,
+          path.isAbsolute(params.input_path) ? params.input_path : path.join(directory, params.input_path),
+          { access: "read" },
+        )
       : undefined
-    const input = source ? await SafeFileIO.read(source) : undefined
+    const source = inputAccess?.path
+    const input = source ? await SafeFileIO.read((await inputAccess?.revalidate()) ?? source) : undefined
     const inputMime = source
       ? path.extname(source).toLowerCase() === ".webp"
         ? "image/webp"
@@ -288,7 +289,11 @@ export const GenerateImageTool = Tool.define("generate_image", {
     if (!direct.response.ok) throw requestError(direct.response.status, direct.body, direct.raw, managed)
     if (!direct.body) throw new Error("Nano Banana returned an unreadable response.")
     const image = await materializeImage(direct.body, ctx.abort)
-    await SafeFileIO.write(output, image.bytes, approved)
+    await AuthoritySignal.exclusive(async () => {
+      const current = (await outputAccess?.revalidate()) ?? output
+      if (current !== output) throw new Error("Image output authority changed before the write")
+      await SafeFileIO.write(current, image.bytes, approved)
+    })
     await Bus.publish(File.Event.Edited, { file: output })
     await Bus.publish(FileWatcher.Event.Updated, { file: output, event: approved ? "change" : "add" })
 

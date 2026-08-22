@@ -38,12 +38,11 @@ export const ReadTool = Tool.define("read", {
   async execute(params, ctx) {
     const directory = await sessionToolDirectory(ctx)
     const requested = path.isAbsolute(params.filePath) ? params.filePath : path.resolve(directory, params.filePath)
-    const authorized = await assertExternalDirectory(ctx, requested, {
+    using authorized = await assertExternalDirectory(ctx, requested, {
       bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
       access: "read",
     })
-    const filepath = authorized?.path ?? requested
-    const title = path.relative(Instance.worktree, filepath)
+    let filepath = authorized?.path ?? requested
 
     if (!authorized?.managedToolOutput) {
       await ctx.ask({
@@ -53,6 +52,9 @@ export const ReadTool = Tool.define("read", {
         metadata: {},
       })
     }
+
+    filepath = (await authorized?.revalidate()) ?? filepath
+    const title = path.relative(Instance.worktree, filepath)
 
     const snapshot = await SafeFileIO.optional(filepath)
     if (!snapshot) {

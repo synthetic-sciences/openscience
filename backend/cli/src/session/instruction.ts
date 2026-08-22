@@ -172,7 +172,7 @@ export namespace InstructionPrompt {
     let current = path.dirname(path.resolve(filepath))
     const root = path.resolve(Instance.directory)
 
-    while (current.startsWith(root)) {
+    while (Filesystem.contains(root, current)) {
       const found = await find(current)
       if (found && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
         claim(messageID, found)

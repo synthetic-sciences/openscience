@@ -137,22 +137,13 @@ export const ArtifactTool = Tool.define("artifact", {
       return result("Invalid provenance", "The producing run was not found in this project and session.")
     }
     {
-      const file = await File.raw(params.path, { sessionID: ctx.sessionID })
+      const file = await File.rawSource(params.path, {
+        sessionID: ctx.sessionID,
+        maxBytes: ArtifactStore.MAX_VERSION_BYTES,
+      })
       const name = path.basename(params.path)
       const classified = ArtifactFile.classify(name)
       const title = params.summary?.trim() || name
-      const preview = await (async () => {
-        if (file.type.startsWith("image/") && file.size <= 1_500_000) {
-          const bytes = Buffer.from(await file.arrayBuffer()).toString("base64")
-          return { kind: "image" as const, data: `data:${file.type};base64,${bytes}` }
-        }
-        const text =
-          file.type.startsWith("text/") ||
-          ["application/json", "application/xml", "application/yaml", "application/x-yaml"].includes(file.type)
-        if (text && file.size <= 250_000) {
-          return { kind: "text" as const, data: (await file.text()).slice(0, 12_000) }
-        }
-      })()
       const saved = await ArtifactStore.save({
         projectID: Instance.project.id,
         sessionID: ctx.sessionID,
@@ -161,11 +152,28 @@ export const ArtifactTool = Tool.define("artifact", {
         kind: classified?.kind ?? "file",
         content: file,
         title,
-        mimeType: file.type,
+        mimeType: file.mimeType,
         messageID: ctx.messageID,
         captureQuality: "declared",
         ...(entry ? { execution: savedExecution(entry) } : {}),
-      })
+      }).finally(() => file.close())
+      const preview = await (async () => {
+        if (saved.current.size > 1_500_000) return
+        const stored = await ArtifactStore.read(Instance.project.id, saved.id, saved.currentVersionID)
+        if (!stored) return
+        if (saved.current.mimeType.startsWith("image/")) {
+          const bytes = Buffer.from(await stored.content.arrayBuffer()).toString("base64")
+          return { kind: "image" as const, data: `data:${saved.current.mimeType};base64,${bytes}` }
+        }
+        const text =
+          saved.current.mimeType.startsWith("text/") ||
+          ["application/json", "application/xml", "application/yaml", "application/x-yaml"].includes(
+            saved.current.mimeType,
+          )
+        if (text && saved.current.size <= 250_000) {
+          return { kind: "text" as const, data: (await stored.content.text()).slice(0, 12_000) }
+        }
+      })()
       await traceSavedArtifact(saved, entry).catch((error) => {
         if (entry) throw error
         log.warn("saved Result has no review provenance target", {

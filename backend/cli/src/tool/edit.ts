@@ -18,6 +18,7 @@ import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
 import { SafeFileIO } from "@/file/safe-io"
+import { AuthoritySignal } from "@/project/authority-signal"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -44,7 +45,14 @@ export const EditTool = Tool.define("edit", {
 
     const directory = await sessionToolDirectory(ctx)
     const requested = path.isAbsolute(params.filePath) ? params.filePath : path.join(directory, params.filePath)
-    const filePath = (await assertExternalDirectory(ctx, requested, { access: "write" }))?.path ?? requested
+    using access = await assertExternalDirectory(ctx, requested, { access: "write" })
+    const filePath = access?.path ?? requested
+    const write = (content: string, approved?: Awaited<ReturnType<typeof SafeFileIO.optional>>) =>
+      AuthoritySignal.exclusive(async () => {
+        const current = (await access?.revalidate()) ?? filePath
+        if (current !== filePath) throw new Error("File authority changed before the edit")
+        return SafeFileIO.write(current, content, approved)
+      })
 
     let diff = ""
     let contentOld = ""
@@ -66,7 +74,7 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
-        await SafeFileIO.write(filePath, params.newString, approved)
+        await write(params.newString, approved)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -99,7 +107,7 @@ export const EditTool = Tool.define("edit", {
         },
       })
 
-      await SafeFileIO.write(filePath, contentNew, approved)
+      await write(contentNew, approved)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
@@ -107,7 +115,6 @@ export const EditTool = Tool.define("edit", {
         file: filePath,
         event: "change",
       })
-      contentNew = await Bun.file(filePath).text()
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )

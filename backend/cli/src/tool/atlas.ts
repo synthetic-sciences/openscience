@@ -89,7 +89,7 @@ export const AtlasTool = Tool.define("atlas", {
       always: [`${params.operation}*`],
       metadata: { broker: "host", mutation },
     })
-    const folder =
+    using folder =
       params.operation === "library_add_local" || params.operation === "library_sync_local"
         ? await assertExternalDirectory(ctx, params.folder, { kind: "directory", access: "read" })
         : undefined
@@ -112,6 +112,8 @@ export const AtlasTool = Tool.define("atlas", {
         repository: params.repository,
         displayName: params.display_name,
         folder: folder?.path ?? params.folder,
+        authorization: folder?.authorization,
+        authorizationOwnership: folder?.authorization ? "borrowed" : undefined,
         sourcePath: params.source_path,
         pattern: params.pattern,
         pathPrefix: params.path_prefix,

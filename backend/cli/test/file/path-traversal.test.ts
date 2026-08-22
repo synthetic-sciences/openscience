@@ -11,6 +11,7 @@ describe("Filesystem.contains", () => {
     expect(Filesystem.contains("/project", "/project/src")).toBe(true)
     expect(Filesystem.contains("/project", "/project/src/file.ts")).toBe(true)
     expect(Filesystem.contains("/project", "/project")).toBe(true)
+    expect(Filesystem.contains("/project", "/project/..hidden/file.ts")).toBe(true)
   })
 
   test("blocks ../ traversal", () => {

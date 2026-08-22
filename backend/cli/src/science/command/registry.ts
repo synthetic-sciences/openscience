@@ -143,6 +143,14 @@ export namespace CommandRuntime {
     void CredentialProcessLedger.complete(id).catch(() => undefined)
   }
 
+  /** Await durable normal-exit cleanup before a caller accepts output or
+   * releases a sandbox that same-group descendants could still access. */
+  export async function settle(id: string) {
+    entries.delete(id)
+    const complete = await CredentialProcessLedger.complete(id)
+    if (!complete) throw new Error(`Command ${id} is still running and cannot be settled`)
+  }
+
   export function list(projectID: string, sessionID?: string): CommandStatus[] {
     return [...entries.values()]
       .filter((value) => value.projectID === projectID && (!sessionID || value.sessionID === sessionID))

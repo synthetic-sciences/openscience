@@ -1,7 +1,10 @@
 import path from "node:path"
+import os from "node:os"
 import fs from "node:fs/promises"
+import { SafeFileIO } from "@/file/safe-io"
 import { API_BASE, OpenScience } from "@/openscience"
 import { SessionFilesystem } from "@/session/filesystem"
+import { AuthoritySignal } from "@/project/authority-signal"
 
 export type AtlasBrokerInput = {
   operation:
@@ -37,6 +40,8 @@ export type AtlasBrokerInput = {
   repository?: string
   displayName?: string
   folder?: string
+  authorization?: SessionFilesystem.Authorization
+  authorizationOwnership?: "borrowed" | "owned"
   sourcePath?: string
   pattern?: string
   pathPrefix?: string
@@ -68,6 +73,10 @@ const DEFAULT_FILES = 2_000
 const MAX_FILE_BYTES = 4 * 1_048_576
 const MAX_TOTAL_BYTES = 100 * 1_048_576
 const MAX_FILES = 5_000
+const MAX_GIT_BYTES = 16 * 1_048_576
+const MAX_CANDIDATES = 40_000
+const MIN_CANDIDATES = 1_024
+const MAX_ENTRIES = 200_000
 const skippedDirectories = new Set([
   ".git",
   ".openscience",
@@ -141,82 +150,260 @@ const secret = (relative: string) => {
 
 const binary = (bytes: Uint8Array) => bytes.subarray(0, 8_000).includes(0)
 
-async function gitFiles(root: string, signal?: AbortSignal) {
-  signal?.throwIfAborted()
-  const git = Bun.which("git")
-  if (!git) return
-  const proc = Bun.spawn([git, "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+async function command(input: { args: string[]; maxBytes: number; signal?: AbortSignal }) {
+  input.signal?.throwIfAborted()
+  const proc = Bun.spawn(input.args, {
     stdout: "pipe",
     stderr: "ignore",
     env: {
       PATH: process.env.PATH ?? "",
       GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_GLOBAL: os.devNull,
       GIT_TERMINAL_PROMPT: "0",
     },
   })
-  const [text, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
-  signal?.throwIfAborted()
-  if (code !== 0) return
-  return text
-    .split("\0")
-    .filter(Boolean)
-    .toSorted((left, right) => left.localeCompare(right))
+  const reader = proc.stdout.getReader()
+  const state = { chunks: [] as Uint8Array[], exited: false, size: 0, truncated: false }
+  const abort = () => proc.kill()
+  input.signal?.addEventListener("abort", abort, { once: true })
+  try {
+    input.signal?.throwIfAborted()
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) break
+      const remaining = input.maxBytes - state.size
+      if (remaining <= 0) {
+        state.truncated = true
+        proc.kill()
+        break
+      }
+      const bytes = chunk.value.subarray(0, remaining)
+      state.chunks.push(bytes)
+      state.size += bytes.byteLength
+      if (bytes.byteLength === chunk.value.byteLength) continue
+      state.truncated = true
+      proc.kill()
+      break
+    }
+    const code = await proc.exited
+    state.exited = true
+    input.signal?.throwIfAborted()
+    return { bytes: Buffer.concat(state.chunks), code, truncated: state.truncated }
+  } finally {
+    if (!state.exited) proc.kill()
+    input.signal?.removeEventListener("abort", abort)
+    reader.releaseLock()
+  }
 }
 
-async function walkedFiles(root: string, signal?: AbortSignal) {
+async function gitFiles(root: string, limit: number, signal?: AbortSignal) {
+  signal?.throwIfAborted()
+  const git = Bun.which("git")
+  if (!git) return
+  const base = await command({
+    args: [git, "-C", root, "rev-parse", "--show-toplevel"],
+    maxBytes: 64 * 1024,
+    signal,
+  }).catch(() => undefined)
+  if (!base || base.code !== 0 || base.truncated) return
+  const top = await fs.realpath(base.bytes.toString().trim()).catch(() => undefined)
+  if (!top || !within(top, root)) return
+  const kind = top === root ? "git-root" : "git-nested"
+  const listed = await command({
+    args: [git, "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "."],
+    maxBytes: MAX_GIT_BYTES,
+    signal,
+  }).catch(() => undefined)
+  if (!listed || (listed.code !== 0 && !listed.truncated)) return
+  const values = listed.bytes.toString().split("\0")
+  if (listed.truncated) values.pop()
+  const paths = values.filter(Boolean).slice(0, limit)
+  return {
+    paths: paths.toSorted((left, right) => left.localeCompare(right)),
+    kind,
+    truncated: listed.truncated || values.filter(Boolean).length > limit,
+  }
+}
+
+async function walkedFiles(root: string, candidates: number, entries: number, signal?: AbortSignal) {
   const files: string[] = []
-  const visit = async (relative: string): Promise<void> => {
+  const queue = [""]
+  const state = { cursor: 0, entries: 0, unavailable: 0, truncated: false }
+  while (state.cursor < queue.length && files.length < candidates && state.entries < entries) {
     signal?.throwIfAborted()
-    const entries = await fs.readdir(relative ? path.join(root, relative) : root, { withFileTypes: true })
-    entries.sort((left, right) => left.name.localeCompare(right.name))
-    for (const entry of entries) {
+    const relative = queue[state.cursor++] ?? ""
+    const target = relative ? path.join(root, relative) : root
+    const before = await Promise.all([fs.lstat(target), fs.realpath(target)]).catch(() => undefined)
+    if (
+      !before ||
+      !before[0].isDirectory() ||
+      before[0].isSymbolicLink() ||
+      before[1] !== target ||
+      !within(root, before[1])
+    ) {
+      state.unavailable++
+      continue
+    }
+    const directory = await fs.opendir(target).catch(() => undefined)
+    if (!directory) {
+      state.unavailable++
+      continue
+    }
+    const listed = await (async () => {
+      const result: Array<{ name: string; directory: boolean }> = []
+      for await (const entry of directory) {
+        signal?.throwIfAborted()
+        if (state.entries >= entries) {
+          state.truncated = true
+          break
+        }
+        state.entries++
+        result.push({ name: entry.name, directory: entry.isDirectory() })
+      }
+      return result
+    })().catch(() => {
+      state.unavailable++
+      return undefined
+    })
+    if (!listed) continue
+    const after = await Promise.all([fs.lstat(target), fs.realpath(target)]).catch(() => undefined)
+    if (
+      !after ||
+      !after[0].isDirectory() ||
+      after[0].isSymbolicLink() ||
+      after[1] !== target ||
+      after[0].dev !== before[0].dev ||
+      after[0].ino !== before[0].ino
+    ) {
+      state.unavailable++
+      continue
+    }
+    for (const entry of listed.toSorted((left, right) => left.name.localeCompare(right.name))) {
       signal?.throwIfAborted()
       const child = relative ? path.join(relative, entry.name) : entry.name
-      if (entry.isDirectory()) {
-        if (!skippedDirectories.has(entry.name)) await visit(child)
+      if (entry.directory) {
+        if (!skippedDirectories.has(entry.name)) queue.push(child)
         continue
+      }
+      if (files.length >= candidates) {
+        state.truncated = true
+        break
       }
       files.push(child)
     }
   }
-  await visit("")
-  return files
+  if (state.cursor < queue.length || files.length >= candidates || state.entries >= entries) state.truncated = true
+  return { paths: files, truncated: state.truncated, unavailable: state.unavailable, entries: state.entries }
 }
 
-export async function collectLocalFolder(input: {
+type CollectionInput = {
   sessionID: string
   folder: string
+  authorization?: SessionFilesystem.Authorization
+  authorizationOwnership?: "borrowed" | "owned"
   maxFileBytes?: number
   maxFiles?: number
   maxTotalBytes?: number
   signal?: AbortSignal
-}) {
+}
+
+async function collect(input: CollectionInput) {
+  const incoming = { transferred: false, released: false }
+  const incomingOwnership = input.authorizationOwnership ?? "borrowed"
+  const releaseIncoming = () => {
+    if (!input.authorization || incomingOwnership !== "owned" || incoming.released) return
+    incoming.released = true
+    SessionFilesystem.releaseAuthorization(input.authorization)
+  }
+  using incomingCleanup = {
+    [Symbol.dispose]() {
+      if (!incoming.transferred) releaseIncoming()
+    },
+  }
   input.signal?.throwIfAborted()
-  const authorized = await SessionFilesystem.authorize({
-    sessionID: input.sessionID,
-    path: input.folder,
-    access: "read",
-  })
-  const root = await fs.realpath(authorized.path)
+  if (
+    input.authorization &&
+    (input.authorization.sessionID !== input.sessionID ||
+      input.authorization.path !== input.folder ||
+      input.authorization.access !== "read")
+  ) {
+    throw new SessionFilesystem.DeniedError({ sessionID: input.sessionID, path: input.folder, access: "read" })
+  }
+  const approval = await (async () => {
+    if (input.authorization) {
+      const authorized = await SessionFilesystem.revalidateAuthorization(input.authorization, {
+        path: input.folder,
+        access: "read",
+      })
+      return {
+        authorization: input.authorization,
+        authorizationOwnership: input.authorizationOwnership ?? ("borrowed" as const),
+        authorized,
+      }
+    }
+    const authorized = await SessionFilesystem.authorize({
+      sessionID: input.sessionID,
+      path: input.folder,
+      access: "read",
+    })
+    const authorization = await SessionFilesystem.bindAuthorization({
+      sessionID: input.sessionID,
+      access: "read",
+      authorized,
+    })
+    return { authorization, authorizationOwnership: "owned" as const, authorized }
+  })()
+  const lifecycle = { released: false, transferred: false }
+  const release = () => {
+    if (lifecycle.released || approval.authorizationOwnership !== "owned") return
+    lifecycle.released = true
+    SessionFilesystem.releaseAuthorization(approval.authorization)
+  }
+  using cleanup = {
+    [Symbol.dispose]() {
+      if (!lifecycle.transferred) release()
+    },
+  }
+  incoming.transferred = true
+  const root = await fs.realpath(approval.authorized.path)
   const rootStat = await fs.lstat(root)
   if (!rootStat.isDirectory()) throw new AtlasBrokerError(`not a directory: ${input.folder}`)
 
   const maxFileBytes = bounded(input.maxFileBytes, DEFAULT_FILE_BYTES, MAX_FILE_BYTES, "max_file_bytes")
   const maxFiles = bounded(input.maxFiles, DEFAULT_FILES, MAX_FILES, "max_files")
   const maxTotalBytes = bounded(input.maxTotalBytes, DEFAULT_TOTAL_BYTES, MAX_TOTAL_BYTES, "max_total_bytes")
-  const listed = await gitFiles(root, input.signal)
-  const paths = listed ?? (await walkedFiles(root, input.signal))
+  const candidates = Math.min(MAX_CANDIDATES, Math.max(MIN_CANDIDATES, maxFiles * 8))
+  const entries = Math.min(MAX_ENTRIES, candidates * 5)
+  const listed = await gitFiles(root, candidates, input.signal)
+  const fallback = !listed || (listed.kind === "git-nested" && listed.paths.length === 0)
+  const walked = fallback ? await walkedFiles(root, candidates, entries, input.signal) : undefined
+  const discovery = walked
+    ? {
+        method: listed ? "walk-nested-fallback" : "walk",
+        candidates: walked.paths.length,
+        entries: walked.entries,
+        truncated: walked.truncated || Boolean(listed?.truncated),
+        unavailable: walked.unavailable,
+      }
+    : {
+        method: listed?.kind ?? "git-root",
+        candidates: listed?.paths.length ?? 0,
+        entries: listed?.paths.length ?? 0,
+        truncated: Boolean(listed?.truncated),
+        unavailable: 0,
+      }
+  const paths = walked?.paths ?? listed?.paths ?? []
   const files: Array<{ path: string; content: string }> = []
   const omitted = {
     aggregate_limit: 0,
     binary: 0,
+    enumeration_limit: discovery.truncated ? 1 : 0,
     file_limit: 0,
     invalid_path: 0,
     oversized: 0,
     secret: 0,
     symlink: 0,
-    unavailable: 0,
+    unavailable: discovery.unavailable,
   }
   const size = { total: 0 }
 
@@ -258,29 +445,96 @@ export async function collectLocalFolder(input: {
       omitted.invalid_path++
       continue
     }
+    if (canonical !== target) {
+      omitted.symlink++
+      continue
+    }
     if (stat.size > maxFileBytes) {
       omitted.oversized++
       continue
     }
-    const bytes = await Bun.file(canonical).bytes()
-    if (binary(bytes)) {
-      omitted.binary++
-      continue
-    }
-    if (size.total + bytes.length > maxTotalBytes) {
+    if (size.total + stat.size > maxTotalBytes) {
       omitted.aggregate_limit++
       continue
     }
-    size.total += bytes.length
+    const read = await SafeFileIO.read(canonical, { maxBytes: maxFileBytes }).then(
+      (snapshot) => ({ snapshot }),
+      (error: unknown) => ({ error }),
+    )
+    if ("error" in read) {
+      if (read.error instanceof SafeFileIO.LimitError) omitted.oversized++
+      else omitted.unavailable++
+      continue
+    }
+    if (
+      read.snapshot.dev !== stat.dev ||
+      read.snapshot.ino !== stat.ino ||
+      read.snapshot.size !== stat.size ||
+      read.snapshot.mtimeMs !== stat.mtimeMs
+    ) {
+      omitted.unavailable++
+      continue
+    }
+    const after = await Promise.all([fs.lstat(target), fs.realpath(target)]).catch(() => undefined)
+    if (!after) {
+      omitted.unavailable++
+      continue
+    }
+    if (after[0].isSymbolicLink() || after[1] !== canonical || !within(root, after[1])) {
+      omitted.symlink++
+      continue
+    }
+    if (
+      !after[0].isFile() ||
+      after[0].dev !== read.snapshot.dev ||
+      after[0].ino !== read.snapshot.ino ||
+      after[0].size !== read.snapshot.size ||
+      after[0].mtimeMs !== read.snapshot.mtimeMs
+    ) {
+      omitted.unavailable++
+      continue
+    }
+    if (binary(read.snapshot.bytes)) {
+      omitted.binary++
+      continue
+    }
+    if (size.total + read.snapshot.bytes.length > maxTotalBytes) {
+      omitted.aggregate_limit++
+      continue
+    }
+    size.total += read.snapshot.bytes.length
     files.push({
       path: path.relative(root, canonical).split(path.sep).join("/"),
-      content: Buffer.from(bytes).toString(),
+      content: read.snapshot.bytes.toString(),
     })
   }
   if (!files.length) {
-    throw new AtlasBrokerError(`No indexable text files found under ${input.folder}: ${JSON.stringify(omitted)}`)
+    throw new AtlasBrokerError(
+      `No indexable text files found under ${input.folder}: ${JSON.stringify({ omitted, discovery })}`,
+    )
   }
-  return { files, omitted, root, totalBytes: size.total }
+  lifecycle.transferred = true
+  return {
+    authorization: approval.authorization,
+    authorizationOwnership: approval.authorizationOwnership,
+    discovery,
+    files,
+    omitted,
+    root,
+    totalBytes: size.total,
+    [Symbol.dispose]: release,
+  }
+}
+
+export async function collectLocalFolder(input: Omit<CollectionInput, "authorization" | "authorizationOwnership">) {
+  using result = await collect(input)
+  return {
+    discovery: result.discovery,
+    files: result.files,
+    omitted: result.omitted,
+    root: result.root,
+    totalBytes: result.totalBytes,
+  }
 }
 
 const query = (values: Record<string, string | number | boolean | undefined>) => {
@@ -292,25 +546,40 @@ const query = (values: Record<string, string | number | boolean | undefined>) =>
   return suffix ? `?${suffix}` : ""
 }
 
-export async function atlasRequest(method: string, path: string, body?: unknown, signal?: AbortSignal) {
+async function request(
+  method: string,
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+  preflight?: () => Promise<void>,
+) {
   const session = await OpenScience.getSession()
   if (!session?.api_key) throw new AtlasBrokerError("Sign in to Gateway before using the host broker.", 401)
   const limit = AbortSignal.timeout(timeout)
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${session.api_key}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: signal ? AbortSignal.any([signal, limit]) : limit,
-  })
+  const send = async () => {
+    await preflight?.()
+    signal?.throwIfAborted()
+    return fetch(`${API_BASE}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${session.api_key}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: signal ? AbortSignal.any([signal, limit]) : limit,
+    })
+  }
+  const response = preflight ? await AuthoritySignal.exclusive(send) : await send()
   if (!response.ok) {
     const detail = await response.text().catch(() => "")
     throw new AtlasBrokerError(detail || `Gateway request failed with HTTP ${response.status}`, response.status)
   }
   return response.json() as Promise<unknown>
+}
+
+export async function atlasRequest(method: string, path: string, body?: unknown, signal?: AbortSignal) {
+  return request(method, path, body, signal)
 }
 
 export namespace AtlasBroker {
@@ -399,9 +668,11 @@ export namespace AtlasBroker {
     if (input.operation === "library_add_local" || input.operation === "library_sync_local") {
       const sessionID = required(input.sessionID, "session_id")
       const folder = required(input.folder, "folder")
-      const collection = await collectLocalFolder({
+      using collection = await collect({
         sessionID,
         folder,
+        authorization: input.authorization,
+        authorizationOwnership: input.authorizationOwnership,
         maxFileBytes: input.maxFileBytes,
         maxFiles: input.maxFiles,
         maxTotalBytes: input.maxTotalBytes,
@@ -420,12 +691,18 @@ export namespace AtlasBroker {
         input.operation === "library_add_local"
           ? "/api/v1/sources"
           : `/api/v1/sources/${encodeURIComponent(required(input.sourceID, "source_id"))}/sync`
-      const result = await atlasRequest("POST", target, body, signal)
+      const result = await request("POST", target, body, signal, async () => {
+        await SessionFilesystem.revalidateAuthorization(collection.authorization, {
+          path: collection.root,
+          access: "read",
+        })
+      })
       return {
         source: result,
         collection: {
           files: collection.files.length,
           bytes: collection.totalBytes,
+          discovery: collection.discovery,
           omitted: collection.omitted,
         },
       }

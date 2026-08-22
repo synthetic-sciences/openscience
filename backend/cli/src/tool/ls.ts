@@ -43,7 +43,7 @@ export const ListTool = Tool.define("list", {
   }),
   async execute(params, ctx) {
     let searchPath = path.resolve(await sessionToolDirectory(ctx), params.path || ".")
-    const authorized = await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
+    using authorized = await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
     searchPath = authorized?.path ?? searchPath
 
     await ctx.ask({
@@ -54,6 +54,8 @@ export const ListTool = Tool.define("list", {
         path: searchPath,
       },
     })
+
+    searchPath = (await authorized?.revalidate()) ?? searchPath
 
     const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
     const files = []

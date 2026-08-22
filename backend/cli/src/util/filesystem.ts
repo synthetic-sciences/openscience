@@ -1,6 +1,6 @@
 import { realpathSync } from "fs"
 import { lstat, realpath, stat } from "fs/promises"
-import { basename, dirname, isAbsolute, join, relative, resolve } from "path"
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "path"
 
 export namespace Filesystem {
   export const exists = (p: string) =>
@@ -30,12 +30,15 @@ export namespace Filesystem {
   export function overlaps(a: string, b: string) {
     const relA = relative(a, b)
     const relB = relative(b, a)
-    return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
+    return containsRelative(relA) || containsRelative(relB)
   }
 
   export function contains(parent: string, child: string) {
-    const rel = relative(parent, child)
-    return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))
+    return containsRelative(relative(parent, child))
+  }
+
+  function containsRelative(value: string) {
+    return value === "" || (value !== ".." && !value.startsWith(`..${sep}`) && !isAbsolute(value))
   }
 
   async function canonicalize(cursor: string, tail: string[]): Promise<string | undefined> {

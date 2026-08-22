@@ -104,12 +104,22 @@ export namespace LockCoordination {
     const name = filename()
     const target = path.join(dir, name)
     const marker = JSON.stringify({ pid: process.pid, token: name, created: Date.now() })
-    const open = async (): Promise<Awaited<ReturnType<typeof fs.open>>> => {
-      await fs.mkdir(dir, { recursive: true })
-      return fs.open(target, "wx", 0o600).catch(async (error: NodeJS.ErrnoException) => {
-        if (error.code !== "ENOENT") throw error
-        return open()
-      })
+    const attempts = { count: 0 }
+    type Handle = Awaited<ReturnType<typeof fs.open>>
+    async function retry(error: NodeJS.ErrnoException, codes: string[]): Promise<Handle> {
+      // macOS may report EINVAL or EEXIST rather than ENOENT when recursive
+      // mkdir races the final-lease cleanup removing an empty ancestor. Open
+      // has the narrower retry set so a UUID collision remains fail-closed.
+      if (!codes.includes(error.code ?? "") || attempts.count >= 100) throw error
+      attempts.count++
+      await Bun.sleep(1)
+      return open()
+    }
+    async function open(): Promise<Handle> {
+      return fs.mkdir(dir, { recursive: true }).then(
+        () => fs.open(target, "wx", 0o600).catch((error) => retry(error, ["ENOENT", "EINVAL"])),
+        (error) => retry(error, ["ENOENT", "EINVAL", "EEXIST"]),
+      )
     }
     const handle = await open()
     await handle

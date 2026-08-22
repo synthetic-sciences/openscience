@@ -9,7 +9,7 @@ import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
-import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
+import { assertExternalDirectory, sessionToolDirectory, type AuthorizedPath } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
@@ -17,6 +17,8 @@ import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { FileTrash } from "../file/trash"
 import { Lock } from "@/util/lock"
+import type { SessionFilesystem } from "@/session/filesystem"
+import { AuthoritySignal } from "@/project/authority-signal"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -40,6 +42,16 @@ type FileChange = {
   additions: number
   deletions: number
   approved?: ApprovedFile
+  authorization?: SessionFilesystem.Authorization
+  access?: AuthorizedPath
+  targetAccess?: AuthorizedPath
+}
+
+async function revalidate(change: FileChange, target = false) {
+  const expected = target ? (change.movePath ?? change.filePath) : change.filePath
+  const access = target ? (change.targetAccess ?? change.access) : change.access
+  const current = (await access?.revalidate()) ?? expected
+  if (current !== expected) throw new Error(`File authority changed before editing ${expected}`)
 }
 
 async function readApprovedFile(filepath: string): Promise<ApprovedFile> {
@@ -150,7 +162,18 @@ async function removeInstalled(item: PreparedChange) {
 async function applyTransaction(changes: FileChange[], ctx: Tool.Context) {
   const prepared: PreparedChange[] = []
   try {
-    for (const change of changes) prepared.push(await prepareChange(change))
+    for (const change of changes) {
+      if (change.type === "delete") {
+        prepared.push(await prepareChange(change))
+        continue
+      }
+      prepared.push(
+        await AuthoritySignal.exclusive(async () => {
+          await revalidate(change, change.type === "move")
+          return prepareChange(change)
+        }),
+      )
+    }
   } catch (error) {
     await Promise.all(prepared.map((item) => (item.staged ? fs.rm(item.staged, { force: true }) : undefined)))
     throw error
@@ -163,15 +186,21 @@ async function applyTransaction(changes: FileChange[], ctx: Tool.Context) {
       started.push(item)
       switch (change.type) {
         case "add":
-          await installExclusive(item.staged!, change.filePath)
+          await AuthoritySignal.exclusive(async () => {
+            await revalidate(change)
+            await installExclusive(item.staged!, change.filePath)
+          })
           item.installed = true
           break
         case "update":
           if (!change.approved || !item.backup) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
-          await fs.rename(change.filePath, item.backup)
-          item.sourceMoved = true
-          await assertApprovedFile(item.backup, change.approved)
-          await installExclusive(item.staged!, change.filePath)
+          await AuthoritySignal.exclusive(async () => {
+            await revalidate(change)
+            await fs.rename(change.filePath, item.backup!)
+            item.sourceMoved = true
+            await assertApprovedFile(item.backup!, change.approved!)
+            await installExclusive(item.staged!, change.filePath)
+          })
           item.installed = true
           break
         case "move":
@@ -182,9 +211,14 @@ async function applyTransaction(changes: FileChange[], ctx: Tool.Context) {
             projectID: Instance.project.id,
             sessionID: ctx.sessionID,
             path: change.filePath,
+            authorization: change.authorization,
+            authorizationOwnership: "borrowed",
             expectedContent: change.approved.bytes,
           })
-          await installExclusive(item.staged!, change.movePath)
+          await AuthoritySignal.exclusive(async () => {
+            await revalidate(change, true)
+            await installExclusive(item.staged!, change.movePath!)
+          })
           item.installed = true
           break
         case "delete":
@@ -193,6 +227,8 @@ async function applyTransaction(changes: FileChange[], ctx: Tool.Context) {
             projectID: Instance.project.id,
             sessionID: ctx.sessionID,
             path: change.filePath,
+            authorization: change.authorization,
+            authorizationOwnership: "borrowed",
             expectedContent: change.approved.bytes,
           })
           break
@@ -262,13 +298,25 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
 
     // Validate file paths and check permissions
     const fileChanges: FileChange[] = []
+    const accesses: AuthorizedPath[] = []
+    using _accesses = {
+      [Symbol.dispose]() {
+        for (const access of accesses.toReversed()) access.dispose()
+      },
+    }
+    const authorize = async (target: string) => {
+      const access = await assertExternalDirectory(ctx, target, { access: "write" })
+      if (access) accesses.push(access)
+      return access
+    }
 
     let totalDiff = ""
 
     const directory = await sessionToolDirectory(ctx)
     for (const hunk of hunks) {
       const requested = path.resolve(directory, hunk.path)
-      const filePath = (await assertExternalDirectory(ctx, requested, { access: "write" }))?.path ?? requested
+      const access = await authorize(requested)
+      const filePath = access?.path ?? requested
 
       switch (hunk.type) {
         case "add": {
@@ -293,6 +341,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             diff,
             additions,
             deletions,
+            authorization: access?.authorization,
+            access,
           })
 
           totalDiff += diff + "\n"
@@ -324,9 +374,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           }
 
           const requestedMove = hunk.move_path ? path.resolve(directory, hunk.move_path) : undefined
-          const movePath = requestedMove
-            ? ((await assertExternalDirectory(ctx, requestedMove, { access: "write" }))?.path ?? requestedMove)
-            : undefined
+          const targetAccess = requestedMove ? await authorize(requestedMove) : undefined
+          const movePath = targetAccess?.path ?? requestedMove
           if (movePath) {
             if (movePath === filePath) throw new Error(`apply_patch verification failed: move destination is unchanged`)
             await assertAbsent(movePath)
@@ -342,6 +391,9 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             additions,
             deletions,
             approved,
+            authorization: access?.authorization,
+            access,
+            targetAccess,
           })
 
           totalDiff += diff + "\n"
@@ -366,6 +418,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             additions: 0,
             deletions,
             approved,
+            authorization: access?.authorization,
+            access,
           })
 
           totalDiff += deleteDiff + "\n"

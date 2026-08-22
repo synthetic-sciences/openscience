@@ -12,7 +12,50 @@ type Options = {
   access?: SessionFilesystem.Access
 }
 
-export type AuthorizedPath = { path: string; managedToolOutput?: boolean }
+export type AuthorizedPath = {
+  path: string
+  authorization?: SessionFilesystem.Authorization
+  authorizationOwnership: "owned" | "none"
+  managedToolOutput?: boolean
+  revalidate(): Promise<string>
+  dispose(): void
+  [Symbol.dispose](): void
+}
+
+function scope(input: {
+  path: string
+  authorization?: SessionFilesystem.Authorization
+  managedToolOutput?: boolean
+}): AuthorizedPath {
+  const state = { disposed: false }
+  const dispose = () => {
+    if (state.disposed) return
+    state.disposed = true
+    if (input.authorization) SessionFilesystem.releaseAuthorization(input.authorization)
+  }
+  return {
+    path: input.path,
+    authorization: input.authorization,
+    authorizationOwnership: input.authorization ? "owned" : "none",
+    ...(input.managedToolOutput ? { managedToolOutput: true } : {}),
+    revalidate: async () => {
+      if (state.disposed) {
+        throw new SessionFilesystem.DeniedError({
+          sessionID: input.authorization?.sessionID ?? "unknown",
+          path: input.path,
+          access: input.authorization?.access ?? "read",
+        })
+      }
+      if (!input.authorization) return input.path
+      return SessionFilesystem.revalidateAuthorization(input.authorization, {
+        path: input.path,
+        access: input.authorization.access,
+      }).then((authorized) => authorized.path)
+    },
+    dispose,
+    [Symbol.dispose]: dispose,
+  }
+}
 
 /** The agent-facing cwd is the isolated workspace owned by this session. */
 export async function sessionToolDirectory(ctx: Pick<Tool.Context, "sessionID">) {
@@ -29,14 +72,14 @@ export async function assertExternalDirectory(
 
   const canonical = await Filesystem.canonical(target)
   if (!canonical) throw new SessionFilesystem.InvalidPathError({ path: path.resolve(target) })
-  if (options?.bypass) return { path: canonical }
+  if (options?.bypass) return scope({ path: canonical })
 
   const workspace = ctx.sessionID.startsWith("ses_") ? await SessionFilesystem.workspace(ctx.sessionID) : undefined
   const canonicalWorkspace = workspace ? await Filesystem.canonical(workspace) : undefined
   const internal =
     (canonicalWorkspace ? Filesystem.contains(canonicalWorkspace, canonical) : false) ||
     (await Instance.containsCanonicalPath(canonical))
-  if (internal) return { path: canonical }
+  if (internal) return scope({ path: canonical })
   const owned = ctx.sessionID.startsWith("ses_")
     ? await SessionFilesystem.ownsToolOutput({ sessionID: ctx.sessionID, path: canonical })
     : false
@@ -68,11 +111,16 @@ export async function assertExternalDirectory(
 
   // Direct unit tests use a deliberately synthetic context. Production tool
   // contexts always carry a real session id and therefore fail closed here.
-  if (!ctx.sessionID.startsWith("ses_")) return { path: canonical }
+  if (!ctx.sessionID.startsWith("ses_")) return scope({ path: canonical })
   const authorized = await SessionFilesystem.authorize({
     sessionID: ctx.sessionID,
     path: canonical,
     access,
   })
-  return { ...authorized, ...(owned ? { managedToolOutput: true } : {}) }
+  const authorization = await SessionFilesystem.bindAuthorization({
+    sessionID: ctx.sessionID,
+    access,
+    authorized,
+  })
+  return scope({ path: authorized.path, authorization, managedToolOutput: owned })
 }

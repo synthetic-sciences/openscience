@@ -6,6 +6,7 @@ import { FileTrash } from "../../src/file/trash"
 import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
 import { FileRoutes } from "../../src/server/routes/file"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import { executionSession, tmpdir } from "../fixture/fixture"
 
 describe("recoverable source file trash", () => {
@@ -91,7 +92,7 @@ describe("recoverable source file trash", () => {
 
           const redirected = path.join(tmp.path, "redirected-trash")
           const trash = path.join(tmp.path, FileTrash.FOLDER)
-          await fs.rm(trash, { recursive: true })
+          await fs.rm(trash, { recursive: true, force: true })
           await fs.mkdir(redirected)
           await fs.symlink(redirected, trash)
           await expect(
@@ -295,6 +296,236 @@ describe("recoverable source file trash", () => {
         await expect(fs.stat(forged)).rejects.toThrow()
         await expect(fs.stat(target)).rejects.toThrow()
         expect(await fs.readFile(record.payloadPath!, "utf8")).toBe("trusted\n")
+      },
+    })
+  })
+
+  test.skipIf(process.platform === "win32")(
+    "does not move an outside item when the approved source parent is swapped",
+    async () => {
+      await using outside = await tmpdir({
+        init: (directory) => Bun.write(path.join(directory, "finding.txt"), "outside\n"),
+      })
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await executionSession()
+          const parent = path.join(tmp.path, "paper")
+          const retained = path.join(tmp.path, "retained")
+          const source = path.join(parent, "finding.txt")
+          await fs.mkdir(parent)
+          await Bun.write(source, "approved\n")
+          using barrier = FileTrash.testing({
+            afterDirectoryVerify: async (operation, target) => {
+              if (operation !== "move" || target !== source) return
+              await fs.rename(parent, retained)
+              await fs.symlink(outside.path, parent)
+            },
+          })
+
+          await expect(
+            FileTrash.trash({ projectID: Instance.project.id, sessionID: session.id, path: source }),
+          ).rejects.toThrow("directory identity changed")
+          expect(await Bun.file(path.join(outside.path, "finding.txt")).text()).toBe("outside\n")
+          expect(await Bun.file(path.join(retained, "finding.txt")).text()).toBe("approved\n")
+          expect(await FileTrash.list(Instance.project.id)).toEqual([])
+        },
+      })
+    },
+  )
+
+  test("does not overwrite a restore target created after its parent was verified", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const target = path.join(tmp.path, "result.txt")
+        await Bun.write(target, "recoverable\n")
+        const record = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          path: target,
+        })
+        using barrier = FileTrash.testing({
+          afterDirectoryVerify: async (operation, current) => {
+            if (operation !== "restore" || current !== target) return
+            await Bun.write(target, "concurrent\n")
+          },
+        })
+
+        await expect(
+          FileTrash.restore({ projectID: Instance.project.id, sessionID: session.id, id: record.id }),
+        ).rejects.toMatchObject({ status: 409 })
+        expect(await Bun.file(target).text()).toBe("concurrent\n")
+        expect(await Bun.file(record.payloadPath!).text()).toBe("recoverable\n")
+      },
+    })
+  })
+
+  test("lets a completed revocation win before the final trash mutation", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const target = path.join(tmp.path, "revoked.txt")
+        await Bun.write(target, "retained\n")
+        const grant = (await SessionFilesystem.list(session.id)).find(
+          (item) => item.access === "write" && item.path === tmp.path && !item.time.revoked,
+        )!
+        const authorizations: SessionFilesystem.Authorization[] = []
+        using barrier = FileTrash.testing({
+          afterAuthorization: async (action, _record, authorization) => {
+            if (authorization) authorizations.push(authorization)
+            if (action === "trash") await SessionFilesystem.revoke(session.id, grant.id)
+          },
+        })
+
+        await expect(
+          FileTrash.trash({ projectID: Instance.project.id, sessionID: session.id, path: target }),
+        ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+        expect(await Bun.file(target).text()).toBe("retained\n")
+        expect(await FileTrash.list(Instance.project.id)).toEqual([])
+        expect(authorizations).toHaveLength(1)
+        await expect(SessionFilesystem.revalidateAuthorization(authorizations[0]!)).rejects.toBeInstanceOf(
+          SessionFilesystem.DeniedError,
+        )
+      },
+    })
+  })
+
+  test("releases owned trash, restore, and purge bindings while preserving borrowed bindings", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const captured: SessionFilesystem.Authorization[] = []
+        using barrier = FileTrash.testing({
+          afterAuthorization: (_action, _record, authorization) => {
+            if (authorization) captured.push(authorization)
+          },
+        })
+        const first = path.join(tmp.path, "first.txt")
+        await Bun.write(first, "first\n")
+        const record = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          path: first,
+        })
+        await expect(SessionFilesystem.revalidateAuthorization(captured[0]!)).rejects.toBeInstanceOf(
+          SessionFilesystem.DeniedError,
+        )
+
+        await FileTrash.restore({ projectID: Instance.project.id, sessionID: session.id, id: record.id })
+        await expect(SessionFilesystem.revalidateAuthorization(captured[1]!)).rejects.toBeInstanceOf(
+          SessionFilesystem.DeniedError,
+        )
+
+        const second = path.join(tmp.path, "second.txt")
+        await Bun.write(second, "second\n")
+        const secondRecord = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          path: second,
+        })
+        await FileTrash.purge({ projectID: Instance.project.id, sessionID: session.id, id: secondRecord.id })
+        for (const authorization of captured.slice(2)) {
+          await expect(SessionFilesystem.revalidateAuthorization(authorization)).rejects.toBeInstanceOf(
+            SessionFilesystem.DeniedError,
+          )
+        }
+
+        const borrowedTarget = path.join(tmp.path, "borrowed.txt")
+        await Bun.write(borrowedTarget, "borrowed\n")
+        const authorized = await SessionFilesystem.authorize({
+          sessionID: session.id,
+          path: borrowedTarget,
+          access: "write",
+        })
+        const borrowed = await SessionFilesystem.bindAuthorization({
+          sessionID: session.id,
+          access: "write",
+          authorized,
+        })
+        await expect(
+          FileTrash.trash({
+            projectID: Instance.project.id,
+            sessionID: session.id,
+            path: borrowedTarget,
+            authorization: borrowed,
+            authorizationOwnership: "borrowed",
+            expectedContent: "different\n",
+          }),
+        ).rejects.toThrow("changed after approval")
+        await expect(SessionFilesystem.revalidateAuthorization(borrowed)).resolves.toMatchObject({
+          path: borrowedTarget,
+        })
+        SessionFilesystem.releaseAuthorization(borrowed)
+      },
+    })
+  })
+
+  test("releases trash authority when an authorized operation errors", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const target = path.join(tmp.path, "error.txt")
+        await Bun.write(target, "retained\n")
+        const captured: SessionFilesystem.Authorization[] = []
+        using barrier = FileTrash.testing({
+          afterAuthorization: (_action, _record, authorization) => {
+            if (authorization) captured.push(authorization)
+            throw new Error("injected authorized failure")
+          },
+        })
+        await expect(
+          FileTrash.trash({ projectID: Instance.project.id, sessionID: session.id, path: target }),
+        ).rejects.toThrow("injected authorized failure")
+        expect(await Bun.file(target).text()).toBe("retained\n")
+        await expect(SessionFilesystem.revalidateAuthorization(captured[0]!)).rejects.toBeInstanceOf(
+          SessionFilesystem.DeniedError,
+        )
+      },
+    })
+  })
+
+  test.skipIf(process.platform === "win32")("never follows a swapped connected trash root during purge", async () => {
+    await using outside = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const target = path.join(tmp.path, "purge.txt")
+        await Bun.write(target, "recoverable\n")
+        const record = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          path: target,
+        })
+        const trash = path.join(tmp.path, FileTrash.FOLDER)
+        const retained = path.join(tmp.path, "retained-trash")
+        const outsideEntry = path.join(outside.path, record.id)
+        await fs.mkdir(outsideEntry)
+        await Bun.write(path.join(outsideEntry, "sentinel.txt"), "outside\n")
+        using barrier = FileTrash.testing({
+          afterDirectoryVerify: async (operation, current) => {
+            if (operation !== "remove" || current !== path.dirname(record.payloadPath!)) return
+            await fs.rename(trash, retained)
+            await fs.symlink(outside.path, trash)
+          },
+        })
+
+        await expect(
+          FileTrash.purge({ projectID: Instance.project.id, sessionID: session.id, id: record.id }),
+        ).rejects.toThrow("directory identity changed")
+        expect(await Bun.file(path.join(outsideEntry, "sentinel.txt")).text()).toBe("outside\n")
+        expect(await Bun.file(path.join(retained, record.id, "payload")).text()).toBe("recoverable\n")
       },
     })
   })
