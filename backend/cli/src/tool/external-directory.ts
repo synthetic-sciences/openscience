@@ -57,7 +57,7 @@ function scope(input: {
         if (current === input.path) return current
         throw new SessionFilesystem.InvalidPathError({
           path: input.path,
-          message: "The authorized path changed before the file operation",
+          message: `Refusing to access ${input.path}: the authorized path changed or became a symbolic link before the file operation`,
         })
       }
       return SessionFilesystem.revalidateAuthorization(input.authorization, {
