@@ -22,6 +22,7 @@ import { constants as FS } from "fs"
 import path from "path"
 
 export const DELEGATION_PROFILES = ["explore", "execute", "review"] as const
+export const DELEGATION_SPECIALISTS = ["biology", "physics", "ml"] as const
 export function isComputeDelegationProfile(name: string) {
   return name === "execute"
 }
@@ -43,6 +44,10 @@ const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.enum(DELEGATION_PROFILES).describe("The internal explore, execute, or review profile"),
+  specialist: z
+    .enum(DELEGATION_SPECIALISTS)
+    .optional()
+    .describe("Optional user-selected biology, physics, or ML specialist for an execute phase"),
   session_id: z.string().describe("Existing Task session to continue").optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
@@ -308,17 +313,20 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       if (!ctx.extra?.bypassAgentCheck) {
         await ctx.ask({
           permission: "task",
-          patterns: [params.subagent_type],
+          patterns: [params.specialist ?? params.subagent_type],
           always: ["*"],
           metadata: {
             description: params.description,
             subagent_type: params.subagent_type,
+            specialist: params.specialist,
           },
         })
       }
 
-      const agent = await Agent.get(params.subagent_type)
-      if (!agent) throw new Error(`Internal delegation profile ${params.subagent_type} is unavailable`)
+      const profile = await Agent.get(params.subagent_type)
+      if (!profile) throw new Error(`Internal delegation profile ${params.subagent_type} is unavailable`)
+      const agent = params.specialist ? await Agent.get(params.specialist) : profile
+      if (!agent) throw new Error(`Delegation specialist ${params.specialist} is unavailable`)
 
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
@@ -341,7 +349,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
         return await Session.create({
           parentID: ctx.sessionID,
-          title: params.description + ` (@${agent.name} subagent)`,
+          title:
+            params.description +
+            (params.specialist
+              ? ` (@${params.specialist} specialist, ${params.subagent_type} phase)`
+              : ` (@${params.subagent_type} subagent)`),
           permission: childPermissionRules(config.experimental?.primary_tools),
         })
       })
@@ -364,7 +376,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // A nested compute agent takes over its waiting parent's permit. Parallel
       // nested siblings serialize on that lease, so nesting cannot bypass the
       // global cap and a full pool cannot deadlock on permits held by parents.
-      const releaseComputeSlot = isComputeDelegationProfile(agent.name)
+      const releaseComputeSlot = isComputeDelegationProfile(params.subagent_type)
         ? await computeSlots.acquire(session.id, { parent: ctx.sessionID, signal: childAbort })
         : undefined
       using _computeSlot = defer(() => releaseComputeSlot?.())
@@ -441,7 +453,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       })
       const promptParts = await SessionPrompt.resolvePromptParts(transfer.prompt)
       const childGuidance = [
-        `You own one ${agent.name} phase for the lead Research agent. The assignment in the user message is authoritative.`,
+        `You own one ${params.subagent_type} phase${params.specialist ? ` with the ${params.specialist} specialist` : ""} for the lead Research agent. The assignment in the user message is authoritative.`,
         "Work independently on that phase. Delegation is unavailable; load a domain skill only when it materially improves the result.",
         "Do not return a diary of searches, reads, or commands. Your final response is a decision-ready handoff to the lead, not a second user-facing report.",
         "Keep the final response under 1,200 words. Use only the Markdown sections that carry substance: Outcome; Findings; Evidence; Changes / outputs; Limitations; Next action.",
@@ -517,7 +529,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 : []),
         handoff.text,
         "",
-        `<task_metadata>${JSON.stringify({ session_id: session.id, profile: agent.name, effort, outcome: taskOutcome.outcome, stop_reason: taskOutcome.stopReason, timed_out: deadline.timedOut, budget_ms: budgetMs, queued_ms: queuedMs, active_ms: Math.max(0, Date.now() - activeStartedAt) })}</task_metadata>`,
+        `<task_metadata>${JSON.stringify({ session_id: session.id, profile: params.subagent_type, specialist: params.specialist, effort, outcome: taskOutcome.outcome, stop_reason: taskOutcome.stopReason, timed_out: deadline.timedOut, budget_ms: budgetMs, queued_ms: queuedMs, active_ms: Math.max(0, Date.now() - activeStartedAt) })}</task_metadata>`,
       ].join("\n")
 
       return {
@@ -531,6 +543,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           failedToolCalls,
           usage,
           effort,
+          profile: params.subagent_type,
+          specialist: params.specialist,
           maxConcurrentChildren,
           maxGlobalChildren: MAX_CHILD_AGENTS,
           taskDispatch: dispatch.dispatch,

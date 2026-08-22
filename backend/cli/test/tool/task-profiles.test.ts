@@ -18,7 +18,7 @@ import { tmpdir } from "../fixture/fixture"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { Session } from "../../src/session"
 
-test("Task advertises only generic internal profiles while legacy agents remain retrievable", async () => {
+test("Task advertises generic phases and accepts an explicit domain specialist lens", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
@@ -32,6 +32,22 @@ test("Task advertises only generic internal profiles while legacy agents remain 
       expect(task.description).not.toContain("- biology:")
       expect(task.description).not.toContain("- physics:")
       expect(task.description).not.toContain("- literature-review:")
+
+      expect(
+        task.parameters.safeParse({
+          description: "Inspect biology evidence",
+          prompt: "Check the supplied assay results.",
+          subagent_type: "execute",
+          specialist: "biology",
+        }).success,
+      ).toBe(true)
+      expect(
+        task.parameters.safeParse({
+          description: "Invalid phase",
+          prompt: "Check the supplied assay results.",
+          subagent_type: "biology",
+        }).success,
+      ).toBe(false)
 
       expect(await Agent.get("biology")).toBeDefined()
       expect(await Agent.get("reviewer")).toBeDefined()

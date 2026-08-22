@@ -9,6 +9,14 @@ describe("Research delegation controls", () => {
     expect(SessionPrompt.allowsDelegation(false, false)).toBe(false)
   })
 
+  test("maps domain specialist selections onto a valid execute phase", () => {
+    expect(SessionPrompt.delegationTarget("biology")).toEqual({ profile: "execute", specialist: "biology" })
+    expect(SessionPrompt.delegationTarget("physics")).toEqual({ profile: "execute", specialist: "physics" })
+    expect(SessionPrompt.delegationTarget("ml")).toEqual({ profile: "execute", specialist: "ml" })
+    expect(SessionPrompt.delegationTarget("review")).toEqual({ profile: "review" })
+    expect(SessionPrompt.delegationTarget("legacy-specialist")).toEqual({ profile: "execute" })
+  })
+
   test("effort reminders expose bounded Normal and Ultra behavior", () => {
     expect(SessionPrompt.researchEffortReminder(undefined)).toContain("Research effort: NORMAL")
     expect(SessionPrompt.researchEffortReminder("normal")).toContain("at most 2 Task calls total")

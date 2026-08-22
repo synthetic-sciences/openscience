@@ -47,7 +47,7 @@ import { SessionSummary } from "./summary"
 import { NamedError } from "@synsci/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
-import { DELEGATION_PROFILES, TaskTool } from "@/tool/task"
+import { DELEGATION_PROFILES, DELEGATION_SPECIALISTS, TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
@@ -1208,6 +1208,7 @@ export namespace SessionPrompt {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
     if (input.direct) return tools
+    const permission = PermissionNext.merge(input.agent.permission, input.session.permission ?? [])
 
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
@@ -1239,7 +1240,7 @@ export namespace SessionPrompt {
       input.agent,
       (id) =>
         (id !== TaskTool.id || input.delegation) &&
-        ToolSelection.enabled(id, { permission: input.agent.permission, tools: input.tools }) &&
+        ToolSelection.enabled(id, { permission, tools: input.tools }) &&
         ToolSelection.relevant(id, {
           agent: input.agent.name,
           message: input.request,
@@ -1411,6 +1412,19 @@ export namespace SessionPrompt {
    * attachment remains authoritative even when automatic routing is off. */
   export function allowsDelegation(enabled: boolean | undefined, explicit: boolean) {
     return explicit || enabled !== false
+  }
+
+  export function delegationTarget(name: string) {
+    if (DELEGATION_PROFILES.includes(name as (typeof DELEGATION_PROFILES)[number])) {
+      return { profile: name as (typeof DELEGATION_PROFILES)[number] }
+    }
+    if (DELEGATION_SPECIALISTS.includes(name as (typeof DELEGATION_SPECIALISTS)[number])) {
+      return {
+        profile: "execute" as const,
+        specialist: name as (typeof DELEGATION_SPECIALISTS)[number],
+      }
+    }
+    return { profile: "execute" as const }
   }
 
   export function researchEffortReminder(value: unknown) {
@@ -1778,6 +1792,8 @@ export namespace SessionPrompt {
           // Check if this agent would be denied by task permission
           const perm = PermissionNext.evaluate("task", part.name, agent.permission)
           const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
+          const target = delegationTarget(part.name)
+          const specialist = target.specialist ? ` and specialist: ${target.specialist}` : ""
           return [
             {
               id: Identifier.ascending("part"),
@@ -1794,8 +1810,10 @@ export namespace SessionPrompt {
               // An extra space is added here. Otherwise the 'Use' gets appended
               // to user's last word; making a combined word
               text:
-                " Use the above message and context to generate a prompt and call the task tool with subagent: " +
-                part.name +
+                " Use the above message and context to generate a prompt and call the task tool with subagent_type: " +
+                target.profile +
+                specialist +
+                `. Preserve the requested ${part.name} capability in the child prompt` +
                 hint,
             },
           ]
