@@ -4,6 +4,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import z from "zod"
 import { Global } from "@/global"
+import { Cleanup } from "@/util/cleanup"
 import { FileLease } from "@/util/file-lease"
 import { Lock } from "@/util/lock"
 import { OutboundTelemetry } from "@/telemetry/outbound"
@@ -384,30 +385,33 @@ export namespace ArtifactStore {
   async function physicalBlobs() {
     const output: string[] = []
     const count = { value: 0 }
-    const read = async (directory: string) => {
-      const entries = await fs.readdir(directory, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return []
+    const read = async function* (directory: string) {
+      const entries = await fs.opendir(directory).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return
         throw error
       })
-      count.value += entries.length
-      if (count.value > 200_000) throw new Error("Artifact blob scan exceeded 200000 entries")
-      return entries
+      if (!entries) return
+      for await (const entry of entries) {
+        count.value++
+        if (count.value > 200_000) throw new Error("Artifact blob scan exceeded 200000 entries")
+        yield entry
+      }
     }
-    for (const first of await read(blobs)) {
+    for await (const first of read(blobs)) {
       const firstPath = path.join(blobs, first.name)
       if (first.isSymbolicLink()) {
         output.push(path.relative(root, firstPath))
         continue
       }
       if (!first.isDirectory()) continue
-      for (const second of await read(firstPath)) {
+      for await (const second of read(firstPath)) {
         const secondPath = path.join(firstPath, second.name)
         if (second.isSymbolicLink()) {
           output.push(path.relative(root, secondPath))
           continue
         }
         if (!second.isDirectory()) continue
-        for (const file of await read(secondPath)) {
+        for await (const file of read(secondPath)) {
           if (!file.isFile() && !file.isSymbolicLink()) continue
           output.push(path.relative(root, path.join(secondPath, file.name)))
         }
@@ -696,17 +700,20 @@ export namespace ArtifactStore {
     if (inspect) scanned.at = now
     const physical = inspect ? await physicalBlobs() : []
     const abandoned = physical.filter((item) => !orphaned.referenced.has(item))
-    const partial = inspect
-      ? await fs.readdir(partials).catch((error: NodeJS.ErrnoException) => {
-          if (error.code === "ENOENT") return []
-          throw error
-        })
-      : []
-    await Promise.all([
-      ...orphaned.unused.map((item) => fs.rm(path.join(root, item.path), { force: true })),
-      ...abandoned.map((item) => fs.rm(path.join(root, item), { force: true })),
-      ...partial.map((item) => fs.rm(path.join(partials, item), { force: true, recursive: true })),
-    ])
+    const partial = async function* () {
+      if (!inspect) return
+      const directory = await fs.opendir(partials).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return
+        throw error
+      })
+      if (!directory) return
+      for await (const item of directory) yield path.join(partials, item.name)
+    }
+    await Cleanup.each(orphaned.unused, (item) => fs.rm(path.join(root, item.path), { force: true }))
+    await Cleanup.each(abandoned, (item) => fs.rm(path.join(root, item), { force: true }))
+    // Partial entries can be crash-left directories. Process one root at a
+    // time so nested cleanup shares a single bounded worker pool.
+    await Cleanup.each(partial(), (item) => Cleanup.remove(item), 1)
     return orphaned.stale
   }
 
@@ -764,7 +771,7 @@ export namespace ArtifactStore {
   export async function reset() {
     using _ = await Lock.write(lock)
     await using lease = await FileLease.acquire(lock)
-    await fs.rm(root, { recursive: true, force: true })
+    await Cleanup.remove(root)
     scanned.at = 0
   }
 }

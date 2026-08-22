@@ -281,6 +281,46 @@ describe("/file/artifact", () => {
     })
   })
 
+  test("streams and bounds cleanup across a large crash-left sweep set", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const root = path.join(Global.Path.data, "artifact-store")
+        const blobs = path.join(root, "blobs")
+        const partials = path.join(root, "partial")
+        await ArtifactStore.list(Instance.project.id)
+        for (const first of Array.from({ length: 8 }, (_, index) => index)) {
+          for (const second of Array.from({ length: 8 }, (_, index) => index)) {
+            const directory = path.join(
+              blobs,
+              first.toString(16).padStart(2, "0"),
+              second.toString(16).padStart(2, "0"),
+            )
+            await fs.mkdir(directory, { recursive: true })
+            for (const file of Array.from({ length: 5 }, (_, index) => index)) {
+              await fs.writeFile(path.join(directory, `${first}-${second}-${file}`.padEnd(64, "a")), "orphan")
+            }
+          }
+        }
+        for (const index of Array.from({ length: 160 }, (_, index) => index)) {
+          const target = path.join(partials, `${index}.partial`)
+          if (index % 2) {
+            await fs.mkdir(path.join(target, "nested"), { recursive: true })
+            await fs.writeFile(path.join(target, "nested", "chunk"), "partial")
+            continue
+          }
+          await fs.writeFile(target, "partial")
+        }
+
+        await ArtifactStore.sweep(Date.now() + 60_001)
+
+        expect(await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: blobs, onlyFiles: true }))).toEqual([])
+        expect(await fs.readdir(partials)).toEqual([])
+      },
+    })
+  }, 30_000)
+
   test("saving the same source creates a new immutable version and reuses identical blobs", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

@@ -1,6 +1,7 @@
 import { Global } from "@/global"
 import { Instance } from "@/project/instance"
 import { Storage } from "@/storage/storage"
+import { Cleanup } from "@/util/cleanup"
 import { Lock } from "@/util/lock"
 import crypto from "crypto"
 import fs from "fs/promises"
@@ -63,19 +64,32 @@ export namespace SessionWorkspace {
   }
 
   async function size(root: string): Promise<number> {
-    const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
-    const values = await Promise.all(
-      entries.map(async (entry) => {
-        const target = path.join(root, entry.name)
-        if (entry.isDirectory()) return size(target)
-        if (!entry.isFile()) return 0
-        return fs.stat(target).then(
-          (stat) => stat.size,
-          () => 0,
-        )
-      }),
-    )
-    return values.reduce((total, value) => total + value, 0)
+    const files = async function* () {
+      const directories = [root]
+      while (directories.length) {
+        const current = directories.pop()
+        if (!current) continue
+        const directory = await fs.opendir(current).catch(() => undefined)
+        if (!directory) continue
+        for await (const entry of directory) {
+          const target = path.join(current, entry.name)
+          if (entry.isDirectory()) {
+            directories.push(target)
+            continue
+          }
+          if (entry.isFile()) yield target
+        }
+      }
+    }
+    const total = { value: 0 }
+    await Cleanup.each(files(), async (target) => {
+      const bytes = await fs.stat(target).then(
+        (stat) => stat.size,
+        () => 0,
+      )
+      total.value += bytes
+    })
+    return total.value
   }
 
   async function read(sessionID: string) {
@@ -241,7 +255,7 @@ export namespace SessionWorkspace {
     using _ = await Lock.write(`session-workspace:${Instance.project.id}:${sessionID}`)
     const info = await get(sessionID)
     if (info.state !== "trash") throw new Error(`Workspace ${info.workspaceID} must be trashed before purge`)
-    if (info.trashRoot) await fs.rm(info.trashRoot, { recursive: true, force: true })
+    if (info.trashRoot) await Cleanup.remove(info.trashRoot)
     await Storage.remove(key(sessionID))
   }
 
@@ -249,13 +263,11 @@ export namespace SessionWorkspace {
    * These are never mounted implicitly into the replacement session. */
   export async function listTrash(sessionID: string) {
     const paths = await Storage.list(trashPrefix(sessionID))
-    const archived = await Promise.all(
-      paths.map((item) =>
-        Storage.read<unknown>(item)
-          .then((value) => Info.safeParse(value))
-          .then((result) => (result.success ? result.data : undefined))
-          .catch(() => undefined),
-      ),
+    const archived = await Cleanup.map(paths, (item) =>
+      Storage.read<unknown>(item)
+        .then((value) => Info.safeParse(value))
+        .then((result) => (result.success ? result.data : undefined))
+        .catch(() => undefined),
     )
     const current = await read(sessionID).catch((error) => {
       if (Storage.NotFoundError.isInstance(error)) return
@@ -290,28 +302,30 @@ export namespace SessionWorkspace {
       if (!parsed?.success) continue
       const info = parsed.data
       if (info.state !== "trash" || !info.trashedAt || now - info.trashedAt < TRASH_AGE) continue
-      if (info.trashRoot) await fs.rm(info.trashRoot, { recursive: true, force: true })
+      if (info.trashRoot) await Cleanup.remove(info.trashRoot)
       await Storage.remove(item)
     }
 
-    const entries = await fs.readdir(root(), { withFileTypes: true }).catch(() => [])
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue
-      const sessionID = entry.name
-      const session = await Storage.read(["session", Instance.project.id, sessionID]).catch((error) => {
-        if (Storage.NotFoundError.isInstance(error)) return
-        throw error
-      })
-      if (session) continue
-      const record = await read(sessionID).catch((error) => {
-        if (Storage.NotFoundError.isInstance(error)) return
-        throw error
-      })
-      if (record) continue
-      const target = path.join(root(), sessionID)
-      const stat = await fs.stat(target).catch(() => undefined)
-      if (!stat || now - stat.mtimeMs < ORPHAN_AGE) continue
-      await fs.rm(target, { recursive: true, force: true })
+    const entries = await fs.opendir(root()).catch(() => undefined)
+    if (entries) {
+      for await (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        const sessionID = entry.name
+        const session = await Storage.read(["session", Instance.project.id, sessionID]).catch((error) => {
+          if (Storage.NotFoundError.isInstance(error)) return
+          throw error
+        })
+        if (session) continue
+        const record = await read(sessionID).catch((error) => {
+          if (Storage.NotFoundError.isInstance(error)) return
+          throw error
+        })
+        if (record) continue
+        const target = path.join(root(), sessionID)
+        const stat = await fs.stat(target).catch(() => undefined)
+        if (!stat || now - stat.mtimeMs < ORPHAN_AGE) continue
+        await Cleanup.remove(target)
+      }
     }
   }
 }
