@@ -4,6 +4,7 @@ import z from "zod"
 import ignore from "ignore"
 import { Filesystem } from "../../util/filesystem"
 import type { ModalAdapter } from "./adapter"
+import { ModalUpload } from "./upload"
 
 export namespace ModalPlan {
   const DENY = new Set([".git", "node_modules", ".openscience", ".modal.toml", ".ssh"])
@@ -70,11 +71,6 @@ export namespace ModalPlan {
     return current || "."
   }
 
-  async function hash(file: string) {
-    const data = await Bun.file(file).arrayBuffer()
-    return new Bun.CryptoHasher("sha256").update(data).digest("hex")
-  }
-
   function forbidden(file: string) {
     const segments = file.split("/")
     return segments.some((part) => DENY.has(part)) || SECRET.test(file)
@@ -110,14 +106,19 @@ export namespace ModalPlan {
   export async function files(root: string, patterns: string[], label = "Modal") {
     const project = await Filesystem.canonical(root)
     if (!project) throw new Error(`${label} project directory is unavailable: ${root}`)
-    const files = new Map<string, ModalAdapter.File>()
+    const files = new Map<string, Omit<ModalAdapter.File, "sha256"> & { snapshot: ModalUpload.Snapshot }>()
     const found = new Set<string>()
     for (const pattern of patterns) {
       if (path.isAbsolute(pattern) || pattern.split(/[\\/]/).includes("..")) {
         throw new Error(`${label} upload pattern must stay inside the project: ${pattern}`)
       }
       const scan = new Bun.Glob(pattern).scan({ cwd: project, dot: true, onlyFiles: true, followSymlinks: true })
-      for await (const file of scan) found.add(posix(file))
+      for await (const file of scan) {
+        found.add(posix(file))
+        if (found.size > ModalUpload.COUNT_LIMIT) {
+          throw new Error(`${label} uploads exceed the ${ModalUpload.COUNT_LIMIT}-file approval limit`)
+        }
+      }
     }
     const excludes = await ignored(project, [...found])
     for (const relative of found) {
@@ -132,17 +133,26 @@ export namespace ModalPlan {
         resolved === relative ? excludes.has(resolved) : (await ignored(project, [resolved])).has(resolved)
       if (canonicalIgnored) continue
       if (forbidden(resolved)) throw new Error(`${label} upload policy denied: ${relative}`)
-      const info = await fs.stat(canonical)
+      if (files.has(canonical)) continue
+      const snapshot = await ModalUpload.inspect(canonical, label)
       files.set(canonical, {
         path: resolved,
         canonical,
-        size: info.size,
-        sha256: await hash(canonical),
+        size: snapshot.size,
+        snapshot,
       })
     }
-    const result = [...files.values()].toSorted((a, b) => a.path.localeCompare(b.path))
-    const bytes = result.reduce((sum, file) => sum + file.size, 0)
-    if (bytes > 104_857_600) throw new Error(`${label} uploads exceed the 100 MiB approval limit`)
+    const candidates = [...files.values()].toSorted((a, b) => a.path.localeCompare(b.path))
+    const bytes = ModalUpload.validate(candidates, label)
+    const result: ModalAdapter.File[] = []
+    for (const file of candidates) {
+      result.push({
+        path: file.path,
+        canonical: file.canonical,
+        size: file.size,
+        sha256: (await ModalUpload.hash(file.canonical, file.snapshot, label)).sha256,
+      })
+    }
     return { files: result, bytes }
   }
 
