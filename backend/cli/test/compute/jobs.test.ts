@@ -315,6 +315,150 @@ printf '%s\\n' '{"exists":true}'
     }
   }, 15_000)
 
+  test("bounds SSH control output and reaps every owned transport process", async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const bin = path.join(tmp.path, "bin")
+    const pids = path.join(tmp.path, "ssh-pids")
+    const pinned = ComputeJobs.Host.parse({
+      ...host,
+      fingerprint: "SHA256:Qhi22lbcPTt1frRtqU56iDRQ6YjdwJU8EDmi0QCdnbc",
+      host_key: "hpc.example.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAUsmADCYwCBoe8869NDLxsh3Vvnsd3raFGoMF1h8fXB",
+    })
+    await fs.mkdir(bin)
+    await fs.writeFile(
+      path.join(bin, "ssh"),
+      `#!/bin/sh
+printf '%s\n' "$$" >> ${JSON.stringify(pids)}
+exec python3 -c 'import os,time; os.write(1,b"x"*(512*1024)); time.sleep(60)'
+`,
+      { mode: 0o700 },
+    )
+    const previousPath = process.env.PATH
+    process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await trustProject()
+          const session = await Session.create({})
+          const workspace = await SessionFilesystem.workspace(session.id)
+          const request = {
+            sessionID: session.id,
+            name: "bounded SSH control",
+            purpose: "prove transport output cannot exhaust broker memory",
+            command: "true",
+            target: { kind: "ssh" as const, host_id: pinned.id },
+          }
+          const options = { root, workspace, hosts: [pinned] }
+          const plan = await ComputeJobs.plan(request, options)
+          const job = await ComputeJobs.start({ ...request, approval: plan.digest }, options)
+          const failed = await (async function poll(attempts = 500): Promise<ComputeJobs.Job> {
+            const current = await ComputeJobs.get(job.id, options)
+            if (current?.status === "failed") return current
+            if (!attempts) throw new Error(`Timed out waiting for bounded SSH failure: ${JSON.stringify(current)}`)
+            await Bun.sleep(20)
+            return poll(attempts - 1)
+          })()
+          expect(failed.error).toContain("SSH operation stdout exceeded 262144 bytes")
+        },
+      })
+      const owned = (await Bun.file(pids).text()).trim().split("\n").map(Number)
+      expect(owned.length).toBeGreaterThanOrEqual(1)
+      for (const pid of owned) {
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const alive = (() => {
+            try {
+              process.kill(pid, 0)
+              return true
+            } catch {
+              return false
+            }
+          })()
+          if (!alive) break
+          if (attempt === 99) throw new Error(`Bounded SSH transport process ${pid} remained alive`)
+          await Bun.sleep(20)
+        }
+      }
+    } finally {
+      process.env.PATH = previousPath
+    }
+  }, 20_000)
+
+  test("bounds SSH probe output and reports a transport error", async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    const pidfile = path.join(tmp.path, "probe.pid")
+    await fs.mkdir(bin)
+    await Promise.all([
+      fs.writeFile(
+        path.join(bin, "ssh-keyscan"),
+        "#!/bin/sh\nprintf '%s\\n' 'probe.example.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAUsmADCYwCBoe8869NDLxsh3Vvnsd3raFGoMF1h8fXB'\n",
+        { mode: 0o700 },
+      ),
+      fs.writeFile(
+        path.join(bin, "ssh-keygen"),
+        "#!/bin/sh\nprintf '%s\\n' '256 SHA256:Qhi22lbcPTt1frRtqU56iDRQ6YjdwJU8EDmi0QCdnbc probe (ED25519)'\n",
+        { mode: 0o700 },
+      ),
+      fs.writeFile(
+        path.join(bin, "ssh"),
+        `#!/bin/sh
+printf '%s' "$$" > ${JSON.stringify(pidfile)}
+exec python3 -c 'import os,time; os.write(1,b"x"*(128*1024)); time.sleep(60)'
+`,
+        { mode: 0o700 },
+      ),
+    ])
+    const module = path.resolve(import.meta.dir, "../../src/compute/jobs.ts")
+    const script = `
+import { ComputeJobs } from ${JSON.stringify(module)}
+const result = await ComputeJobs.probe({
+  id: "bounded-probe",
+  label: "Bounded probe",
+  host: "probe.example.org",
+  scheduler: "none",
+  concurrency: 1,
+})
+console.log(JSON.stringify(result))
+`
+    try {
+      const child = Bun.spawn([process.execPath, "-e", script], {
+        cwd: path.resolve(import.meta.dir, "../.."),
+        env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` },
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ])
+      if (code !== 0) throw new Error(stderr)
+      const result = ComputeJobs.Probe.parse(JSON.parse(stdout.trim().split("\n").at(-1)!))
+      expect(result.ok).toBe(false)
+      expect(result.error).toBe("SSH operation stdout exceeded 65536 bytes")
+      const pid = Number(await Bun.file(pidfile).text())
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const alive = (() => {
+          try {
+            process.kill(pid, 0)
+            return true
+          } catch {
+            return false
+          }
+        })()
+        if (!alive) return
+        await Bun.sleep(20)
+      }
+      throw new Error(`Bounded SSH probe process ${pid} remained alive`)
+    } finally {
+      await fs.rm(pidfile, { force: true })
+    }
+  }, 10_000)
+
   test("rejects an SSH launch that fails before its first durable transport handoff", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")

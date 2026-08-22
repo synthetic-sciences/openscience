@@ -66,17 +66,111 @@ export namespace SshAdapter {
   const COMMAND_TIMEOUT = 300_000
   const STOP_GRACE = 1_000
 
+  const BOUNDED_SUBPROCESS = String.raw`
+def bounded(argv, stdout_limit=4 * 1024 * 1024, stderr_limit=64 * 1024, timeout=15):
+    if stdout_limit < 0 or stderr_limit < 0 or timeout <= 0:
+        raise RuntimeError("Invalid remote command capture limits")
+    options = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "close_fds": True,
+    }
+    if os.name == "posix":
+        options["start_new_session"] = True
+    process = subprocess.Popen(argv, **options)
+    selector = None
+    streams = ((process.stdout, "stdout", stdout_limit), (process.stderr, "stderr", stderr_limit))
+    buffers = {"stdout": bytearray(), "stderr": bytearray()}
+    def stop():
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except (OSError, ProcessLookupError):
+            pass
+    try:
+        selector = selectors.DefaultSelector()
+        for stream, label, limit in streams:
+            if stream is None:
+                continue
+            os.set_blocking(stream.fileno(), False)
+            selector.register(stream, selectors.EVENT_READ, (label, limit))
+        deadline = time.monotonic() + timeout
+        failure = ""
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                failure = "Remote command timed out after " + str(timeout) + " seconds"
+                break
+            for key, _ in selector.select(min(remaining, 0.1)):
+                label, limit = key.data
+                try:
+                    chunk = os.read(key.fd, 65536)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    key.fileobj.close()
+                    continue
+                target = buffers[label]
+                accepted = min(len(chunk), max(0, limit - len(target)))
+                if accepted:
+                    target.extend(chunk[:accepted])
+                if accepted != len(chunk):
+                    failure = "Remote command " + label + " exceeded " + str(limit) + " bytes"
+                    break
+            if failure:
+                break
+        if failure:
+            raise RuntimeError(failure)
+        remaining = max(0.01, deadline - time.monotonic())
+        try:
+            code = process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Remote command timed out after " + str(timeout) + " seconds") from None
+        return subprocess.CompletedProcess(
+            argv,
+            code,
+            buffers["stdout"].decode("utf-8", errors="replace"),
+            buffers["stderr"].decode("utf-8", errors="replace"),
+        )
+    except BaseException:
+        stop()
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            stop()
+        raise
+    finally:
+        if selector is not None:
+            selector.close()
+        for stream, _, _ in streams:
+            if stream is not None and not stream.closed:
+                stream.close()
+        if process.returncode is None:
+            stop()
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                stop()
+`
+
   const SUPERVISOR = String.raw`#!/usr/bin/env python3
 import ctypes
 import hashlib
 import json
 import os
 import pathlib
+import selectors
 import shutil
 import signal
 import subprocess
 import sys
 import time
+
+${BOUNDED_SUBPROCESS}
 
 root = pathlib.Path(sys.argv[1]).resolve()
 script = pathlib.Path(sys.argv[2]).resolve()
@@ -107,7 +201,7 @@ def identity(pid):
         text = stat.read_text(encoding="utf-8")
         fields = text[text.rfind(")") + 2:].split()
         return "proc:" + fields[19]
-    result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart="], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    result = bounded(["ps", "-p", str(pid), "-o", "lstart="], stdout_limit=4096, timeout=5)
     return "ps:" + result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else ""
 
 darwin_library = None
@@ -240,7 +334,7 @@ def leased(refresh=False):
     now = time.monotonic()
     if not refresh and now - lease_checked < 2.0:
         return lease_cache
-    result = subprocess.run([lease_tool, "-t", str(lease_path)], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    result = bounded([lease_tool, "-t", str(lease_path)], stdout_limit=1024 * 1024, timeout=5)
     lease_checked = now
     lease_cache = [int(value) for value in result.stdout.split() if value.isdigit() and int(value) != os.getpid()] if result.returncode in (0, 1) else []
     return lease_cache
@@ -283,7 +377,7 @@ def tagged(refresh=False):
     if not refresh and now - tag_checked < 0.5:
         return tag_cache
     token = "OPENSCIENCE_JOB_ID=" + hashlib.sha256(str(root).encode()).hexdigest()
-    result = subprocess.run(["ps", "eww", "-axo", "pid=,command="], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    result = bounded(["ps", "eww", "-axo", "pid=,command="], stdout_limit=16 * 1024 * 1024, timeout=10)
     if result.returncode != 0:
         return []
     found = []
@@ -298,7 +392,7 @@ def tagged(refresh=False):
 def cgroup_members():
     if not unit or not pathlib.Path("/sys/fs/cgroup").is_dir():
         return []
-    result = subprocess.run(["systemctl", "--user", "show", unit, "--property=ControlGroup", "--value"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    result = bounded(["systemctl", "--user", "show", unit, "--property=ControlGroup", "--value"], stdout_limit=64 * 1024, timeout=5)
     group = result.stdout.strip()
     if result.returncode != 0 or not group.startswith("/"):
         return []
@@ -544,6 +638,7 @@ import hashlib
 import json
 import os
 import pathlib
+import selectors
 import shlex
 import shutil
 import signal
@@ -552,6 +647,8 @@ import sys
 import tarfile
 import tempfile
 import time
+
+${BOUNDED_SUBPROCESS}
 
 root = pathlib.Path(__file__).resolve().parent
 
@@ -583,7 +680,7 @@ def identity(pid):
             return "proc:" + text[text.rfind(")") + 2:].split()[19]
         except (FileNotFoundError, ProcessLookupError, IndexError):
             return ""
-    result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart="], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    result = bounded(["ps", "-p", str(pid), "-o", "lstart="], stdout_limit=4096, timeout=5)
     return "ps:" + result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else ""
 
 def runtime():
@@ -661,14 +758,14 @@ def scope_ready():
     if not shutil.which("systemd-run") or not shutil.which("systemctl"):
         return False
     name = "openscience-probe-" + str(os.getpid()) + "-" + str(time.time_ns()) + ".scope"
-    result = subprocess.run(["systemd-run", "--user", "--scope", "--quiet", "--unit=" + name, "true"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    result = bounded(["systemd-run", "--user", "--scope", "--quiet", "--unit=" + name, "true"], stdout_limit=4096, stderr_limit=4096, timeout=10)
     return result.returncode == 0
 
 def scope_empty(value):
     unit = value.get("unit") if value else ""
     if not unit:
         return True
-    result = subprocess.run(["systemctl", "--user", "is-active", unit], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    result = bounded(["systemctl", "--user", "is-active", unit], stdout_limit=4096, timeout=5)
     return result.stdout.strip() not in ("active", "activating", "deactivating", "reloading")
 
 def workload(value):
@@ -733,18 +830,18 @@ def flags(value):
 
 def recover_scheduler(value, name):
     if value["scheduler"] == "slurm":
-        live = subprocess.run(["squeue", "-h", "--name=" + name, "-o", "%A|%j"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        live = bounded(["squeue", "-h", "--name=" + name, "-o", "%A|%j"], timeout=15)
         for line in live.stdout.splitlines():
             fields = line.strip().split("|", 1)
             if len(fields) == 2 and fields[1] == name and fields[0]:
                 return "slurm:" + fields[0]
-        history = subprocess.run(["sacct", "-n", "-X", "--name=" + name, "--format=JobIDRaw,JobName", "-P"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        history = bounded(["sacct", "-n", "-X", "--name=" + name, "--format=JobIDRaw,JobName", "-P"], timeout=15)
         for line in history.stdout.splitlines():
             fields = line.strip().split("|", 1)
             if len(fields) == 2 and fields[1] == name and fields[0]:
                 return "slurm:" + fields[0]
         return ""
-    query = subprocess.run(["qstat", "-f"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    query = bounded(["qstat", "-f"], timeout=15)
     identifier = ""
     matched = False
     for line in query.stdout.splitlines() + [""]:
@@ -793,7 +890,11 @@ def submit(token):
     atomic("intent.json", json.dumps({"scheduler": value["scheduler"], "name": name, "created_at": time.time_ns()}, separators=(",", ":")))
     if value["scheduler"] == "slurm":
         command = ["sbatch", "--parsable", "--job-name=" + name, "--output=" + str(log), "--error=" + str(log)] + flags(value) + [str(script)]
-        result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            result = bounded(command, stdout_limit=64 * 1024, stderr_limit=64 * 1024, timeout=30)
+        except Exception:
+            intent.unlink(missing_ok=True)
+            raise
         if result.returncode != 0:
             intent.unlink(missing_ok=True)
             raise RuntimeError("sbatch failed: " + result.stderr.strip())
@@ -803,7 +904,11 @@ def submit(token):
         identifier = "slurm:" + identifier
     elif value["scheduler"] == "pbs":
         command = ["qsub", "-N", name, "-j", "oe", "-o", str(log)] + flags(value) + [str(script)]
-        result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            result = bounded(command, stdout_limit=64 * 1024, stderr_limit=64 * 1024, timeout=30)
+        except Exception:
+            intent.unlink(missing_ok=True)
+            raise
         if result.returncode != 0:
             intent.unlink(missing_ok=True)
             raise RuntimeError("qsub failed: " + result.stderr.strip())
@@ -856,20 +961,20 @@ def slurm_result(raw_state, raw_exit):
 def scheduler_status(identifier, value):
     raw = identifier.split(":", 1)[1]
     if identifier.startswith("slurm:"):
-        live = subprocess.run(["squeue", "-h", "-j", raw, "-o", "%T"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        live = bounded(["squeue", "-h", "-j", raw, "-o", "%T"], timeout=15)
         state = live.stdout.strip().splitlines()
         if state:
             name = state[0].upper()
             return {"state": "queued" if name in ("PENDING", "CONFIGURING") else "running", "detail": name}
-        history = subprocess.run(["sacct", "-n", "-X", "-P", "-j", raw, "--format=State,ExitCode"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        history = bounded(["sacct", "-n", "-X", "-P", "-j", raw, "--format=State,ExitCode"], timeout=15)
         rows = [line for line in history.stdout.splitlines() if line.strip()]
         if rows:
             fields = rows[0].split("|")
             return slurm_result(fields[0], fields[1] if len(fields) > 1 else "1:0")
         return {"state": "unknown", "detail": "Slurm no longer reports this job and no exit marker was found"}
-    query = subprocess.run(["qstat", "-xf", raw], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    query = bounded(["qstat", "-xf", raw], timeout=15)
     if query.returncode != 0:
-        query = subprocess.run(["qstat", "-f", raw], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        query = bounded(["qstat", "-f", raw], timeout=15)
     text = query.stdout
     match = next((line.split("=", 1)[1].strip() for line in text.splitlines() if "job_state" in line and "=" in line), "")
     code = next((line.split("=", 1)[1].strip() for line in text.splitlines() if "Exit_status" in line and "=" in line), "")
@@ -912,9 +1017,9 @@ def cancel(token, identifier):
     if identifier != remote_id():
         raise RuntimeError("OpenScience SSH remote id mismatch")
     if identifier.startswith("slurm:"):
-        result = subprocess.run(["scancel", identifier.split(":", 1)[1]], stderr=subprocess.PIPE, text=True)
+        result = bounded(["scancel", identifier.split(":", 1)[1]], stdout_limit=4096, timeout=30)
     elif identifier.startswith("pbs:"):
-        result = subprocess.run(["qdel", identifier.split(":", 1)[1]], stderr=subprocess.PIPE, text=True)
+        result = bounded(["qdel", identifier.split(":", 1)[1]], stdout_limit=4096, timeout=30)
     else:
         pid = int(identifier.split(":", 1)[1])
         value = runtime()
@@ -934,7 +1039,7 @@ def cancel(token, identifier):
             except ProcessLookupError:
                 result = subprocess.CompletedProcess([], 0, "", "")
         elif not scope_empty(value):
-            result = subprocess.run(["systemctl", "--user", "kill", "--signal=TERM", "--kill-whom=all", value["unit"]], stderr=subprocess.PIPE, text=True)
+            result = bounded(["systemctl", "--user", "kill", "--signal=TERM", "--kill-whom=all", value["unit"]], stdout_limit=4096, timeout=30)
         else:
             response({"cancelled": False, "detail": "Direct SSH ownership supervisor disappeared before descendant shutdown was proven"})
             return
@@ -960,7 +1065,7 @@ def cancel(token, identifier):
             if attempt == 100 and alive(value) and hasattr(signal, "SIGUSR1"):
                 os.kill(pid, signal.SIGUSR1)
             if attempt == 100 and not alive(value) and not scope_empty(value):
-                subprocess.run(["systemctl", "--user", "kill", "--signal=KILL", "--kill-whom=all", value["unit"]], stderr=subprocess.DEVNULL)
+                bounded(["systemctl", "--user", "kill", "--signal=KILL", "--kill-whom=all", value["unit"]], stdout_limit=4096, timeout=30)
             if attempt == 200 and alive(value):
                 force_responsibility(value)
             time.sleep(0.02)

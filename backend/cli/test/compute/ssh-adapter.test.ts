@@ -30,6 +30,80 @@ test("stops a control subprocess before buffering an oversized response", async 
   )
 })
 
+test("bounds scheduler command output and reaps its owned process group", async () => {
+  if (process.platform === "win32") return
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-scheduler-bound-"))
+  const remote = path.join(root, "remote")
+  const bin = path.join(root, "bin")
+  const pidfile = path.join(root, "scheduler.pid")
+  const token = "scheduler-owner"
+  const spec: SshAdapter.Spec = {
+    id: "bounded-scheduler",
+    owner: token,
+    root: remote,
+    cwd: ".",
+    command: "true",
+    scheduler: "slurm",
+    outputs: [],
+    uploads: [],
+  }
+  try {
+    await Promise.all([fs.mkdir(remote), fs.mkdir(bin)])
+    const packed = await SshAdapter.archive(spec, root)
+    const extracted = Bun.spawn(["tar", "-xf", packed, "-C", remote], {
+      stdout: "ignore",
+      stderr: "pipe",
+    })
+    const [extractCode, extractError] = await Promise.all([extracted.exited, new Response(extracted.stderr).text()])
+    if (extractCode !== 0) throw new Error(extractError)
+    await Promise.all([
+      fs.writeFile(path.join(remote, "owner"), `${crypto.createHash("sha256").update(token).digest("hex")}\n`),
+      fs.writeFile(
+        path.join(bin, "sbatch"),
+        `#!/bin/sh
+printf '%s\n' "$$" > ${JSON.stringify(pidfile)}
+python3 -c 'import os,time; time.sleep(0.1); os.write(1,b"x"*(128*1024)); time.sleep(60)' &
+child=$!
+printf '%s\n' "$child" >> ${JSON.stringify(pidfile)}
+wait "$child"
+`,
+        { mode: 0o700 },
+      ),
+    ])
+    const proc = Bun.spawn(["python3", path.join(remote, "control.py"), "submit", token], {
+      env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [code, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ])
+    expect(code).not.toBe(0)
+    expect(stdout).toBe("")
+    expect(stderr).toContain("Remote command stdout exceeded 65536 bytes")
+    expect(await Bun.file(path.join(remote, "intent.json")).exists()).toBe(false)
+    const pids = (await Bun.file(pidfile).text()).trim().split("\n").map(Number)
+    expect(pids).toHaveLength(2)
+    for (const pid of pids) {
+      const gone = await (async function wait(attempts = 100): Promise<boolean> {
+        try {
+          process.kill(pid, 0)
+        } catch {
+          return true
+        }
+        if (!attempts) return false
+        await Bun.sleep(20)
+        return wait(attempts - 1)
+      })()
+      expect(gone).toBe(true)
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("terminates an SSH probe when its bounded operation times out or is aborted", async () => {
   if (process.platform === "win32") return
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-probe-"))
