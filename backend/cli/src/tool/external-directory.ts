@@ -22,6 +22,12 @@ export type AuthorizedPath = {
   [Symbol.dispose](): void
 }
 
+const scopes = new WeakSet<object>()
+
+export function isAuthorizedPath(value: unknown): value is AuthorizedPath {
+  return typeof value === "object" && value !== null && scopes.has(value)
+}
+
 function scope(input: {
   path: string
   authorization?: SessionFilesystem.Authorization
@@ -33,7 +39,7 @@ function scope(input: {
     state.disposed = true
     if (input.authorization) SessionFilesystem.releaseAuthorization(input.authorization)
   }
-  return {
+  const result: AuthorizedPath = {
     path: input.path,
     authorization: input.authorization,
     authorizationOwnership: input.authorization ? "owned" : "none",
@@ -62,6 +68,8 @@ function scope(input: {
     dispose,
     [Symbol.dispose]: dispose,
   }
+  scopes.add(result)
+  return result
 }
 
 /** The agent-facing cwd is the isolated workspace owned by this session. */

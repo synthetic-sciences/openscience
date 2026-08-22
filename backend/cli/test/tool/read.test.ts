@@ -6,6 +6,7 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { PermissionNext } from "../../src/permission/next"
 import { Agent } from "../../src/agent/agent"
+import { SessionFilesystem } from "../../src/session/filesystem"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -181,7 +182,7 @@ describe("tool.read external_directory permission", () => {
               },
             },
           ),
-        ).rejects.toThrow("symbolic link")
+        ).rejects.toBeInstanceOf(SessionFilesystem.InvalidPathError)
         expect(await fs.readFile(path.join(outside.path, "secret.txt"), "utf8")).toBe("must remain private")
       },
     })

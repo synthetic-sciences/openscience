@@ -40,7 +40,7 @@ import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { fileURLToPath } from "bun"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { ConfigMarkdown } from "../config/markdown"
 import { Config } from "../config/config"
 import { SessionSummary } from "./summary"
@@ -80,6 +80,7 @@ import { Global } from "@/global"
 import { TaskAttempt } from "@/tool/task-attempt"
 import { Token } from "@/util/token"
 import { Auth } from "@/auth"
+import { SafeFileIO } from "@/file/safe-io"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -89,9 +90,28 @@ export namespace SessionPrompt {
   export const OUTPUT_TOKEN_MAX = Flag.OPENSCIENCE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
   export const CONTEXT_PREFLIGHT_MARGIN = 0.9
   const LOOP_LEASE_TIMEOUT = 24 * 60 * 60 * 1_000
+  const ATTACHMENT_LIMIT = 32 * 1024 * 1024
   // Scientific agents can still consume session-scoped artifact references.
   // Science agents that dispatch GPU/compute work and should honor billing.compute.
   const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
+
+  type TestHooks = {
+    afterAttachmentAuthorization?: (input: { sessionID: string; path: string }) => void | Promise<void>
+  }
+
+  const hooks = { value: undefined as TestHooks | undefined }
+
+  /** Deterministic authority-race barrier for prompt attachment tests. */
+  export function testing(input: TestHooks) {
+    if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("SessionPrompt test hooks are disabled outside tests")
+    const prior = hooks.value
+    hooks.value = input
+    return {
+      [Symbol.dispose]() {
+        if (hooks.value === input) hooks.value = prior
+      },
+    }
+  }
 
   /** Build the provider schema and keep the executable Zod contract attached. */
   export function toolInputSchema(model: Provider.Model, item: Tool.Contract & { id: string }) {
@@ -1991,8 +2011,36 @@ export namespace SessionPrompt {
               log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const filepath = fileURLToPath(part.url)
-              const stat = await Bun.file(filepath).stat()
+              const requested = fileURLToPath(part.url)
+              const readCtx: Tool.Context = {
+                sessionID: input.sessionID,
+                abort: new AbortController().signal,
+                agent: agent.name,
+                messageID: info.id,
+                extra: {},
+                messages: [],
+                metadata: async () => {},
+                ask,
+              }
+              using authorized = await assertExternalDirectory(readCtx, requested, {
+                access: "read",
+                ...(part.mime === "application/x-directory" ? { kind: "directory" } : {}),
+              })
+              if (!authorized?.managedToolOutput) {
+                await readCtx.ask({
+                  permission: "read",
+                  patterns: [authorized?.path ?? requested],
+                  always: ["*"],
+                  metadata: {},
+                })
+              }
+              await hooks.value?.afterAttachmentAuthorization?.({ sessionID: input.sessionID, path: requested })
+              const opened = await AuthoritySignal.exclusive(async () => {
+                const filepath = (await authorized?.revalidate()) ?? requested
+                return { filepath, stat: await fs.stat(filepath) }
+              })
+              const filepath = opened.filepath
+              const stat = opened.stat
 
               if (stat.isDirectory()) {
                 part.mime = "application/x-directory"
@@ -2006,14 +2054,18 @@ export namespace SessionPrompt {
                   end: url.searchParams.get("end"),
                 }
                 if (range.start != null) {
-                  const filePathURI = part.url.split("?")[0]
+                  const filePathURI = pathToFileURL(filepath).href
                   let start = parseInt(range.start)
                   let end = range.end ? parseInt(range.end) : undefined
                   // some LSP servers (eg, gopls) don't give full range in
                   // workspace/symbol searches, so we'll try to find the
                   // symbol in the document to get the full range
                   if (start === end) {
-                    const symbols = await LSP.documentSymbol(filePathURI)
+                    const symbols = await AuthoritySignal.exclusive(async () => {
+                      const current = (await authorized?.revalidate()) ?? filepath
+                      if (current !== filepath) throw new Error("Attachment path changed after authorization")
+                      return LSP.documentSymbol(filePathURI)
+                    })
                     for (const symbol of symbols) {
                       let range: LSP.Range | undefined
                       if ("range" in symbol) {
@@ -2049,17 +2101,12 @@ export namespace SessionPrompt {
                 await ReadTool.init()
                   .then(async (t) => {
                     const model = await Provider.getModel(info.model.providerID, info.model.modelID)
-                    const readCtx: Tool.Context = {
-                      sessionID: input.sessionID,
-                      abort: new AbortController().signal,
-                      agent: agent.name,
-                      messageID: info.id,
-                      extra: { model },
-                      messages: [],
-                      metadata: async () => {},
-                      ask,
-                    }
-                    const result = await t.execute(args, readCtx)
+                    const result = await AuthoritySignal.exclusive(() =>
+                      t.execute(args, {
+                        ...readCtx,
+                        extra: { model, fileAuthorization: authorized, skipLSP: true },
+                      }),
+                    )
                     pieces.push({
                       id: Identifier.ascending("part"),
                       messageID: info.id,
@@ -2111,17 +2158,14 @@ export namespace SessionPrompt {
 
               if (part.mime === "application/x-directory") {
                 const args = { path: filepath }
-                const listCtx: Tool.Context = {
-                  sessionID: input.sessionID,
-                  abort: new AbortController().signal,
-                  agent: agent.name,
-                  messageID: info.id,
-                  extra: {},
-                  messages: [],
-                  metadata: async () => {},
-                  ask,
-                }
-                const result = await ListTool.init().then((t) => t.execute(args, listCtx))
+                const result = await AuthoritySignal.exclusive(() =>
+                  ListTool.init().then((t) =>
+                    t.execute(args, {
+                      ...readCtx,
+                      extra: { fileAuthorization: authorized },
+                    }),
+                  ),
+                )
                 return [
                   {
                     id: Identifier.ascending("part"),
@@ -2148,27 +2192,21 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const readCtx: Tool.Context = {
-                sessionID: input.sessionID,
-                abort: new AbortController().signal,
-                agent: agent.name,
-                messageID: info.id,
-                extra: {},
-                messages: [],
-                metadata: async () => {},
-                ask,
-              }
-              using authorized = await assertExternalDirectory(readCtx, filepath)
-              await readCtx.ask({
-                permission: "read",
-                patterns: [filepath],
-                always: ["*"],
-                metadata: {},
+              const snapshot = await AuthoritySignal.exclusive(async () => {
+                const current = (await authorized?.revalidate()) ?? filepath
+                if (current !== filepath) throw new Error("Attachment path changed after authorization")
+                return SafeFileIO.read(current, { maxBytes: ATTACHMENT_LIMIT })
+              }).catch((error: unknown) => {
+                if (error instanceof SafeFileIO.LimitError) {
+                  throw new Error(
+                    `Attachment too large to include (${error.size} bytes > ${ATTACHMENT_LIMIT}). ` +
+                      "The harness caps prompt attachments at 32 MiB.",
+                  )
+                }
+                throw error
               })
-              const readable = (await authorized?.revalidate()) ?? filepath
-              const file = Bun.file(readable)
-              FileTime.read(input.sessionID, readable)
-              const bytes = await file.bytes()
+              FileTime.read(input.sessionID, filepath)
+              const bytes = snapshot.bytes
               const mime = correctImageMime(part.mime, bytes)
               return [
                 {

@@ -4,7 +4,7 @@ import * as path from "path"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
-import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
+import { assertExternalDirectory, isAuthorizedPath, sessionToolDirectory } from "./external-directory"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -43,17 +43,24 @@ export const ListTool = Tool.define("list", {
   }),
   async execute(params, ctx) {
     let searchPath = path.resolve(await sessionToolDirectory(ctx), params.path || ".")
-    using authorized = await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
+    const retained = isAuthorizedPath(ctx.extra?.["fileAuthorization"]) ? ctx.extra?.["fileAuthorization"] : undefined
+    if (retained && retained.path !== searchPath) {
+      throw new Error("Retained directory authorization does not match the requested path")
+    }
+    using owned = retained ? undefined : await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
+    const authorized = retained ?? owned
     searchPath = authorized?.path ?? searchPath
 
-    await ctx.ask({
-      permission: "list",
-      patterns: [searchPath],
-      always: ["*"],
-      metadata: {
-        path: searchPath,
-      },
-    })
+    if (!retained) {
+      await ctx.ask({
+        permission: "list",
+        patterns: [searchPath],
+        always: ["*"],
+        metadata: {
+          path: searchPath,
+        },
+      })
+    }
 
     searchPath = (await authorized?.revalidate()) ?? searchPath
 

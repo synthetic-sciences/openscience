@@ -17,8 +17,31 @@ import { Filesystem } from "../util/filesystem"
 import { escapeHtml } from "../util/html"
 import { PublicationReview } from "./review"
 import { SafeFileIO } from "./safe-io"
+import { Log } from "../util/log"
 
 export namespace PublicationFile {
+  const log = Log.create({ service: "file.publication" })
+
+  type TestHooks = {
+    timeoutMs?: number
+    job?: (path: string) => void
+    afterForcedTermination?: () => void | Promise<void>
+  }
+
+  const hooks = { value: undefined as TestHooks | undefined }
+
+  /** Deterministic process-lifecycle barriers for publication tests. */
+  export function testing(input: TestHooks) {
+    if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("PublicationFile test hooks are disabled outside tests")
+    const prior = hooks.value
+    hooks.value = input
+    return {
+      [Symbol.dispose]() {
+        if (hooks.value === input) hooks.value = prior
+      },
+    }
+  }
+
   export type Authority = PublicationReview.Authority & {
     write(file: string): Promise<string>
   }
@@ -232,14 +255,17 @@ ${body}
     // physical spelling is `/private/var`. Keep every later no-follow check,
     // sandbox grant, and converter argument on the same canonical path.
     const job = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "openscience-publication-")))
+    hooks.value?.job?.(job)
     const snapshotFile = path.join(job, "source.md")
     const generatedFile = path.join(job, `result.${extensions[parsed.format]}`)
     let lifecycle:
       | {
           child: ChildProcess
           sandbox: ReturnType<typeof Sandbox.wrapArgv>
+          command: string
           closed: boolean
           reaped: boolean
+          reaping?: Promise<void>
         }
       | undefined
     let releaseRequested = false
@@ -338,7 +364,10 @@ ${body}
         }
 
         const output = completion(child)
-        const stop = () => Shell.killTree(child, { exited: () => stopped(child), detached })
+        const stop = async () => {
+          await Shell.killTree(child, { exited: () => stopped(child), detached })
+          await hooks.value?.afterForcedTermination?.()
+        }
         const registered = await CommandRuntime.start(
           {
             projectID: Instance.project.id,
@@ -364,24 +393,46 @@ ${body}
       lifecycle = {
         child: launched.child,
         sandbox: launched.sandbox,
+        command: launched.registered.id,
         closed: stopped(launched.child),
         reaped: false,
+      }
+      const reap = () => {
+        const current = lifecycle
+        if (!current || current.reaped) return Promise.resolve()
+        if (current.reaping) return current.reaping
+        current.reaping = CommandRuntime.settle(current.command)
+          .then(async () => {
+            current.reaped = true
+            if (releaseRequested && current.closed) await release()
+          })
+          .finally(() => {
+            if (!current.reaped) current.reaping = undefined
+          })
+        return current.reaping
       }
       const closed = () => {
         if (!lifecycle) return
         lifecycle.closed = true
-        if (releaseRequested && lifecycle.reaped) void release()
+        void reap().catch((error) => {
+          log.error("late publication child reaping failed", {
+            command: lifecycle?.command,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        })
       }
       launched.child.once("close", closed)
       launched.child.once("error", closed)
-      if (stopped(launched.child)) lifecycle.closed = true
+      if (stopped(launched.child)) {
+        lifecycle.closed = true
+        await reap()
+      }
 
       const stop = async () => {
         await launched.stop()
-        await CommandRuntime.settle(launched.registered.id)
-        if (lifecycle) lifecycle.reaped = true
+        await reap()
       }
-      const timeout = timeoutAfter(launched.child, stop)
+      const timeout = timeoutAfter(launched.child, stop, hooks.value?.timeoutMs ?? exportTimeoutMs)
       const outcome = await Promise.race([launched.output, timeout.promise])
         .then(
           (result) => ({ result }),
@@ -389,8 +440,7 @@ ${body}
         )
         .finally(timeout.cancel)
       if (stopped(launched.child) && !lifecycle.reaped) {
-        await CommandRuntime.settle(launched.registered.id)
-        lifecycle.reaped = true
+        await reap()
       }
       if ("error" in outcome) throw outcome.error
       const result = outcome.result
@@ -455,17 +505,17 @@ ${body}
     })
   }
 
-  function timeoutAfter(child: ChildProcess, stop: () => Promise<void>) {
+  function timeoutAfter(child: ChildProcess, stop: () => Promise<void>, timeoutMs: number) {
     let timer: ReturnType<typeof setTimeout> | undefined
     const promise = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
         void stop()
           .then(() => waitForStop(child))
           .then(
-            () => reject(new Error(`Pandoc timed out after ${Math.round(exportTimeoutMs / 1_000)} seconds`)),
+            () => reject(new Error(`Pandoc timed out after ${Math.round(timeoutMs / 1_000)} seconds`)),
             (error) => reject(new AggregateError([error], "Pandoc timed out and could not be stopped")),
           )
-      }, exportTimeoutMs)
+      }, timeoutMs)
       timer.unref()
     })
     return {

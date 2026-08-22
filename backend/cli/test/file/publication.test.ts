@@ -184,6 +184,52 @@ exit 0
     })
   })
 
+  posixTest("settles and releases a publication child that exits after forced-stop reporting fails", async () => {
+    await using _sandbox = await sandboxedExecution()
+    await using tmp = await tmpdir({
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "report.md"), "# Late child cleanup\n")
+        const bin = path.join(directory, "bin")
+        await fs.mkdir(bin, { recursive: true })
+        await Bun.write(path.join(bin, "pandoc"), "#!/bin/sh\ntrap '' TERM\nwhile true; do sleep 1; done\n")
+        await fs.chmod(path.join(bin, "pandoc"), 0o755)
+        return bin
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const prior = process.env.PATH
+        process.env.PATH = `${tmp.extra}${path.delimiter}${prior ?? ""}`
+        const state = { job: "", forced: 0 }
+        using _ = PublicationFile.testing({
+          timeoutMs: 20,
+          job: (value) => (state.job = value),
+          afterForcedTermination: () => {
+            state.forced++
+            throw new Error("injected post-termination reporting failure")
+          },
+        })
+        try {
+          await expect(PublicationFile.render(tmp.path, { path: "report.md", format: "docx" })).rejects.toThrow()
+          for (const _ of Array.from({ length: 400 })) {
+            const released = state.job && !(await Bun.file(state.job).exists())
+            if (released && CommandRuntime.list(Instance.project.id, "publication").length === 0) break
+            await Bun.sleep(10)
+          }
+          expect(state.job).not.toBe("")
+          expect(state.forced).toBeGreaterThan(0)
+          expect(await Bun.file(state.job).exists()).toBe(false)
+          expect(CommandRuntime.list(Instance.project.id, "publication")).toEqual([])
+        } finally {
+          process.env.PATH = prior
+        }
+      },
+    })
+  })
+
   test("reaps a registered publication converter before trust revocation is acknowledged", async () => {
     await using tmp = await tmpdir({
       init: async (directory) => {

@@ -7,7 +7,7 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
-import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
+import { assertExternalDirectory, isAuthorizedPath, sessionToolDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
 import { readImageDimensions } from "../util/image"
 import { SafeFileIO } from "@/file/safe-io"
@@ -157,13 +157,20 @@ export const ReadTool = Tool.define("read", {
   async execute(params, ctx) {
     const directory = await sessionToolDirectory(ctx)
     const requested = path.isAbsolute(params.filePath) ? params.filePath : path.resolve(directory, params.filePath)
-    using authorized = await assertExternalDirectory(ctx, requested, {
-      bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
-      access: "read",
-    })
+    const retained = isAuthorizedPath(ctx.extra?.["fileAuthorization"]) ? ctx.extra?.["fileAuthorization"] : undefined
+    if (retained && retained.path !== requested) {
+      throw new Error("Retained file authorization does not match the requested path")
+    }
+    using owned = retained
+      ? undefined
+      : await assertExternalDirectory(ctx, requested, {
+          bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
+          access: "read",
+        })
+    const authorized = retained ?? owned
     let filepath = authorized?.path ?? requested
 
-    if (!authorized?.managedToolOutput) {
+    if (!retained && !authorized?.managedToolOutput) {
       await ctx.ask({
         permission: "read",
         patterns: [filepath],
@@ -266,7 +273,7 @@ export const ReadTool = Tool.define("read", {
     output += "\n</file>"
 
     // just warms the lsp client
-    LSP.touchFile(filepath, false)
+    if (!ctx.extra?.["skipLSP"]) LSP.touchFile(filepath, false)
     FileTime.read(ctx.sessionID, filepath)
 
     if (instructions.length > 0) {

@@ -47,6 +47,18 @@ describe("PublicationReview", () => {
         })
         expect(report.format).toBe("openscience.publication-review.v1")
         expect(report.artifactHash).toMatch(/^[a-f0-9]{64}$/)
+        expect(report.dependencies).toEqual([
+          {
+            kind: "bibliography",
+            path: "references.bib",
+            artifactHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          },
+          {
+            kind: "figure",
+            path: "figures/observed.png",
+            artifactHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          },
+        ])
         expect(report.status).toBe("blocked")
         const checks = new Set(report.findings.map((finding) => finding.check))
         expect(checks.has("citation")).toBe(true)
@@ -260,6 +272,100 @@ describe("PublicationReview", () => {
         expect(second.id).not.toBe(first.id)
         expect(second.artifactHash).not.toBe(first.artifactHash)
         expect((await PublicationReview.history("report.md")).map((report) => report.id)).toEqual([first.id, second.id])
+      },
+    })
+  })
+
+  test("marks finalized reviews stale when a hashed bibliography or figure changes", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "README.md"), "# Dependency fixture\n")
+        await Bun.write(path.join(directory, "uv.lock"), "version = 1\n")
+        await Bun.write(path.join(directory, "pyproject.toml"), '[project]\nname = "dependency-fixture"\n')
+        await Bun.write(path.join(directory, "references.bib"), "@article{known2026, title={Known}}\n")
+        await Bun.write(path.join(directory, "figure.svg"), "<svg><text>original</text></svg>\n")
+        await Bun.write(
+          path.join(directory, "report.md"),
+          [
+            "---",
+            "bibliography: references.bib",
+            "---",
+            "# Result",
+            "",
+            "The result is supported by @known2026.",
+            "",
+            "![Result](figure.svg)",
+          ].join("\n"),
+        )
+        await $`git add .`.cwd(directory).quiet()
+        await $`git -c user.name=OpenScience -c user.email=test@openscience.local commit -m "dependency fixture"`
+          .cwd(directory)
+          .quiet()
+      },
+    })
+
+    await Provenance.record({
+      kind: "artifact",
+      label: "Dependency figure",
+      artifactType: "figure",
+      path: "figure.svg",
+      meta: { directory: tmp.path },
+    } as Parameters<typeof Provenance.record>[0])
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const report = await PublicationReview.run({ path: "report.md", actor: "Reviewer" })
+        expect(report.dependencies.map((item) => item.kind)).toEqual(["bibliography", "figure"])
+        for (const finding of report.findings.filter(
+          (item) => item.severity === "blocking" && item.status === "open",
+        )) {
+          await PublicationReview.resolve(report.id, finding.id, {
+            status: "overridden",
+            actor: "Reviewer",
+            reason: "Dependency-integrity fixture override.",
+          })
+        }
+        const finalized = await PublicationReview.finalize(report.id, { actor: "Reviewer" })
+        expect(finalized.finalized?.dependencyHash).toMatch(/^[a-f0-9]{64}$/)
+        expect((await PublicationReview.current("report.md"))?.stale).toBe(false)
+
+        await Bun.write(path.join(tmp.path, "references.bib"), "@article{known2026, title={Changed}}\n")
+        expect((await PublicationReview.current("report.md"))?.stale).toBe(true)
+        await expect(PublicationReview.assertReady("report.md", report.id)).rejects.toThrow(
+          "bibliography or figure changed",
+        )
+      },
+    })
+  })
+
+  test("revalidates connected review current and history access immediately before returning", async () => {
+    await using tmp = await tmpdir({
+      init: (directory) => Bun.write(path.join(directory, "report.md"), "# Connected review\n"),
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await PublicationReview.run({ path: "report.md", actor: "Reviewer" })
+        const authority = (failure: number): PublicationReview.Authority => {
+          const state = { reads: 0 }
+          return {
+            root: tmp.path,
+            scan: true,
+            async read(file) {
+              state.reads++
+              if (state.reads === failure) throw new Error("injected final authority revocation")
+              return file
+            },
+          }
+        }
+
+        await expect(PublicationReview.history("report.md", authority(2))).rejects.toThrow(
+          "injected final authority revocation",
+        )
+        await expect(PublicationReview.current("report.md", authority(5))).rejects.toThrow(
+          "injected final authority revocation",
+        )
       },
     })
   })

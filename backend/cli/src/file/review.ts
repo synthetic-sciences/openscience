@@ -68,8 +68,19 @@ export namespace PublicationReview {
     actor: z.string(),
     at: z.number(),
     artifactHash: z.string().regex(/^[a-f0-9]{64}$/),
+    dependencyHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   })
   export type Finalization = z.infer<typeof Finalization>
+
+  export const Dependency = z.object({
+    kind: z.enum(["bibliography", "figure"]),
+    path: z.string(),
+    artifactHash: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  export type Dependency = z.infer<typeof Dependency>
 
   export const Summary = z.object({
     total: z.number().int().nonnegative(),
@@ -89,6 +100,7 @@ export namespace PublicationReview {
     projectID: z.string(),
     path: z.string(),
     artifactHash: z.string().regex(/^[a-f0-9]{64}$/),
+    dependencies: Dependency.array().default([]),
     version: z.number().int().positive(),
     status: z.enum(["blocked", "warnings", "ready"]),
     summary: Summary,
@@ -127,6 +139,7 @@ export namespace PublicationReview {
   const key = (id: string) => [...prefix(), id]
   const sourceLimit = 32 * 1024 * 1024
   const bibliographyLimit = 16 * 1024 * 1024
+  const figureLimit = 64 * 1024 * 1024
 
   async function migrate() {
     await ProjectLegacy.adopt("publication_review", Instance.project.id, (value, projectID) => ({
@@ -147,7 +160,7 @@ export namespace PublicationReview {
     const text = snapshot.bytes.toString("utf8")
     const artifactHash = byteHash(snapshot.bytes)
     const scan = !authority || authority.scan
-    const [graph, provenance, audit] = await Promise.all([
+    const [graph, provenance, audit, bib] = await Promise.all([
       scan
         ? Provenance.project({
             projectID: Instance.project.id,
@@ -158,11 +171,19 @@ export namespace PublicationReview {
         ? ArtifactFile.provenance(source.root, source.local)
         : Promise.resolve({ path: source.local, tracked: false, dirty: false, status: "local" as const }),
       scan ? ArtifactFile.audit(source.root) : Promise.resolve(undefined),
+      bibliography(text, source, authority),
     ])
+    const figure = await figures(text, source, graph.nodes, authority)
+    const dependencies = [...bib.map((item) => item.dependency), ...figure.dependencies]
+      .filter(
+        (item, index, values) =>
+          values.findIndex((candidate) => candidate.kind === item.kind && candidate.path === item.path) === index,
+      )
+      .toSorted((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path))
     const findings = [
-      ...(await citations(text, source, authority)),
+      ...(await citations(text, source, bib)),
       ...(await numbers(text, source)),
-      ...(await figures(text, source, graph.nodes, authority)),
+      ...figure.findings,
       ...(await reproducibility(source, provenance, audit)),
     ]
     const now = Date.now()
@@ -172,6 +193,7 @@ export namespace PublicationReview {
       projectID: Instance.project.id,
       path: source.relative,
       artifactHash,
+      dependencies,
       version: 1,
       status: status(findings),
       summary: summary(findings),
@@ -184,6 +206,11 @@ export namespace PublicationReview {
       const current = authority ? await authority.read(source.absolute) : source.absolute
       if (current !== source.absolute || (await digest(current)) !== artifactHash) {
         throw new Error("The manuscript changed while its publication preflight was being generated; retry it")
+      }
+      if (!(await dependenciesCurrent(report, source, authority))) {
+        throw new Error(
+          "A bibliography or figure changed while its publication preflight was being generated; retry it",
+        )
       }
       await Storage.write(key(report.id), report)
     }
@@ -200,8 +227,15 @@ export namespace PublicationReview {
     const report = await latest(filepath, authority)
     if (!report) return
     const source = await target(filepath, authority)
-    const stale = (await digest(source.absolute).catch(() => "")) !== report.artifactHash
-    return State.parse({ ...report, stale })
+    const inspect = async () => {
+      const current = await revalidate(source, authority)
+      const sourceCurrent = (await digest(current.absolute).catch(() => "")) === report.artifactHash
+      const stale = !sourceCurrent || !(await dependenciesCurrent(report, current, authority))
+      await revalidate(current, authority)
+      return State.parse({ ...report, stale })
+    }
+    if (!authority) return inspect()
+    return AuthoritySignal.exclusive(inspect)
   }
 
   export async function history(filepath: string, authority?: Authority): Promise<Report[]> {
@@ -211,9 +245,14 @@ export namespace PublicationReview {
     const reports = await Promise.all(
       keys.map((item) => Storage.read<unknown>(item).then((value) => Report.parse(value))),
     )
-    return reports
+    const result = reports
       .filter((report) => report.path === source.relative)
       .toSorted((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+    if (!authority) return result
+    return AuthoritySignal.exclusive(async () => {
+      await revalidate(source, authority)
+      return result
+    })
   }
 
   export async function get(id: string): Promise<Report> {
@@ -273,7 +312,7 @@ export namespace PublicationReview {
     const parsed = FinalizeInput.parse(input)
     const update = async () => {
       const current = await get(id)
-      await assertCurrent(current, undefined, authority)
+      await assertCurrentLocked(current, undefined, authority)
       if (current.findings.some((finding) => finding.severity === "blocking" && finding.status === "open")) {
         throw new Error("Resolve or explicitly override all blocking findings before finalization")
       }
@@ -287,6 +326,7 @@ export namespace PublicationReview {
             actor: parsed.actor,
             at: now,
             artifactHash: report.artifactHash,
+            dependencyHash: dependencyHash(report.dependencies),
           }
           report.events.push({
             version: report.version,
@@ -321,7 +361,7 @@ export namespace PublicationReview {
   async function citations(
     text: string,
     source: Awaited<ReturnType<typeof target>>,
-    authority?: Authority,
+    bib: Awaited<ReturnType<typeof bibliography>>,
   ): Promise<Finding[]> {
     const lines = prose(text)
     const definitions = new Set(
@@ -336,7 +376,6 @@ export namespace PublicationReview {
         references.add(`${match[1]}\0${line.line}`)
       }
     }
-    const bib = await bibliography(text, source, authority)
     const keys = new Set<string>()
     for (const item of bib) {
       for (const match of item.text.matchAll(/@\w+\s*\{\s*([^,\s]+)\s*,/g)) keys.add(match[1]!)
@@ -429,8 +468,9 @@ export namespace PublicationReview {
     source: Awaited<ReturnType<typeof target>>,
     nodes: Awaited<ReturnType<typeof Provenance.project>>["nodes"],
     authority?: Authority,
-  ): Promise<Finding[]> {
-    const output: Finding[] = []
+  ): Promise<{ findings: Finding[]; dependencies: Dependency[] }> {
+    const findings: Finding[] = []
+    const dependencies: Dependency[] = []
     for (const image of markdownImages(text)) {
       const alt = image.alt.trim()
       const value = image.target.trim()
@@ -443,10 +483,11 @@ export namespace PublicationReview {
           : undefined
       const relative = path.relative(source.root, requested).replaceAll("\\", "/")
       const inside = Boolean(absolute)
-      const opened = absolute ? await SafeFileIO.open(absolute).catch(() => undefined) : undefined
-      await opened?.close()
-      if (!absolute || !opened) {
-        output.push(
+      const snapshot = absolute
+        ? await SafeFileIO.optional(absolute, { maxBytes: figureLimit }).catch(() => undefined)
+        : undefined
+      if (!absolute || !snapshot) {
+        findings.push(
           await finding({
             check: "figure",
             severity: "blocking",
@@ -460,8 +501,9 @@ export namespace PublicationReview {
         )
         continue
       }
+      dependencies.push(dependency("figure", absolute, snapshot.bytes, source))
       if (!alt) {
-        output.push(
+        findings.push(
           await finding({
             check: "figure",
             severity: "minor",
@@ -479,7 +521,7 @@ export namespace PublicationReview {
         return path.resolve(nodePath) === path.resolve(absolute)
       })
       if (recorded) continue
-      output.push(
+      findings.push(
         await finding({
           check: "figure",
           severity: "major",
@@ -490,7 +532,7 @@ export namespace PublicationReview {
         }),
       )
     }
-    return output
+    return { findings, dependencies }
   }
 
   async function reproducibility(
@@ -582,10 +624,16 @@ export namespace PublicationReview {
             : undefined
         if (!authorized) return
         const snapshot = await SafeFileIO.optional(authorized, { maxBytes: bibliographyLimit }).catch(() => undefined)
-        return snapshot ? { file: authorized, text: snapshot.bytes.toString("utf8") } : undefined
+        return snapshot
+          ? {
+              file: authorized,
+              text: snapshot.bytes.toString("utf8"),
+              dependency: dependency("bibliography", authorized, snapshot.bytes, source),
+            }
+          : undefined
       }),
     )
-    return safe.filter((item): item is { file: string; text: string } => Boolean(item))
+    return safe.filter((item): item is { file: string; text: string; dependency: Dependency } => Boolean(item))
   }
 
   async function target(value: string, authority?: Authority) {
@@ -604,12 +652,70 @@ export namespace PublicationReview {
     }
   }
 
-  async function assertCurrent(report: Report, artifactHash?: string, authority?: Authority) {
+  async function assertCurrentLocked(report: Report, artifactHash?: string, authority?: Authority) {
     const requested = path.isAbsolute(report.path) ? report.path : path.resolve(Instance.worktree, report.path)
     const source = await target(requested, authority)
     if ((artifactHash ?? (await digest(source.absolute).catch(() => ""))) !== report.artifactHash) {
       throw new Error("The manuscript changed after this publication preflight was generated")
     }
+    if (!(await dependenciesCurrent(report, source, authority))) {
+      throw new Error("A bibliography or figure changed after this publication preflight was generated")
+    }
+    if (
+      report.finalized &&
+      (report.finalized.artifactHash !== report.artifactHash ||
+        (report.finalized.dependencyHash !== undefined &&
+          report.finalized.dependencyHash !== dependencyHash(report.dependencies)))
+    ) {
+      throw new Error("The finalized publication preflight integrity record is inconsistent")
+    }
+    await revalidate(source, authority)
+  }
+
+  async function assertCurrent(report: Report, artifactHash?: string, authority?: Authority) {
+    if (!authority) return assertCurrentLocked(report, artifactHash)
+    return AuthoritySignal.exclusive(() => assertCurrentLocked(report, artifactHash, authority))
+  }
+
+  async function revalidate(source: Awaited<ReturnType<typeof target>>, authority?: Authority) {
+    if (!authority) return source
+    const current = await target(source.absolute, authority)
+    if (current.absolute !== source.absolute || current.relative !== source.relative) {
+      throw new Error("Publication filesystem authority changed during review access")
+    }
+    return current
+  }
+
+  async function dependenciesCurrent(
+    report: Report,
+    source: Awaited<ReturnType<typeof target>>,
+    authority?: Authority,
+  ) {
+    for (const item of report.dependencies) {
+      const requested = path.isAbsolute(item.path) ? item.path : path.resolve(source.root, item.path)
+      const absolute = authority ? await authority.read(requested) : requested
+      if (!authority && !(await Instance.containsCanonicalPath(absolute))) return false
+      if ((await digest(absolute).catch(() => "")) !== item.artifactHash) return false
+    }
+    return true
+  }
+
+  function dependency(
+    kind: Dependency["kind"],
+    file: string,
+    bytes: Uint8Array,
+    source: Awaited<ReturnType<typeof target>>,
+  ): Dependency {
+    const relative = path.relative(source.root, file)
+    const value =
+      relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)
+        ? file
+        : relative.split(path.sep).join("/")
+    return { kind, path: value, artifactHash: byteHash(bytes) }
+  }
+
+  function dependencyHash(dependencies: Dependency[]) {
+    return byteHash(Buffer.from(JSON.stringify(stable(dependencies))))
   }
 
   async function finding(input: Omit<Finding, "id" | "status">): Promise<Finding> {

@@ -124,6 +124,7 @@ test("adopts legacy annotation and publication-review history into the opaque pr
   expect(result.review).toEqual({
     ...review,
     projectID: result.projectID,
+    dependencies: [],
   })
   expect(await Storage.read(["artifact_annotation", legacy, annotationID]).catch(() => undefined)).toBeUndefined()
   expect(await Storage.read(["publication_review", legacy, reviewID]).catch(() => undefined)).toBeUndefined()
