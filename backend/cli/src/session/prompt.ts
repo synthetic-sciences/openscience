@@ -1209,7 +1209,6 @@ export namespace SessionPrompt {
       // context overflow, needs compaction (proactive, at the 0.75 threshold)
       const overThreshold =
         !!lastFinished &&
-        lastFinished.parentID === lastUser.id &&
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       // Circuit breaker: once repeated compactions have proven ineffective for this
