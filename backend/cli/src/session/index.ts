@@ -168,6 +168,13 @@ export namespace Session {
     return (await Storage.read<Info>(["session", Instance.project.id, id])) as Info
   }
 
+  async function loadOptional(key: string[]) {
+    return Storage.read<Info>(key).catch((error) => {
+      if (Storage.NotFoundError.isInstance(error)) return
+      throw error
+    })
+  }
+
   export async function assertDirectory(id: string) {
     if (validated().has(id)) return
     bind(await load(id))
@@ -419,7 +426,8 @@ export namespace Session {
   export async function* list() {
     const project = Instance.project
     for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item)
+      const session = await loadOptional(item)
+      if (!session) continue
       if (!current(session)) continue
       yield session
     }
@@ -430,7 +438,8 @@ export namespace Session {
     const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item)
+      const session = await loadOptional(item)
+      if (!session) continue
       if (!current(session)) continue
       if (session.parentID !== parentID) continue
       result.push(session)
