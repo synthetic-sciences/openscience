@@ -244,9 +244,9 @@ describe("/file/artifact", () => {
 
         expect(await ArtifactStore.list(Instance.project.id)).toEqual([])
         const root = path.join(Global.Path.data, "artifact-store")
-        expect(await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: path.join(root, "blobs"), onlyFiles: true }))).toEqual(
-          [],
-        )
+        expect(
+          await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: path.join(root, "blobs"), onlyFiles: true })),
+        ).toEqual([])
         expect(await fs.readdir(path.join(root, "partial"))).toEqual([])
       },
     })

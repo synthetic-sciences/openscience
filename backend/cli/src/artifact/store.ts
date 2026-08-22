@@ -351,12 +351,7 @@ export namespace ArtifactStore {
         hasher.update(item.value)
         const offset = { value: 0 }
         while (offset.value < item.value.byteLength) {
-          const result = await handle.write(
-            item.value,
-            offset.value,
-            item.value.byteLength - offset.value,
-            null,
-          )
+          const result = await handle.write(item.value, offset.value, item.value.byteLength - offset.value, null)
           if (!result.bytesWritten) throw new Error("Artifact staging write made no progress")
           offset.value += result.bytesWritten
         }

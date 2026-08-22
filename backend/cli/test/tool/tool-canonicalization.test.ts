@@ -296,8 +296,7 @@ test("batch never reflects unsafe tool names from rejected or over-limit childre
       expect(JSON.stringify(parts)).not.toContain("raw-secret")
       expect(
         parts.some(
-          (part) =>
-            part.tool === "invalid" && part.state.status === "completed" && part.state.input.tool === "tool",
+          (part) => part.tool === "invalid" && part.state.status === "completed" && part.state.input.tool === "tool",
         ),
       ).toBeTrue()
       expect(parts.some((part) => part.tool === "tool" && part.state.status === "error")).toBeTrue()
