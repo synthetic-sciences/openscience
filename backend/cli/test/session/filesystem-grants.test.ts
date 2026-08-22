@@ -240,13 +240,14 @@ describe("session filesystem grants", () => {
         )
         expect(error).toBeInstanceOf(SessionFilesystem.InvalidPathError)
         if (!SessionFilesystem.InvalidPathError.isInstance(error)) throw new Error("expected invalid path error")
-        expect(error.toObject()).toMatchObject({
+        const serialized = error.toObject()
+        expect(serialized).toMatchObject({
           name: "SessionFilesystemInvalidPathError",
           data: {
-            path: Truncate.DIR,
             message: expect.stringContaining("reserved for OpenScience's managed tool outputs"),
           },
         })
+        expect(serialized.data.path).toBe(await fs.realpath(Truncate.DIR))
         expect(await Array.fromAsync(Session.list())).toEqual(before)
       },
     })
