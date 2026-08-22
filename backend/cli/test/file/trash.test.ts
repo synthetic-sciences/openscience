@@ -52,6 +52,7 @@ describe("recoverable source file trash", () => {
         const target = path.join(tmp.path, "results", "finding.txt")
         await fs.mkdir(path.dirname(target), { recursive: true })
         await fs.writeFile(target, "approved finding\n", { mode: 0o640 })
+        const mode = (await fs.stat(target)).mode & 0o777
 
         const trashed = await FileTrash.trash({
           projectID: Instance.project.id,
@@ -65,7 +66,7 @@ describe("recoverable source file trash", () => {
           filename: "finding.txt",
           state: "trash",
           size: 17,
-          mode: 0o640,
+          mode,
         })
         expect(trashed.expiresAt - trashed.trashedAt).toBe(FileTrash.RETENTION_MS)
         await expect(fs.readFile(target)).rejects.toThrow()
@@ -82,7 +83,7 @@ describe("recoverable source file trash", () => {
         expect(restored.status).toBe(200)
         expect(await restored.json()).toMatchObject({ id: trashed.id, state: "restored" })
         expect(await fs.readFile(target, "utf8")).toBe("approved finding\n")
-        if (process.platform !== "win32") expect((await fs.stat(target)).mode & 0o777).toBe(0o640)
+        if (process.platform !== "win32") expect((await fs.stat(target)).mode & 0o777).toBe(mode)
         expect(await FileTrash.list(Instance.project.id)).toEqual([])
 
         const duplicate = await FileRoutes().request(`/file/trash/${trashed.id}/restore`, {
