@@ -106,11 +106,7 @@ test("can send the first prompt after New research opens the explicit new-sessio
   }
 })
 
-test("an incomplete provider tool call is recovered without a raw schema error", async ({
-  page,
-  sdk,
-  gotoSession,
-}) => {
+test("an incomplete provider tool call is recovered without a raw schema error", async ({ page, sdk, gotoSession }) => {
   test.setTimeout(45_000)
   await gotoSession()
 
