@@ -356,6 +356,7 @@ describe("durable Task attempts across Bun processes", () => {
       const output = await result(second)
 
       expect(output.output).toContain("DURABLE_CHILD_RESULT")
+      expect(output.output).not.toContain("<task_metadata>")
       expect(output.metadata.timedOut).toBe(false)
       expect(Number(output.metadata.queuedMs)).toBeGreaterThan(budgetMs)
       expect(Number(output.metadata.activeMs)).toBeLessThan(budgetMs)

@@ -600,7 +600,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             ? `No textual findings were emitted before the cutoff. The child completed ${summary.length} tool calls in this turn.`
             : taskOutcome.outcome === "error"
               ? `The child failed before emitting textual findings after ${summary.length} tool calls in this turn.`
-              : "")
+              : taskOutcome.outcome === "completed"
+                ? "The child completed without emitting textual findings."
+                : `The child stopped before emitting textual findings after ${summary.length} tool calls in this turn.`)
         const handoff = taskHandoff(raw)
         const memory = taskHandoff(handoff.text, TASK_MEMORY_CHARS)
         const activeMs = timing.activeMs
@@ -617,9 +619,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                   ? ["[Child failed before completion; any partial result follows.]"]
                   : []),
           handoff.text,
-          "",
-          `<task_metadata>${JSON.stringify({ session_id: session.id, profile: params.subagent_type, ...(params.specialist && { specialist: params.specialist }), effort, outcome: taskOutcome.outcome, stop_reason: taskOutcome.stopReason, timed_out: deadline.timedOut, budget_ms: budgetMs, queued_ms: timing.queuedMs, active_ms: activeMs })}</task_metadata>`,
-        ].join("\n")
+        ]
+          .filter(Boolean)
+          .join("\n")
         const result = TaskAttempt.Result.parse({
           title: params.description,
           metadata: {
