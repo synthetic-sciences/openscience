@@ -18,6 +18,8 @@ import { Config } from "@/config/config"
 import path from "node:path"
 import fs from "node:fs/promises"
 import { SessionFilesystem } from "./filesystem"
+import { SessionLoopState } from "./loop-state"
+import { NamedError } from "@synsci/util/error"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -105,8 +107,169 @@ export namespace SessionCompaction {
     return (breakerState()[sessionID] ?? 0) >= CIRCUIT_BREAKER_LIMIT
   }
 
+  export function breakerCount(sessionID: string) {
+    return breakerState()[sessionID] ?? 0
+  }
+
   export function resetBreaker(sessionID: string) {
+    const reset = (breakerState()[sessionID] ?? 0) > 0
     delete breakerState()[sessionID]
+    return reset
+  }
+
+  /** Restore the compaction breaker after a backend restart from hidden,
+   * ignored markers in the durable session transcript. */
+  export function restoreBreaker(sessionID: string, messages: MessageV2.WithParts[]) {
+    const count = SessionLoopState.breaker(messages, EFFECTIVE_COMPACTION_RATIO)
+    if (count > 0) breakerState()[sessionID] = count
+    if (count === 0) delete breakerState()[sessionID]
+    return { count, tripped: count >= CIRCUIT_BREAKER_LIMIT }
+  }
+
+  /** Persist a breaker transition on a user message. Ignored user text is
+   * neither rendered nor sent to the provider, but survives compaction and a
+   * full backend restart with the rest of the transcript. */
+  export async function persistBreaker(input: {
+    sessionID: string
+    messageID: string
+    transaction: string
+    before?: number
+    reclaimed?: number
+    reset?: boolean
+  }) {
+    await Session.updatePart({
+      id: SessionLoopState.partID(input.transaction, input.reset ? "breaker-reset" : "breaker"),
+      messageID: input.messageID,
+      sessionID: input.sessionID,
+      type: "text",
+      text: "",
+      synthetic: true,
+      ignored: true,
+      metadata: input.reset
+        ? SessionLoopState.compactionReset(input.transaction)
+        : SessionLoopState.compaction({
+            transaction: input.transaction,
+            before: input.before,
+            reclaimed: input.reclaimed ?? 0,
+          }),
+    } satisfies MessageV2.TextPart)
+  }
+
+  export async function continueAfter(user: MessageV2.User) {
+    const text =
+      "Continue from the 'Next Move' in the handoff above. Trust it as an accurate record — do not re-read files or re-verify completed work unless the immediate step actually requires it. If the Objective is already complete, give the user your result and stop; do NOT start new work, investigations, or analyses they did not ask for."
+    const stored = await MessageV2.get({ sessionID: user.sessionID, messageID: user.id })
+    if (stored.info.role !== "user" || stored.info.internal?.type !== "compaction") return
+    const reserved = stored.info.internal.continuationID
+    const id = reserved ?? (await MessageV2.nextMessageID(user.sessionID))
+    if (!reserved) {
+      stored.info.internal.continuationID = id
+      await Session.updateMessage(stored.info)
+    }
+    const epoch = SessionLoopState.messageEpoch(stored.info) ?? stored.info.id
+    const message = await Session.updateMessage({
+      id,
+      role: "user",
+      sessionID: stored.info.sessionID,
+      time: {
+        created: Date.now(),
+      },
+      agent: stored.info.agent,
+      model: stored.info.model,
+      effort: MessageV2.resolveResearchEffort(stored.info.effort),
+      ...SessionLoopState.controls(stored.info),
+      internal: SessionLoopState.intent({ kind: "compaction", text, epoch, transaction: id }),
+    })
+    await Session.updatePart({
+      id: SessionLoopState.partID(id, "continuation"),
+      messageID: message.id,
+      sessionID: stored.info.sessionID,
+      type: "text",
+      synthetic: true,
+      metadata: SessionLoopState.continuation("compaction"),
+      text,
+      time: {
+        start: Date.now(),
+        end: Date.now(),
+      },
+    })
+    return message
+  }
+
+  /** Complete the side effects of one durable compaction transaction. Handoff
+   * writes are overwrite-idempotent, the finalization part has a deterministic
+   * ID, and automatic continuation is queued only when recovery says it is
+   * still required. */
+  export async function recover(input: SessionLoopState.PendingCompaction) {
+    const current = SessionLoopState.pendingCompaction(
+      await Session.messages({ sessionID: input.carrier.info.sessionID }),
+    )
+    if (
+      !current ||
+      current.carrier.info.id !== input.carrier.info.id ||
+      current.summary.info.id !== input.summary.info.id
+    )
+      return
+    const intent = current.carrier.info.internal
+    if (intent?.type !== "compaction") return
+    const transaction = intent.transaction || current.carrier.info.id
+    const summary = current.summary.parts
+      .filter((part) => part.type === "text")
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("")
+      .trim()
+    if (!summary) {
+      const error = new NamedError.Unknown({
+        message:
+          "Compaction finished without producing a usable summary. OpenScience stopped this turn and preserved the original context. Retry /compact with a different model, shorten the request, or start a new session.",
+      }).toObject()
+      current.summary.info.error = error
+      current.summary.info.finish = "stop"
+      current.summary.info.time.completed ??= Date.now()
+      await Session.updateMessage(current.summary.info)
+      Bus.publish(Session.Event.Error, { sessionID: current.carrier.info.sessionID, error })
+      return "stop" as const
+    }
+    const before = intent.before ?? 0
+    const reclaimed = Math.max(0, (intent.headTokens ?? before) - Token.estimate(summary))
+    const trigger = intent.trigger ?? "manual"
+    if (!current.finalized) {
+      await persistHandoff({
+        root: Instance.worktree,
+        sessionID: current.carrier.info.sessionID,
+        summary,
+        file: intent.handoffFile,
+      })
+      await Session.updatePart({
+        id: SessionLoopState.partID(transaction, "finalization"),
+        messageID: current.carrier.info.id,
+        sessionID: current.carrier.info.sessionID,
+        type: "text",
+        text: "",
+        synthetic: true,
+        ignored: true,
+        metadata: SessionLoopState.compactionFinalized({
+          transaction,
+          summaryID: current.summary.info.id,
+          trigger,
+          before,
+          reclaimed,
+        }),
+      } satisfies MessageV2.TextPart)
+      SessionTelemetry.recordCompaction({
+        sessionID: current.carrier.info.sessionID,
+        trigger,
+        mechanism: "summary",
+        before,
+        after: Math.max(0, before - reclaimed),
+        reclaimed,
+      })
+      if (trigger !== "manual") {
+        noteCompaction({ sessionID: current.carrier.info.sessionID, before, reclaimed })
+      }
+    }
+    if (current.continuation) await continueAfter(current.carrier.info)
+    return "continue" as const
   }
 
   // Newest prior handoff text in the transcript, or undefined if this session has never
@@ -357,6 +520,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     focus?: string
     handoffFile?: string
     trigger?: "proactive" | "overflow" | "manual"
+    step: number
   }) {
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
@@ -379,8 +543,13 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     const { tailStartId } = selectTail(input.messages, { tailTurns, tailTokens })
     const tailIdx = tailStartId ? input.messages.findIndex((m) => m.info.id === tailStartId) : -1
     const head = tailIdx > 0 ? input.messages.slice(0, tailIdx) : input.messages
+    if (userMessage.internal?.type === "compaction") {
+      userMessage.internal.before = MessageV2.composition(input.messages).total
+      userMessage.internal.headTokens = MessageV2.composition(head).total
+      await Session.updateMessage(userMessage)
+    }
     const msg = (await Session.updateMessage({
-      id: Identifier.ascending("message"),
+      id: await MessageV2.nextMessageID(input.sessionID),
       role: "assistant",
       parentID: input.parentID,
       sessionID: input.sessionID,
@@ -401,6 +570,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       },
       modelID: model.id,
       providerID: model.providerID,
+      internal: { step: input.step },
       time: {
         created: Date.now(),
       },
@@ -462,71 +632,9 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     // re-attempting a compaction that can never succeed.
     if (result === "overflow") return "overflow"
 
-    // The summary always remains durable in the session transcript. Only an explicit
-    // `/handoff` also writes it into the project; automatic compaction and `/compact`
-    // must not create .openscience/handoffs or mutate the user's .gitignore state.
     if (result === "continue") {
-      const summaryText = (await MessageV2.parts(msg.id))
-        .filter((part) => part.type === "text")
-        .map((part) => (part.type === "text" ? part.text : ""))
-        .join("")
-        .trim()
-      if (summaryText) {
-        // Summary telemetry: `before` is the size of the history being compressed, `after`
-        // the size of the summary that replaces it. Attributes the expensive LLM-summary
-        // reclamation (level 4) separately from the cheap prune (level 3).
-        const summaryTokens = Token.estimate(summaryText)
-        const before = MessageV2.composition(input.messages).total
-        // P3.2 keeps the tail verbatim — only `head` is replaced by the summary, so reclaimed
-        // is head−summary (not full−summary), keeping the P2.5 breaker + telemetry honest.
-        const reclaimed = Math.max(0, MessageV2.composition(head).total - summaryTokens)
-        const after = before - reclaimed
-        SessionTelemetry.recordCompaction({
-          sessionID: input.sessionID,
-          trigger: input.trigger ?? "manual",
-          mechanism: "summary",
-          before,
-          after,
-          reclaimed,
-        })
-        // Feed the circuit breaker: repeated low-yield summaries trip it (P2.5). Only
-        // AUTOMATIC compactions count — a manual /compact reclaiming little (fixed overhead
-        // dominates) must not trip the breaker that gates PROACTIVE auto-compaction, or a
-        // few manual runs would silently disable auto-compaction for the session.
-        if ((input.trigger ?? "manual") !== "manual") noteCompaction({ sessionID: input.sessionID, before, reclaimed })
-        await persistHandoff({
-          root: Instance.worktree,
-          sessionID: input.sessionID,
-          summary: summaryText,
-          file: input.handoffFile,
-        })
-      }
-    }
-
-    if (result === "continue" && input.auto) {
-      const continueMsg = await Session.updateMessage({
-        id: Identifier.ascending("message"),
-        role: "user",
-        sessionID: input.sessionID,
-        time: {
-          created: Date.now(),
-        },
-        agent: userMessage.agent,
-        model: userMessage.model,
-        effort: MessageV2.resolveResearchEffort(userMessage.effort),
-      })
-      await Session.updatePart({
-        id: Identifier.ascending("part"),
-        messageID: continueMsg.id,
-        sessionID: input.sessionID,
-        type: "text",
-        synthetic: true,
-        text: "Continue from the 'Next Move' in the handoff above. Trust it as an accurate record — do not re-read files or re-verify completed work unless the immediate step actually requires it. If the Objective is already complete, give the user your result and stop; do NOT start new work, investigations, or analyses they did not ask for.",
-        time: {
-          start: Date.now(),
-          end: Date.now(),
-        },
-      })
+      const pending = SessionLoopState.pendingCompaction(await Session.messages({ sessionID: input.sessionID }))
+      if (pending && (await recover(pending)) === "stop") return "stop"
     }
     if (processor.message.error) return "stop"
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
@@ -546,21 +654,38 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       focus: z.string().optional(),
       handoffFile: z.string().optional(),
       trigger: z.enum(["proactive", "overflow", "manual"]).optional(),
+      epoch: z.string().optional(),
     }),
     async (input) => {
+      const messages = await Session.messages({ sessionID: input.sessionID })
+      const previous = messages.findLast(
+        (message): message is MessageV2.WithParts & { info: MessageV2.User } => message.info.role === "user",
+      )
+      const id = await MessageV2.nextMessageID(input.sessionID)
+      const epoch = input.epoch ?? (input.auto ? (SessionLoopState.currentEpoch(messages) ?? id) : id)
       const msg = await Session.updateMessage({
-        id: Identifier.ascending("message"),
+        id,
         role: "user",
         model: input.model,
         sessionID: input.sessionID,
         agent: input.agent,
         effort: input.effort ?? "normal",
+        ...(previous ? SessionLoopState.controls(previous.info) : {}),
+        internal: {
+          type: "compaction",
+          auto: input.auto,
+          epoch,
+          transaction: id,
+          focus: input.focus,
+          handoffFile: input.handoffFile,
+          trigger: input.trigger,
+        },
         time: {
           created: Date.now(),
         },
       })
       await Session.updatePart({
-        id: Identifier.ascending("part"),
+        id: SessionLoopState.partID(id, "carrier"),
         messageID: msg.id,
         sessionID: msg.sessionID,
         type: "compaction",

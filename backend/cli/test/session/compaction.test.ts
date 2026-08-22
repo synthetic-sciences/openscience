@@ -10,6 +10,9 @@ import { Session } from "../../src/session"
 import type { Provider } from "../../src/provider/provider"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionFilesystem } from "../../src/session/filesystem"
+import { Identifier } from "../../src/id/id"
+import { SessionLoopState } from "../../src/session/loop-state"
+import { Bus } from "../../src/bus"
 
 Log.init({ print: false })
 
@@ -50,6 +53,35 @@ async function withSession<T>(directory: string, fn: (session: Session.Info) => 
       return fn(session).finally(() => Session.remove(session.id))
     },
   })
+}
+
+async function finishSummary(input: { session: Session.Info; carrier: MessageV2.User; text: string; step?: number }) {
+  const id = await MessageV2.nextMessageID(input.session.id)
+  const message = await Session.updateMessage({
+    id,
+    sessionID: input.session.id,
+    parentID: input.carrier.id,
+    role: "assistant",
+    time: { created: Date.now(), completed: Date.now() },
+    mode: "compaction",
+    agent: "compaction",
+    path: { cwd: Instance.worktree, root: Instance.worktree },
+    cost: 0,
+    tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: "test-model",
+    providerID: "test",
+    internal: { step: input.step ?? 1 },
+    finish: "stop",
+    summary: true,
+  })
+  await Session.updatePart({
+    id: Identifier.ascending("part"),
+    messageID: message.id,
+    sessionID: input.session.id,
+    type: "text",
+    text: input.text,
+  })
+  return message
 }
 
 describe("session.compaction.isOverflow", () => {
@@ -524,6 +556,25 @@ describe("session.compaction.persistHandoff", () => {
   test("the compaction carrier preserves the explicit empty handoff marker", async () => {
     await using tmp = await tmpdir()
     await withSession(tmp.path, async (session) => {
+      const source = await Session.updateMessage({
+        id: await MessageV2.nextMessageID(session.id),
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "build",
+        model: { providerID: "test", modelID: "test-model" },
+        effort: "normal",
+        tools: { task: false },
+        delegation: false,
+        variant: "careful",
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: source.id,
+        sessionID: session.id,
+        type: "text",
+        text: "preserve my controls",
+      })
       await SessionCompaction.create({
         sessionID: session.id,
         agent: "build",
@@ -533,9 +584,22 @@ describe("session.compaction.persistHandoff", () => {
       })
       const messages = await Session.messages({ sessionID: session.id })
       const marker = messages.flatMap((message) => message.parts).find((part) => part.type === "compaction")
+      const carrier = messages.find((message) => message.parts.includes(marker!))
       expect(marker?.type).toBe("compaction")
       if (marker?.type !== "compaction") throw new Error("missing compaction marker")
       expect(marker.handoffFile).toBe("")
+      expect(carrier?.info.role).toBe("user")
+      if (carrier?.info.role !== "user") throw new Error("missing compaction carrier")
+      expect(carrier.info.internal).toEqual({
+        type: "compaction",
+        auto: false,
+        epoch: carrier.info.id,
+        transaction: carrier.info.id,
+        handoffFile: "",
+      })
+      expect(carrier.info.tools).toEqual({ task: false })
+      expect(carrier.info.delegation).toBe(false)
+      expect(carrier.info.variant).toBe("careful")
     })
   })
 
@@ -600,6 +664,251 @@ describe("session.compaction.persistHandoff", () => {
         }),
       ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
       expect(existsSync(path.join(root, "handoff.md"))).toBe(false)
+    })
+  })
+})
+
+describe("session.compaction durable finalization", () => {
+  test("replays an explicit handoff idempotently after a summary/finalization boundary", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      await SessionCompaction.create({
+        sessionID: session.id,
+        agent: "research",
+        model: { providerID: "test", modelID: "test-model" },
+        auto: false,
+        handoffFile: "notes/next.md",
+        trigger: "manual",
+      })
+      const created = await Session.messages({ sessionID: session.id })
+      const carrier = created.find(
+        (message): message is MessageV2.WithParts & { info: MessageV2.User } =>
+          message.info.role === "user" && message.info.internal?.type === "compaction",
+      )
+      if (!carrier || carrier.info.internal?.type !== "compaction") throw new Error("missing carrier")
+      carrier.info.internal.before = 100
+      carrier.info.internal.headTokens = 80
+      await Session.updateMessage(carrier.info)
+      await finishSummary({ session, carrier: carrier.info, text: "durable handoff" })
+
+      const pending = SessionLoopState.pendingCompaction(await Session.messages({ sessionID: session.id }))
+      if (!pending) throw new Error("missing pending finalization")
+      await SessionCompaction.recover(pending)
+      await SessionCompaction.recover(pending)
+
+      expect(await Bun.file(path.join(tmp.path, "notes", "next.md")).text()).toBe("durable handoff\n")
+      const stored = await Session.messages({ sessionID: session.id })
+      const finalized = stored
+        .find((message) => message.info.id === carrier.info.id)
+        ?.parts.filter((part) => part.id === SessionLoopState.partID(carrier.info.id, "finalization"))
+      expect(finalized).toHaveLength(1)
+      expect(SessionLoopState.pendingCompaction(stored)).toBeUndefined()
+      expect(SessionLoopState.breaker(stored, 0.1)).toBe(0)
+    })
+  })
+
+  test("recovers exactly one automatic continuation past ignored notices", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const model = { providerID: "test", modelID: "test-model" }
+      const sourceID = await MessageV2.nextMessageID(session.id)
+      const source = await Session.updateMessage({
+        id: sourceID,
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "research",
+        model,
+        effort: "normal",
+        internal: SessionLoopState.prompt(sourceID),
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: source.id,
+        sessionID: session.id,
+        type: "text",
+        text: "continue this research",
+      })
+      await SessionCompaction.create({
+        sessionID: session.id,
+        agent: "research",
+        model,
+        auto: true,
+        epoch: source.id,
+        trigger: "proactive",
+      })
+      const created = await Session.messages({ sessionID: session.id })
+      const carrier = created.find(
+        (message): message is MessageV2.WithParts & { info: MessageV2.User } =>
+          message.info.role === "user" && message.info.internal?.type === "compaction",
+      )
+      if (!carrier || carrier.info.internal?.type !== "compaction") throw new Error("missing carrier")
+      carrier.info.internal.before = 100
+      carrier.info.internal.headTokens = 10
+      await Session.updateMessage(carrier.info)
+      await finishSummary({ session, carrier: carrier.info, text: "brief" })
+
+      const first = SessionLoopState.pendingCompaction(await Session.messages({ sessionID: session.id }))
+      if (!first) throw new Error("missing pending compaction")
+      // Simulate a process exit after durable finalization but before queuing
+      // the synthetic continuation.
+      await Session.updatePart({
+        id: SessionLoopState.partID(carrier.info.id, "finalization"),
+        messageID: carrier.info.id,
+        sessionID: session.id,
+        type: "text",
+        text: "",
+        synthetic: true,
+        ignored: true,
+        metadata: SessionLoopState.compactionFinalized({
+          transaction: carrier.info.id,
+          summaryID: first.summary.info.id,
+          trigger: "proactive",
+          before: 100,
+          reclaimed: 10 - Token.estimate("brief"),
+        }),
+      })
+
+      const noticeID = await MessageV2.nextMessageID(session.id)
+      await Session.updateMessage({
+        id: noticeID,
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "research",
+        model,
+        effort: "normal",
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: noticeID,
+        sessionID: session.id,
+        type: "text",
+        text: "/status",
+        ignored: true,
+      })
+      const reportID = await MessageV2.nextMessageID(session.id)
+      await Session.updateMessage({
+        id: reportID,
+        sessionID: session.id,
+        parentID: noticeID,
+        role: "assistant",
+        time: { created: Date.now(), completed: Date.now() },
+        mode: "research",
+        agent: "research",
+        path: { cwd: tmp.path, root: tmp.path },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: model.modelID,
+        providerID: model.providerID,
+        finish: "stop",
+      })
+
+      SessionCompaction.resetBreaker(session.id)
+      const interrupted = await Session.messages({ sessionID: session.id })
+      expect(SessionCompaction.restoreBreaker(session.id, interrupted)).toEqual({ count: 1, tripped: false })
+      const pending = SessionLoopState.pendingCompaction(interrupted)
+      expect(pending).toMatchObject({ finalized: true, continuation: true })
+      if (!pending) throw new Error("missing continuation recovery")
+      await SessionCompaction.recover(pending)
+      await SessionCompaction.recover(pending)
+
+      const stored = await Session.messages({ sessionID: session.id })
+      const continuations = stored.filter(
+        (message) =>
+          message.info.role === "user" &&
+          message.info.internal?.type === "continuation" &&
+          message.info.internal.kind === "compaction",
+      )
+      expect(continuations).toHaveLength(1)
+      expect(continuations[0]?.parts).toEqual([
+        expect.objectContaining({
+          id: SessionLoopState.partID(continuations[0]!.info.id, "continuation"),
+          type: "text",
+          synthetic: true,
+        }),
+      ])
+      expect(SessionLoopState.pendingCompaction(stored)).toBeUndefined()
+      expect(SessionLoopState.incomplete(stored)).toHaveLength(0)
+    })
+  })
+
+  test("makes an empty completed summary terminal exactly once after restart", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const model = { providerID: "test", modelID: "test-model" }
+      const sourceID = await MessageV2.nextMessageID(session.id)
+      const source = await Session.updateMessage({
+        id: sourceID,
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "research",
+        model,
+        effort: "normal",
+        internal: SessionLoopState.prompt(sourceID),
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: source.id,
+        sessionID: session.id,
+        type: "text",
+        text: "important original context",
+      })
+      await SessionCompaction.create({
+        sessionID: session.id,
+        agent: "research",
+        model,
+        auto: true,
+        epoch: source.id,
+        trigger: "proactive",
+      })
+      const created = await Session.messages({ sessionID: session.id })
+      const carrier = created.find(
+        (message): message is MessageV2.WithParts & { info: MessageV2.User } =>
+          message.info.role === "user" && message.info.internal?.type === "compaction",
+      )
+      if (!carrier) throw new Error("missing carrier")
+      await finishSummary({ session, carrier: carrier.info, text: "" })
+
+      const errors: MessageV2.Assistant["error"][] = []
+      const unsubscribe = Bus.subscribe(Session.Event.Error, (event) => {
+        if (event.properties.sessionID === session.id) errors.push(event.properties.error)
+      })
+      const pending = SessionLoopState.pendingCompaction(await Session.messages({ sessionID: session.id }))
+      if (!pending) throw new Error("missing empty summary")
+      expect(await SessionCompaction.recover(pending)).toBe("stop")
+      // A second startup/recovery pass sees the stored terminal error and does
+      // not emit another failure or queue another action.
+      expect(await SessionCompaction.recover(pending)).toBeUndefined()
+      unsubscribe()
+
+      const stored = await Session.messages({ sessionID: session.id })
+      const summary = stored.find((message) => message.info.id === pending.summary.info.id)
+      expect(summary?.info.role).toBe("assistant")
+      if (summary?.info.role !== "assistant") throw new Error("missing summary")
+      expect(summary.info.error?.data.message).toContain("preserved the original context")
+      expect(errors).toHaveLength(1)
+      expect(SessionLoopState.pendingCompaction(stored)).toBeUndefined()
+      expect(
+        stored.filter(
+          (message) =>
+            message.info.role === "user" &&
+            message.info.internal?.type === "continuation" &&
+            message.info.internal.kind === "compaction",
+        ),
+      ).toHaveLength(0)
+      expect(
+        stored
+          .find((message) => message.info.id === carrier.info.id)
+          ?.parts.filter((part) => part.id === SessionLoopState.partID(carrier.info.id, "finalization")),
+      ).toHaveLength(0)
+      expect(
+        (await MessageV2.filterCompacted(MessageV2.stream(session.id))).some(
+          (message) => message.info.id === source.id,
+        ),
+      ).toBe(true)
+      expect(SessionLoopState.terminalError({ user: carrier.info, assistant: summary.info })).toBe(true)
     })
   })
 })

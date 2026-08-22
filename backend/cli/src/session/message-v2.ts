@@ -353,6 +353,36 @@ export namespace MessageV2 {
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    /** Durable runtime intent and turn identity. This field is never accepted
+     * by the public prompt API; runtime-created carriers use it to recover
+     * idempotently after a process exit. */
+    internal: z
+      .discriminatedUnion("type", [
+        z.object({
+          type: z.literal("prompt"),
+          epoch: z.string(),
+        }),
+        z.object({
+          type: z.literal("continuation"),
+          kind: z.enum(["output", "contract", "review", "review-summary", "compaction", "task"]),
+          text: z.string(),
+          epoch: z.string(),
+          transaction: z.string(),
+        }),
+        z.object({
+          type: z.literal("compaction"),
+          auto: z.boolean(),
+          epoch: z.string(),
+          transaction: z.string(),
+          focus: z.string().optional(),
+          handoffFile: z.string().optional(),
+          trigger: z.enum(["proactive", "overflow", "manual"]).optional(),
+          before: z.number().nonnegative().optional(),
+          headTokens: z.number().nonnegative().optional(),
+          continuationID: Identifier.schema("message").optional(),
+        }),
+      ])
+      .optional(),
     effort: ResearchEffort.default("normal"),
     /** @deprecated Research effort now controls bounded delegation. */
     delegation: z.boolean().optional(),
@@ -402,6 +432,8 @@ export namespace MessageV2 {
     parentID: z.string(),
     modelID: z.string(),
     providerID: z.string(),
+    /** Loop iteration claimed atomically with assistant creation. */
+    internal: z.object({ step: z.number().int().positive() }).optional(),
     /** Named reasoning level resolved from the final provider options for this request. */
     reasoningEffort: z.string().optional(),
     /**

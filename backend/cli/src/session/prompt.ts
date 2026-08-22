@@ -74,6 +74,7 @@ import { ComputeJobs } from "@/compute/jobs"
 import { KernelRuntime } from "@/science/kernel/registry"
 import { SessionCheckpoint } from "./checkpoint"
 import { ToolSelection } from "./tool-selection"
+import { SessionLoopState } from "./loop-state"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -137,7 +138,7 @@ export namespace SessionPrompt {
     if (match) throw new Session.BusyError(sessionID)
   }
 
-  export const PromptInput = z.object({
+  const RuntimePromptInput = z.object({
     sessionID: Identifier.schema("session"),
     messageID: Identifier.schema("message").optional(),
     model: z
@@ -170,7 +171,7 @@ export namespace SessionPrompt {
             id: true,
           })
           .meta({
-            ref: "TextPartInput",
+            ref: "RuntimeTextPartInput",
           }),
         MessageV2.FilePart.omit({
           messageID: true,
@@ -180,7 +181,7 @@ export namespace SessionPrompt {
             id: true,
           })
           .meta({
-            ref: "FilePartInput",
+            ref: "RuntimeFilePartInput",
           }),
         MessageV2.AgentPart.omit({
           messageID: true,
@@ -190,7 +191,7 @@ export namespace SessionPrompt {
             id: true,
           })
           .meta({
-            ref: "AgentPartInput",
+            ref: "RuntimeAgentPartInput",
           }),
         MessageV2.SubtaskPart.omit({
           messageID: true,
@@ -200,14 +201,43 @@ export namespace SessionPrompt {
             id: true,
           })
           .meta({
-            ref: "SubtaskPartInput",
+            ref: "RuntimeSubtaskPartInput",
           }),
       ]),
     ),
   })
-  export type PromptInput = z.infer<typeof PromptInput>
+  // Public clients may supply ordinary text, files, agent mentions, and
+  // explicit subtasks, but cannot mark text as synthetic/ignored or attach
+  // runtime metadata. Internal command expansion uses RuntimePromptInput.
+  export const PromptInput = RuntimePromptInput.extend({
+    parts: z.array(
+      z.discriminatedUnion("type", [
+        MessageV2.TextPart.omit({
+          messageID: true,
+          sessionID: true,
+          synthetic: true,
+          ignored: true,
+          time: true,
+          metadata: true,
+        })
+          .partial({ id: true })
+          .strict()
+          .meta({ ref: "TextPartInput" }),
+        MessageV2.FilePart.omit({ messageID: true, sessionID: true })
+          .partial({ id: true })
+          .meta({ ref: "FilePartInput" }),
+        MessageV2.AgentPart.omit({ messageID: true, sessionID: true })
+          .partial({ id: true })
+          .meta({ ref: "AgentPartInput" }),
+        MessageV2.SubtaskPart.omit({ messageID: true, sessionID: true })
+          .partial({ id: true })
+          .meta({ ref: "SubtaskPartInput" }),
+      ]),
+    ),
+  })
+  export type PromptInput = z.infer<typeof RuntimePromptInput>
 
-  export const prompt = fn(PromptInput, async (input) => {
+  export const prompt = fn(RuntimePromptInput, async (input) => {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
@@ -342,6 +372,44 @@ export namespace SessionPrompt {
     return state()[sessionID]?.abort.signal
   }
 
+  async function enqueue(input: {
+    user: MessageV2.User
+    kind: SessionLoopState.Continuation
+    text: string
+    epoch: string
+    agent?: string
+    model?: MessageV2.User["model"]
+  }) {
+    const id = await MessageV2.nextMessageID(input.user.sessionID)
+    const message: MessageV2.User = {
+      id,
+      sessionID: input.user.sessionID,
+      role: "user",
+      time: { created: Date.now() },
+      agent: input.agent ?? input.user.agent,
+      model: input.model ?? input.user.model,
+      effort: MessageV2.resolveResearchEffort(input.user.effort),
+      ...SessionLoopState.controls(input.user),
+      internal: SessionLoopState.intent({
+        kind: input.kind,
+        text: input.text,
+        epoch: input.epoch,
+        transaction: id,
+      }),
+    }
+    await Session.updateMessage(message)
+    await Session.updatePart({
+      id: SessionLoopState.partID(id, "continuation"),
+      messageID: message.id,
+      sessionID: message.sessionID,
+      type: "text",
+      synthetic: true,
+      metadata: SessionLoopState.continuation(input.kind),
+      text: input.text,
+    } satisfies MessageV2.TextPart)
+    return message
+  }
+
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
     const session = await Session.get(sessionID)
     const abort = start(sessionID)
@@ -354,19 +422,38 @@ export namespace SessionPrompt {
 
     using _ = defer(() => cancel(sessionID, abort))
 
-    let step = 0
+    const initial = await Session.messages({ sessionID })
+    const incomplete = SessionLoopState.incomplete(initial)
+    await Promise.all(
+      incomplete.map((message) => {
+        const part = SessionLoopState.repair(message.info)
+        if (!part) return
+        return Session.updatePart({
+          messageID: message.info.id,
+          sessionID,
+          ...part,
+        })
+      }),
+    )
+    const durable = incomplete.length ? await Session.messages({ sessionID }) : initial
+    const recovered = SessionLoopState.restore(durable)
+    SessionCompaction.restoreBreaker(sessionID, durable)
+    const interrupted = SessionLoopState.pendingCompaction(durable)
+    if (interrupted) await SessionCompaction.recover(interrupted)
+    let epoch = recovered.epoch
+    let step = recovered.step
     // Consecutive context-overflow compactions for the current unanswered turn.
     // Reset on any non-overflow result; a second overflow means the pending
     // message itself is too large to ever fit.
-    let overflowCompactions = 0
+    let overflowCompactions = recovered.overflowCompactions
     // Compact once, then don't compact again until context drops back under the
     // threshold. Prevents an infinite compaction loop when fixed system+tool+
     // summary overhead alone already exceeds the 0.75 threshold.
     let compactionArmed = true
-    let outputContinuations = 0
-    let contractContinuations = 0
-    let reviewContinuations = 0
-    let summaryContinuations = 0
+    let outputContinuations = recovered.outputContinuations
+    let contractContinuations = recovered.contractContinuations
+    let reviewContinuations = recovered.reviewContinuations
+    let summaryContinuations = recovered.summaryContinuations
     const reviewLimit = 2
     const workspace = await SessionFilesystem.workspace(sessionID)
     // Text doom-loop guard (#176): weak/local models sometimes emit a near-identical
@@ -411,6 +498,19 @@ export namespace SessionPrompt {
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
       const user = lastUser
+      const current = SessionLoopState.messageEpoch(user)
+      if (current && current !== epoch) {
+        epoch = current
+        step = 0
+        overflowCompactions = 0
+        outputContinuations = 0
+        contractContinuations = 0
+        reviewContinuations = 0
+        summaryContinuations = 0
+        compactionArmed = true
+        SessionCompaction.resetBreaker(sessionID)
+      }
+      const turn = epoch ?? current ?? user.id
       // Terminal for "input exceeds the window and compaction can't help":
       // either the summarization itself overflowed, or the input is still too
       // big after one compaction. Surface an actionable error, never loop.
@@ -456,6 +556,7 @@ export namespace SessionPrompt {
           effort: MessageV2.resolveResearchEffort(user.effort),
           auto: true,
           trigger,
+          epoch: turn,
         })
       // Latched compaction: fire once, then not again until context drops back under
       // the threshold (re-arm happens in the reactive branch). Returns whether it fired.
@@ -473,6 +574,29 @@ export namespace SessionPrompt {
         return true
       }
       const bareMode = lastUser.tools?.["*"] === false
+      // Provider/auth/payment/cancellation errors are terminal for the durable
+      // attempt that produced them. A backend restart must not silently issue
+      // the same request again; a newer real prompt has a newer user id and is
+      // therefore allowed to proceed.
+      if (SessionLoopState.terminalError({ user: lastUser, assistant: lastAssistant })) break
+      // A process may stop after the provider durably records an overflow but
+      // before the outer loop queues its compaction carrier. Recover that edge
+      // from the assistant's `finish=compact` marker instead of retrying the
+      // same oversized request with freshly-reset local counters.
+      const overflowRecovery = SessionLoopState.overflowRecovery({
+        assistant: lastAssistant,
+        unanswered: !!lastAssistant && lastUser.id < lastAssistant.id,
+        attempts: overflowCompactions,
+      })
+      if (overflowRecovery === "fail") {
+        await failTooLarge()
+        break
+      }
+      if (overflowRecovery === "compact") {
+        await compact("overflow")
+        compactionArmed = false
+        continue
+      }
       // A text-only turn that finished "unknown" (no tool call to feed back) is a
       // completed turn, not a continue — otherwise the loop re-prompts the identical
       // context forever (the #176 doom loop). See MessageV2.isContinuingTurn.
@@ -492,28 +616,16 @@ export namespace SessionPrompt {
           break
         }
         outputContinuations++
-        const resume: MessageV2.User = {
-          id: await MessageV2.nextMessageID(sessionID),
-          sessionID,
-          role: "user",
-          time: { created: Date.now() },
-          agent: lastUser.agent,
-          model: lastUser.model,
-          effort: MessageV2.resolveResearchEffort(lastUser.effort),
-        }
-        await Session.updateMessage(resume)
-        await Session.updatePart({
-          id: Identifier.ascending("part"),
-          messageID: resume.id,
-          sessionID,
-          type: "text",
-          synthetic: true,
+        await enqueue({
+          user: lastUser,
+          kind: "output",
+          epoch: turn,
           text: [
             "Your previous response reached the output limit before the task completed.",
             "Continue from the existing work without repeating it. Write requested files in smaller chunks,",
             "run the saved workflow, inspect its outputs, and finish with the verified result.",
           ].join(" "),
-        } satisfies MessageV2.TextPart)
+        })
         continue
       }
       if (lastAssistant?.finish !== "length") outputContinuations = 0
@@ -534,28 +646,16 @@ export namespace SessionPrompt {
           )
           if (reviewing && owner && summaryContinuations < reviewLimit && !bareMode) {
             summaryContinuations++
-            const resume: MessageV2.User = {
-              id: await MessageV2.nextMessageID(sessionID),
-              sessionID,
-              role: "user",
-              time: { created: Date.now() },
-              agent: owner.info.agent,
-              model: owner.info.model,
-              effort: MessageV2.resolveResearchEffort(owner.info.effort),
-            }
-            await Session.updateMessage(resume)
-            await Session.updatePart({
-              id: Identifier.ascending("part"),
-              messageID: resume.id,
-              sessionID,
-              type: "text",
-              synthetic: true,
+            await enqueue({
+              user: owner.info,
+              kind: "review-summary",
+              epoch: turn,
               text: pending.length
                 ? `Independent review completed. Address these remaining completion gates without repeating verified work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}. Open findings: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ") || "none recorded"}. Correct each underlying defect before calling provenance_resolve with replacement evidence; a later reviewer must confirm it. Then return the corrected outcome.`
                 : findings.length
                   ? `Independent review completed with ${findings.length} non-blocking ${findings.length === 1 ? "finding" : "findings"}. Correct them when possible, save the corrected Result, then call provenance_resolve with replacement evidence; a later reviewer must confirm it. Disclose anything that remains: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ")}. Then return the concise verified outcome.`
                   : "Independent review completed with no recorded provenance findings. Read the reviewer's final report above and address or disclose any text-only findings or limitations it contains. Do not claim there are no open findings unless the report itself is clean. Then return the concise verified outcome and the saved Results.",
-            } satisfies MessageV2.TextPart)
+            })
             continue
           }
           const review = pending.find((gate) => gate.id === "review")
@@ -563,50 +663,27 @@ export namespace SessionPrompt {
           if (review && other.length === 0 && reviewContinuations < reviewLimit && !bareMode) {
             reviewContinuations++
             const packet = await import("./review").then((mod) => mod.SessionReview.prepare(sessionID))
-            const resume: MessageV2.User = {
-              id: await MessageV2.nextMessageID(sessionID),
-              sessionID,
-              role: "user",
-              time: { created: Date.now() },
+            await enqueue({
+              user: lastUser,
+              kind: "review",
+              epoch: turn,
               agent: packet.agent,
-              model: lastUser.model,
-              effort: MessageV2.resolveResearchEffort(lastUser.effort),
-            }
-            await Session.updateMessage(resume)
-            await Session.updatePart({
-              id: Identifier.ascending("part"),
-              messageID: resume.id,
-              sessionID,
-              type: "text",
-              synthetic: true,
               text: packet.text,
-            } satisfies MessageV2.TextPart)
+            })
             continue
           }
           if (pending.length && contractContinuations < 1 && !bareMode) {
             contractContinuations++
-            const resume: MessageV2.User = {
-              id: await MessageV2.nextMessageID(sessionID),
-              sessionID,
-              role: "user",
-              time: { created: Date.now() },
-              agent: lastUser.agent,
-              model: lastUser.model,
-              effort: MessageV2.resolveResearchEffort(lastUser.effort),
-            }
-            await Session.updateMessage(resume)
-            await Session.updatePart({
-              id: Identifier.ascending("part"),
-              messageID: resume.id,
-              sessionID,
-              type: "text",
-              synthetic: true,
+            await enqueue({
+              user: lastUser,
+              kind: "contract",
+              epoch: turn,
               text: [
                 "The durable research completion contract is not satisfied yet.",
                 `Resolve these gates without repeating completed work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}.`,
                 "Save every required Result, record deterministic checks and failed candidates truthfully, then return the verified outcome.",
               ].join(" "),
-            } satisfies MessageV2.TextPart)
+            })
             continue
           }
           if (pending.length) {
@@ -678,6 +755,7 @@ export namespace SessionPrompt {
           },
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
+          internal: { step },
           error,
           time: {
             created: Date.now(),
@@ -719,6 +797,7 @@ export namespace SessionPrompt {
           },
           modelID: taskModel.id,
           providerID: taskModel.providerID,
+          internal: { step },
           time: {
             created: Date.now(),
           },
@@ -843,26 +922,12 @@ export namespace SessionPrompt {
           // Add synthetic user message to prevent certain reasoning models from erroring
           // If we create assistant messages w/ out user ones following mid loop thinking signatures
           // will be missing and it can cause errors for models like gemini for example
-          const summaryUserMsg: MessageV2.User = {
-            id: Identifier.ascending("message"),
-            sessionID,
-            role: "user",
-            time: {
-              created: Date.now(),
-            },
-            agent: lastUser.agent,
-            model: lastUser.model,
-            effort: MessageV2.resolveResearchEffort(lastUser.effort),
-          }
-          await Session.updateMessage(summaryUserMsg)
-          await Session.updatePart({
-            id: Identifier.ascending("part"),
-            messageID: summaryUserMsg.id,
-            sessionID,
-            type: "text",
+          await enqueue({
+            user: lastUser,
+            kind: "task",
+            epoch: turn,
             text: "Summarize the task tool output above and continue with your task.",
-            synthetic: true,
-          } satisfies MessageV2.TextPart)
+          })
         }
 
         continue
@@ -879,6 +944,7 @@ export namespace SessionPrompt {
           focus: task.focus,
           handoffFile: task.handoffFile,
           trigger: task.trigger,
+          step,
         })
         if (result === "stop") break
         // The summarization request itself exceeded the window — the pending
@@ -933,6 +999,13 @@ export namespace SessionPrompt {
           // the threshold); prune's return value is the estimated reclaim.
           const before = lastFinished!.tokens.input + lastFinished!.tokens.cache.read + lastFinished!.tokens.output
           SessionTelemetry.recordCompaction({ sessionID, trigger: "proactive", mechanism: "prune", before, reclaimed })
+          await SessionCompaction.persistBreaker({
+            sessionID,
+            messageID: lastFinished!.parentID,
+            transaction: lastFinished!.id,
+            before,
+            reclaimed,
+          })
           SessionCompaction.noteCompaction({ sessionID, before, reclaimed })
           compactionArmed = true
         }
@@ -947,7 +1020,15 @@ export namespace SessionPrompt {
       // later, legitimately-needed compaction can still fire.
       if (!overThreshold && lastFinished && lastFinished.summary !== true) {
         compactionArmed = true
-        SessionCompaction.resetBreaker(sessionID)
+        if (SessionCompaction.breakerCount(sessionID) > 0) {
+          await SessionCompaction.persistBreaker({
+            sessionID,
+            messageID: lastFinished.parentID,
+            transaction: lastFinished.id,
+            reset: true,
+          })
+          SessionCompaction.resetBreaker(sessionID)
+        }
       }
 
       // normal processing
@@ -980,6 +1061,7 @@ export namespace SessionPrompt {
           },
           modelID: model.id,
           providerID: model.providerID,
+          internal: { step },
           time: {
             created: Date.now(),
           },
@@ -1470,6 +1552,7 @@ export namespace SessionPrompt {
       delegation: input.delegation,
       agent: agent.name,
       model,
+      internal: SessionLoopState.prompt(messageID),
       system: input.system,
       variant: input.variant,
       tier: input.tier,
@@ -1844,6 +1927,21 @@ export namespace SessionPrompt {
         parts,
       },
     )
+
+    // A fresh external turn starts a new breaker epoch. The marker is bound to
+    // the server-owned prompt intent and ordered by its monotonic message ID, so
+    // restart replay clears older ineffective-compaction events before counting
+    // events from this turn.
+    parts.push({
+      id: SessionLoopState.partID(messageID, "breaker-reset"),
+      messageID,
+      sessionID: input.sessionID,
+      type: "text",
+      text: "",
+      synthetic: true,
+      ignored: true,
+      metadata: SessionLoopState.compactionReset(messageID),
+    })
 
     await Session.updateMessage(info)
     for (const part of parts) {
