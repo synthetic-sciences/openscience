@@ -234,7 +234,13 @@ describe("session filesystem grants", () => {
       fn: async () => {
         const before = await Array.fromAsync(Session.list())
 
-        await expect(Session.create({})).rejects.toMatchObject({
+        const error = await Session.create({}).then(
+          () => undefined,
+          (cause) => cause,
+        )
+        expect(error).toBeInstanceOf(SessionFilesystem.InvalidPathError)
+        if (!SessionFilesystem.InvalidPathError.isInstance(error)) throw new Error("expected invalid path error")
+        expect(error.toObject()).toMatchObject({
           name: "SessionFilesystemInvalidPathError",
           data: {
             path: Truncate.DIR,
