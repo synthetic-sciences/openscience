@@ -10,7 +10,7 @@ import { settingsApi } from "./api"
 type Mode = SettingsBillingGetResponse["llm"]
 type Wallet = {
   signedIn: boolean
-  balanceUsd: number
+  balanceUsd: number | null
   billingMode: "managed" | "byok" | null
   managedSupported: boolean
 }
@@ -34,6 +34,12 @@ const MODES: { value: Mode; title: string; body: string }[] = [
 ]
 
 const money = (value: number) => `$${value.toFixed(value >= 100 ? 0 : 2)}`
+
+export function walletBalanceLabel(wallet: Pick<Wallet, "signedIn" | "balanceUsd">) {
+  if (!wallet.signedIn) return "Not signed in"
+  if (wallet.balanceUsd === null) return "Balance unavailable"
+  return wallet.balanceUsd >= 0 ? `${money(wallet.balanceUsd)} available` : `${money(wallet.balanceUsd)} balance`
+}
 
 /**
  * Persist and apply the small billing response independently of the much larger
@@ -151,13 +157,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
             <span class="text-12-regular text-text-weak">Synthetic Sciences credits</span>
             <span aria-live="polite">
               <Show when={wallet()} fallback={<span class="text-13-medium text-text-weak">Checking account…</span>}>
-                <span class="text-13-medium text-text-strong">
-                  {wallet()!.signedIn
-                    ? wallet()!.balanceUsd >= 0
-                      ? `${money(wallet()!.balanceUsd)} available`
-                      : "Balance unavailable"
-                    : "Not signed in"}
-                </span>
+                <span class="text-13-medium text-text-strong">{walletBalanceLabel(wallet()!)}</span>
               </Show>
             </span>
           </div>

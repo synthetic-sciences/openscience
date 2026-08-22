@@ -18,7 +18,7 @@ export const BillingState = z.object({
   compute: z.enum(["managed", "byok"]),
   wallet: z.object({
     signedIn: z.boolean().describe("Whether a Gateway session (thk_ key) is available"),
-    balanceUsd: z.number().describe("Credit balance in USD; -1 when signed out or unavailable"),
+    balanceUsd: z.number().nullable().describe("Credit balance in USD; null when signed out or unavailable"),
   }),
 })
 export type BillingState = z.infer<typeof BillingState>
@@ -33,7 +33,7 @@ const BillingPatch = z.object({
 async function readState(): Promise<BillingState> {
   const cfg = await Config.getGlobal()
   const session = await OpenScience.getSession().catch(() => null)
-  const balanceUsd = (session ? await OpenScience.getBalance().catch(() => null) : null) ?? -1
+  const balanceUsd = session ? await OpenScience.getBalance().catch(() => null) : null
   return {
     llm: cfg.billing?.llm ?? null,
     compute: cfg.billing?.compute ?? "byok",

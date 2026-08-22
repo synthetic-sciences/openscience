@@ -11,7 +11,7 @@ import { lazy } from "../../../util/lazy"
 // session, and to empty sections when an Atlas endpoint is unavailable.
 export const WalletState = z.object({
   signedIn: z.boolean(),
-  balanceUsd: z.number().describe("Wallet balance in USD; -1 when signed out or unavailable"),
+  balanceUsd: z.number().nullable().describe("Wallet balance in USD; null when signed out or unavailable"),
   billingMode: z.enum(["managed", "byok"]).nullable(),
   managedSupported: z.boolean(),
   lifetimeSpentUsd: z.number(),
@@ -29,7 +29,7 @@ export type WalletState = z.infer<typeof WalletState>
 
 const SIGNED_OUT: WalletState = {
   signedIn: false,
-  balanceUsd: -1,
+  balanceUsd: null,
   billingMode: null,
   managedSupported: false,
   lifetimeSpentUsd: 0,
@@ -46,7 +46,7 @@ async function readWallet(): Promise<WalletState> {
   ])
   return {
     signedIn: true,
-    balanceUsd: credits?.balanceUsd ?? mode?.balance_usd ?? -1,
+    balanceUsd: credits?.balanceUsd ?? mode?.balance_usd ?? null,
     billingMode: mode?.mode ?? null,
     managedSupported: mode?.managed_supported ?? false,
     lifetimeSpentUsd: (credits?.lifetimeSpentCents ?? 0) / 100,

@@ -7952,9 +7952,9 @@ export type SettingsBillingGetResponses = {
        */
       signedIn: boolean
       /**
-       * Credit balance in USD; -1 when signed out or unavailable
+       * Credit balance in USD; null when signed out or unavailable
        */
-      balanceUsd: number
+      balanceUsd: number | null
     }
   }
 }
@@ -7984,9 +7984,9 @@ export type SettingsBillingUpdateResponses = {
        */
       signedIn: boolean
       /**
-       * Credit balance in USD; -1 when signed out or unavailable
+       * Credit balance in USD; null when signed out or unavailable
        */
-      balanceUsd: number
+      balanceUsd: number | null
     }
   }
 }
@@ -8007,9 +8007,9 @@ export type SettingsWalletGetResponses = {
   200: {
     signedIn: boolean
     /**
-     * Wallet balance in USD; -1 when signed out or unavailable
+     * Wallet balance in USD; null when signed out or unavailable
      */
-    balanceUsd: number
+    balanceUsd: number | null
     billingMode: "managed" | "byok" | null
     managedSupported: boolean
     lifetimeSpentUsd: number

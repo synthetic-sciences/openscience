@@ -18251,8 +18251,15 @@
                           "type": "boolean"
                         },
                         "balanceUsd": {
-                          "description": "Credit balance in USD; -1 when signed out or unavailable",
-                          "type": "number"
+                          "description": "Credit balance in USD; null when signed out or unavailable",
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -18318,8 +18325,15 @@
                           "type": "boolean"
                         },
                         "balanceUsd": {
-                          "description": "Credit balance in USD; -1 when signed out or unavailable",
-                          "type": "number"
+                          "description": "Credit balance in USD; null when signed out or unavailable",
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -18394,8 +18408,15 @@
                       "type": "boolean"
                     },
                     "balanceUsd": {
-                      "description": "Wallet balance in USD; -1 when signed out or unavailable",
-                      "type": "number"
+                      "description": "Wallet balance in USD; null when signed out or unavailable",
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "billingMode": {
                       "anyOf": [

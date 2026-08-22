@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { commitBilling } from "./ManagedInference"
+import { commitBilling, walletBalanceLabel } from "./ManagedInference"
+
+test("keeps a real negative wallet balance distinct from an unavailable balance", () => {
+  expect(walletBalanceLabel({ signedIn: true, balanceUsd: -1 })).toBe("$-1.00 balance")
+  expect(walletBalanceLabel({ signedIn: true, balanceUsd: null })).toBe("Balance unavailable")
+  expect(walletBalanceLabel({ signedIn: false, balanceUsd: -1 })).toBe("Not signed in")
+})
 
 // The provider catalog is intentionally not part of this helper. It is a
 // multi-megabyte follow-up synchronization; including it here used to keep all
