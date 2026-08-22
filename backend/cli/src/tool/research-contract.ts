@@ -156,6 +156,14 @@ const Unlearn = z.object({
 
 const Status = z.object({ action: z.literal("status") })
 
+const Preregister = z.object({
+  action: z.literal("preregister"),
+  evidence_refs: EvidenceRequests.length(1).refine(
+    (refs) => refs[0]?.startsWith("artifact:") || refs[0]?.startsWith("artifact-path:"),
+    "Preregistration requires exactly one immutable artifact reference",
+  ),
+})
+
 function hash(value: string) {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex")
 }
@@ -337,7 +345,7 @@ async function evidence(
 
 const Params = z
   .object({
-    action: z.enum(["define", "stage", "check", "trial", "failure", "learn", "unlearn", "status"]),
+    action: z.enum(["define", "preregister", "stage", "check", "trial", "failure", "learn", "unlearn", "status"]),
     objective: Define.shape.objective.optional(),
     domain: Domain.optional(),
     template: SessionResearch.Template.optional(),
@@ -371,6 +379,7 @@ const Params = z
   .superRefine((value, ctx) => {
     const schema = {
       define: Define,
+      preregister: Preregister,
       stage: Stage,
       check: Check,
       trial: Trial,
@@ -386,10 +395,11 @@ const Params = z
 
 export const ResearchContractTool = Tool.define("research_contract", {
   description: [
-    "Durable state for multi-stage research. Define first; update stages; record candidates with trial and invalid ones with failure.",
+    "Durable multi-stage research state. Define first, then update stages and record trials or failures.",
     "Settled checks and advanced/regressed trials need runtime-verified evidence_refs. Free text is explanation only.",
     "Add metric plus baseline when quantitative; contradictory outcomes fail.",
     "Learn methods only from verified trials; unlearn with verified counterevidence.",
+    "Preregister freezes an empirical plan Result before trials and verifies hash and chronology.",
     "Never infer max_* fields: set only exact numeric ceilings from the user. Omitted limits are generous. Status inspects state.",
   ].join(" "),
   parameters: Params,
@@ -441,6 +451,14 @@ export const ResearchContractTool = Tool.define("research_contract", {
                 }
               : undefined,
         })
+      }
+      if (params.action === "preregister") {
+        const input = Preregister.parse(params)
+        const artifact = refs.find((item): item is SessionResearch.ArtifactReference => item.kind === "artifact")
+        if (!artifact || input.evidence_refs.length !== 1) {
+          throw new Error("Preregistration requires exactly one immutable artifact reference")
+        }
+        return SessionResearch.preregister(ctx.sessionID, artifact)
       }
       if (params.action === "stage") {
         const input = Stage.parse(params)
@@ -513,9 +531,11 @@ export const ResearchContractTool = Tool.define("research_contract", {
       title:
         params.action === "define"
           ? "Research contract defined"
-          : params.action === "learn" || params.action === "unlearn"
-            ? "Research experience updated"
-            : "Research contract updated",
+          : params.action === "preregister"
+            ? "Research plan preregistered"
+            : params.action === "learn" || params.action === "unlearn"
+              ? "Research experience updated"
+              : "Research contract updated",
       output: [
         `Objective: ${contract.objective}`,
         `Domain: ${contract.domain}`,
@@ -527,6 +547,7 @@ export const ResearchContractTool = Tool.define("research_contract", {
             .map((item) => item.path)
             .join(", ") || "none"
         }`,
+        `Preregistration: ${contract.preregistration ? `${contract.preregistration.artifact.versionID} frozen at ${new Date(contract.preregistration.frozenAt).toISOString()}` : "none (exploratory)"}`,
         `Recorded candidate failures: ${contract.failures.length}`,
         `Recorded material attempts: ${contract.trials.length}`,
         ...(recent.length
@@ -555,6 +576,7 @@ export const ResearchContractTool = Tool.define("research_contract", {
           action: params.action,
           domain: contract.domain,
           template: contract.template,
+          preregistrationVersionID: contract.preregistration?.artifact.versionID,
           completedStages: completed,
           totalStages: contract.stages.length,
           passedChecks: passed,

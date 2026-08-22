@@ -11,6 +11,7 @@ import { Review } from "../../src/science/provenance/review"
 import { SessionRoutes } from "../../src/server/routes/session"
 import { Session } from "../../src/session"
 import { SessionReview } from "../../src/session/review"
+import { SessionResearch } from "../../src/session/research"
 import { SessionPrompt } from "../../src/session/prompt"
 import { ReviewSettings } from "../../src/settings/review"
 import { ArtifactSnapshotTool } from "../../src/tool/artifact-snapshot"
@@ -213,6 +214,20 @@ test("an artifact review is bound to one immutable version and cannot access the
         mimeType: "text/markdown",
       })
       await fs.rm(source)
+      await SessionResearch.define(session.id, {
+        objective: "Review preregistration claims",
+        domain: "statistics",
+        template: "empirical",
+      })
+      await SessionResearch.preregister(session.id, {
+        kind: "artifact",
+        ref: `${first.id}:${first.currentVersionID}`,
+        artifactID: first.id,
+        versionID: first.currentVersionID,
+        path: first.current.sourcePath,
+        sha256: first.current.sha256,
+        verifiedAt: Date.now(),
+      })
 
       const packet = await SessionReview.packet(session.id, {
         artifactID: first.id,
@@ -229,6 +244,8 @@ test("an artifact review is bound to one immutable version and cannot access the
       expect(packet.text).toContain(ArtifactStore.reviewTargetID(first.current.id, first.current.sha256))
       expect(packet.text).toContain(first.current.sha256)
       expect(packet.text).not.toContain(second.current.sha256)
+      expect(packet.text).toContain(`immutable plan ${first.currentVersionID}`)
+      expect(packet.text).toContain("frozen")
 
       const launched = await (async () => {
         const prompt = spyOn(SessionPrompt, "prompt").mockResolvedValue(undefined as never)

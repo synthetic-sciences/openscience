@@ -197,3 +197,59 @@ test("quantitative trials reject outcome labels that contradict a directed metri
     },
   })
 })
+
+test("preregister freezes the exact immutable plan Result and cannot be replaced", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await executionSession()
+      const tool = await ResearchContractTool.init()
+      try {
+        await tool.execute(
+          { action: "define", objective: "Preregister an analysis", domain: "statistics", template: "empirical" },
+          context(session.id),
+        )
+        const first = await ArtifactStore.save({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          sourcePath: "analysis-plan.md",
+          filename: "analysis-plan.md",
+          kind: "report",
+          content: new Blob(["# Frozen analysis plan\n"]),
+        })
+        const frozen = await tool.execute(
+          { action: "preregister", evidence_refs: [`artifact:${first.id}`] },
+          context(session.id),
+        )
+        expect(frozen.title).toBe("Research plan preregistered")
+        expect(frozen.metadata.researchContract).toMatchObject({
+          preregistrationVersionID: first.currentVersionID,
+        })
+        expect((await SessionResearch.read(session.id))?.preregistration).toMatchObject({
+          artifact: {
+            artifactID: first.id,
+            versionID: first.currentVersionID,
+            sha256: first.current.sha256,
+          },
+          frozenAt: expect.any(Number),
+        })
+
+        const changed = await ArtifactStore.save({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          sourcePath: "analysis-plan.md",
+          filename: "analysis-plan.md",
+          kind: "report",
+          content: new Blob(["# Changed analysis plan\n"]),
+        })
+        expect(changed.currentVersionID).not.toBe(first.currentVersionID)
+        await expect(
+          tool.execute({ action: "preregister", evidence_refs: [`artifact:${first.id}`] }, context(session.id)),
+        ).rejects.toThrow(`already frozen at ${first.currentVersionID}`)
+      } finally {
+        await SessionResearch.remove(session.id)
+      }
+    },
+  })
+})

@@ -304,6 +304,107 @@ test("empirical readiness requires immutable producing-run lineage for every cur
   }
 })
 
+test("preregistration freezes an immutable plan and verifies result chronology structurally", async () => {
+  const sessionID = `ses_research_${crypto.randomUUID()}`
+  try {
+    const contract = await SessionResearch.define(sessionID, {
+      objective: "Run a preregistered estimator study",
+      domain: "statistics",
+      template: "empirical",
+      deliverables: [{ path: "metrics.json", label: "Metrics", required: true }],
+    })
+    expect(await SessionResearch.prompt(sessionID)).toContain("this work is exploratory")
+    const plan = artifact("analysis-plan.md", 50)
+    const frozen = await SessionResearch.preregister(sessionID, {
+      kind: "artifact",
+      ref: `${plan.artifactID}:${plan.versionID}`,
+      artifactID: plan.artifactID,
+      versionID: plan.versionID,
+      path: plan.path,
+      sha256: plan.sha256,
+      verifiedAt: 1,
+    })
+    for (const check of contract.checks) {
+      await SessionResearch.check(sessionID, {
+        id: check.id,
+        status: "passed",
+        evidenceRefs: [verified(check.id)],
+      })
+    }
+    const metrics = { ...artifact("metrics.json", 51), producedAt: frozen.preregistration!.frozenAt + 1 }
+    const evidence = {
+      artifacts: [plan, metrics],
+      jobs: [],
+      kernels: [],
+      findings: [],
+      reviewed: false,
+      busy: false,
+    }
+    expect(SessionResearch.assess((await SessionResearch.read(sessionID))!, evidence).gates).toContainEqual(
+      expect.objectContaining({ id: "checks", status: "passed", complete: 3, total: 3 }),
+    )
+
+    const changed = { ...plan, sha256: "f".repeat(64) }
+    expect(
+      SessionResearch.assess((await SessionResearch.read(sessionID))!, { ...evidence, artifacts: [changed, metrics] })
+        .gates,
+    ).toContainEqual(
+      expect.objectContaining({
+        id: "checks",
+        status: "failed",
+        detail: `Preregistration failed immutable verification for ${plan.versionID}`,
+      }),
+    )
+
+    const premature = { ...metrics, producedAt: frozen.preregistration!.frozenAt - 1 }
+    expect(
+      SessionResearch.assess((await SessionResearch.read(sessionID))!, { ...evidence, artifacts: [plan, premature] })
+        .gates,
+    ).toContainEqual(
+      expect.objectContaining({
+        id: "checks",
+        status: "failed",
+        detail: "1 empirical Result was produced before the analysis plan was frozen: metrics.json",
+      }),
+    )
+    expect(await SessionResearch.prompt(sessionID)).toContain(`frozen immutable version ${plan.versionID}`)
+  } finally {
+    await SessionResearch.remove(sessionID)
+  }
+})
+
+test("preregistration cannot be created after a material trial", async () => {
+  const sessionID = `ses_research_${crypto.randomUUID()}`
+  try {
+    await SessionResearch.define(sessionID, {
+      objective: "Do not backdate the plan",
+      domain: "statistics",
+      template: "empirical",
+    })
+    await SessionResearch.trial(sessionID, {
+      stage: "simulate",
+      branch: "baseline",
+      candidate: "first run",
+      outcome: "neutral",
+      summary: "The first material run already happened",
+    })
+    const plan = artifact("analysis-plan.md", 52)
+    await expect(
+      SessionResearch.preregister(sessionID, {
+        kind: "artifact",
+        ref: `${plan.artifactID}:${plan.versionID}`,
+        artifactID: plan.artifactID,
+        versionID: plan.versionID,
+        path: plan.path,
+        sha256: plan.sha256,
+        verifiedAt: 1,
+      }),
+    ).rejects.toThrow("cannot be preregistered after a material trial")
+  } finally {
+    await SessionResearch.remove(sessionID)
+  }
+})
+
 test("persists material attempts and changes trajectory strategy without repeating dead ends", async () => {
   const sessionID = `ses_research_${crypto.randomUUID()}`
   try {

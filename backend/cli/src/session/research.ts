@@ -30,15 +30,18 @@ export namespace SessionResearch {
     verifiedAt: z.number().int().nonnegative(),
   }
 
+  export const ArtifactReference = z.object({
+    ...Reference,
+    kind: z.literal("artifact"),
+    artifactID: z.string().trim().min(1),
+    versionID: z.string().trim().min(1),
+    path: z.string().trim().min(1),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  export type ArtifactReference = z.infer<typeof ArtifactReference>
+
   export const EvidenceReference = z.discriminatedUnion("kind", [
-    z.object({
-      ...Reference,
-      kind: z.literal("artifact"),
-      artifactID: z.string().trim().min(1),
-      versionID: z.string().trim().min(1),
-      path: z.string().trim().min(1),
-      sha256: z.string().regex(/^[a-f0-9]{64}$/),
-    }),
+    ArtifactReference,
     z.object({
       ...Reference,
       kind: z.literal("tool"),
@@ -49,6 +52,12 @@ export namespace SessionResearch {
     }),
   ])
   export type EvidenceReference = z.infer<typeof EvidenceReference>
+
+  export const Preregistration = z.object({
+    artifact: ArtifactReference,
+    frozenAt: z.number().int().positive(),
+  })
+  export type Preregistration = z.infer<typeof Preregistration>
 
   export const Metric = z.object({
     name: z.string().trim().min(1).max(120),
@@ -227,6 +236,7 @@ export namespace SessionResearch {
     stages: z.array(Stage),
     deliverables: z.array(Deliverable),
     checks: z.array(Check),
+    preregistration: Preregistration.optional(),
     failures: z.array(Failure),
     trials: z.array(Trial).default([]),
     budget: Budget,
@@ -516,6 +526,7 @@ export namespace SessionResearch {
         ...next,
         stages,
         checks,
+        preregistration: current.data.preregistration,
         failures: current.data.failures,
         trials: current.data.trials,
         budget: {
@@ -548,6 +559,35 @@ export namespace SessionResearch {
           },
         },
         createdAt: current.data.createdAt,
+        updatedAt: Date.now(),
+      })
+    })
+    return (await read(sessionID))!
+  }
+
+  export async function preregister(sessionID: string, artifact: ArtifactReference): Promise<Contract> {
+    await JsonStore.update(file(sessionID), (data) => {
+      const current = Contract.parse(data)
+      if (current.template !== "empirical") {
+        throw new Error("Only an empirical research contract can be preregistered")
+      }
+      if (current.trials.length) {
+        throw new Error("The analysis plan cannot be preregistered after a material trial has been recorded")
+      }
+      if (current.preregistration) {
+        if (
+          current.preregistration.artifact.versionID === artifact.versionID &&
+          current.preregistration.artifact.sha256 === artifact.sha256
+        ) {
+          return current
+        }
+        throw new Error(
+          `The analysis plan is already frozen at ${current.preregistration.artifact.versionID}; preregistration is immutable`,
+        )
+      }
+      return Contract.parse({
+        ...current,
+        preregistration: { artifact, frozenAt: Date.now() },
         updatedAt: Date.now(),
       })
     })
@@ -978,6 +1018,7 @@ export namespace SessionResearch {
       path?: string
       sha256?: string
       provenanceID?: string
+      producedAt?: number
       completedAt?: number
     }>
     jobs: Array<{ status: string }>
@@ -1012,8 +1053,6 @@ export namespace SessionResearch {
     const paths = evidence.artifacts.flatMap((item) => (item.path ? [item.path] : []))
     const missing = required.filter((item) => !paths.some((value) => match(item.path, value)))
     const stages = contract.stages.filter((stage) => stage.status === "completed").length
-    const checks = contract.checks.filter((check) => check.status === "passed" && check.evidenceRefs.length).length
-    const failed = contract.checks.filter((check) => check.status === "failed").length
     const open = evidence.findings.filter(
       (finding) =>
         finding.verdict === "refutes" &&
@@ -1050,6 +1089,30 @@ export namespace SessionResearch {
     )
     const unreviewed = targets.filter((target) => !reviewedTargets.has(target))
     const reviewed = targets.length ? unreviewed.length === 0 : evidence.reviewed
+    const preregistration = contract.preregistration
+    const frozen = preregistration
+      ? evidence.artifacts.some(
+          (artifact) =>
+            artifact.artifactID === preregistration.artifact.artifactID &&
+            artifact.versionID === preregistration.artifact.versionID &&
+            artifact.sha256 === preregistration.artifact.sha256,
+        )
+      : false
+    const premature = preregistration
+      ? requiredArtifacts.filter(
+          (artifact) =>
+            artifact.versionID !== preregistration.artifact.versionID &&
+            artifact.producedAt !== undefined &&
+            artifact.producedAt <= preregistration.frozenAt,
+        )
+      : []
+    const preregistrationFailed = Boolean(preregistration && (!frozen || premature.length))
+    const preregistrationPassed = Boolean(preregistration && frozen && !premature.length)
+    const checks =
+      contract.checks.filter((check) => check.status === "passed" && check.evidenceRefs.length).length +
+      Number(preregistrationPassed)
+    const failed = contract.checks.filter((check) => check.status === "failed").length + Number(preregistrationFailed)
+    const checkTotal = contract.checks.length + Number(Boolean(preregistration))
     const running = evidence.jobs.filter((job) => job.status === "queued" || job.status === "running").length
     const jobFailures = evidence.jobs.filter(
       (job) => job.status === "failed" || job.status === "interrupted" || job.status === "cancelled",
@@ -1064,7 +1127,7 @@ export namespace SessionResearch {
       runtimeFailures > 0 &&
       stages === contract.stages.length &&
       missing.length === 0 &&
-      checks === contract.checks.length &&
+      checks === checkTotal &&
       failed === 0 &&
       reviewed &&
       open === 0
@@ -1092,12 +1155,16 @@ export namespace SessionResearch {
       {
         id: "checks",
         label: "Verification checks",
-        status: failed ? "failed" : checks === contract.checks.length ? "passed" : "pending",
+        status: failed ? "failed" : checks === checkTotal ? "passed" : "pending",
         complete: checks,
-        total: contract.checks.length,
-        detail: failed
-          ? `${failed} verification ${failed === 1 ? "check failed" : "checks failed"}`
-          : `${checks}/${contract.checks.length} checks passed`,
+        total: checkTotal,
+        detail: preregistrationFailed
+          ? !frozen
+            ? `Preregistration failed immutable verification for ${preregistration?.artifact.versionID ?? "unknown"}`
+            : `${premature.length} empirical ${premature.length === 1 ? "Result was" : "Results were"} produced before the analysis plan was frozen: ${premature.map((artifact) => artifact.path ?? artifact.versionID ?? "unknown").join(", ")}`
+          : failed
+            ? `${failed} verification ${failed === 1 ? "check failed" : "checks failed"}`
+            : `${checks}/${checkTotal} checks passed`,
       },
       {
         id: "review",
@@ -1539,6 +1606,7 @@ export namespace SessionResearch {
       `Objective: ${contract.objective}`,
       `Domain: ${contract.domain}`,
       `Required Results: ${contract.deliverables.map((item) => item.path).join(", ") || "none"}`,
+      `Preregistration: ${contract.preregistration ? `frozen immutable version ${contract.preregistration.artifact.versionID} (${contract.preregistration.artifact.sha256}) at ${new Date(contract.preregistration.frozenAt).toISOString()}` : "none; this work is exploratory and must not be described as preregistered. To freeze an empirical plan before material trials, save it as a Result and call research_contract preregister with that artifact reference."}`,
       ...(contract.template === "empirical" && contract.deliverables.some((item) => item.required)
         ? [
             "Result lineage: every required empirical Result must be saved with artifact provenance_id bound to its actual producing run; an unlinked Result cannot pass completion.",

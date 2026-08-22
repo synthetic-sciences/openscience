@@ -141,6 +141,7 @@ export namespace SessionTrace {
     kind: z.string().optional(),
     sha256: z.string().optional(),
     provenanceID: z.string().optional(),
+    producedAt: z.number().optional(),
     durable: z.boolean(),
     completedAt: z.number().optional(),
   })
@@ -563,6 +564,7 @@ export namespace SessionTrace {
         const target = versionID && sha256 ? ArtifactStore.reviewTargetID(versionID, sha256) : undefined
         const edge = target ? graph.edges.find((item) => item.to === target && item.relation === "produced") : undefined
         const producer = edge ? graph.nodes.find((item) => item.id === edge.from && item.kind === "run") : undefined
+        const producedAt = producer ? Date.parse(producer.recordedAt) : Number.NaN
         return {
           toolID: part.id,
           messageID: part.messageID,
@@ -573,6 +575,7 @@ export namespace SessionTrace {
           kind: string(saved?.kind),
           sha256,
           provenanceID: producer?.id,
+          producedAt: Number.isFinite(producedAt) ? producedAt : undefined,
           durable: true,
           completedAt: times(part, now).completedAt,
         }

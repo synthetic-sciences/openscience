@@ -7,6 +7,7 @@ import { Review as ProvenanceReview } from "@/science/provenance/review"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
+import { SessionResearch } from "@/session/research"
 import { Todo } from "@/session/todo"
 import { ReviewSettings } from "@/settings/review"
 import { Log } from "@/util/log"
@@ -58,10 +59,11 @@ export namespace SessionReview {
   }
 
   async function context(sessionID: string) {
-    const [todos, artifacts, findings] = await Promise.all([
+    const [todos, artifacts, findings, contract] = await Promise.all([
       Todo.get(sessionID).catch(() => []),
       File.artifacts({ sessionID }).catch(() => []),
       ProvenanceReview.list({ projectID: Instance.project.id, directory: Instance.directory }).catch(() => []),
+      SessionResearch.read(sessionID).catch(() => undefined),
     ])
     const lines = ["Run an independent review of the work in this conversation.", ""]
     if (todos.length) {
@@ -90,6 +92,19 @@ export namespace SessionReview {
       }
       lines.push(
         "For an addressed finding, inspect the correction evidence. If it resolves the defect, record a supports verdict against the original target and pass the exact original id in provenance_review's finding field; otherwise record the remaining defect.",
+        "",
+      )
+    }
+    if (contract?.preregistration) {
+      lines.push(
+        `Preregistration contract: immutable plan ${contract.preregistration.artifact.versionID}, SHA-256 ${contract.preregistration.artifact.sha256}, frozen ${new Date(contract.preregistration.frozenAt).toISOString()}.`,
+        "Verify every preregistration claim against that exact version and ensure required Results descend from runs recorded after the freeze.",
+        "",
+      )
+    }
+    if (contract && !contract.preregistration) {
+      lines.push(
+        "Preregistration contract: none. Treat any claim that this work was preregistered or frozen before analysis as unsupported.",
         "",
       )
     }
@@ -156,7 +171,7 @@ export namespace SessionReview {
     }
   }
 
-  function artifactContext(target: Bound) {
+  function artifactContext(target: Bound, preregistration?: SessionResearch.Preregistration) {
     return [
       "Run an independent review of exactly one immutable artifact-store version.",
       "",
@@ -167,6 +182,7 @@ export namespace SessionReview {
       `MIME type: ${target.mimeType}`,
       `Size: ${target.size} bytes`,
       `SHA-256: ${target.sha256}`,
+      `Preregistration contract: ${preregistration ? `immutable plan ${preregistration.artifact.versionID}, SHA-256 ${preregistration.artifact.sha256}, frozen ${new Date(preregistration.frozenAt).toISOString()}` : "none; reject unsupported claims that this work was preregistered"}.`,
       "",
       `Call artifact_snapshot with target "${target.id}" to inspect these exact bytes.`,
       "You cannot read the live workspace, execute commands, or change files. Do not infer from the source path.",
@@ -180,8 +196,12 @@ export namespace SessionReview {
   export async function packet(sessionID: string, target?: Target) {
     await Session.get(sessionID)
     if (!target) return { agent: "reviewer", text: await context(sessionID) }
-    const bound = await bind(sessionID, target)
-    return { agent: "artifact-reviewer", text: artifactContext(bound), target: bound }
+    const [bound, contract] = await Promise.all([bind(sessionID, target), SessionResearch.read(sessionID)])
+    return {
+      agent: "artifact-reviewer",
+      text: artifactContext(bound, contract?.preregistration),
+      target: bound,
+    }
   }
 
   /** Prepare a first-class reviewer turn, including the narrow provenance
