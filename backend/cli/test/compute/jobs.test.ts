@@ -362,6 +362,13 @@ exec python3 -c 'import os,time; os.write(1,b"x"*(512*1024)); time.sleep(60)'
             return poll(attempts - 1)
           })()
           expect(failed.error).toContain("SSH operation stdout exceeded 262144 bytes")
+          await (async function cleanup(attempts = 1_500): Promise<void> {
+            const current = await ComputeJobs.get(job.id, options)
+            if (current?.status === "failed" && current.lifecycle?.resource !== "starting") return
+            if (!attempts) throw new Error(`Timed out waiting for bounded SSH cleanup: ${JSON.stringify(current)}`)
+            await Bun.sleep(20)
+            return cleanup(attempts - 1)
+          })()
         },
       })
       const owned = (await Bun.file(pids).text()).trim().split("\n").map(Number)
@@ -384,7 +391,7 @@ exec python3 -c 'import os,time; os.write(1,b"x"*(512*1024)); time.sleep(60)'
     } finally {
       process.env.PATH = previousPath
     }
-  }, 20_000)
+  }, 45_000)
 
   test("bounds SSH probe output and reports a transport error", async () => {
     if (process.platform === "win32") return

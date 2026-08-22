@@ -1938,22 +1938,37 @@ export namespace ComputeJobs {
   }
 
   async function failSshStart(job: Job, scope: Scope, error: unknown) {
-    const released = await releaseSsh(job, scope, false).then(
+    const message = error instanceof Error ? error.message : String(error)
+    const failed = await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0) throw new Error(`Compute job ${job.id} was not found`)
+      if (terminal.has(jobs[index]!.status)) return jobs[index]!
+      const lifecycle = jobs[index]!.lifecycle ?? ComputeLifecycle.from(jobs[index]!.status)
+      const starting = lifecycle.execution === "queued" ? move(jobs[index]!, { type: "start" }) : jobs[index]!
+      const stopped = move(
+        starting,
+        { type: "finish", outcome: "failed", message },
+        { completed_at: new Date().toISOString(), exit_code: null, error: message },
+      )
+      jobs[index] = Job.parse({ ...stopped, provenance: provenance(stopped) })
+      return jobs[index]!
+    })
+    const released = await releaseSsh(failed, scope, false).then(
       () => true,
-      () => false,
+      async (failure) => {
+        await event(
+          scope.root,
+          job.id,
+          `Remote workspace cleanup failed: ${failure instanceof Error ? failure.message : String(failure)}`,
+        )
+        return false
+      },
     )
     return change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0) throw new Error(`Compute job ${job.id} was not found`)
-      if (terminal.has(jobs[index]!.status)) return jobs[index]!
-      const message = error instanceof Error ? error.message : String(error)
-      const failed = move(
-        jobs[index]!,
-        { type: "finish", outcome: "failed", message },
-        { completed_at: new Date().toISOString(), exit_code: null, error: message },
-      )
-      const closed = released ? move(failed, { type: "close" }) : move(failed, { type: "lose" })
-      jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+      const settled = released ? move(jobs[index]!, { type: "close" }) : move(jobs[index]!, { type: "lose" })
+      jobs[index] = Job.parse({ ...settled, provenance: provenance(settled) })
       return jobs[index]!
     })
   }
