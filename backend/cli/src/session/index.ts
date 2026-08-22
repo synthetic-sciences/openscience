@@ -321,13 +321,18 @@ export namespace Session {
         updated: Date.now(),
       },
     }
+    await SessionFilesystem.validateProject(directory)
     log.info("created", result)
     await Storage.write(["session", Instance.project.id, result.id], result)
     // No process can hold authority for a session that has not been returned
     // or announced yet. Publishing its initial workspace as a "change" would
     // schedule a redundant revocation that can race the session's first job.
     // Lazy initialization of legacy sessions keeps the default revocation.
-    await SessionFilesystem.initialize(result.id, directory, { revokeExisting: false })
+    await SessionFilesystem.initialize(result.id, directory, { revokeExisting: false }).catch(async (error) => {
+      await SessionFilesystem.remove(result.id).catch(() => undefined)
+      await Storage.remove(["session", Instance.project.id, result.id])
+      throw error
+    })
     validated().add(result.id)
     Bus.publish(Event.Created, {
       info: result,

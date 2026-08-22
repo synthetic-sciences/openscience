@@ -227,6 +227,25 @@ describe("session filesystem grants", () => {
     })
   })
 
+  test("rejects the managed tool-output enclave before persisting a session", async () => {
+    await fs.mkdir(Truncate.DIR, { recursive: true })
+    await Instance.provide({
+      directory: Truncate.DIR,
+      fn: async () => {
+        const before = await Array.fromAsync(Session.list())
+
+        await expect(Session.create({})).rejects.toMatchObject({
+          name: "SessionFilesystemInvalidPathError",
+          data: {
+            path: Truncate.DIR,
+            message: expect.stringContaining("reserved for OpenScience's managed tool outputs"),
+          },
+        })
+        expect(await Array.fromAsync(Session.list())).toEqual(before)
+      },
+    })
+  })
+
   test("does not broadcast a revocation for a new session's initial workspace", async () => {
     await using external = await tmpdir()
     await using tmp = await tmpdir()

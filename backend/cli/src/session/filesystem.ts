@@ -95,6 +95,7 @@ export namespace SessionFilesystem {
     "SessionFilesystemInvalidPathError",
     z.object({
       path: z.string(),
+      message: z.string().optional(),
     }),
   )
 
@@ -151,7 +152,21 @@ export namespace SessionFilesystem {
   async function projectRoots(root: string, worktree: string) {
     if (managedProject()) return []
     const output = await toolOutputRoot()
+    const enclave = [root, worktree].find((value) => Filesystem.contains(output, value))
+    if (enclave) {
+      throw new InvalidPathError({
+        path: enclave,
+        message:
+          "This folder is reserved for OpenScience's managed tool outputs. Choose the repository folder itself or create a managed project and connect a narrower source folder.",
+      })
+    }
     return [...new Set([root, worktree])].filter((value) => !Filesystem.overlaps(output, value))
+  }
+
+  export async function validateProject(directory: string) {
+    const root = await canonical(directory)
+    const worktree = await canonical(Instance.worktree)
+    await projectRoots(root, worktree)
   }
 
   async function managedToolOutput(target: string) {
