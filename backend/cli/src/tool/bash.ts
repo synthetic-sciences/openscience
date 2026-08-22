@@ -32,6 +32,36 @@ const DEFAULT_TIMEOUT = Flag.OPENSCIENCE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS ||
 
 export const log = Log.create({ service: "bash-tool" })
 
+function record(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined
+  return input as Record<string, unknown>
+}
+
+function label(command: string) {
+  const line = command.replace(/\s+/g, " ").trim()
+  if (!line) return "Run shell command"
+  return `Run ${line}`.slice(0, 80)
+}
+
+/** Accept common provider dialects without weakening the command contract. */
+export function normalizeBashInput(input: unknown): unknown {
+  const direct = typeof input === "string" ? { command: input } : record(input)
+  if (!direct) return input
+  const nested = record(direct.input) ?? record(direct.arguments) ?? record(direct.parameters)
+  const source = nested && !direct.command && !direct.cmd && !direct.script ? { ...direct, ...nested } : direct
+  const command = [source.command, source.cmd, source.script].find((value) => typeof value === "string")
+  const description = [source.description, source.purpose, source.summary].find(
+    (value) => typeof value === "string" && value.trim().length > 0,
+  )
+  return {
+    ...source,
+    ...(typeof command === "string" ? { command } : {}),
+    ...(typeof command === "string" ? { description: description ?? label(command) } : {}),
+    ...(source.workdir === undefined && typeof source.cwd === "string" ? { workdir: source.cwd } : {}),
+    ...(source.timeout === undefined && typeof source.timeout_ms === "number" ? { timeout: source.timeout_ms } : {}),
+  }
+}
+
 const clip = (value: string, max = 2000) => (value.length > max ? `${value.slice(0, max)}\n\n... (truncated)` : value)
 
 /** Record a provenance run node for a completed shell command (mirrors the
@@ -144,7 +174,7 @@ export const BashTool = Tool.define("bash", async () => {
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
       .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
     parameters: z.object({
-      command: z.string().describe("The command to execute"),
+      command: z.string().trim().min(1).describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
       workdir: z
         .string()
@@ -152,6 +182,14 @@ export const BashTool = Tool.define("bash", async () => {
         .optional(),
       description: z.string().describe("Clear 5-10 word description of the command's purpose"),
     }),
+    normalizeInput: normalizeBashInput,
+    formatValidationError(error) {
+      const command = error.issues.some((issue) => issue.path[0] === "command")
+      if (command) {
+        return "Bash did not receive a complete command. No command was run. Retry once with a non-empty `command` field."
+      }
+      return "Bash received incomplete input. No command was run. Retry once with a command, optional workdir/timeout, and short description."
+    },
     async execute(params, ctx) {
       const authority = await ExecutionAuthority.require({
         projectID: Instance.project.id,

@@ -11,7 +11,7 @@ import {
   tool,
   jsonSchema,
 } from "ai"
-import { clone, mergeDeep, pipe } from "remeda"
+import { clone, mergeDeep } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -123,12 +123,12 @@ export namespace LLM {
           sessionID: input.sessionID,
           providerOptions: provider.options,
         })
-    const options: Record<string, any> = pipe(
-      base,
-      mergeDeep(input.model.options),
-      mergeDeep(tier.options),
-      mergeDeep(input.agent.options),
-      mergeDeep(variant),
+    // Keeping five deeply inferred Remeda pipe stages here can exceed
+    // TypeScript's instantiation limit as provider option unions grow. The
+    // runtime operation is a straightforward left-to-right deep merge.
+    const options = [input.model.options, tier.options, input.agent.options, variant].reduce<Record<string, any>>(
+      (result, layer) => mergeDeep(result, layer ?? {}) as Record<string, any>,
+      base as Record<string, any>,
     )
     if (isCodex) {
       options.instructions = SystemPrompt.instructions(input.direct, input.inspection)
@@ -240,11 +240,19 @@ export namespace LLM {
             toolName: lower,
           }
         }
+        const name = tools[failed.toolCall.toolName] ? failed.toolCall.toolName : lower
+        const message = tools[name]
+          ? `OpenScience caught an incomplete ${name} call before execution. ${failed.error.message}`
+          : `OpenScience caught a call to the unavailable tool ${failed.toolCall.toolName}. No action was taken.`
+        l.warn("replacing invalid tool call", {
+          tool: failed.toolCall.toolName,
+          error: failed.error.message,
+        })
         return {
           ...failed.toolCall,
           input: JSON.stringify({
             tool: failed.toolCall.toolName,
-            error: failed.error.message,
+            error: message,
           }),
           toolName: "invalid",
         }

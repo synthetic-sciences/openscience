@@ -76,15 +76,17 @@ test("read-only inspections receive a compact evidence-preserving core", () => {
   expect(instructions).toContain("Do not modify files")
 })
 
-test("the primary and domain prompts stay adaptive instead of procedural", async () => {
-  const [research, direct, ml, biology, physics] = await Promise.all([
+test("the primary, domain, and specialist prompts stay adaptive instead of procedural", async () => {
+  const [research, direct, ml, biology, physics, write, explore] = await Promise.all([
     read("agent/prompt/research.txt"),
     read("session/prompt/direct.txt"),
     read("agent/prompt/ml.txt"),
     read("agent/prompt/biology.txt"),
     read("agent/prompt/physics.txt"),
+    read("agent/prompt/write.txt"),
+    read("agent/prompt/explore.txt"),
   ])
-  for (const prompt of [research, ml, biology, physics]) {
+  for (const prompt of [research, ml, biology, physics, write, explore]) {
     expect(prompt.length).toBeLessThan(4_000)
     expect(prompt).not.toContain("literature-review.md")
     expect(prompt).not.toContain("reasoning.md")
@@ -112,6 +114,12 @@ test("the primary and domain prompts stay adaptive instead of procedural", async
   expect(ml).toContain("simplest method")
   expect(biology).toContain("multiple testing")
   expect(physics).toContain("dimensional consistency")
+  expect(write).toContain("Do not invent a report")
+  expect(write).toContain("format-only task")
+  expect(write).not.toContain("Every document MUST")
+  expect(write).not.toContain("minimum 5 figures")
+  expect(explore).toContain("Stay read-only")
+  expect(explore).not.toContain("copying, moving")
 })
 
 test("delegation is rare, bounded, and observable", async () => {
@@ -149,4 +157,13 @@ test("Plan and Review use the observable record without mandatory delegation", a
   expect(reviewer).toContain("INCOMPLETE RECORD")
   expect(reviewer).toContain("METHOD/CONCLUSION MISMATCH")
   expect(reviewer).toContain("Environment or dependency gaps")
+})
+
+test("data-analysis skills keep reports and figures opt-in", async () => {
+  const skill = await read("../skills/coding/exploratory-data-analysis/SKILL.md")
+  expect(skill).toContain("Do not create a report, figure, artifact, directory, or sidecar file by default")
+  expect(skill).toContain("Do not write to disk unless the user requested")
+  expect(skill).toContain("For a bounded question")
+  expect(skill).toContain("Save only when requested")
+  expect(skill).not.toContain("### Step 5: Save Report")
 })

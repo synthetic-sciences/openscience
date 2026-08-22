@@ -26,6 +26,25 @@ export function stripRedactedReasoning(text: string): string {
   return (text ?? "").replaceAll("[REDACTED]", "").trim()
 }
 
+export function toolErrorDisplay(tool: string, value: string) {
+  const cleaned = value.replace(/^Error:\s*/, "")
+  const malformed = /(?:tool was called with invalid arguments|received invalid arguments or incomplete input)/i.test(
+    cleaned,
+  )
+  if (malformed) {
+    return {
+      title: `Incomplete ${sentenceCaseLabel(tool)} call`,
+      message: tool.toLowerCase() === "bash" ? "No command was run." : "No action was taken.",
+      details: cleaned,
+    }
+  }
+  const [title, ...rest] = cleaned.split(": ")
+  if (title && title.length < 30 && rest.length) {
+    return { title, message: rest.join(": ") }
+  }
+  return { message: cleaned }
+}
+
 export type SavedArtifact = {
   title: string
   kind: string

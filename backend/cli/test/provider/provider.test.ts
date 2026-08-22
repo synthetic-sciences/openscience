@@ -317,6 +317,27 @@ test("provider loaded from env variable", async () => {
   })
 })
 
+test("repository GitHub tokens do not masquerade as Copilot inference credentials", async () => {
+  await using tmp = await tmpdir({})
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("GITHUB_TOKEN", "github-app-server-token")
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers["github-copilot"]).toBeUndefined()
+        expect(providers["github-copilot-enterprise"]).toBeUndefined()
+      },
+    })
+  } finally {
+    delete process.env.GITHUB_TOKEN
+    Provider.invalidate()
+  }
+})
+
 test("provider loaded from config with apiKey option", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

@@ -45,6 +45,22 @@ test("Tool.define executes the canonical Zod output for every tool", async () =>
   expect(JSON.parse(result.output)).toEqual({ label: "PARSED", limit: 10 })
 })
 
+test("Tool.validate rejects incomplete provider input without exposing raw Zod noise", () => {
+  const result = Tool.validate(
+    "probe",
+    {
+      parameters: z.object({ command: z.string(), description: z.string() }),
+    },
+    {},
+  )
+  expect(result.success).toBe(false)
+  if (result.success) throw new Error("Incomplete input unexpectedly passed validation")
+  expect(result.error.message).toBe(
+    "The probe tool received invalid arguments or incomplete input. No action was taken. Retry with all required fields.",
+  )
+  expect(result.error.message).not.toContain("invalid_type")
+})
+
 test("Tool.define dedupes against the canonical signature persisted with a raw call", async () => {
   let executions = 0
   const tool = await Tool.define("science_search", {

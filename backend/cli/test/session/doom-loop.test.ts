@@ -9,6 +9,10 @@ const tool = (name: string, input: unknown, status = "completed"): any => ({
 })
 const reasoning = (): any => ({ type: "reasoning", text: "thinking..." })
 const text = (): any => ({ type: "text", text: "hi" })
+const message = (id: string, parentID: string, parts: any[]): any => ({
+  info: { id, role: "assistant", parentID },
+  parts,
+})
 
 describe("SessionProcessor.isDoomLoop", () => {
   test("fires when the last 3 TOOL calls are identical, even with reasoning/text between them", () => {
@@ -44,5 +48,16 @@ describe("SessionProcessor.isDoomLoop", () => {
   test("ignores a pending tool call (not yet a confirmed repeat)", () => {
     const parts = [tool("bash", { cmd: "ls" }), tool("bash", { cmd: "ls" }), tool("bash", { cmd: "ls" }, "pending")]
     expect(SessionProcessor.isDoomLoop(parts, "bash", { cmd: "ls" })).toBe(false)
+  })
+
+  test("sees repeated calls spread across assistant steps for one user request", () => {
+    const messages = [
+      message("assistant-1", "user-1", [reasoning(), tool("invalid", { tool: "bash", error: "incomplete" })]),
+      message("assistant-2", "user-1", [text(), tool("invalid", { tool: "bash", error: "incomplete" })]),
+      message("assistant-other", "user-2", [tool("invalid", { tool: "bash", error: "incomplete" })]),
+    ]
+    const parts = SessionProcessor.turnParts(messages, "user-1")
+    expect(SessionProcessor.isDoomLoop(parts, "invalid", { tool: "bash", error: "incomplete" }, 2)).toBe(true)
+    expect(parts).toHaveLength(4)
   })
 })

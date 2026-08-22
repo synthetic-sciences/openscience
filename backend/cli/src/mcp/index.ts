@@ -1,4 +1,5 @@
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
@@ -244,25 +245,46 @@ export namespace MCP {
   }
 
   // Convert MCP tool definition to AI SDK Tool type
+  const validator = new AjvJsonSchemaValidator()
+
+  /** MCP publishes JSON Schema rather than Zod. Attach the SDK's own AJV
+   * validator so malformed model calls reach the AI SDK repair hook before a
+   * permission prompt or remote MCP request can start. */
+  export function inputSchema(name: string, schema: JSONSchema7) {
+    const validate = validator.getValidator<Record<string, unknown>>(schema as never)
+    return jsonSchema(schema, {
+      validate(input) {
+        const result = validate(input)
+        if (result.valid) return { success: true, value: result.data }
+        return {
+          success: false,
+          error: new Error(
+            `The ${name} MCP tool received invalid arguments or incomplete input. No action was taken. Retry with all required fields.`,
+          ),
+        }
+      },
+    })
+  }
+
   async function convertMcpTool(
     mcpTool: MCPToolDef,
     client: MCPClient,
     timeout?: number,
     projectOwned = false,
   ): Promise<Tool> {
-    const inputSchema = mcpTool.inputSchema
+    const published = mcpTool.inputSchema
 
     // Spread first, then override type to ensure it's always "object"
     const schema: JSONSchema7 = {
-      ...(inputSchema as JSONSchema7),
+      ...(published as JSONSchema7),
       type: "object",
-      properties: (inputSchema.properties ?? {}) as JSONSchema7["properties"],
+      properties: (published.properties ?? {}) as JSONSchema7["properties"],
       additionalProperties: false,
     }
 
     return dynamicTool({
       description: mcpTool.description ?? "",
-      inputSchema: jsonSchema(schema),
+      inputSchema: inputSchema(mcpTool.name, schema),
       execute: async (args: unknown) => {
         if (projectOwned) await ProjectTrust.require(Instance.project, "project_mcp")
         return client.callTool(

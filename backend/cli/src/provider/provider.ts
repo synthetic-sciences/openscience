@@ -1786,6 +1786,12 @@ export namespace Provider {
     const env = Env.all()
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
+      // models.dev lists GITHUB_TOKEN for Copilot, but OpenScience also uses
+      // that variable for ordinary repository access. A GitHub PAT or App
+      // server token is not a Copilot inference credential and advertising it
+      // here produces a connected provider that fails before inference. Real
+      // Copilot access is loaded below through the OAuth plugin.
+      if (providerID.startsWith("github-copilot")) continue
       const credential = provider.env.map((name) => ({ name, value: env[name] })).find((item) => item.value)
       if (!credential?.value) continue
       mergeProvider(providerID, {

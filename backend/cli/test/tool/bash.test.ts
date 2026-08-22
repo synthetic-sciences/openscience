@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { BashTool } from "../../src/tool/bash"
+import { BashTool, normalizeBashInput } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { executionSession, tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
@@ -27,6 +27,32 @@ async function context() {
 const projectRoot = path.join(__dirname, "../..")
 
 describe("tool.bash", () => {
+  test("normalizes common provider argument dialects", () => {
+    expect(normalizeBashInput({ cmd: "pwd" })).toMatchObject({
+      command: "pwd",
+      description: "Run pwd",
+    })
+    expect(
+      normalizeBashInput({
+        arguments: {
+          script: "echo hello",
+          purpose: "Print greeting",
+          cwd: "/tmp",
+          timeout_ms: 1200,
+        },
+      }),
+    ).toMatchObject({
+      command: "echo hello",
+      description: "Print greeting",
+      workdir: "/tmp",
+      timeout: 1200,
+    })
+  })
+
+  test("keeps an empty provider call invalid", () => {
+    expect(normalizeBashInput({})).toEqual({})
+  })
+
   test("basic", async () => {
     await Instance.provide({
       directory: projectRoot,

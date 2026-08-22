@@ -45,6 +45,40 @@ function fixture() {
 }
 
 describe("SessionProcessor tool outcome correlation", () => {
+  test("persists raw streamed tool input through the terminal state", async () => {
+    const { coordinator, updates } = fixture()
+    coordinator.pending({
+      id: "part_call_raw",
+      sessionID: "ses_tool_correlation",
+      messageID: "msg_tool_correlation",
+      type: "tool",
+      callID: "call_raw",
+      tool: "bash",
+      state: { status: "pending", input: {}, raw: "" },
+    })
+    await coordinator.delta("call_raw", '{"command":')
+    await coordinator.delta("call_raw", '"pwd"}')
+    const pending = coordinator.part("call_raw")
+    if (!pending || pending.state.status !== "pending") throw new Error("raw tool call was not pending")
+    await coordinator.running({
+      ...pending,
+      state: { status: "running", input: { command: "pwd" }, raw: pending.state.raw, time: { start: 100 } },
+    })
+    await coordinator.execute("call_raw", { command: "pwd" }, async () => ({
+      title: "Print directory",
+      output: "/tmp",
+      metadata: {},
+    }))
+
+    expect(updates.at(-1)).toMatchObject({
+      state: {
+        status: "completed",
+        raw: '{"command":"pwd"}',
+        input: { command: "pwd" },
+      },
+    })
+  })
+
   test("persists native execution success that settles before tool-call and has no streamed tool-result", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

@@ -6,6 +6,7 @@ const PROJECT_PACKAGE = fileURLToPath(new URL("../../../package.json", import.me
 export const E2E_TOOL_SENTINELS = {
   question: "E2E_TOOL_QUESTION",
   permission: "E2E_TOOL_PERMISSION",
+  malformed: "E2E_TOOL_MALFORMED",
 } as const
 
 type ChatRequest = {
@@ -20,7 +21,7 @@ type ToolCall = {
   id: string
   type: "function"
   function: {
-    name: "question" | "read"
+    name: "question" | "read" | "bash"
     arguments: string
   }
 }
@@ -46,11 +47,16 @@ function replyFor(body: ChatRequest) {
 
 function findSentinel(body: ChatRequest) {
   const text = textFrom(body.messages)
-  const match = text.match(/\bE2E_TOOL_(QUESTION|PERMISSION)_[A-Za-z0-9_-]+\b/)
+  const match = text.match(/\bE2E_TOOL_(QUESTION|PERMISSION|MALFORMED)_[A-Za-z0-9_-]+\b/)
   if (!match) return undefined
   return {
     value: match[0],
-    kind: match[1] === "QUESTION" ? E2E_TOOL_SENTINELS.question : E2E_TOOL_SENTINELS.permission,
+    kind:
+      match[1] === "QUESTION"
+        ? E2E_TOOL_SENTINELS.question
+        : match[1] === "MALFORMED"
+          ? E2E_TOOL_SENTINELS.malformed
+          : E2E_TOOL_SENTINELS.permission,
   }
 }
 
@@ -78,7 +84,12 @@ function toolCallFor(body: ChatRequest): { call: ToolCall; sentinel: string } | 
   const sentinel = findSentinel(body)
   if (!sentinel || hasToolResult(body.messages)) return undefined
 
-  const name = sentinel.kind === E2E_TOOL_SENTINELS.question ? "question" : "read"
+  const name =
+    sentinel.kind === E2E_TOOL_SENTINELS.question
+      ? "question"
+      : sentinel.kind === E2E_TOOL_SENTINELS.malformed
+        ? "bash"
+        : "read"
   if (!requestedToolNames(body).includes(name)) return undefined
 
   const id = `call_${sentinel.value.toLowerCase().replace(/[^a-z0-9_-]/g, "_")}`
@@ -103,6 +114,22 @@ function toolCallFor(body: ChatRequest): { call: ToolCall; sentinel: string } | 
               },
             ],
           }),
+        },
+      },
+    }
+  }
+
+  if (sentinel.kind === E2E_TOOL_SENTINELS.malformed) {
+    return {
+      sentinel: sentinel.value,
+      call: {
+        id,
+        type: "function",
+        function: {
+          name: "bash",
+          // Simulates the empty object produced when a provider stream ends
+          // before required tool arguments arrive.
+          arguments: "{}",
         },
       },
     }

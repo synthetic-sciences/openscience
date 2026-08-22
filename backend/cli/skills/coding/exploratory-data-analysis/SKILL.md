@@ -1,6 +1,6 @@
 ---
 name: exploratory-data-analysis
-description: Perform comprehensive exploratory data analysis on scientific data files across 200+ file formats. This skill should be used when analyzing any scientific data file to understand its structure, content, quality, and characteristics. Automatically detects file type and generates detailed markdown reports with format-specific analysis, quality metrics, and downstream analysis recommendations. Covers chemistry, bioinformatics, microscopy, spectroscopy, proteomics, metabolomics, and general scientific data formats.
+description: Analyze scientific data files across 200+ formats at the depth the user requests. Detect file type, assess structure, quality, and statistics, and create reports or visualizations only when they are requested or materially needed. Covers chemistry, bioinformatics, microscopy, spectroscopy, proteomics, metabolomics, and general scientific data formats.
 category: coding
 license: MIT license
 metadata:
@@ -11,7 +11,15 @@ metadata:
 
 ## Overview
 
-Perform comprehensive exploratory data analysis (EDA) on scientific data files across multiple domains. This skill provides automated file type detection, format-specific analysis, data quality assessment, and generates detailed markdown reports suitable for documentation and downstream analysis planning.
+Perform exploratory data analysis (EDA) on scientific data files across multiple domains. Match the depth and output to the request: a narrow calculation should stay a narrow calculation, while a requested full audit can include broader quality assessment and documentation.
+
+## Scope and output contract
+
+- The user's requested scope and output format take precedence over this workflow.
+- Do not create a report, figure, artifact, directory, or sidecar file by default.
+- Do not write to disk unless the user requested a saved deliverable or the task inherently requires one.
+- For a bounded question, inspect only the necessary data and answer inline with the decisive calculation and caveats.
+- Recommend a visualization only when it materially clarifies the result; generate one only when requested or necessary for the requested deliverable.
 
 **Key Capabilities:**
 - Automatic detection and analysis of 200+ scientific file formats
@@ -152,11 +160,11 @@ For arrays (NPY, HDF5):
 - Calculate statistical summaries
 - Check for missing/invalid values
 
-### Step 4: Generate Comprehensive Report
+### Step 4: Present the requested result
 
-Create a markdown report with the following sections:
+For a narrow request, return the result inline and stop. If the user explicitly requests a comprehensive report, create a markdown report with the following sections as relevant:
 
-#### Required Sections:
+#### Suggested report sections:
 1. **Title and Metadata**
    - Filename and timestamp
    - File size and location
@@ -191,9 +199,9 @@ Create a markdown report with the following sections:
 #### Template Location
 Use `assets/report_template.md` as a guide for report structure.
 
-### Step 5: Save Report
+### Step 5: Save only when requested
 
-Save the markdown report with a descriptive filename:
+When the user requests a saved report, use a descriptive filename:
 - Pattern: `{original_filename}_eda_report.md`
 - Example: `experiment_data.fastq` → `experiment_data_eda_report.md`
 
@@ -442,4 +450,3 @@ Based on data characteristics, recommend:
 
 ### assets/
 - `report_template.md`: Comprehensive markdown template for EDA reports
-

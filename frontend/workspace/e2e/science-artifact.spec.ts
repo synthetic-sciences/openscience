@@ -139,6 +139,10 @@ async function withArtifact(
     await steps.click()
 
     const artifact = locate(browser.page)
+    const metadata = browser.page.locator('details[data-slot="session-turn-metadata"]').filter({ has: artifact }).first()
+    if ((await metadata.count()) > 0 && (await metadata.getAttribute("open")) === null) {
+      await metadata.locator("summary").click()
+    }
     await expect(artifact).toBeVisible()
     await verify(artifact)
   } finally {

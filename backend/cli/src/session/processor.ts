@@ -66,6 +66,15 @@ export namespace SessionProcessor {
     )
   }
 
+  /** Collect all assistant parts produced for one user request. The prompt loop
+   * creates a new assistant message after every tool step, so checking only the
+   * current message misses the most common repeated-call failure mode. */
+  export function turnParts(messages: MessageV2.WithParts[], parentID: string): MessageV2.Part[] {
+    return messages
+      .filter((message) => message.info.role === "assistant" && message.info.parentID === parentID)
+      .flatMap((message) => message.parts)
+  }
+
   function sharedPrefixLen(a: string, b: string): number {
     const n = Math.min(a.length, b.length)
     let i = 0
@@ -168,6 +177,7 @@ export namespace SessionProcessor {
             state: {
               status: "completed",
               input: outcome.input ?? match.state.input,
+              ...(match.state.raw ? { raw: match.state.raw } : {}),
               output: outcome.output.output,
               metadata: outcome.output.metadata ?? {},
               title: outcome.output.title,
@@ -182,6 +192,7 @@ export namespace SessionProcessor {
             state: {
               status: "error",
               input: outcome.input ?? match.state.input,
+              ...(match.state.raw ? { raw: match.state.raw } : {}),
               error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
               ...(metadata ? { metadata } : {}),
               time,
@@ -209,6 +220,19 @@ export namespace SessionProcessor {
       },
       pending(part: MessageV2.ToolPart) {
         toolcalls[part.callID] = part
+      },
+      async delta(callID: string, delta: string) {
+        const match = toolcalls[callID]
+        if (!match || match.state.status !== "pending") return
+        const updated: MessageV2.ToolPart = {
+          ...match,
+          state: {
+            ...match.state,
+            raw: match.state.raw + delta,
+          },
+        }
+        toolcalls[callID] = updated
+        await input.updatePart(updated)
       },
       async running(part: MessageV2.ToolPart) {
         toolcalls[part.callID] = part
@@ -521,6 +545,7 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-input-delta":
+                  await toolOutcomes.delta(value.id, value.delta)
                   break
 
                 case "tool-input-end":
@@ -535,6 +560,7 @@ export namespace SessionProcessor {
                       state: {
                         status: "running",
                         input: value.input,
+                        ...(match.state.status === "pending" && match.state.raw ? { raw: match.state.raw } : {}),
                         time: {
                           start: Date.now(),
                         },
@@ -547,9 +573,28 @@ export namespace SessionProcessor {
                     // reconcile it as soon as the call part exists.
                     await toolOutcomes.running(part as MessageV2.ToolPart)
 
-                    const parts = await MessageV2.parts(input.assistantMessage.id)
+                    const history = await Array.fromAsync(MessageV2.stream(input.sessionID))
+                    const parts = turnParts(history, input.assistantMessage.parentID)
+                    const threshold = value.toolName === "invalid" ? 2 : DOOM_LOOP_THRESHOLD
 
-                    if (isDoomLoop(parts, value.toolName, value.input)) {
+                    if (isDoomLoop(parts, value.toolName, value.input, threshold)) {
+                      if (value.toolName === "invalid") {
+                        const source =
+                          value.input && typeof value.input === "object" && "tool" in value.input
+                            ? String(value.input.tool)
+                            : "tool"
+                        blocked = true
+                        await Session.updatePart({
+                          id: Identifier.ascending("part"),
+                          messageID: input.assistantMessage.id,
+                          sessionID: input.sessionID,
+                          type: "text",
+                          synthetic: true,
+                          text: `OpenScience stopped two repeated incomplete ${source} calls before execution. No action was taken.`,
+                          time: { start: Date.now(), end: Date.now() },
+                        } satisfies MessageV2.TextPart)
+                        break
+                      }
                       const agent = await Agent.get(input.assistantMessage.agent)
                       await PermissionNext.ask({
                         permission: "doom_loop",

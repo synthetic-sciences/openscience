@@ -105,3 +105,50 @@ test("can send the first prompt after New research opens the explicit new-sessio
     await sdk.session.delete({ sessionID }).catch(() => undefined)
   }
 })
+
+test("an incomplete provider tool call is recovered without a raw schema error", async ({
+  page,
+  sdk,
+  gotoSession,
+}) => {
+  test.setTimeout(45_000)
+  await gotoSession()
+
+  const token = `E2E_TOOL_MALFORMED_${Date.now()}`
+  const prompt = page.locator(promptSelector)
+  await prompt.click()
+  await page.keyboard.type(token)
+  await page.keyboard.press("Enter")
+  await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
+
+  const sessionID = sessionIDFromUrl(page.url())
+  if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)
+
+  try {
+    await expect
+      .poll(
+        () =>
+          sdk.session.messages({ sessionID, limit: 50 }).then((response) =>
+            (response.data ?? [])
+              .filter((message) => message.info.role === "assistant")
+              .flatMap((message) => message.parts)
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join("\n"),
+          ),
+        { timeout: 20_000 },
+      )
+      .toContain(`${token}_DONE`)
+
+    const messages = await sdk.session.messages({ sessionID, limit: 50 }).then((response) => response.data ?? [])
+    const payload = JSON.stringify(messages)
+    expect(payload).toContain("Recovered incomplete bash call")
+    expect(payload).not.toContain("expected string, received undefined")
+    expect(payload).not.toContain("Please rewrite the input so it satisfies the expected schema")
+    await expect(page.locator("body")).not.toContainText("expected string, received undefined")
+    await expect(page.locator("body")).not.toContainText("Please rewrite the input so it satisfies the expected schema")
+    await expect(page.getByText(`${token}_DONE`, { exact: false }).first()).toBeVisible()
+  } finally {
+    await sdk.session.delete({ sessionID }).catch(() => undefined)
+  }
+})

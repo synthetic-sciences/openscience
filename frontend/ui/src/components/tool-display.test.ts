@@ -10,6 +10,7 @@ import {
   sessionErrorText,
   skillName,
   stripRedactedReasoning,
+  toolErrorDisplay,
   writtenFiles,
 } from "./tool-display"
 
@@ -150,6 +151,25 @@ describe("stripRedactedReasoning", () => {
   })
   test("leaves normal reasoning untouched", () => {
     expect(stripRedactedReasoning("plain reasoning text")).toBe("plain reasoning text")
+  })
+})
+
+describe("toolErrorDisplay", () => {
+  test("collapses legacy malformed Bash schema dumps behind technical details", () => {
+    const raw =
+      'The bash tool was called with invalid arguments: [{"code":"invalid_type","path":["command"]}]. Please rewrite the input.'
+    expect(toolErrorDisplay("bash", raw)).toEqual({
+      title: "Incomplete Bash call",
+      message: "No command was run.",
+      details: raw,
+    })
+  })
+
+  test("preserves ordinary short tool errors", () => {
+    expect(toolErrorDisplay("read", "Error: File not found: paper.pdf")).toEqual({
+      title: "File not found",
+      message: "paper.pdf",
+    })
   })
 })
 

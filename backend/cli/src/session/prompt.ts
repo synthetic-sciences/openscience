@@ -85,6 +85,16 @@ export namespace SessionPrompt {
   // Science agents that dispatch GPU/compute work and should honor billing.compute.
   const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
 
+  /** Build the provider schema and keep the executable Zod contract attached. */
+  export function toolInputSchema(model: Provider.Model, item: Tool.Contract & { id: string }) {
+    const schema = ProviderTransform.schema(model, z.toJSONSchema(item.parameters))
+    return jsonSchema(schema as any, {
+      validate(args) {
+        return Tool.validate(item.id, item, args)
+      },
+    })
+  }
+
   const state = Instance.state(
     () => {
       const data: Record<
@@ -1233,11 +1243,16 @@ export namespace SessionPrompt {
           direct: input.direct,
         }),
     )) {
-      const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
         description: ToolSelection.description(item.id, item.description, input.inspection),
-        inputSchema: jsonSchema(schema as any),
+        // Provider-facing JSON Schema is only a description. Without a runtime
+        // validator the AI SDK accepts any syntactically valid JSON (including
+        // the `{}` fallback emitted by some streaming adapters), skips
+        // experimental_repairToolCall, and starts the tool before Zod can stop
+        // it. Share the exact execution contract at this boundary so malformed
+        // calls are repaired into the harmless `invalid` tool instead.
+        inputSchema: toolInputSchema(input.model, item),
         async execute(args, options) {
           const ctx = context(args, options)
           return input.processor.executeTool(options.toolCallId, args, async () => {

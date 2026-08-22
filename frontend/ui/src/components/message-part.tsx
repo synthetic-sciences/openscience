@@ -51,7 +51,14 @@ import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { savedArtifact, scienceTaskLabel, sentenceCaseLabel, skillName, stripRedactedReasoning } from "./tool-display"
+import {
+  savedArtifact,
+  scienceTaskLabel,
+  sentenceCaseLabel,
+  skillName,
+  stripRedactedReasoning,
+  toolErrorDisplay,
+} from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
 import { formatTaskDuration, stripTaskMetadata, summarizeTaskActivity } from "./research-trace"
 
@@ -818,23 +825,34 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
       <Switch>
         <Match when={part.state.status === "error" && part.state.error}>
           {(error) => {
-            const cleaned = error().replace("Error: ", "")
-            const [title, ...rest] = cleaned.split(": ")
+            const display = () => toolErrorDisplay(part.tool, error())
             return (
               <Card variant="error">
                 <div data-component="tool-error">
                   <Icon name="circle-ban-sign" size="small" />
-                  <Switch>
-                    <Match when={title && title.length < 30}>
-                      <div data-slot="message-part-tool-error-content">
-                        <div data-slot="message-part-tool-error-title">{title}</div>
-                        <span data-slot="message-part-tool-error-message">{rest.join(": ")}</span>
-                      </div>
-                    </Match>
-                    <Match when={true}>
-                      <span data-slot="message-part-tool-error-message">{cleaned}</span>
-                    </Match>
-                  </Switch>
+                  <div data-slot="message-part-tool-error-body">
+                    <Switch>
+                      <Match when={display().title}>
+                        {(title) => (
+                          <div data-slot="message-part-tool-error-content">
+                            <div data-slot="message-part-tool-error-title">{title()}</div>
+                            <span data-slot="message-part-tool-error-message">{display().message}</span>
+                          </div>
+                        )}
+                      </Match>
+                      <Match when={true}>
+                        <span data-slot="message-part-tool-error-message">{display().message}</span>
+                      </Match>
+                    </Switch>
+                    <Show when={display().details}>
+                      {(details) => (
+                        <details data-slot="message-part-tool-error-details">
+                          <summary>Technical details</summary>
+                          <pre>{details()}</pre>
+                        </details>
+                      )}
+                    </Show>
+                  </div>
                 </div>
               </Card>
             )

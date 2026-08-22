@@ -263,6 +263,7 @@ export namespace MessageV2 {
     .object({
       status: z.literal("running"),
       input: z.record(z.string(), z.any()),
+      raw: z.string().optional(),
       title: z.string().optional(),
       metadata: z.record(z.string(), z.any()).optional(),
       time: z.object({
@@ -278,6 +279,7 @@ export namespace MessageV2 {
     .object({
       status: z.literal("completed"),
       input: z.record(z.string(), z.any()),
+      raw: z.string().optional(),
       output: z.string(),
       title: z.string(),
       metadata: z.record(z.string(), z.any()),
@@ -297,6 +299,7 @@ export namespace MessageV2 {
     .object({
       status: z.literal("error"),
       input: z.record(z.string(), z.any()),
+      raw: z.string().optional(),
       error: z.string(),
       metadata: z.record(z.string(), z.any()).optional(),
       time: z.object({

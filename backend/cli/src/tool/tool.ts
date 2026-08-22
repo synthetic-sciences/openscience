@@ -52,6 +52,41 @@ export namespace Tool {
   export type InferParameters<T extends Info> = T extends Info<infer P> ? z.infer<P> : never
   export type InferMetadata<T extends Info> = T extends Info<any, infer M> ? M : never
 
+  export type Contract<Parameters extends z.ZodType = z.ZodType> = {
+    parameters: Parameters
+    normalizeInput?(args: unknown): unknown
+    formatValidationError?(error: z.ZodError, args: unknown): string
+  }
+
+  /**
+   * Validate a model tool call with the same normalization and Zod contract
+   * used by execute(). JSON Schema alone is only a provider hint; the AI SDK
+   * cannot repair malformed calls unless its schema also has a runtime
+   * validator. Keep this result in the provider boundary as well as execute()
+   * so an incomplete call is repaired before any tool starts.
+   */
+  export function validate<Parameters extends z.ZodType>(
+    id: string,
+    contract: Contract<Parameters>,
+    args: unknown,
+  ): { success: true; value: z.infer<Parameters> } | { success: false; error: Error } {
+    const normalized = contract.normalizeInput ? contract.normalizeInput(args) : args
+    const result = contract.parameters.safeParse(normalized)
+    if (result.success) {
+      return {
+        success: true,
+        value: result.data,
+      }
+    }
+    const message = contract.formatValidationError
+      ? contract.formatValidationError(result.error, normalized)
+      : `The ${id} tool received invalid arguments or incomplete input. No action was taken. Retry with all required fields.`
+    return {
+      success: false,
+      error: new Error(message, { cause: result.error }),
+    }
+  }
+
   export function define<Parameters extends z.ZodType, Result extends Metadata>(
     id: string,
     init: Info<Parameters, Result>["init"] | Awaited<ReturnType<Info<Parameters, Result>["init"]>>,
@@ -63,23 +98,13 @@ export namespace Tool {
         const execute = toolInfo.execute
         toolInfo.execute = async (args, ctx) => {
           PlanMode.enforce(id, ctx.agent)
-          const normalized = toolInfo.normalizeInput ? toolInfo.normalizeInput(args) : args
-          let canonical: z.infer<Parameters>
-          try {
-            // The parser's output is the public tool contract. Always execute
-            // and dedupe with it so defaults, transforms, stripped fields, and
-            // tool-specific normalization behave identically for direct and
-            // delegated calls.
-            canonical = toolInfo.parameters.parse(normalized)
-          } catch (error) {
-            if (error instanceof z.ZodError && toolInfo.formatValidationError) {
-              throw new Error(toolInfo.formatValidationError(error, normalized), { cause: error })
-            }
-            throw new Error(
-              `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
-              { cause: error },
-            )
-          }
+          // The parser's output is the public tool contract. Always execute
+          // and dedupe with it so defaults, transforms, stripped fields, and
+          // tool-specific normalization behave identically for direct and
+          // delegated calls.
+          const parsed = validate(id, toolInfo, args)
+          if (!parsed.success) throw parsed.error
+          const canonical = parsed.value
           const dedupeSignature = SearchDedupe.key(id, canonical)
           const cached = SearchDedupe.find(ctx.messages, id, canonical)
           if (cached) return SearchDedupe.reuse(cached) as unknown as Awaited<ReturnType<typeof execute>>
