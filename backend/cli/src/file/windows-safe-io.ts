@@ -39,6 +39,7 @@ export namespace WindowsSafeIO {
 
   export type Hooks = {
     afterDirectoryVerify?: (operation: "move" | "restore" | "remove", target: string) => void | Promise<void>
+    afterSnapshotChunk?: (bytes: number) => void | Promise<void>
   }
 
   type NativeIdentity = {
@@ -73,7 +74,13 @@ export namespace WindowsSafeIO {
     afterMutation?: (source: string, target: string) => void | Promise<void>
   }
 
+  type RenameOrigin = {
+    directory: Lock
+    child: string
+  }
+
   const FILE_READ_ATTRIBUTES = 0x00000080
+  const FILE_TRAVERSE = 0x00000020
   const FILE_ADD_FILE = 0x00000002
   const FILE_ADD_SUBDIRECTORY = 0x00000004
   const DELETE = 0x00010000
@@ -93,7 +100,6 @@ export namespace WindowsSafeIO {
   const ERROR_NOT_SAME_DEVICE = 17
   const ERROR_SHARING_VIOLATION = 32
   const ERROR_FILE_EXISTS = 80
-  const ERROR_INVALID_PARAMETER = 87
   const ERROR_DIR_NOT_EMPTY = 145
   const ERROR_ALREADY_EXISTS = 183
 
@@ -219,6 +225,7 @@ export namespace WindowsSafeIO {
     const handle = symbols.CreateFileW(
       wide(target),
       FILE_READ_ATTRIBUTES |
+        (options?.parent ? FILE_TRAVERSE : 0) |
         (options?.parent ? FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY : 0) |
         (options?.mutable ? DELETE : 0),
       options?.parent ? FILE_SHARE_READ | FILE_SHARE_WRITE : FILE_SHARE_READ,
@@ -387,29 +394,51 @@ export namespace WindowsSafeIO {
     )
   }
 
-  function renameBuffer(parent: Handle | undefined, target: string, replace: boolean) {
-    const value = Buffer.from(parent === undefined ? path.resolve(target) : safeName(target), "utf16le")
-    const buffer = Buffer.alloc(Math.max(24, 20 + value.byteLength))
+  function renameBuffer(parent: Handle, target: string, replace: boolean) {
+    const value = Buffer.from(safeName(target), "utf16le")
+    // FILE_RENAME_INFO has a 24-byte sizeof on 64-bit Windows even though
+    // FileName begins at offset 20. SetFileInformationByHandle requires the
+    // full structure size plus the variable name, not merely offset+length.
+    // The four zeroed trailing bytes also leave the documented NUL/padding.
+    const buffer = Buffer.alloc(24 + value.byteLength)
     buffer.writeUInt8(replace ? 1 : 0, 0)
-    buffer.writeBigUInt64LE(parent === undefined ? 0n : BigInt(parent), 8)
+    buffer.writeBigUInt64LE(BigInt(parent), 8)
     buffer.writeUInt32LE(value.byteLength, 16)
     value.copy(buffer, 20)
     return buffer
   }
 
-  async function renameHandle(source: Lock, parent: Lock, child: string, replace = false) {
+  export function renameBufferForTests(parent: Handle, target: string, replace: boolean) {
+    if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("Windows safe file test helpers are disabled outside tests")
+    return renameBuffer(parent, target, replace)
+  }
+
+  function nativeSame(left: NativeIdentity, right: NativeIdentity) {
+    return (
+      left.volume === right.volume &&
+      left.index === right.index &&
+      left.type === right.type &&
+      left.reparse === right.reparse
+    )
+  }
+
+  async function verifyRename(source: Lock, parent: Lock, child: string) {
+    const target = path.join(parent.path, child)
+    const current = await lockEntry(target, { reparse: true })
+    try {
+      if (!nativeSame(source.identity, current.locked.identity)) {
+        throw new Error(`Windows rename target identity mismatch for ${target}`)
+      }
+    } finally {
+      current.locked.close()
+    }
+  }
+
+  async function setName(source: Lock, parent: Lock, child: string, replace: boolean) {
     const target = path.join(parent.path, child)
     const relative = renameBuffer(parent.handle, child, replace)
-    const first = api().SetFileInformationByHandle(source.handle, FILE_RENAME_INFO, relative, relative.byteLength)
-    if (first) return
-    const initial = code()
-    const error = (() => {
-      if (initial !== ERROR_INVALID_PARAMETER) return initial
-      const absolute = renameBuffer(undefined, target, replace)
-      if (api().SetFileInformationByHandle(source.handle, FILE_RENAME_INFO, absolute, absolute.byteLength)) return 0
-      return code()
-    })()
-    if (!error) return
+    if (api().SetFileInformationByHandle(source.handle, FILE_RENAME_INFO, relative, relative.byteLength)) return
+    const error = code()
     if (!replace && (error === ERROR_ACCESS_DENIED || error === ERROR_SHARING_VIOLATION)) {
       const exists = await fs.lstat(target).then(
         () => true,
@@ -420,6 +449,24 @@ export namespace WindowsSafeIO {
     throw failure("SetFileInformationByHandle(FileRenameInfo)", target, error)
   }
 
+  async function renameHandle(source: Lock, parent: Lock, child: string, origin: RenameOrigin, replace = false) {
+    await setName(source, parent, child, replace)
+    try {
+      await verifyRename(source, parent, child)
+    } catch (error) {
+      try {
+        await setName(source, origin.directory, origin.child, false)
+        await verifyRename(source, origin.directory, origin.child)
+      } catch (rollback) {
+        throw new AggregateError(
+          [error, rollback],
+          `Windows rename postcondition failed for ${path.join(parent.path, child)}`,
+        )
+      }
+      throw error
+    }
+  }
+
   function dispose(handle: Lock) {
     const buffer = Buffer.from([1])
     if (!api().SetFileInformationByHandle(handle.handle, FILE_DISPOSITION_INFO, buffer, buffer.byteLength)) {
@@ -427,12 +474,25 @@ export namespace WindowsSafeIO {
     }
   }
 
-  async function snapshot(target: string, locked: Awaited<ReturnType<typeof lockEntry>>) {
+  async function snapshot(
+    target: string,
+    locked: Awaited<ReturnType<typeof lockEntry>>,
+    hooks?: Hooks,
+  ): Promise<Snapshot> {
     if (locked.locked.identity.type === "directory") return identity(locked.stat)
     const handle = await fs.open(target, "r")
     try {
       const before = await handle.stat()
-      const bytes = await handle.readFile()
+      const hash = crypto.createHash("sha256")
+      const chunk = Buffer.allocUnsafe(64 * 1024)
+      const cursor = { value: 0 }
+      while (cursor.value < before.size) {
+        const result = await handle.read(chunk, 0, Math.min(chunk.byteLength, before.size - cursor.value), cursor.value)
+        if (!result.bytesRead) throw new Error(`Windows file changed during safe access: ${target}`)
+        hash.update(chunk.subarray(0, result.bytesRead))
+        cursor.value += result.bytesRead
+        await hooks?.afterSnapshotChunk?.(result.bytesRead)
+      }
       const after = await handle.stat()
       const current = await fs.lstat(target)
       const approved = identity(locked.stat)
@@ -444,11 +504,11 @@ export namespace WindowsSafeIO {
         before.size !== after.size ||
         before.mtimeMs !== after.mtimeMs ||
         before.ctimeMs !== after.ctimeMs ||
-        bytes.byteLength !== after.size
+        cursor.value !== after.size
       ) {
         throw new Error(`Windows file changed during safe access: ${target}`)
       }
-      return { ...final, sha256: crypto.createHash("sha256").update(bytes).digest("hex"), bytes }
+      return { ...final, sha256: hash.digest("hex") }
     } finally {
       await handle.close()
     }
@@ -529,13 +589,16 @@ export namespace WindowsSafeIO {
   ) {
     if (!expected) return
     const result = await snapshot(target, locked)
+    const digest = crypto.createHash("sha256").update(expected.bytes).digest("hex")
     if (
-      "bytes" in result &&
-      (result.dev !== expected.dev || result.ino !== expected.ino || !result.bytes.equals(expected.bytes))
+      result.kind !== "file" ||
+      result.dev !== expected.dev ||
+      result.ino !== expected.ino ||
+      result.size !== expected.bytes.byteLength ||
+      result.sha256 !== digest
     ) {
       throw new Error(`Refusing to write ${target}: the approved file changed before replacement`)
     }
-    if (!("bytes" in result)) throw new Error(`Only regular files can be approved for replacement: ${target}`)
   }
 
   export async function write(target: string, content: string | Uint8Array, options: WriteOptions) {
@@ -546,14 +609,15 @@ export namespace WindowsSafeIO {
       const state = { moved: false }
       try {
         if (!options.approved) {
-          await renameHandle(staged.locked.locked, destination.directory, destination.child).catch(
-            (error: NodeJS.ErrnoException) => {
-              if (error.code === "EEXIST") {
-                throw new Error(`Refusing to overwrite an unapproved file: ${destination.path}`)
-              }
-              throw error
-            },
-          )
+          await renameHandle(staged.locked.locked, destination.directory, destination.child, {
+            directory: destination.directory,
+            child: staged.child,
+          }).catch((error: NodeJS.ErrnoException) => {
+            if (error.code === "EEXIST") {
+              throw new Error(`Refusing to overwrite an unapproved file: ${destination.path}`)
+            }
+            throw error
+          })
           state.moved = true
           return
         }
@@ -561,13 +625,22 @@ export namespace WindowsSafeIO {
         try {
           await approved(destination.path, current, options.approved)
           const backup = safeName(`.openscience-approved-${crypto.randomUUID()}.bak`)
-          await renameHandle(current.locked, destination.directory, backup)
+          await renameHandle(current.locked, destination.directory, backup, {
+            directory: destination.directory,
+            child: destination.child,
+          })
           const moved = { backup: true }
           try {
-            await renameHandle(staged.locked.locked, destination.directory, destination.child)
+            await renameHandle(staged.locked.locked, destination.directory, destination.child, {
+              directory: destination.directory,
+              child: staged.child,
+            })
             state.moved = true
           } catch (error) {
-            await renameHandle(current.locked, destination.directory, destination.child).catch((rollback) => {
+            await renameHandle(current.locked, destination.directory, destination.child, {
+              directory: destination.directory,
+              child: backup,
+            }).catch((rollback) => {
               throw new AggregateError([error, rollback], `Write failed; original retained under ${backup}`)
             })
             moved.backup = false
@@ -623,13 +696,19 @@ export namespace WindowsSafeIO {
       if (!sameEntry(final, expected)) {
         throw new Error(`Refusing to rename ${source.path}: the source identity changed before mutation`)
       }
-      await renameHandle(current.locked, target.directory, target.child)
+      await renameHandle(current.locked, target.directory, target.child, {
+        directory: source.directory,
+        child: source.child,
+      })
       try {
         await options?.afterMutation?.(source.path, target.path)
         const result = entry(await fs.lstat(target.path))
         if (!sameEntry(result, expected)) throw new Error(`Renamed source identity changed for ${target.path}`)
       } catch (error) {
-        await renameHandle(current.locked, source.directory, source.child).catch((rollback) => {
+        await renameHandle(current.locked, source.directory, source.child, {
+          directory: target.directory,
+          child: target.child,
+        }).catch((rollback) => {
           throw new AggregateError([error, rollback], "Windows rename failed and could not be rolled back safely")
         })
         throw error
@@ -642,17 +721,12 @@ export namespace WindowsSafeIO {
     }
   }
 
-  export async function inspectTrash(target: string): Promise<Snapshot> {
+  export async function inspectTrash(target: string, hooks?: Hooks): Promise<Snapshot> {
     const source = await existingParent(target)
     try {
       const current = await lockEntry(source.path)
       try {
-        const result = await snapshot(source.path, current)
-        if ("bytes" in result) {
-          const { bytes: _bytes, ...value } = result
-          return value
-        }
-        return result
+        return snapshot(source.path, current, hooks)
       } finally {
         current.locked.close()
       }
@@ -665,7 +739,7 @@ export namespace WindowsSafeIO {
     const staged = await stage(parent, content, 0o600)
     const moved = { value: false }
     try {
-      await renameHandle(staged.locked.locked, parent, child, true)
+      await renameHandle(staged.locked.locked, parent, child, { directory: parent, child: staged.child }, true)
       moved.value = true
     } finally {
       await cleanup(staged, moved.value)
@@ -746,18 +820,27 @@ export namespace WindowsSafeIO {
       if (!same(final, expected)) {
         throw new Error(`Refusing to trash ${source.path}: the approved item changed before deletion`)
       }
-      await renameHandle(current.locked, target.directory, target.child)
+      await renameHandle(current.locked, target.directory, target.child, {
+        directory: source.directory,
+        child: source.child,
+      })
       moved.value = true
       const result = identity(await fs.lstat(target.path))
       if (!sameObject(result, expected) || result.size !== expected.size || result.mtimeMs !== expected.mtimeMs) {
-        await renameHandle(current.locked, source.directory, source.child)
+        await renameHandle(current.locked, source.directory, source.child, {
+          directory: target.directory,
+          child: target.child,
+        })
         moved.value = false
         throw new Error(`Refusing to trash ${source.path}: the item identity changed during deletion`)
       }
       return result
     } catch (error) {
       if (moved.value) {
-        await renameHandle(current.locked, source.directory, source.child).catch((rollback) => {
+        await renameHandle(current.locked, source.directory, source.child, {
+          directory: target.directory,
+          child: target.child,
+        }).catch((rollback) => {
           throw new AggregateError([error, rollback], `Trash rollback failed; payload retained at ${target.path}`)
         })
       }
@@ -800,12 +883,18 @@ export namespace WindowsSafeIO {
       if (!sameObject(identity(await fs.lstat(source.path)), expected)) {
         throw new Error(`Trash payload identity mismatch for ${source.path}`)
       }
-      await renameHandle(current.locked, target.directory, target.child)
+      await renameHandle(current.locked, target.directory, target.child, {
+        directory: source.directory,
+        child: source.child,
+      })
       try {
         const restored = identity(await fs.lstat(target.path))
         if (!sameObject(restored, expected)) throw new Error(`Restored item identity mismatch for ${target.path}`)
       } catch (error) {
-        await renameHandle(current.locked, source.directory, source.child).catch((rollback) => {
+        await renameHandle(current.locked, source.directory, source.child, {
+          directory: target.directory,
+          child: target.child,
+        }).catch((rollback) => {
           throw new AggregateError([error, rollback], `Restore rollback failed; item retained at ${target.path}`)
         })
         throw error
@@ -844,12 +933,13 @@ export namespace WindowsSafeIO {
         const final = identity(await fs.lstat(source.path))
         if (!same(identity(current.stat), final))
           throw new Error(`Trash payload changed while restoring ${source.path}`)
-        await renameHandle(staged.locked.locked, target.directory, target.child).catch(
-          (error: NodeJS.ErrnoException) => {
-            if (error.code === "EEXIST") throw new Error(`Refusing to overwrite ${target.path}`)
-            throw error
-          },
-        )
+        await renameHandle(staged.locked.locked, target.directory, target.child, {
+          directory: target.directory,
+          child: staged.child,
+        }).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "EEXIST") throw new Error(`Refusing to overwrite ${target.path}`)
+          throw error
+        })
         moved.value = true
       } finally {
         await cleanup(staged, moved.value)
@@ -862,9 +952,9 @@ export namespace WindowsSafeIO {
   }
 
   async function empty(directory: Lock): Promise<void> {
-    const names = await fs.readdir(directory.path)
-    for (const name of names) {
-      const child = path.join(directory.path, safeName(name))
+    const entries = await fs.opendir(directory.path)
+    for await (const entry of entries) {
+      const child = path.join(directory.path, safeName(entry.name))
       const current = await lockEntry(child, { mutable: true, reparse: true })
       try {
         if (current.locked.identity.type === "directory" && !current.locked.identity.reparse) {

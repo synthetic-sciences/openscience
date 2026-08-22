@@ -3,6 +3,7 @@ import crypto from "node:crypto"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { FileTrash } from "../../src/file/trash"
+import { WindowsSafeIO } from "../../src/file/windows-safe-io"
 import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
 import { FileRoutes } from "../../src/server/routes/file"
@@ -10,6 +11,38 @@ import { SessionFilesystem } from "../../src/session/filesystem"
 import { executionSession, tmpdir } from "../fixture/fixture"
 
 describe("recoverable source file trash", () => {
+  test("encodes the complete 64-bit FILE_RENAME_INFO layout", () => {
+    const name = "result.txt"
+    const encoded = Buffer.from(name, "utf16le")
+    const buffer = WindowsSafeIO.renameBufferForTests(0x1234n, name, false)
+
+    expect(buffer.byteLength).toBe(24 + encoded.byteLength)
+    expect(buffer.readUInt8(0)).toBe(0)
+    expect(buffer.readBigUInt64LE(8)).toBe(0x1234n)
+    expect(buffer.readUInt32LE(16)).toBe(encoded.byteLength)
+    expect(buffer.subarray(20, 20 + encoded.byteLength)).toEqual(encoded)
+    expect(buffer.subarray(20 + encoded.byteLength)).toEqual(Buffer.alloc(4))
+  })
+
+  test.skipIf(process.platform !== "win32")("hashes a Windows trash snapshot in bounded chunks", async () => {
+    await using tmp = await tmpdir()
+    const target = path.join(tmp.path, "large-result.bin")
+    const bytes = Buffer.alloc(3 * 1024 * 1024 + 17, 0x5a)
+    await fs.writeFile(target, bytes)
+    const chunks: number[] = []
+
+    const snapshot = await WindowsSafeIO.inspectTrash(target, {
+      afterSnapshotChunk: (size) => {
+        chunks.push(size)
+      },
+    })
+
+    expect(snapshot.sha256).toBe(crypto.createHash("sha256").update(bytes).digest("hex"))
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(Math.max(...chunks)).toBeLessThanOrEqual(64 * 1024)
+    expect(chunks.reduce((total, size) => total + size, 0)).toBe(bytes.byteLength)
+  })
+
   test("retains approved bytes for 30 days and restores through the file route", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

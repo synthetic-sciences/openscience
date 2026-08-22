@@ -1,11 +1,34 @@
 import z from "zod"
 import path from "path"
+import crypto from "node:crypto"
 import { Tool } from "./tool"
 import { registry } from "../science/connectors"
 import type { ConnectorHit } from "../science/connectors"
 import { SessionFilesystem } from "../session/filesystem"
 import { SafeFileIO } from "../file/safe-io"
 import { outcomeFor, formatBytes, classifyError, safeSegment } from "../science/connectors/fetch-outcome"
+
+async function existingFile(target: string, body: string, size: number) {
+  const source = await SafeFileIO.open(target).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return
+    throw error
+  })
+  if (!source) return { exists: false, matches: false }
+  try {
+    if (source.size !== size) return { exists: true, matches: false }
+    const hash = crypto.createHash("sha256")
+    const reader = source.stream().getReader()
+    while (true) {
+      const result = await reader.read()
+      if (result.done) break
+      hash.update(result.value)
+    }
+    const expected = crypto.createHash("sha256").update(body).digest("hex")
+    return { exists: true, matches: hash.digest("hex") === expected }
+  } finally {
+    await source.close()
+  }
+}
 
 /**
  * Small, database-agnostic surface over the scientific connector registry.
@@ -254,12 +277,11 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
     const requested = path.join(workspace, relative)
     const target = (await SessionFilesystem.authorize({ sessionID: ctx.sessionID, path: requested, access: "write" }))
       .path
-    const existing = await SafeFileIO.optional(target)
-    const bytes = Buffer.from(outcome.body)
-    if (existing && !existing.bytes.equals(bytes)) {
+    const existing = await existingFile(target, outcome.body, outcome.bytes)
+    if (existing.exists && !existing.matches) {
       throw new Error(`Refusing to replace the existing session file ${relative}; read or rename it first`)
     }
-    if (!existing) await SafeFileIO.write(target, bytes)
+    if (!existing.exists) await SafeFileIO.write(target, outcome.body)
 
     return {
       title: `${connector.name}: ${params.id} → ${outcome.filename}`,
