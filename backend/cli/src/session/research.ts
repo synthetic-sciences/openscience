@@ -168,6 +168,20 @@ export namespace SessionResearch {
   })
   export type RuntimeUsage = z.infer<typeof RuntimeUsage>
 
+  const LegacyTokens = 5_000_000
+  export const RuntimeDefaults = {
+    modelCalls: 128,
+    toolCalls: 1_024,
+    // The 90% finalization boundary must not precede the model-call boundary
+    // for 128k-class long-context calls. 20M leaves room for 128 such calls
+    // while still bounding cumulative inference across the session tree.
+    tokens: 20_000_000,
+    wallClockMs: 24 * 60 * 60_000,
+    costUsd: 200,
+  } as const
+
+  const LimitOrigin = z.enum(["default", "explicit", "unknown"])
+
   export const Budget = z.object({
     reserveUsd: z.number().min(0).max(100).default(1),
     finalizationCalls: z.number().int().nonnegative().default(0),
@@ -176,24 +190,23 @@ export namespace SessionResearch {
     lastBalanceUsd: z.number().optional(),
     limits: z
       .object({
-        modelCalls: z.number().int().positive().max(10_000).default(128),
-        toolCalls: z.number().int().positive().max(100_000).default(1_024),
-        tokens: z.number().int().positive().max(1_000_000_000).default(5_000_000),
+        modelCalls: z.number().int().positive().max(10_000).default(RuntimeDefaults.modelCalls),
+        toolCalls: z.number().int().positive().max(100_000).default(RuntimeDefaults.toolCalls),
+        tokens: z.number().int().positive().max(1_000_000_000).default(RuntimeDefaults.tokens),
         wallClockMs: z
           .number()
           .int()
           .positive()
           .max(30 * 24 * 60 * 60_000)
-          .default(24 * 60 * 60_000),
-        costUsd: z.number().positive().max(100_000).default(200),
+          .default(RuntimeDefaults.wallClockMs),
+        costUsd: z.number().positive().max(100_000).default(RuntimeDefaults.costUsd),
       })
-      .default({
-        modelCalls: 128,
-        toolCalls: 1_024,
-        tokens: 5_000_000,
-        wallClockMs: 24 * 60 * 60_000,
-        costUsd: 200,
-      }),
+      .default(RuntimeDefaults),
+    limitOrigins: z
+      .object({
+        tokens: LimitOrigin,
+      })
+      .optional(),
     runtimeFinalizationCalls: z.number().int().nonnegative().default(0),
     runtimeModelCalls: z.number().int().nonnegative().default(0),
     runtimeFinalizing: z.boolean().default(false),
@@ -387,6 +400,9 @@ export namespace SessionResearch {
         finalizing: false,
         exhausted: false,
         limits: input.limits ?? {},
+        limitOrigins: {
+          tokens: input.limits?.tokens === undefined ? "default" : "explicit",
+        },
         runtimeFinalizationCalls: 0,
         runtimeModelCalls: 0,
         runtimeFinalizing: false,
@@ -405,6 +421,67 @@ export namespace SessionResearch {
     return parsed.success ? parsed.data : undefined
   }
 
+  async function legacyTokenOrigin(sessionID: string, contract: Contract): Promise<z.infer<typeof LimitOrigin>> {
+    const known = contract.budget.limitOrigins?.tokens
+    if (known) return known
+    // Any non-default value in the old schema could only have come from an
+    // explicit max_tokens input. Keep it fail-closed.
+    if (contract.budget.limits.tokens !== LegacyTokens) return "explicit"
+
+    const { Session } = await import("@/session")
+    const messages = await Session.messages({ sessionID }).catch(() => [] as MessageV2.WithParts[])
+    const definitions = messages
+      .flatMap((message) => message.parts)
+      .filter(
+        (part): part is MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted } =>
+          part.type === "tool" &&
+          part.tool === "research_contract" &&
+          part.state.status === "completed" &&
+          part.state.input.action === "define",
+      )
+    // A persisted explicit limit is authoritative even when it equals the old
+    // default. If history is missing, ambiguity also stays bounded.
+    if (definitions.some((part) => typeof part.state.input.max_tokens === "number")) return "explicit"
+    if (!definitions.length) return "unknown"
+    return "default"
+  }
+
+  async function migrateRuntimeDefaults(sessionID: string, options?: { resume?: boolean }) {
+    const stored = await read(sessionID)
+    if (!stored) return
+    const inferred = await legacyTokenOrigin(sessionID, stored)
+    const next =
+      inferred === "default" &&
+      stored.budget.limits.tokens === LegacyTokens &&
+      (!stored.budget.runtimeExhausted || options?.resume)
+        ? RuntimeDefaults.tokens
+        : stored.budget.limits.tokens
+    if (stored.budget.limitOrigins?.tokens === inferred && next === stored.budget.limits.tokens) return stored
+    await JsonStore.update(file(sessionID), (data) => {
+      const current = Contract.parse(data)
+      const origin =
+        current.budget.limitOrigins?.tokens ??
+        (current.budget.limits.tokens === stored.budget.limits.tokens ? inferred : "explicit")
+      const tokens =
+        origin === "default" &&
+        current.budget.limits.tokens === LegacyTokens &&
+        (!current.budget.runtimeExhausted || options?.resume)
+          ? RuntimeDefaults.tokens
+          : current.budget.limits.tokens
+      return {
+        ...current,
+        budget: {
+          ...current.budget,
+          limits: { ...current.budget.limits, tokens },
+          limitOrigins: { tokens: origin },
+          updatedAt: Date.now(),
+        },
+        updatedAt: Date.now(),
+      }
+    })
+    return read(sessionID)
+  }
+
   export async function define(
     sessionID: string,
     input: {
@@ -416,6 +493,7 @@ export namespace SessionResearch {
       limits?: Partial<Budget["limits"]>
     },
   ): Promise<Contract> {
+    await migrateRuntimeDefaults(sessionID)
     // A contract can be created late in a long session. Snapshot everything
     // that happened before this definition so the new bounded run is charged
     // only for work performed under its contract, not the entire chat history.
@@ -452,10 +530,7 @@ export namespace SessionResearch {
               current.data.budget.limits.toolCalls,
               input.limits?.toolCalls ?? current.data.budget.limits.toolCalls,
             ),
-            tokens: Math.min(
-              current.data.budget.limits.tokens,
-              input.limits?.tokens ?? current.data.budget.limits.tokens,
-            ),
+            tokens: Math.min(current.data.budget.limits.tokens, input.limits?.tokens ?? Infinity),
             wallClockMs: Math.min(
               current.data.budget.limits.wallClockMs,
               input.limits?.wallClockMs ?? current.data.budget.limits.wallClockMs,
@@ -464,6 +539,12 @@ export namespace SessionResearch {
               current.data.budget.limits.costUsd,
               input.limits?.costUsd ?? current.data.budget.limits.costUsd,
             ),
+          },
+          limitOrigins: {
+            tokens:
+              input.limits?.tokens !== undefined && input.limits.tokens <= current.data.budget.limits.tokens
+                ? "explicit"
+                : (current.data.budget.limitOrigins?.tokens ?? "unknown"),
           },
         },
         createdAt: current.data.createdAt,
@@ -1257,6 +1338,7 @@ export namespace SessionResearch {
   export async function resume(sessionID: string) {
     const anchor = await runtimeContract(sessionID)
     if (!anchor) return { resumed: false as const, reason: "No research contract is active." }
+    await migrateRuntimeDefaults(anchor, { resume: true })
     const observed = await runtimeUsage(anchor)
     const result = { resumed: false, epoch: 0, sessionID: anchor, reason: "The current bounded run is still active." }
     await JsonStore.update(file(anchor), (data) => {
@@ -1298,6 +1380,7 @@ export namespace SessionResearch {
   export async function runtimePreflight(sessionID: string): Promise<RuntimeDecision> {
     const anchor = await runtimeContract(sessionID)
     if (!anchor) return { decision: "allow" as const }
+    await migrateRuntimeDefaults(anchor)
     const observed = await runtimeUsage(anchor)
     const contract = (await read(anchor))!
     // Contracts saved before runtime epochs were introduced are migrated from

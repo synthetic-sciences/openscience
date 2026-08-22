@@ -70,6 +70,12 @@ export async function resolveCredentialSource(providerID: string, _modelID: stri
     return auth?.type === "oauth" ? "oauth-free" : "byok"
   }
 
+  const auth = await Auth.get(providerID).catch(() => undefined)
+  // The synthesized Codex provider exists only for Sign in with ChatGPT. Its
+  // OAuth record is the billing authority even if stale managed-shaped config
+  // happens to coexist with it; ChatGPT-plan calls must never touch Credits.
+  if (isCodexOAuthProvider(providerID) && auth?.type === "oauth") return "oauth-free"
+
   const provider = await Provider.getProvider(providerID).catch(() => undefined)
 
   // 1) Managed: a thk_* proxy token. Classified by VALUE, not by how the
@@ -90,7 +96,6 @@ export async function resolveCredentialSource(providerID: string, _modelID: stri
   }
 
   // 2) OAuth-free: a first-party OAuth subscription (user's own account).
-  const auth = await Auth.get(providerID).catch(() => undefined)
   if (auth?.type === "oauth") return "oauth-free"
   if (OAUTH_FREE_PROVIDERS.has(providerID) && !resolvedKey && !explicitKey && !auth) return "oauth-free"
 
