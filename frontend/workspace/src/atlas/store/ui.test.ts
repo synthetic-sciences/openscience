@@ -262,6 +262,30 @@ describe("context pane state", () => {
     expect(state.open()).toBe(true)
   })
 
+  test("does not confuse a sibling prefix for a project file", () => {
+    const state = createContextState({ storage: memoryStorage() })
+
+    state.openFile("/work/CERBench", "/work/CERBench-old/results.csv")
+
+    expect(state.file()).toMatchObject({
+      directory: "/work/CERBench",
+      path: "/work/CERBench-old/results.csv",
+      external: true,
+    })
+  })
+
+  test("treats Windows project paths case-insensitively", () => {
+    const state = createContextState({ storage: memoryStorage() })
+
+    state.openFile("C:\\Research\\CERBench", "c:\\research\\cerbench\\results\\scores.csv")
+
+    expect(state.file()).toEqual({
+      directory: "C:/Research/CERBench",
+      path: "results/scores.csv",
+      name: "scores.csv",
+    })
+  })
+
   test("closes artifact context when its active artifact disappears", () => {
     const state = createContextState({ storage: memoryStorage() })
 

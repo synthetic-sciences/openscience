@@ -119,7 +119,10 @@ export function resolveContextFile(directory: string, path: string): ContextFile
   const input = slash(path)
   const absolute = input.startsWith("/") || /^[A-Za-z]:\//.test(input)
   const full = normalize(absolute ? input : `${root}/${input}`)
-  const inside = full.startsWith(`${root}/`)
+  const windows = /^[A-Za-z]:\//.test(root) || /^[A-Za-z]:\//.test(full)
+  const base = windows ? root.toLowerCase() : root
+  const target = windows ? full.toLowerCase() : full
+  const inside = target.startsWith(`${base}/`)
   if (inside) {
     return {
       directory: root,
