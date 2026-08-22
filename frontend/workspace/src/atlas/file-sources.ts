@@ -61,7 +61,17 @@ export function containsFilePath(root: string, target: string) {
   const base = normalizeFilePath(root).replace(/\/+$/, "") || "/"
   const file = normalizeFilePath(target)
   if (base === "/") return file.startsWith("/")
-  return file === base || file.startsWith(`${base}/`)
+  const windows = /^[a-z]:\//.test(base) || /^[a-z]:\//.test(file)
+  const parent = windows ? base.toLowerCase() : base
+  const child = windows ? file.toLowerCase() : file
+  return child === parent || child.startsWith(`${parent}/`)
+}
+
+function equalFilePath(left: string, right: string) {
+  const first = normalizeFilePath(left)
+  const second = normalizeFilePath(right)
+  if (!/^[a-z]:\//.test(first) && !/^[a-z]:\//.test(second)) return first === second
+  return first.toLowerCase() === second.toLowerCase()
 }
 
 export function fileSourceName(value: string) {
@@ -79,7 +89,7 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
     typeof root.projectID !== "string" ||
     (identity.projectID && root.projectID !== identity.projectID) ||
     typeof root.directory !== "string" ||
-    normalizeFilePath(root.directory) !== normalizeFilePath(identity.directory) ||
+    !equalFilePath(root.directory, identity.directory) ||
     !Array.isArray(root.grants) ||
     enforcement?.broker !== "enforced" ||
     enforcement.processWrite !== "grant_only" ||

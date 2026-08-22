@@ -170,6 +170,24 @@ describe("filesystem source isolation", () => {
   test("treats the filesystem root as containing its descendants", () => {
     expect(containsFilePath("/", "/outputs/model.pt")).toBe(true)
     expect(containsFilePath("/", "relative/model.pt")).toBe(false)
+    expect(containsFilePath("C:\\Research\\CERBench", "c:\\research\\cerbench\\results.csv")).toBe(true)
+    expect(containsFilePath("C:\\Research\\CERBench", "C:\\Research\\CERBench-old\\results.csv")).toBe(false)
+  })
+
+  test("accepts a Windows filesystem snapshot when only path casing differs", () => {
+    const windows = {
+      ...snapshot,
+      directory: "C:\\Research\\CERBench",
+      grants: snapshot.grants.map((grant) => ({ ...grant, path: grant.path.replace("/work/alpha", "C:\\Research\\CERBench") })),
+    }
+
+    expect(
+      parseFilesystemSnapshot(windows, {
+        sessionID: "ses_alpha",
+        projectID: "prj_alpha",
+        directory: "c:\\research\\cerbench",
+      })?.directory,
+    ).toBe("c:/Research/CERBench")
   })
 
   test("parses project-persistent folder grants without weakening project identity checks", () => {
