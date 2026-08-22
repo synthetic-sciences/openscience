@@ -187,6 +187,91 @@ describe("/file/artifact", () => {
     })
   })
 
+  test("rejects artifact streams that do not match their declared byte length", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const input = {
+          projectID: Instance.project.id,
+          sessionID: "ses_stream_integrity",
+          sourcePath: "result.txt",
+          filename: "result.txt",
+          kind: "report",
+          captureQuality: "exact" as const,
+        }
+        await expect(
+          ArtifactStore.save({
+            ...input,
+            content: { size: 2, stream: () => new Blob(["longer"]).stream() },
+          }),
+        ).rejects.toThrow("exceeded its declared 2-byte length")
+        await expect(
+          ArtifactStore.save({
+            ...input,
+            content: { size: 20, stream: () => new Blob(["short"]).stream() },
+          }),
+        ).rejects.toThrow("ended at 5 bytes; expected 20")
+        expect(await ArtifactStore.list(Instance.project.id)).toEqual([])
+        const partials = path.join(Global.Path.data, "artifact-store", "partial")
+        expect(await fs.readdir(partials)).toEqual([])
+      },
+    })
+  })
+
+  test("removes a newly published blob when its database transaction rolls back", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const content = new Blob(["transactional artifact"])
+        await expect(
+          ArtifactStore.save({
+            projectID: Instance.project.id,
+            sessionID: "ses_transaction_rollback",
+            sourcePath: "result.txt",
+            filename: "result.txt",
+            kind: "report",
+            content,
+            captureQuality: "exact",
+            execution: {
+              status: "invalid" as never,
+              captureQuality: "exact",
+              files: [],
+            },
+          }),
+        ).rejects.toThrow()
+
+        expect(await ArtifactStore.list(Instance.project.id)).toEqual([])
+        const root = path.join(Global.Path.data, "artifact-store")
+        expect(await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: path.join(root, "blobs"), onlyFiles: true }))).toEqual(
+          [],
+        )
+        expect(await fs.readdir(path.join(root, "partial"))).toEqual([])
+      },
+    })
+  })
+
+  test("sweeps crash-left physical blobs and partial staging files with no database owner", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const root = path.join(Global.Path.data, "artifact-store")
+        await ArtifactStore.list(Instance.project.id)
+        const blob = path.join(root, "blobs", "aa", "bb", "a".repeat(64))
+        const partial = path.join(root, "partial", "crashed.partial")
+        await fs.mkdir(path.dirname(blob), { recursive: true })
+        await Promise.all([Bun.write(blob, "orphan"), Bun.write(partial, "partial")])
+
+        await ArtifactStore.sweep(Date.now() + 60_001)
+
+        expect(await Bun.file(blob).exists()).toBeFalse()
+        expect(await Bun.file(partial).exists()).toBeFalse()
+      },
+    })
+  })
+
   test("saving the same source creates a new immutable version and reuses identical blobs", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

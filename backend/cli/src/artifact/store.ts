@@ -82,7 +82,11 @@ export namespace ArtifactStore {
     sourcePath: string
     filename: string
     kind: string
-    content: Blob
+    content: {
+      readonly size: number
+      readonly type?: string
+      stream(): ReadableStream<Uint8Array>
+    }
     title?: string
     mimeType?: string
     messageID?: string
@@ -110,6 +114,7 @@ export namespace ArtifactStore {
   const partials = path.join(root, "partial")
   const database = path.join(root, "artifacts.db")
   const lock = path.join(root, ".write")
+  const scanned = { at: 0 }
 
   type VersionRow = {
     id: string
@@ -319,6 +324,7 @@ export namespace ArtifactStore {
   `
 
   async function space(size: number) {
+    if (!Number.isSafeInteger(size) || size < 0) throw new Error(`Invalid artifact byte length: ${size}`)
     if (size > MAX_VERSION_BYTES) throw new LimitError(size)
     const stat = await fs.statfs(root)
     const available = Number(stat.bavail) * Number(stat.bsize)
@@ -326,49 +332,107 @@ export namespace ArtifactStore {
     if (available < required) throw new CapacityError(required, available)
   }
 
-  async function stage(content: Blob) {
+  async function stage(content: SaveInput["content"]) {
     await prepare().then((db) => db.close())
     await space(content.size)
     const file = path.join(partials, `${crypto.randomUUID()}.partial`)
     const handle = await fs.open(file, "wx")
     const hasher = new Bun.CryptoHasher("sha256")
     const reader = content.stream().getReader()
+    const total = { value: 0 }
     const write = async () => {
-      const item = await reader.read()
-      if (item.done) return
-      hasher.update(item.value)
-      await handle.write(item.value)
-      return write()
+      while (true) {
+        const item = await reader.read()
+        if (item.done) break
+        total.value += item.value.byteLength
+        if (total.value > content.size || total.value > MAX_VERSION_BYTES) {
+          throw new Error(`Artifact stream exceeded its declared ${content.size}-byte length`)
+        }
+        hasher.update(item.value)
+        const offset = { value: 0 }
+        while (offset.value < item.value.byteLength) {
+          const result = await handle.write(
+            item.value,
+            offset.value,
+            item.value.byteLength - offset.value,
+            null,
+          )
+          if (!result.bytesWritten) throw new Error("Artifact staging write made no progress")
+          offset.value += result.bytesWritten
+        }
+      }
+      if (total.value !== content.size) {
+        throw new Error(`Artifact stream ended at ${total.value} bytes; expected ${content.size}`)
+      }
     }
-    const result = await write().then(
-      async () => {
-        await handle.sync()
-        await handle.close()
-        return { file, sha256: hasher.digest("hex"), size: content.size }
-      },
-      async (error) => {
-        await handle.close().catch(() => undefined)
-        await fs.rm(file, { force: true })
-        throw error
-      },
-    )
-    return result
+    const state = { closed: false }
+    try {
+      await write()
+      await handle.sync()
+      await handle.close()
+      state.closed = true
+      return { file, sha256: hasher.digest("hex"), size: total.value }
+    } catch (error) {
+      await reader.cancel(error).catch(() => undefined)
+      if (!state.closed) await handle.close().catch(() => undefined)
+      await fs.rm(file, { force: true })
+      throw error
+    } finally {
+      reader.releaseLock()
+    }
   }
 
   function blob(sha256: string) {
     return path.join(blobs, sha256.slice(0, 2), sha256.slice(2, 4), sha256)
   }
 
+  async function physicalBlobs() {
+    const output: string[] = []
+    const count = { value: 0 }
+    const read = async (directory: string) => {
+      const entries = await fs.readdir(directory, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return []
+        throw error
+      })
+      count.value += entries.length
+      if (count.value > 200_000) throw new Error("Artifact blob scan exceeded 200000 entries")
+      return entries
+    }
+    for (const first of await read(blobs)) {
+      const firstPath = path.join(blobs, first.name)
+      if (first.isSymbolicLink()) {
+        output.push(path.relative(root, firstPath))
+        continue
+      }
+      if (!first.isDirectory()) continue
+      for (const second of await read(firstPath)) {
+        const secondPath = path.join(firstPath, second.name)
+        if (second.isSymbolicLink()) {
+          output.push(path.relative(root, secondPath))
+          continue
+        }
+        if (!second.isDirectory()) continue
+        for (const file of await read(secondPath)) {
+          if (!file.isFile() && !file.isSymbolicLink()) continue
+          output.push(path.relative(root, path.join(secondPath, file.name)))
+        }
+      }
+    }
+    return output
+  }
+
   async function digest(content: BunFile) {
     const hasher = new Bun.CryptoHasher("sha256")
     const reader = content.stream().getReader()
-    const read = async (): Promise<string> => {
-      const item = await reader.read()
-      if (item.done) return hasher.digest("hex")
-      hasher.update(item.value)
-      return read()
+    try {
+      while (true) {
+        const item = await reader.read()
+        if (item.done) return hasher.digest("hex")
+        hasher.update(item.value)
+      }
+    } finally {
+      reader.releaseLock()
     }
-    return read()
   }
 
   function rows(db: Database, projectID: string, artifactID?: string, state: "active" | "trash" = "active") {
@@ -381,12 +445,12 @@ export namespace ArtifactStore {
   }
 
   export async function save(input: SaveInput): Promise<Artifact> {
-    const staged = await stage(input.content)
     using _ = await Lock.write(lock)
-    await using lease = await FileLease.acquire(lock).catch(async (error) => {
-      await fs.rm(staged.file, { force: true })
-      throw error
-    })
+    await using lease = await FileLease.acquire(lock)
+    // Capacity is a store-wide invariant. Serialize the reservation check and
+    // stream itself so concurrent large saves cannot each observe the same
+    // free bytes and collectively consume the safety reserve.
+    const staged = await stage(input.content)
     const db = await prepare()
     const target = blob(staged.sha256)
     const now = Date.now()
@@ -395,40 +459,57 @@ export namespace ArtifactStore {
     const executionID = input.execution ? `exe_${crypto.randomUUID()}` : undefined
     const source = input.sourcePath.replaceAll("\\", "/")
     const relative = path.relative(root, target)
-    await fs.mkdir(path.dirname(target), { recursive: true })
-    const published = await fs.link(staged.file, target).then(
-      () => true,
-      async (error: NodeJS.ErrnoException) => {
-        if (error.code === "EEXIST") return false
-        await fs.rm(staged.file, { force: true })
-        throw error
-      },
-    )
-    if (!published) {
-      const prior = await fs.lstat(target).catch(() => undefined)
-      const valid =
-        !!prior?.isFile() &&
-        !prior.isSymbolicLink() &&
-        prior.size === staged.size &&
-        (await digest(Bun.file(target))) === staged.sha256
-      if (valid) await fs.rm(staged.file, { force: true })
-      if (!valid) await fs.rename(staged.file, target)
-    } else {
-      await fs.rm(staged.file, { force: true })
+    const state = {
+      transaction: false,
+      committed: false,
+      installed: false,
+      identity: undefined as { dev: number; ino: number } | undefined,
     }
-    const stored = await fs.lstat(target)
-    if (
-      !stored.isFile() ||
-      stored.isSymbolicLink() ||
-      stored.size !== staged.size ||
-      (await digest(Bun.file(target))) !== staged.sha256
-    ) {
-      db.close()
-      throw new Error(`Artifact blob ${staged.sha256} failed its size integrity check`)
+    const cleanup = async () => {
+      if (!state.installed || state.committed || !state.identity) return
+      const current = await fs.lstat(target).catch(() => undefined)
+      if (!current || current.dev !== state.identity.dev || current.ino !== state.identity.ino) return
+      await fs.rm(target, { force: true })
     }
-
     try {
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      const published = await fs.link(staged.file, target).then(
+        () => true,
+        async (error: NodeJS.ErrnoException) => {
+          if (error.code === "EEXIST") return false
+          await fs.rm(staged.file, { force: true })
+          throw error
+        },
+      )
+      if (!published) {
+        const prior = await fs.lstat(target).catch(() => undefined)
+        const valid =
+          !!prior?.isFile() &&
+          !prior.isSymbolicLink() &&
+          prior.size === staged.size &&
+          (await digest(Bun.file(target))) === staged.sha256
+        if (valid) await fs.rm(staged.file, { force: true })
+        if (!valid) {
+          await fs.rename(staged.file, target)
+          state.installed = true
+        }
+      } else {
+        state.installed = true
+        await fs.rm(staged.file, { force: true })
+      }
+      const stored = await fs.lstat(target)
+      if (state.installed) state.identity = { dev: stored.dev, ino: stored.ino }
+      if (
+        !stored.isFile() ||
+        stored.isSymbolicLink() ||
+        stored.size !== staged.size ||
+        (await digest(Bun.file(target))) !== staged.sha256
+      ) {
+        throw new Error(`Artifact blob ${staged.sha256} failed its size integrity check`)
+      }
+
       db.exec("BEGIN IMMEDIATE")
+      state.transaction = true
       const existing = db
         .query("SELECT id FROM artifacts WHERE project_id = ?1 AND source_key = ?2")
         .get(input.projectID, source) as { id: string } | null
@@ -511,19 +592,30 @@ export namespace ArtifactStore {
          WHERE id = ?5`,
       ).run(input.title ?? input.filename, input.kind, versionID, now, id)
       db.exec("COMMIT")
+      state.committed = true
 
       const row = rows(db, input.projectID, id)[0]
-      db.close()
       if (!row) throw new Error(`Artifact ${id} was not saved`)
       const saved = artifact(row)
       void OutboundTelemetry.artifact({ sessionID: input.sessionID, type: input.kind, size: staged.size }).catch(
         () => undefined,
       )
       return saved
-    } catch (error) {
-      db.exec("ROLLBACK")
+    } catch (cause) {
+      const rollback = (() => {
+        if (!state.transaction || state.committed) return
+        try {
+          db.exec("ROLLBACK")
+        } catch (error) {
+          return error
+        }
+      })()
+      await fs.rm(staged.file, { force: true })
+      await cleanup()
+      if (rollback) throw new AggregateError([cause, rollback], "Artifact save and rollback both failed")
+      throw cause
+    } finally {
       db.close()
-      throw error
     }
   }
 
@@ -585,10 +677,6 @@ export namespace ArtifactStore {
         const stale = db
           .query("SELECT id FROM artifacts WHERE state = 'trash' AND trashed_at <= ?1")
           .all(cutoff) as Array<{ id: string }>
-        if (!stale.length) {
-          db.exec("COMMIT")
-          return { stale: 0, unused: [] as Array<{ path: string }> }
-        }
         const remove = db.query("DELETE FROM artifacts WHERE id = ?1")
         stale.forEach((item) => remove.run(item.id))
         const unused = db
@@ -599,8 +687,9 @@ export namespace ArtifactStore {
         db.query(
           "DELETE FROM blobs WHERE NOT EXISTS (SELECT 1 FROM versions WHERE versions.sha256 = blobs.sha256)",
         ).run()
+        const referenced = db.query("SELECT path FROM blobs").all() as Array<{ path: string }>
         db.exec("COMMIT")
-        return { stale: stale.length, unused }
+        return { stale: stale.length, unused, referenced: new Set(referenced.map((item) => item.path)) }
       } catch (error) {
         db.exec("ROLLBACK")
         throw error
@@ -608,7 +697,21 @@ export namespace ArtifactStore {
         db.close()
       }
     })()
-    await Promise.all(orphaned.unused.map((item) => fs.rm(path.join(root, item.path), { force: true })))
+    const inspect = !scanned.at || Math.abs(now - scanned.at) >= 60_000
+    if (inspect) scanned.at = now
+    const physical = inspect ? await physicalBlobs() : []
+    const abandoned = physical.filter((item) => !orphaned.referenced.has(item))
+    const partial = inspect
+      ? await fs.readdir(partials).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return []
+          throw error
+        })
+      : []
+    await Promise.all([
+      ...orphaned.unused.map((item) => fs.rm(path.join(root, item.path), { force: true })),
+      ...abandoned.map((item) => fs.rm(path.join(root, item), { force: true })),
+      ...partial.map((item) => fs.rm(path.join(partials, item), { force: true, recursive: true })),
+    ])
     return orphaned.stale
   }
 
@@ -667,5 +770,6 @@ export namespace ArtifactStore {
     using _ = await Lock.write(lock)
     await using lease = await FileLease.acquire(lock)
     await fs.rm(root, { recursive: true, force: true })
+    scanned.at = 0
   }
 }
