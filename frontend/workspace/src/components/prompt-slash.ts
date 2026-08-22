@@ -20,6 +20,14 @@ export interface SlashToken {
   inline: boolean
 }
 
+export interface SlashEdit {
+  content: string
+  cursor: number
+  start: number
+  end: number
+  value: string
+}
+
 /** Find the slash token immediately before the caret, wherever it appears. */
 export function slashTokenAt(text: string, cursor: number): SlashToken | undefined {
   const end = Math.max(0, Math.min(cursor, text.length))
@@ -32,6 +40,27 @@ export function slashTokenAt(text: string, cursor: number): SlashToken | undefin
     start,
     end,
     inline: text.slice(0, start).trim().length > 0 || text.slice(end).trim().length > 0,
+  }
+}
+
+/** Replace the slash token at the caret without disturbing the surrounding draft. */
+export function slashEdit(text: string, cursor: number, value: string): SlashEdit | undefined {
+  const token = slashTokenAt(text, cursor)
+  if (!token) return
+
+  const after = text[token.end]
+  const before = text[token.start - 1]
+  const trimsAfter = !!after && /\s/.test(after) && (value.length === 0 || /\s$/.test(value))
+  const trimsBefore = value.length === 0 && token.end === text.length && !!before && /\s/.test(before)
+  const start = trimsBefore ? token.start - 1 : token.start
+  const end = trimsAfter ? token.end + 1 : token.end
+
+  return {
+    content: text.slice(0, start) + value + text.slice(end),
+    cursor: start + value.length,
+    start,
+    end,
+    value,
   }
 }
 

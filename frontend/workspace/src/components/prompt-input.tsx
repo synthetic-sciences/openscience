@@ -87,6 +87,7 @@ import {
   slashIcon,
   slashMode,
   slashActionSkill,
+  slashEdit,
   slashSource,
   slashTokenAt,
   SLASH_NATIVE,
@@ -976,7 +977,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: slashMode({ trigger: item.name }) ? "mode" : "action",
       }))
 
-    const all = store.slashInline ? items.filter((item) => item.type === "skill") : [...items, ...commands]
+    const all = store.slashInline
+      ? items.filter((item) => item.type === "skill" || item.type === "mode")
+      : [...items, ...commands]
     const needle = query.trim().replace(/^\/+/, "").toLowerCase()
     const trigger = (item: SlashCommand) => item.trigger.toLowerCase()
     const exact = all.filter((item) => trigger(item) === needle)
@@ -1008,39 +1011,48 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setIntent(intent)
   }
 
+  const replaceSlash = (value: string) => {
+    const selection = window.getSelection()
+    const cursor = getCursorPosition(editorRef)
+    const text = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    const edit = slashEdit(text, cursor, value)
+    if (!selection || selection.rangeCount === 0 || !edit) return false
+
+    const range = selection.getRangeAt(0)
+    setRangeEdge(range, "start", edit.start)
+    setRangeEdge(range, "end", edit.end)
+    range.deleteContents()
+
+    if (edit.value) {
+      const node = document.createTextNode(edit.value)
+      range.insertNode(node)
+      range.setStart(node, edit.value.length)
+    }
+
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    handleInput()
+    requestAnimationFrame(() => editorRef.focus({ preventScroll: true }))
+    return true
+  }
+
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
     setStore("popover", null)
 
     const intent = slashMode(cmd)
     if (intent) {
-      enterIntent(intent)
+      if (!replaceSlash("")) return
+      setIntent(intent)
       return
     }
 
     if (cmd.type === "skill") {
-      const selection = window.getSelection()
-      const cursor = getCursorPosition(editorRef)
-      const text = prompt
-        .current()
-        .map((part) => ("content" in part ? part.content : ""))
-        .join("")
-      const token = slashTokenAt(text, cursor)
-      if (!selection || selection.rangeCount === 0 || !token) return
-
-      const range = selection.getRangeAt(0)
-      const value = `/${cmd.trigger} `
-      setRangeEdge(range, "start", token.start)
-      setRangeEdge(range, "end", token.end)
-      range.deleteContents()
-      const node = document.createTextNode(value)
-      range.insertNode(node)
-      range.setStart(node, value.length)
-      range.collapse(true)
-      selection.removeAllRanges()
-      selection.addRange(range)
-      handleInput()
-      requestAnimationFrame(() => editorRef.focus({ preventScroll: true }))
+      replaceSlash(`/${cmd.trigger} `)
       return
     }
 

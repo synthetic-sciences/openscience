@@ -7,6 +7,7 @@ import {
   slashActionSkill,
   slashGroup,
   slashIcon,
+  slashEdit,
   slashMode,
   slashSource,
   slashTokenAt,
@@ -35,6 +36,7 @@ test("slash menu keeps a small toggleable action surface above other skills", ()
   expect(component).toContain("if (exact.length) return exact")
   expect(component).toContain("if (prefix.length) return prefix")
   expect(component).toContain("if (contained.length) return contained")
+  expect(component).toContain('item.type === "skill" || item.type === "mode"')
   expect(component).toContain("items: slashItems")
   expect(component).toContain("const enabled = enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission)")
   expect(component).toContain("const skills = enabled")
@@ -45,6 +47,7 @@ test("slash menu keeps a small toggleable action surface above other skills", ()
   expect(component).toContain("grouped: slashGrouped")
   expect(component).toContain("aria-label={group.category}")
   expect(component).toContain('if (cmd.type === "skill")')
+  expect(component).toContain('if (!replaceSlash("")) return')
   expect(component).toContain('void handleSubmit(new Event("submit"), cmd.trigger)')
   expect(component).toContain("const intent = slashMode(cmd)")
   expect(component).toContain("data-composer-intent={intent()}")
@@ -118,4 +121,46 @@ test("slash skills can be selected at the start, middle, or end of a draft", () 
     inline: true,
   })
   expect(slashTokenAt("path/to/file", 12)).toBeUndefined()
+})
+
+test("slash modes preserve the draft and caret at the start, middle, and end", () => {
+  expect(slashEdit("/goal Finish the paper", 5, "")).toEqual({
+    content: "Finish the paper",
+    cursor: 0,
+    start: 0,
+    end: 6,
+    value: "",
+  })
+  expect(slashEdit("Please /plan revise the paper", 12, "")).toEqual({
+    content: "Please revise the paper",
+    cursor: 7,
+    start: 7,
+    end: 13,
+    value: "",
+  })
+  expect(slashEdit("Finish the paper /goal", 22, "")).toEqual({
+    content: "Finish the paper",
+    cursor: 16,
+    start: 16,
+    end: 22,
+    value: "",
+  })
+})
+
+test("slash skill insertion preserves text on both sides without duplicate spacing", () => {
+  expect(slashEdit("Please use /rev before finalizing", 15, "/review ")).toEqual({
+    content: "Please use /review before finalizing",
+    cursor: 19,
+    start: 11,
+    end: 16,
+    value: "/review ",
+  })
+  expect(slashEdit("Inspect results with /rev", 25, "/review ")).toEqual({
+    content: "Inspect results with /review ",
+    cursor: 29,
+    start: 21,
+    end: 25,
+    value: "/review ",
+  })
+  expect(slashEdit("path/to/file", 12, "/review ")).toBeUndefined()
 })
