@@ -16,6 +16,8 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import path from "node:path"
+import fs from "node:fs/promises"
+import { SessionFilesystem } from "./filesystem"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -172,6 +174,40 @@ ${opts.previousSummary}
 
 Output exactly this Markdown structure, keeping every section (write "(none)" when a section is empty).`
     return `${head}\n\n${HANDOFF_STRUCTURE}\n\n${HANDOFF_RULES}${focus}`
+  }
+
+  /**
+   * Persist a handoff only when the caller carries an explicit `/handoff`
+   * marker. An empty `file` is intentional: it selects the managed per-session
+   * destination, while `undefined` means ordinary manual or automatic
+   * compaction and must leave the user's repository untouched.
+   */
+  export async function persistHandoff(input: { root: string; sessionID: string; summary: string; file?: string }) {
+    if (input.file === undefined) return
+    const root = path.resolve(input.root)
+    const custom = input.file.trim()
+    const fallback = path.resolve(root, ".openscience", "handoffs", `${input.sessionID}.md`)
+    // Confine a user-supplied /handoff path to the worktree (no absolute / ".."
+    // escape); on escape, fall back to the managed per-session file.
+    const resolved = custom ? path.resolve(root, custom) : fallback
+    const target = resolved.startsWith(root + path.sep) ? resolved : fallback
+    const approved = await SessionFilesystem.authorize({
+      sessionID: input.sessionID,
+      path: target,
+      access: "write",
+    })
+    const ignore = !custom
+      ? await SessionFilesystem.authorize({
+          sessionID: input.sessionID,
+          path: path.join(path.dirname(fallback), ".gitignore"),
+          access: "write",
+        })
+      : undefined
+    await fs.mkdir(path.dirname(approved.path), { recursive: true })
+    // The managed destination stays out of git status. This write is part of
+    // the explicit `/handoff` action; compaction alone never creates it.
+    if (ignore) await Bun.write(ignore.path, "*\n")
+    await Bun.write(approved.path, input.summary.trimEnd() + "\n")
   }
 
   // How many recent turns (user message + its following assistant/tool messages) to
@@ -426,12 +462,9 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     // re-attempting a compaction that can never succeed.
     if (result === "overflow") return "overflow"
 
-    // Persist the handoff so a fresh agent/process can pick up from one curated file
-    // instead of re-reading the whole project. Default is a PER-SESSION file at
-    // .openscience/handoffs/<sessionID>.md — one writer per file, so parallel sessions
-    // and subagents never clobber each other (no shared mutable "latest"; the caller
-    // knows its session id, and a human can `ls -t` for the newest). /handoff <path>
-    // overrides with an explicit file. Best-effort — a write failure never blocks it.
+    // The summary always remains durable in the session transcript. Only an explicit
+    // `/handoff` also writes it into the project; automatic compaction and `/compact`
+    // must not create .openscience/handoffs or mutate the user's .gitignore state.
     if (result === "continue") {
       const summaryText = (await MessageV2.parts(msg.id))
         .filter((part) => part.type === "text")
@@ -461,18 +494,12 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
         // dominates) must not trip the breaker that gates PROACTIVE auto-compaction, or a
         // few manual runs would silently disable auto-compaction for the session.
         if ((input.trigger ?? "manual") !== "manual") noteCompaction({ sessionID: input.sessionID, before, reclaimed })
-        const root = path.resolve(Instance.worktree)
-        const custom = input.handoffFile?.trim()
-        const defaultTarget = path.resolve(root, ".openscience", "handoffs", `${input.sessionID}.md`)
-        // Confine a user-supplied /handoff path to the worktree (no absolute / ".."
-        // escape); on escape, fall back to the default per-session file.
-        const resolved = custom ? path.resolve(root, custom) : defaultTarget
-        const target = resolved.startsWith(root + path.sep) ? resolved : defaultTarget
-        // Self-ignoring dir so per-session handoffs never show up in `git status`.
-        if (!custom) await Bun.write(path.join(path.dirname(defaultTarget), ".gitignore"), "*\n").catch(() => {})
-        await Bun.write(target, summaryText + "\n").catch((e) =>
-          log.warn("failed to write handoff file", { target, error: e instanceof Error ? e.message : String(e) }),
-        )
+        await persistHandoff({
+          root: Instance.worktree,
+          sessionID: input.sessionID,
+          summary: summaryText,
+          file: input.handoffFile,
+        })
       }
     }
 

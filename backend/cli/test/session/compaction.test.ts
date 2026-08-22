@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { existsSync } from "node:fs"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Token } from "../../src/util/token"
 import { Instance } from "../../src/project/instance"
@@ -8,6 +9,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
 import type { Provider } from "../../src/provider/provider"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionFilesystem } from "../../src/session/filesystem"
 
 Log.init({ print: false })
 
@@ -38,6 +40,16 @@ function createModel(opts: {
     api: { npm: "@ai-sdk/anthropic" },
     options: {},
   } as Provider.Model
+}
+
+async function withSession<T>(directory: string, fn: (session: Session.Info) => Promise<T>) {
+  return Instance.provide({
+    directory,
+    fn: async () => {
+      const session = await Session.create({})
+      return fn(session).finally(() => Session.remove(session.id))
+    },
+  })
 }
 
 describe("session.compaction.isOverflow", () => {
@@ -505,6 +517,90 @@ describe("session.compaction.buildHandoffPrompt", () => {
   test("focus is appended in both branches", () => {
     expect(SessionCompaction.buildHandoffPrompt({ focus: "the deploy" })).toContain("the deploy")
     expect(SessionCompaction.buildHandoffPrompt({ previousSummary: "x", focus: "the deploy" })).toContain("the deploy")
+  })
+})
+
+describe("session.compaction.persistHandoff", () => {
+  test("the compaction carrier preserves the explicit empty handoff marker", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      await SessionCompaction.create({
+        sessionID: session.id,
+        agent: "build",
+        model: { providerID: "test", modelID: "test-model" },
+        auto: false,
+        handoffFile: "",
+      })
+      const messages = await Session.messages({ sessionID: session.id })
+      const marker = messages.flatMap((message) => message.parts).find((part) => part.type === "compaction")
+      expect(marker?.type).toBe("compaction")
+      if (marker?.type !== "compaction") throw new Error("missing compaction marker")
+      expect(marker.handoffFile).toBe("")
+    })
+  })
+
+  test("ordinary and automatic compaction never create project handoff files", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      await SessionCompaction.persistHandoff({
+        root: tmp.path,
+        sessionID: session.id,
+        summary: "durable transcript summary",
+        file: undefined,
+      })
+    })
+
+    expect(existsSync(path.join(tmp.path, ".openscience", "handoffs"))).toBe(false)
+  })
+
+  test("an explicit handoff with no path writes the managed per-session file", async () => {
+    await using tmp = await tmpdir()
+    const sessionID = await withSession(tmp.path, async (session) => {
+      await SessionCompaction.persistHandoff({
+        root: tmp.path,
+        sessionID: session.id,
+        summary: "handoff body",
+        file: "",
+      })
+      return session.id
+    })
+
+    const dir = path.join(tmp.path, ".openscience", "handoffs")
+    expect(await Bun.file(path.join(dir, `${sessionID}.md`)).text()).toBe("handoff body\n")
+    expect(await Bun.file(path.join(dir, ".gitignore")).text()).toBe("*\n")
+  })
+
+  test("an explicit handoff path writes only the requested project file", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      await SessionCompaction.persistHandoff({
+        root: tmp.path,
+        sessionID: session.id,
+        summary: "custom handoff",
+        file: "notes/next.md",
+      })
+    })
+
+    expect(await Bun.file(path.join(tmp.path, "notes", "next.md")).text()).toBe("custom handoff\n")
+    expect(existsSync(path.join(tmp.path, ".openscience", "handoffs"))).toBe(false)
+  })
+
+  test("an explicit handoff surfaces a missing write grant without creating a file", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (owner) => {
+      const sibling = await Session.create({})
+      await using cleanup = { [Symbol.asyncDispose]: () => Session.remove(sibling.id) }
+      const root = await SessionFilesystem.workspace(sibling.id)
+      await expect(
+        SessionCompaction.persistHandoff({
+          root,
+          sessionID: owner.id,
+          summary: "must not cross the private boundary",
+          file: "handoff.md",
+        }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      expect(existsSync(path.join(root, "handoff.md"))).toBe(false)
+    })
   })
 })
 

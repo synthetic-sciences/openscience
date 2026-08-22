@@ -2618,7 +2618,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.
         model: { providerID: model.providerID, modelID: model.modelID },
         effort,
         auto: false,
-        handoffFile: input.arguments.trim() || undefined,
+        // Keep the empty string: it is the explicit `/handoff` marker for the
+        // managed per-session path. `undefined` is reserved for compaction that
+        // must stay entirely in transcript storage.
+        handoffFile: input.arguments.trim(),
         trigger: "manual",
       })
       const result = await loop(input.sessionID)
