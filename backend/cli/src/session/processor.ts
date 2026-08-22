@@ -141,6 +141,11 @@ export namespace SessionProcessor {
     normalized: ReturnType<NamedError["toObject"]>,
     toolStarted: boolean,
   ) {
+    if (Provider.isIdleTimeoutError(error)) {
+      const message = error instanceof Error ? error.message : "Provider request became idle"
+      if (toolStarted) return { type: "drain" as const, message }
+      return { type: "retry-idle" as const, message }
+    }
     const message = retryableProviderError(error, normalized)
     if (message === undefined) return { type: "terminal" as const }
     if (toolStarted) return { type: "drain" as const, message }
@@ -940,9 +945,48 @@ export namespace SessionProcessor {
               // terminal, actionable outcome; other transient failures retain
               // the existing retry policy.
               const action = providerFailureAction(e, error, toolOutcomes.started())
-              if (action.type === "retry" && attempt < MAX_RETRY_ATTEMPTS) {
+              const limit = action.type === "retry-idle" ? 1 : MAX_RETRY_ATTEMPTS
+              if ((action.type === "retry" || action.type === "retry-idle") && attempt < limit) {
                 attempt++
-                const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+                const delay =
+                  action.type === "retry-idle"
+                    ? 0
+                    : SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+                if (action.type === "retry-idle") {
+                  // Nothing crossed the tool-execution boundary, so replay is
+                  // safe. Retire partial provider output before retrying and
+                  // persist an explicit boundary for crash recovery and audit.
+                  const parts = await MessageV2.parts(input.assistantMessage.id)
+                  for (const part of parts) {
+                    if (part.type === "text" && !part.synthetic && !part.ignored) {
+                      await Session.updatePart({ ...part, ignored: true, time: finishTime(part.time) })
+                      continue
+                    }
+                    if (part.type !== "tool" || part.state.status === "completed" || part.state.status === "error") {
+                      continue
+                    }
+                    await Session.updatePart({
+                      ...part,
+                      state: {
+                        ...part.state,
+                        status: "error",
+                        error: "Provider became idle before tool execution started; no action was taken.",
+                        time: finishTime("time" in part.state ? part.state.time : undefined),
+                      },
+                    })
+                    toolOutcomes.abandon(part.callID)
+                  }
+                  await Session.updatePart({
+                    id: Identifier.ascending("part"),
+                    messageID: input.assistantMessage.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    ignored: true,
+                    text: "Provider idle recovery boundary: partial output was retired before one automatic side-effect-free retry.",
+                    time: { start: Date.now(), end: Date.now() },
+                  } satisfies MessageV2.TextPart)
+                }
                 await SessionTraceStore.recordRetry({
                   sessionID: input.sessionID,
                   messageID: input.assistantMessage.id,

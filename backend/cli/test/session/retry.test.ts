@@ -4,6 +4,7 @@ import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 import { NamedError } from "@synsci/util/error"
 import { SessionProcessor } from "../../src/session/processor"
+import { Provider } from "../../src/provider/provider"
 
 function apiError(headers?: Record<string, string>): MessageV2.APIError {
   return new MessageV2.APIError({
@@ -140,6 +141,19 @@ describe("SessionProcessor.providerFailureAction", () => {
     const error = apiError()
     expect(SessionProcessor.providerFailureAction(error, error, false)).toEqual({ type: "retry", message: "boom" })
     expect(SessionProcessor.providerFailureAction(error, error, true)).toEqual({ type: "drain", message: "boom" })
+  })
+
+  test("retries one side-effect-free idle request but drains a started tool", () => {
+    const error = new Provider.IdleTimeoutError("stream", 300_000)
+    const normalized = wrap(error.message)
+    expect(SessionProcessor.providerFailureAction(error, normalized, false)).toEqual({
+      type: "retry-idle",
+      message: error.message,
+    })
+    expect(SessionProcessor.providerFailureAction(error, normalized, true)).toEqual({
+      type: "drain",
+      message: error.message,
+    })
   })
 })
 
