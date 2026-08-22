@@ -611,7 +611,11 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
         ...compacting.context,
       ].join("\n\n")
     const result = await processor.process({
-      user: userMessage,
+      // Compaction is an isolated internal call. Preserve the source system
+      // controls on the durable carrier for the resumed main turn, but do not
+      // replay them into the compaction agent where child/custom guidance can
+      // conflict with the handoff contract and consume context twice.
+      user: { ...userMessage, system: undefined },
       agent,
       abort: input.abort,
       sessionID: input.sessionID,

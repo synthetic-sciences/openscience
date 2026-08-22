@@ -125,6 +125,14 @@ function scenarioID(text: string) {
   return match?.[1]
 }
 
+function summaryScenario(text: string, scenarios: Iterable<StressScenario>) {
+  const prior = text.match(/Summary for ([a-z0-9_.-]+)/i)?.[1]
+  if (prior) return prior
+  for (const scenario of scenarios) {
+    if (text.includes(scenario.prompt)) return scenario.id
+  }
+}
+
 function childText(text: string) {
   const profile = text.match(/You own one (explore|execute|review) phase/)?.[1] ?? "child"
   return [
@@ -246,8 +254,11 @@ export function startStressProvider(scenarios: readonly StressScenario[]) {
 
       const body = (await request.json()) as ChatRequest
       const text = textFrom(body.messages)
-      const id = scenarioID(text)
-      const summary = text.includes("The following is the text to summarize:")
+      const summary =
+        text.includes("The following is the text to summarize:") ||
+        text.includes("Output exactly this Markdown structure") ||
+        text.includes("You are UPDATING an existing handoff")
+      const id = scenarioID(text) ?? (summary ? summaryScenario(text, lookup.values()) : undefined)
       const kind = summary ? "summary" : id ? "main" : "child"
       requests.push({ scenario: id, kind, body, tools: toolNames(body), text })
 

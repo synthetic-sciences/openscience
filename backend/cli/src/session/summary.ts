@@ -162,7 +162,10 @@ export namespace SessionSummary {
       if (!agent) return
       const stream = await LLM.stream({
         agent,
-        user: userMsg,
+        // Title generation is an isolated internal call over the visible user
+        // text. Replaying the source turn's custom/child system guidance here
+        // can conflict with the title agent and needlessly duplicate context.
+        user: { ...userMsg, system: undefined },
         tools: {},
         model: agent.model
           ? await Provider.getModel(agent.model.providerID, agent.model.modelID)

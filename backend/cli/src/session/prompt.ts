@@ -1106,11 +1106,12 @@ export namespace SessionPrompt {
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
-      msgs = await insertReminders({
+      const reminders = await insertReminders({
         messages: msgs,
         agent,
         session,
       })
+      msgs = reminders.messages
 
       const processor = SessionProcessor.create({
         assistantMessage: (await Session.updateMessage({
@@ -1174,24 +1175,17 @@ export namespace SessionPrompt {
 
       const sessionMessages = clone(msgs)
 
-      // Ephemerally wrap queued user messages with a reminder to stay on track
-      if (step > 1 && lastFinished) {
-        for (const msg of sessionMessages) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
-          for (const part of msg.parts) {
-            if (part.type !== "text" || part.ignored || part.synthetic) continue
-            if (!part.text.trim()) continue
-            part.text = [
-              "<system-reminder>",
-              "The user sent the following message:",
-              part.text,
-              "",
-              "Please address this message and continue with your tasks.",
-              "</system-reminder>",
-            ].join("\n")
-          }
-        }
-      }
+      const queued =
+        step > 1 &&
+        !!lastFinished &&
+        sessionMessages.some(
+          (message) =>
+            message.info.role === "user" &&
+            message.info.id > lastFinished.id &&
+            message.parts.some(
+              (part) => part.type === "text" && !part.ignored && !part.synthetic && !!part.text.trim(),
+            ),
+        )
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
@@ -1205,6 +1199,12 @@ export namespace SessionPrompt {
           ? [await SystemPrompt.availableSkills(agent.permission, route.text)]
           : []),
         ...(contract ? [contract] : []),
+        ...reminders.system,
+        ...(queued
+          ? [
+              "Additional user messages arrived while this turn was in progress. They remain ordinary user messages in the conversation. Address them in chronological order while continuing the current task.",
+            ]
+          : []),
       ]
 
       // P0.1 telemetry: record what the working context is made of, by content type,
@@ -1621,10 +1621,8 @@ export namespace SessionPrompt {
         ? "Investigate additional independent branches when they can materially change the result."
         : "Stay focused; delegate only when one or two independent branches will materially help."
     return [
-      "<system-reminder>",
       `Research effort: ${effort.toUpperCase()}. ${posture}`,
       `Delegation is optional and shallow: at most ${limit} Task calls total this user turn, including continuations.`,
-      "</system-reminder>",
     ].join("\n")
   }
 
@@ -1770,7 +1768,7 @@ export namespace SessionPrompt {
                 ]
               }
               break
-            case "file:":
+            case "file:": {
               log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
@@ -1931,7 +1929,6 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const file = Bun.file(filepath)
               const readCtx: Tool.Context = {
                 sessionID: input.sessionID,
                 abort: new AbortController().signal,
@@ -1942,14 +1939,16 @@ export namespace SessionPrompt {
                 metadata: async () => {},
                 ask,
               }
-              await assertExternalDirectory(readCtx, filepath)
+              using authorized = await assertExternalDirectory(readCtx, filepath)
               await readCtx.ask({
                 permission: "read",
                 patterns: [filepath],
                 always: ["*"],
                 metadata: {},
               })
-              FileTime.read(input.sessionID, filepath)
+              const readable = (await authorized?.revalidate()) ?? filepath
+              const file = Bun.file(readable)
+              FileTime.read(input.sessionID, readable)
               const bytes = await file.bytes()
               const mime = correctImageMime(part.mime, bytes)
               return [
@@ -1972,6 +1971,7 @@ export namespace SessionPrompt {
                   source: part.source,
                 },
               ]
+            }
           }
         }
 
@@ -2058,143 +2058,60 @@ export namespace SessionPrompt {
     }
   }
 
-  async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
+  export type InternalReminders = {
+    messages: MessageV2.WithParts[]
+    system: string[]
+  }
+
+  export function systemReminder(value: string) {
+    return value.replace(/<\/?system-reminder>/gu, "").trim()
+  }
+
+  async function insertReminders(input: {
+    messages: MessageV2.WithParts[]
+    agent: Agent.Info
+    session: Session.Info
+  }): Promise<InternalReminders> {
+    // Older builds persisted plan reminders as synthetic user text. Keep the
+    // durable record intact, but move those legacy parts to the provider's
+    // system channel so resumed sessions cannot leak them as user-authored
+    // content.
+    const legacy: string[] = []
+    const messages = input.messages.map((message) => {
+      if (message.info.role !== "user") return message
+      const parts = message.parts.filter((part) => {
+        const reminder = part.type === "text" && part.synthetic && part.text.includes("<system-reminder>")
+        if (reminder) legacy.push(systemReminder(part.text))
+        return !reminder
+      })
+      if (parts.length === message.parts.length) return message
+      return { ...message, parts }
+    })
     const route = request(input.messages, input.agent.name)
     const userMessage = route.user
-    if (!userMessage) return input.messages
+    if (!userMessage) return { messages, system: legacy }
     const effort = userMessage.info.role === "user" ? userMessage.info.effort : undefined
     const research = route.direct
       ? PROMPT_DIRECT
       : route.inspection
         ? PROMPT_INSPECTION
         : [PROMPT_RESEARCH, researchEffortReminder(effort)].join("\n\n")
+    const prompts = {
+      plan: PROMPT_PLAN,
+      write: PROMPT_WRITE,
+      ml: PROMPT_ML,
+      research,
+      biology: PROMPT_BIOLOGY,
+      physics: PROMPT_PHYSICS,
+    } as const
+    const selected = prompts[input.agent.name as keyof typeof prompts]
+    const system = [...legacy, ...(selected ? [systemReminder(selected)] : [])]
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE) {
-      if (input.agent.name === "plan") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_PLAN,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "write") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_WRITE,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "ml") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_ML,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "research") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: research,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "biology") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_BIOLOGY,
-          synthetic: true,
-        })
-      }
-      if (input.agent.name === "physics") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_PHYSICS,
-          synthetic: true,
-        })
-      }
       const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
-      if (wasPlan && input.agent.name !== "plan") {
-        userMessage.parts.push({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: BUILD_SWITCH,
-          synthetic: true,
-        })
-      }
-      return input.messages
-    }
-
-    // Write mode injection (works in both experimental and non-experimental paths)
-    if (input.agent.name === "write") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_WRITE,
-        synthetic: true,
-      })
-    }
-    if (input.agent.name === "ml") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_ML,
-        synthetic: true,
-      })
-    }
-    if (input.agent.name === "research") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: research,
-        synthetic: true,
-      })
-    }
-    if (input.agent.name === "biology") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_BIOLOGY,
-        synthetic: true,
-      })
-    }
-    if (input.agent.name === "physics") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_PHYSICS,
-        synthetic: true,
-      })
+      if (wasPlan && input.agent.name !== "plan") system.push(systemReminder(BUILD_SWITCH))
+      return { messages, system }
     }
 
     // New plan mode logic when flag is enabled
@@ -2205,32 +2122,23 @@ export namespace SessionPrompt {
       const plan = Session.plan(input.session)
       const exists = await Bun.file(plan).exists()
       if (exists) {
-        const part = await Session.updatePart({
-          id: Identifier.ascending("part"),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text:
-            BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`,
-          synthetic: true,
-        })
-        userMessage.parts.push(part)
+        system.push(
+          systemReminder(BUILD_SWITCH) +
+            "\n\n" +
+            `A plan file exists at ${plan}. You should execute on the plan defined within it`,
+        )
       }
-      return input.messages
+      return { messages, system }
     }
 
-    // Entering plan mode
-    if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
+    // Keep the exact plan path and write boundary in the system channel on every
+    // provider step. A plan turn can span multiple tool calls; restricting this
+    // guidance to the first step makes later provider requests ambiguous.
+    if (input.agent.name === "plan") {
       const plan = Session.plan(input.session)
       const exists = await Bun.file(plan).exists()
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
-      const part = await Session.updatePart({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: `<system-reminder>
-Plan mode is active. Do not execute commands that mutate state, edit project files, start
+      system.push(`Plan mode is active. Do not execute commands that mutate state, edit project files, start
 jobs, upload data, or spend money. The only writable file is the plan below.
 
 ${exists ? `Plan file: ${plan}. Read it and update only what the current request changes.` : `Plan file: ${plan}. Create it only after you understand the request.`}
@@ -2242,14 +2150,10 @@ delegate just to validate your own plan.
 Ask a question only when the answer cannot be discovered and would materially change the
 implementation. Then write one concise recommended plan with the outcome, critical files,
 ordered changes, risks, and end-to-end verification. Do not include discarded alternatives
-or internal reasoning. Call plan_exit when the plan is ready for approval.
-</system-reminder>`,
-        synthetic: true,
-      })
-      userMessage.parts.push(part)
-      return input.messages
+or internal reasoning. Call plan_exit when the plan is ready for approval.`)
+      return { messages, system }
     }
-    return input.messages
+    return { messages, system }
   }
 
   export const ShellInput = z.object({
