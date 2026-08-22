@@ -608,6 +608,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     intent: SlashMode | null
     slashInline: boolean
     applyingHistory: boolean
+    bootstrapID?: string
+    bootstrapDirectory?: string
   }>({
     popover: null,
     historyIndex: -1,
@@ -617,6 +619,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     intent: null,
     slashInline: false,
     applyingHistory: false,
+    bootstrapID: undefined,
+    bootstrapDirectory: undefined,
   })
 
   const [submitting, setSubmitting] = createSignal(false)
@@ -1831,10 +1835,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     let session = info()
     if (!session && isNewSession) {
+      const candidate =
+        store.bootstrapID && store.bootstrapDirectory === sessionDirectory
+          ? store.bootstrapID
+          : Identifier.descending("session")
+      setStore({ bootstrapID: candidate, bootstrapDirectory: sessionDirectory })
       session = await client.session
-        .create()
+        .create({ id: candidate })
         .then((x) => x.data ?? undefined)
-        .catch((err) => {
+        .catch(async (err) => {
+          const recovered = await client.session
+            .get({ sessionID: candidate })
+            .then((x) => x.data ?? undefined)
+            .catch(() => undefined)
+          if (recovered) return recovered
           showToast({
             title: language.t("prompt.toast.sessionCreateFailed.title"),
             description: errorMessage(err),
@@ -1842,6 +1856,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           return undefined
         })
       if (session) {
+        setStore({ bootstrapID: undefined, bootstrapDirectory: undefined })
         const project = sync.project
         const href = project
           ? projectHref(project, sessionDirectory, session.id)

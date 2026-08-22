@@ -33,10 +33,24 @@ describe("session environment prompt", () => {
         )
 
         expect(prompt).toContain(`- ${source.path} (read and write, project scope)`)
+        expect(prompt).toContain("may aggregate multiple connected folders and individual files")
+        expect(prompt).toContain('not a claim that any one directory is "the user\'s project folder."')
+        expect(prompt).toContain(
+          "Do not expose scratch, managed-project, or connected-folder paths in a generic greeting",
+        )
         expect(prompt).toContain("Do not ask the user to copy or clone an already-connected folder")
         expect(prompt).toContain("Access mode: Full access")
         await Session.remove(session.id)
       },
     })
+  })
+
+  test("core prompt requires durable state without model-invented research ceilings", () => {
+    const prompt = SystemPrompt.instructions()
+
+    expect(prompt).toContain("You are OpenScience, a local-first Research agent.")
+    expect(prompt).toContain("Before costly multi-stage work, define and maintain `research_contract`")
+    expect(prompt).toContain("save required Results")
+    expect(prompt).toContain("Never set a `max_*` field unless the user gave that exact numeric limit")
   })
 })

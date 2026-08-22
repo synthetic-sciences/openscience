@@ -2959,6 +2959,7 @@ export class Session extends HeyApiClient {
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      id?: string
       parentID?: string
       title?: string
       permission?: PermissionRuleset
@@ -2971,6 +2972,7 @@ export class Session extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
+            { in: "body", key: "id" },
             { in: "body", key: "parentID" },
             { in: "body", key: "title" },
             { in: "body", key: "permission" },
@@ -4161,9 +4163,9 @@ export class Runtime extends HeyApiClient {
 
 export class Search extends HeyApiClient {
   /**
-   * Search sessions, messages, and artifacts
+   * Search sessions, messages, files, and artifacts
    *
-   * Case-insensitive plain-text search across session titles, recent conversation text, and artifact files in the project.
+   * Case-insensitive plain-text search across session titles, recent conversation text, up to 500 visible workspace files, and artifact files in the project.
    */
   public query<ThrowOnError extends boolean = false>(
     parameters: {

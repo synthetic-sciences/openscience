@@ -319,7 +319,7 @@ export const ResearchContractTool = Tool.define("research_contract", {
     "Settled checks and advanced/regressed trials need runtime-verified evidence_refs. Free text is explanation only.",
     "Add metric plus baseline when quantitative; contradictory outcomes fail.",
     "Learn methods only from verified trials; unlearn with verified counterevidence.",
-    "Optional max_* fields bound the session tree; omitted limits are generous. Status inspects state.",
+    "Never infer max_* fields: set only exact numeric ceilings from the user. Omitted limits are generous. Status inspects state.",
   ].join(" "),
   parameters: Params,
   formatValidationError(error) {

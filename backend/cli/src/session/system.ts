@@ -226,6 +226,7 @@ Keep only one item in_progress at a time.
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
+        `An OpenScience project is a research context that may aggregate multiple connected folders and individual files. The paths above are routing information, not a claim that any one directory is "the user's project folder." Do not expose scratch, managed-project, or connected-folder paths in a generic greeting. Mention a path only when the user asks about location or when it is needed to complete their request.`,
         `Work directly in a connected project folder when the user refers to its files. Do not ask the user to copy or clone an already-connected folder into the session scratch directory. Use the scratch directory only for temporary work or outputs that do not belong in a connected folder.`,
         `<files>`,
         `  ${

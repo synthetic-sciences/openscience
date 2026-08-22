@@ -8953,6 +8953,7 @@ export type SessionListResponse = SessionListResponses[keyof SessionListResponse
 
 export type SessionCreateData = {
   body?: {
+    id?: string
     parentID?: string
     title?: string
     permission?: PermissionRuleset
@@ -10692,6 +10693,11 @@ export type SearchQueryResponses = {
       messageID: string
       role: string
       snippet: string
+    }>
+    files: Array<{
+      path: string
+      name: string
+      snippet?: string
     }>
     artifacts: Array<{
       path: string
@@ -12532,6 +12538,11 @@ export type FileReviewsCurrentResponses = {
     projectID: string
     path: string
     artifactHash: string
+    dependencies?: Array<{
+      kind: "bibliography" | "figure"
+      path: string
+      artifactHash: string
+    }>
     version: number
     status: "blocked" | "warnings" | "ready"
     summary: {
@@ -12575,6 +12586,7 @@ export type FileReviewsCurrentResponses = {
       actor: string
       at: number
       artifactHash: string
+      dependencyHash?: string
     }
     createdAt: number
     updatedAt: number
@@ -12614,6 +12626,11 @@ export type FileReviewsRunResponses = {
     projectID: string
     path: string
     artifactHash: string
+    dependencies?: Array<{
+      kind: "bibliography" | "figure"
+      path: string
+      artifactHash: string
+    }>
     version: number
     status: "blocked" | "warnings" | "ready"
     summary: {
@@ -12657,6 +12674,7 @@ export type FileReviewsRunResponses = {
       actor: string
       at: number
       artifactHash: string
+      dependencyHash?: string
     }
     createdAt: number
     updatedAt: number
@@ -12693,6 +12711,11 @@ export type FileReviewsHistoryResponses = {
     projectID: string
     path: string
     artifactHash: string
+    dependencies?: Array<{
+      kind: "bibliography" | "figure"
+      path: string
+      artifactHash: string
+    }>
     version: number
     status: "blocked" | "warnings" | "ready"
     summary: {
@@ -12736,6 +12759,7 @@ export type FileReviewsHistoryResponses = {
       actor: string
       at: number
       artifactHash: string
+      dependencyHash?: string
     }
     createdAt: number
     updatedAt: number
@@ -12782,6 +12806,11 @@ export type FileReviewsResolveResponses = {
     projectID: string
     path: string
     artifactHash: string
+    dependencies?: Array<{
+      kind: "bibliography" | "figure"
+      path: string
+      artifactHash: string
+    }>
     version: number
     status: "blocked" | "warnings" | "ready"
     summary: {
@@ -12825,6 +12854,7 @@ export type FileReviewsResolveResponses = {
       actor: string
       at: number
       artifactHash: string
+      dependencyHash?: string
     }
     createdAt: number
     updatedAt: number
@@ -12868,6 +12898,11 @@ export type FileReviewsFinalizeResponses = {
     projectID: string
     path: string
     artifactHash: string
+    dependencies?: Array<{
+      kind: "bibliography" | "figure"
+      path: string
+      artifactHash: string
+    }>
     version: number
     status: "blocked" | "warnings" | "ready"
     summary: {
@@ -12911,6 +12946,7 @@ export type FileReviewsFinalizeResponses = {
       actor: string
       at: number
       artifactHash: string
+      dependencyHash?: string
     }
     createdAt: number
     updatedAt: number

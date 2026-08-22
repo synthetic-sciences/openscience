@@ -5,6 +5,7 @@ import { Bus } from "../../src/bus"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
+import { Identifier } from "../../src/id/id"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -92,6 +93,25 @@ describe("session.started event", () => {
         expect(events.indexOf("started")).toBeLessThan(events.indexOf("updated"))
 
         await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("reuses a caller-supplied session ID without publishing duplicate creation events", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const id = Identifier.descending("session")
+        const events: string[] = []
+        const unsub = Bus.subscribe(Session.Event.Created, (event) => events.push(event.properties.info.id))
+
+        const first = await Session.create({ id, title: "Idempotent bootstrap" })
+        const second = await Session.create({ id, title: "Ignored retry title" })
+        unsub()
+
+        expect(second).toEqual(first)
+        expect(events.filter((event) => event === id)).toHaveLength(1)
+        await Session.remove(id)
       },
     })
   })

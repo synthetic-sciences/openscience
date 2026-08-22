@@ -219,6 +219,7 @@ export namespace Session {
   export const create = fn(
     z
       .object({
+        id: Identifier.schema("session").optional(),
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
@@ -226,6 +227,7 @@ export namespace Session {
       .optional(),
     async (input) => {
       return createNext({
+        id: input?.id,
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
@@ -298,7 +300,7 @@ export namespace Session {
           throw error
         })
       : undefined
-    if (existing) bind(existing)
+    if (existing) return bind(existing)
     if (input.parentID) await assertDirectory(input.parentID)
     if (directory !== Project.canonicalize(Instance.directory)) {
       throw new DirectoryMismatchError({

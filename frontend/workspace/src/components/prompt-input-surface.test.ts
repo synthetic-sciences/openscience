@@ -148,6 +148,19 @@ describe("floating prompt surface", () => {
     )
   })
 
+  test("makes first-session bootstrap recoverable after an ambiguous create response", () => {
+    const submit = source.indexOf("const handleSubmit = async")
+    const candidate = source.indexOf('Identifier.descending("session")', submit)
+    const create = source.indexOf(".create({ id: candidate })", candidate)
+    const recover = source.indexOf(".get({ sessionID: candidate })", create)
+
+    expect(candidate).toBeGreaterThan(submit)
+    expect(create).toBeGreaterThan(candidate)
+    expect(recover).toBeGreaterThan(create)
+    expect(source.slice(submit, candidate)).toContain("store.bootstrapID")
+    expect(source.slice(recover, source.indexOf("if (!session)", recover))).toContain("if (recovered) return recovered")
+  })
+
   test("uses draft-safe rollback for every post-dispatch failure path", () => {
     const calls = source.match(/restoreInputAfterFailure\(\)/g) ?? []
 

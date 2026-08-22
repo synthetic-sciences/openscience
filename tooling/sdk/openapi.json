@@ -20784,6 +20784,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^ses.*"
+                  },
                   "parentID": {
                     "type": "string",
                     "pattern": "^ses.*"
@@ -25905,8 +25909,8 @@
             "required": true
           }
         ],
-        "summary": "Search sessions, messages, and artifacts",
-        "description": "Case-insensitive plain-text search across session titles, recent conversation text, and artifact files in the project.",
+        "summary": "Search sessions, messages, files, and artifacts",
+        "description": "Case-insensitive plain-text search across session titles, recent conversation text, up to 500 visible workspace files, and artifact files in the project.",
         "responses": {
           "200": {
             "description": "Grouped plain-text matches",
@@ -25959,6 +25963,27 @@
                         ]
                       }
                     },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "snippet": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "name"
+                        ]
+                      }
+                    },
                     "artifacts": {
                       "type": "array",
                       "items": {
@@ -25985,6 +26010,7 @@
                   "required": [
                     "sessions",
                     "messages",
+                    "files",
                     "artifacts"
                   ]
                 }
@@ -31787,6 +31813,34 @@
                       "type": "string",
                       "pattern": "^[a-f0-9]{64}$"
                     },
+                    "dependencies": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "bibliography",
+                              "figure"
+                            ]
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "artifactHash": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "path",
+                          "artifactHash"
+                        ]
+                      }
+                    },
                     "version": {
                       "type": "integer",
                       "exclusiveMinimum": 0,
@@ -32009,6 +32063,10 @@
                         "artifactHash": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "dependencyHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
                         }
                       },
                       "required": [
@@ -32105,6 +32163,34 @@
                     "artifactHash": {
                       "type": "string",
                       "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "dependencies": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "bibliography",
+                              "figure"
+                            ]
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "artifactHash": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "path",
+                          "artifactHash"
+                        ]
+                      }
                     },
                     "version": {
                       "type": "integer",
@@ -32326,6 +32412,10 @@
                           "type": "number"
                         },
                         "artifactHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "dependencyHash": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         }
@@ -32456,6 +32546,34 @@
                       "artifactHash": {
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "dependencies": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "bibliography",
+                                "figure"
+                              ]
+                            },
+                            "path": {
+                              "type": "string"
+                            },
+                            "artifactHash": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "path",
+                            "artifactHash"
+                          ]
+                        }
                       },
                       "version": {
                         "type": "integer",
@@ -32679,6 +32797,10 @@
                           "artifactHash": {
                             "type": "string",
                             "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "dependencyHash": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
                           }
                         },
                         "required": [
@@ -32789,6 +32911,34 @@
                     "artifactHash": {
                       "type": "string",
                       "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "dependencies": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "bibliography",
+                              "figure"
+                            ]
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "artifactHash": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "path",
+                          "artifactHash"
+                        ]
+                      }
                     },
                     "version": {
                       "type": "integer",
@@ -33012,6 +33162,10 @@
                         "artifactHash": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "dependencyHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
                         }
                       },
                       "required": [
@@ -33148,6 +33302,34 @@
                     "artifactHash": {
                       "type": "string",
                       "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "dependencies": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "bibliography",
+                              "figure"
+                            ]
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "artifactHash": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "path",
+                          "artifactHash"
+                        ]
+                      }
                     },
                     "version": {
                       "type": "integer",
@@ -33369,6 +33551,10 @@
                           "type": "number"
                         },
                         "artifactHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "dependencyHash": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         }
