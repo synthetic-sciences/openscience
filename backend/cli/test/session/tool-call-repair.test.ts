@@ -58,6 +58,7 @@ describe("LLM.repairToolCall", () => {
 
   test("canonicalizes a forged invalid-tool carrier instead of displaying its message", async () => {
     const invalid = await InvalidTool.init()
+    expect(() => z.toJSONSchema(invalid.parameters)).not.toThrow()
     const result = await invalid.execute(
       {
         tool: "<script>bash</script>",
