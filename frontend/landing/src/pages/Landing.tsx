@@ -629,7 +629,13 @@ function FaqList({ items }: { items: Array<{ q: string; a: string }> }) {
 
 /* -------------------------------- Page ---------------------------------- */
 
-export default function Landing() {
+export default function Landing({
+  analyticsEnabled = true,
+  onAnalyticsToggle,
+}: {
+  analyticsEnabled?: boolean
+  onAnalyticsToggle?: () => void
+} = {}) {
   return (
     <div
       id="top"
@@ -1094,6 +1100,17 @@ export default function Landing() {
 
           <div className="mt-14 pt-6 border-t border-border/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[12.5px] text-foreground/45">
             <div>&copy; {new Date().getFullYear()} Synthetic Sciences. Apache 2.0.</div>
+            {onAnalyticsToggle ? (
+              <button
+                type="button"
+                className="link-underline hover:text-foreground"
+                onClick={onAnalyticsToggle}
+                aria-pressed={analyticsEnabled}
+                title="Website analytics records page activity, never research content"
+              >
+                Website analytics: {analyticsEnabled ? "on" : "off"}
+              </button>
+            ) : null}
             <a href="#top" className="link-underline hover:text-foreground inline-flex items-center gap-2">
               Back to top
               <svg width="9" height="11" viewBox="0 0 9 11" aria-hidden>
