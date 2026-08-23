@@ -2,9 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import workspaceShot from "@/assets/workspace.png"
 import modelPickerShot from "@/assets/model-picker.png"
 import heroPlate from "@/assets/hero.webp"
-import kernelShot from "@/assets/kernel-live.jpg"
-import reviewerShot from "@/assets/reviewer.jpg"
-import artifactShot from "@/assets/artifact-result.jpg"
 
 const LOGOS = [
   { id: "harvard", src: "/logos/harvard.png", alt: "Harvard University" },
@@ -510,6 +507,59 @@ function LoopVisual() {
   )
 }
 
+function PlanVisual() {
+  return (
+    <Visual label="plan / success criterion">
+      <div className="space-y-3 font-terminal text-[11px] leading-[1.65]">
+        <div className="border border-border/50 bg-background/55 px-4 py-3">
+          <span className="text-foreground/40">goal </span>
+          <span className="text-foreground/85">test whether the effect survives the held-out cohort</span>
+        </div>
+        <div className="border border-border/50 bg-background/55 px-4 py-3">
+          <span className="text-foreground/40">changes my mind </span>
+          <span className="text-foreground/85">the interval crosses the null after correction</span>
+        </div>
+      </div>
+    </Visual>
+  )
+}
+
+function RunVisual() {
+  return (
+    <Visual label="workspace / live run">
+      <div className="font-terminal text-[11px] leading-[1.75]">
+        <div>
+          <span className="text-foreground/40">$ </span>
+          <span className="text-foreground/90">python analysis.py</span>
+        </div>
+        <div className="text-foreground/45">reading study.csv</div>
+        <div className="text-foreground/45">fitting preregistered model</div>
+        <div className="text-[hsl(86_30%_62%)]">saved results/model-summary.csv</div>
+        <div className="text-[hsl(86_30%_62%)]">saved results/diagnostic.png</div>
+        <div className="mt-3 flex items-center gap-2 text-foreground/55">
+          <span className="inline-block h-2 w-2 bg-[hsl(var(--accent-coral))]" /> evidence attached to the session
+        </div>
+      </div>
+    </Visual>
+  )
+}
+
+function CritiqueVisual() {
+  return (
+    <Visual label="critique / claim review">
+      <div className="space-y-3 text-[12px] leading-[1.55]">
+        <div className="border border-border/50 bg-background/55 px-4 py-3 text-foreground/80">
+          “The treatment improved recovery.”
+        </div>
+        <div className="border-l border-[hsl(var(--accent-coral))]/70 pl-4 text-foreground/65">
+          The subgroup split was chosen after inspection. Re-run with the declared grouping and report both results.
+        </div>
+        <div className="font-terminal text-[10px] text-foreground/40">claim held until the check resolves</div>
+      </div>
+    </Visual>
+  )
+}
+
 function ContextVisual() {
   return (
     <Visual label="source-grounded research">
@@ -676,78 +726,40 @@ export default function Landing({
         <SectionHeader
           eyebrow="How it works"
           title="Built around the research loop."
-          sub="The agent does more than produce an answer. It runs the analysis in a real environment, saves the result, and makes the claim defend itself."
+          sub="The agent does more than produce an answer. It defines the test, runs the work, and makes the result defend itself."
         />
-        <div className="mt-16 grid grid-cols-12 gap-5">
-          <Reveal className="col-span-12">
-            <article className="group flex flex-col overflow-hidden border border-border/45 bg-background/55 transition-colors duration-500 hover:bg-foreground/[0.02]">
-              <div className="relative aspect-[16/9] overflow-hidden border-b border-border/40 bg-[hsl(28,14%,6%)] sm:aspect-[16/7]">
-                <img
-                  src={kernelShot}
-                  alt="OpenScience running a real Python notebook kernel with live memory, status, and run history in the Compute panel"
-                  className="h-full w-full object-cover object-[center_20%] transition-transform duration-700 ease-out group-hover:scale-[1.012]"
-                  loading="lazy"
-                  decoding="async"
-                  draggable={false}
-                />
-                <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-background/85 to-transparent" />
-                <div className="absolute bottom-4 left-5 flex items-center gap-2 font-terminal text-[10px] tracking-[0.04em] text-foreground/70">
-                  <span className="size-1.5 rounded-full bg-[hsl(86_30%_62%)]" /> live product capture
+        <div className="mt-16 grid grid-cols-12 gap-px border border-border/40 bg-border/40">
+          {[
+            {
+              visual: <PlanVisual />,
+              title: "Plan before acting.",
+              body: "The session turns a broad goal into a testable plan, including what evidence would change the conclusion.",
+            },
+            {
+              visual: <RunVisual />,
+              title: "Work in the real environment.",
+              body: "It reads project files, writes and runs code, inspects outputs, and keeps artifacts beside the reasoning that produced them.",
+            },
+            {
+              visual: <CritiqueVisual />,
+              title: "Challenge weak claims.",
+              body: "Critique agents look for leakage, confounds, unsupported leaps, and missing controls before the result becomes a write-up.",
+            },
+          ].map((feature, index) => (
+            <Reveal key={feature.title} delay={index * 90} className="col-span-12 bg-background md:col-span-4">
+              <div className="group flex h-full flex-col transition-colors duration-500 hover:bg-foreground/[0.02]">
+                <div className="border-b border-border/40 bg-background/55 px-6 pb-4 pt-6 sm:px-8">
+                  <div className="h-[250px] overflow-hidden border border-border/40 transition-all duration-500 group-hover:-translate-y-0.5 group-hover:border-foreground/35">
+                    {feature.visual}
+                  </div>
+                </div>
+                <div className="flex-1 p-7 sm:p-8">
+                  <h3 className={H_MED}>{feature.title}</h3>
+                  <p className={`mt-3.5 max-w-[42ch] ${P}`}>{feature.body}</p>
                 </div>
               </div>
-              <div className="p-7 sm:p-9">
-                <h3 className={H_MED}>A real kernel, inside the project.</h3>
-                <p className={`mt-3.5 max-w-[48ch] ${P}`}>
-                  Run Python and R in project-scoped runtimes. Memory, status, and run history stay visible while the
-                  agent reads files, executes code, and follows the evidence.
-                </p>
-              </div>
-            </article>
-          </Reveal>
-
-          <Reveal delay={120} className="col-span-12 lg:col-span-7">
-            <article className="group overflow-hidden border border-border/45 bg-background/55 transition-colors duration-500 hover:bg-foreground/[0.02]">
-              <div className="relative aspect-[16/9] overflow-hidden border-b border-border/40 bg-[hsl(28,14%,6%)]">
-                <img
-                  src={artifactShot}
-                  alt="A generated cross-validation figure opened as a durable OpenScience result beside the research conversation"
-                  className="h-full w-full object-cover object-[68%_center] transition-transform duration-700 ease-out group-hover:scale-[1.012]"
-                  loading="lazy"
-                  decoding="async"
-                  draggable={false}
-                />
-              </div>
-              <div className="p-7 sm:p-8">
-                <h3 className={H_MED}>Artifacts, not chat attachments.</h3>
-                <p className={`mt-3.5 max-w-[42ch] ${P}`}>
-                  Figures, tables, reports, and datasets become versioned results, previewed beside the work and ready
-                  to inspect or download.
-                </p>
-              </div>
-            </article>
-          </Reveal>
-
-          <Reveal delay={220} className="col-span-12 lg:col-span-5">
-            <article className="group overflow-hidden border border-border/45 bg-background/55 transition-colors duration-500 hover:bg-foreground/[0.02]">
-              <div className="relative aspect-[16/9] overflow-hidden border-b border-border/40 bg-[hsl(28,14%,6%)]">
-                <img
-                  src={reviewerShot}
-                  alt="OpenScience reviewer output challenging leakage, metric interpretation, and reproducibility while showing generated artifacts"
-                  className="h-full w-full object-cover object-[60%_center] transition-transform duration-700 ease-out group-hover:scale-[1.012]"
-                  loading="lazy"
-                  decoding="async"
-                  draggable={false}
-                />
-              </div>
-              <div className="p-7 sm:p-8">
-                <h3 className={H_MED}>A reviewer that pushes back.</h3>
-                <p className={`mt-3.5 max-w-[42ch] ${P}`}>
-                  Results are checked for leakage, missing evidence, metric interpretation, and whether another
-                  researcher could reproduce the claim.
-                </p>
-              </div>
-            </article>
-          </Reveal>
+            </Reveal>
+          ))}
         </div>
       </Section>
 
