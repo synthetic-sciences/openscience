@@ -15,7 +15,11 @@ async function sha256(file: string) {
 
 const directory = path.resolve(process.argv[2] ?? "backend/cli/dist")
 const files = (await readdir(directory))
-  .filter((file) => file === "checksums.txt" || file.endsWith(".zip") || file.endsWith(".tar.gz"))
+  .filter(
+    (file) =>
+      file === "checksums.txt" ||
+      (file.startsWith("openscience-") && (file.endsWith(".zip") || file.endsWith(".tar.gz"))),
+  )
   .sort()
 const expected = [
   "checksums.txt",
