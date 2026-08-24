@@ -22,6 +22,7 @@ const BillingMode = z.object({
   balance_cents: z.number(),
   balance_usd: z.number(),
   managed_supported: z.boolean(),
+  managed_unlocked: z.boolean(),
 })
 
 function emitDisposed() {

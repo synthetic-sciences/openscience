@@ -51,7 +51,9 @@ async function readWallet(): Promise<WalletState> {
     // never turn an unavailable balance into "$0.00".
     balanceUsd: credits?.balanceUsd ?? null,
     billingMode: mode?.mode ?? null,
-    managedSupported: mode?.managed_supported ?? false,
+    // The control is account-aware: infrastructure support alone must not
+    // make Managed selectable before Ace is enabled or funded.
+    managedSupported: mode?.managed_unlocked ?? false,
     lifetimeSpentUsd:
       credits?.lifetimeSpentCents === null || credits?.lifetimeSpentCents === undefined
         ? null

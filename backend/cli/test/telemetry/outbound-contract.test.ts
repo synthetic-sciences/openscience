@@ -1018,7 +1018,7 @@ describe("outbound OpenScience trace contract", () => {
     expect(await Bun.file(queue).exists()).toBe(false)
   })
 
-  test("turning data use off purges pending traces and prevents new capture", async () => {
+  test("turning data use off drops unsent traces and prevents new capture", async () => {
     await signIn("user_opt_out")
     restores.push(spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")))
     await OutboundTelemetry.initializeAccount()
@@ -1044,7 +1044,7 @@ describe("outbound OpenScience trace contract", () => {
     ).toBe(false)
   })
 
-  test("turning data use off waits for the authenticated server purge", async () => {
+  test("turning data use off waits for the authenticated server preference", async () => {
     await signIn("user_opt_out_server_purge")
     await OutboundTelemetry.initializeAccount({ synchronize: false })
     const requestStarted = Promise.withResolvers<void>()
@@ -1123,7 +1123,7 @@ describe("outbound OpenScience trace contract", () => {
     expect(await OutboundTelemetry.status()).toMatchObject({ analyticsEnabled: false, pending: false })
   })
 
-  test("account initialization retries a persisted offline purge after restart", async () => {
+  test("account initialization retries a persisted offline opt-out after restart", async () => {
     await signIn("user_restart_retry")
     await OutboundTelemetry.initializeAccount({ synchronize: false })
     const offline = spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"))
@@ -1132,10 +1132,10 @@ describe("outbound OpenScience trace contract", () => {
     offline.mockRestore()
     restores.pop()
 
-    let purges = 0
+    let optOuts = 0
     restores.push(
       spyOn(globalThis, "fetch").mockImplementation((async (_input, init) => {
-        purges++
+        optOuts++
         expect(new Headers(init?.headers).get("authorization")).toBe("Bearer thk_fixture")
         return Response.json({
           consent_version: CONSENT_VERSION,
@@ -1146,11 +1146,11 @@ describe("outbound OpenScience trace contract", () => {
     )
 
     await OutboundTelemetry.initializeAccount()
-    expect(purges).toBe(1)
+    expect(optOuts).toBe(1)
     expect(await OutboundTelemetry.status()).toMatchObject({ analyticsEnabled: false, pending: false })
   })
 
-  test("signed-out startup purges an offline opt-out using only its deletion proof", async () => {
+  test("signed-out startup never turns a prospective opt-out into deletion", async () => {
     const apiKey = `thk_${"a".repeat(32)}.${"device-secret".repeat(3)}`
     await signIn("proof-account", apiKey)
     await OutboundTelemetry.initializeAccount({ synchronize: false })
@@ -1158,49 +1158,34 @@ describe("outbound OpenScience trace contract", () => {
     restores.push(offline)
     expect(await OutboundTelemetry.setAnalytics(false)).toMatchObject({ pending: true })
 
-    // Test-only reconstruction of Atlas's API-key verifier proves that neither
-    // the reusable verifier nor the raw random credential reaches local disk.
-    // This does not implement password storage.
+    // Neither a reusable verifier, raw credential, nor deletion authority is
+    // written for a prospective collection opt-out.
     // codeql[js/insufficient-password-hash]
     const rawHash = createHash("sha256").update(apiKey).digest("hex")
     const beforeLogout = await Bun.file(consent).text()
     expect(beforeLogout).not.toContain(apiKey)
     expect(beforeLogout).not.toContain(rawHash)
-    const storedProof = JSON.parse(beforeLogout).subjects["account:proof-account"].deletion_proof as string
-    expect(storedProof).toMatch(/^odp_v2\./)
+    expect(beforeLogout).not.toContain("deletion_proof")
     await OpenScience.clearSession()
     expect(await OpenScience.getSession()).toBeNull()
 
     offline.mockRestore()
     restores.pop()
-    const requests: Array<{ authorization: string | null; proof: string | null; body: BodyInit | null | undefined }> =
-      []
+    const requests: string[] = []
     restores.push(
-      spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
-        expect(String(input)).toEndWith("/api/v1/telemetry/account-data/by-key-proof")
-        const headers = new Headers(init?.headers)
-        requests.push({
-          authorization: headers.get("authorization"),
-          proof: headers.get("x-openscience-telemetry-deletion-proof"),
-          body: init?.body,
-        })
-        return Response.json({ status: "completed", scope: "traces" })
-      }) as typeof fetch),
+      spyOn(globalThis, "fetch").mockImplementation((async (input: Parameters<typeof fetch>[0]) => {
+        requests.push(String(input))
+        throw new Error(`Unexpected signed-out request: ${input}`)
+      }) as unknown as typeof fetch),
     )
 
     await OutboundTelemetry.initializeAccount()
-    expect(requests).toEqual([
-      {
-        authorization: null,
-        proof: storedProof,
-        body: undefined,
-      },
-    ])
+    expect(requests).toEqual([])
     const afterRetry = await Bun.file(consent).text()
     expect(afterRetry).not.toContain(apiKey)
     expect(afterRetry).not.toContain(rawHash)
     expect(afterRetry).not.toContain("deletion_proof")
-    expect(JSON.parse(afterRetry).subjects["account:proof-account"]).toMatchObject({ pending: false })
+    expect(JSON.parse(afterRetry).subjects["account:proof-account"]).toMatchObject({ pending: true })
   })
 
   test("opt-out serializes behind an in-flight upload and prevents every later upload", async () => {

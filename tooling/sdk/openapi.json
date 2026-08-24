@@ -500,13 +500,17 @@
                             },
                             "managed_supported": {
                               "type": "boolean"
+                            },
+                            "managed_unlocked": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
                             "mode",
                             "balance_cents",
                             "balance_usd",
-                            "managed_supported"
+                            "managed_supported",
+                            "managed_unlocked"
                           ]
                         },
                         {
@@ -704,13 +708,17 @@
                         },
                         "managed_supported": {
                           "type": "boolean"
+                        },
+                        "managed_unlocked": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "mode",
                         "balance_cents",
                         "balance_usd",
-                        "managed_supported"
+                        "managed_supported",
+                        "managed_unlocked"
                       ]
                     },
                     {
@@ -757,13 +765,17 @@
                         },
                         "managed_supported": {
                           "type": "boolean"
+                        },
+                        "managed_unlocked": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "mode",
                         "balance_cents",
                         "balance_usd",
-                        "managed_supported"
+                        "managed_supported",
+                        "managed_unlocked"
                       ]
                     },
                     {

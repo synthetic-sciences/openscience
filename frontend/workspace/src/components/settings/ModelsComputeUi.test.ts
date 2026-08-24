@@ -21,12 +21,10 @@ describe("models and compute settings UI contract", () => {
     expect(source).toContain("setBusy(false)")
     expect(source.indexOf("setBusy(false)")).toBeLessThan(source.indexOf(".refreshProviders()"))
 
-    expect(source.indexOf('title: "Automatic"')).toBeLessThan(source.indexOf('title: "Credits"'))
-    expect(source.indexOf('title: "Credits"')).toBeLessThan(source.indexOf('title: "Accounts"'))
+    expect(source.indexOf('title: "BYOK / Subscription"')).toBeLessThan(source.indexOf('title: "Managed"'))
     for (const description of [
-      "Use the selected model's best available account, local, or credit route.",
-      "Use your Ace wallet for supported models. No provider account is required.",
-      "Use only connected provider accounts, keys, and eligible subscriptions.",
+      "Use connected provider keys or models included with an eligible subscription.",
+      "Use your Ace balance for supported models without configuring a provider key.",
     ]) {
       expect(source.split(description)).toHaveLength(2)
     }

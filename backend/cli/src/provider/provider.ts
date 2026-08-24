@@ -443,7 +443,6 @@ export namespace Provider {
 
   function isRemovedModel(modelID: string) {
     const normalized = modelID.toLowerCase()
-    if (normalized.includes("fable")) return true
     return REMOVED_MODEL_IDS.has(normalized)
   }
 

@@ -2696,6 +2696,7 @@ export type AccountGetResponses = {
       balance_cents: number
       balance_usd: number
       managed_supported: boolean
+      managed_unlocked: boolean
     } | null
   }
 }
@@ -2777,6 +2778,7 @@ export type AccountBillingModeGetResponses = {
     balance_cents: number
     balance_usd: number
     managed_supported: boolean
+    managed_unlocked: boolean
   } | null
 }
 
@@ -2800,6 +2802,7 @@ export type AccountBillingModeSetResponses = {
     balance_cents: number
     balance_usd: number
     managed_supported: boolean
+    managed_unlocked: boolean
   } | null
 }
 

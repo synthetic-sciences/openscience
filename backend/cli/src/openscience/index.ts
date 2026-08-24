@@ -2179,11 +2179,13 @@ export namespace OpenScience {
     balance_cents: number
     balance_usd: number
     managed_supported: boolean
+    managed_unlocked: boolean
   }
 
   interface CliAccess {
     cli_balance_cents?: number
     managed_supported?: boolean
+    managed_unlocked?: boolean
   }
 
   interface BillingCompatibility {
@@ -2281,6 +2283,7 @@ export namespace OpenScience {
     const configured = (await Config.getGlobal()).billing?.llm
     const fallback = access.legacy
     const balanceCents = credits?.balanceCents ?? fallback?.balance_cents ?? 0
+    const managedSupported = access.access?.managed_supported ?? fallback?.managed_supported ?? true
     return {
       mode: configured === "managed" ? "managed" : configured === "byok" ? "byok" : (fallback?.mode ?? "byok"),
       balance_cents: balanceCents,
@@ -2288,7 +2291,11 @@ export namespace OpenScience {
       // Current Atlas publishes this on /access. A temporary capability-read
       // outage must not disable the local Credits choice; dispatch remains the
       // authoritative fail-closed boundary.
-      managed_supported: access.access?.managed_supported ?? fallback?.managed_supported ?? true,
+      managed_supported: managedSupported,
+      // New Atlas reports the account decision directly. Older deployments
+      // unlocked managed calls whenever the purchased Wallet had value.
+      managed_unlocked:
+        access.access?.managed_unlocked ?? fallback?.managed_unlocked ?? (managedSupported && balanceCents > 0),
     }
   }
 

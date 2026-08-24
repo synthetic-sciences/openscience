@@ -10,7 +10,7 @@ import { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
 
 export { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
 
-type Mode = SettingsBillingGetResponse["llm"]
+type Mode = Exclude<SettingsBillingGetResponse["llm"], null>
 type Wallet = {
   signedIn: boolean
   balanceUsd: number | null
@@ -20,21 +20,19 @@ type Wallet = {
 
 const MODES: { value: Mode; title: string; body: string }[] = [
   {
-    value: null,
-    title: "Automatic",
-    body: "Use the selected model's best available account, local, or credit route.",
+    value: "byok",
+    title: "BYOK / Subscription",
+    body: "Use connected provider keys or models included with an eligible subscription.",
   },
   {
     value: "managed",
-    title: "Credits",
-    body: "Use your Ace wallet for supported models. No provider account is required.",
-  },
-  {
-    value: "byok",
-    title: "Accounts",
-    body: "Use only connected provider accounts, keys, and eligible subscriptions.",
+    title: "Managed",
+    body: "Use your Ace balance for supported models without configuring a provider key.",
   },
 ]
+
+const normalizeMode = (value: SettingsBillingGetResponse["llm"] | undefined): Mode =>
+  value === "managed" ? "managed" : "byok"
 
 /**
  * Persist and apply the small billing response independently of the much larger
@@ -54,7 +52,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   const globalSync = useGlobalSync()
   const platform = usePlatform()
   const [wallet, setWallet] = createSignal<Wallet>()
-  const [mode, setMode] = createSignal<Mode>(globalSync.data.config.billing?.llm ?? null)
+  const [mode, setMode] = createSignal<Mode>(normalizeMode(globalSync.data.config.billing?.llm))
   const [busy, setBusy] = createSignal(false)
   const [refreshing, setRefreshing] = createSignal(false)
   const selected = createMemo(() => MODES.find((item) => item.value === mode()) ?? MODES[0])
@@ -72,7 +70,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
       .get()
       .then((result) => {
         if (result.data) {
-          if (!busy()) setMode(result.data.llm)
+          if (!busy()) setMode(normalizeMode(result.data.llm))
           return
         }
         fail("Couldn't load model access settings.")
@@ -84,6 +82,10 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   }
   const update = (value: Mode) => {
     if (busy()) return
+    if (value === "managed" && wallet() && (!wallet()!.signedIn || !wallet()!.managedSupported)) {
+      platform.openLink(URLS.dashboardBilling)
+      return
+    }
     const previous = mode()
     // Immediate visual acknowledgement: the network write may include account
     // synchronization, but the pressed state should never wait on that work.
@@ -93,7 +95,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     void commitBilling(
       () => sdk.client.settings.billing.update({ llm: value }),
       (data) => {
-        setMode(data.llm)
+        setMode(normalizeMode(data.llm))
       },
     )
       .then((ok) => {
@@ -141,8 +143,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     unsubscribe()
   })
 
-  const unsupported = (value: Mode) =>
-    value === "managed" && wallet() !== undefined && (!wallet()!.signedIn || !wallet()!.managedSupported)
+  const needsAce = () => wallet() !== undefined && (!wallet()!.signedIn || !wallet()!.managedSupported)
 
   return (
     <div class="models-inference">
@@ -159,13 +160,9 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
                 type="button"
                 aria-pressed={mode() === option.value}
                 aria-busy={busy()}
-                disabled={busy() || unsupported(option.value)}
+                disabled={busy() || wallet() === undefined}
                 class="models-routing__option"
-                title={
-                  unsupported(option.value)
-                    ? "Credits require a signed-in Synthetic Sciences account with Ace enabled"
-                    : undefined
-                }
+                title={option.value === "managed" && needsAce() ? "Enable Ace to use Managed models" : undefined}
                 onClick={() => update(option.value)}
               >
                 <span class="models-routing__option-label">
@@ -203,14 +200,14 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
             variant="secondary"
             onClick={() => platform.openLink(URLS.dashboardBilling)}
           >
-            Open billing
+            {needsAce() ? "Enable Ace" : "Manage Ace"}
           </Button>
         </span>
       </div>
 
       <Show when={wallet() && !wallet()!.signedIn}>
         <p class="settings-inline-note text-12-regular text-text-weak">
-          Sign in from General to use Credits. Automatic routing and connected accounts remain available.
+          Managed access requires a Synthetic Sciences account with Ace enabled.
         </p>
       </Show>
     </div>

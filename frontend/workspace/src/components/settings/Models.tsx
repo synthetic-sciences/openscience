@@ -309,7 +309,6 @@ export default function Models() {
           >
             <div class="settings-card models-access-card">
               <ManagedInference onError={setError} />
-              <CodexConnection onError={setError} />
               <Row title="Starting model" detail="Used when a new session starts.">
                 <DefaultModelControl
                   label="Starting model"
@@ -328,8 +327,11 @@ export default function Models() {
           <Section
             id="provider-keys"
             title="Provider keys"
-            description="Connect a provider account directly. Keys stay in the owner-only local auth file."
+            description="Connect provider keys and subscriptions. Credentials stay in the owner-only local auth file."
           >
+            <div class="settings-card models-access-card">
+              <CodexConnection onError={setError} />
+            </div>
             <ProviderKeys onError={setError} />
           </Section>
 

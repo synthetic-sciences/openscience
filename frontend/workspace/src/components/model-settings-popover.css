@@ -61,6 +61,10 @@
   font-weight: var(--font-weight-regular);
   line-height: 1;
   letter-spacing: -0.011em;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
 }
 
 [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"]:hover:not(:disabled),
@@ -89,6 +93,10 @@
   font: inherit;
   font-size: 13px;
   line-height: 1;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
 }
 
 [data-model-effort-chip]::before {
@@ -136,6 +144,11 @@
 [data-model-effort-chip]:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
+}
+
+[data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"]:active:not(:disabled),
+[data-model-effort-chip]:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 @media (pointer: coarse) {

@@ -53,12 +53,12 @@ export function searchStatus(status: ResearchToolsStatus) {
 export function dataSharingDetail(status: ResearchToolsStatus) {
   if (status.telemetry.corrupt) return "Off until you choose this setting again."
   if (status.telemetry.pending && (!status.telemetry.analyticsEnabled || !status.telemetry.researchContentEnabled))
-    return "Off on this device. Deletion finishes when OpenScience reconnects."
+    return "Off on this device. The setting will sync when OpenScience reconnects."
   if (!status.telemetry.analyticsEnabled || !status.telemetry.researchContentEnabled)
-    return "Off. New activity stays on this device."
+    return "Off. New activity is not shared."
   if (status.telemetry.pending) return "Saved on this device. It will sync when OpenScience reconnects."
   if (status.telemetry.source === "default") return "On by default for this account."
-  return "On for this account."
+  return "On. New research activity helps improve OpenScience."
 }
 
 export function dataSharingEnabled(status: ResearchToolsStatus) {

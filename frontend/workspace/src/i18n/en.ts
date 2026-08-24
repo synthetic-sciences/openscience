@@ -51,7 +51,7 @@ export const dict = {
   "command.terminal.new": "New terminal",
   "command.terminal.new.description": "Create a new terminal tab",
   "command.steps.toggle": "Toggle steps",
-  "command.steps.toggle.description": "Show or hide the execution trace for the current message",
+  "command.steps.toggle.description": "Show or hide tool activity for the current message",
   "command.message.previous": "Previous message",
   "command.message.previous.description": "Go to the previous user message",
   "command.message.next": "Next message",

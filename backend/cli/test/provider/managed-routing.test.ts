@@ -245,7 +245,7 @@ describe("managed session availability", () => {
     })
   })
 
-  test("Fable is hidden from stale managed and direct catalogs", async () => {
+  test("Fable is available through managed OpenRouter and direct Anthropic routes", async () => {
     await using managed = await tmpdir({
       config: {
         billing: { llm: "managed" },
@@ -266,13 +266,9 @@ describe("managed session availability", () => {
       },
       fn: async () => {
         const openrouter = (await Provider.list())["openrouter"]
-        expect(openrouter.models["anthropic/claude-fable-5"]).toBeUndefined()
+        expect(openrouter.models["anthropic/claude-fable-5"]).toBeDefined()
         expect(openrouter.models["anthropic/claude-sonnet-5"]).toBeDefined()
-        await expect(Provider.getModel("openrouter", "anthropic/claude-fable-5")).rejects.toThrow()
-        await expect(Provider.getModel("amazon-bedrock", "anthropic.claude-fable-5")).rejects.toThrow()
-        await expect(Provider.getModel("amazon-bedrock", "global.anthropic.claude-fable-5")).rejects.toThrow()
-        await expect(Provider.getModel("digitalocean", "anthropic-claude-fable-5")).rejects.toThrow()
-        await expect(Provider.getModel("gitlab", "duo-chat-fable-5")).rejects.toThrow()
+        await expect(Provider.getModel("openrouter", "anthropic/claude-fable-5")).resolves.toBeDefined()
       },
     })
 
@@ -287,7 +283,7 @@ describe("managed session availability", () => {
       fn: async () => {
         const anthropic = (await Provider.list())["anthropic"]
         expect(anthropic).toBeDefined()
-        expect(anthropic.models["claude-fable-5"]).toBeUndefined()
+        expect(anthropic.models["claude-fable-5"]).toBeDefined()
         expect(anthropic.models["claude-sonnet-5"]).toBeDefined()
       },
     })

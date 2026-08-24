@@ -3,19 +3,16 @@ import { commitBilling, formatCreditBalance, walletBalanceLabel } from "./Manage
 
 const source = await Bun.file(new URL("./ManagedInference.tsx", import.meta.url)).text()
 
-test("presents routing as Automatic, Credits, and Accounts while preserving wire modes", () => {
-  const automatic = source.indexOf('title: "Automatic"')
-  const credits = source.indexOf('title: "Credits"')
-  const accounts = source.indexOf('title: "Accounts"')
+test("presents the two actual routing contracts", () => {
+  const accounts = source.indexOf('title: "BYOK / Subscription"')
+  const managed = source.indexOf('title: "Managed"')
 
-  expect(automatic).toBeGreaterThan(-1)
-  expect(credits).toBeGreaterThan(automatic)
-  expect(accounts).toBeGreaterThan(credits)
+  expect(accounts).toBeGreaterThan(-1)
+  expect(managed).toBeGreaterThan(accounts)
   expect(source).toContain('value: "managed"')
   expect(source).toContain('value: "byok"')
-  expect(source).not.toContain('title: "Managed"')
-  expect(source).not.toContain('title: "BYOK"')
-  expect(source).not.toContain("managed billing enabled")
+  expect(source).not.toContain('title: "Automatic"')
+  expect(source).toContain("platform.openLink(URLS.dashboardBilling)")
 })
 
 test("keeps a real negative wallet balance distinct from an unavailable balance", () => {

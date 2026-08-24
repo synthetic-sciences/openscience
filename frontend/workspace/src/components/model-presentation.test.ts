@@ -101,7 +101,7 @@ describe("model control presentation", () => {
     })
   })
 
-  test("keeps backend-only max and ultra effort out of the compact control", () => {
+  test("shows every effort level supported by the selected route", () => {
     expect(
       modelControl({
         name: "Reasoning model",
@@ -111,17 +111,19 @@ describe("model control presentation", () => {
       }),
     ).toMatchObject({
       effort: {
-        value: "Extra high",
-        current: { id: "xhigh", label: "Extra high" },
+        value: "Ultra",
+        current: { id: "ultra", label: "Ultra" },
         options: [
           { id: "standard", label: "Standard" },
           { id: "low", label: "Low" },
           { id: "medium", label: "Medium" },
           { id: "high", label: "High" },
           { id: "xhigh", label: "Extra high" },
+          { id: "max", label: "Max" },
+          { id: "ultra", label: "Ultra" },
         ],
       },
-      reset: { effort: "xhigh" },
+      reset: {},
     })
   })
 

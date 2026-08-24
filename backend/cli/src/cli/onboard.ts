@@ -365,7 +365,7 @@ export const DoctorCommand = cmd({
         OpenScience.getCredits().catch(() => null),
       ])
       if (mode) {
-        const suffix = mode.managed_supported ? "" : " (credits unavailable)"
+        const suffix = mode.managed_unlocked ? "" : " (Managed off)"
         const amount = credits ? `$${credits.balanceUsd.toFixed(2)}` : "unavailable"
         prompts.log.info(`Wallet: ${amount}${suffix}`)
       }

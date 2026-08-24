@@ -77,7 +77,7 @@ describe("Research Tools settings", () => {
       telemetry: { ...status().telemetry, analyticsEnabled: true, researchContentEnabled: false, source: "account" },
     })
     expect(dataSharingEnabled(migrated)).toBe(false)
-    expect(dataSharingDetail(migrated)).toBe("Off. New activity stays on this device.")
+    expect(dataSharingDetail(migrated)).toBe("Off. New activity is not shared.")
     expect(
       dataSharingEnabled(
         status({
@@ -102,7 +102,7 @@ describe("Research Tools settings", () => {
           },
         }),
       ),
-    ).toContain("Deletion finishes when OpenScience reconnects")
+    ).toContain("setting will sync when OpenScience reconnects")
   })
 
   test("wires the real trust and sandbox contracts and warns before Full access", async () => {
@@ -124,15 +124,12 @@ describe("Research Tools settings", () => {
     expect(source).not.toContain("useSDK()")
   })
 
-  test("uses one clear data-use toggle and explains the redaction boundary", async () => {
+  test("uses one clear prospective data-use toggle", async () => {
     const source = await Bun.file(new URL("./ResearchTools.tsx", import.meta.url)).text()
     const copy = source.replace(/\s+/g, " ")
     expect(copy).toContain("Use my data to improve OpenScience")
-    expect(copy).toContain("complete research trajectory")
-    expect(copy).toContain("prompts, model responses, tool inputs")
-    expect(copy).toContain("Credentials and secret values are removed before upload")
-    expect(copy).toContain("Turning it off stops new sharing immediately")
-    expect(copy).toContain("reconnects")
+    expect(copy).not.toContain("complete research trajectory")
+    expect(copy).not.toContain("removes previously shared activity")
     expect(copy).not.toContain("Research content is never shared")
     expect(copy).not.toContain("managed searches remain")
     expect(copy).not.toContain("Delete shared data")

@@ -142,9 +142,9 @@ const cli = yargs(hideBin(process.argv))
         Log.Default.warn("failed to purge retired Atlas agent install", { error: retiredAgentInstallCleanupError })
       }
 
-      // A consent-off write may have been saved while offline. Retry it on
-      // every startup, including after logout/401 when only its deletion-only
-      // proof remains. This must happen before the account gate can exit.
+      // A consent change may have been saved while offline. Retry it on every
+      // startup before the account gate can exit. Opt-out is prospective and
+      // never turns into an implicit deletion request.
       await OutboundTelemetry.initializeAccount().catch(() => undefined)
 
       if (requiresOpenScienceAccount(command, process.argv.slice(2)) && !(await OpenScience.isAuthenticated())) {

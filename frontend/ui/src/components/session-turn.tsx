@@ -19,14 +19,7 @@ import { Binary } from "@synsci/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part } from "./message-part"
-import {
-  artifactTypeLabel,
-  artifactActions,
-  generatedArtifacts,
-  sessionErrorText,
-  stripRedactedReasoning,
-  writtenFiles,
-} from "./tool-display"
+import { artifactTypeLabel, artifactActions, generatedArtifacts, sessionErrorText, writtenFiles } from "./tool-display"
 import { Markdown } from "./markdown"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -333,21 +326,10 @@ export function SessionTurn(
       if (!msgParts) continue
       for (const p of msgParts) {
         if (p?.type === "tool") return true
-        // Ignore encrypted-reasoning placeholders ("[REDACTED]") so a turn whose only
-        // reasoning is an encrypted blob doesn't get a toggle that reveals nothing.
-        if (p?.type === "reasoning" && stripRedactedReasoning(p.text ?? "").length > 0) return true
       }
     }
     return false
   })
-
-  const hasReasoning = createMemo(() =>
-    assistantMessages().some((message) =>
-      (data.store.part[message.id] ?? emptyParts).some(
-        (part) => part?.type === "reasoning" && stripRedactedReasoning(part.text ?? "").length > 0,
-      ),
-    ),
-  )
 
   const promoted = createMemo(() =>
     assistantMessages().flatMap((message) => {
@@ -364,8 +346,6 @@ export function SessionTurn(
   const nextPermission = createMemo(() => permissions()[0])
   const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
   const nextQuestion = createMemo(() => questions()[0])
-  const requestCount = createMemo(() => permissions().length + questions().length)
-
   const requestParts = createMemo(() => {
     if (props.stepsExpanded) return emptyRequestParts
 
@@ -614,14 +594,6 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  createEffect(
-    on(requestCount, (count, prev) => {
-      if (!count) return
-      if (prev !== undefined && count <= prev) return
-      autoScroll.forceScrollToBottom()
-    }),
-  )
-
   let lastStatusChange = Date.now()
   let statusTimeout: number | undefined
   createEffect(() => {
@@ -759,17 +731,11 @@ export function SessionTurn(
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
                       <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
-                        <Show when={hasReasoning()}>
-                          <div data-slot="session-turn-trace-legend">
-                            <strong>{i18n.t("ui.sessionTurn.trace.title")}</strong>
-                            <span>{i18n.t("ui.sessionTurn.trace.detail")}</span>
-                          </div>
-                        </Show>
                         <AssistantTrace
                           messages={assistantMessages()}
                           responsePartId={responsePartId()}
                           hideResponsePart={hideResponsePart()}
-                          hideReasoning={false}
+                          hideReasoning
                           hidePromotedTools
                         />
                         <Show when={error()}>

@@ -33,11 +33,13 @@ const BillingShowCommand = cmd({
       return
     }
     prompts.log.info(credits ? `Wallet      : $${credits.balanceUsd.toFixed(2)}` : "Wallet      : unavailable")
-    prompts.log.info("Model access: Automatic uses your account when present, then supported credit routes.")
+    prompts.log.info("Model access: choose BYOK / Subscription or Managed in web Settings.")
     if (!mode.managed_supported) {
       prompts.log.warn(
         "Credit-backed routes are not provisioned on this deployment — connect a provider account instead.",
       )
+    } else if (!mode.managed_unlocked) {
+      prompts.log.info("Managed access is off. Enable Ace in Billing or use remaining purchased Wallet credit.")
     }
     prompts.log.info("Review wallet, auto-reload, and usage at " + BILLING_URL + ".")
     prompts.outro("Done")

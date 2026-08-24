@@ -48,14 +48,14 @@ test("long transcript diffs use a bounded progressive-disclosure preview", () =>
   expect(css).toContain("@media (max-width: 480px)")
 })
 
-test("expanded steps render a semantic research trace and first-class delegation results", () => {
+test("expanded steps render literal tool activity and first-class delegation results", () => {
   const parts = readFileSync(fileURLToPath(new URL("./message-part.tsx", import.meta.url)), "utf8")
   const css = readFileSync(fileURLToPath(new URL("./message-part.css", import.meta.url)), "utf8")
 
   expect(source).toContain("groupResearchTrace")
   expect(source).toContain("props.messages.flatMap")
   expect(source).toContain("messages={assistantMessages()}")
-  expect(source).toContain('data-component="research-trace-group"')
+  expect(source).toContain("groupResearchTrace")
   expect(parts).toContain('<details\n              data-component="delegation-card"')
   expect(parts).toContain('data-slot="delegation-summary"')
   expect(parts).toContain('data-slot="delegation-body"')
@@ -64,21 +64,18 @@ test("expanded steps render a semantic research trace and first-class delegation
   expect(parts).toContain('data-slot="delegation-raw"')
   expect(parts).toContain("Open agent")
   expect(parts).toContain("<Markdown text={text()} cacheKey={part.id} />")
-  expect(parts).toContain('data-origin="provider-summary"')
-  expect(parts).toContain('data-slot="reasoning-part-label"')
-  expect(parts).toContain('i18n.t("ui.messagePart.reasoning.providerSummary")')
+  expect(parts).toContain('data-origin="provider-reasoning"')
+  expect(parts).not.toContain('data-slot="reasoning-part-label"')
   expect(css).toContain('[data-component="delegation-card"]')
 })
 
-test("execution trace distinguishes recorded tools from provider-generated summaries", () => {
+test("activity hides provider reasoning and removes the execution-trace legend", () => {
   const parts = readFileSync(fileURLToPath(new URL("./message-part.tsx", import.meta.url)), "utf8")
   const english = readFileSync(fileURLToPath(new URL("../i18n/en.ts", import.meta.url)), "utf8")
 
-  expect(source).toContain('data-slot="session-turn-trace-legend"')
-  expect(source).toContain('i18n.t("ui.sessionTurn.trace.detail")')
-  expect(parts).toContain('data-origin="provider-summary"')
-  expect(english).toContain('"ui.sessionTurn.steps.show": "Show execution trace"')
-  expect(english).toContain(
-    '"ui.sessionTurn.trace.detail": "Recorded tool activity; model summaries are provider-generated."',
-  )
+  expect(source).not.toContain('data-slot="session-turn-trace-legend"')
+  expect(source).toContain("hideReasoning")
+  expect(parts).toContain('data-origin="provider-reasoning"')
+  expect(english).toContain('"ui.sessionTurn.steps.show": "Show activity"')
+  expect(english).not.toContain("model summaries are provider-generated")
 })

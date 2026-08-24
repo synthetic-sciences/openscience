@@ -544,6 +544,7 @@ export namespace ProviderTransform {
       return efforts(exact ?? ["low", "high"])
     }
     // https://docs.x.ai/developers/model-capabilities/text/reasoning
+    if (/grok-4[.-]6\b/.test(id)) return efforts(exact ?? [...WIDELY_SUPPORTED_EFFORTS, "xhigh"])
     if (/grok-4[.-]5\b/.test(id)) return efforts(exact ?? WIDELY_SUPPORTED_EFFORTS)
     if (/grok-4[.-]3\b/.test(id)) return efforts(exact ?? ["none", ...WIDELY_SUPPORTED_EFFORTS])
     if (/grok-4[.-]20/.test(id) && id.includes("multi-agent"))

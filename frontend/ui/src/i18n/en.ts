@@ -14,10 +14,10 @@ export const dict = {
   "ui.lineComment.placeholder": "Add comment",
   "ui.lineComment.submit": "Comment",
 
-  "ui.sessionTurn.steps.show": "Show execution trace",
-  "ui.sessionTurn.steps.hide": "Hide execution trace",
-  "ui.sessionTurn.trace.title": "Execution trace",
-  "ui.sessionTurn.trace.detail": "Recorded tool activity; model summaries are provider-generated.",
+  "ui.sessionTurn.steps.show": "Show activity",
+  "ui.sessionTurn.steps.hide": "Hide activity",
+  "ui.sessionTurn.trace.title": "Activity",
+  "ui.sessionTurn.trace.detail": "Tool activity from this response.",
   "ui.sessionTurn.summary.response": "Response",
   "ui.sessionTurn.diff.showMore": "Show more changes ({{count}})",
 
@@ -37,7 +37,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Considering next steps",
 
   "ui.messagePart.diagnostic.error": "Error",
-  "ui.messagePart.reasoning.providerSummary": "Model summary",
+  "ui.messagePart.reasoning.providerSummary": "Reasoning",
   "ui.messagePart.title.edit": "Edit",
   "ui.messagePart.title.write": "Write",
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",

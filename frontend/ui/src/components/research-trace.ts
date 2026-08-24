@@ -1,4 +1,4 @@
-import type { AssistantMessage, Part, ToolPart } from "@synsci/sdk/v2/client"
+import type { AssistantMessage, Part } from "@synsci/sdk/v2/client"
 
 export type ResearchTraceEntry = {
   message: AssistantMessage
@@ -69,29 +69,11 @@ export function traceLabel(family: TraceFamily, count: number) {
   return `Completed ${count} research ${count === 1 ? "operation" : "operations"}`
 }
 
-function toolTitle(part: ToolPart) {
-  const state = part.state
-  if ("title" in state && typeof state.title === "string" && state.title.trim()) return state.title.trim()
-  const input = state.input ?? {}
-  const value = input.filePath ?? input.path ?? input.pattern ?? input.query ?? input.url ?? input.description
-  if (typeof value === "string" && value.trim()) return value.trim()
-  return part.tool
-}
-
 function compact(values: string[], limit = 3) {
   const unique = [...new Set(values)]
   const visible = unique.slice(0, limit)
   const hidden = unique.length - visible.length
   return [visible.join(" · "), hidden > 0 ? `+${hidden} more` : undefined].filter(Boolean).join(" · ")
-}
-
-function grouped(part: Part): part is ToolPart {
-  if (part.type !== "tool") return false
-  if (part.state.status !== "completed") return false
-  if (part.tool === "task" || part.tool === "todowrite" || part.tool === "todoread" || part.tool === "planwrite") {
-    return false
-  }
-  return traceFamily(part.tool) !== "other"
 }
 
 function narrative(part: Part) {
@@ -102,111 +84,13 @@ function lifecycle(part: Part) {
   return part.type === "step-start" || part.type === "step-finish" || part.type === "snapshot" || part.type === "patch"
 }
 
-/**
- * Turns a chronological turn transcript into compact semantic phases. Provider-
- * visible reasoning and intermediate text stay byte-for-byte in their original
- * position inside a phase; invisible step bookkeeping and assistant-message
- * boundaries do not fragment related work. A different tool family or a first-
- * class operation (delegation, planning, a failure, and so on) starts a new
- * phase. A lone operation remains untouched.
- */
+/** Keep the visible execution record chronological and literal. The previous
+ * semantic grouping replaced concrete operations with generated phase labels,
+ * which made ordinary turns read like a verbose audit report. */
 export function groupResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceItem[] {
-  const output: ResearchTraceItem[] = []
-  const state = {
-    phase: undefined as
-      | {
-          family: TraceFamily
-          entries: ResearchTraceEntry[]
-          tools: ResearchTraceEntry[]
-        }
-      | undefined,
-    bridge: [] as ResearchTraceEntry[],
-  }
-
-  const parts = (items: ResearchTraceEntry[]) => {
-    for (const entry of items) output.push({ kind: "part", entry })
-  }
-
-  const flush = () => {
-    const phase = state.phase
-    if (!phase) return
-    if (phase.tools.length === 1) {
-      parts(phase.entries)
-      state.phase = undefined
-      return
-    }
-
-    output.push({
-      kind: "group",
-      id: `trace-${phase.tools[0].part.id}-${phase.tools.at(-1)!.part.id}`,
-      family: phase.family,
-      label: traceLabel(phase.family, phase.tools.length),
-      detail: compact(phase.tools.map((entry) => toolTitle(entry.part as ToolPart))),
-      entries: phase.entries,
-    })
-    state.phase = undefined
-  }
-
-  for (const entry of entries) {
-    if (lifecycle(entry.part)) continue
-
-    if (entry.hidden) {
-      if (state.phase) {
-        state.phase.entries.push(...state.bridge)
-        state.bridge = []
-        flush()
-      } else {
-        parts(state.bridge)
-        state.bridge = []
-      }
-      continue
-    }
-
-    if (narrative(entry.part)) {
-      state.bridge.push(entry)
-      continue
-    }
-
-    if (!grouped(entry.part)) {
-      if (state.phase) {
-        state.phase.entries.push(...state.bridge)
-        state.bridge = []
-        flush()
-      } else {
-        parts(state.bridge)
-        state.bridge = []
-      }
-      output.push({ kind: "part", entry })
-      continue
-    }
-
-    const family = traceFamily(entry.part.tool)
-    if (!state.phase) {
-      state.phase = { family, entries: [...state.bridge, entry], tools: [entry] }
-      state.bridge = []
-      continue
-    }
-
-    if (state.phase.family === family) {
-      state.phase.entries.push(...state.bridge, entry)
-      state.phase.tools.push(entry)
-      state.bridge = []
-      continue
-    }
-
-    flush()
-    state.phase = { family, entries: [...state.bridge, entry], tools: [entry] }
-    state.bridge = []
-  }
-
-  if (state.phase) {
-    state.phase.entries.push(...state.bridge)
-    state.bridge = []
-    flush()
-  } else {
-    parts(state.bridge)
-  }
-  return output
+  return entries
+    .filter((entry) => !entry.hidden && !lifecycle(entry.part) && !narrative(entry.part))
+    .map((entry) => ({ kind: "part" as const, entry }))
 }
 
 export function summarizeTaskActivity(items: TaskActivity[]): TaskActivityGroup[] {

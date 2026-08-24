@@ -28,7 +28,6 @@ const DEFAULT_DRAIN_TIMEOUT_MS = 2_000
 const DELETION_PROOF_DOMAIN = "openscience-telemetry-delete:v2"
 const SUBJECT_DOMAIN = "openscience-telemetry-subject:v1"
 const LEGACY_CONSENT_EPOCH = "0".repeat(32)
-const DELETION_PROOF_HEADER = "X-OpenScience-Telemetry-Deletion-Proof"
 const consentPath = path.join(Global.Path.data, "telemetry-consent-v2.json")
 const queuePath = path.join(Global.Path.data, "telemetry-queue-v2.jsonl")
 const stateLeasePath = path.join(Global.Path.data, "telemetry-state-v2.lock")
@@ -337,13 +336,15 @@ async function migrateLegacy(state: ConsentFile, subject: string): Promise<boole
   const previous =
     legacy.subjects[subject] ?? (legacy.active_subject ? legacy.subjects[legacy.active_subject] : undefined)
   if (!previous) return false
+  const enabled = previous.analytics_enabled === true
   state.subjects[subject] = {
-    // The retired preference covered content-free product analytics. It did
-    // not authorize conversation or tool-trajectory upload, so do not widen
-    // it during migration. The user can enable the new single setting in
-    // Settings whenever they choose.
-    analytics_enabled: false,
-    research_content_enabled: false,
+    // Preserve an explicit legacy opt-out. Accounts that left the old default
+    // enabled inherit the disclosed default-on trajectory setting; otherwise
+    // nearly every upgrading user would silently become off despite the
+    // account contract and Settings UI both saying the feature is on by
+    // default.
+    analytics_enabled: enabled,
+    research_content_enabled: enabled,
     updated_at: new Date().toISOString(),
     pending: false,
     generation: generation(),
@@ -536,69 +537,6 @@ async function disableSubjectLocked(state: ConsentFile, subject: string) {
   await atomic(consentPath, JSON.stringify(state, null, 2))
 }
 
-async function synchronizeDeletionProofs(skipSubject?: string) {
-  const selected = await withStateLease(async () => {
-    const consent = await readConsent()
-    if (consent.corrupt) return []
-    return Object.entries(consent.value.subjects)
-      .filter(
-        ([subject, entry]) =>
-          subject !== skipSubject &&
-          entry.pending === true &&
-          (!entry.analytics_enabled || !entry.research_content_enabled) &&
-          !!entry.deletion_proof,
-      )
-      .slice(0, 8)
-      .map(([subject, entry]) => ({ subject, proof: entry.deletion_proof! }))
-  })
-  if (!selected.length) return true
-
-  // Fixed-target deletion proofs are safe to send without holding the global
-  // state lease. Their acknowledgement is still compare-and-applied below so
-  // a stale response cannot clear a newer tombstone or account state.
-  const results = await Promise.all(
-    selected.map(async (item) => {
-      const response = await fetch(`${API_BASE}/api/v1/telemetry/account-data/by-key-proof`, {
-        method: "DELETE",
-        headers: {
-          Accept: "application/json",
-          [DELETION_PROOF_HEADER]: item.proof,
-        },
-        signal: AbortSignal.timeout(5_000),
-      }).catch(() => undefined)
-      return { ...item, completed: response?.ok === true }
-    }),
-  )
-
-  return withStateLease(async () => {
-    const consent = await readConsent()
-    if (consent.corrupt) return false
-    let changed = false
-    for (const result of results) {
-      if (!result.completed) continue
-      const current = consent.value.subjects[result.subject]
-      if (!current || current.deletion_proof !== result.proof || current.pending !== true) continue
-      consent.value.subjects[result.subject] = {
-        analytics_enabled: false,
-        research_content_enabled: false,
-        updated_at: new Date().toISOString(),
-        pending: false,
-        generation: generation(),
-      }
-      changed = true
-    }
-    if (changed) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
-    const remaining = Object.entries(consent.value.subjects).some(
-      ([subject, entry]) =>
-        subject !== skipSubject &&
-        entry.pending === true &&
-        (!entry.analytics_enabled || !entry.research_content_enabled) &&
-        !!entry.deletion_proof,
-    )
-    return !remaining && results.every((result) => result.completed)
-  })
-}
-
 type ConsentRequest = {
   subject: string
   token: string
@@ -637,7 +575,7 @@ async function synchronizeConsent(who: Awaited<ReturnType<typeof identity>>) {
       const ensured = await ensureSubject(consent.value, who.subject, who.token)
       if (activated || ensured) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
       const entry = consent.value.subjects[who.subject]
-      // A durable local opt-out/deletion tombstone is authoritative until the
+      // A durable local opt-out is authoritative until the
       // user explicitly turns sharing back on in this client. A later GET must
       // never interpret a missing/default server row as permission.
       if (!entry.pending && (!entry.analytics_enabled || !entry.research_content_enabled)) return true
@@ -1164,10 +1102,8 @@ export namespace OutboundTelemetry {
       if (!current) return false
       consent.value.subjects[nextSubject] = { ...current }
       if (current.pending && (!current.analytics_enabled || !current.research_content_enabled)) {
-        // Move, rather than duplicate, the deletion capability. Both subjects
-        // identify the same key during canonical-id migration; duplicating it
-        // would let the historical alias revoke the still-current key before
-        // its authenticated consent write gets a chance to finish.
+        // Keep the historical alias disabled while the pending account choice
+        // moves to the canonical subject.
         consent.value.subjects[who.subject] = {
           analytics_enabled: false,
           research_content_enabled: false,
@@ -1181,35 +1117,26 @@ export namespace OutboundTelemetry {
     })
   }
 
-  /** Retry durable tombstones for every historical account. The current
-   * account still uses its raw credential while available; older or signed-out
-   * accounts use only their fixed-target deletion capabilities. */
+  /** Retry the current account's durable consent write when authenticated.
+   * Legacy deletion proofs are deliberately inert: disabling data use is
+   * prospective, while deletion requires the explicit authenticated action. */
   export async function retryPendingConsent(): Promise<boolean> {
     const who = await identity()
     const prepared = await withStateLease(async () => {
       if (who.signedIn && !(await identityIsCurrent(who))) return false
       const consent = await readConsent()
       if (consent.corrupt) return false
-
-      const entry = who.signedIn ? consent.value.subjects[who.subject] : undefined
-      if (
-        who.token &&
-        entry?.pending &&
-        (!entry.analytics_enabled || !entry.research_content_enabled) &&
-        !entry.deletion_proof
-      ) {
-        const proof = telemetryDeletionProof(who.token, entry.consent_epoch)
-        if (proof) {
-          entry.deletion_proof = proof
-          await atomic(consentPath, JSON.stringify(consent.value, null, 2))
-        }
+      let changed = false
+      for (const entry of Object.values(consent.value.subjects)) {
+        if (!entry.deletion_proof) continue
+        delete entry.deletion_proof
+        changed = true
       }
+      if (changed) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
       return true
     })
     if (!prepared) return false
-
-    const historicalResolved = await synchronizeDeletionProofs(who.signedIn ? who.subject : undefined)
-    if (!who.token) return historicalResolved
+    if (!who.token) return true
     const pending = await withStateLease(async () => {
       if (!(await identityIsCurrent(who))) return { valid: false as const }
       const consent = await readConsent()
@@ -1218,13 +1145,13 @@ export namespace OutboundTelemetry {
       return {
         valid: true as const,
         pending: entry?.pending === true,
-        purge: !!entry && (!entry.analytics_enabled || !entry.research_content_enabled),
+        disabling: !!entry && (!entry.analytics_enabled || !entry.research_content_enabled),
       }
     })
     if (!pending.valid) return false
     if (!pending.pending) return true
     const synchronized = await synchronizeConsent(who)
-    return !pending.purge || synchronized
+    return !pending.disabling || synchronized
   }
 
   export async function status(refresh = false): Promise<Status> {
@@ -1292,21 +1219,18 @@ export namespace OutboundTelemetry {
           pending: true,
           generation: generation(),
           ...(currentEntry?.consent_epoch ? { consent_epoch: currentEntry.consent_epoch } : {}),
-          ...(!enabled && who.token
-            ? { deletion_proof: telemetryDeletionProof(who.token, currentEntry?.consent_epoch) }
-            : {}),
         }
         if (!enabled) {
-          consent.value.installation_id = randomUUID()
+          // Opt-out is prospective: stop capture immediately and discard only
+          // unsent local rows. Previously uploaded account history remains
+          // intact unless the separate explicit deletion endpoint is used.
           await mutateRowsLocked(() => [])
         }
         await atomic(consentPath, JSON.stringify(consent.value, null, 2))
         return localStatus(consent.value, who.subject, true, false, false)
       })
-      // This is the single privacy control. In particular, resolving an opt-out
-      // means the authenticated server has been asked to atomically disable
-      // consent and purge uploaded traces. Offline failures remain pending and
-      // retry automatically without weakening the local tombstone.
+      // The switch controls future collection only. Explicit account-data
+      // deletion remains a separate operation and is never implied by opt-out.
       await synchronizeConsent(who).catch(() => false)
       return OutboundTelemetry.status(false).catch(() => status)
     })
@@ -1349,7 +1273,6 @@ export namespace OutboundTelemetry {
     if (expectedSubject && who.subject !== expectedSubject) return
     await CredentialLifecycle.serialized(async () => {
       if (!(await identityIsCurrent(who))) return
-      await synchronizeDeletionProofs(who.subject)
       const pending = await withStateLease(async () => {
         if (!(await identityIsCurrent(who))) return false
         const consent = await readConsent()
@@ -1359,7 +1282,7 @@ export namespace OutboundTelemetry {
         if (activated || ensured) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
         return consent.value.subjects[who.subject]?.pending === true
       })
-      // A pending entry is a server consent write, including an opt-out purge.
+      // A pending entry is a server consent write, including prospective opt-out.
       // Resolve it before selecting any content for delivery.
       if (pending && !(await synchronizeConsent(who))) return
 

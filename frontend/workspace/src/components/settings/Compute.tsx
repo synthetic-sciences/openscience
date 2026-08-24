@@ -190,17 +190,7 @@ const Compute: Component = () => {
     )
   }
   const connectionNotice = (): Notice | undefined => {
-    const current = connection()
-    if (current) return current
-    if (!modal()?.connected) return undefined
-    if (!modal()?.enabled) {
-      return { tone: "neutral", title: "Modal is disabled", detail: "Enable Modal to test or dispatch jobs." }
-    }
-    return {
-      tone: "neutral",
-      title: "Configured — connection not tested",
-      detail: "Select Test connection to verify this profile with Modal.",
-    }
+    return connection()
   }
   const defaultsNotice = (): Notice | undefined => {
     if (!modal()?.connected) return undefined
@@ -213,13 +203,7 @@ const Compute: Component = () => {
         detail: "Save defaults before reviewing a new Modal job.",
       }
     }
-    return (
-      current ?? {
-        tone: "neutral",
-        title: "Defaults loaded",
-        detail: "These values match the saved Modal configuration.",
-      }
-    )
+    return current
   }
 
   let modalHydrated = false
@@ -554,21 +538,18 @@ const Compute: Component = () => {
             description="Connect a cloud once. Credentials stay encrypted locally and go only to the tools that need them."
           />
 
-          <Section
-            title="Modal"
-            subtitle="Run explicitly approved jobs in isolated Modal sandboxes using your account."
-          >
+          <Section title="Modal" subtitle="Connect Modal for approved jobs in isolated cloud sandboxes.">
             <Panel>
               <div class="settings-compute-card" aria-busy={modalBusy() ? "true" : undefined}>
                 <div class="settings-compute-provider-row">
                   <div class="flex min-w-0 flex-1 basis-[240px] items-center gap-2.5">
                     <ProviderLogo id="modal" label="Modal" connected={modal()?.connected} />
                     <div class="flex min-w-0 flex-col gap-0.5">
-                      <span class="text-14-medium text-text-strong">Modal compute</span>
+                      <span class="text-14-medium text-text-strong">Modal</span>
                       <span class="text-12-regular text-text-weak">
                         {modal()?.connected
                           ? modal()?.source === "modal_toml"
-                            ? "Using the active profile in ~/.modal.toml."
+                            ? "Active profile from ~/.modal.toml"
                             : "Token stored locally and encrypted."
                           : data()?.modal_file.ready
                             ? "Modal CLI configuration found at ~/.modal.toml."
@@ -579,14 +560,19 @@ const Compute: Component = () => {
                     </div>
                   </div>
                   <Show when={modal()?.connected}>
-                    <Switch
-                      hideLabel
-                      checked={modal()?.enabled ?? false}
-                      disabled={modalBusy()}
-                      onChange={(value) => void toggle(value)}
-                    >
-                      Enable Modal
-                    </Switch>
+                    <div class="settings-compute-actions">
+                      <span class="settings-preference-status" data-tone={modal()?.enabled ? "success" : undefined}>
+                        {modal()?.enabled ? "Enabled" : "Off"}
+                      </span>
+                      <Switch
+                        hideLabel
+                        checked={modal()?.enabled ?? false}
+                        disabled={modalBusy()}
+                        onChange={(value) => void toggle(value)}
+                      >
+                        Enable Modal
+                      </Switch>
+                    </div>
                   </Show>
                 </div>
                 <Show when={connectionNotice()}>{(notice) => <NoticeBox notice={notice()} />}</Show>
@@ -634,6 +620,9 @@ const Compute: Component = () => {
                   </div>
                 </Show>
                 <Show when={modal()?.connected}>
+                  <div class="settings-list-header">
+                    <h4 class="text-11-medium text-text-weak">Job defaults</h4>
+                  </div>
                   <div class="grid gap-3 sm:grid-cols-2">
                     <Field label="Modal app" value={app()} placeholder="openscience" onInput={setApp} />
                     <Field label="Default image" value={image()} placeholder="python:3.12-slim" onInput={setImage} />
@@ -664,15 +653,7 @@ const Compute: Component = () => {
                       onInput={setConcurrency}
                     />
                   </div>
-                  <p class="text-11-regular text-text-weak">
-                    Agents use this as their starting limit and may choose a different timeout for the workload. Every
-                    approval card shows the final limit before dispatch.
-                  </p>
                   <Show when={defaultsNotice()}>{(notice) => <NoticeBox notice={notice()} />}</Show>
-                  <p class="text-11-regular text-text-weak">
-                    The token is never added to agent shells. Turning Modal off prevents new credential resolution and
-                    dispatch.
-                  </p>
                   <div class="settings-compute-actions">
                     <Button
                       class="settings-panel-action settings-panel-action--quiet"
@@ -694,6 +675,9 @@ const Compute: Component = () => {
                       {isBusy("modal:save") ? "Saving…" : "Save defaults"}
                     </Button>
                   </div>
+                  <p class="text-11-regular text-text-weak">
+                    Credentials stay local. Every dispatch still requires approval.
+                  </p>
                 </Show>
               </div>
             </Panel>

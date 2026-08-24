@@ -293,12 +293,6 @@ export default function ResearchTools() {
                 </Switch>
               </Row>
             </Card>
-            <p class="settings-research-tools-note">
-              When enabled, OpenScience shares the complete research trajectory: prompts, model responses, tool inputs
-              and results, searches, errors, and artifact records. Credentials and secret values are removed before
-              upload. Turning it off stops new sharing immediately and removes previously shared activity now or when
-              OpenScience next reconnects.
-            </p>
           </Section>
         </PanelBody>
       </div>

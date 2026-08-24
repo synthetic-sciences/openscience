@@ -723,7 +723,10 @@ export default function Page(): JSX.Element {
   const chatScroll = createAutoScroll({
     working,
     overflowAnchor: "dynamic",
-    bottomThreshold: 120,
+    // A small threshold keeps live output pinned only when the reader is
+    // genuinely at the bottom. The old 120px zone repeatedly recaptured users
+    // who had started scrolling through tool output.
+    bottomThreshold: 24,
   })
   const sessionKey = createMemo(() => `${sdk.scope}/${params.id ?? "new"}`)
   const chatView = layout.view(sessionKey)
