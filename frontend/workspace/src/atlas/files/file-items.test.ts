@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url"
 const css = () => readFileSync(fileURLToPath(new URL("./file-items.css", import.meta.url)), "utf8")
 
 describe("file catalog styles", () => {
-  test("keeps the selected grid visibly a grid at narrow pane widths", () => {
+  test("keeps the selected grid responsive without reserving empty tracks", () => {
     const styles = css()
 
     expect(styles).toMatch(
-      /@container files-pane \(max-width: 400px\)[\s\S]*\.artifact-grid\s*\{[^}]*display: grid;[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/,
+      /@container files-pane \(max-width: 400px\)[\s\S]*\.artifact-grid\s*\{[^}]*display: grid;[^}]*grid-template-columns: repeat\(auto-fit, minmax\(min\(152px, 100%\), 1fr\)\)/,
     )
     expect(styles).not.toMatch(/\.artifact-grid\s*\{[^}]*display: flex;[^}]*flex-direction: column/s)
   })
@@ -23,12 +23,15 @@ describe("file catalog styles", () => {
     expect(styles).toContain("var(--color-text-muted)")
   })
 
-  test("keeps narrow artifact cards compact without permanently showing every action", () => {
+  test("keeps narrow artifact cards readable without permanently showing every action", () => {
     const styles = css()
 
     expect(styles).toMatch(/\.artifact-toolbar__primary\s*\{[^}]*flex-direction: row/s)
     expect(styles).toMatch(/\.artifact-menu__section\s*\{[^}]*padding: 5px 7px 2px/s)
-    expect(styles).toMatch(/@container files-pane \(max-width: 400px\)[\s\S]*\.artifact-thumb\s*\{[^}]*height: 52px/s)
+    expect(styles).toMatch(/@container files-pane \(max-width: 400px\)[\s\S]*\.artifact-thumb\s*\{[^}]*height: 82px/s)
+    expect(styles).toMatch(
+      /@container files-pane \(max-width: 400px\)[\s\S]*\.artifact-thumb--text\s*\{[^}]*font-size: 8px/s,
+    )
     expect(styles).not.toMatch(
       /@container files-pane \(max-width: 400px\)[\s\S]*\.artifact-card__actions\s*\{[^}]*opacity: 1/s,
     )

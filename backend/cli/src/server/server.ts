@@ -45,7 +45,6 @@ import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
-import { ReviewSettingsRoutes } from "./routes/settings/review"
 import { SearchRoutes } from "./routes/search"
 import { GlobalRoutes } from "./routes/global"
 import { AccountRoutes } from "./routes/account"
@@ -68,6 +67,8 @@ import { ComputeJobs } from "../compute/jobs"
 import { CommandRuntime } from "../science/command/registry"
 import { CredentialProcessLedger } from "../credentials/process-ledger"
 import { DataRootBarrier } from "../global/data-root-barrier"
+import { OpenScience } from "../openscience"
+import { accountRequiredResponse, requiresAccountForRequest } from "./account-gate"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -199,6 +200,23 @@ export namespace Server {
           return next()
         })
         .use(async (c, next) => {
+          const internal = c.req.header(INTERNAL_HEADER)
+          if (internal !== undefined && timingSafeEqual(internal, INTERNAL_NONCE)) return next()
+          if (
+            requiresAccountForRequest({
+              method: c.req.method,
+              path: c.req.path,
+              accept: c.req.header("accept"),
+              upgrade: c.req.header("upgrade"),
+            }) &&
+            !(await OpenScience.isAuthenticated())
+          ) {
+            c.header("WWW-Authenticate", 'Bearer realm="openscience-account"')
+            return c.json(accountRequiredResponse, 401)
+          }
+          return next()
+        })
+        .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
           if (!skipLogging) {
             log.info("request", {
@@ -246,7 +264,6 @@ export namespace Server {
         .route("/settings/credentials", CredentialsRoutes())
         .route("/settings/storage", StorageRoutes())
         .route("/settings/compute", ComputeSettingsRoutes())
-        .route("/settings/review", ReviewSettingsRoutes())
         .route("/settings/preferences", SettingsPreferencesRoutes())
         .route("/settings/local", LocalModelsRoutes())
         .route("/settings/sandbox", SandboxSettingsRoutes())

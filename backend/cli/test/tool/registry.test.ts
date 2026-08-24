@@ -75,7 +75,7 @@ describe("tool.registry", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        for (const providerID of ["anthropic", "openai", "synsci"]) {
+        for (const providerID of ["anthropic", "openai", "openrouter"]) {
           const tools = await ToolRegistry.tools({ providerID, modelID: "test-model" })
           expect(tools.map((tool) => tool.id)).toContain("research_search")
           expect(tools.map((tool) => tool.id)).not.toContain("websearch")

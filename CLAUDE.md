@@ -63,20 +63,19 @@ Routing logic: `src/session/system.ts` supplies the same product contract to eve
 
 ### Agent prompts (`src/agent/prompt/`)
 
-| File                    | Active role                                                               |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `research.txt`          | `research`, the single user-facing harness                                |
-| `explore.txt`           | Hidden Explore profile and compatibility alias                            |
-| `reviewer.txt`          | Hidden Review profile plus explicit session and immutable-artifact review |
-| `biology.txt`           | Hidden domain compatibility profile                                       |
-| `physics.txt`           | Hidden domain compatibility profile                                       |
-| `ml.txt`                | Hidden domain compatibility profile                                       |
-| `write.txt`             | Hidden writing compatibility profile                                      |
-| `literature-review.txt` | Hidden literature-review compatibility profile                            |
-| `critique.txt`          | Hidden critique compatibility profile                                     |
-| `physics-critique.txt`  | Hidden physics-critique compatibility profile                             |
-| `compaction.txt`        | Hidden system agent                                                       |
-| `title.txt`             | Hidden system agent                                                       |
+| File                    | Active role                                    |
+| ----------------------- | ---------------------------------------------- |
+| `research.txt`          | `research`, the single user-facing harness     |
+| `explore.txt`           | Hidden Explore profile and compatibility alias |
+| `biology.txt`           | Hidden domain compatibility profile            |
+| `physics.txt`           | Hidden domain compatibility profile            |
+| `ml.txt`                | Hidden domain compatibility profile            |
+| `write.txt`             | Hidden writing compatibility profile           |
+| `literature-review.txt` | Hidden literature-review compatibility profile |
+| `critique.txt`          | Hidden critique compatibility profile          |
+| `physics-critique.txt`  | Hidden physics-critique compatibility profile  |
+| `compaction.txt`        | Hidden system agent                            |
+| `title.txt`             | Hidden system agent                            |
 
 `execute` uses the shared execution contract rather than a separate prompt file. Plan mode lives in `src/session/prompt/plan.txt`. Routing logic in `src/session/prompt.ts` injects the Research effort contract and preserves the hidden compatibility prompts.
 
@@ -85,9 +84,9 @@ Routing logic: `src/session/system.ts` supplies the same product contract to eve
 Defines built-in agents with `Agent.Info` schema: `name`, `mode` (primary/subagent/all), `hidden`, `model`, `prompt`, `permission`, `temperature`, `steps`.
 
 **Default harness**: `research` (the single user-facing default; also the plan-exit target)
-**Internal task profiles**: `explore`, `execute`, `review` (hidden; selected by work type rather than domain branding)
+**Internal task profiles**: `explore`, `execute` (hidden; selected by work type rather than domain branding)
 **Mode**: `plan` (read-only)
-**Compatibility profiles** (hidden): `task`, `biology`, `physics`, `ml`, `write`, `literature-review`, `critique`, `physics-critique`, `reviewer`, `artifact-reviewer`
+**Compatibility profiles** (hidden): `task`, `biology`, `physics`, `ml`, `write`, `literature-review`, `critique`, `physics-critique`
 **System agents**: `compaction`, `title`
 
 Custom agents can be added via config file (`openscience.json` → `agent` key). See `src/cli/cmd/agent.ts` for the creation CLI.
@@ -107,7 +106,7 @@ Custom agents can be added via config file (`openscience.json` → `agent` key).
 | Agent over-processes a simple request | Workflow prompt is too procedural                   | `src/agent/prompt/{agent}.txt`, preserve adaptive behavior |
 | Wrong model used                      | Agent/model config incorrect                        | `src/agent/agent.ts` + `openscience.json` `agent` config   |
 | Agent delegates excessively           | Task contract or prompt lost the zero-child default | `src/tool/task.txt` + `src/session/prompt/core.txt`        |
-| Review runs on trivial work           | Research review threshold is too broad              | `src/agent/prompt/research.txt` + `reviewer.txt`           |
+| Delegation loops or stalls            | Task profile or bounded-attempt contract regressed  | `src/tool/task.ts` + `src/session/loop-state.ts`           |
 | Sub-agent returns empty               | Context window exhaustion or bad prompt             | `src/agent/agent.ts`, check subagent's `steps` limit       |
 | Custom agent not appearing            | Config not in `openscience.json` or wrong `mode`    | Config file `agent` key → `src/agent/agent.ts`             |
 

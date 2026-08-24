@@ -8,7 +8,6 @@ import { LLM } from "../../src/session/llm"
 import { SessionHarness } from "../../src/session/harness"
 import { SessionResearch } from "../../src/session/research"
 import { Provenance } from "../../src/science/provenance/store"
-import { Review } from "../../src/science/provenance/review"
 import { tmpdir } from "../fixture/fixture"
 import { TokenUsage } from "@synsci/util/token-usage"
 import { TaskAttempt } from "../../src/tool/task-attempt"
@@ -385,7 +384,7 @@ test("builds one local observable harness trace without reasoning or copied outp
       expect(trace.harnessReport).toMatchObject({ records: 2, stable: true, valid: true })
       expect(trace.harnessReport.checks.every((item) => item.status === "pass")).toBe(true)
       expect(trace.research).toMatchObject({ configured: true, status: "blocked", missing: [] })
-      expect(trace.research.gates.find((gate) => gate.id === "review")?.status).toBe("failed")
+      expect(trace.research.gates.map((gate) => gate.id)).not.toContain("review")
       expect(trace.research.gates.find((gate) => gate.id === "runtime")?.status).toBe("failed")
       expect(JSON.stringify(trace)).not.toContain("search output that the trace must not copy")
       expect(trace.turns[0].timeToFirstUsefulOutputMs).toBe(100)
@@ -558,13 +557,12 @@ test("runtime gates remain visible failures without masquerading as model infere
   })
 })
 
-test("parent readiness includes findings recorded by a delegated reviewer", async () => {
+test("parent traces keep historical findings without using them as readiness gates", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const parent = await Session.create({ title: "Research owner" })
-      const child = await Session.create({ parentID: parent.id, title: "Independent review" })
       const scope = { projectID: Instance.project.id, directory: Instance.directory }
       await SessionResearch.define(parent.id, {
         objective: "Produce an independently reviewed result",
@@ -578,47 +576,68 @@ test("parent readiness includes findings recorded by a delegated reviewer", asyn
         label: "Parent result",
         meta: { sessionID: parent.id },
       })
-      const finding = await Review.record({
-        ...scope,
-        target: "delegated_target",
-        finding: { claim: "headline", issue: "unsupported", severity: "major", evidence: "result.csv:2" },
-        reviewer: "reviewer",
-        sessionID: child.id,
-        messageID: "msg_child_review",
-        callID: "call_child_review",
+      const finding = await Provenance.recordOwned(scope, {
+        kind: "claim",
+        label: "historical review: unsupported",
+        meta: {
+          review: true,
+          target: "delegated_target",
+          verdict: "refutes",
+          claim: "headline",
+          issue: "unsupported",
+          severity: "major",
+          evidence: "result.csv:2",
+          sessionID: "ses_legacy_review",
+          messageID: "msg_child_review",
+          callID: "call_child_review",
+        },
       })
+      await Provenance.linkOwned(scope, { from: finding.id, to: "delegated_target", relation: "refutes" })
 
       const open = await SessionTrace.build(parent.id)
       expect(open.reviewerFindings).toHaveLength(1)
-      expect(open.reviewerFindings[0]).toMatchObject({ id: finding.node.id, status: "open", severity: "major" })
-      expect(open.research.gates.find((gate) => gate.id === "review")?.status).toBe("failed")
+      expect(open.reviewerFindings[0]).toMatchObject({ id: finding.id, status: "open", severity: "major" })
+      expect(open.research.gates.map((gate) => gate.id)).not.toContain("review")
 
-      await Review.resolve({
-        ...scope,
-        finding: finding.node.id,
-        actor: "research",
-        reason: "Recomputed and replaced the unsupported headline result",
-        sessionID: parent.id,
+      const resolution = await Provenance.recordOwned(scope, {
+        kind: "claim",
+        label: "historical resolution",
+        meta: {
+          resolution: true,
+          finding: finding.id,
+          actor: "research",
+          reason: "Recomputed and replaced the unsupported headline result",
+          sessionID: parent.id,
+        },
       })
-      await Review.record({
-        ...scope,
-        target: "delegated_target",
-        confirms: finding.node.id,
-        finding: { claim: "headline", issue: "verified", severity: "info", evidence: "result.csv:2" },
-        verdict: "supports",
-        reviewer: "reviewer",
-        sessionID: child.id,
+      await Provenance.linkOwned(scope, { from: resolution.id, to: finding.id, relation: "supports" })
+      const confirmation = await Provenance.recordOwned(scope, {
+        kind: "claim",
+        label: "historical review: verified",
+        meta: {
+          review: true,
+          target: "delegated_target",
+          verdict: "supports",
+          confirms: finding.id,
+          claim: "headline",
+          issue: "verified",
+          severity: "info",
+          evidence: "result.csv:2",
+          sessionID: "ses_legacy_review",
+        },
       })
+      await Provenance.linkOwned(scope, { from: confirmation.id, to: "delegated_target", relation: "supports" })
+      await Provenance.linkOwned(scope, { from: confirmation.id, to: finding.id, relation: "supports" })
 
       const confirmed = await SessionTrace.build(parent.id)
-      expect(confirmed.reviewerFindings.find((item) => item.id === finding.node.id)?.status).toBe("confirmed")
-      expect(confirmed.research.gates.find((gate) => gate.id === "review")?.status).toBe("passed")
+      expect(confirmed.reviewerFindings.find((item) => item.id === finding.id)?.status).toBe("confirmed")
+      expect(confirmed.research.gates.map((gate) => gate.id)).not.toContain("review")
       await Session.remove(parent.id)
     },
   })
 })
 
-test("a completed delegated review cannot satisfy the review gate without a structured disposition", async () => {
+test("historical delegated review trace entries remain parseable without a review gate", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
     directory: tmp.path,
@@ -677,10 +696,7 @@ test("a completed delegated review cannot satisfy the review gate without a stru
       const trace = await SessionTrace.build(session.id)
       expect(trace.children[0]).toMatchObject({ agent: "review", status: "completed" })
       expect(trace.reviewerFindings).toHaveLength(0)
-      expect(trace.research.gates.find((gate) => gate.id === "review")).toMatchObject({
-        status: "pending",
-        detail: "Independent review has not recorded a structured disposition",
-      })
+      expect(trace.research.gates.map((gate) => gate.id)).not.toContain("review")
       await Session.remove(session.id)
     },
   })

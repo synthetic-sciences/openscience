@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { DEFAULT_PINNED_MODELS, RECOMMENDED_MODELS, togglePinned } from "./models"
+import {
+  DEFAULT_PINNED_MODELS,
+  RECOMMENDED_MODELS,
+  composerModelPreferenceKey,
+  connectedPinnedModels,
+  togglePinned,
+} from "./models"
 
 const model = (modelID: string, providerID = "anthropic") => ({ modelID, providerID })
 
@@ -51,5 +57,21 @@ describe("pinned models", () => {
       pinned: true,
       limited: false,
     })
+  })
+
+  test("shares composer visibility identity across access-route aliases", () => {
+    expect(composerModelPreferenceKey(model("gpt-5.6-sol", "openai-codex"))).toBe(
+      composerModelPreferenceKey(model("openai/gpt-5.6-sol", "openrouter")),
+    )
+  })
+
+  test("does not let stale disconnected pins consume the three quick slots", () => {
+    const connected = new Set(["openai/gpt-5-6-sol", "anthropic/claude-opus-5"])
+    expect(
+      connectedPinnedModels(
+        [model("gpt-5.6-sol", "openai-codex"), model("claude-opus-5"), model("gemini-3.6-flash", "google")],
+        connected,
+      ),
+    ).toEqual([model("gpt-5.6-sol", "openai-codex"), model("claude-opus-5")])
   })
 })

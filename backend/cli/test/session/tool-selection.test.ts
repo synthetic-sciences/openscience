@@ -40,7 +40,6 @@ describe("tool selection", () => {
     expect(ToolSelection.relevant("bash", input)).toBe(true)
     expect(ToolSelection.relevant("compute_job", input)).toBe(false)
     expect(ToolSelection.relevant("python", input)).toBe(false)
-    expect(ToolSelection.relevant("provenance_review", input)).toBe(false)
     expect(ToolSelection.relevant("science_search", input)).toBe(false)
   })
 

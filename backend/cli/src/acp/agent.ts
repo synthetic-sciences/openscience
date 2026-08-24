@@ -1421,20 +1421,6 @@ export namespace ACP {
 
     if (specified && !providers.length) return specified
 
-    const openscienceProvider = providers.find((p) => p.id === "synsci")
-    if (openscienceProvider) {
-      if (openscienceProvider.models["big-pickle"]) {
-        return { providerID: "synsci", modelID: "big-pickle" }
-      }
-      const [best] = Provider.sort(Object.values(openscienceProvider.models))
-      if (best) {
-        return {
-          providerID: best.providerID,
-          modelID: best.id,
-        }
-      }
-    }
-
     const models = providers.flatMap((p) => Object.values(p.models))
     const [best] = Provider.sort(models)
     if (best) {
@@ -1446,7 +1432,7 @@ export namespace ACP {
 
     if (specified) return specified
 
-    return { providerID: "synsci", modelID: "big-pickle" }
+    throw new Error(Provider.NO_PROVIDER_HINT)
   }
 
   function parseUri(

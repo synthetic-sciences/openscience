@@ -14,7 +14,7 @@ export const WalletState = z.object({
   balanceUsd: z.number().nullable().describe("Wallet balance in USD; null when signed out or unavailable"),
   billingMode: z.enum(["managed", "byok"]).nullable(),
   managedSupported: z.boolean(),
-  lifetimeSpentUsd: z.number(),
+  lifetimeSpentUsd: z.number().nullable(),
   transactions: z.array(
     z.object({
       id: z.string(),
@@ -32,7 +32,7 @@ const SIGNED_OUT: WalletState = {
   balanceUsd: null,
   billingMode: null,
   managedSupported: false,
-  lifetimeSpentUsd: 0,
+  lifetimeSpentUsd: null,
   transactions: [],
 }
 
@@ -46,10 +46,16 @@ async function readWallet(): Promise<WalletState> {
   ])
   return {
     signedIn: true,
-    balanceUsd: credits?.balanceUsd ?? mode?.balance_usd ?? null,
+    // Financial display comes only from the authoritative Wallet response.
+    // Compatibility mode metadata may synthesize zero when that read failed;
+    // never turn an unavailable balance into "$0.00".
+    balanceUsd: credits?.balanceUsd ?? null,
     billingMode: mode?.mode ?? null,
     managedSupported: mode?.managed_supported ?? false,
-    lifetimeSpentUsd: (credits?.lifetimeSpentCents ?? 0) / 100,
+    lifetimeSpentUsd:
+      credits?.lifetimeSpentCents === null || credits?.lifetimeSpentCents === undefined
+        ? null
+        : credits.lifetimeSpentCents / 100,
     transactions: (txns ?? []).map((t) => ({
       id: t.id,
       amountCents: t.amountCents,

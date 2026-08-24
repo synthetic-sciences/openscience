@@ -21,7 +21,7 @@ describe("fetchSetupSession", () => {
     await expect(fetchSetupSession("http://localhost:4096", fetchFn)).resolves.toBe(false)
   })
 
-  test("rejects failed checks so the gate can fail open", async () => {
+  test("rejects failed checks so the account gate stays closed", async () => {
     const fetchFn = (async () => new Response("unavailable", { status: 503 })) as unknown as typeof fetch
 
     await expect(fetchSetupSession("http://localhost:4096", fetchFn)).rejects.toThrow("Session check failed: 503")

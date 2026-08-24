@@ -9,7 +9,6 @@ const Operation = z.enum([
   "node",
   "tree",
   "search",
-  "ask",
   "usage",
   "library_list",
   "library_summary",
@@ -36,16 +35,16 @@ export const AtlasTool = Tool.define("atlas", {
     operation: Operation,
     project: z.string().trim().min(1).optional().describe("Project node id or slug for brief."),
     node: z.string().trim().min(1).optional().describe("Node id or slug for node or tree."),
-    query: z.string().trim().min(1).max(20_000).optional().describe("Question for search or ask."),
+    query: z.string().trim().min(1).max(20_000).optional().describe("Query for search."),
     full: z.boolean().optional().describe("Load the expanded project brief."),
     mode: z.enum(["universal", "targeted", "web", "deep"]).optional().describe("Library search mode."),
-    top_k: z.number().int().min(1).max(50).optional().describe("Maximum search or answer result count."),
+    top_k: z.number().int().min(1).max(50).optional().describe("Maximum search result count."),
     source_ids: z.array(z.string().trim().min(1)).max(100).optional().describe("Indexed source ids."),
     local_source_ids: z
       .array(z.string().trim().min(1))
       .max(100)
       .optional()
-      .describe("Private local-folder source ids for search or ask."),
+      .describe("Private local-folder source ids for search."),
     source_id: z.string().trim().min(1).optional().describe("Source id for show, tree, read, grep, or sync."),
     source_type: z
       .enum(["repository", "documentation", "research_paper", "huggingface_dataset"])

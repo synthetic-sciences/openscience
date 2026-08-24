@@ -19,10 +19,6 @@ function artifact(path: string, index: number) {
   return { path, artifactID: `art-${index}`, versionID, sha256, provenanceID: `run-${index}` }
 }
 
-function target(item: { versionID: string; sha256: string }) {
-  return `artifact-version:${item.versionID}:${item.sha256.slice(0, 16)}`
-}
-
 test("explicit deliverables replace generic template filenames", async () => {
   const sessionID = `ses_research_${crypto.randomUUID()}`
   try {
@@ -136,18 +132,10 @@ test("persists, resumes, and truthfully assesses a research completion contract"
       artifact("REPRODUCE.md", 4),
       artifact("figures/calibration.png", 5),
     ]
-    const findings = artifacts.map((item) => ({
-      target: target(item),
-      verdict: "supports",
-      status: undefined,
-      severity: "info",
-    }))
     const assessment = SessionResearch.assess(contract, {
       artifacts,
       jobs: [{ status: "completed" }],
       kernels: [{ status: "completed" }],
-      findings,
-      reviewed: true,
       busy: false,
     })
     expect(assessment).toMatchObject({ status: "ready", readiness: 100, failedCandidates: 1 })
@@ -156,14 +144,12 @@ test("persists, resumes, and truthfully assesses a research completion contract"
       artifacts,
       jobs: [{ status: "failed" }, { status: "completed" }],
       kernels: [{ status: "error" }, { status: "completed" }],
-      findings: findings.map((item) => ({ ...item, status: "confirmed" })),
-      reviewed: true,
       busy: false,
     })
     expect(recovered).toMatchObject({ status: "ready", readiness: 100 })
     expect(recovered.gates.find((gate) => gate.id === "runtime")).toMatchObject({
       status: "passed",
-      detail: "2 failed runtime attempts are retained; final checks and review passed",
+      detail: "2 failed runtime attempts are retained; final checks passed",
     })
 
     expect(await SessionResearch.preflight(sessionID, 1.2)).toBe("finalize")
@@ -176,7 +162,7 @@ test("persists, resumes, and truthfully assesses a research completion contract"
   }
 })
 
-test("blocks readiness on unresolved review findings and runtime failures", async () => {
+test("blocks readiness on unresolved runtime failures without a review gate", async () => {
   const sessionID = `ses_research_${crypto.randomUUID()}`
   try {
     const contract = await SessionResearch.define(sessionID, {
@@ -188,86 +174,12 @@ test("blocks readiness on unresolved review findings and runtime failures", asyn
       artifacts: [],
       jobs: [{ status: "failed" }],
       kernels: [{ status: "error" }],
-      findings: [{ verdict: "refutes", status: "open", severity: "major" }],
-      reviewed: true,
       busy: false,
     })
 
     expect(assessment.status).toBe("blocked")
-    expect(assessment.gates.find((gate) => gate.id === "review")?.status).toBe("failed")
+    expect(assessment.gates.map((gate) => gate.id)).not.toContain("review")
     expect(assessment.gates.find((gate) => gate.id === "runtime")?.detail).toContain("2 kernel or compute failures")
-  } finally {
-    await SessionResearch.remove(sessionID)
-  }
-})
-
-test("review coverage requires a structured disposition for every required immutable Result", async () => {
-  const sessionID = `ses_research_${crypto.randomUUID()}`
-  try {
-    const contract = await SessionResearch.define(sessionID, {
-      objective: "Review every result",
-      domain: "general",
-      template: "minimal",
-      deliverables: [
-        { path: "report.md", label: "Report", required: true },
-        { path: "metrics.json", label: "Metrics", required: true },
-      ],
-    })
-    const report = artifact("report.md", 20)
-    const metrics = artifact("metrics.json", 21)
-    const assessment = SessionResearch.assess(contract, {
-      artifacts: [report, metrics],
-      jobs: [],
-      kernels: [],
-      findings: [{ target: target(report), verdict: "supports", severity: "info" }],
-      reviewed: true,
-      busy: false,
-    })
-    expect(assessment.gates.find((gate) => gate.id === "review")).toMatchObject({
-      status: "pending",
-      detail: `1 current required Result version has no structured review disposition: ${target(metrics)}`,
-    })
-  } finally {
-    await SessionResearch.remove(sessionID)
-  }
-})
-
-test("review coverage follows the latest immutable version of each required Result", async () => {
-  const sessionID = `ses_research_${crypto.randomUUID()}`
-  try {
-    const contract = await SessionResearch.define(sessionID, {
-      objective: "Review the corrected result",
-      domain: "general",
-      template: "minimal",
-      deliverables: [{ path: "report.md", label: "Report", required: true }],
-    })
-    const superseded = { ...artifact("report.md", 30), completedAt: 1 }
-    const current = { ...artifact("report.md", 31), artifactID: superseded.artifactID, completedAt: 2 }
-    const assessment = SessionResearch.assess(contract, {
-      artifacts: [superseded, current],
-      jobs: [],
-      kernels: [],
-      findings: [{ target: target(current), verdict: "supports", severity: "info" }],
-      reviewed: true,
-      busy: false,
-    })
-    expect(assessment.gates.find((gate) => gate.id === "review")).toMatchObject({
-      status: "passed",
-      detail: "Independent review recorded a disposition for every required Result",
-    })
-
-    const stale = SessionResearch.assess(contract, {
-      artifacts: [superseded, current],
-      jobs: [],
-      kernels: [],
-      findings: [{ target: target(superseded), verdict: "supports", severity: "info" }],
-      reviewed: true,
-      busy: false,
-    })
-    expect(stale.gates.find((gate) => gate.id === "review")).toMatchObject({
-      status: "pending",
-      detail: `1 current required Result version has no structured review disposition: ${target(current)}`,
-    })
   } finally {
     await SessionResearch.remove(sessionID)
   }
@@ -287,8 +199,6 @@ test("empirical readiness requires immutable producing-run lineage for every cur
       artifacts: [metrics],
       jobs: [],
       kernels: [],
-      findings: [{ target: target(metrics), verdict: "supports", severity: "info" }],
-      reviewed: true,
       busy: false,
     })
     expect(assessment.gates.find((gate) => gate.id === "deliverables")).toMatchObject({
@@ -336,8 +246,6 @@ test("preregistration freezes an immutable plan and verifies result chronology s
       artifacts: [plan, metrics],
       jobs: [],
       kernels: [],
-      findings: [],
-      reviewed: false,
       busy: false,
     }
     expect(SessionResearch.assess((await SessionResearch.read(sessionID))!, evidence).gates).toContainEqual(
@@ -682,8 +590,6 @@ test("requires observed evidence before a verification check may settle", async 
       artifacts: [],
       jobs: [],
       kernels: [],
-      findings: [],
-      reviewed: false,
       busy: false,
     })
     expect(assessment.gates.find((gate) => gate.id === "checks")).toMatchObject({ status: "pending", complete: 0 })

@@ -1,14 +1,14 @@
 ---
 title: "Connect Synthetic Sciences"
-description: "Optionally add pay-as-you-go model and search credits, synced credentials, and private research graphs without changing local or BYOK workflows."
+description: "Connect the free account OpenScience uses for identity, trace ownership, settings sync, and optional pay-as-you-go model and search credits."
 icon: "link"
 ---
 
-OpenScience never requires an account. Local models, your own provider keys, eligible ChatGPT/Codex access, scientific tools, Python/R, and direct downloads continue to work without a plan. Connecting a **Synthetic Sciences account** adds optional pay-as-you-go credits and sync.
+OpenScience requires a free **Synthetic Sciences account** for installation identity, session and settings continuity, and account-bound trace controls. No paid plan is required: local models, your own provider keys, eligible ChatGPT/Codex access, scientific tools, Python/R, and direct downloads continue without Ace. Pay-as-you-go credits remain optional.
 
-## What connecting adds
+## What the account and Ace add
 
-- **One managed wallet.** Use supported models without configuring a provider key and spend the same balance on enhanced research search.
+- **One purchased-credit wallet.** Use supported models without configuring a provider key and spend the same balance on enhanced research search.
 - **OpenRouter model routing.** Managed LLM calls use the curated OpenRouter catalog; your own provider keys still call providers directly.
 - **Private research graphs.** Sync durable claims, runs, evidence, and decisions that are visible only to owners and explicitly invited collaborators.
 - **Synced service credentials.** Store supported service keys on your account and pull them to another signed-in machine.
@@ -57,7 +57,7 @@ Basic research search remains available without managed credits. Enhanced search
 
 ## Privacy
 
-Content-free product telemetry is enabled by default and can be disabled in Settings. It records allowlisted operational events and aggregate usage, not prompt or response text, file content, notebook cells, or shell output. Research content is not collected or shared, and there is no content-sharing setting in this release.
+**Use my data** is on by default for connected accounts. It shares a redacted complete research trajectory: prompts, model and assistant responses, tool inputs and results, searches, artifacts, retries, errors, and session lifecycle events. Known credentials and secret values are removed before upload, and Synthetic Sciences applies a second redaction pass before retention. Turn the setting off anytime in Settings to stop new trace uploads and clear pending events without disabling OpenScience or Ace. See [Security](/openscience/security) for the exact boundary.
 
 ## Account commands
 
@@ -68,7 +68,7 @@ Content-free product telemetry is enabled by default and can be disabled in Sett
 | `openscience wallet` | Inspect the wallet balance and open Billing. |
 | `openscience sync` | Refresh synced supported credentials. |
 | `openscience devices` | List authenticated devices. |
-| `openscience logout` | Disconnect this machine; local and BYOK routes keep working. |
+| `openscience logout` | Disconnect this machine; sign in again before running OpenScience. |
 
 ## What's next
 

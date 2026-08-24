@@ -29,6 +29,10 @@ test("account GET reads the profile without publishing a credential revision", a
       })
     }
     if (url.endsWith("/api/cli/balance")) return Response.json({ balance_usd: 12.5 })
+    if (url.endsWith("/api/v1/wallet")) {
+      return Response.json({ balance_cents: 1500, purchased_cents: 1250, promotional_cents: 250 })
+    }
+    if (url.endsWith("/api/cli/access")) return Response.json({ managed_supported: true })
     if (url.endsWith("/api/cli/billing-mode")) {
       return Response.json({ mode: "byok", balance_cents: 1250, balance_usd: 12.5, managed_supported: true })
     }
@@ -44,6 +48,29 @@ test("account GET reads the profile without publishing a credential revision", a
   expect(data.billing_mode.mode).toBe("byok")
   expect(process.env["OPENAI_API_KEY"]).not.toBe("must-not-be-applied")
   expect(await Bun.file(revision).exists()).toBe(false)
+})
+
+test("account routes keep unavailable distinct from a real negative balance", async () => {
+  const signedOut = await AccountRoutes().request("/")
+  expect(await signedOut.json()).toMatchObject({ session: false, balance_usd: null })
+
+  await Bun.write(session, JSON.stringify({ api_key: "thk_test.secret", user_id: "user-1" }))
+  OpenScience.invalidateBalance()
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input)
+    if (url.endsWith("/api/v1/wallet")) {
+      return Response.json({ balance_cents: -100, purchased_cents: -100, promotional_cents: 0 })
+    }
+    return new Response("not found", { status: 404 })
+  }) as typeof fetch
+
+  const negative = await AccountRoutes().request("/balance")
+  expect(await negative.json()).toEqual({ balance_usd: -1 })
+
+  OpenScience.invalidateBalance()
+  globalThis.fetch = (async () => new Response("unavailable", { status: 503 })) as unknown as typeof fetch
+  const unavailable = await AccountRoutes().request("/balance")
+  expect(await unavailable.json()).toEqual({ balance_usd: null })
 })
 
 test("concurrent balance reads share one control-plane request", async () => {

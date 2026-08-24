@@ -51,6 +51,11 @@ describe("settings registry source contract", () => {
     expect(models).toContain("<CodexConnection")
     expect(models).toContain("<ProviderKeys")
     expect(general).toContain("<AppearanceSections")
+    expect(general).not.toContain('title="Navigation"')
+    expect(general).not.toContain('title="Gateway"')
+    expect(general).not.toContain('title="Trace"')
+    expect(general).not.toContain("atlas_enabled")
+    expect(general).not.toContain("show_trace")
   })
 
   test("keeps specialist and memory implementations unavailable from the settings surface", () => {

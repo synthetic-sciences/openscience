@@ -4,11 +4,12 @@ import z from "zod"
 import { Instance } from "../../project/instance"
 import { Provenance, type Edge, type Node } from "../../science/provenance/store"
 import { Review } from "../../science/provenance/review"
+import { WritableMetadata } from "../../science/provenance/write"
 import { lazy } from "../../util/lazy"
 import { ExecutionHistory } from "../../science/execution/history"
 
 const Kind = z.enum(["artifact", "run", "source", "claim"])
-const Relation = z.enum(["produced", "consumed", "derived-from", "supports", "refutes"])
+const Relation = z.enum(["produced", "consumed", "derived-from"])
 const NodeInput = z.object({
   kind: Kind,
   label: z.string().trim().min(1).max(240),
@@ -18,19 +19,10 @@ const NodeInput = z.object({
   size: z.number().int().nonnegative().optional(),
   tool: z.string().trim().min(1).max(240).optional(),
   status: z.enum(["ok", "error"]).optional(),
-  meta: z.record(z.string(), z.unknown()).optional(),
+  meta: WritableMetadata.optional(),
   derived_from: z.string().optional(),
   relation: Relation.default("derived-from"),
 })
-const ReviewInput = z.object({
-  target: z.string(),
-  claim: z.string().trim().min(1).max(10_000),
-  issue: z.string().trim().min(1).max(10_000),
-  severity: z.enum(["blocking", "major", "minor", "info"]),
-  evidence: z.string().trim().min(1).max(20_000),
-  verdict: z.enum(["refutes", "supports"]).default("refutes"),
-})
-
 const scope = () => ({
   projectID: Instance.project.id,
   directory: Instance.directory,
@@ -85,7 +77,8 @@ export const ProvenanceRoutes = lazy(() =>
       "/",
       describeRoute({
         summary: "List the project provenance graph",
-        description: "Returns project-scoped artifacts, runs, sources, claims, reviewer findings, and typed edges.",
+        description:
+          "Returns project-scoped artifacts, runs, sources, claims, historical review records, and typed edges.",
         operationId: "provenance.list",
         responses: { 200: { description: "Project provenance graph" } },
       }),
@@ -129,73 +122,17 @@ export const ProvenanceRoutes = lazy(() =>
         return c.json(node)
       },
     )
-    .post(
-      "/reviews",
-      describeRoute({
-        summary: "Record a reviewer finding",
-        operationId: "provenance.review",
-        responses: { 200: { description: "Recorded finding" }, 400: { description: "Invalid target" } },
-      }),
-      validator("json", ReviewInput),
-      async (c) => {
-        const input = c.req.valid("json")
-        const graph = await Provenance.project(scope())
-        if (!graph.nodes.some((node) => node.id === input.target)) {
-          return c.json({ error: "The review target was not found" }, 400)
-        }
-        const result = await Review.record({
-          target: input.target,
-          finding: {
-            claim: input.claim,
-            issue: input.issue,
-            severity: input.severity,
-            evidence: input.evidence,
-          },
-          verdict: input.verdict,
-          reviewer: "manual review",
-          projectID: Instance.project.id,
-          directory: Instance.directory,
-        })
-        return c.json(result)
-      },
-    )
     .get(
       "/reviews",
       describeRoute({
-        summary: "List reviewer findings with lifecycle status",
+        summary: "List historical review findings with lifecycle status",
         description:
-          "Every reviewer finding in the project. Refuting findings carry a derived status: open, addressed (a fix was recorded), or confirmed (a later reviewer pass verified the target).",
+          "Read-only compatibility view of findings recorded by earlier OpenScience versions. Refuting findings carry their derived historical lifecycle status.",
         operationId: "provenance.reviews.list",
-        responses: { 200: { description: "Reviewer findings" } },
+        responses: { 200: { description: "Historical review findings" } },
       }),
       async (c) => {
         return c.json(await Review.list(scope()))
-      },
-    )
-    .post(
-      "/reviews/:id/resolve",
-      describeRoute({
-        summary: "Mark a reviewer finding as addressed",
-        description:
-          "Records an append-only resolution against a refuting finding. The finding is only confirmed closed once a later reviewer pass records a supports finding on the same target.",
-        operationId: "provenance.reviews.resolve",
-        responses: { 200: { description: "Resolution node" }, 400: { description: "Not a refuting finding" } },
-      }),
-      validator("param", z.object({ id: z.string() })),
-      validator(
-        "json",
-        z.object({ actor: z.string().trim().min(1).max(240), reason: z.string().trim().min(1).max(10_000) }),
-      ),
-      async (c) => {
-        const input = c.req.valid("json")
-        const node = await Review.resolve({
-          finding: c.req.valid("param").id,
-          actor: input.actor,
-          reason: input.reason,
-          ...scope(),
-        }).catch((error) => (error instanceof Error ? error : new Error(String(error))))
-        if (node instanceof Error) return c.json({ error: node.message }, 400)
-        return c.json(node)
       },
     )
     .get(

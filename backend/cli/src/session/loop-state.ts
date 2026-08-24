@@ -2,15 +2,13 @@ import { createHash } from "node:crypto"
 import type { MessageV2 } from "./message-v2"
 
 export namespace SessionLoopState {
-  export type Continuation = "output" | "contract" | "review" | "review-summary" | "compaction" | "task"
+  export type Continuation = "output" | "contract" | "compaction" | "task"
 
   export type Info = {
     epoch?: string
     step: number
     outputContinuations: number
     contractContinuations: number
-    reviewContinuations: number
-    summaryContinuations: number
     overflowCompactions: number
   }
 
@@ -78,10 +76,18 @@ export namespace SessionLoopState {
     return message.internal?.epoch
   }
 
+  /** Read-time compatibility only. Retired reviewer continuations resume as a
+   * normal task on the current research agent; no reviewer profile or writable
+   * review workflow is reintroduced. */
+  function compatibleContinuation(value: unknown): Continuation | undefined {
+    if (value === "output" || value === "contract" || value === "compaction" || value === "task") return value
+    if (value === "review" || value === "review-summary") return "task"
+  }
+
   export function messageKind(message: MessageV2.User): Continuation | undefined {
     if (message.internal?.type !== "continuation") return
     if (message.internal.transaction !== message.id) return
-    return message.internal.kind
+    return compatibleContinuation((message.internal as { kind?: unknown }).kind)
   }
 
   export function continuation(kind: Continuation) {
@@ -137,23 +143,14 @@ export namespace SessionLoopState {
     if (part.type !== "text" || !part.synthetic) return
     if (part.text.startsWith("Your previous response reached the output limit")) return "output"
     if (part.text.startsWith("The durable research completion contract is not satisfied yet.")) return "contract"
-    if (part.text.startsWith("Independent review completed")) return "review-summary"
-    if (part.text.startsWith("Run an independent review of")) return "review"
+    if (part.text.startsWith("Independent review completed")) return "task"
+    if (part.text.startsWith("Run an independent review of")) return "task"
   }
 
   export function continuationKind(part: MessageV2.Part): Continuation | undefined {
     const value = metadata(part)
     if ((value?.version === 1 || value?.version === 2) && value.type === "continuation") {
-      const kind = value.kind
-      if (
-        kind === "output" ||
-        kind === "contract" ||
-        kind === "review" ||
-        kind === "review-summary" ||
-        kind === "compaction" ||
-        kind === "task"
-      )
-        return kind
+      return compatibleContinuation(value.kind)
     }
     return legacy(part)
   }
@@ -236,8 +233,6 @@ export namespace SessionLoopState {
         return kinds.reduce<Info & { durableStep?: number }>((next, value) => {
           if (value === "output") return { ...next, outputContinuations: next.outputContinuations + 1 }
           if (value === "contract") return { ...next, contractContinuations: next.contractContinuations + 1 }
-          if (value === "review") return { ...next, reviewContinuations: next.reviewContinuations + 1 }
-          if (value === "review-summary") return { ...next, summaryContinuations: next.summaryContinuations + 1 }
           return next
         }, state)
       },
@@ -246,8 +241,6 @@ export namespace SessionLoopState {
         step: 0,
         outputContinuations: 0,
         contractContinuations: 0,
-        reviewContinuations: 0,
-        summaryContinuations: 0,
         overflowCompactions: 0,
       },
     )
@@ -256,8 +249,6 @@ export namespace SessionLoopState {
       step: state.durableStep ?? state.step,
       outputContinuations: state.outputContinuations,
       contractContinuations: state.contractContinuations,
-      reviewContinuations: state.reviewContinuations,
-      summaryContinuations: state.summaryContinuations,
       overflowCompactions: state.overflowCompactions,
     }
   }

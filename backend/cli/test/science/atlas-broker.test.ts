@@ -268,9 +268,11 @@ describe("Atlas host broker", () => {
       fn: async () => {
         const session = await Session.create({ title: "one-shot indexing" })
         try {
-          const calls = { external: 0, network: 0 }
-          globalThis.fetch = (async () => {
-            calls.network++
+          const calls = { external: 0, sourceUploads: 0, telemetry: 0 }
+          globalThis.fetch = (async (input: string | URL | Request) => {
+            const pathname = new URL(String(input)).pathname
+            if (pathname.includes("/telemetry/")) calls.telemetry++
+            else calls.sourceUploads++
             return Response.json({ source_id: "one-shot-source" }, { status: 201 })
           }) as unknown as typeof fetch
 
@@ -300,7 +302,8 @@ describe("Atlas host broker", () => {
             },
           )
 
-          expect(calls).toEqual({ external: 1, network: 1 })
+          expect(calls.external).toBe(1)
+          expect(calls.sourceUploads).toBe(1)
           expect(JSON.parse(result.output)).toMatchObject({
             source: { source_id: "one-shot-source" },
             collection: { files: 1 },
@@ -500,7 +503,9 @@ describe("Atlas host broker", () => {
             scope: "session",
           })
           const state = { settled: false, revocation: undefined as Promise<unknown> | undefined }
-          globalThis.fetch = (async () => {
+          globalThis.fetch = (async (input: string | URL | Request) => {
+            const pathname = new URL(input instanceof Request ? input.url : String(input)).pathname
+            if (pathname.includes("/telemetry/")) return Response.json({ enabled: false })
             state.revocation = SessionFilesystem.revoke(session.id, grant.id).then((value) => {
               state.settled = true
               return value
@@ -554,7 +559,9 @@ describe("Atlas host broker", () => {
             authorized,
           })
           const calls = { network: 0 }
-          globalThis.fetch = (async () => {
+          globalThis.fetch = (async (input: string | URL | Request) => {
+            const pathname = new URL(input instanceof Request ? input.url : String(input)).pathname
+            if (pathname.includes("/telemetry/")) return Response.json({ enabled: false })
             calls.network++
             return Response.json({ source_id: "must-not-upload" }, { status: 201 })
           }) as unknown as typeof fetch
@@ -603,7 +610,9 @@ describe("Atlas host broker", () => {
             await Bun.write(path.join(folder, `filler-${String(index).padStart(3, "0")}.md`), `safe ${index}\n`)
           }
           const request = { body: {} as Record<string, unknown> }
-          globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+          globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+            const pathname = new URL(input instanceof Request ? input.url : String(input)).pathname
+            if (pathname.includes("/telemetry/")) return Response.json({ enabled: false })
             request.body = JSON.parse(String(init?.body))
             return Response.json({ source_id: "race-safe" }, { status: 201 })
           }) as typeof fetch
@@ -817,25 +826,12 @@ describe("Atlas host broker", () => {
     })
   })
 
-  test("asks over a deduplicated source-id array", async () => {
-    await fs.mkdir(Global.Path.data, { recursive: true })
-    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
-    const request = { body: {} as Record<string, unknown> }
-    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
-      request.body = JSON.parse(String(init?.body))
-      return Response.json({ answer: "grounded" })
-    }) as typeof fetch
-
-    await AtlasBroker.run({
-      operation: "ask",
-      query: "What changed?",
-      sourceIDs: ["source-1", " source-2 ", "source-1"],
-    })
-
-    expect(request.body).toEqual({
-      query: "What changed?",
-      source_ids: ["source-1", "source-2"],
-    })
+  test("does not expose the retired hosted document-answer operation", async () => {
+    const tool = await Bun.file(new URL("../../src/tool/atlas.ts", import.meta.url)).text()
+    const broker = await Bun.file(new URL("../../src/science/atlas/broker.ts", import.meta.url)).text()
+    expect(tool).not.toMatch(/^\s*"ask",$/m)
+    expect(broker).not.toContain('operation === "ask"')
+    expect(broker).not.toContain("/api/v1/documents/ask")
   })
 
   test("rejects local paths at the source-id boundary", async () => {
@@ -854,7 +850,7 @@ describe("Atlas host broker", () => {
     ).rejects.toThrow("source_ids must contain Synthetic Sciences identifiers")
     await expect(
       AtlasBroker.run({
-        operation: "ask",
+        operation: "search",
         query: "private source",
         sourceIDs: ["../private-data"],
       }),
@@ -975,7 +971,6 @@ describe("Atlas host broker", () => {
                 ],
               },
               handoff: {
-                atlas_compute_id: { status: "unavailable", reason: "not_implemented" },
                 atlas_run_id: { status: "unavailable", reason: "not_published" },
               },
             },

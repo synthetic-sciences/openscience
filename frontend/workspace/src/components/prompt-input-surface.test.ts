@@ -6,6 +6,7 @@ const componentCss = await Bun.file(new URL("./prompt-input.css", import.meta.ur
 const chatCss = await Bun.file(new URL("./chat-surface.css", import.meta.url)).text()
 const popover = await Bun.file(new URL("./model-settings-popover.tsx", import.meta.url)).text()
 const modelCatalog = await Bun.file(new URL("../context/model-catalog.ts", import.meta.url)).text()
+const modelFast = await Bun.file(new URL("./model-fast.ts", import.meta.url)).text()
 
 describe("floating prompt surface", () => {
   test("uses one floating surface without the retired compact outline utilities", () => {
@@ -57,10 +58,10 @@ describe("floating prompt surface", () => {
   test("uses the shared icon system and accessible control groups instead of text glyphs", () => {
     expect(source).toContain('role="group"')
     expect(source).toContain('aria-label="Composer tools"')
-    expect(source).toContain('aria-label="Model and send"')
+    expect(source).toContain('aria-label="Model, effort, and send"')
     expect(source).toContain('aria-label="Research tools"')
-    expect(popover).toContain("aria-label={`Model: ${label()}`}")
-    expect(popover).toContain("`${name} · ${routeAccess(model)}`")
+    expect(popover).toContain("aria-label={`Model: ${control().trigger}`}")
+    expect(popover).toContain("data-model-effort-chip")
     expect(source).not.toContain('aria-label="Research capabilities"')
     expect(source).not.toContain("workspace-composer__overflow")
     expect(source).toContain('class="workspace-composer__research-tools"')
@@ -189,14 +190,12 @@ describe("composer control consolidation", () => {
     expect(source).toContain('const isNewSession = !params.id || params.id === "new"')
   })
 
-  test("keeps model-aware effort and speed choices inside compact Research tools", () => {
+  test("keeps effort beside the model and removes duplicate effort and speed rows from Research", () => {
     expect(source).not.toContain('Persist.workspace(sdk.scope, "research-effort"')
-    expect(source).toContain("data-research-effort={option.id}")
-    expect(source).toContain("data-research-speed={option.id}")
-    expect(source).toContain("local.model.variant.list()")
-    expect(source).toContain("local.model.tier.list()")
-    expect(source).toContain("local.model.variant.set(option.id)")
-    expect(source).toContain("local.model.tier.set(option.id)")
+    expect(source).not.toContain("data-research-effort={option.id}")
+    expect(source).not.toContain("data-research-speed={option.id}")
+    expect(popover).toContain("local.model.variant.list()")
+    expect(popover).toContain("data-model-effort-chip")
     expect(source).toContain("const resetResearchTools = () =>")
     expect(source).toContain('".workspace-composer__research-choice[open]"')
     expect(source).toContain("if (event.currentTarget.open) return")
@@ -216,20 +215,31 @@ describe("composer control consolidation", () => {
     expect(componentCss).toContain("width: min(252px, calc(100vw - 24px))")
   })
 
-  test("shows one tiny fast toggle whenever a connected route supports it", () => {
-    expect(source).toContain("const fastMode = createMemo")
-    expect(source).toContain("logicalModelKey(model.provider.id, model.id) === key")
-    expect(source).toContain('Object.keys(model.modes ?? {}).includes("fast")')
-    expect(source).toContain('class="workspace-composer__fast-mode"')
-    expect(source).toContain('class="workspace-composer__model-actions"')
-    expect(source.indexOf('class="workspace-composer__fast-mode"')).toBeLessThan(
-      source.indexOf("<ModelSettingsPopover />"),
-    )
-    expect(source).toContain("aria-pressed={mode().active}")
-    expect(source).toContain('<Icon name="bolt" size="small" />')
-    expect(componentCss).toContain(".workspace-composer__model-actions")
-    expect(componentCss).toContain("width: 28px")
-    expect(componentCss).toContain('workspace-composer__fast-mode[data-active="true"]')
+  test("keeps exact-route Fast inside model options and out of the composer chrome", () => {
+    expect(popover).toContain("exactRouteFastMode(current(), local.model.tier.current())")
+    expect(modelFast).toContain('hasOwnProperty.call(route.modes ?? {}, "fast")')
+    expect(popover).toContain("<Switch")
+    expect(popover).toContain("data-model-fast-toggle")
+    expect(popover).toContain("checked={fast().active}")
+    expect(popover).not.toContain('name="bolt"')
+    expect(popover).toContain('props.onTierSelect(checked ? "fast" : "standard")')
+    expect(popover).toContain("control().effort || fast()")
+    expect(popover).toContain("props.options.length > 0")
+    expect(popover).toContain('[data-model-fast-toggle] [data-slot="switch-input"]')
+    expect(popover).not.toContain('kind="speed"')
+    expect(popover).not.toContain("Available through")
+    expect(popover).toContain("onTierSelect={(id) => local.model.tier.set(id)}")
+    expect(source).not.toContain("const fastMode = createMemo")
+    expect(source).not.toContain("toggleFastMode")
+    expect(source).not.toContain("workspace-composer__fast-mode")
+    expect(source).not.toContain("workspace-composer__model-actions")
+    expect(componentCss).not.toContain("workspace-composer__fast-mode")
+    expect(componentCss).not.toContain("workspace-composer__model-actions")
+    const effortStart = popover.lastIndexOf("<ModelEffortPopover")
+    const effortSurface = popover.slice(effortStart, popover.indexOf("</Show>", effortStart))
+    expect(effortSurface).toContain("local.model.variant.set")
+    expect(effortSurface).toContain("local.model.tier.set")
+    expect(effortSurface).not.toContain("local.model.set")
   })
 
   test("offers three real action-approval modes inside Research tools", () => {
@@ -251,6 +261,9 @@ describe("composer control consolidation", () => {
 
   test("sends the standard research effort through the SDK prompt", () => {
     expect(source).toContain('const researchEffort = "normal" as const')
+    expect(source).toContain("const variant = local.model.variant.prompt()")
+    expect(source).toContain("const tier = local.model.tier.prompt()")
+    expect(source).toMatch(/variant,\s+tier,/)
     expect(source).toContain("effort: researchEffort")
     expect(source).toContain("delegation: capabilities()?.delegation_enabled ?? true")
     expect(source).toContain("await client.session.prompt(request)")
@@ -263,11 +276,8 @@ describe("composer control consolidation", () => {
     expect(source.match(/\.command\(request\)/g)?.length ?? 0).toBe(3)
   })
 
-  test("offers clear delegation and reviewer controls without duplicating Compute", () => {
+  test("offers clear delegation controls without duplicating Compute or reviewer settings", () => {
     expect(source).toContain('settings<CapabilityPreferences>("/settings/preferences")')
-    expect(source).toContain('settings<ReviewPreferences>("/settings/review")')
-    expect(source).toContain("Reviewer model")
-    expect(source).toContain("Auto-review")
     expect(source).toContain("delegatedSpecialist(")
     expect(source).toContain('aria-label="Research roles"')
     expect(source).toContain('class="workspace-composer__research-control"')
@@ -275,15 +285,13 @@ describe("composer control consolidation", () => {
     expect(source).toContain('class="workspace-composer__research-choice-menu"')
     expect(source).toContain('role="radiogroup"')
     expect(source).toContain("Route to the best match")
-    expect(source).toContain("Use the response model")
-    expect(source).toContain('placeholder="Find a reviewer model"')
-    expect(source).toContain("reviewerChoices()")
-    expect(source).toContain("reviewerSources()")
-    expect(source).toContain("...local.model.list()")
-    expect(componentCss).toContain("width: min(288px, calc(100vw - 24px))")
-    expect(componentCss).toContain("button.workspace-composer__reviewer-back > span")
-    expect(componentCss).toContain("justify-content: flex-start")
-    expect(source).not.toContain('<select aria-label="Reviewer model"')
+    expect(source).not.toContain("ReviewPreferences")
+    expect(source).not.toContain('settings<ReviewPreferences>("/settings/review")')
+    expect(source).not.toContain("Reviewer model")
+    expect(source).not.toContain("Auto-review")
+    expect(source).not.toContain("reviewerChoices()")
+    expect(source).not.toContain("reviewerSources()")
+    expect(componentCss).not.toContain("workspace-composer__reviewer")
     expect(source).not.toContain("Research workflow")
     expect(source).not.toContain("Saved locally")
     expect(source).not.toContain("Compute activity")
@@ -297,8 +305,10 @@ describe("composer control consolidation", () => {
 
   test("keeps billing source details out of the model trigger", () => {
     expect(popover).not.toContain("data-model-source-label")
-    expect(popover).toContain("inferenceSource({")
-    expect(modelCatalog).toContain('if (input.providerID.startsWith("synsci")) return "managed"')
+    expect(popover).not.toContain("inferenceSource({")
+    expect(popover).not.toContain("inferenceSourceLabel(")
+    expect(modelCatalog).not.toContain('input.providerID.startsWith("synsci")')
+    expect(modelCatalog).toContain('input.providerID === "openrouter" && input.credential === "managed"')
     expect(modelCatalog).toContain('if (input.providerID === "openai-codex") return "chatgpt"')
     expect(modelCatalog).toContain('if (input.credential === "api") return "byok"')
     expect(modelCatalog).toContain('input.billing === "byok" ? "byok" : undefined')
@@ -320,6 +330,6 @@ describe("composer control consolidation", () => {
   test("shows missing model setup inline immediately above the composer", () => {
     expect(source).toContain('class="workspace-composer__setup" role="status"')
     expect(source).toContain("Choose a model to start")
-    expect(source).toContain("Connect ChatGPT, add a provider key, or use managed inference.")
+    expect(source).toContain("Connect a provider in Settings to choose a model.")
   })
 })

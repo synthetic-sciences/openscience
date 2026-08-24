@@ -6,6 +6,9 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
+import { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
+
+export { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
 
 type Mode = SettingsBillingGetResponse["llm"]
 type Wallet = {
@@ -19,27 +22,19 @@ const MODES: { value: Mode; title: string; body: string }[] = [
   {
     value: null,
     title: "Automatic",
-    body: "Use the selected model's best available access route.",
+    body: "Use the selected model's best available account, local, or credit route.",
   },
   {
     value: "managed",
     title: "Credits",
-    body: "Use your Synthetic Sciences credits. No provider account is required.",
+    body: "Use your Ace wallet for supported models. No provider account is required.",
   },
   {
     value: "byok",
     title: "Accounts",
-    body: "Use only the provider accounts and API keys connected below.",
+    body: "Use only connected provider accounts, keys, and eligible subscriptions.",
   },
 ]
-
-const money = (value: number) => `$${value.toFixed(value >= 100 ? 0 : 2)}`
-
-export function walletBalanceLabel(wallet: Pick<Wallet, "signedIn" | "balanceUsd">) {
-  if (!wallet.signedIn) return "Not signed in"
-  if (wallet.balanceUsd === null) return "Balance unavailable"
-  return wallet.balanceUsd >= 0 ? `${money(wallet.balanceUsd)} available` : `${money(wallet.balanceUsd)} balance`
-}
 
 /**
  * Persist and apply the small billing response independently of the much larger
@@ -117,7 +112,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
           .refreshProviders()
           .catch((error) =>
             props.onError?.(
-              `Model access settings saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
+              `Model access was saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
             ),
           )
           .finally(() => setRefreshing(false))
@@ -151,13 +146,52 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
 
   return (
     <div class="models-inference">
+      <div class="models-routing" aria-label="Inference routing">
+        <div
+          class="models-routing__options"
+          role="group"
+          aria-label="Inference routing mode"
+          aria-describedby="managed-inference-description"
+        >
+          <For each={MODES}>
+            {(option) => (
+              <button
+                type="button"
+                aria-pressed={mode() === option.value}
+                aria-busy={busy()}
+                disabled={busy() || unsupported(option.value)}
+                class="models-routing__option"
+                title={
+                  unsupported(option.value)
+                    ? "Credits require a signed-in Synthetic Sciences account with Ace enabled"
+                    : undefined
+                }
+                onClick={() => update(option.value)}
+              >
+                <span class="models-routing__option-label">
+                  <span>{option.title}</span>
+                </span>
+              </button>
+            )}
+          </For>
+        </div>
+        <p id="managed-inference-description" class="models-routing__description" aria-live="polite">
+          {busy() ? `Saving ${selected().title.toLowerCase()}…` : selected().body}
+          <Show when={!busy() && refreshing()}>
+            <span class="models-routing__sync"> Updating model availability…</span>
+          </Show>
+        </p>
+      </div>
+
       <div class="settings-row models-compact-row models-account-summary">
         <div class="models-account-summary__identity">
           <div class="flex min-w-0 flex-col gap-0.5">
-            <span class="text-12-regular text-text-weak">Synthetic Sciences credits</span>
+            <span class="text-12-regular text-text-weak">Wallet balance</span>
             <span aria-live="polite">
               <Show when={wallet()} fallback={<span class="text-13-medium text-text-weak">Checking account…</span>}>
-                <span class="text-13-medium text-text-strong">{walletBalanceLabel(wallet()!)}</span>
+                <span class="models-account-summary__balance text-13-medium text-text-strong">
+                  {walletBalanceLabel(wallet()!)}
+                </span>
               </Show>
             </span>
           </div>
@@ -169,50 +203,14 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
             variant="secondary"
             onClick={() => platform.openLink(URLS.dashboardBilling)}
           >
-            Add funds
+            Open billing
           </Button>
         </span>
       </div>
 
-      <div class="models-routing" aria-label="Inference routing">
-        <div class="models-routing__options" role="group" aria-label="Inference routing mode">
-          <For each={MODES}>
-            {(option) => (
-              <button
-                type="button"
-                aria-pressed={mode() === option.value}
-                aria-describedby={`managed-inference-${option.value ?? "automatic"}-description`}
-                aria-busy={busy()}
-                disabled={busy() || unsupported(option.value)}
-                class="models-routing__option"
-                title={
-                  unsupported(option.value)
-                    ? "Credits requires a signed-in Synthetic Sciences account with wallet billing available"
-                    : undefined
-                }
-                onClick={() => update(option.value)}
-              >
-                <span class="models-routing__option-label">
-                  <span>{option.title}</span>
-                </span>
-                <span id={`managed-inference-${option.value ?? "automatic"}-description`} class="sr-only">
-                  {option.body}
-                </span>
-              </button>
-            )}
-          </For>
-        </div>
-        <p class="models-routing__description" aria-live="polite">
-          {busy() ? `Saving ${selected().title.toLowerCase()}…` : selected().body}
-          <Show when={!busy() && refreshing()}>
-            <span class="models-routing__sync"> Updating model availability…</span>
-          </Show>
-        </p>
-      </div>
-
       <Show when={wallet() && !wallet()!.signedIn}>
         <p class="settings-inline-note text-12-regular text-text-weak">
-          Sign in from General to use Credits. Accounts and Automatic remain available.
+          Sign in from General to use Credits. Automatic routing and connected accounts remain available.
         </p>
       </Show>
     </div>

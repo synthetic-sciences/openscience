@@ -3,11 +3,6 @@ export type CapabilityPreferences = {
   delegation_specialist: string | null
 }
 
-export type ReviewPreferences = {
-  auto: boolean
-  model: { providerID: string; modelID: string } | null
-}
-
 export type SpecialistOption = {
   name: string
   description?: string
@@ -25,7 +20,6 @@ const LABELS: Record<string, string> = {
   "literature-review": "Literature review",
   critique: "Scientific critique",
   "physics-critique": "Physics critique",
-  reviewer: "Research reviewer",
 }
 
 export const CORE_SPECIALISTS = ["biology", "physics", "ml"] as const

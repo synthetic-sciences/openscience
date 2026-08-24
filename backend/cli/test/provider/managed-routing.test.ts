@@ -48,6 +48,7 @@ function clearManagedLLMEnv() {
     "OPENROUTER_BASE_URL",
     "META_MODEL_API_KEY",
     "META_MODEL_BASE_URL",
+    "SYNSCI_API_KEY",
   ]) {
     Env.remove(key)
   }
@@ -72,13 +73,22 @@ describe("Provider.managedRoutesCuratedProvidersOnly (pure)", () => {
 })
 
 describe("Provider.managedProviderAllowed (pure)", () => {
-  test("OpenRouter and the hosted synsci demo are the only managed providers", () => {
+  test("OpenRouter is the only managed provider", () => {
     expect(Provider.managedProviderAllowed("openrouter")).toBe(true)
-    expect(Provider.managedProviderAllowed("synsci")).toBe(true)
-    expect(Provider.managedProviderAllowed("synsci-hosted")).toBe(true)
   })
-  test("first-party managed proxies, Meta, Codex, and everything else are rejected", () => {
-    for (const id of ["anthropic", "openai", "google", "meta", "openai-codex", "github-copilot", "gateway", "azure"]) {
+  test("legacy Synthetic Sciences, first-party proxies, Codex, and everything else are rejected", () => {
+    for (const id of [
+      "synsci",
+      "synsci-hosted",
+      "anthropic",
+      "openai",
+      "google",
+      "meta",
+      "openai-codex",
+      "github-copilot",
+      "gateway",
+      "azure",
+    ]) {
       expect(Provider.managedProviderAllowed(id)).toBe(false)
     }
   })
@@ -136,6 +146,31 @@ describe("managed session availability", () => {
         expect(providers["anthropic"]).toBeUndefined()
         expect(providers["openai"]).toBeUndefined()
         expect(providers["google"]).toBeUndefined()
+      },
+    })
+  })
+
+  test("the retired hosted provider never loads from catalog env or config", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        provider: {
+          synsci: {
+            options: { apiKey: "legacy-config-key" },
+            models: { demo: { name: "Retired demo" } },
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("SYNSCI_API_KEY", "legacy-env-key")
+        Provider.invalidate()
+      },
+      fn: async () => {
+        expect((await Provider.list())["synsci"]).toBeUndefined()
+        await expect(Provider.getModel("synsci", "demo")).rejects.toThrow()
       },
     })
   })
@@ -333,26 +368,103 @@ describe("managed session availability", () => {
     })
   })
 
-  test("legacy auto-detect (thk_ present, billing.llm unset) is unchanged — proxies still load", async () => {
-    await using tmp = await tmpdir({ config: {} })
+  test("legacy auto-detect rejects every non-OpenRouter thk_ proxy while keeping managed OpenRouter", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        provider: {
+          xai: { options: { baseURL: `${PROXY}/xai/v1` } },
+        },
+      },
+    })
     await Instance.provide({
       directory: tmp.path,
       init: async () => {
         clearManagedLLMEnv()
         Env.set("ANTHROPIC_API_KEY", "thk_anthropic")
         Env.set("ANTHROPIC_BASE_URL", `${PROXY}/anthropic/v1`)
+        Env.set("OPENAI_API_KEY", "thk_openai")
+        Env.set("OPENAI_BASE_URL", `${PROXY}/openai/v1`)
+        Env.set("GOOGLE_GENERATIVE_AI_API_KEY", "thk_google")
+        Env.set("GOOGLE_GENERATIVE_AI_BASE_URL", `${PROXY}/gemini/v1beta`)
+        Env.set("META_MODEL_API_KEY", "thk_meta")
+        Env.set("META_MODEL_BASE_URL", `${PROXY}/meta/v1`)
         Env.set("OPENROUTER_API_KEY", "thk_openrouter")
         Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
         Provider.invalidate()
       },
       fn: async () => {
         const providers = await Provider.list()
-        // Gating is scoped to the explicit toggle: without it, nothing is dropped.
-        expect(providers["anthropic"]).toBeDefined()
-        expect(providers["anthropic"].options.baseURL).toBe(`${PROXY}/anthropic/v1`)
+        expect(providers["anthropic"]).toBeUndefined()
+        expect(providers["openai"]).toBeUndefined()
+        expect(providers["google"]).toBeUndefined()
+        expect(providers["meta"]).toBeUndefined()
+        // A stale Atlas proxy is itself a managed route, even if its paired
+        // thk_* env value was lost from an old sync snapshot.
+        expect(providers["xai"]).toBeUndefined()
         expect(providers["openrouter"]).toBeDefined()
+        expect(providers["openrouter"].options.baseURL).toBe(`${PROXY}/openrouter/v1`)
       },
     })
+  })
+
+  test("legacy auto-detect still preserves explicit OAuth, Codex OAuth, and localhost routes", async () => {
+    const previousAnthropic = await Auth.get("anthropic")
+    const previousCodex = await Auth.get("openai-codex")
+    await Auth.set("anthropic", {
+      type: "oauth",
+      refresh: "anthropic-refresh",
+      access: "anthropic-access",
+      expires: Date.now() + 60_000,
+    })
+    await Auth.set("openai-codex", {
+      type: "oauth",
+      refresh: "codex-refresh",
+      access: "codex-access",
+      expires: Date.now() + 60_000,
+    })
+    await using tmp = await tmpdir({
+      config: {
+        provider: {
+          "openai-codex": {},
+          ollama: {
+            name: "Ollama (local)",
+            npm: "@ai-sdk/openai-compatible",
+            options: { baseURL: "http://localhost:11434/v1", apiKey: "local" },
+            models: { "llama3.1": { name: "llama3.1", limit: { context: 8192, output: 2048 } } },
+          },
+        },
+      },
+    })
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          clearManagedLLMEnv()
+          // A stale sync value beside an explicit OAuth record must not hide
+          // that user's direct subscription route.
+          Env.set("ANTHROPIC_API_KEY", "thk_stale_anthropic")
+          Env.set("ANTHROPIC_BASE_URL", `${PROXY}/anthropic/v1`)
+          Env.set("OPENAI_API_KEY", "thk_stale_openai")
+          Env.set("OPENAI_BASE_URL", `${PROXY}/openai/v1`)
+          Provider.invalidate()
+        },
+        fn: async () => {
+          const providers = await Provider.list()
+          expect(providers["anthropic"]).toBeDefined()
+          expect(providers["anthropic"].options.baseURL).toBeUndefined()
+          expect(Provider.effectiveKey(providers["anthropic"])).toBeUndefined()
+          expect(providers["openai-codex"]).toBeDefined()
+          expect(providers["ollama"]).toBeDefined()
+          expect(providers["openai"]).toBeUndefined()
+        },
+      })
+    } finally {
+      if (previousAnthropic) await Auth.set("anthropic", previousAnthropic)
+      else await Auth.remove("anthropic")
+      if (previousCodex) await Auth.set("openai-codex", previousCodex)
+      else await Auth.remove("openai-codex")
+      Provider.invalidate()
+    }
   })
 })
 
@@ -402,14 +514,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("managed with NO managed credential: the provider is dropped rather than silently billing the stored own key", async () => {
-    // The lapsed-Atlas-session case. billing.llm is explicitly "managed" and
-    // an own key sits in auth.json, but there is no thk_ token anywhere (no
-    // env, and OpenScience.getSession() cannot reach the hermetic API base
-    // from test/preload.ts). The loader returns headers only — no credential —
-    // so without the guard the "load apikeys" stage's provider.key survives
-    // into getSDK and pays for managed-labelled traffic out of the user's own
-    // pocket. No OpenRouter models is the honest outcome.
+  test("managed with no managed credential fails closed instead of charging an OpenRouter own key", async () => {
     await withOpenRouterOwnKey("sk-or-own-key", async () => {
       await using tmp = await tmpdir({
         config: {
@@ -427,8 +532,8 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
           expect((await Provider.list())["openrouter"]).toBeUndefined()
         },
       })
-      // The key itself is untouched — dropping the provider is a routing
-      // decision, not a credential edit.
+      // The account key remains stored and becomes usable again after the user
+      // switches to Accounts or Automatic; Credits never spends it silently.
       expect(await Auth.get("openrouter")).toEqual({ type: "api", key: "sk-or-own-key" })
     })
   })
@@ -768,13 +873,13 @@ describe("global config writes invalidate the provider cache before announcing",
           }
 
           expect(observed).toBeDefined()
-          // Managed routes curated providers only, so a map rebuilt under the
-          // config just written cannot contain the BYOK Anthropic key. Seeing
-          // it means the refetch was handed the pre-write memo — and nothing
-          // invalidates after the announcement, so it would stay that way.
+          // The map is rebuilt before announcement: direct Anthropic stays
+          // direct while the managed credit-spending route is OpenRouter.
           const refetched = await observed!
-          expect(refetched["anthropic"]).toBeUndefined()
+          expect(refetched["anthropic"]).toBeDefined()
+          expect(refetched["anthropic"].source).toBe("env")
           expect(refetched["openrouter"]).toBeDefined()
+          expect(refetched["openrouter"].source).toBe("managed")
         },
       })
     } finally {
@@ -813,8 +918,10 @@ describe("global config writes invalidate the provider cache before announcing",
           )
 
           const after = await Provider.list()
-          expect(after["anthropic"]).toBeUndefined()
+          expect(after["anthropic"]).toBeDefined()
+          expect(after["anthropic"].source).toBe("env")
           expect(after["openrouter"]).toBeDefined()
+          expect(after["openrouter"].source).toBe("managed")
         },
       })
     } finally {

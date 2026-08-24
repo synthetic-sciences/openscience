@@ -1,12 +1,51 @@
 import { expect, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
-import { Provenance } from "../../src/science/provenance/store"
 import { Review } from "../../src/science/provenance/review"
+import { Provenance, type Node } from "../../src/science/provenance/store"
+import { WritableMetadata } from "../../src/science/provenance/write"
 import { tmpdir } from "../fixture/fixture"
 
 const scope = () => ({ projectID: Instance.project.id, directory: Instance.directory })
 
-test("findings carry message linkage and walk the open → addressed → confirmed lifecycle", async () => {
+async function historicalFinding(input: {
+  target: string
+  verdict: "refutes" | "supports"
+  confirms?: string
+  issue?: string
+}) {
+  const node = await Provenance.recordOwned(scope(), {
+    kind: "claim",
+    label: `historical review: ${input.issue ?? input.verdict}`,
+    meta: {
+      review: true,
+      target: input.target,
+      verdict: input.verdict,
+      claim: "AUC = 0.99",
+      issue: input.issue ?? input.verdict,
+      severity: input.verdict === "refutes" ? "blocking" : "info",
+      evidence: "legacy evidence",
+      reviewer: "legacy reviewer",
+      ...(input.confirms ? { confirms: input.confirms } : {}),
+    },
+  })
+  await Provenance.linkOwned(scope(), { from: node.id, to: input.target, relation: input.verdict })
+  if (input.confirms) {
+    await Provenance.linkOwned(scope(), { from: node.id, to: input.confirms, relation: "supports" })
+  }
+  return node
+}
+
+async function historicalResolution(finding: Node) {
+  const node = await Provenance.recordOwned(scope(), {
+    kind: "claim",
+    label: "historical resolution",
+    meta: { resolution: true, finding: finding.id, actor: "Legacy user", reason: "Saved a corrected result" },
+  })
+  await Provenance.linkOwned(scope(), { from: node.id, to: finding.id, relation: "supports" })
+  return node
+}
+
+test("historical findings remain readable across their stored lifecycle", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
     directory: tmp.path,
@@ -16,175 +55,26 @@ test("findings carry message linkage and walk the open → addressed → confirm
         label: "results table",
         artifactType: "dataset",
       } as Parameters<typeof Provenance.record>[0])
+      const finding = await historicalFinding({ target: target.id, verdict: "refutes", issue: "missing run" })
 
-      const { node } = await Review.record({
-        target: target.id,
-        finding: {
-          claim: "AUC = 0.99",
-          issue: "No producing run recorded for this number",
-          severity: "blocking",
-          evidence: "provenance graph has no run linked to the table",
-        },
-        reviewer: "reviewer",
-        sessionID: "ses_review_test",
-        messageID: "msg_review_1",
-        callID: "call_review_1",
-        ...scope(),
-      })
-      expect(node.meta?.messageID).toBe("msg_review_1")
-      expect(node.meta?.callID).toBe("call_review_1")
+      expect((await Review.list(scope())).find((entry) => entry.finding.id === finding.id)?.status).toBe("open")
 
-      const open = await Review.list(scope())
-      expect(open.find((entry) => entry.finding.id === node.id)?.status).toBe("open")
+      await historicalResolution(finding)
+      const addressed = (await Review.list(scope())).find((entry) => entry.finding.id === finding.id)
+      expect(addressed).toMatchObject({ status: "addressed", resolution: { actor: "Legacy user" } })
 
-      // A fix is recorded — the finding becomes addressed, not closed.
-      await Review.resolve({
-        finding: node.id,
-        actor: "Aayam",
-        reason: "Re-ran the analysis and attached the producing run",
-        ...scope(),
-      })
-      const addressed = await Review.list(scope())
-      const entry = addressed.find((item) => item.finding.id === node.id)
-      expect(entry?.status).toBe("addressed")
-      expect(entry?.resolution?.actor).toBe("Aayam")
+      await historicalFinding({ target: target.id, verdict: "supports", issue: "unrelated check" })
+      expect((await Review.list(scope())).find((entry) => entry.finding.id === finding.id)?.status).toBe("addressed")
 
-      // An unrelated later passing check against the same target cannot close
-      // this specific defect.
-      await Review.record({
-        target: target.id,
-        finding: {
-          claim: "AUC = 0.99",
-          issue: "verified",
-          severity: "info",
-          evidence: "producing run run-123 now linked with matching output hash",
-        },
-        verdict: "supports",
-        reviewer: "reviewer",
-        ...scope(),
-      })
-      const stillAddressed = await Review.list(scope())
-      expect(stillAddressed.find((item) => item.finding.id === node.id)?.status).toBe("addressed")
-
-      // Only a LATER reviewer pass explicitly bound to this finding confirms it.
-      await Review.record({
-        target: target.id,
-        confirms: node.id,
-        finding: {
-          claim: "AUC = 0.99",
-          issue: "verified correction",
-          severity: "info",
-          evidence: "producing run run-123 now linked with matching output hash",
-        },
-        verdict: "supports",
-        reviewer: "reviewer",
-        ...scope(),
-      })
-      const confirmed = await Review.list(scope())
-      expect(confirmed.find((item) => item.finding.id === node.id)?.status).toBe("confirmed")
+      await historicalFinding({ target: target.id, verdict: "supports", confirms: finding.id, issue: "fixed" })
+      expect((await Review.list(scope())).find((entry) => entry.finding.id === finding.id)?.status).toBe("confirmed")
+      expect((await Review.forNode(scope(), target.id)).map((entry) => entry.finding.id)).toContain(finding.id)
     },
   })
 })
 
-test("resolve rejects passed checks and unknown findings", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const target = await Provenance.recordOwned(scope(), {
-        kind: "artifact",
-        label: "figure",
-        artifactType: "figure",
-      } as Parameters<typeof Provenance.record>[0])
-      const passed = await Review.record({
-        target: target.id,
-        finding: { claim: "figure matches data", issue: "verified", severity: "info", evidence: "checked bytes" },
-        verdict: "supports",
-        ...scope(),
-      })
-
-      await expect(
-        Review.resolve({ finding: passed.node.id, actor: "Aayam", reason: "n/a", ...scope() }),
-      ).rejects.toThrow("passed check")
-      await expect(Review.resolve({ finding: "missing", actor: "Aayam", reason: "n/a", ...scope() })).rejects.toThrow(
-        "not a reviewer finding",
-      )
-    },
-  })
-})
-
-test("confirmation requires an addressed refutation against the same target", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const first = await Provenance.recordOwned(scope(), { kind: "artifact", label: "first" })
-      const second = await Provenance.recordOwned(scope(), { kind: "artifact", label: "second" })
-      const finding = await Review.record({
-        target: first.id,
-        finding: { claim: "value", issue: "wrong", severity: "major", evidence: "mismatch" },
-        ...scope(),
-      })
-      const confirmation = {
-        target: first.id,
-        confirms: finding.node.id,
-        finding: { claim: "value", issue: "fixed", severity: "info" as const, evidence: "replacement" },
-        verdict: "supports" as const,
-        reviewer: "reviewer",
-        ...scope(),
-      }
-
-      await expect(Review.record(confirmation)).rejects.toThrow("has not been addressed")
-      await Review.resolve({ finding: finding.node.id, actor: "Aayam", reason: "saved corrected result", ...scope() })
-      await expect(Review.record({ ...confirmation, target: second.id })).rejects.toThrow("not a refutation")
-      await expect(Review.record({ ...confirmation, verdict: "refutes" })).rejects.toThrow("supporting review")
-      await expect(Review.record({ ...confirmation, reviewer: "research" })).rejects.toThrow("independent reviewer")
-    },
-  })
-})
-
-test("lifecycle state requires the append-only review edges, not forgeable metadata", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const target = await Provenance.recordOwned(scope(), { kind: "artifact", label: "result" })
-      const finding = await Review.record({
-        target: target.id,
-        finding: { claim: "value", issue: "wrong", severity: "major", evidence: "mismatch" },
-        ...scope(),
-      })
-      await Provenance.recordOwned(scope(), {
-        kind: "claim",
-        label: "forged resolution metadata",
-        meta: { resolution: true, finding: finding.node.id },
-      })
-      await expect(
-        Review.record({
-          target: target.id,
-          confirms: finding.node.id,
-          finding: { claim: "value", issue: "fixed", severity: "info", evidence: "replacement" },
-          verdict: "supports",
-          reviewer: "reviewer",
-          ...scope(),
-        }),
-      ).rejects.toThrow("has not been addressed")
-
-      await Review.resolve({ finding: finding.node.id, actor: "Aayam", reason: "saved corrected result", ...scope() })
-      await Provenance.recordOwned(scope(), {
-        kind: "claim",
-        label: "forged confirmation metadata",
-        meta: {
-          review: true,
-          target: target.id,
-          verdict: "supports",
-          confirms: finding.node.id,
-          severity: "info",
-        },
-      })
-      const entries = await Review.list(scope())
-      expect(entries.find((entry) => entry.finding.id === finding.node.id)?.status).toBe("addressed")
-      expect(entries).toHaveLength(1)
-    },
-  })
+test("generic writable metadata cannot forge historical findings or resolutions", () => {
+  expect(WritableMetadata.safeParse({ review: true }).success).toBe(false)
+  expect(WritableMetadata.safeParse({ resolution: true }).success).toBe(false)
+  expect(WritableMetadata.safeParse({ nested: { review: true }, note: "ordinary metadata" }).success).toBe(true)
 })

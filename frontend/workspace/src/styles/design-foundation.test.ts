@@ -49,10 +49,9 @@ describe("workspace design foundation", () => {
         read("../../../ui/src/components/checkbox.css"),
       ])
 
-    expect(compute).toMatch(/\.compute-surface \.kernel-card__stop\s*\{[^}]*height:\s*32px[^}]*font-size:\s*12px/s)
-    expect(compute).toMatch(
-      /\.compute-surface \.kernel-card__metric small\s*\{[^}]*color:\s*var\(--color-text-muted\)/s,
-    )
+    expect(compute).not.toContain(".kernel-card__stop")
+    expect(compute).toMatch(/\.compute-row\s*\{[^}]*min-height:\s*66px[^}]*display:\s*grid/s)
+    expect(compute).toMatch(/\.compute-row__metric > span\s*\{[^}]*color:\s*var\(--color-text-muted\)/s)
     expect(terminal).toMatch(/\.terminal-surface__search button\s*\{[^}]*height:\s*32px[^}]*font-size:\s*12px/s)
     expect(terminal).toMatch(/\.terminal-surface__tab,\s*\.terminal-surface__close\s*\{[^}]*height:\s*32px/s)
     expect(atlas).not.toContain(".terminal-surface")
@@ -67,18 +66,7 @@ describe("workspace design foundation", () => {
     expect(switchCss).toMatch(/\[data-component="switch"\]\s*\{[^}]*min-height:\s*32px/s)
     expect(checkbox).toMatch(/\[data-component="checkbox"\]\s*\{[^}]*min-height:\s*32px/s)
 
-    for (const css of [
-      atlas,
-      terminal,
-      compute,
-      settings,
-      button,
-      iconButton,
-      select,
-      textField,
-      switchCss,
-      checkbox,
-    ]) {
+    for (const css of [atlas, terminal, settings, button, iconButton, select, textField, switchCss, checkbox]) {
       expect(css).toContain("@media (pointer: coarse)")
       expect(css).toContain("44px")
     }

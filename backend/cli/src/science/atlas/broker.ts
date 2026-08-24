@@ -12,7 +12,6 @@ export type AtlasBrokerInput = {
     | "node"
     | "tree"
     | "search"
-    | "ask"
     | "usage"
     | "library_list"
     | "library_summary"
@@ -795,22 +794,6 @@ export namespace AtlasBroker {
           ...(input.mode ? { mode: input.mode } : {}),
           ...(input.topK ? { top_k: input.topK } : {}),
           ...(sourceIDs?.length ? { data_sources: sourceIDs } : {}),
-          ...(localSourceIDs?.length ? { local_folders: localSourceIDs } : {}),
-        },
-        signal,
-      )
-    }
-    if (input.operation === "ask") {
-      const text = required(input.query, "query")
-      const sourceIDs = sources(input.sourceIDs)
-      const localSourceIDs = sources(input.localSourceIDs)
-      return atlasRequest(
-        "POST",
-        "/api/v1/documents/ask",
-        {
-          query: text,
-          ...(input.topK ? { top_k: input.topK } : {}),
-          ...(sourceIDs?.length ? { source_ids: sourceIDs } : {}),
           ...(localSourceIDs?.length ? { local_folders: localSourceIDs } : {}),
         },
         signal,

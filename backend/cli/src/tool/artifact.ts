@@ -176,23 +176,13 @@ export const ArtifactTool = Tool.define("artifact", {
       })()
       await traceSavedArtifact(saved, entry).catch((error) => {
         if (entry) throw error
-        log.warn("saved Result has no review provenance target", {
+        log.warn("saved Result has no provenance target", {
           sessionID: ctx.sessionID,
           artifactID: saved.id,
           versionID: saved.currentVersionID,
           error,
         })
       })
-      // Dynamic import avoids a registry cycle: review launches route back
-      // through the session prompt loop that owns this tool definition.
-      const { SessionReview } = await import("@/session/review")
-      void SessionReview.auto(ctx.sessionID, ctx.agent).catch((error) =>
-        log.warn("automatic review launch failed after Result save", {
-          sessionID: ctx.sessionID,
-          artifactID: saved.id,
-          error,
-        }),
-      )
       return result(
         `Saved Result: ${saved.title}`,
         [

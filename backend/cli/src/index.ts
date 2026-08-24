@@ -48,6 +48,8 @@ import {
 } from "./process/darwin-responsibility-launcher"
 import { Global } from "./global"
 import { disposeDataRootOperation, runDataRootMiddleware } from "./cli/cmd/cmd"
+import { ACCOUNT_REQUIRED_MESSAGE, requiresOpenScienceAccount } from "./cli/account-gate"
+import { OutboundTelemetry } from "./telemetry/outbound"
 
 if (process.argv[2] === WINDOWS_JOB_LAUNCHER_ARG) {
   try {
@@ -125,6 +127,15 @@ const cli = yargs(hideBin(process.argv))
         version: Installation.VERSION,
         args: process.argv.slice(2),
       })
+
+      // A consent-off write may have been saved while offline. Retry it on
+      // every startup, including after logout/401 when only its deletion-only
+      // proof remains. This must happen before the account gate can exit.
+      await OutboundTelemetry.initializeAccount().catch(() => undefined)
+
+      if (requiresOpenScienceAccount(command, process.argv.slice(2)) && !(await OpenScience.isAuthenticated())) {
+        throw new Error(ACCOUNT_REQUIRED_MESSAGE)
+      }
 
       // Cheap /sync/version probe (10s TTL). When the server-side version
       // has changed, a full /api/cli/sync runs in the background so the new
@@ -243,6 +254,7 @@ async function run() {
     // Most notably, some docker-container-based MCP servers don't handle such signals unless
     // run using `docker run --init`.
     // Explicitly exit to avoid any hanging subprocesses.
+    await OutboundTelemetry.drain({ timeoutMs: 2_000 }).catch(() => undefined)
     await disposeDataRootOperation().catch(() => undefined)
     await Log.flush().catch(() => undefined)
     process.exit()

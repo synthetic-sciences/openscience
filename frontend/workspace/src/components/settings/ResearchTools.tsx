@@ -1,4 +1,5 @@
-import { For, Show, createMemo, createSignal, onMount } from "solid-js"
+import { useParams } from "@solidjs/router"
+import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
 import { Switch } from "@synsci/ui/switch"
@@ -6,9 +7,12 @@ import { useDialog } from "@synsci/ui/context/dialog"
 import { showToast } from "@synsci/ui/toast"
 import { confirmDialog } from "@/atlas/dialogs"
 import { URLS } from "@/config/urls"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
-import { useSDK } from "@/context/sdk"
+import { createProjectRequest } from "@/utils/openscience-fetch"
+import { resolveProjectRoute } from "@/utils/project-route"
 import {
   RESEARCH_ACCESS_OPTIONS,
   researchAccessContract,
@@ -18,18 +22,20 @@ import {
 } from "../research-access"
 import { Card, PanelBody, PanelHeader, PanelScroll, Row, RowCopy, Section } from "./_shared"
 import { settingsApi } from "./api"
-import { dataSharingDetail, searchStatus, walletStatus, type ResearchToolsStatus } from "./research-tools-state"
+import { dataSharingDetail, dataSharingEnabled, searchStatus, type ResearchToolsStatus } from "./research-tools-state"
 import "./preference-panels.css"
 
 export default function ResearchTools() {
+  const params = useParams()
   const platform = usePlatform()
   const server = useServer()
   const dialog = useDialog()
-  const sdk = useSDK()
+  const sdk = useGlobalSDK()
+  const globalSync = useGlobalSync()
+  const route = createMemo(() => resolveProjectRoute(params.dir, globalSync.data.project))
   const [state, setState] = createSignal<ResearchToolsStatus>()
   const [error, setError] = createSignal<string>()
   const [saving, setSaving] = createSignal(false)
-  const [deleting, setDeleting] = createSignal(false)
   const [access, setAccess] = createSignal<{
     root: string
     trusted: boolean
@@ -39,6 +45,12 @@ export default function ResearchTools() {
   }>()
   const [accessSaving, setAccessSaving] = createSignal(false)
   const fetchFn = () => platform.fetch ?? fetch
+  const projectRequest = createProjectRequest({
+    baseUrl: () => sdk.url,
+    fetch: fetchFn,
+    directory: () => route()?.directory ?? "",
+    projectID: () => route()?.projectID,
+  })
 
   const load = async () => {
     setError(undefined)
@@ -49,11 +61,10 @@ export default function ResearchTools() {
     }
   }
 
-  const loadAccess = async () => {
-    if (!sdk.projectID) return
+  const loadAccess = async (project: NonNullable<ReturnType<typeof route>>) => {
     const [trust, sandboxResponse] = await Promise.all([
-      sdk.client.project.trust.get({ projectID: sdk.projectID, directory: sdk.directory }),
-      sdk.request("/settings/sandbox"),
+      sdk.client.project.trust.get({ projectID: project.projectID, directory: project.directory }),
+      projectRequest("/settings/sandbox"),
     ])
     if (!trust.data) throw new Error("Project trust status was empty.")
     if (!sandboxResponse.ok) throw new Error(await sandboxResponse.text())
@@ -72,16 +83,24 @@ export default function ResearchTools() {
 
   onMount(() => {
     void load()
-    void loadAccess().catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+  })
+
+  createEffect(() => {
+    const project = route()
+    if (!project) {
+      setAccess(undefined)
+      return
+    }
+    void loadAccess(project).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
   })
 
   const search = createMemo(() => {
     const current = state()
     return current ? searchStatus(current) : undefined
   })
-  const wallet = createMemo(() => {
+  const sharingEnabled = createMemo(() => {
     const current = state()
-    return current ? walletStatus(current) : undefined
+    return current ? dataSharingEnabled(current) : false
   })
 
   const updateSharing = async (analyticsEnabled: boolean) => {
@@ -103,8 +122,9 @@ export default function ResearchTools() {
   }
 
   const updateAccess = async (mode: ResearchAccessMode) => {
+    const project = route()
     const current = access()
-    if (!sdk.projectID || !current || accessSaving() || researchAccessMode(current) === mode) return
+    if (!project || !current || accessSaving() || researchAccessMode(current) === mode) return
     if (mode !== "full" && !current.sandboxAvailable) return
     if (mode === "full") {
       const confirmed = await confirmDialog(dialog, {
@@ -122,7 +142,7 @@ export default function ResearchTools() {
       for (const mutation of researchAccessMutations(mode)) {
         if (mutation.kind === "sandbox") {
           if (next.sandboxEnabled === mutation.enabled) continue
-          const response = await sdk.request("/settings/sandbox", {
+          const response = await projectRequest("/settings/sandbox", {
             method: "PUT",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ enabled: mutation.enabled }),
@@ -134,8 +154,8 @@ export default function ResearchTools() {
         }
         if (next.trusted === mutation.trusted) continue
         const result = await sdk.client.project.trust.update({
-          projectID: sdk.projectID,
-          directory: sdk.directory,
+          projectID: project.projectID,
+          directory: project.directory,
           body: mutation.trusted ? { trusted: true, root: next.root } : { trusted: false },
         })
         if (!result.data) throw new Error("Project trust update was empty.")
@@ -152,43 +172,9 @@ export default function ResearchTools() {
         title: "Access setting failed",
         description: cause instanceof Error ? cause.message : String(cause),
       })
-      void loadAccess()
+      void loadAccess(project)
     } finally {
       setAccessSaving(false)
-    }
-  }
-
-  const deleteAccountAnalytics = async () => {
-    const confirmed = await confirmDialog(dialog, {
-      title: "Delete account analytics?",
-      message:
-        "This deletes content-free usage analytics linked to your account. Local research, conversations, files, and artifacts are unaffected.",
-      confirmLabel: "Delete analytics",
-      danger: true,
-    })
-    if (!confirmed) return
-    setDeleting(true)
-    try {
-      const result = await settingsApi<{ ok: boolean; message?: string }>(
-        server.url,
-        fetchFn(),
-        "/settings/research-tools/telemetry/account-data",
-        { method: "DELETE" },
-      )
-      if (!result.ok) throw new Error(result.message || "Account analytics could not be deleted.")
-      await load()
-      showToast({
-        title: "Analytics deleted",
-        description: "Synthetic Sciences deleted account-linked usage analytics.",
-      })
-    } catch (cause) {
-      showToast({
-        variant: "error",
-        title: "Analytics deletion failed",
-        description: cause instanceof Error ? cause.message : String(cause),
-      })
-    } finally {
-      setDeleting(false)
     }
   }
 
@@ -197,7 +183,7 @@ export default function ResearchTools() {
       <div class="settings-preferences-panel settings-preferences-panel--research-tools">
         <PanelHeader
           title="Research tools"
-          description="See your wallet, search access, and exactly what structural usage OpenScience may share."
+          description="Manage research access, search, and how OpenScience uses your activity."
         />
         <PanelBody>
           <Show when={error()}>
@@ -209,32 +195,16 @@ export default function ResearchTools() {
             </div>
           </Show>
 
-          <Section
-            title="Wallet and search"
-            description="Usage is pay as you go. Enhanced search uses your connected account, with basic search as a fallback."
-          >
+          <Section title="Search" description="The Ace wallet covers credit-backed models and enhanced search.">
             <Card>
-              <Row>
-                <span class="settings-preference-icon">
-                  <Icon name="bolt" size="small" />
-                </span>
-                <RowCopy
-                  title={wallet()?.label ?? "Loading…"}
-                  description={
-                    state()?.signedIn
-                      ? "Pay as you go with wallet credits. Auto-reload can keep usage uninterrupted."
-                      : "Connect a Synthetic Sciences account to use wallet-backed models and enhanced search."
-                  }
-                />
-                <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
-                  Open billing
-                </Button>
-              </Row>
               <Row>
                 <span class="settings-preference-icon" data-tone={search()?.tone}>
                   <Icon name="magnifying-glass" size="small" />
                 </span>
-                <RowCopy title={`${search()?.label ?? "Loading…"} search`} description={search()?.detail} />
+                <RowCopy
+                  title="Research search"
+                  description={search()?.detail ?? "Basic community search is available. Checking enhanced search…"}
+                />
                 <Show when={search()}>
                   {(value) => (
                     <span class="settings-preference-status" data-tone={value().tone} aria-live="polite">
@@ -242,6 +212,9 @@ export default function ResearchTools() {
                     </span>
                   )}
                 </Show>
+                <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
+                  Open billing
+                </Button>
               </Row>
             </Card>
           </Section>
@@ -250,111 +223,83 @@ export default function ResearchTools() {
             title="Action approval"
             description="Choose how project commands are approved. Existing project trust and sandbox choices are preserved."
           >
-            <div class="settings-research-access" role="radiogroup" aria-label="Research action approval">
-              <For each={RESEARCH_ACCESS_OPTIONS}>
-                {(option) => {
-                  const contract = () => researchAccessContract(option.value)
-                  const unavailable = () => option.value !== "full" && access()?.sandboxAvailable === false
-                  return (
-                    <button
-                      type="button"
-                      role="radio"
-                      data-tone={option.value === "full" ? "warning" : undefined}
-                      aria-checked={access() ? researchAccessMode(access()!) === option.value : false}
-                      disabled={!access() || accessSaving() || unavailable()}
-                      onClick={() => void updateAccess(option.value)}
-                    >
-                      <span class="settings-research-access__mark" aria-hidden="true" />
-                      <span>
-                        <strong>{option.label}</strong>
-                        <small>
-                          {unavailable()
-                            ? `Unavailable: ${access()?.sandboxUnavailableReason ?? "sandbox backend not installed"}`
-                            : option.description}
-                        </small>
-                        <code>
-                          {contract().sandbox} · {contract().approval} · {contract().review}
-                        </code>
-                      </span>
-                    </button>
-                  )
-                }}
-              </For>
-            </div>
+            <Show
+              when={route()}
+              fallback={
+                <Card>
+                  <Row>
+                    <span class="settings-preference-icon" aria-hidden="true">
+                      <Icon name="folder" size="small" />
+                    </span>
+                    <RowCopy
+                      title="Open a project to manage action approval"
+                      description="Project trust and sandbox choices are available after you open a project."
+                    />
+                  </Row>
+                </Card>
+              }
+            >
+              <div class="settings-research-access" role="radiogroup" aria-label="Research action approval">
+                <For each={RESEARCH_ACCESS_OPTIONS}>
+                  {(option) => {
+                    const contract = () => researchAccessContract(option.value)
+                    const unavailable = () => option.value !== "full" && access()?.sandboxAvailable === false
+                    return (
+                      <button
+                        type="button"
+                        role="radio"
+                        data-tone={option.value === "full" ? "warning" : undefined}
+                        aria-checked={access() ? researchAccessMode(access()!) === option.value : false}
+                        disabled={!access() || accessSaving() || unavailable()}
+                        onClick={() => void updateAccess(option.value)}
+                      >
+                        <span class="settings-research-access__mark" aria-hidden="true" />
+                        <span>
+                          <strong>{option.label}</strong>
+                          <small>
+                            {unavailable()
+                              ? `Unavailable: ${access()?.sandboxUnavailableReason ?? "sandbox backend not installed"}`
+                              : option.description}
+                          </small>
+                          <code>
+                            {contract().sandbox} · {contract().approval} · {contract().review}
+                          </code>
+                        </span>
+                      </button>
+                    )
+                  }}
+                </For>
+              </div>
+            </Show>
           </Section>
 
-          <Section
-            title="Data sharing"
-            description="Help improve reliability with bounded, content-free structural usage from completed actions."
-          >
+          <Section title="Data use" description="Choose whether activity from this device helps improve OpenScience.">
             <Card>
               <Row>
-                <span
-                  class="settings-preference-icon"
-                  data-tone={state()?.telemetry.analyticsEnabled ? "success" : undefined}
-                >
+                <span class="settings-preference-icon" data-tone={sharingEnabled() ? "success" : undefined}>
                   <Icon name="activity" size="small" />
                 </span>
                 <RowCopy
-                  title="Share structural usage"
+                  title="Use my data to improve OpenScience"
                   description={state() ? dataSharingDetail(state()!) : "Loading consent…"}
                 />
                 <Switch
                   hideLabel
-                  checked={state()?.telemetry.analyticsEnabled ?? false}
+                  checked={sharingEnabled()}
                   disabled={!state() || saving()}
                   onChange={(enabled) => void updateSharing(enabled)}
                 >
-                  Share content-free structural usage
+                  Use my data to improve OpenScience
                 </Switch>
-              </Row>
-              <Row>
-                <span class="settings-preference-icon" data-tone="success">
-                  <Icon name="shield" size="small" />
-                </span>
-                <RowCopy
-                  title="Research content is never shared"
-                  description="Prompts, responses, tool inputs and outputs, retrieved content, URLs, file paths, file contents, and secret values are excluded."
-                />
-                <span class="settings-preference-status" data-tone="success">
-                  Always off
-                </span>
               </Row>
             </Card>
             <p class="settings-research-tools-note">
-              Sharing is on by default for new installations and accounts, disclosed here, and can be disabled at any
-              time. Events are allowlisted, bounded, and sent only after an assistant response, tool, or artifact
-              completes. This is separate from the local session trace and billing.
+              When enabled, OpenScience shares the complete research trajectory: prompts, model responses, tool inputs
+              and results, searches, errors, and artifact records. Credentials and secret values are removed before
+              upload. Turning it off stops new sharing immediately and removes previously shared activity now or when
+              OpenScience next reconnects.
             </p>
           </Section>
-
-          <Show when={state()?.telemetry.deletionAvailable}>
-            <Section
-              title="Account analytics"
-              description="Remove previously collected structural usage linked to this account."
-            >
-              <Card>
-                <Row>
-                  <span class="settings-preference-icon">
-                    <Icon name="trash" size="small" />
-                  </span>
-                  <RowCopy
-                    title="Delete account analytics"
-                    description="This does not delete local projects, conversations, files, artifacts, or research results."
-                  />
-                  <button
-                    type="button"
-                    class="settings-preference-action"
-                    data-variant="danger"
-                    disabled={deleting()}
-                    onClick={() => void deleteAccountAnalytics()}
-                  >
-                    {deleting() ? "Deleting…" : "Delete analytics"}
-                  </button>
-                </Row>
-              </Card>
-            </Section>
-          </Show>
         </PanelBody>
       </div>
     </PanelScroll>

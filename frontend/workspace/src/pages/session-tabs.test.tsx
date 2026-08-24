@@ -23,6 +23,7 @@ const [subject, web] = await Promise.all([
   server.ssrLoadModule("solid-js/web") as Promise<typeof import("solid-js/web")>,
 ])
 const SessionTabStrip = subject.SessionTabStrip
+const sessionTabEditorBounds = subject.sessionTabEditorBounds
 
 afterAll(() => server.close())
 
@@ -62,6 +63,12 @@ const tabs = [
 ]
 
 describe("SessionTabStrip", () => {
+  test("keeps the rename editor fully inside narrow and right-scrolled strips", () => {
+    expect(sessionTabEditorBounds(260, 180, 320)).toEqual({ left: 140, width: 180 })
+    expect(sessionTabEditorBounds(-48, 180, 320)).toEqual({ left: 0, width: 180 })
+    expect(sessionTabEditorBounds(80, 180, 120)).toEqual({ left: 0, width: 120 })
+  })
+
   test("renders truthful state with roving horizontal keyboard navigation", async () => {
     const selected: string[] = []
     const reordered: Array<[string, number]> = []

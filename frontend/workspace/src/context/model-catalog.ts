@@ -29,12 +29,25 @@ const OPENROUTER_PROVIDER_PREFIX: Record<string, string> = {
 }
 
 const ANTHROPIC_DASHED_VERSION = /^(claude-(?:opus|sonnet|haiku)-\d+)-(\d+)(?:-\d{8})?$/
+const GLM_PROVIDER_ALIASES = new Set(["zai", "opencode-go", "zai-coding-plan", "zhipuai-coding-plan"])
 
-// The curated "frontier" set shown in the model picker by default. Everything
-// else stays in the catalog and is one click away in Manage Models. Matched by
-// canonicalKey() so a BYOK-native id and its managed OpenRouter vendor/model
-// slug collapse to one entry.
-export const FRONTIER_MODELS = new Set([
+/** Ordered product roster for the composer. Missing entries are presentation-
+ * only placeholders; this list never fabricates a callable provider route. */
+export const COMPOSER_MODEL_ROSTER = [
+  { key: "openai/gpt-5-6-sol", label: "5.6 Sol", provider: "openai" },
+  { key: "openai/gpt-5-6-terra", label: "5.6 Terra", provider: "openai" },
+  { key: "anthropic/claude-opus-5", label: "Opus 5", provider: "anthropic" },
+  { key: "moonshotai/kimi-k3", label: "Kimi K3", provider: "moonshotai" },
+  { key: "zai/glm-5-3", label: "GLM 5.3", provider: "zai" },
+  { key: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", provider: "deepseek" },
+  { key: "anthropic/claude-fable-5", label: "Fable 5", provider: "anthropic" },
+  { key: "xai/grok-4-6", label: "Grok 4.6", provider: "xai" },
+] as const
+
+// Manage Models remains the one-time place for changing composer visibility.
+// Keep the release's broader frontier defaults intact; the composer roster
+// above only controls ordering and passive unavailable placeholders.
+export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "openai/gpt-5-6-sol",
   "openai/gpt-5-6-sol-pro",
   "openai/gpt-5-6-terra",
@@ -47,17 +60,20 @@ export const FRONTIER_MODELS = new Set([
   "openai-codex/gpt-5-6-sol",
   "openai-codex/gpt-5-6-terra",
   "xai/grok-4-5",
+  "xai/grok-4-6",
   "xai/grok-4-20-multi-agent",
   "meta/muse-spark-1-1",
   "openai/gpt-5-5",
   "openai/gpt-5-5-pro",
-  "openai/gpt-5-5-mini", // announced tier, not yet in the live catalog
+  "openai/gpt-5-5-mini",
   "anthropic/claude-sonnet-5",
   "anthropic/claude-opus-5",
+  "anthropic/claude-fable-5",
   "anthropic/claude-opus-4-8",
   "google/gemini-3-6-flash",
   "google/gemini-3-1-pro-preview",
   "zai/glm-5-2",
+  "zai/glm-5-3",
   "moonshotai/kimi-k2-7-code",
   "moonshotai/kimi-k3",
   "deepseek/deepseek-v4-pro",
@@ -83,6 +99,7 @@ export function routableModelKey(model: ModelKey, hasModel: (model: ModelKey) =>
 
 export function displayProviderForModel(provider: ModelProviderDisplay, modelID: string): ModelProviderDisplay {
   if (provider.id === "openai-codex") return { id: "openai", name: "OpenAI" }
+  if (GLM_PROVIDER_ALIASES.has(provider.id) && /^glm[-.]/i.test(modelID)) return { id: "zai", name: "Z.AI" }
   if (provider.id !== "openrouter") return provider
   const [vendor] = modelID.replace(/^~/, "").split("/")
   return OPENROUTER_VENDOR_DISPLAY[vendor?.toLowerCase() ?? ""] ?? provider
@@ -96,9 +113,8 @@ export function inferenceSource(input: {
   credential: "env" | "synced" | "config" | "custom" | "api" | "managed"
   billing?: "managed" | "byok" | null
 }): InferenceSource | undefined {
-  if (input.providerID.startsWith("synsci")) return "managed"
   if (input.providerID === "openai-codex") return "chatgpt"
-  if (input.credential === "managed") return "managed"
+  if (input.providerID === "openrouter" && input.credential === "managed") return "managed"
   if (input.credential === "api") return "byok"
   if (input.providerID === "openrouter") return input.billing === "byok" ? "byok" : undefined
   if (input.credential === "env" || input.credential === "synced" || input.credential === "config") return "byok"
@@ -136,6 +152,7 @@ export function canonicalKey(providerID: string, modelID: string): string {
     base = modelID.slice(slash + 1)
   }
   vendor = vendor.replace(/^~/, "").toLowerCase()
+  if (GLM_PROVIDER_ALIASES.has(vendor) && /^glm[-.]/i.test(base)) vendor = "zai"
   if (vendor === "z-ai" || vendor === "zhipuai") vendor = "zai"
   if (vendor === "x-ai") vendor = "xai"
   base = base.replace(/^~/, "").toLowerCase().replace(/\./g, "-")
@@ -161,7 +178,9 @@ export const isFrontier = (model: ModelKey) =>
 
 /** Display name for catalog aliases; exact provider/model ids are untouched. */
 export function modelDisplayName(name: string, providerID: string, modelID: string): string {
-  if (logicalModelKey(providerID, modelID) === "openai/gpt-5-6-sol" && !/\bsol\b/i.test(name)) return "GPT-5.6 Sol"
+  const key = logicalModelKey(providerID, modelID)
+  const roster = COMPOSER_MODEL_ROSTER.find((model) => model.key === key)
+  if (roster) return roster.label
   return name
 }
 

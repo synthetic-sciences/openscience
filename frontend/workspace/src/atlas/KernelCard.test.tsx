@@ -57,78 +57,44 @@ const mount = (view: () => JSX.Element) => {
   return host
 }
 
-describe("kernel status row", () => {
-  test("shows the live runtime in one compact row", () => {
-    const host = mount(() => subject.KernelCard({ kernel: kernel(), action: "", onControl: () => {} }))
+describe("kernel tracker row", () => {
+  test("shows live state and point-in-time resources without controls", () => {
+    const host = mount(() => subject.KernelCard({ kernel: kernel() }))
 
-    expect(host.querySelector(".activity-card__kind")?.textContent).toBe("Python")
-    expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Python analysis")
-    expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Running · 7 runs")
-    expect(host.querySelector(".kernel-card__copy > span")?.getAttribute("title")).toBe("Executing now.")
-    expect(host.querySelector(".activity-card__status")?.textContent).toBe("Running")
-    expect(host.querySelector<HTMLDetailsElement>('.activity-disclosure[data-quiet="true"]')?.open).toBe(false)
-    expect(host.textContent).toContain("412 MB")
-    expect(host.textContent).toContain("1.8 cores")
+    expect(host.querySelector('.compute-row__kind [data-component="file-icon"]')).not.toBeNull()
+    expect(host.querySelector(".compute-row__copy")?.textContent).toContain("Python analysis")
+    expect(host.querySelector('[data-slot="kernel-card-executions"]')?.textContent).toContain(
+      "Running · 7 runs completed",
+    )
+    expect(host.querySelector('[data-metric="memory"]')?.textContent).toContain("412 MB RSS")
+    expect(host.querySelector('[data-metric="cpu"]')?.textContent).toContain("1.8 cores")
+    expect(host.querySelectorAll("svg")).toHaveLength(3)
+    expect(host.querySelector("button, details, summary, pre, code")).toBeNull()
   })
 
-  test("keeps queued work visible without filling the row with recovery prose", () => {
-    expect(subject.kernelActivity(kernel({ queue_depth: 2 }))).toBe("Running · 7 runs · 2 queued")
-    expect(subject.kernelActivity(kernel({ state: "idle", execution_count: 1 }))).toBe("Warm for follow-up · 1 run")
+  test("keeps queue depth, idle age, and a named environment concise", () => {
+    expect(subject.kernelActivity(kernel({ queue_depth: 2 }))).toBe("Running · 7 runs completed · 2 queued")
+    expect(subject.kernelActivity(kernel({ execution_count: 0 }))).toBe("Running")
+    expect(subject.kernelActivity(kernel({ state: "idle", execution_count: 1, last_activity_at: 1_000 }), 7_000)).toBe(
+      "Idle 6s · 1 run",
+    )
 
     const host = mount(() =>
       subject.KernelCard({
-        kernel: kernel({ state: "idle", execution_count: 1 }),
-        action: "",
-        onControl: () => {},
+        kernel: kernel({
+          state: "idle",
+          execution_count: 1,
+          last_activity_at: Date.now() - 6_000,
+          environment_name: "structural-biology",
+        }),
       }),
     )
-    expect(host.querySelector(".activity-card__status")?.textContent).toBe("Ready")
-    expect(host.querySelector(".kernel-card__copy > span")?.textContent).toBe("Warm for follow-up · 1 run")
-  })
-
-  test("keeps restart and stop available without exposing creation, interrupt, or forget", () => {
-    const calls: string[] = []
-    const host = mount(() =>
-      subject.KernelCard({ kernel: kernel(), action: "", onControl: (action) => calls.push(action) }),
+    expect(host.querySelector('[data-slot="kernel-card-executions"]')?.textContent).toContain(
+      "Idle 6s · 1 run · structural-biology",
     )
-    const restart = host.querySelector<HTMLButtonElement>('button[aria-label="Restart Python analysis"]')
-    const stop = host.querySelector<HTMLButtonElement>('button[aria-label="Stop Python analysis"]')
-
-    expect(host.querySelectorAll("button").length).toBe(2)
-    expect(restart?.disabled).toBe(false)
-    expect(stop?.disabled).toBe(false)
-    expect(stop?.title).toContain("clear its in-memory state")
-    restart?.click()
-    stop?.click()
-    expect(calls).toEqual(["restart", "stop"])
   })
 
-  test("never presents an inactive record as startable", () => {
-    const host = mount(() =>
-      subject.KernelCard({
-        kernel: kernel({ active: false, state: "stopped", started_at: null, resources: undefined }),
-        action: "",
-        onControl: () => {},
-      }),
-    )
-
-    expect(host.querySelectorAll("button").length).toBe(2)
-    expect(Array.from(host.querySelectorAll<HTMLButtonElement>("button")).every((button) => button.disabled)).toBe(true)
-    expect(host.textContent).toContain("Not running")
-    expect(host.textContent).not.toContain("Start")
-  })
-
-  test("counts uptime while a process stays mounted", async () => {
-    const host = mount(() =>
-      subject.KernelCard({ kernel: kernel({ started_at: Date.now() - 2_000 }), action: "", onControl: () => {} }),
-    )
-    const details = () => host.querySelector(".activity-card__facts > div:first-child dd")?.textContent
-    const first = details()
-    await Bun.sleep(1_200)
-    expect(details()).not.toBe(first)
-  })
-
-  test("keeps the latest execution compact and inspectable", () => {
+  test("uses the active execution title without disclosing source or code", () => {
     const host = mount(() =>
       subject.KernelCard({
         kernel: kernel({
@@ -142,18 +108,11 @@ describe("kernel status row", () => {
             call_id: "call_1",
           },
         }),
-        action: "",
-        onControl: () => {},
       }),
     )
-    const execution = host.querySelector<HTMLDetailsElement>(".kernel-card__cell")
 
-    expect(execution?.open).toBe(false)
-    expect(execution?.querySelector("summary")?.textContent).toContain("Run 7")
-    expect(execution?.querySelector(".activity-disclosure__caption")?.textContent).toContain(
-      "Benchmarking survival classifiers",
-    )
-    expect(execution?.querySelector(".activity-disclosure__caption")?.textContent).toContain("analysis/titanic.py")
-    expect(execution?.querySelector("code")?.textContent).toBe("model.fit(X, y)")
+    expect(host.querySelector(".compute-row__copy strong")?.textContent).toBe("Benchmarking survival classifiers")
+    expect(host.textContent).not.toContain("analysis/titanic.py")
+    expect(host.textContent).not.toContain("model.fit")
   })
 })

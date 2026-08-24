@@ -36,31 +36,16 @@ export const BYOK_LLM_ENV_KEYS = [
 ]
 
 /** Atlas-synced non-model credentials that approved agent subprocesses may
- * consume. Modal stays outside this list because its token resolves only in the
- * trusted compute adapter. */
+ * consume. Retired cloud-provider credentials are intentionally absent. Modal
+ * stays outside this generic subprocess list because its user-owned token
+ * resolves only in the trusted compute adapter. */
 export const SYNCED_SERVICE_ENV_KEYS = [
-  "AWS_ACCESS_KEY_ID",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_DEFAULT_REGION",
-  "AWS_REGION",
-  "GOOGLE_CLOUD_PROJECT",
-  "GCLOUD_PROJECT",
-  "GOOGLE_APPLICATION_CREDENTIALS",
-  "AZURE_TENANT_ID",
-  "AZURE_CLIENT_ID",
-  "AZURE_CLIENT_SECRET",
-  "AZURE_SUBSCRIPTION_ID",
-  "AZURE_OPENAI_API_KEY",
-  "AZURE_API_KEY",
-  "AZURE_OPENAI_ENDPOINT",
   "NVIDIA_API_KEY",
   "GITHUB_TOKEN",
   "GH_TOKEN",
   "OPENALEX_MAILTO",
   "OPENALEX_API_KEY",
   "SEMANTIC_SCHOLAR_API_KEY",
-  "TINKER_API_KEY",
-  "TINKER_BASE_URL",
   "HF_TOKEN",
   "HUGGING_FACE_HUB_TOKEN",
   "WANDB_API_KEY",
@@ -68,17 +53,52 @@ export const SYNCED_SERVICE_ENV_KEYS = [
   "LANGCHAIN_API_KEY",
   "LANGSMITH_TRACING",
   "PINECONE_API_KEY",
+] as const
+
+/** Compute credentials accepted by older Atlas sync responses. Keep this
+ * explicit denylist separate from local credential handling: a user may still
+ * configure their own local/SSH/scheduler/Modal runtime, but Atlas must never
+ * inject or persist these values. Aliases cover the names consumed by the
+ * local compute settings adapter as well as the historical sync names. */
+export const RETIRED_SYNCED_COMPUTE_ENV_KEYS = new Set<string>([
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "AWS_PROFILE",
+  "AWS_DEFAULT_REGION",
+  "AWS_REGION",
+  "GOOGLE_CLOUD_PROJECT",
+  "GCLOUD_PROJECT",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+  "GOOGLE_APPLICATION_CREDENTIALS_JSON",
+  "AZURE_TENANT_ID",
+  "AZURE_CLIENT_ID",
+  "AZURE_CLIENT_SECRET",
+  "AZURE_SUBSCRIPTION_ID",
+  "AZURE_OPENAI_API_KEY",
+  "AZURE_API_KEY",
+  "AZURE_OPENAI_ENDPOINT",
+  "TINKER_API_KEY",
+  "TINKER_BASE_URL",
+  "TENSORPOOL_KEY",
   "TENSORPOOL_API_KEY",
   "LAMBDA_API_KEY",
+  "LAMBDA_LABS_API_KEY",
+  "PRIME_API_KEY",
   "PRIME_INTELLECT_API_KEY",
   "VAST_API_KEY",
   "RUNPOD_API_KEY",
-] as const
+])
 
 const MANAGED_SYNCED_LLM_KEYS = new Set(["OPENROUTER_API_KEY"])
 const MANAGED_SYNCED_BASE_URLS: Record<string, string> = {
   OPENROUTER_BASE_URL: "/api/llm/proxy/openrouter/",
 }
+const ALLOWED_SYNCED_ENV_KEYS = new Set<string>([
+  ...BYOK_LLM_ENV_KEYS,
+  ...SYNCED_SERVICE_ENV_KEYS,
+  ...Object.keys(MANAGED_SYNCED_BASE_URLS),
+])
 
 export function managedOpenRouterBaseURL(atlasBase = managedApiBase()): string {
   return `${atlasBase.replace(/\/+$/, "")}/api/llm/proxy/openrouter/v1`
@@ -120,15 +140,18 @@ export const BLOCKED_SYNCED_ENV = new Set<string>(
 )
 
 /** True when an Atlas-synced env var may be applied to the CLI process.
- *  User-owned BYOK keys, the validated OpenRouter managed route, and compute /
- *  ML-service keys pass through. A scoped Atlas token is never accepted under
- *  a direct provider's env var. */
+ *  User-owned LLM BYOK keys, the validated OpenRouter managed route, and
+ *  explicitly named non-compute integrations pass through. Everything else,
+ *  including compute credentials and a scoped Atlas token under a direct
+ *  provider's env var, is rejected. */
 export function isSyncedEnvAllowed(key: string, value?: string, atlasBase = managedApiBase()): boolean {
+  if (RETIRED_SYNCED_COMPUTE_ENV_KEYS.has(key)) return false
   if (BLOCKED_SYNCED_ENV.has(key)) return false
+  if (!ALLOWED_SYNCED_ENV_KEYS.has(key)) return false
   if (isAtlasManagedKey(value) && !MANAGED_SYNCED_LLM_KEYS.has(key)) return false
   // Likewise, managed routing may only target the provider-specific Atlas
   // proxy. A mismatched/public URL is dropped before it reaches process.env.
   const route = MANAGED_SYNCED_BASE_URLS[key]
-  if (value !== undefined && route) return isAtlasProxyURL(value, route, atlasBase)
+  if (route) return isAtlasProxyURL(value, route, atlasBase)
   return true
 }

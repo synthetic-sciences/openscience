@@ -29,6 +29,7 @@ import { SessionTraceStore } from "./trace-store"
 import { SessionResearch } from "./research"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { FileLease } from "@/util/file-lease"
+import { OutboundTelemetry } from "@/telemetry/outbound"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -355,6 +356,7 @@ export namespace Session {
     Bus.publish(Event.Updated, {
       info: result,
     })
+    void OutboundTelemetry.sessionStarted({ sessionID: result.id, session: result }).catch(() => undefined)
     return result
   }
 
@@ -469,6 +471,7 @@ export namespace Session {
           // Publish the recovery record before any destructive mutation. A
           // failed reaper or killed deleter can therefore retry by session id.
           await Storage.write(deletionKey(project.id, sessionID), pending)
+          await OutboundTelemetry.sessionCompleted({ sessionID, reason: "deleted", session }).catch(() => undefined)
         }
         // Cancellation must be visible before deletion waits for the authority
         // lease held by a booting kernel. Otherwise that boot can become ready,

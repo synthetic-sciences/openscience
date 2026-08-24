@@ -1,141 +1,93 @@
 import { Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
-import {
-  kernelCanStop,
-  kernelLabel,
-  kernelLanguageLabel,
-  kernelMemoryLabel,
-  kernelRecoveryLabel,
-  kernelStateLabel,
-  kernelTone,
-  kernelUptimeLabel,
-  type KernelStatus,
-} from "@/atlas/kernel-runtime"
+import { FileIcon } from "@synsci/ui/file-icon"
+import { ComputeMetric } from "@/atlas/ComputeMetric"
+import { kernelLabel, kernelLanguageLabel, kernelMemoryLabel, type KernelStatus } from "@/atlas/kernel-runtime"
 
-export type KernelAction = "restart" | "stop"
+const age = (then: number | null, now: number) => {
+  if (!then) return ""
+  const seconds = Math.max(0, Math.floor((now - then) / 1_000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`
+}
 
 const memory = (value?: number) => {
   const label = kernelMemoryLabel(value)
-  return label === "Unavailable" ? "Not captured" : label
+  return label === "Unavailable" ? "— RSS" : `${label} RSS`
 }
 
 const cores = (value?: number) => {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return "Not captured"
+  if (value === undefined || !Number.isFinite(value) || value < 0) return "— cores"
   return `${(value / 100).toFixed(1)} cores`
 }
 
-export const kernelActivity = (kernel: KernelStatus) => {
-  const executions = `${kernel.execution_count} ${kernel.execution_count === 1 ? "run" : "runs"}`
+const runs = (kernel: KernelStatus) => `${kernel.execution_count} ${kernel.execution_count === 1 ? "run" : "runs"}`
+
+export const kernelActivity = (kernel: KernelStatus, now = Date.now()) => {
   const queued = kernel.queue_depth > 0 ? ` · ${kernel.queue_depth} queued` : ""
-  const state = kernelStateLabel(kernel.state)
-  return state === "Ready" ? `Warm for follow-up · ${executions}${queued}` : `${state} · ${executions}${queued}`
+  if (kernel.state === "running") {
+    const completed = kernel.execution_count > 0 ? ` · ${runs(kernel)} completed` : ""
+    return `Running${completed}${queued}`
+  }
+  if (kernel.state === "starting") return `Starting · ${runs(kernel)}${queued}`
+  if (kernel.state === "idle") {
+    const idle = age(kernel.last_activity_at, now)
+    return `Idle${idle ? ` ${idle}` : ""} · ${runs(kernel)}${queued}`
+  }
+  return `${kernel.state.charAt(0).toUpperCase()}${kernel.state.slice(1)} · ${runs(kernel)}${queued}`
 }
 
-export function KernelCard(props: {
-  kernel: KernelStatus
-  action: string
-  onControl: (action: KernelAction) => void
-}): JSX.Element {
-  const busy = (action: KernelAction) => props.action === `${props.kernel.id}:${action}`
+const marker = (kernel: KernelStatus) =>
+  kernel.language === "python" ? "kernel.py" : kernel.language === "r" ? "kernel.r" : "kernel.txt"
+
+const environment = (kernel: KernelStatus) => {
+  const name = kernel.environment_name?.trim()
+  if (!name || name === "default" || name === kernel.language) return
+  return name
+}
+
+export function KernelCard(props: { kernel: KernelStatus; sample?: number }): JSX.Element {
   const [now, setNow] = createSignal(Date.now())
 
   createEffect(() => {
-    if (!props.kernel.active || !props.kernel.started_at) return
+    if (!props.kernel.active) return
     const timer = setInterval(() => setNow(Date.now()), 1_000)
     onCleanup(() => clearInterval(timer))
   })
 
-  const uptime = () => kernelUptimeLabel(props.kernel, now())
-  const canControl = () => kernelCanStop(props.kernel)
+  const title = () =>
+    props.kernel.last_execution?.title?.trim() ||
+    props.kernel.last_execution?.source?.trim() ||
+    kernelLabel(props.kernel)
 
   return (
-    <article class="activity-card kernel-card" data-kernel-id={props.kernel.id} data-state={props.kernel.state}>
-      <header class="activity-card__header">
-        <div class="activity-card__identity">
-          <span class="activity-card__kind">{kernelLanguageLabel(props.kernel)}</span>
-          <div class="kernel-card__copy">
-            <strong title={kernelLabel(props.kernel)}>{kernelLabel(props.kernel)}</strong>
-            <span title={kernelRecoveryLabel(props.kernel)} data-slot="kernel-card-executions">
-              {kernelActivity(props.kernel)}
-            </span>
-          </div>
-        </div>
-        <span class="activity-card__status" data-tone={kernelTone(props.kernel.state)}>
-          {kernelStateLabel(props.kernel.state)}
+    <article class="compute-row kernel-card" data-kernel-id={props.kernel.id} data-state={props.kernel.state}>
+      <span class="compute-row__kind" aria-label={kernelLanguageLabel(props.kernel)}>
+        <FileIcon node={{ path: marker(props.kernel), type: "file" }} />
+      </span>
+      <div class="compute-row__copy">
+        <strong title={title()}>{title()}</strong>
+        <span data-slot="kernel-card-executions">
+          {kernelActivity(props.kernel, now())}
+          <Show when={environment(props.kernel)}>{(name) => ` · ${name()}`}</Show>
         </span>
-      </header>
-
-      <div class="activity-card__actions" aria-label={`${kernelLabel(props.kernel)} controls`}>
-        <button
-          type="button"
-          aria-label={`Restart ${kernelLabel(props.kernel)}`}
-          title={`Restart this ${kernelLanguageLabel(props.kernel)} runtime and clear its in-memory state.`}
-          disabled={!!props.action || !canControl()}
-          aria-busy={busy("restart")}
-          onClick={() => props.onControl("restart")}
-        >
-          {busy("restart") ? "Restarting…" : "Restart"}
-        </button>
-        <button
-          type="button"
-          class="kernel-card__stop activity-card__danger"
-          aria-label={`Stop ${kernelLabel(props.kernel)}`}
-          title={`Stop this ${kernelLanguageLabel(props.kernel)} runtime and clear its in-memory state.`}
-          disabled={!!props.action || !canControl()}
-          aria-busy={busy("stop")}
-          onClick={() => props.onControl("stop")}
-        >
-          {busy("stop") ? "Stopping…" : "Stop"}
-        </button>
       </div>
-
-      <div class="activity-card__disclosures">
-        <Show when={props.kernel.last_execution ?? props.kernel.last_cell}>
-          {(execution) => (
-            <details class="activity-disclosure kernel-card__cell">
-              <summary>
-                Code · {execution().execution_count ? `Run ${execution().execution_count}` : "Current execution"}
-              </summary>
-              <div class="activity-disclosure__body">
-                <Show when={execution().title || execution().source}>
-                  <p class="activity-disclosure__caption">
-                    {execution().title || `${kernelLanguageLabel(props.kernel)} execution`}
-                    <Show when={execution().source}>{(source) => ` · ${source()}`}</Show>
-                  </p>
-                </Show>
-                <pre>
-                  <code>{execution().code}</code>
-                </pre>
-              </div>
-            </details>
-          )}
-        </Show>
-        <details class="activity-disclosure" data-quiet="true">
-          <summary>Runtime details</summary>
-          <div class="activity-disclosure__body">
-            <dl class="activity-card__facts">
-              <Fact label="Runtime" value={uptime() === "Unavailable" ? "Not running" : uptime()} />
-              <Fact label="Memory" value={memory(props.kernel.resources?.memory_bytes)} />
-              <Fact label="CPU" value={cores(props.kernel.resources?.cpu_percent)} />
-              <Fact label="Process" value={props.kernel.process_id?.toString() ?? "Not running"} mono />
-              <Fact
-                label="Environment"
-                value={props.kernel.environment_name || props.kernel.environment?.interpreter?.name || "Default"}
-              />
-              <Fact label="Runtime ID" value={props.kernel.id} mono />
-            </dl>
-            <p class="activity-disclosure__note">{kernelRecoveryLabel(props.kernel)}</p>
-          </div>
-        </details>
+      <div class="compute-row__metrics" aria-label="Current kernel resources">
+        <ComputeMetric
+          metric="memory"
+          label={memory(props.kernel.resources?.memory_bytes)}
+          value={props.kernel.resources?.memory_bytes}
+          sample={props.sample}
+        />
+        <ComputeMetric
+          metric="cpu"
+          label={cores(props.kernel.resources?.cpu_percent)}
+          value={props.kernel.resources?.cpu_percent}
+          sample={props.sample}
+        />
       </div>
     </article>
-  )
-}
-
-function Fact(props: { label: string; value: string; mono?: boolean }): JSX.Element {
-  return (
-    <div>
-      <dt>{props.label}</dt>
-      <dd data-mono={props.mono ? "true" : undefined}>{props.value}</dd>
-    </div>
   )
 }

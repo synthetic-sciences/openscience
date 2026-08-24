@@ -139,13 +139,7 @@ export const ModelsCommand = cmd({
           return
         }
 
-        const providerIDs = Object.keys(providers).sort((a, b) => {
-          const aIsManaged = a.startsWith("synsci")
-          const bIsManaged = b.startsWith("synsci")
-          if (aIsManaged && !bIsManaged) return -1
-          if (!aIsManaged && bIsManaged) return 1
-          return a.localeCompare(b)
-        })
+        const providerIDs = Object.keys(providers).sort((a, b) => a.localeCompare(b))
 
         const printer = args.flat ? printFlat : printGrouped
         for (const providerID of providerIDs) {

@@ -27,7 +27,24 @@ import { StoredArtifactView } from "@/artifacts/StoredArtifactView"
 import { confirmDialog } from "@/atlas/dialogs"
 import { discardFileDraft } from "@/atlas/file-drafts"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
-import { IconChevronLeft, IconCollapse, IconExpand, IconSplit, IconX } from "@/atlas/shared/Icon"
+import {
+  IconActivity,
+  IconArchive,
+  IconArtifact,
+  IconBookOpen,
+  IconBraces,
+  IconChevronLeft,
+  IconCollapse,
+  IconCpu,
+  IconExpand,
+  IconFile,
+  IconFolder,
+  IconNetwork,
+  IconSplit,
+  IconTable,
+  IconTerminal,
+  IconX,
+} from "@/atlas/shared/Icon"
 import {
   DEFAULT_PANE_WIDTH,
   MIN_PANE_WIDTH,
@@ -236,12 +253,18 @@ export function RightPane(
   const [dirtyFiles, setDirtyFiles] = createSignal<string[]>([])
   const dialog = useDialog()
   const [workspace, setWorkspace] = createSignal(typeof window === "undefined" ? 1200 : window.innerWidth)
+  const [persistentSidebar, setPersistentSidebar] = createSignal(0)
   const [narrow, setNarrow] = createSignal(typeof window !== "undefined" && window.innerWidth < INLINE_PANE_BREAKPOINT)
   const [seen, setSeen] = createSignal(context() === "files")
-  const limit = createMemo(() => maxPaneWidthForWorkspace(workspace()))
-  const paneWidth = createMemo(() => paneWidthForWorkspace(width(), workspace()))
+  const limit = createMemo(() => maxPaneWidthForWorkspace(workspace(), persistentSidebar()))
+  const paneWidth = createMemo(() => paneWidthForWorkspace(width(), workspace(), persistentSidebar()))
   const drag = { start: null as { x: number; width: number } | null }
-  const frame: { observer?: ResizeObserver; pane?: HTMLElement } = {}
+  const frame: {
+    observer?: ResizeObserver
+    mutation?: MutationObserver
+    pane?: HTMLElement
+    sidebar?: HTMLElement
+  } = {}
   const browser = () => context() === "files" && !uiStore.file() && !uiStore.saved()
   const fileTabs = createMemo(() =>
     uiStore.workTabs().filter((tab): tab is Extract<WorkTab, { kind: "file" }> => tab.kind === "file"),
@@ -310,22 +333,48 @@ export function RightPane(
     onCleanup(() => {
       window.removeEventListener("resize", resize)
       frame.observer?.disconnect()
+      frame.mutation?.disconnect()
     })
   })
 
-  const observePane = (element: HTMLElement) => {
+  const observePane = (element: HTMLElement, retry = true) => {
     frame.observer?.disconnect()
+    frame.mutation?.disconnect()
     frame.pane = element
-    const parent = element.parentElement
-    if (!parent) return
-    // The parent is the actual split boundary. Adding the two children feeds
-    // overflow back into the resize limit, so a wide pane can grow the value
-    // used to clamp itself and push the inspector beyond the viewport.
-    const measure = () => setWorkspace(parent.clientWidth || window.innerWidth)
-    measure()
-    if (typeof ResizeObserver === "undefined") return
-    frame.observer = new ResizeObserver(measure)
-    frame.observer.observe(parent)
+    frame.sidebar = undefined
+    const boundary = element.closest<HTMLElement>(".project-workspace-frame")
+    if (!boundary) {
+      if (retry && !element.isConnected) queueMicrotask(() => frame.pane === element && observePane(element, false))
+      return
+    }
+    // Clamp against the complete project frame, but reserve the persistent
+    // navigation rail before assigning space to conversation and inspector.
+    // Observing the rail keeps the 420px conversation floor intact throughout
+    // both collapse/expand transitions and manual sidebar resizing.
+    const measure = () => {
+      setWorkspace(boundary.clientWidth || window.innerWidth)
+      setPersistentSidebar(frame.sidebar?.getBoundingClientRect().width || frame.sidebar?.clientWidth || 0)
+    }
+    const attachSidebar = () => {
+      const next = boundary.querySelector<HTMLElement>(".project-workspace-frame__route .session-sidebar")
+      if (frame.sidebar === next) {
+        measure()
+        return
+      }
+      if (frame.sidebar) frame.observer?.unobserve(frame.sidebar)
+      frame.sidebar = next ?? undefined
+      if (frame.sidebar) frame.observer?.observe(frame.sidebar)
+      measure()
+    }
+    if (typeof ResizeObserver !== "undefined") {
+      frame.observer = new ResizeObserver(measure)
+      frame.observer.observe(boundary)
+    }
+    if (typeof MutationObserver !== "undefined") {
+      frame.mutation = new MutationObserver(attachSidebar)
+      frame.mutation.observe(boundary, { childList: true, subtree: true })
+    }
+    attachSidebar()
   }
 
   const onHandlePointerDown = (event: PointerEvent) => {
@@ -359,7 +408,7 @@ export function RightPane(
     } catch {}
   }
   const splitEvenly = () => {
-    const next = equalPaneWidth(workspace())
+    const next = equalPaneWidth(workspace(), persistentSidebar())
     setWidth(next)
     try {
       savePaneWidth(key(), next)
@@ -483,7 +532,6 @@ export function RightPane(
                       subtitle="Session files"
                       active={selectedFile(tab) && (context() === "files" || context() === "artifact")}
                       onDirtyChange={(dirty) => markDirty(tab.id, dirty)}
-                      onClose={() => void closeWorkTab(tab.id)}
                     />
                   </Show>
                 </div>
@@ -552,6 +600,26 @@ function workTabLabel(tab: WorkTab) {
   return labels[tab.context]
 }
 
+function workTabIcon(tab: WorkTab): JSX.Element {
+  if (tab.kind === "saved") return <IconArchive size={16} strokeWidth={1.5} />
+  if (tab.kind === "file") {
+    const extension = tab.file.name.split(".").at(-1)?.toLowerCase()
+    if (extension === "md" || extension === "markdown" || extension === "mdx")
+      return <IconBookOpen size={16} strokeWidth={1.5} />
+    if (["csv", "tsv", "json", "jsonl", "xlsx", "xls"].includes(extension ?? ""))
+      return <IconTable size={16} strokeWidth={1.5} />
+    if (["py", "r", "js", "jsx", "ts", "tsx", "jl", "sh", "sql", "tex"].includes(extension ?? ""))
+      return <IconBraces size={16} strokeWidth={1.5} />
+    return <IconFile size={16} strokeWidth={1.5} />
+  }
+  if (tab.context === "files") return <IconFolder size={16} strokeWidth={1.5} />
+  if (tab.context === "terminal") return <IconTerminal size={16} strokeWidth={1.5} />
+  if (tab.context === "kernels") return <IconCpu size={16} strokeWidth={1.5} />
+  if (tab.context === "canvas") return <IconNetwork size={16} strokeWidth={1.5} />
+  if (tab.context === "trace") return <IconActivity size={16} strokeWidth={1.5} />
+  return <IconArtifact size={16} strokeWidth={1.5} />
+}
+
 function WorkTabStrip(props: {
   tabs: WorkTab[]
   active: string | undefined
@@ -559,8 +627,26 @@ function WorkTabStrip(props: {
   onClose: (id: string) => void
   onReorder: (id: string, to: number) => void
 }): JSX.Element {
+  let strip: HTMLElement | undefined
+
+  createEffect(() => {
+    const active = props.active
+    if (!active) return
+    queueMicrotask(() =>
+      Array.from(strip?.querySelectorAll<HTMLElement>("[data-work-tab]") ?? [])
+        .find((item) => item.dataset.workTab === active)
+        ?.scrollIntoView({ block: "nearest", inline: "nearest" }),
+    )
+  })
+
   return (
-    <nav class="inspector-tabs" aria-label="Contextual work tabs" role="tablist" aria-orientation="horizontal">
+    <nav
+      ref={strip}
+      class="inspector-tabs"
+      aria-label="Contextual work tabs"
+      role="tablist"
+      aria-orientation="horizontal"
+    >
       <For each={props.tabs}>
         {(tab, index) => (
           <div
@@ -610,15 +696,18 @@ function WorkTabStrip(props: {
                           : undefined
                 if (!target) return
                 event.preventDefault()
-                const strip = event.currentTarget.closest(".inspector-tabs")
+                const owner = event.currentTarget.closest(".inspector-tabs")
                 props.onSelect(target.id)
                 queueMicrotask(() =>
-                  Array.from(strip?.querySelectorAll<HTMLElement>("[data-work-tab]") ?? [])
+                  Array.from(owner?.querySelectorAll<HTMLElement>("[data-work-tab]") ?? [])
                     .find((item) => item.dataset.workTab === target.id)
                     ?.focus(),
                 )
               }}
             >
+              <span class="inspector-tab__icon" aria-hidden="true">
+                {workTabIcon(tab)}
+              </span>
               <span class="inspector-tab__name">{workTabLabel(tab)}</span>
             </button>
             <button

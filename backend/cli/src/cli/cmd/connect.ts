@@ -211,9 +211,12 @@ export const StatusCommand = cmd({
       OpenScience.getCredits().catch(() => null),
       OpenScience.getTransactions(5).catch(() => null),
     ])
-    const balanceUsd = credits?.balanceUsd ?? mode?.balance_usd
+    const balanceUsd = credits?.balanceUsd
     if (balanceUsd !== undefined) {
-      const spent = credits ? ` (spent $${(credits.lifetimeSpentCents / 100).toFixed(2)} lifetime)` : ""
+      const spent =
+        credits?.lifetimeSpentCents === null || credits?.lifetimeSpentCents === undefined
+          ? ""
+          : ` (spent $${(credits.lifetimeSpentCents / 100).toFixed(2)} lifetime)`
       prompts.log.info(`Wallet: $${balanceUsd.toFixed(2)}${spent}`)
     }
     if (mode) {

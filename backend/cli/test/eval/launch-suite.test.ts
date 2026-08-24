@@ -9,8 +9,8 @@ describe("launch evaluation suite", () => {
     const result = await validateLaunchSuite(root)
 
     expect(result.errors).toEqual([])
-    expect(result.suite.flows).toHaveLength(10)
-    expect(result.suite.flows.filter((flow) => flow.split === "development")).toHaveLength(6)
+    expect(result.suite.flows).toHaveLength(9)
+    expect(result.suite.flows.filter((flow) => flow.split === "development")).toHaveLength(5)
     expect(result.suite.flows.filter((flow) => flow.split === "held_out")).toHaveLength(4)
     expect(result.rubric.releaseRule).toEqual({
       cleanLocalRuns: 3,

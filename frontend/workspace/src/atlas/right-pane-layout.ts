@@ -13,9 +13,10 @@ export function legacyPaneWidthKey(project: string, session = "new") {
   return `openscience-context-width-v5:${encodeURIComponent(project)}:${encodeURIComponent(session)}`
 }
 
-export function maxPaneWidthForWorkspace(workspace: number) {
+export function maxPaneWidthForWorkspace(workspace: number, persistentSidebar = 0) {
   if (!Number.isFinite(workspace)) return MAX_PANE_WIDTH
-  return Math.max(MIN_PANE_WIDTH, Math.min(MAX_PANE_WIDTH, workspace - MIN_CONVERSATION_WIDTH))
+  const sidebar = Number.isFinite(persistentSidebar) ? Math.max(0, persistentSidebar) : 0
+  return Math.max(MIN_PANE_WIDTH, Math.min(MAX_PANE_WIDTH, workspace - sidebar - MIN_CONVERSATION_WIDTH))
 }
 
 export function clampPaneWidth(width: number, max = MAX_PANE_WIDTH) {
@@ -26,12 +27,12 @@ export function paneWidthForViewport(width: number, viewport: number) {
   return clampPaneWidth(Math.min(width, viewport - INLINE_PANE_CHROME))
 }
 
-export function paneWidthForWorkspace(width: number, workspace: number) {
-  return clampPaneWidth(width, maxPaneWidthForWorkspace(workspace))
+export function paneWidthForWorkspace(width: number, workspace: number, persistentSidebar = 0) {
+  return clampPaneWidth(width, maxPaneWidthForWorkspace(workspace, persistentSidebar))
 }
 
-export function equalPaneWidth(workspace: number) {
-  return paneWidthForWorkspace(workspace / 2, workspace)
+export function equalPaneWidth(workspace: number, persistentSidebar = 0) {
+  return paneWidthForWorkspace((workspace - persistentSidebar) / 2, workspace, persistentSidebar)
 }
 
 export function readPaneWidth(

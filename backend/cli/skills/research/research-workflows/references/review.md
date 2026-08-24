@@ -22,7 +22,9 @@ $ARGUMENTS
 - Generate candidate findings, then try to disprove each one against the surrounding implementation and tests.
 - Report only defects introduced by the reviewed scope, unless a pre-existing issue is made reachable or materially worse by it.
 - Do not report style preferences, speculative edge cases with no realistic trigger, issues a normal static check already states more precisely, or test gaps without a concrete untested failure.
-- Record an exact scientific finding through `provenance_review` when the target can be resolved. Keep exploratory concerns out of durable review state until validated.
+- When a validated scientific finding should persist, record it as a claim through `provenance_record`
+  and derive it from the resolved target or evidence. Do not use reserved historical review metadata.
+  Keep exploratory concerns out of durable provenance until validated.
 
 ## Finding contract
 

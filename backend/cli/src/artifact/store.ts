@@ -596,9 +596,12 @@ export namespace ArtifactStore {
       const row = rows(db, input.projectID, id)[0]
       if (!row) throw new Error(`Artifact ${id} was not saved`)
       const saved = artifact(row)
-      void OutboundTelemetry.artifact({ sessionID: input.sessionID, type: input.kind, size: staged.size }).catch(
-        () => undefined,
-      )
+      void OutboundTelemetry.artifact({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        artifact: saved,
+        execution: input.execution,
+      }).catch(() => undefined)
       return saved
     } catch (cause) {
       const rollback = (() => {

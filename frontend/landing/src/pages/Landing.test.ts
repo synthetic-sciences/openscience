@@ -4,64 +4,77 @@ const landing = await Bun.file(new URL("./Landing.tsx", import.meta.url)).text()
 const main = await Bun.file(new URL("../main.tsx", import.meta.url)).text()
 const readme = await Bun.file(new URL("../../../../README.md", import.meta.url)).text()
 const gateway = await Bun.file(new URL("../../../docs/src/content/openscience/gateway.mdx", import.meta.url)).text()
-const docsIndex = await Bun.file(new URL("../../../docs/src/content/openscience/index.mdx", import.meta.url)).text()
-const skills = await Bun.file(new URL("../../../docs/src/content/openscience/skills.mdx", import.meta.url)).text()
-const installer = await Bun.file(new URL("../../public/install", import.meta.url)).text()
-const packageReadme = await Bun.file(new URL("../../../../backend/cli/README.md", import.meta.url)).text()
-const graphSkill = await Bun.file(
-  new URL("../../../../backend/cli/src/skill/system/initialize-research-graph.txt", import.meta.url),
-).text()
-const docsHtml = await Bun.file(new URL("../../public/docs/index.html", import.meta.url)).text()
-const docsScript = docsHtml.match(/src="\/docs\/assets\/([^\"]+\.js)"/)?.[1]
-if (!docsScript) throw new Error("could not resolve the checked-in docs bundle")
-const docsBundle = await Bun.file(new URL(`../../public/docs/assets/${docsScript}`, import.meta.url)).text()
+const security = await Bun.file(new URL("../../../docs/src/content/openscience/security.mdx", import.meta.url)).text()
+const docs = await Bun.file(new URL("../../public/docs/index.html", import.meta.url)).text()
+const asset = docs.match(/assets\/(index-[^"']+\.js)/)?.[1]
+if (!asset) throw new Error("Built docs index does not reference a JavaScript bundle")
+const bundle = await Bun.file(new URL(`../../public/docs/assets/${asset}`, import.meta.url)).text()
 
 describe("OpenScience landing contract", () => {
-  test("keeps the core workbench open source, local, and account-optional", () => {
-    expect(landing).toContain("The open-source AI workbench for scientists.")
-    expect(landing).toContain("Your files")
-    expect(landing).toContain("Your keys")
-    expect(landing).toContain("Do I need a Synthetic Sciences account?")
-    expect(landing).toContain("A Synthetic Sciences account is optional")
+  test("keeps the free product independent from Ace", () => {
+    expect(landing).toContain("The desktop and local runtime remain free")
+    expect(landing).toContain("BYOK")
+    expect(landing).toContain("eligible ChatGPT")
+    expect(landing).toContain("Do I need Ace to use OpenScience?")
   })
 
-  test("publishes the supported OpenScience install paths", () => {
-    for (const source of [landing, readme, docsIndex]) {
-      expect(source).toContain("@synsci/openscience")
-    }
-    expect(landing).toContain("curl -fsSL https://openscience.sh/install | bash")
-    expect(installer).toContain("OpenScience Installer")
+  test("publishes Ace as a single pay as you go offer", () => {
+    expect(landing).toContain("$20")
+    expect(landing).toContain("20 credits")
+    expect(landing).toContain("to start")
+    expect(landing).toContain("OpenScience is free. Ace is pay as you go.")
+    expect(landing).toContain("Credit-backed models through OpenRouter")
+    expect(landing).toContain("One balance for models and enhanced search")
+    expect(landing).not.toContain("Ace+")
+    expect(landing).not.toContain("per month")
+    expect(landing).not.toContain("included every month")
+    expect(landing).not.toContain("promotional credits")
+    expect(landing).not.toContain("research quota")
   })
 
-  test("does not advertise paused surfaces or old branding", () => {
-    for (const source of [
-      landing,
-      readme,
-      packageReadme,
-      gateway,
-      docsIndex,
-      skills,
-      installer,
-      graphSkill,
-      docsBundle,
-    ]) {
-      expect(source).not.toMatch(/\b(?:Atlas|managed compute|cloud compute)\b/i)
-    }
-    expect(landing).not.toContain("Explore public")
+  test("explains Zen-style reload and separates the processing fee from credits", () => {
+    expect(landing).toContain("Reloads 20 credits below 5")
+    expect(landing).toContain("Change or disable it anytime")
+    expect(landing).toContain("Processing fee shown before payment")
+    expect(landing).toContain("never added to your credit balance")
+    expect(landing).not.toContain("Synthetic Scientists")
   })
 
-  test("publishes only the pay-as-you-go credit contract", () => {
-    for (const source of [landing, readme, packageReadme, gateway, docsBundle]) {
-      expect(source).not.toMatch(
-        /(?:Ace\+|Ace is \$20\/month|\$100\/month|150 credits|research quota|Synthetic Scientists access|\$50 or \$200|recurring monthly)/i,
-      )
-    }
-    for (const source of [readme, gateway, docsBundle]) {
+  test("keeps public Ace copy aligned across the landing page, README, and docs", () => {
+    for (const source of [landing, readme, gateway]) {
       expect(source).toContain("20 credits")
-      expect(source).toMatch(/\$20 (?:to your wallet|wallet value)/i)
+      expect(source).toMatch(/pay[- ]as[- ]you[- ]go/i)
+      expect(source).toMatch(/OpenRouter/i)
       expect(source).toMatch(/below 5/i)
-      expect(source).toMatch(/processing fee/i)
+      expect(source).not.toMatch(/Ace\+/i)
+      expect(source).not.toMatch(/Synthetic Scientists/i)
+      expect(source).not.toMatch(/research quota/i)
     }
+  })
+
+  test("states the account and full-session data contract plainly", () => {
+    expect(landing).toContain("A free Synthetic Sciences account is required")
+    expect(landing).toContain("The Use my data setting is on")
+    expect(landing).toContain("prompts, responses, tool activity, and errors")
+    expect(landing).toMatch(/Turn\s+it\s+off anytime in Settings/)
+  })
+
+  test("uses Synthetic Sciences branding for the control plane in docs source and bundle", () => {
+    for (const source of [security, bundle]) {
+      expect(source).toContain("Synthetic Sciences session")
+      expect(source).toContain("Synthetic Sciences service")
+      expect(source).not.toContain("Gateway session")
+      expect(source).not.toContain("connected to Gateway")
+      expect(source).not.toContain("Gateway research search")
+      expect(source).not.toContain("Gateway wallet")
+    }
+    expect(security).toContain("[connected to Synthetic Sciences](/openscience/gateway)")
+  })
+
+  test("does not advertise retired product surfaces", () => {
+    expect(landing).not.toContain("Compute")
+    expect(landing).not.toContain("Explore public")
+    expect(landing).not.toContain("Atlas")
   })
 
   test("gives visitors an explicit website analytics control", () => {

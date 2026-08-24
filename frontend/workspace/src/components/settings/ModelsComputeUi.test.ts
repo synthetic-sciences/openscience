@@ -13,11 +13,23 @@ describe("models and compute settings UI contract", () => {
     expect(source).toContain('class="models-routing__option"')
     expect(source).toContain('class="models-routing__option-label"')
     expect(source).not.toContain('name="check-small"')
-    expect(source).toContain("aria-describedby=")
+    expect(source).toContain('aria-describedby="managed-inference-description"')
+    expect(source).toContain('id="managed-inference-description"')
+    expect(source).not.toContain("managed-inference-${option.value")
     expect(source).toContain("aria-pressed=")
     expect(source).toContain("setMode(value)")
     expect(source).toContain("setBusy(false)")
     expect(source.indexOf("setBusy(false)")).toBeLessThan(source.indexOf(".refreshProviders()"))
+
+    expect(source.indexOf('title: "Automatic"')).toBeLessThan(source.indexOf('title: "Credits"'))
+    expect(source.indexOf('title: "Credits"')).toBeLessThan(source.indexOf('title: "Accounts"'))
+    for (const description of [
+      "Use the selected model's best available account, local, or credit route.",
+      "Use your Ace wallet for supported models. No provider account is required.",
+      "Use only connected provider accounts, keys, and eligible subscriptions.",
+    ]) {
+      expect(source.split(description)).toHaveLength(2)
+    }
   })
 
   test("uses compact semantic status and action affordances for model access", async () => {
@@ -25,11 +37,12 @@ describe("models and compute settings UI contract", () => {
     const codex = await read("CodexConnection.tsx")
     const keys = await read("ProviderKeys.tsx")
 
-    expect(models).toContain('<Row title="Research model"')
-    expect(models).toContain('<Row title="Background model"')
+    expect(models).toContain('<Row title="Starting model"')
+    expect(models).not.toContain('<Row title="Background model"')
     expect(models).toContain('title="Access and routing"')
     expect(models).toContain('class="settings-card models-access-card"')
-    expect(models.indexOf('id="model-defaults"')).toBeLessThan(models.indexOf('id="provider-keys"'))
+    expect(models).not.toContain('id="model-defaults"')
+    expect(models.indexOf('<Row title="Starting model"')).toBeLessThan(models.indexOf('id="provider-keys"'))
     expect(models).toContain("takeModelGroups(groups(), renderLimit())")
     expect(models).toContain("groupModelRoutes")
     expect(models).toContain("modelDisplayName")
@@ -38,12 +51,19 @@ describe("models and compute settings UI contract", () => {
     expect(models).toContain("<DefaultModelControl")
     expect(models).toContain("aria-label={`${props.label} access`}")
     expect(models).toContain('placeholder="Choose access"')
-    expect(models).toContain("model.routes.forEach((route) => models.setVisibility(route.key, checked))")
+    expect(models).toContain("models.setVisibility(model.key, checked)")
+    expect(models).toContain("if (!checked && model.pinned) models.pinned.toggle(model.key)")
+    expect(models).toContain("Pinned models appear first. Hidden models stay out of the picker.")
+    expect(models).toContain("{visibleCount()} shown · {pinnedCount()}/3 pinned")
+    expect(models).toContain("Show ${model.label} in composer")
     expect(models).not.toContain("label: item.name")
     expect(models).toContain("providerLogo: display.id")
     expect(models).toContain("<ProviderLogo id={model.providerLogo}")
     expect(codex).toContain('class="settings-status" data-tone="ready"')
     expect(codex).toContain('<ProviderLogo id="openai-codex" label="OpenAI" />')
+    expect(codex).toContain(">ChatGPT / Codex</span>")
+    expect(codex).toContain("Use models included with your ChatGPT plan.")
+    expect(codex).toContain(': "Sign in"')
     expect(codex).not.toContain('label="OpenAI" connected=')
     expect(codex).toContain('class="settings-panel-action settings-panel-action--quiet models-secondary-action"')
     expect(keys).toContain("settings-provider-key-form")
@@ -106,6 +126,7 @@ describe("models and compute settings UI contract", () => {
     expect(models).toContain("outline-color: var(--border-focus)")
     expect(models).toContain("background: var(--settings-surface-muted)")
     expect(models).toContain("background: var(--settings-surface)")
+    expect(models).toContain("font-variant-numeric: tabular-nums")
     expect(models).toContain("box-shadow: none")
     expect(models).toContain("grid-template-columns: minmax(330px, 0.9fr) minmax(220px, 1.1fr)")
     expect(models).toContain("background-clip: padding-box")

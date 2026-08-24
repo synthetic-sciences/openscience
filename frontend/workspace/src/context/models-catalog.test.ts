@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   canonicalKey,
+  COMPOSER_MODEL_ROSTER,
   displayProviderForModel,
   foldedRouteMode,
   FRONTIER_MODELS,
@@ -28,7 +29,7 @@ describe("frontier model canonicalization", () => {
     }
     expect(canonicalKey("openai", "gpt-5.6")).not.toBe(canonicalKey("openai", "gpt-5.6-sol"))
     expect(logicalModelKey("openai", "gpt-5.6")).toBe(logicalModelKey("openai", "gpt-5.6-sol"))
-    expect(modelDisplayName("GPT-5.6", "openai", "gpt-5.6")).toBe("GPT-5.6 Sol")
+    expect(modelDisplayName("GPT-5.6", "openai", "gpt-5.6")).toBe("5.6 Sol")
     expect(modelDisplayName("GPT-5.6 Luna", "openai", "gpt-5.6-luna")).toBe("GPT-5.6 Luna")
   })
 
@@ -187,8 +188,28 @@ describe("frontier model canonicalization", () => {
       ["openai", "openai-codex"],
       ["openai", "openai-codex"],
     ])
-    expect(modelDisplayName("GPT-5.6", groups[0]!.model.provider.id, groups[0]!.model.id)).toBe("GPT-5.6 Sol")
-    expect(modelDisplayName("GPT-5.6", "openai-codex", "gpt-5.6-sol")).toBe("GPT-5.6 Sol")
+    expect(modelDisplayName("GPT-5.6", groups[0]!.model.provider.id, groups[0]!.model.id)).toBe("5.6 Sol")
+    expect(modelDisplayName("GPT-5.6", "openai-codex", "gpt-5.6-sol")).toBe("5.6 Sol")
+  })
+
+  test("uses the requested composer roster and normalizes GLM provider aliases", () => {
+    expect(COMPOSER_MODEL_ROSTER.map((model) => model.label)).toEqual([
+      "5.6 Sol",
+      "5.6 Terra",
+      "Opus 5",
+      "Kimi K3",
+      "GLM 5.3",
+      "DeepSeek V4 Flash",
+      "Fable 5",
+      "Grok 4.6",
+    ])
+    for (const providerID of ["zai", "opencode-go", "zai-coding-plan", "zhipuai-coding-plan"]) {
+      expect(canonicalKey(providerID, "glm-5.3")).toBe("zai/glm-5-3")
+      expect(displayProviderForModel({ id: providerID, name: providerID }, "glm-5.3")).toEqual({
+        id: "zai",
+        name: "Z.AI",
+      })
+    }
   })
 
   test("preserves an exact access route and refuses an ambiguous route switch", () => {

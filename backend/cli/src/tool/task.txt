@@ -3,8 +3,8 @@ Delegate one bounded independent unit when parallel work materially improves the
 Profiles:
 {agents}
 
-Use `explore` for evidence, `execute` for implementation or computation, and `review` to check an
-observable result. Skills add domain expertise; do not invent personas.
+Choose by work: `explore` finds evidence and `execute` implements or computes. Lazy skills provide
+domain expertise; do not invent personas.
 
 - Default to no children. Normal permits two calls per turn; Ultra four, including continuations.
 - Children cannot call Task. The lead owns synthesis and verification.

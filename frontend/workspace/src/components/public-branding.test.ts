@@ -6,6 +6,7 @@ const publicSources = [
   "../pages/home-workbench.tsx",
   "../pages/home.tsx",
   "../atlas/SetupDialog.tsx",
+  "../atlas/AccountGate.tsx",
   "../atlas/RightPane.tsx",
   "../atlas/AtlasCanvas.tsx",
   "../atlas/kernel-runtime.ts",
@@ -46,6 +47,7 @@ describe("public Synthetic Sciences branding", () => {
     const sources = await Promise.all(
       [
         "../atlas/SetupDialog.tsx",
+        "../atlas/AccountGate.tsx",
         "./settings/General.tsx",
         "./settings/ManagedInference.tsx",
         "./settings/ProviderKeys.tsx",
@@ -55,7 +57,9 @@ describe("public Synthetic Sciences branding", () => {
     const combined = sources.join("\n")
 
     expect(combined).toContain("Synthetic Sciences account")
-    expect(combined).toContain("Synthetic Sciences credits")
+    expect(combined).toContain("Ace wallet")
+    expect(combined).toContain('title: "Credits"')
+    expect(combined).not.toContain("Add Ace credits")
     expect(combined).toContain("Connected to Synthetic Sciences")
     expect(combined).toContain("openscience login")
     expect(combined).not.toMatch(/OpenScience (?:account|identity|credits|plan)/)

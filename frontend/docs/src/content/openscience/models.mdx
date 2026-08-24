@@ -4,7 +4,7 @@ description: "Bring your own keys, use eligible ChatGPT/Codex access, run local 
 icon: "package-check"
 ---
 
-OpenScience is model-agnostic. A **model** is one inference endpoint the agent routes through; a **provider** is a vendor that exposes models. Routing happens on your machine: with your own keys (the default), each call goes straight from your machine to the provider — no gateway in the middle, no account required.
+OpenScience is model-agnostic. A **model** is one inference endpoint the agent routes through; a **provider** is a vendor that exposes models. Routing happens on your machine: with your own keys, each call goes straight from your machine to the provider, with no managed model service in the middle. A free Synthetic Sciences account is still required for OpenScience identity and trace ownership.
 
 ## Bring your own keys
 
@@ -57,7 +57,7 @@ openscience models             # grouped by provider, with a routing label per p
 openscience models anthropic   # one provider
 ```
 
-Each provider is labeled `your key`, `managed`, `local`, `Signed in with Codex`, or `unconfigured`, so you always know which route a model takes. `--verbose` adds per-model metadata like costs, `--refresh` refetches the catalogue, and `--flat` prints one `provider/model` id per line for scripting.
+Each provider is labeled `your key`, `credits`, `local`, `Signed in with Codex`, or `unconfigured`, so you always know which route a model takes. `--verbose` adds per-model metadata like costs, `--refresh` refetches the catalogue, and `--flat` prints one `provider/model` id per line for scripting.
 
 ## Pick a model per run
 
@@ -70,15 +70,15 @@ openscience run --model moonshotai/kimi-k3 "Implement the pipeline"
 
 `--model <provider>/<model>` overrides the default for one run; in the workspace, use the model selector per session. `--variant` picks a reasoning-effort tier — `minimal`, `high`, `max`, and so on. Available tiers depend on the model: Claude Opus 5 and GPT-5.6 extend through `xhigh` and `max`, Kimi K3 supports `low`, `high`, and `max`, and current Grok models expose their provider-supported ladders.
 
-## Synthetic Sciences managed (optional)
+## Ace credits (optional)
 
-[Synthetic Sciences](/openscience/gateway) is the optional managed service. Connecting adds supported models through OpenRouter, billed from a pay-as-you-go wallet, so you can skip per-provider keys when you choose:
+[Synthetic Sciences](/openscience/gateway) provides the required free account. Ace is the optional credit-backed service: supported models route through OpenRouter and bill a pay-as-you-go wallet, so you can skip per-provider keys when you choose:
 
 ```bash
 openscience login   # defaults to app.syntheticsciences.ai
 ```
 
-Once connected, Settings → Billing lets you choose managed or user-funded model routing. Managed credits never disable BYOK, local, or eligible ChatGPT/Codex routes; only calls served through Synthetic Sciences debit the wallet.
+Settings → Credits offers Automatic, Credits, and Accounts routing. Ace credits never disable BYOK, local, or eligible ChatGPT/Codex routes; only calls served through Synthetic Sciences debit the wallet.
 
 | Path | What runs where | Billing |
 | --- | --- | --- |

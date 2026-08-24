@@ -1190,7 +1190,7 @@ export namespace Config {
             ),
         })
         .optional()
-        .describe("Managed Credits vs bring-your-own-key spend for LLM inference."),
+        .describe("How LLM inference is paid for when using Ace or user-owned credentials."),
       username: z
         .string()
         .optional()

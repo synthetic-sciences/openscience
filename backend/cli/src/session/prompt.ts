@@ -81,6 +81,7 @@ import { TaskAttempt } from "@/tool/task-attempt"
 import { Token } from "@/util/token"
 import { Auth } from "@/auth"
 import { SafeFileIO } from "@/file/safe-io"
+import { OutboundTelemetry } from "@/telemetry/outbound"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -663,9 +664,6 @@ export namespace SessionPrompt {
     let compactionArmed = true
     let outputContinuations = recovered.outputContinuations
     let contractContinuations = recovered.contractContinuations
-    let reviewContinuations = recovered.reviewContinuations
-    let summaryContinuations = recovered.summaryContinuations
-    const reviewLimit = 2
     const workspace = await SessionFilesystem.workspace(sessionID)
     // Text doom-loop guard (#176): weak/local models sometimes emit a near-identical
     // "continuity summary" turn over and over instead of converging on an answer.
@@ -716,8 +714,6 @@ export namespace SessionPrompt {
         overflowCompactions = 0
         outputContinuations = 0
         contractContinuations = 0
-        reviewContinuations = 0
-        summaryContinuations = 0
         compactionArmed = true
         SessionCompaction.resetBreaker(sessionID)
       }
@@ -846,44 +842,6 @@ export namespace SessionPrompt {
         if (contract) {
           const trace = await import("./trace").then((mod) => mod.SessionTrace.build(sessionID))
           const pending = trace.research.gates.filter((gate) => gate.id !== "runtime" && gate.status !== "passed")
-          const findings = trace.reviewerFindings.filter(
-            (finding) => finding.relation === "refutes" && finding.status !== "confirmed",
-          )
-          const reviewing = lastUser.agent === "reviewer" || lastUser.agent === "artifact-reviewer"
-          const owner = msgs.findLast(
-            (message): message is MessageV2.WithParts & { info: MessageV2.User } =>
-              message.info.role === "user" &&
-              message.info.agent !== "reviewer" &&
-              message.info.agent !== "artifact-reviewer",
-          )
-          if (reviewing && owner && summaryContinuations < reviewLimit && !bareMode) {
-            summaryContinuations++
-            await enqueue({
-              user: owner.info,
-              kind: "review-summary",
-              epoch: turn,
-              text: pending.length
-                ? `Independent review completed. Address these remaining completion gates without repeating verified work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}. Open findings: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ") || "none recorded"}. Correct each underlying defect before calling provenance_resolve with replacement evidence; a later reviewer must confirm it. Then return the corrected outcome.`
-                : findings.length
-                  ? `Independent review completed with ${findings.length} non-blocking ${findings.length === 1 ? "finding" : "findings"}. Correct them when possible, save the corrected Result, then call provenance_resolve with replacement evidence; a later reviewer must confirm it. Disclose anything that remains: ${findings.map((finding) => `${finding.severity ?? "unknown"}: ${finding.issue ?? finding.claim ?? finding.id}`).join("; ")}. Then return the concise verified outcome.`
-                  : "Independent review completed with no recorded provenance findings. Read the reviewer's final report above and address or disclose any text-only findings or limitations it contains. Do not claim there are no open findings unless the report itself is clean. Then return the concise verified outcome and the saved Results.",
-            })
-            continue
-          }
-          const review = pending.find((gate) => gate.id === "review")
-          const other = pending.filter((gate) => gate.id !== "review")
-          if (review && other.length === 0 && reviewContinuations < reviewLimit && !bareMode) {
-            reviewContinuations++
-            const packet = await import("./review").then((mod) => mod.SessionReview.prepare(sessionID))
-            await enqueue({
-              user: lastUser,
-              kind: "review",
-              epoch: turn,
-              agent: packet.agent,
-              text: packet.text,
-            })
-            continue
-          }
           if (pending.length && contractContinuations < 1 && !bareMode) {
             contractContinuations++
             await enqueue({
@@ -977,7 +935,7 @@ export namespace SessionPrompt {
         step = nextStep
         // Older saved command definitions may still name a domain-specific
         // subagent. Keep those records runnable while funnelling all new work
-        // through the three bounded internal Research profiles.
+        // through the two bounded internal Research profiles.
         const taskProfile = DELEGATION_PROFILES.includes(task.agent as (typeof DELEGATION_PROFILES)[number])
           ? (task.agent as (typeof DELEGATION_PROFILES)[number])
           : "execute"
@@ -1272,7 +1230,15 @@ export namespace SessionPrompt {
       }
 
       // normal processing
-      const agent = await Agent.get(lastUser.agent)
+      // Existing durable sessions may still contain a removed reviewer agent.
+      // Resume them on the current default agent instead of crashing, while
+      // keeping reviewer profiles and launch state fully retired.
+      const agent =
+        (await Agent.get(lastUser.agent)) ??
+        (lastUser.agent === "review" || lastUser.agent === "reviewer" || lastUser.agent === "artifact-reviewer"
+          ? await Agent.get(await Agent.defaultAgent())
+          : undefined)
+      if (!agent) throw new Error(`agent "${lastUser.agent}" not found`)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = nextStep >= maxSteps
       const reminders = await insertReminders({
@@ -2306,6 +2272,12 @@ export namespace SessionPrompt {
     for (const part of parts) {
       await Session.updatePart(part)
     }
+    void OutboundTelemetry.userMessage({
+      sessionID: input.sessionID,
+      messageID: info.id,
+      message: info,
+      parts,
+    }).catch(() => undefined)
 
     return {
       info,
@@ -2466,6 +2438,12 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       synthetic: true,
     }
     await Session.updatePart(userPart)
+    void OutboundTelemetry.userMessage({
+      sessionID: input.sessionID,
+      messageID: userMsg.id,
+      message: userMsg,
+      parts: [userPart],
+    }).catch(() => undefined)
 
     const msg: MessageV2.Assistant = {
       id: await MessageV2.nextMessageID(input.sessionID),
@@ -2510,6 +2488,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       },
     }
     await Session.updatePart(part)
+    void OutboundTelemetry.tool(part as MessageV2.ToolPart).catch(() => undefined)
     const shell = Shell.preferred()
     const shellName = (
       process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
@@ -2696,6 +2675,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         output,
       }
       await Session.updatePart(part)
+      void OutboundTelemetry.tool(part as MessageV2.ToolPart).catch(() => undefined)
     }
     return { info: msg, parts: [part] }
   }
@@ -2774,6 +2754,12 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     }
     await Session.updateMessage(user)
     await Session.updatePart(userPart)
+    void OutboundTelemetry.userMessage({
+      sessionID: input.sessionID,
+      messageID: user.id,
+      message: user,
+      parts: [userPart],
+    }).catch(() => undefined)
 
     const assistant: MessageV2.Assistant = {
       id: await MessageV2.nextMessageID(input.sessionID),
@@ -2802,6 +2788,16 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     }
     await Session.updateMessage(assistant)
     await Session.updatePart(part)
+    await OutboundTelemetry.assistantMessage({
+      sessionID: input.sessionID,
+      messageID: assistant.id,
+      attempt: 1,
+      route: "local",
+      provider: assistant.providerID,
+      model: assistant.modelID,
+      message: assistant,
+      parts: [part],
+    }).catch(() => undefined)
     Bus.publish(Command.Event.Executed, {
       name: input.command,
       sessionID: input.sessionID,

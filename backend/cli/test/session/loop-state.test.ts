@@ -106,29 +106,21 @@ describe("session loop restart state", () => {
     })
   })
 
-  test("research review and contract bounds survive restart and reset on a real user turn", () => {
+  test("research contract bounds survive restart and reset on a real user turn", () => {
     const history = [
       user("u1", [text("u1", "research this")]),
       assistant("a1", "u1", "stop"),
-      user("c1", [text("c1", "review", { synthetic: true, kind: "review" })], "review"),
-      assistant("a2", "c1", "stop"),
-      user("c2", [text("c2", "summary", { synthetic: true, kind: "review-summary" })], "review-summary"),
-      assistant("a3", "c2", "stop"),
-      user("c3", [text("c3", "contract", { synthetic: true, kind: "contract" })], "contract"),
+      user("c1", [text("c1", "contract", { synthetic: true, kind: "contract" })], "contract"),
     ]
     expect(SessionLoopState.restore(history)).toMatchObject({
-      step: 3,
+      step: 1,
       contractContinuations: 1,
-      reviewContinuations: 1,
-      summaryContinuations: 1,
     })
     expect(SessionLoopState.restore([...history, user("u2", [text("u2", "new request")])])).toEqual({
       epoch: "u2",
       step: 0,
       outputContinuations: 0,
       contractContinuations: 0,
-      reviewContinuations: 0,
-      summaryContinuations: 0,
       overflowCompactions: 0,
     })
   })
@@ -217,8 +209,6 @@ describe("session loop restart state", () => {
       step: 0,
       outputContinuations: 0,
       contractContinuations: 0,
-      reviewContinuations: 0,
-      summaryContinuations: 0,
       overflowCompactions: 0,
     })
 
@@ -456,7 +446,7 @@ describe("session loop restart state", () => {
     expect(SessionLoopState.overflowRecovery({ assistant: normal, unanswered: false, attempts: 1 })).toBe("none")
   })
 
-  test("recognizes pre-marker synthetic continuations from existing sessions", () => {
+  test("recognizes pre-marker contract continuations from existing sessions", () => {
     const history = [
       user("u1", [text("u1", "research")]),
       assistant("a1", "u1", "stop"),
@@ -465,14 +455,31 @@ describe("session loop restart state", () => {
           synthetic: true,
         }),
       ]),
-      user("c2", [text("c2", "Run an independent review of the work in this conversation.", { synthetic: true })]),
-      user("c3", [text("c3", "Independent review completed with no recorded findings.", { synthetic: true })]),
     ]
     expect(SessionLoopState.restore(history)).toMatchObject({
       contractContinuations: 1,
-      reviewContinuations: 1,
-      summaryContinuations: 1,
     })
+  })
+
+  test("maps persisted reviewer continuations onto the normal task resume path", () => {
+    const legacy = user("legacy-review", [
+      {
+        ...text("legacy-review", "Independent review completed; continue the task.", { synthetic: true }),
+        metadata: { "openscience.loop": { version: 2, type: "continuation", kind: "review-summary" } },
+      },
+    ])
+    if (legacy.info.role !== "user") throw new Error("bad fixture")
+    legacy.info.agent = "reviewer"
+    legacy.info.internal = {
+      type: "continuation",
+      kind: "review-summary",
+      text: "continue",
+      epoch: "u1",
+      transaction: legacy.info.id,
+    } as unknown as MessageV2.User["internal"]
+
+    expect(SessionLoopState.messageKind(legacy.info)).toBe("task")
+    expect(SessionLoopState.continuationKind(legacy.parts[0])).toBe("task")
   })
 
   test("legacy breaker metadata cannot seed a transcript after modern epochs exist", () => {

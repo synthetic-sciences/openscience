@@ -26,7 +26,6 @@ const trace = {
     dedupeHits: 0,
     approvalCount: 0,
     artifactSaves: 0,
-    reviewerFindings: 0,
     failureCount: 0,
     retryCount: 0,
   },
@@ -39,7 +38,6 @@ const trace = {
   approvals: [],
   external: [{ kind: "model" as const, name: "echo", source: "local", external: false, cost: 0.02 }],
   artifacts: [],
-  reviewerFindings: [],
   failures: [],
   retries: [],
   privacy: {
@@ -106,13 +104,13 @@ describe("launch capture", () => {
 
   test("captures required artifacts from a directory root", async () => {
     const validation = await validateLaunchSuite(launch)
-    const flow = validation.suite.flows.find((item) => item.id === "reviewer-unsupported-number")
+    const flow = validation.suite.flows.find((item) => item.id === "oauth-artifact")
     const artifacts = path.join(root, "artifact-root")
     expect(flow).toBeDefined()
     if (!flow) return
 
     await mkdir(artifacts, { recursive: true })
-    await Bun.write(path.join(artifacts, "reviewed-claim.md"), "# Reviewed\n\nSupported by the source.")
+    await Bun.write(path.join(artifacts, "assay-decision.md"), "# Decision\n\nSupported by the source.")
     const captured = await captureRun({
       root,
       flow,
@@ -123,13 +121,13 @@ describe("launch capture", () => {
       trace,
       attempt: 1,
       phase: "baseline",
-      runID: "reviewer-artifact-a1",
+      runID: "oauth-artifact-a1",
       artifactRoot: artifacts,
     })
 
     expect(captured.result.artifacts).toMatchObject([
       {
-        path: "reviewed-claim.md",
+        path: "assay-decision.md",
         exists: true,
         valid: true,
       },

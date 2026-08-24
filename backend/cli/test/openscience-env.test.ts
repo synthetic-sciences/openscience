@@ -50,7 +50,7 @@ test("subprocess env filtering preserves a BYOK custom gateway", () => {
   expect(filtered.OPENROUTER_BASE_URL).toBe("https://my-gateway.example/api/v1")
 })
 
-test("subprocess env filtering keeps legacy skill credentials but never exposes Modal tokens", () => {
+test("subprocess env filtering preserves direct shell credentials but never exposes Modal tokens", () => {
   const filtered = OpenScience.filterEnvForSubprocess({
     PATH: "/usr/bin",
     MODAL_TOKEN_ID: "ak-user-owned",

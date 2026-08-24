@@ -85,12 +85,10 @@ const required = [
   "job_manifest",
   "reattach",
   "output_retrieval",
-  "unsupported_number",
   "simple_answer",
   "no_ceremony",
   "long_research",
   "multiple_artifacts",
-  "reviewer",
 ]
 
 const sha = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
@@ -169,7 +167,6 @@ export async function validateLaunchSuite(root = dir) {
     "tool_reliability",
     "citation_support",
     "artifact_validity",
-    "reviewer_precision",
     "ui_continuity",
     "delegation_restraint",
     "search_deduplication",

@@ -1,17 +1,16 @@
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
-import { mkdirSync, writeFileSync } from "fs"
-import { basename, join } from "path"
+import { basename } from "path"
 import { UI } from "../ui"
 import { OpenScience, API_BASE } from "../../openscience"
-import { computeDedupeKey, initProjectDetailed } from "../../server/routes/atlas-bridge"
+import { computeDedupeKey, initProjectDetailed, mergeProjectRootsAndPin } from "../../server/routes/atlas-bridge"
 import type { InitProjectFailure } from "../../server/routes/atlas-bridge"
 import { GitOutput } from "../../util/git-output"
 
 /**
- * `openscience project` — manage the Atlas project root for a folder.
+ * `openscience project` — manage the Synthetic Sciences project root for a folder.
  *
- * `init` (find-or-create) links this repo to an Atlas research graph — the same
+ * `init` (find-or-create) links this repo to a private research graph — the same
  * dedupe-safe path the web "Initialize" button uses. Agent-runnable, so a skill
  * can set the graph up from chat.
  *
@@ -173,25 +172,23 @@ const ProjectMergeCommand = cmd({
       .map((n: any) => ({ node_id: rootId(n) ?? "", title: String(n?.title ?? "untitled"), ref: rootRef(n) }))
       .filter((r: Root) => r.node_id)
 
-    // Candidates: roots whose ref already carries this key, or whose title
-    // matches the folder name (the "Project: <name>" roots created eagerly).
+    // Prefer the authoritative dedupe marker. Only use the historical title
+    // heuristic when no keyed root exists; mixing the two pools could absorb an
+    // unrelated old root that happens to share a repository name.
     const refKey = `atlas-project-dedupe:${key}`
     const lname = name.toLowerCase()
-    const candidates = allRoots.filter((r) => r.ref === refKey || r.title.toLowerCase().includes(lname))
-    const pool = candidates.length > 0 ? candidates : allRoots
+    const keyedCandidates = allRoots.filter((r) => r.ref === refKey)
+    const titleCandidates = allRoots.filter((r) => r.title.toLowerCase().includes(lname))
+    const pool = keyedCandidates.length > 0 ? keyedCandidates : titleCandidates
     if (pool.length === 0) {
-      prompts.log.warn("No research-graph roots found for your account.")
+      prompts.log.warn("No research-graph roots match this folder; refusing to merge unrelated account roots.")
       prompts.outro("Nothing to merge")
       return
     }
-    if (candidates.length <= 1) {
-      prompts.log.info(
-        candidates.length === 1
-          ? "Only one matching root — nothing to collapse, but you can still pin it."
-          : "No title/key match for this folder; showing all roots so you can pin one.",
-      )
+    if (pool.length <= 1) {
+      prompts.log.info("Only one matching root — the server will verify it before the local project pin is written.")
     } else {
-      prompts.log.warn(`Found ${candidates.length} duplicate roots for "${name}".`)
+      prompts.log.warn(`Found ${pool.length} duplicate roots for "${name}".`)
     }
 
     const chosen = await prompts.select({
@@ -207,38 +204,55 @@ const ProjectMergeCommand = cmd({
       return
     }
 
-    // Pin locally: PR-B's find-or-create reads this marker first, so every
-    // future sync from this folder collapses onto the chosen root.
-    try {
-      mkdirSync(join(directory, ".openscience"), { recursive: true })
-      writeFileSync(
-        join(directory, ".openscience", "project.json"),
-        JSON.stringify({ project_id: chosen, dedupe_key: key, resolved_at: new Date().toISOString() }, null, 2) + "\n",
-      )
-    } catch (e) {
-      prompts.log.error(`Could not write .openscience/project.json: ${e instanceof Error ? e.message : String(e)}`)
-      prompts.outro("Aborted")
-      return
-    }
-
-    prompts.log.success(`Pinned ${chosen} for this folder (.openscience/project.json).`)
-    const others = pool.filter((r) => r.node_id !== chosen)
+    const canonicalId = String(chosen)
+    const others = pool.filter((r) => r.node_id !== canonicalId)
     if (others.length > 0) {
       prompts.note(
         [
-          "Future syncs from this folder now reuse the chosen root.",
+          `Keep: ${pool.find((r) => r.node_id === canonicalId)?.title ?? canonicalId} (${canonicalId})`,
           "",
-          "The other roots are left untouched (no silent merge). To fully",
-          "collapse them server-side (cross-machine) or re-parent their",
-          "children, do it from the Synthetic Sciences web app — the CLI contract has no",
-          "node-update/re-parent endpoint yet.",
-          "",
-          "Other roots:",
+          "Re-parent children and delete these duplicate roots:",
           ...others.map((r) => `  • ${r.title} (${r.node_id})`),
         ].join("\n"),
-        "Next steps",
+        "Server merge",
       )
+      const confirmed = await prompts.confirm({
+        message: `Merge ${others.length} duplicate root${others.length === 1 ? "" : "s"} into the selected project?`,
+      })
+      if (prompts.isCancel(confirmed) || !confirmed) {
+        prompts.cancel("Cancelled — no roots or local pins changed.")
+        return
+      }
     }
+
+    // The server owns the destructive merge transaction. Only a confirmed
+    // success may create the local pin; a 404/405 safely tries the historical
+    // `/api/agent/projects/merge` contract, while every real v1 failure stops.
+    let outcome: Awaited<ReturnType<typeof mergeProjectRootsAndPin>>
+    try {
+      outcome = await mergeProjectRootsAndPin(
+        directory,
+        key,
+        canonicalId,
+        others.map((r) => r.node_id),
+      )
+    } catch (e) {
+      prompts.log.error(`Could not merge project roots: ${e instanceof Error ? e.message : String(e)}`)
+      prompts.outro("No local project pin was written")
+      return
+    }
+
+    prompts.log.success(
+      `Merged ${outcome.merge.deleted_nodes ?? others.length} duplicate root${others.length === 1 ? "" : "s"} into ${canonicalId}.`,
+    )
+    if (!outcome.pinned) {
+      prompts.log.warn(
+        "The server merge succeeded, but this checkout is read-only and .openscience/project.json could not be written.",
+      )
+      prompts.outro("Server merge complete")
+      return
+    }
+    prompts.log.success(`Pinned ${canonicalId} for this folder (.openscience/project.json).`)
     prompts.outro("Done")
   },
 })

@@ -153,37 +153,6 @@ class BackendHttpError extends Error {
   }
 }
 
-async function commitNew(input: {
-  localID: string
-  parentIDs: string[]
-  title: string
-  kind: string
-  summary: string
-  hypothesis: string
-  content: string
-  reason: string
-  context: unknown
-  insights?: string[]
-}): Promise<{ node_id: string | null; raw: unknown }> {
-  const res = await atlas("POST", "/api/v1/nodes/commit-new", {
-    local_temp_node_id: input.localID,
-    parent_ids: input.parentIDs,
-    staged_payload: {
-      title: input.title,
-      kind: input.kind,
-      content: input.content,
-      summary: input.summary,
-      hypothesis: input.hypothesis,
-      insights: input.insights ?? [],
-      no_artifacts_reason: input.reason,
-      repo_context: input.context,
-    },
-  })
-  if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
-  const data = await res.json()
-  return { node_id: nodeIdOf(data), raw: data }
-}
-
 export interface StageNodeInput {
   title: string
   directory?: string
@@ -306,10 +275,19 @@ export function computeDedupeKey(directory: string, repoUrl: string | null): str
 }
 
 // ── per-folder project resolution (scopes the canvas to the OPENED folder) ──
-// The /api/agent/projects payload keys the id as `project_id` (NOT `node_id`),
-// so use a project-aware extractor — `nodeIdOf` would miss it and return null.
+// The projects payload keys the id as `project_id` (NOT `node_id`), so use a
+// project-aware extractor — `nodeIdOf` would miss it and return null.
 function projectIdOf(p: any): string | null {
   return p?.project_id ?? p?.id ?? p?.node_id ?? null
+}
+
+/** Current Atlas exposes the deduping project contract at `/api/v1/projects`.
+ * Fall back to the retired `/api/agent/projects` route only when an older
+ * deployment proves the v1 route is absent; real v1 errors must stay visible. */
+async function projectRequest(method: "GET" | "POST", suffix = "", body?: unknown): Promise<Response> {
+  const current = await atlas(method, `/api/v1/projects${suffix}`, body)
+  if (current.status !== 404 && current.status !== 405) return current
+  return atlas(method, `/api/agent/projects${suffix}`, body)
 }
 
 // ── local project pin (.openscience/project.json) ─────────────────────────────
@@ -345,16 +323,54 @@ export function pinMatchesKey(pin: ProjectPin, key: string): boolean {
   return !pin.dedupe_key || pin.dedupe_key === key
 }
 
-function writeProjectPin(root: string, projectId: string, key: string): void {
+function writeProjectPin(root: string, projectId: string, key: string): boolean {
   try {
     mkdirSync(join(root, ".openscience"), { recursive: true })
     writeFileSync(
       join(root, ".openscience", "project.json"),
       JSON.stringify({ project_id: projectId, dedupe_key: key, resolved_at: new Date().toISOString() }, null, 2) + "\n",
     )
+    return true
   } catch {
     // best-effort — a read-only checkout still works, just without the cache
+    return false
   }
+}
+
+export interface ProjectMergeResult {
+  canonical_id: string
+  absorbed?: string[]
+  reparented_edges?: number
+  deleted_nodes?: number
+  backfilled_dedupe_key?: string | null
+}
+
+/** Collapse user-selected duplicate roots through the server-owned merge
+ * transaction. Current v1 is authoritative; an older Atlas deployment is
+ * tried only when 404/405 proves that route family is absent. */
+export async function mergeProjectRoots(canonicalId: string, duplicateIds: string[]): Promise<ProjectMergeResult> {
+  const res = await projectRequest("POST", "/merge", {
+    canonical_id: canonicalId,
+    duplicate_ids: duplicateIds,
+  })
+  if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
+  const result = (await res.json()) as Partial<ProjectMergeResult>
+  if (result.canonical_id !== canonicalId) {
+    throw new Error("projects merge endpoint returned the wrong canonical project id")
+  }
+  return result as ProjectMergeResult
+}
+
+/** Merge first, then persist the local repo pin. A failed/ambiguous server
+ * response must never make a local pin conceal roots that were not merged. */
+export async function mergeProjectRootsAndPin(
+  root: string,
+  key: string,
+  canonicalId: string,
+  duplicateIds: string[],
+): Promise<{ merge: ProjectMergeResult; pinned: boolean }> {
+  const merge = await mergeProjectRoots(canonicalId, duplicateIds)
+  return { merge, pinned: writeProjectPin(root, canonicalId, key) }
 }
 
 // Find-only: the repo's dedupe-key → its Atlas project root id (null only when
@@ -373,7 +389,7 @@ async function resolveProjectId(directory: string): Promise<string | null> {
   // project (or block find-or-create from ever creating it).
   const pin = readProjectPin(root)
   if (pin && pinMatchesKey(pin, key)) return pin.project_id
-  const res = await atlas("GET", `/api/agent/projects?dedupe_key=${encodeURIComponent(key)}`)
+  const res = await projectRequest("GET", `?dedupe_key=${encodeURIComponent(key)}`)
   if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
   const data = await res.json()
   const existing = Array.isArray(data?.projects) ? data.projects[0] : undefined
@@ -447,34 +463,12 @@ function failureFromError(e: unknown): InitProjectFailure {
   return { kind: "unreachable", message, host: API_BASE }
 }
 
-// Lower rank = more actionable for the user; ties keep the primary attempt's
-// failure, except a primary 404 ("projects endpoint not deployed") defers to
-// the proven commit-new fallback's failure.
-const FAILURE_RANK: Record<InitProjectFailureKind, number> = {
-  unauthenticated: 0,
-  access: 1,
-  unreachable: 2,
-  backend: 3,
-}
-
-function pickFailure(
-  primary: InitProjectFailure | undefined,
-  fallback: InitProjectFailure | undefined,
-): InitProjectFailure {
-  if (!primary) return fallback ?? { kind: "backend", host: API_BASE }
-  if (!fallback) return primary
-  if (primary.kind === "backend" && primary.status === 404) return fallback
-  if (FAILURE_RANK[fallback.kind] < FAILURE_RANK[primary.kind]) return fallback
-  return primary
-}
-
 // Find-or-create the repo's project root — the "initialize graph" action, shared
 // by the web bridge (POST /project/init) and the `openscience project init` CLI so
-// both take the exact same, dedupe-consistent path. Primary create is the
-// projects endpoint; on any failure it falls back to a dedupe-tagged ROOT NODE
-// via the proven commit-new endpoint (the same call the canvas uses), so init
-// still succeeds even if the projects endpoint is unavailable. Always writes the
-// pin on success. Exported for the CLI command.
+// both take the exact same, server-atomic dedupe path. Project creation must
+// never fall back to generic node creation: a lost response there could mint a
+// duplicate root because node commit does not own the dedupe constraint.
+// Always writes the pin on success. Exported for the CLI command.
 export async function initProject(directory: string): Promise<string | null> {
   return (await initProjectDetailed(directory)).projectId
 }
@@ -503,10 +497,9 @@ export async function initProjectDetailed(directory: string): Promise<InitProjec
   const key = computeDedupeKey(root, ctx.repo_url)
   const name = root.split("/").filter(Boolean).pop() || "project"
 
-  // Primary: the projects find-or-create endpoint.
-  let primaryFailure: InitProjectFailure | undefined
+  // The projects endpoint is the sole find-or-create authority.
   try {
-    const res = await atlas("POST", "/api/agent/projects", {
+    const res = await projectRequest("POST", "", {
       title: name,
       dedupe_key: key,
       repo_url: ctx.repo_url ?? undefined,
@@ -518,44 +511,22 @@ export async function initProjectDetailed(directory: string): Promise<InitProjec
         writeProjectPin(root, id, key)
         return { projectId: id }
       }
-      primaryFailure = { kind: "backend", message: "projects endpoint returned no project id", host: API_BASE }
+      return {
+        projectId: null,
+        failure: { kind: "backend", message: "projects endpoint returned no project id", host: API_BASE },
+      }
     } else {
-      primaryFailure = classifyInitFailure(res.status, await res.text().catch(() => ""))
-      log.warn("projects endpoint init failed, falling back to root node", { status: res.status })
+      const failure = classifyInitFailure(res.status, await res.text().catch(() => ""))
+      log.warn("projects endpoint init failed", { status: res.status })
+      return { projectId: null, failure }
     }
   } catch (e) {
-    primaryFailure = failureFromError(e)
-    log.warn("projects endpoint init errored, falling back to root node", {
+    const failure = failureFromError(e)
+    log.warn("projects endpoint init errored", {
       error: e instanceof Error ? e.message : String(e),
     })
+    return { projectId: null, failure }
   }
-
-  // Fallback: create a dedupe-tagged root node via commit-new (proven path).
-  // `external_transcript_ref` carries the dedupe key so `project merge` and a
-  // future resolve can rediscover this root.
-  let fallbackFailure: InitProjectFailure | undefined
-  try {
-    const { node_id } = await commitNew({
-      localID: `local-project-${stubNodeId(key)}`,
-      parentIDs: [],
-      title: `Project: ${name}`,
-      kind: "insight",
-      summary: `Synthetic Sciences research-graph root for ${name}.`,
-      hypothesis: "",
-      content: "",
-      reason: "Initialized as this repo's Synthetic Sciences research-graph root.",
-      context: { ...ctx, external_transcript_ref: `atlas-project-dedupe:${key}` },
-    })
-    if (node_id) {
-      writeProjectPin(root, node_id, key)
-      return { projectId: node_id }
-    }
-    fallbackFailure = { kind: "backend", message: "commit-new returned no node id", host: API_BASE }
-  } catch (e) {
-    fallbackFailure = failureFromError(e)
-    log.warn("root-node init fallback failed", { error: e instanceof Error ? e.message : String(e) })
-  }
-  return { projectId: null, failure: pickFailure(primaryFailure, fallbackFailure) }
 }
 
 export const AtlasBridgeRoutes = lazy(() =>

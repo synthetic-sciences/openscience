@@ -16,7 +16,7 @@ const LOGOS = [
 ] as const
 
 /* OpenScience. CMU Concrete, warm dark, coral accents.
-   Same design family as the Synthetic Sciences product pages.
+   Same design family as Synthetic Sciences.
 
    Type system, used consistently:
      H_HUGE  dither statements and the closing banner only
@@ -40,6 +40,7 @@ const LABEL = "text-[14px] text-muted-foreground"
 
 const GITHUB = "https://github.com/synthetic-sciences/openscience"
 const DOCS = "https://openscience.sh/docs"
+const APP = "https://app.syntheticsciences.ai"
 const NPM_CMD = "npm i -g @synsci/openscience"
 const CURL_CMD = "curl -fsSL https://openscience.sh/install | bash"
 
@@ -823,8 +824,9 @@ export default function Landing({
                   <Eyebrow className="mb-6 text-foreground/70">Model freedom</Eyebrow>
                   <h2 className={`text-balance ${H_HUGE} text-foreground`}>Use the model the work deserves.</h2>
                   <p className={`mt-7 max-w-[40ch] ${P_BIG} text-foreground/85`}>
-                    Route each task to a frontier model, your own provider, or a local model. Switch without moving the
-                    project, rewriting the workflow, or giving up control of your keys.
+                    After signing in, use local models, provider accounts, eligible ChatGPT access, or credit-backed
+                    models through OpenRouter. The desktop and local runtime remain free; BYOK and ChatGPT remain
+                    separate from the Ace wallet.
                   </p>
                 </div>
               </div>
@@ -845,6 +847,67 @@ export default function Landing({
         </div>
       </section>
 
+      {/* ------------------------------ ACE --------------------------- */}
+      <Section seed={9} id="ace">
+        <div className="grid grid-cols-12 items-start gap-10 lg:gap-16">
+          <div className="col-span-12 lg:col-span-5">
+            <Reveal>
+              <Eyebrow className="mb-5">Ace</Eyebrow>
+              <h2 className={`text-balance ${H_BIG}`}>OpenScience is free. Ace is pay as you go.</h2>
+            </Reveal>
+            <Reveal delay={150}>
+              <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
+                Add a purchased balance only when you want credit-backed models or enhanced search. There is no
+                subscription or fixed monthly charge.
+              </p>
+            </Reveal>
+          </div>
+          <Reveal delay={200} className="col-span-12 lg:col-span-7">
+            <div className="border border-border/60 bg-background/55 p-6 backdrop-blur-[3px] sm:p-9">
+              <div className="flex flex-col gap-4 border-b border-border/50 pb-7 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <div className="flex items-baseline gap-3">
+                    <span className="font-display text-[clamp(38px,5vw,56px)] leading-none tracking-[-0.025em]">
+                      $20
+                    </span>
+                    <span className={CAPTION}>to start</span>
+                  </div>
+                  <p className={`mt-3 ${P}`}>20 credits added to your purchased Wallet balance.</p>
+                </div>
+                <span className="w-fit border border-border/70 px-3 py-1.5 font-terminal text-[11px] tracking-[0.08em] text-foreground/60">
+                  PAY AS YOU GO
+                </span>
+              </div>
+              <p className={`mt-7 max-w-[60ch] ${P_BIG}`}>
+                One credit is one dollar of prepaid OpenScience balance. Credits cover managed model and enhanced search
+                usage at the rates shown in Billing.
+              </p>
+              <div className="mt-7 grid gap-px border border-border/50 bg-border/50 sm:grid-cols-2">
+                {[
+                  ["Credit-backed models through OpenRouter", "A curated route without provider setup."],
+                  ["One balance for models and enhanced search", "Free basic search still works without Ace."],
+                  ["Reloads 20 credits below 5", "On after card setup. Change or disable it anytime."],
+                  ["Stay in control", "Set a monthly cap and review every charge in Billing."],
+                ].map(([title, copy]) => (
+                  <div key={title} className="bg-background/90 p-5">
+                    <h3 className="text-[15px] leading-6 text-foreground/90">{title}</h3>
+                    <p className={`mt-2 ${CAPTION}`}>{copy}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-7 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                <p className={`max-w-[48ch] ${CAPTION}`}>
+                  Processing fee shown before payment and never added to your credit balance.
+                </p>
+                <Cta href={`${APP}/billing`} className="shrink-0">
+                  Add credits
+                </Cta>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </Section>
+
       {/* ---------------------------- INSTALL -------------------------- */}
       <Section seed={8} id="install">
         <div className="grid grid-cols-12 items-start gap-10 lg:gap-16">
@@ -855,8 +918,9 @@ export default function Landing({
             </Reveal>
             <Reveal delay={150}>
               <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
-                Install OpenScience, point it at a project, and the workspace opens in your browser. Sessions and
-                artifacts stay on disk. Provider requests go directly to the model you choose.
+                Install OpenScience, sign in once, and point it at a project. Sessions and artifacts stay on disk.
+                Provider account requests go directly to that provider; Ace requests use Synthetic Sciences and
+                OpenRouter.
               </p>
               <div className="mt-7 flex flex-wrap gap-2 text-[13px]">
                 {["Your files", "Your keys", "Your environment"].map((item) => (
@@ -937,11 +1001,23 @@ export default function Landing({
                 },
                 {
                   q: "Which models can it use?",
-                  a: "Use frontier providers, open-weight models, local models, or managed routes through Synthetic Sciences. You can switch mid-project without changing the project itself.",
+                  a: "Use frontier providers, open-weight models, local models, eligible ChatGPT access, or credit-backed models through OpenRouter. Local, provider-account, and ChatGPT-backed use does not debit the Ace wallet.",
                 },
                 {
                   q: "Where does my work live?",
-                  a: "On your machine. Sessions and artifacts are stored on disk, keys stay local, and requests go straight to the provider you select. Nothing is uploaded unless you choose to share it.",
+                  a: "Sessions and artifacts stay on your machine. BYOK keys remain local and requests go straight to your provider. When Use my data is enabled, OpenScience uploads a redacted complete session trajectory to improve the product.",
+                },
+                {
+                  q: "Do I need Ace to use OpenScience?",
+                  a: "No paid plan is required. A free Synthetic Sciences account is required to keep your sessions and settings connected, while local models, BYOK providers, and eligible ChatGPT access remain available without Ace.",
+                },
+                {
+                  q: "What data does OpenScience collect?",
+                  a: "The Use my data setting is on for a new connected account. It records the complete trajectory, including prompts, responses, tool activity, and errors. Turn it off anytime in Settings; local session history keeps working.",
+                },
+                {
+                  q: "What if enhanced search is unavailable?",
+                  a: "OpenScience uses the free basic-search fallback instead of breaking the research session. Ace can use enhanced search when it is available.",
                 },
                 {
                   q: "Can it work with my field?",
@@ -952,8 +1028,8 @@ export default function Landing({
                   a: "Yes. Add skills, plugins, MCP servers, custom agents and commands, or use the TypeScript SDK to connect a private lab tool.",
                 },
                 {
-                  q: "Do I need a Synthetic Sciences account?",
-                  a: "No. OpenScience works with your own provider keys, eligible ChatGPT access, or local models. A Synthetic Sciences account is optional when you want managed model credits and research search.",
+                  q: "How do I manage my account?",
+                  a: "Open Settings for connected accounts and model access, or use the Synthetic Sciences dashboard for wallet credits, auto-reload, receipts, and devices.",
                 },
               ]}
             />
@@ -976,7 +1052,7 @@ export default function Landing({
               <div className="col-span-12 lg:col-span-5">
                 <Reveal delay={200}>
                   <p className={`${P_BIG} text-foreground/85 max-w-[38ch]`}>
-                    Free and open source. The whole loop, on your keys.
+                    Free and open source. Use your keys, eligible ChatGPT, local models, or optional Ace credits.
                   </p>
                   <div className="mt-8 flex flex-wrap items-center gap-3">
                     <Cta href="#install">Install OpenScience</Cta>
@@ -1078,19 +1154,6 @@ export default function Landing({
                     rel="noreferrer"
                   >
                     Synthetic Sciences
-                    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-                      <path d="M2 8 L8 2 M4 2 L8 2 L8 6" stroke="currentColor" fill="none" />
-                    </svg>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://app.syntheticsciences.ai"
-                    className="link-underline text-foreground/70 hover:text-foreground inline-flex items-center gap-1.5"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Account
                     <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
                       <path d="M2 8 L8 2 M4 2 L8 2 L8 6" stroke="currentColor" fill="none" />
                     </svg>

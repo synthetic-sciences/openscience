@@ -13,6 +13,8 @@ const snapshot = path.join(synced, "synced-env.json")
 const managed = path.join(synced, "openscience-synced.json")
 const gcp = path.join(synced, "atlas-gcp-service-account.json")
 const queue = path.join(Global.Path.data, "usage-queue.jsonl")
+const traceQueue = path.join(Global.Path.data, "telemetry-queue-v2.jsonl")
+const traceConsent = path.join(Global.Path.data, "telemetry-consent-v2.json")
 const atlas = path.join(os.tmpdir(), `openscience-test-atlas-${process.pid}`, "config.json")
 const sandboxAtlasConfig = process.env.ATLAS_CLI_CONFIG_PATH
 
@@ -24,7 +26,7 @@ afterEach(async () => {
   delete process.env[EXPORTED]
   if (sandboxAtlasConfig) process.env.ATLAS_CLI_CONFIG_PATH = sandboxAtlasConfig
   else delete process.env.ATLAS_CLI_CONFIG_PATH
-  for (const file of [session, snapshot, managed, gcp, queue, atlas]) {
+  for (const file of [session, snapshot, managed, gcp, queue, traceQueue, traceConsent, atlas]) {
     await fs.rm(file, { force: true }).catch(() => {})
   }
 })
@@ -40,6 +42,7 @@ test("clearSession removes every synced credential artifact", async () => {
   await Bun.write(managed, JSON.stringify({ model: "synsci/some-model" }))
   await Bun.write(gcp, JSON.stringify({ private_key: "gcp-secret" }))
   await Bun.write(queue, JSON.stringify({ service: "llm", event_type: "chat", tokens_used: 10 }) + "\n")
+  await Bun.write(traceQueue, '{"queued":"account-trace"}\n')
 
   process.env.ATLAS_CLI_CONFIG_PATH = atlas
   await Bun.write(
@@ -65,6 +68,7 @@ test("clearSession removes every synced credential artifact", async () => {
   expect(await Bun.file(managed).exists()).toBe(false)
   expect(await Bun.file(gcp).exists()).toBe(false)
   expect(await Bun.file(queue).exists()).toBe(false)
+  expect(await Bun.file(traceQueue).exists()).toBe(false)
 
   // The injected var is gone; the shell export survives.
   expect(process.env[INJECTED]).toBeUndefined()
@@ -121,10 +125,7 @@ test("logout in one server removes synced env and revokes inherited children in 
   const openscience = new URL("../src/openscience/index.ts", import.meta.url).href
   const lifecycle = new URL("../src/credentials/lifecycle.ts", import.meta.url).href
   await fs.mkdir(managedDir, { recursive: true })
-  await Bun.write(
-    path.join(managedDir, "synced-env.json"),
-    JSON.stringify({ AWS_ACCESS_KEY_ID: "cross-managed-access", AWS_SECRET_ACCESS_KEY: "cross-managed-secret" }),
-  )
+  await Bun.write(path.join(managedDir, "synced-env.json"), JSON.stringify({ GITHUB_TOKEN: "cross-synced-secret" }))
   await Bun.write(
     path.join(root, "openscience-session.json"),
     JSON.stringify({ api_key: "thk_test.secret", user_id: "u" }),
@@ -142,10 +143,10 @@ test("logout in one server removes synced env and revokes inherited children in 
       `import { CredentialLifecycle } from ${JSON.stringify(lifecycle)}`,
       `await CredentialLifecycle.ensureFresh()`,
       `const initial = await OpenScience.subprocessEnv(process.env)`,
-      `if (initial.AWS_SECRET_ACCESS_KEY !== "cross-managed-secret") throw new Error("worker did not load synced secret")`,
-      `const child = spawn(process.execPath, ["-e", "console.log(process.env.AWS_SECRET_ACCESS_KEY || 'absent'); setInterval(() => {}, 1000)"], { env: initial, stdio: ["ignore", "pipe", "pipe"] })`,
+      `if (initial.GITHUB_TOKEN !== "cross-synced-secret") throw new Error("worker did not load synced secret")`,
+      `const child = spawn(process.execPath, ["-e", "console.log(process.env.GITHUB_TOKEN || 'absent'); setInterval(() => {}, 1000)"], { env: initial, stdio: ["ignore", "pipe", "pipe"] })`,
       `const inherited = await new Promise((resolve, reject) => { child.stdout.once("data", (data) => resolve(String(data).trim())); child.once("error", reject) })`,
-      `if (inherited !== "cross-managed-secret") throw new Error("child did not inherit synced secret")`,
+      `if (inherited !== "cross-synced-secret") throw new Error("child did not inherit synced secret")`,
       `let revoked = false`,
       `CredentialLifecycle.onRevoke(async () => { revoked = true; child.kill("SIGTERM"); await new Promise((resolve) => child.once("exit", resolve)) })`,
       `CredentialLifecycle.watch(25)`,
@@ -153,16 +154,15 @@ test("logout in one server removes synced env and revokes inherited children in 
       `for (let i = 0; i < 400 && !revoked; i++) await Bun.sleep(10)`,
       `await CredentialLifecycle.ensureFresh()`,
       `if (!revoked || (child.exitCode === null && child.signalCode === null)) throw new Error("synced child was not revoked")`,
-      `if (process.env.AWS_SECRET_ACCESS_KEY !== undefined) throw new Error("logout left synced secret in process.env")`,
+      `if (process.env.GITHUB_TOKEN !== undefined) throw new Error("logout left synced secret in process.env")`,
       `const next = await OpenScience.subprocessEnv(process.env)`,
-      `if (next.AWS_SECRET_ACCESS_KEY !== undefined) throw new Error("new child env retained logged-out secret")`,
+      `if (next.GITHUB_TOKEN !== undefined) throw new Error("new child env retained logged-out secret")`,
       `CredentialLifecycle.stopWatching()`,
     ].join("\n"),
   )
   const env = {
     ...process.env,
-    AWS_ACCESS_KEY_ID: "cross-managed-access",
-    AWS_SECRET_ACCESS_KEY: "cross-managed-secret",
+    GITHUB_TOKEN: "cross-synced-secret",
     OPENSCIENCE_DATA_DIR: root,
     OPENSCIENCE_CONFIG_DIR: managedDir,
     OPENSCIENCE_TEST_HOME: path.join(root, "home"),

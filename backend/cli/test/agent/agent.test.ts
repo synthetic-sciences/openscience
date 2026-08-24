@@ -1,15 +1,61 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect, spyOn } from "bun:test"
+import * as AI from "ai"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { PermissionNext } from "../../src/permission/next"
 import { ProjectTrust } from "../../src/project/trust"
 import { Config } from "../../src/config/config"
+import { Provider } from "../../src/provider/provider"
+import { Auth } from "../../src/auth"
+import { OutboundTelemetry } from "../../src/telemetry/outbound"
+import * as BillingGate from "../../src/session/billing-gate"
+
+const restores: Array<{ mockRestore(): void }> = []
+
+afterEach(() => {
+  for (const restore of restores.splice(0)) restore.mockRestore()
+})
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionNext.Action | undefined {
   if (!agent) return undefined
   return PermissionNext.evaluate(permission, "*", agent.permission).action
+}
+
+function generatedModel() {
+  return {
+    id: "anthropic/claude-test",
+    providerID: "openrouter",
+    api: { id: "anthropic/claude-test", npm: "@openrouter/ai-sdk-provider" },
+    name: "Claude Test",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 100_000, output: 8_000 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-01-01",
+  } as Provider.Model
+}
+
+function generationTelemetrySpies() {
+  const sessionStarted = spyOn(OutboundTelemetry, "sessionStarted").mockResolvedValue(true)
+  const userMessage = spyOn(OutboundTelemetry, "userMessage").mockResolvedValue(true)
+  const modelRequest = spyOn(OutboundTelemetry, "modelRequest").mockResolvedValue(true)
+  const modelResponse = spyOn(OutboundTelemetry, "modelResponse").mockResolvedValue(true)
+  const error = spyOn(OutboundTelemetry, "error").mockResolvedValue(true)
+  const sessionCompleted = spyOn(OutboundTelemetry, "sessionCompleted").mockResolvedValue(true)
+  restores.push(sessionStarted, userMessage, modelRequest, modelResponse, error, sessionCompleted)
+  return { sessionStarted, userMessage, modelRequest, modelResponse, error, sessionCompleted }
 }
 
 test("returns default native agents when no config", async () => {
@@ -73,23 +119,42 @@ test("Research is the only built-in user-facing primary", async () => {
   })
 })
 
-test("built-in delegation uses only Explore, Execute, and Review profiles", async () => {
+test("built-in delegation uses only Explore and Execute profiles", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const profiles = (await Promise.all([Agent.get("execute"), Agent.get("explore"), Agent.get("review")])).map(
-        (agent) => agent?.name,
-      )
-      expect(profiles).toEqual(["execute", "explore", "review"])
+      const profiles = (await Promise.all([Agent.get("execute"), Agent.get("explore")])).map((agent) => agent?.name)
+      expect(profiles).toEqual(["execute", "explore"])
       expect((await Agent.get("execute"))?.hidden).toBe(true)
       expect((await Agent.get("explore"))?.hidden).toBe(true)
-      expect((await Agent.get("review"))?.hidden).toBe(true)
       expect(evalPerm(await Agent.get("execute"), "edit")).toBe("allow")
-      expect(evalPerm(await Agent.get("review"), "edit")).toBe("deny")
       expect((await Agent.get("explore"))?.steps).toBe(12)
       expect((await Agent.get("execute"))?.steps).toBe(16)
-      expect((await Agent.get("review"))?.steps).toBe(12)
+      expect(await Agent.get("review")).toBeUndefined()
+      expect(await Agent.get("reviewer")).toBeUndefined()
+      expect(await Agent.get("artifact-reviewer")).toBeUndefined()
+    },
+  })
+})
+
+test("removed reviewer aliases cannot be restored by persisted agent config", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        review: { description: "legacy review alias" },
+        reviewer: { description: "legacy reviewer" },
+        "artifact-reviewer": { description: "legacy artifact reviewer" },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trustProject()
+      expect(await Agent.get("review")).toBeUndefined()
+      expect(await Agent.get("reviewer")).toBeUndefined()
+      expect(await Agent.get("artifact-reviewer")).toBeUndefined()
     },
   })
 })
@@ -804,6 +869,178 @@ test("defaultAgent throws when all primary visible agents are disabled", async (
     fn: async () => {
       await trustProject()
       await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
+    },
+  })
+})
+
+test("agent configuration generation emits one canonical ephemeral model trace and disables AI SDK telemetry", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const model = generatedModel()
+      const telemetry = generationTelemetrySpies()
+      const getModel = spyOn(Provider, "getModel").mockResolvedValue(model)
+      const getLanguage = spyOn(Provider, "getLanguage").mockResolvedValue({} as never)
+      const credential = spyOn(BillingGate, "resolveCredentialSource").mockResolvedValue("byok")
+      const auth = spyOn(Auth, "get").mockImplementation(async () => undefined as never)
+      const generate = spyOn(AI, "generateObject").mockResolvedValue({
+        object: { identifier: "reviewer", whenToUse: "Review a result", systemPrompt: "Check every claim." },
+        usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+        finishReason: "stop",
+      } as never)
+      restores.push(getModel, getLanguage, credential, auth, generate)
+
+      const output = await Agent.generate({
+        description: "Create a careful reviewer",
+        model: { providerID: "requested-provider", modelID: "requested-model" },
+      })
+
+      expect(output).toEqual({
+        identifier: "reviewer",
+        whenToUse: "Review a result",
+        systemPrompt: "Check every claim.",
+      })
+      expect(generate).toHaveBeenCalledTimes(1)
+      expect(generate.mock.calls[0]?.[0]).toMatchObject({
+        experimental_telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
+        temperature: 0.3,
+      })
+      const started = telemetry.sessionStarted.mock.calls[0]?.[0]
+      const user = telemetry.userMessage.mock.calls[0]?.[0]
+      const request = telemetry.modelRequest.mock.calls[0]?.[0]
+      const response = telemetry.modelResponse.mock.calls[0]?.[0]
+      expect(started?.sessionID).toMatch(/^agent-config:/)
+      expect(started?.session).toMatchObject({ purpose: "agent_config_generation", ephemeral: true })
+      expect(user).toMatchObject({
+        sessionID: started?.sessionID,
+        message: { role: "user", purpose: "agent_config_generation" },
+        parts: [{ type: "text", text: "Create a careful reviewer" }],
+      })
+      expect(request).toMatchObject({
+        sessionID: started?.sessionID,
+        messageID: user?.messageID,
+        attempt: 1,
+        route: "byok",
+        provider: "openrouter",
+        model: "anthropic/claude-test",
+        parameters: { purpose: "agent_config_generation", structuredOutput: true, streaming: false },
+      })
+      expect(response).toMatchObject({
+        sessionID: started?.sessionID,
+        messageID: user?.messageID,
+        route: "byok",
+        provider: "openrouter",
+        model: "anthropic/claude-test",
+        parts: [{ type: "json", value: output }],
+      })
+      expect(telemetry.error).not.toHaveBeenCalled()
+      expect(telemetry.sessionCompleted).toHaveBeenCalledWith({
+        sessionID: started?.sessionID,
+        reason: "completed",
+        session: { purpose: "agent_config_generation", source: "cli", ephemeral: true },
+      })
+    },
+  })
+})
+
+test("OAuth configuration generation traces the streamObject response without provider telemetry", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const output = { identifier: "planner", whenToUse: "Plan work", systemPrompt: "Plan carefully." }
+      const model = { ...generatedModel(), id: "gpt-test", providerID: "openai" }
+      const telemetry = generationTelemetrySpies()
+      const getModel = spyOn(Provider, "getModel").mockResolvedValue(model)
+      const getLanguage = spyOn(Provider, "getLanguage").mockResolvedValue({} as never)
+      const credential = spyOn(BillingGate, "resolveCredentialSource").mockResolvedValue("oauth-free")
+      const auth = spyOn(Auth, "get").mockResolvedValue({
+        type: "oauth",
+        refresh: "refresh",
+        access: "access",
+        expires: Date.now() + 60_000,
+      })
+      const generate = spyOn(AI, "generateObject")
+      const stream = spyOn(AI, "streamObject").mockReturnValue({
+        object: Promise.resolve(output),
+        usage: Promise.resolve({ inputTokens: 20, outputTokens: 10, totalTokens: 30 }),
+        finishReason: Promise.resolve("stop"),
+        fullStream: (async function* () {
+          yield { type: "finish" }
+        })(),
+      } as never)
+      restores.push(getModel, getLanguage, credential, auth, generate, stream)
+
+      expect(
+        await Agent.generate({
+          description: "Create a planning agent",
+          model: { providerID: "openai", modelID: "gpt-test" },
+        }),
+      ).toEqual(output)
+
+      expect(generate).not.toHaveBeenCalled()
+      expect(stream).toHaveBeenCalledTimes(1)
+      expect(stream.mock.calls[0]?.[0]).toMatchObject({
+        experimental_telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
+      })
+      expect(telemetry.modelRequest.mock.calls[0]?.[0]).toMatchObject({
+        route: "subscription",
+        provider: "openai",
+        model: "gpt-test",
+        parameters: { purpose: "agent_config_generation", streaming: true },
+      })
+      expect(telemetry.modelResponse.mock.calls[0]?.[0]).toMatchObject({
+        route: "subscription",
+        provider: "openai",
+        model: "gpt-test",
+        parts: [{ type: "json", value: output }],
+      })
+      expect(telemetry.error).not.toHaveBeenCalled()
+    },
+  })
+})
+
+test("agent configuration generation records provider errors under the model request span", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const model = generatedModel()
+      const telemetry = generationTelemetrySpies()
+      const getModel = spyOn(Provider, "getModel").mockResolvedValue(model)
+      const getLanguage = spyOn(Provider, "getLanguage").mockResolvedValue({} as never)
+      const credential = spyOn(BillingGate, "resolveCredentialSource").mockResolvedValue("managed")
+      const auth = spyOn(Auth, "get").mockImplementation(async () => undefined as never)
+      const failure = new Error("provider failed")
+      const generate = spyOn(AI, "generateObject").mockRejectedValue(failure)
+      restores.push(getModel, getLanguage, credential, auth, generate)
+
+      await expect(
+        Agent.generate({
+          description: "Create a careful reviewer",
+          model: { providerID: "requested-provider", modelID: "requested-model" },
+        }),
+      ).rejects.toThrow("provider failed")
+
+      const request = telemetry.modelRequest.mock.calls[0]?.[0]
+      expect(telemetry.modelResponse).not.toHaveBeenCalled()
+      expect(telemetry.error).toHaveBeenCalledTimes(1)
+      expect(telemetry.error.mock.calls[0]?.[0]).toMatchObject({
+        sessionID: request?.sessionID,
+        messageID: request?.messageID,
+        attempt: 1,
+        parentSpanID: `${request?.messageID}:model:1:request`,
+        route: "managed",
+        provider: "openrouter",
+        model: "anthropic/claude-test",
+        error: failure,
+        context: { purpose: "agent_config_generation", phase: "model_generation" },
+      })
+      expect(telemetry.sessionCompleted.mock.calls[0]?.[0]).toMatchObject({
+        sessionID: request?.sessionID,
+        reason: "error",
+      })
     },
   })
 })

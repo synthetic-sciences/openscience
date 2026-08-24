@@ -364,7 +364,7 @@ export namespace MessageV2 {
         }),
         z.object({
           type: z.literal("continuation"),
-          kind: z.enum(["output", "contract", "review", "review-summary", "compaction", "task"]),
+          kind: z.enum(["output", "contract", "compaction", "task"]),
           text: z.string(),
           epoch: z.string(),
           transaction: z.string(),

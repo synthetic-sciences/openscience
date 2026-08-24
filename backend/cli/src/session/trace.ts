@@ -755,13 +755,6 @@ export namespace SessionTrace {
       artifacts,
       jobs,
       kernels,
-      findings: reviewerFindings.map((item) => ({
-        target: item.target,
-        verdict: item.relation,
-        status: item.status,
-        severity: item.severity,
-      })),
-      reviewed: reviewerFindings.some((item) => item.relation === "supports" || item.relation === "refutes"),
       busy: SessionStatus.get(sessionID).type !== "idle",
     })
     const harnessReport = SessionHarness.analyze({

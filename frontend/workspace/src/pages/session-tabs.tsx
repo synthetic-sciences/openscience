@@ -1,4 +1,4 @@
-import { createEffect, createUniqueId, For, on, Show, type JSX } from "solid-js"
+import { createEffect, createUniqueId, For, on, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { IconX } from "@/atlas/shared/Icon"
 import { StatusDot } from "@/atlas/shared/StatusDot"
@@ -21,6 +21,18 @@ export function sessionTabID(id: string) {
 }
 
 const DRAG_TYPE = "text/openscience-session-tab"
+const MIN_EDITOR_WIDTH = 152
+
+export function sessionTabEditorBounds(left: number, width: number, containerWidth: number) {
+  const available = Number.isFinite(containerWidth) ? Math.max(0, containerWidth) : 0
+  const requested = Number.isFinite(width) ? Math.max(MIN_EDITOR_WIDTH, width) : MIN_EDITOR_WIDTH
+  const boundedWidth = Math.min(requested, available)
+  const requestedLeft = Number.isFinite(left) ? left : 0
+  return {
+    left: Math.max(0, Math.min(requestedLeft, available - boundedWidth)),
+    width: boundedWidth,
+  }
+}
 
 export function SessionTabStrip(props: {
   tabs: SessionTabItem[]
@@ -44,12 +56,14 @@ export function SessionTabStrip(props: {
   })
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
+  let editingPair: HTMLElement | undefined
   let pendingFocus = ""
 
   const buttons = () => Array.from(root?.querySelectorAll<HTMLButtonElement>("[data-session-tab]") ?? [])
   const button = (id: string) => buttons().find((item) => item.dataset.sessionTab === id)
   const focus = (id: string) => queueMicrotask(() => button(id)?.focus())
-  const clear = () =>
+  const clear = () => {
+    editingPair = undefined
     setState({
       editing: "",
       draft: "",
@@ -59,20 +73,34 @@ export function SessionTabStrip(props: {
       top: 5,
       width: 180,
     })
+  }
+
+  const editorPosition = (pair: HTMLElement) => {
+    const bounds = root?.getBoundingClientRect()
+    const rect = pair.getBoundingClientRect()
+    if (!bounds) return { left: 0, top: 5, width: 180 }
+    return {
+      ...sessionTabEditorBounds(rect.left - bounds.left, rect.width, bounds.width),
+      top: Math.max(0, rect.top - bounds.top),
+    }
+  }
+
+  const repositionEditor = () => {
+    if (!state.editing || !editingPair?.isConnected) return
+    setState(editorPosition(editingPair))
+  }
 
   const start = (item: SessionTabItem, target: HTMLElement) => {
     if (item.id !== props.active || item.editable === false || state.saving) return
     const pair = target.closest<HTMLElement>(".workspace-session-tab")
-    const bounds = root?.getBoundingClientRect()
-    const rect = pair?.getBoundingClientRect()
+    if (!pair) return
+    editingPair = pair
     setState({
       editing: item.id,
       draft: item.title,
       saving: false,
       error: "",
-      left: rect && bounds ? Math.max(0, rect.left - bounds.left) : 0,
-      top: rect && bounds ? Math.max(0, rect.top - bounds.top) : 5,
-      width: Math.max(152, rect?.width ?? 180),
+      ...editorPosition(pair),
     })
     queueMicrotask(() => {
       input?.focus()
@@ -141,6 +169,19 @@ export function SessionTabStrip(props: {
       },
     ),
   )
+
+  onMount(() => {
+    const list = root?.querySelector<HTMLElement>(".workspace-tabs__list")
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(repositionEditor)
+    if (root) observer?.observe(root)
+    list?.addEventListener("scroll", repositionEditor, { passive: true })
+    window.addEventListener("resize", repositionEditor)
+    onCleanup(() => {
+      observer?.disconnect()
+      list?.removeEventListener("scroll", repositionEditor)
+      window.removeEventListener("resize", repositionEditor)
+    })
+  })
 
   return (
     <div ref={root} class="workspace-session-tabs">

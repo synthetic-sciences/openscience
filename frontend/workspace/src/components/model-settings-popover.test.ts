@@ -47,8 +47,8 @@ const press = async (target: HTMLElement, key: string) => {
 
 describe("inference source classification", () => {
   test("labels provider routes by the access the user controls", () => {
-    expect(subject.inferenceSource({ providerID: "synsci", credential: "custom" })).toBe("managed")
-    expect(subject.inferenceSource({ providerID: "synsci-demo", credential: "env" })).toBe("managed")
+    expect(subject.inferenceSource({ providerID: "synsci", credential: "custom" })).toBeUndefined()
+    expect(subject.inferenceSource({ providerID: "anthropic", credential: "managed" })).toBeUndefined()
     expect(subject.inferenceSource({ providerID: "openai-codex", credential: "custom" })).toBe("chatgpt")
     expect(subject.inferenceSource({ providerID: "anthropic", credential: "api" })).toBe("byok")
     expect(subject.inferenceSource({ providerID: "anthropic", credential: "env" })).toBe("byok")
@@ -162,24 +162,23 @@ describe("model catalog keyboard navigation", () => {
 describe("model option keyboard navigation", () => {
   test.each([
     ["effort", ["standard", "high", "xhigh"]],
-    ["speed", ["standard", "fast", "priority"]],
+    ["route", ["openai", "codex", "openrouter"]],
   ] as const)("automatically activates %s radio options without traversing Back", async (kind, ids) => {
     const current = { value: ids[0] as string }
     const host = mount(() =>
       web.createComponent(subject.ModelOptionList, {
         id: `model-${kind}-options-test`,
         kind,
-        title: kind === "effort" ? "Effort" : "Speed",
+        title: kind === "effort" ? "Effort" : "Route",
         options: ids.map((id) => ({ id, label: id })),
         current: current.value,
         onSelect: (value) => (current.value = value),
-        onBack: () => undefined,
       }),
     )
     const back = host.querySelector<HTMLButtonElement>("[data-model-menu-back]")
     const radios = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
 
-    expect(back).not.toBeNull()
+    expect(back).toBeNull()
     expect(radios).toHaveLength(3)
     radios[0]?.focus()
 
@@ -223,7 +222,6 @@ describe("model option keyboard navigation", () => {
           { id: "openai-codex/gpt-5.6-sol", label: "OpenAI · ChatGPT" },
         ],
         onSelect: (value) => (selected.value = value),
-        onBack: () => undefined,
         onDone: () => done++,
       }),
     )
@@ -233,5 +231,145 @@ describe("model option keyboard navigation", () => {
     routes[1]?.click()
     expect(selected.value).toBe("openai-codex/gpt-5.6-sol")
     expect(done).toBe(1)
+  })
+})
+
+describe("reasoning effort and Fast mode", () => {
+  test("renders one Fast toggle only when the exact route advertises it", () => {
+    const unsupported = mount(() =>
+      web.createComponent(subject.ModelEffortPanel, {
+        current: "standard",
+        options: [
+          { id: "standard", label: "Standard" },
+          { id: "high", label: "High" },
+        ],
+        onEffortSelect: () => undefined,
+        onTierSelect: () => undefined,
+      }),
+    )
+
+    expect(unsupported.querySelectorAll('[data-model-option="effort"]')).toHaveLength(2)
+    expect(unsupported.querySelector("[data-model-fast-toggle]")).toBeNull()
+    expect(unsupported.textContent).not.toContain("Fast mode")
+
+    const supported = mount(() =>
+      web.createComponent(subject.ModelEffortPanel, {
+        current: "standard",
+        options: [
+          { id: "standard", label: "Standard" },
+          { id: "high", label: "High" },
+        ],
+        fast: { active: false },
+        onEffortSelect: () => undefined,
+        onTierSelect: () => undefined,
+      }),
+    )
+
+    expect(supported.querySelectorAll('[data-component="switch"]')).toHaveLength(1)
+    expect(supported.querySelector("[data-model-fast-toggle]")).not.toBeNull()
+    expect(supported.textContent).toContain("Fast mode")
+    expect(supported.textContent).not.toContain("Response speed")
+
+    const fastOnly = mount(() =>
+      web.createComponent(subject.ModelEffortPanel, {
+        current: "standard",
+        options: [],
+        fast: { active: false },
+        onEffortSelect: () => undefined,
+        onTierSelect: () => undefined,
+      }),
+    )
+    expect(fastOnly.querySelector('[role="radiogroup"]')).toBeNull()
+    expect(fastOnly.querySelector('[data-component="switch"]')).not.toBeNull()
+  })
+
+  test("changes effort and tier independently without touching the selected route", () => {
+    const state = {
+      route: "openai-codex/gpt-5.6-sol",
+      variant: "standard",
+      tier: "standard",
+    }
+    const host = mount(() =>
+      web.createComponent(subject.ModelEffortPanel, {
+        current: state.variant,
+        options: [
+          { id: "standard", label: "Standard" },
+          { id: "high", label: "High" },
+        ],
+        fast: { active: false },
+        onEffortSelect: (variant) => (state.variant = variant),
+        onTierSelect: (tier) => (state.tier = tier),
+      }),
+    )
+
+    host.querySelector<HTMLButtonElement>('[data-model-option="effort"][data-model-option-id="high"]')?.click()
+    expect(state).toEqual({
+      route: "openai-codex/gpt-5.6-sol",
+      variant: "high",
+      tier: "standard",
+    })
+
+    host.querySelector<HTMLInputElement>('[data-slot="switch-input"]')?.click()
+    expect(state).toEqual({
+      route: "openai-codex/gpt-5.6-sol",
+      variant: "high",
+      tier: "fast",
+    })
+  })
+
+  test("uses a real dialog trigger and restores focus to its own effort chip", async () => {
+    const host = mount(() =>
+      web.createComponent(subject.ModelEffortPopover, {
+        value: "Standard",
+        current: "standard",
+        options: [
+          { id: "standard", label: "Standard" },
+          { id: "high", label: "High" },
+        ],
+        fast: { active: false },
+        onEffortSelect: () => undefined,
+        onTierSelect: () => undefined,
+      }),
+    )
+    const trigger = host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")!
+
+    expect(trigger.getAttribute("aria-haspopup")).toBe("dialog")
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    trigger.focus()
+    trigger.click()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const content = document.body.querySelector<HTMLElement>('[data-model-popover-kind="effort"]')!
+    expect(content).not.toBeNull()
+    expect(content.getAttribute("role")).toBe("dialog")
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
+    expect(trigger.getAttribute("aria-controls")).toBe(content.id)
+    expect(document.activeElement).toBe(content.querySelector('[data-model-option="effort"][aria-checked="true"]'))
+
+    await press(content, "Escape")
+    await Promise.resolve()
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  test("keeps active Fast mode visible and announced after the dialog closes", () => {
+    const host = mount(() =>
+      web.createComponent(subject.ModelEffortPopover, {
+        value: "High",
+        current: "high",
+        options: [{ id: "high", label: "High" }],
+        fast: { active: true },
+        onEffortSelect: () => undefined,
+        onTierSelect: () => undefined,
+      }),
+    )
+    const trigger = host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")!
+
+    expect(trigger.textContent).toContain("High")
+    expect(trigger.textContent).toContain("Fast")
+    expect(trigger.getAttribute("aria-label")).toBe("Reasoning effort: High. Fast mode on. Reasoning options")
+    expect(trigger.querySelector("[data-model-fast-indicator]")).not.toBeNull()
+    expect(trigger.querySelector('[data-icon="bolt"]')).toBeNull()
   })
 })

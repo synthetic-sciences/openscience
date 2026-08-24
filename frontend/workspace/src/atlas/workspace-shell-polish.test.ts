@@ -50,6 +50,6 @@ describe("seamless workspace shell", () => {
       expect(css).toContain(":active")
       expect(css).toContain("scale(")
     }
-    expect(source).toContain('role="tablist" aria-orientation="horizontal"')
+    expect(source).toMatch(/role="tablist"\s+aria-orientation="horizontal"/)
   })
 })

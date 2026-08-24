@@ -1,19 +1,21 @@
 import { describe, expect, test } from "bun:test"
-import { dataSharingDetail, searchStatus, walletStatus, type ResearchToolsStatus } from "./research-tools-state"
+import { dataSharingDetail, dataSharingEnabled, searchStatus, type ResearchToolsStatus } from "./research-tools-state"
 
 const status = (patch?: Partial<ResearchToolsStatus>): ResearchToolsStatus => ({
   signedIn: true,
-  wallet: { mode: "payg", balanceUsd: 23.45 },
   search: {
-    route: "enhanced",
-    enhancedAvailable: true,
+    route: "credits",
+    state: "available",
+    enabled: true,
+    balanceUsd: 18.75,
+    communityFlagEnabled: false,
   },
   telemetry: {
     analyticsEnabled: true,
-    researchContentEnabled: false,
+    researchContentEnabled: true,
     source: "default",
     signedIn: true,
-    consentVersion: "openscience-analytics-2026-08-20",
+    consentVersion: "openscience-trace-v2-2026-08-23",
     pending: false,
     corrupt: false,
     deletionAvailable: true,
@@ -22,37 +24,85 @@ const status = (patch?: Partial<ResearchToolsStatus>): ResearchToolsStatus => ({
 })
 
 describe("Research Tools settings", () => {
-  test("summarizes wallet-backed enhanced search and the community fallback", () => {
-    expect(searchStatus(status())).toMatchObject({ label: "Enhanced", tone: "success" })
-    expect(walletStatus(status())).toMatchObject({ label: "$23.45 available", tone: "success" })
+  test("summarizes shared-credit and community search without inventing an allowance", () => {
+    expect(searchStatus(status())).toMatchObject({ label: "Ready", tone: "success" })
+    expect(searchStatus(status()).detail).toBe("$18.75 available for credit-backed models and enhanced search.")
     expect(
       searchStatus(
         status({
           search: {
             ...status().search,
             route: "community",
-            enhancedAvailable: false,
+            enabled: false,
+            state: "conditional",
+            balanceUsd: null,
           },
         }),
       ),
     ).toMatchObject({ label: "Community", tone: "neutral" })
-    expect(walletStatus(status({ signedIn: false, wallet: { mode: "payg", balanceUsd: null } }))).toMatchObject({
-      label: "Not connected",
+
+    expect(
+      searchStatus(
+        status({
+          search: {
+            ...status().search,
+            state: "basic",
+            balanceUsd: null,
+          },
+        }),
+      ),
+    ).toMatchObject({
+      label: "Basic",
+      detail: "Basic community search is available. Enhanced search status could not be checked.",
       tone: "neutral",
     })
-    expect(walletStatus(status({ wallet: { mode: "payg", balanceUsd: -1 } }))).toMatchObject({
-      label: "$-1.00 balance",
-      tone: "warning",
-    })
+
+    expect(
+      searchStatus(
+        status({
+          search: {
+            ...status().search,
+            state: "basic",
+            balanceUsd: 0,
+          },
+        }),
+      ),
+    ).toMatchObject({ label: "Basic", tone: "neutral" })
   })
 
   test("discloses default-on sharing and corrupt-record fail-closed behavior", () => {
+    expect(dataSharingEnabled(status())).toBe(true)
     expect(dataSharingDetail(status())).toContain("On by default")
+    const migrated = status({
+      telemetry: { ...status().telemetry, analyticsEnabled: true, researchContentEnabled: false, source: "account" },
+    })
+    expect(dataSharingEnabled(migrated)).toBe(false)
+    expect(dataSharingDetail(migrated)).toBe("Off. New activity stays on this device.")
+    expect(
+      dataSharingEnabled(
+        status({
+          telemetry: { ...status().telemetry, analyticsEnabled: true, researchContentEnabled: true, corrupt: true },
+        }),
+      ),
+    ).toBe(false)
     expect(
       dataSharingDetail(
-        status({ telemetry: { ...status().telemetry, analyticsEnabled: false, corrupt: true, source: "local" } }),
+        status({ telemetry: { ...status().telemetry, analyticsEnabled: false, corrupt: true, source: "account" } }),
       ),
-    ).toContain("sharing is off")
+    ).toContain("Off until")
+    expect(
+      dataSharingDetail(
+        status({
+          telemetry: {
+            ...status().telemetry,
+            analyticsEnabled: false,
+            researchContentEnabled: false,
+            pending: true,
+            source: "account",
+          },
+        }),
+      ),
+    ).toContain("Deletion finishes when OpenScience reconnects")
   })
 
   test("wires the real trust and sandbox contracts and warns before Full access", async () => {
@@ -60,30 +110,31 @@ describe("Research Tools settings", () => {
     expect(source).toContain("RESEARCH_ACCESS_OPTIONS")
     expect(source).toContain("researchAccessMutations(mode)")
     expect(source).toContain("sdk.client.project.trust.update")
-    expect(source).toContain('sdk.request("/settings/sandbox"')
+    expect(source).toContain('projectRequest("/settings/sandbox"')
     expect(source).toContain('title: "Enable Full access?"')
     expect(source).toContain("Full access disables the execution sandbox")
     expect(source).toContain("sandboxAvailable")
   })
 
-  test("states the content exclusion boundary next to the sharing switch", async () => {
+  test("keeps global settings usable without a project-scoped SDK", async () => {
     const source = await Bun.file(new URL("./ResearchTools.tsx", import.meta.url)).text()
-    expect(source).toContain("Research content is never shared")
-    expect(source).toContain("Prompts, responses, tool inputs and outputs")
-    expect(source).toContain("separate from the local session trace and billing")
-    expect(source).toContain('method: "DELETE"')
+    expect(source).toContain("useGlobalSDK()")
+    expect(source).toContain("resolveProjectRoute(params.dir, globalSync.data.project)")
+    expect(source).toContain("Open a project to manage action approval")
+    expect(source).not.toContain("useSDK()")
   })
 
-  test("shows PAYG wallet and search status without retired plan or quota copy", async () => {
-    const sources = await Promise.all(
-      ["ResearchTools.tsx", "research-tools-state.ts", "General.tsx"].map((file) =>
-        Bun.file(new URL(`./${file}`, import.meta.url)).text(),
-      ),
-    )
-    for (const source of sources) {
-      expect(source).not.toMatch(/\b(?:Ace\+?|Legacy Pro|Legacy Starter|subscription|search allowance|Manage plan)\b/i)
-    }
-    expect(sources[0]).toContain("Usage is pay as you go")
-    expect(sources[0]).toContain("Open billing")
+  test("uses one clear data-use toggle and explains the redaction boundary", async () => {
+    const source = await Bun.file(new URL("./ResearchTools.tsx", import.meta.url)).text()
+    const copy = source.replace(/\s+/g, " ")
+    expect(copy).toContain("Use my data to improve OpenScience")
+    expect(copy).toContain("complete research trajectory")
+    expect(copy).toContain("prompts, model responses, tool inputs")
+    expect(copy).toContain("Credentials and secret values are removed before upload")
+    expect(copy).toContain("Turning it off stops new sharing immediately")
+    expect(copy).toContain("reconnects")
+    expect(copy).not.toContain("Research content is never shared")
+    expect(copy).not.toContain("managed searches remain")
+    expect(copy).not.toContain("Delete shared data")
   })
 })

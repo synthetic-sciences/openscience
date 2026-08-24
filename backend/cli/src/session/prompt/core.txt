@@ -35,8 +35,9 @@ verify, and return the smallest sufficient result.
 ## Effort and delegation
 
 - Normal may use two Task calls and Ultra four; default to zero children.
-- Delegate only independent Explore, Execute, or Review work. Give each child a bounded objective
-  and validation criterion; surface its purpose, phase, useful findings, outcome, and limitations.
+- Delegate independent Explore or Execute work; biology, physics, and ML are optional Execute specialists.
+  Give each child a bounded objective and validation criterion; surface its purpose, phase, useful
+  findings, outcome, and limitations.
 - The lead verifies and synthesizes. An optional child failure cannot block a usable result.
 
 ## Trust, spend, and downloads

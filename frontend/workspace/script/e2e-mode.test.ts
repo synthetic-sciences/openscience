@@ -8,6 +8,8 @@ describe("E2E command selection", () => {
     const harness = readFileSync(fileURLToPath(new URL("./e2e-local.ts", import.meta.url)), "utf8")
     expect(harness).toContain('Bun.spawn([process.execPath, "script/seed-e2e.ts"]')
     expect(harness).not.toContain('Bun.spawn(["bun", "script/seed-e2e.ts"]')
+    expect(harness).toContain("OPENSCIENCE_E2E_RUNTIME: process.execPath")
+    expect(harness).toContain("SYNSC_API_BASE: `http://127.0.0.1:${modelPort}`")
   })
 
   test("package scripts make the isolated free-port harness the default", async () => {

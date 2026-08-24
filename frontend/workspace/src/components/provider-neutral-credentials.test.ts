@@ -9,10 +9,12 @@ test("shares the complete provider-key catalog across setup and settings", () =>
   expect(managed).toContain('title: "Credits"')
   expect(managed).toContain('title: "Accounts"')
   expect(keys).toContain('from "./model-providers"')
-  expect(setup).toContain('from "@/components/settings/model-providers"')
   expect(keys).not.toContain("const PROVIDERS")
   expect(setup).not.toContain("const BYOK_PROVIDERS")
-  expect(setup).toContain('title="ChatGPT / Codex"')
+  expect(setup).toContain("Synthetic Sciences API key")
+  expect(setup).toContain('"/account/login-key"')
+  expect(setup).not.toContain("ChatGPT / Codex")
+  expect(setup).not.toContain("model-providers")
   expect(managed).not.toContain("OpenRouter")
 
   for (const label of [

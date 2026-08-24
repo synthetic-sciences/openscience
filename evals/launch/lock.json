@@ -3,11 +3,11 @@
   "files": {
     "suite": {
       "path": "suite.json",
-      "sha256": "2bce53f9532c5f3235db20b2dd1e20cf4701833683e25a00d053e048425025b5"
+      "sha256": "dce6adc9217ae013971beda015b6585180d34c03f4f7ef9991bb627db941b94d"
     },
     "rubric": {
       "path": "rubric.json",
-      "sha256": "aa12d4804b90230496a50700ad806ee7d129224f24c12631b2d6ffe76af3fcc2"
+      "sha256": "0e8aa3499e1470315fe475b93f0a96bcb5840fb90ff49e8f170c234d3670a4c6"
     }
   }
 }

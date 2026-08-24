@@ -54,10 +54,10 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
   // still describe itself honestly rather than fall through to "local file" if
   // that filter is ever relaxed.
   managed: {
-    label: "billed from wallet",
+    label: "uses Ace credits",
     removable: false,
-    note: "routed through Synthetic Sciences credits",
-    title: "Routed through Synthetic Sciences and billed to your managed credits",
+    note: "routed through OpenRouter and billed from Ace credits",
+    title: "Routed through OpenRouter and billed from your Ace balance",
   },
 }
 

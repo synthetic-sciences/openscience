@@ -92,8 +92,6 @@ const list = (source: () => KernelStatus[] | undefined) => {
         get kernel() {
           return kernel
         },
-        action: "",
-        onControl: () => {},
       }),
   })
 }
@@ -130,15 +128,13 @@ describe("kernel list reconciliation", () => {
     expect(executions(cardB)).toBe("9")
   })
 
-  test("moves the collapsed plate's own figures when a poll changes them", async () => {
-    // These are the two numbers a collapsed plate is reduced to, and they sit
+  test("moves the row's own figures when a poll changes them", async () => {
+    // These are the two numbers a passive row is reduced to, and they sit
     // on a nested object (`resources`) rather than on the kernel itself — so
     // this pins that reconcile's patch reaches them and the head re-renders,
     // rather than the card holding the first reading it was given.
-    const metric = (element: Element | null, label: string) =>
-      [...(element?.querySelectorAll(".activity-card__facts > div") ?? [])]
-        .find((item) => item.querySelector("dt")?.textContent === label)
-        ?.querySelector("dd")?.textContent
+    const metric = (element: Element | null, name: "memory" | "cpu") =>
+      element?.querySelector(`[data-metric="${name}"] > span`)?.textContent
     const [source, setSource] = core.createSignal<KernelStatus[] | undefined>([
       kernel({ id: "kernel-a", resources: { cpu_percent: 0, memory_bytes: 16_000_000 } }),
     ])
@@ -146,15 +142,15 @@ describe("kernel list reconciliation", () => {
     await Promise.resolve()
 
     const card = host.querySelector('[data-kernel-id="kernel-a"]')
-    expect(metric(card, "Memory")).toBe("16 MB")
-    expect(metric(card, "CPU")).toBe("0.0 cores")
+    expect(metric(card, "memory")).toBe("16 MB RSS")
+    expect(metric(card, "cpu")).toBe("0.0 cores")
 
     setSource([kernel({ id: "kernel-a", resources: { cpu_percent: 187.5, memory_bytes: 2_400_000_000 } })])
     await Promise.resolve()
 
     expect(host.querySelector('[data-kernel-id="kernel-a"]')).toBe(card)
-    expect(metric(card, "Memory")).toBe("2.4 GB")
-    expect(metric(card, "CPU")).toBe("1.9 cores")
+    expect(metric(card, "memory")).toBe("2.4 GB RSS")
+    expect(metric(card, "cpu")).toBe("1.9 cores")
   })
 
   test("mounts a newly appeared kernel and unmounts one that disappeared", async () => {

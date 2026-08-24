@@ -77,7 +77,7 @@ describe("model control presentation", () => {
         name: "Valid model",
         variants: ["standard", "high"],
         modes: ["standard", "fast"],
-        currentEffort: "ultra",
+        currentEffort: "extreme",
         currentSpeed: "turbo",
       }),
     ).toMatchObject({
@@ -98,6 +98,30 @@ describe("model control presentation", () => {
         ],
       },
       reset: { effort: "standard", speed: "standard" },
+    })
+  })
+
+  test("keeps backend-only max and ultra effort out of the compact control", () => {
+    expect(
+      modelControl({
+        name: "Reasoning model",
+        variants: ["standard", "low", "medium", "high", "xhigh", "max", "ultra"],
+        modes: [],
+        currentEffort: "ultra",
+      }),
+    ).toMatchObject({
+      effort: {
+        value: "Extra high",
+        current: { id: "xhigh", label: "Extra high" },
+        options: [
+          { id: "standard", label: "Standard" },
+          { id: "low", label: "Low" },
+          { id: "medium", label: "Medium" },
+          { id: "high", label: "High" },
+          { id: "xhigh", label: "Extra high" },
+        ],
+      },
+      reset: { effort: "xhigh" },
     })
   })
 

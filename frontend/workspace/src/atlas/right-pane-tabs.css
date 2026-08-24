@@ -189,7 +189,7 @@
   min-height: 32px;
   display: inline-flex;
   align-items: stretch;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   overflow: hidden;
   border: 0;
   border-radius: var(--atlas-radius-xs);
@@ -217,6 +217,7 @@
   flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 0 8px;
   overflow: hidden;
   border: 0;
@@ -241,6 +242,19 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.inspector-tab__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--color-text-faint);
+}
+
+.inspector-tab-pair[data-active="true"] .inspector-tab__icon {
+  color: var(--color-text-muted);
 }
 
 .inspector-tab-pair .inspector-tab__close {

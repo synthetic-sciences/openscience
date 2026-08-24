@@ -151,7 +151,7 @@ describe("composer and state behavior", () => {
     expect(source).toContain("<ModelSettingsPopover />")
     expect(source).toContain('icon={working() ? "stop" : "arrow-up"}')
     expect(source).toContain('data-composer-action={working() ? "stop" : prompt.dirty() ? "send" : "idle"}')
-    expect(source).toContain('aria-label="Model and send"')
+    expect(source).toContain('aria-label="Model, effort, and send"')
     expect(source).toContain('data-attachment-status="attached"')
     expect(source).toContain("attachmentFormat")
     expect(source).toContain("multiple")

@@ -88,9 +88,9 @@ ordinary questions or code work. Contracted runs add three fail-closed guarantee
   runtime resolves `artifact:<id>` and `artifact-path:<path>` to an immutable Result version and
   SHA-256, or `tool:<name>` and `tool-call:<id>` to an exact terminal tool call and output hash.
   Free-text evidence remains useful explanation, but cannot pass a gate;
-- independent review completes only after a reviewer records a structured `supports` or `refutes`
-  disposition. When required Results are immutable, every Result version must have a disposition;
-  an empty reviewer response or completed child session does not count; and
+- advancing or regressing empirical claims retain the exact producing run and immutable Result
+  lineage. A later provenance record can support, refute, or qualify that result, but completion
+  never waits on a separate reviewer model or hidden review gate; and
 - the complete session tree has configurable model-call, tool-call, token, wall-clock, and cost
   ceilings. Model calls, including provider retries and delegated child calls, are reserved
   atomically against the parent contract. Defaults are intentionally generous. Near a ceiling, two

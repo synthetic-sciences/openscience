@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test"
-import { classifyKeyTarget } from "../../src/cli/cmd/auth"
+import { classifyKeyTarget, isRetiredHostedProvider } from "../../src/cli/cmd/auth"
 
 // #142: `openscience keys add deepseek` used the bare provider name as a URL and
 // crashed with "fetch() URL is invalid". classifyKeyTarget separates a real
@@ -30,5 +30,15 @@ describe("classifyKeyTarget", () => {
     expect(classifyKeyTarget("deepseek/deepseek-v4-pro")).toEqual({})
     expect(classifyKeyTarget("Some Provider")).toEqual({})
     expect(classifyKeyTarget("ftp://x")).toEqual({})
+  })
+
+  test("retired hosted-provider ids cannot be offered or stored", async () => {
+    expect(isRetiredHostedProvider("synsci")).toBe(true)
+    expect(isRetiredHostedProvider("synsci-hosted")).toBe(true)
+    expect(isRetiredHostedProvider("openrouter")).toBe(false)
+
+    const source = await Bun.file(new URL("../../src/cli/cmd/auth.ts", import.meta.url)).text()
+    expect(source).not.toContain("Synthetic Sciences — recommended")
+    expect(source).not.toContain("Create an API key at https://app.syntheticsciences.ai/cli")
   })
 })

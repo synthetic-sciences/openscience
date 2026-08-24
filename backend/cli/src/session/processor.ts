@@ -16,7 +16,7 @@ import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 import { OpenScience } from "@/openscience"
-import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource, llmBillingMode } from "./billing-gate"
+import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource } from "./billing-gate"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { TokenUsage } from "@synsci/util/token-usage"
@@ -483,6 +483,7 @@ export namespace SessionProcessor {
         overflow = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         shouldBreakOnDeny = shouldBreak
+        let traceRoute = "custom"
         while (true) {
           try {
             // Probe dashboard-side BYOK/managed changes for the next request,
@@ -495,35 +496,25 @@ export namespace SessionProcessor {
             // Pro/Max, Sign in with ChatGPT, Copilot) run on the user's own
             // account — an empty wallet must never block or gate them.
             const credentialSource = await resolveCredentialSource(input.model.providerID, input.model.id)
+            traceRoute = telemetryRoute(credentialSource, input.model)
 
-            // Managed spend is ON but this call resolved to the user's OWN api
-            // key (BYOK) — the wallet isn't wired to it, and silently spending a
-            // BYOK key the user set for a different mode is wrong. First-party
-            // OAuth subscriptions (Sign in with ChatGPT/Codex, Claude Pro/Max,
-            // Copilot) are the user's explicit sign-in and run free of the
-            // wallet, so they are NOT gated here.
-            if ((await llmBillingMode()) === "managed" && credentialSource === "byok") {
-              throw new Error(
-                `Managed LLM spend is on, but ${input.model.providerID} isn't available through Credits - it resolved to a non-managed key. Switch LLM spend to BYOK in Settings → Spend to use your own key, or pick a managed model.`,
-              )
-            }
-
-            // Pre-flight wallet check for managed-proxy calls only. Block ONLY on a
-            // VERIFIED empty or overdrafted wallet. If the balance can't be verified
-            // (null: no/expired Atlas session or a transient error), do NOT hard-block —
-            // the managed proxy is the billing authority and returns 402 if actually
-            // out of credits. Hard-blocking here strands a user whose session lapsed.
+            // Managed calls require a live balance decision. Direct BYOK, OAuth,
+            // and local calls keep working from the cached account session during
+            // a control-plane outage and never spend Ace credits.
             if (requiresWalletBalance(credentialSource)) {
               const balance = await OpenScience.getBalance()
-              if (balance !== null) {
-                creditDecision ??= await SessionResearch.preflight(input.sessionID, balance)
+              if (balance === null) {
+                throw new Error(
+                  "OpenScience could not verify your Ace balance. Managed model calls require a live connection. Retry when connected, or use a direct BYOK, ChatGPT, or local model.",
+                )
               }
-              if (balance !== null && (balance <= 0 || creditDecision === "block")) {
+              creditDecision ??= await SessionResearch.preflight(input.sessionID, balance)
+              if (balance <= 0 || creditDecision === "block") {
                 // Drop the 30s cache so a top-up is visible on the next
                 // attempt instead of blocking until the TTL expires.
                 OpenScience.invalidateBalance()
                 throw new Error(
-                  "Your managed Credits balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Top up at app.syntheticsciences.ai/billing, or switch LLM spend to BYOK in Settings → Spend.",
+                  "Your Ace balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Add credits at app.syntheticsciences.ai/billing, or switch model access to Accounts in Settings → Models.",
                 )
               }
             }
@@ -566,6 +557,7 @@ export namespace SessionProcessor {
             const stream = await Provider.withRequestContext(requestContext, () =>
               LLM.stream({
                 ...request,
+                route: traceRoute,
                 trace: { messageID: input.assistantMessage.id, attempt: attempt + 1 },
                 onReasoningEffortResolved: async (effort) => {
                   if (input.assistantMessage.reasoningEffort === effort) return
@@ -662,6 +654,7 @@ export namespace SessionProcessor {
                       },
                       metadata: value.providerMetadata,
                     })
+                    void OutboundTelemetry.tool(part as MessageV2.ToolPart).catch(() => undefined)
                     // Some providers omit the terminal tool-result event even
                     // though the execute promise has already settled. The
                     // execute wrapper records that authoritative outcome, so
@@ -751,14 +744,6 @@ export namespace SessionProcessor {
                     cost: usage.cost,
                   })
                   await Session.updateMessage(input.assistantMessage)
-                  void OutboundTelemetry.assistant({
-                    sessionID: input.sessionID,
-                    route: telemetryRoute(credentialSource, input.model),
-                    provider: input.model.providerID,
-                    model: input.model.family ?? input.model.id,
-                    tokens: usage.tokens,
-                  }).catch(() => undefined)
-
                   // Report usage ONLY for managed-proxy credentials. BYOK keys
                   // and first-party OAuth subscriptions are billed to the user's
                   // own account, not Credits, so they are never
@@ -927,6 +912,16 @@ export namespace SessionProcessor {
               stack: JSON.stringify(e.stack),
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+            void OutboundTelemetry.error({
+              sessionID: input.sessionID,
+              messageID: input.assistantMessage.id,
+              attempt: attempt + 1,
+              route: traceRoute,
+              provider: input.model.providerID,
+              model: input.model.id,
+              error: e,
+              context: { normalized: error },
+            }).catch(() => undefined)
             // A context-window overflow is deterministic — retrying the same
             // oversized input can only fail again. Signal the outer loop (via the
             // "overflow" return below) to compact + resume instead of burning
@@ -965,7 +960,7 @@ export namespace SessionProcessor {
                     if (part.type !== "tool" || part.state.status === "completed" || part.state.status === "error") {
                       continue
                     }
-                    await Session.updatePart({
+                    const failed = await Session.updatePart({
                       ...part,
                       state: {
                         ...part.state,
@@ -974,6 +969,7 @@ export namespace SessionProcessor {
                         time: finishTime("time" in part.state ? part.state.time : undefined),
                       },
                     })
+                    void OutboundTelemetry.tool(failed as MessageV2.ToolPart).catch(() => undefined)
                     toolOutcomes.abandon(part.callID)
                   }
                   await Session.updatePart({
@@ -994,6 +990,16 @@ export namespace SessionProcessor {
                   message: action.message,
                   delayMs: delay,
                 })
+                await OutboundTelemetry.retry({
+                  sessionID: input.sessionID,
+                  messageID: input.assistantMessage.id,
+                  attempt: attempt + 1,
+                  delay,
+                  route: traceRoute,
+                  provider: input.model.providerID,
+                  model: input.model.id,
+                  error,
+                }).catch(() => undefined)
                 SessionStatus.set(input.sessionID, {
                   type: "retry",
                   attempt,
@@ -1042,7 +1048,7 @@ export namespace SessionProcessor {
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
               if (await toolOutcomes.reconcile(part)) continue
-              await Session.updatePart({
+              const failed = await Session.updatePart({
                 ...part,
                 state: {
                   ...part.state,
@@ -1056,11 +1062,23 @@ export namespace SessionProcessor {
                   },
                 },
               })
+              void OutboundTelemetry.tool(failed as MessageV2.ToolPart).catch(() => undefined)
               toolOutcomes.abandon(part.callID)
             }
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+          const completedParts = await MessageV2.parts(input.assistantMessage.id)
+          await OutboundTelemetry.assistantMessage({
+            sessionID: input.sessionID,
+            messageID: input.assistantMessage.id,
+            attempt: attempt + 1,
+            route: traceRoute,
+            provider: input.model.providerID,
+            model: input.model.id,
+            message: input.assistantMessage,
+            parts: completedParts,
+          }).catch(() => undefined)
           if (overflow) return "overflow"
           if (needsCompaction) return "compact"
           if (blocked) return "stop"

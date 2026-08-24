@@ -24,6 +24,11 @@ export namespace CredentialLifecycle {
   const revisionFile = path.join(Global.Path.data, "credential-revision.json")
   const mutationLock = `${revisionFile}.lock`
   const waitTimeout = 10_000
+  // Telemetry can hold this boundary across a bounded deletion proof (5s),
+  // consent sync (5s), and batch upload (10s). Account replacement, opt-out,
+  // and process admission must outwait that valid sequence rather than fail at
+  // FileLease's 10s default.
+  const mutationLeaseTimeout = 30_000
 
   type Phase = "updating" | "ready"
   interface Revision {
@@ -151,7 +156,7 @@ export namespace CredentialLifecycle {
 
   /** Serialize credential-adjacent metadata writes without publishing a revision. */
   export async function serialized<T>(action: () => T | Promise<T>): Promise<T> {
-    await using lease = await FileLease.acquire(mutationLock)
+    await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
     return await lease.during(async () => {
       return await action()
     })
@@ -160,7 +165,7 @@ export namespace CredentialLifecycle {
   /** Hold the cross-process mutation lease from freshness check through child
    * spawn and durable owner registration, closing the snapshot-to-spawn race. */
   export async function admit<T>(action: () => T | Promise<T>): Promise<T> {
-    await using lease = await FileLease.acquire(mutationLock)
+    await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
     return await lease.during(async () => {
       await ensureFresh()
       return await action()
@@ -192,22 +197,23 @@ export namespace CredentialLifecycle {
     return checking
   }
 
-  /**
-   * Serialize and publish a credential-bearing mutation. The updating marker
-   * is visible before `action` runs, closing the store-write/revision race.
-   */
-  export async function mutate<T>(
+  async function runMutation<T>(
     reason: string,
     action: () => T | Promise<T>,
     options: { reconcileLocal?: boolean } = {},
-  ): Promise<T> {
-    let ready!: Revision
+    condition?: () => boolean | Promise<boolean>,
+  ): Promise<{ applied: false } | { applied: true; value: T }> {
+    let ready: Revision | undefined
     let value: T | undefined
     let failure: unknown
     let failed = false
     {
-      await using lease = await FileLease.acquire(mutationLock)
+      await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
       await lease.during(async () => {
+        // Evaluate the condition under the same lease as the mutation. This
+        // is the compare-and-mutate seam for account-key revocation: a late
+        // response for key A cannot clear key B after B has been saved.
+        if (condition && !(await condition())) return
         const token = crypto.randomUUID()
         const base = {
           version: 1 as const,
@@ -229,10 +235,36 @@ export namespace CredentialLifecycle {
       })
     }
 
+    if (!ready) return { applied: false }
     if (options.reconcileLocal === false) seen = ready.token
     else await reconcile(ready, true)
     if (failed) throw failure
-    return value as T
+    return { applied: true, value: value as T }
+  }
+
+  /**
+   * Serialize and publish a credential-bearing mutation. The updating marker
+   * is visible before `action` runs, closing the store-write/revision race.
+   */
+  export async function mutate<T>(
+    reason: string,
+    action: () => T | Promise<T>,
+    options: { reconcileLocal?: boolean } = {},
+  ): Promise<T> {
+    const result = await runMutation(reason, action, options)
+    if (!result.applied) throw new Error("unconditional credential mutation was not applied")
+    return result.value
+  }
+
+  /** Compare-and-mutate under the credential lease. A false condition does
+   * not publish a revision or invoke refresh/revoke handlers. */
+  export async function mutateIf<T>(
+    reason: string,
+    condition: () => boolean | Promise<boolean>,
+    action: () => T | Promise<T>,
+    options: { reconcileLocal?: boolean } = {},
+  ): Promise<{ applied: false } | { applied: true; value: T }> {
+    return runMutation(reason, action, options, condition)
   }
 
   /** Start a low-cost process-local watcher; spawn boundaries still check synchronously. */

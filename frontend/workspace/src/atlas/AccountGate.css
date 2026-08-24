@@ -1,0 +1,95 @@
+.account-gate {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  color: var(--color-text);
+  background: var(--color-background);
+}
+
+.account-gate__panel {
+  width: min(100%, 360px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.account-gate__brand {
+  margin-bottom: 14px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+}
+
+.account-gate h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: var(--font-weight-emphasis);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.account-gate p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.account-gate__loading {
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+}
+
+.account-gate__disclosure {
+  padding-left: 12px;
+  border-left: 2px solid var(--color-border-strong);
+  color: var(--color-text-muted) !important;
+}
+
+.account-gate__actions {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+.account-gate__actions--end {
+  justify-content: flex-end;
+}
+
+.account-gate__divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-faint);
+  font-size: 11px;
+}
+
+.account-gate__divider::before,
+.account-gate__divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--color-border);
+}
+
+.account-gate__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+}
+
+.account-gate__error {
+  color: var(--color-error) !important;
+}
+
+.account-gate__note {
+  text-align: center;
+  color: var(--color-text-faint) !important;
+  font-size: 11px !important;
+}

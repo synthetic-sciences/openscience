@@ -36,7 +36,6 @@ import { NotebookTool, PythonTool } from "./notebook"
 import { RKernelTool, RTool } from "./rkernel"
 import { AtlasTool } from "./atlas"
 import { AtlasRecordTool } from "./atlas-record"
-import { ArtifactSnapshotTool } from "./artifact-snapshot"
 import { ModalTool } from "./modal"
 import { ComputeJobTool } from "./compute-job"
 import { ResearchContractTool } from "./research-contract"
@@ -169,7 +168,6 @@ export namespace ToolRegistry {
       ...BiologyTools,
       ...ScienceTools,
       ...ProvenanceTools,
-      ArtifactSnapshotTool,
       AtlasTool,
       AtlasRecordTool,
       PythonTool,
@@ -256,7 +254,7 @@ export namespace ToolRegistry {
           // `research_search` is always advertised; its execution path selects
           // managed Synthetic Sciences search or the preserved community rule.
           if (t.id === "codesearch") {
-            return model.providerID === "synsci" || Flag.OPENSCIENCE_ENABLE_EXA
+            return Flag.OPENSCIENCE_ENABLE_EXA
           }
 
           // use apply tool in same format as codex

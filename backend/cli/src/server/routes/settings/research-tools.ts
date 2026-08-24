@@ -1,14 +1,15 @@
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
+import { Flag } from "@/flag/flag"
 import { OpenScience } from "@/openscience"
 import { OutboundTelemetry } from "@/telemetry/outbound"
 import { lazy } from "@/util/lazy"
 
 const Telemetry = z.object({
   analyticsEnabled: z.boolean(),
-  researchContentEnabled: z.literal(false),
-  source: z.enum(["default", "local", "account"]),
+  researchContentEnabled: z.boolean(),
+  source: z.enum(["default", "account"]),
   signedIn: z.boolean(),
   consentVersion: z.string(),
   pending: z.boolean(),
@@ -18,30 +19,30 @@ const Telemetry = z.object({
 
 const State = z.object({
   signedIn: z.boolean(),
-  wallet: z.object({
-    mode: z.literal("payg"),
-    balanceUsd: z.number().nullable(),
-  }),
   search: z.object({
-    route: z.enum(["enhanced", "community"]),
-    enhancedAvailable: z.boolean(),
+    route: z.enum(["credits", "community"]),
+    state: z.enum(["available", "basic", "conditional"]),
+    enabled: z.boolean(),
+    balanceUsd: z.number().nullable(),
+    communityFlagEnabled: z.boolean(),
   }),
   telemetry: Telemetry,
 })
 
 async function read() {
   const session = await OpenScience.getSession().catch(() => null)
-  const [balanceUsd, telemetry] = await Promise.all([
+  const [balance, telemetry] = await Promise.all([
     session ? OpenScience.getBalance().catch(() => null) : null,
     OutboundTelemetry.status(true),
   ])
-  const enhancedAvailable = !!session
   return State.parse({
-    signedIn: enhancedAvailable,
-    wallet: { mode: "payg", balanceUsd },
+    signedIn: !!session,
     search: {
-      route: enhancedAvailable ? "enhanced" : "community",
-      enhancedAvailable,
+      route: session ? "credits" : "community",
+      state: !session ? "conditional" : balance === null || balance <= 0 ? "basic" : "available",
+      enabled: !!session,
+      balanceUsd: balance,
+      communityFlagEnabled: Flag.OPENSCIENCE_ENABLE_EXA,
     },
     telemetry,
   })
@@ -52,7 +53,7 @@ export const ResearchToolsSettingsRoutes = lazy(() =>
     .get(
       "/",
       describeRoute({
-        summary: "Get wallet, enhanced-search, and data-sharing status",
+        summary: "Get credit-backed search and data-sharing status",
         operationId: "settings.researchTools.get",
         responses: {
           200: { description: "Research tools status", content: { "application/json": { schema: resolver(State) } } },
@@ -63,7 +64,7 @@ export const ResearchToolsSettingsRoutes = lazy(() =>
     .put(
       "/telemetry",
       describeRoute({
-        summary: "Update structural usage sharing consent",
+        summary: "Update OpenScience data-use consent",
         operationId: "settings.researchTools.telemetry.update",
         responses: {
           200: {
@@ -81,7 +82,7 @@ export const ResearchToolsSettingsRoutes = lazy(() =>
     .delete(
       "/telemetry/account-data",
       describeRoute({
-        summary: "Delete account-linked usage analytics",
+        summary: "Delete account-linked OpenScience trace data",
         operationId: "settings.researchTools.telemetry.delete",
         responses: {
           200: {

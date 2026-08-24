@@ -19,7 +19,7 @@ process.env.__SYNSCI_LAUNCHER_PID = String(process.pid)
 import { execFileSync, execSync, spawn } from "node:child_process"
 import { existsSync, readFileSync, realpathSync } from "node:fs"
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { npmDistTag, opensciencePackageSpec } from "../lib/channel.mjs"
 
@@ -194,6 +194,32 @@ function hasDeprecatedCli() {
   }
 }
 
+function isConnected() {
+  const explicit = process.env.OPENSCIENCE_DATA_DIR?.trim()
+  const xdgData = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share")
+  const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config")
+  const pointerPath = join(xdgConfig, "openscience", "data-location")
+  const pointer = (() => {
+    try {
+      return readFileSync(pointerPath, "utf-8").trim()
+    } catch {
+      return ""
+    }
+  })()
+  const roots = explicit
+    ? [resolve(explicit)]
+    : pointer
+      ? [resolve(pointer)]
+      : [join(homedir(), ".openscience"), join(xdgData, "openscience")]
+  const sessionPath = roots.map((root) => join(root, "openscience-session.json")).find(existsSync)
+  if (!sessionPath) return false
+  try {
+    const data = JSON.parse(readFileSync(sessionPath, "utf-8"))
+    return typeof data.api_key === "string" && /^thk_[^.]+\.[A-Za-z0-9_-]+$/.test(data.api_key)
+  } catch {
+    return false
+  }
+}
 async function main() {
   process.on("exit", () => process.stdout.write(SHOW_CURSOR))
   process.on("SIGINT", () => {
@@ -286,7 +312,26 @@ async function main() {
     }
   }
 
-  // --- Step 2: Launch the workspace ---
+  // --- Step 2: Connect this device ---
+  if (isConnected()) {
+    ok("Connected to Synthetic Sciences")
+  } else {
+    console.log()
+    try {
+      execCli(cliPath, ["login"], { stdio: "inherit" })
+    } catch {
+      warn("Synthetic Sciences sign-in did not finish")
+      process.exit(1)
+    }
+    if (!isConnected()) {
+      warn("A Synthetic Sciences account is required before the workspace can open")
+      process.exit(1)
+    }
+    ok("Connected to Synthetic Sciences")
+  }
+  console.log()
+
+  // --- Step 3: Launch the workspace ---
   console.log(`  ${DIM}Opening the workspace in your browser…${RESET}`)
   console.log()
 

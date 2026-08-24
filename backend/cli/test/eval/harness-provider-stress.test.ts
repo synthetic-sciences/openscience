@@ -15,6 +15,7 @@ import { SessionResearch } from "../../src/session/research"
 import { SessionStatus } from "../../src/session/status"
 import { SessionTraceStore } from "../../src/session/trace-store"
 import { Skill } from "../../src/skill"
+import { OutboundTelemetry } from "../../src/telemetry/outbound"
 import { RAW_TOOL_ERRORS, STRESS_MATRIX, type StressScenario } from "../../../../evals/cadence-harness/stress-matrix"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import {
@@ -246,6 +247,13 @@ describe("provider-driven harness stress campaign", () => {
       await Bun.write(session, JSON.stringify({ api_key: "thk_test", user_id: "stress-user" }))
       globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
         const url = input instanceof Request ? input.url : String(input)
+        if (url === `${API_BASE}/api/v1/telemetry/batches`) {
+          // This test exercises the real SessionPrompt pipeline, including its
+          // trace hooks, but must not turn a deliberately local stress campaign
+          // into an ever-growing offline telemetry queue. A successful local
+          // collector keeps the queue bounded exactly as the service does.
+          return Response.json({})
+        }
         if (!url.startsWith(`${API_BASE}/api/v1/sources`)) return fetch(input, init)
         const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
         atlas.push({
@@ -293,6 +301,12 @@ describe("provider-driven harness stress campaign", () => {
               )),
             )
           }
+          expect(await OutboundTelemetry.drain({ timeoutMs: 5_000 })).toMatchObject({
+            captured: true,
+            flushed: true,
+            timedOut: false,
+            pendingEvents: 0,
+          })
           await provider.quiet()
 
           expect(outcomes).toHaveLength(50)

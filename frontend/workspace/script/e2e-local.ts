@@ -110,6 +110,9 @@ const serverEnv = {
   OPENSCIENCE_E2E_MESSAGE: "Seeded for UI e2e",
   OPENSCIENCE_E2E_MODEL: fakeModelID,
   OPENSCIENCE_E2E_FAKE_MODEL: "1",
+  // Keep the synthetic account key entirely inside the isolated harness.
+  // A production 401 would correctly revoke it and collapse the account gate.
+  SYNSC_API_BASE: `http://127.0.0.1:${modelPort}`,
   OPENSCIENCE_CONFIG_CONTENT: JSON.stringify({
     ...fakeModelConfig(`http://127.0.0.1:${modelPort}/v1`),
     // The isolated browser suite does not exercise repository snapshots. The
@@ -173,6 +176,9 @@ const runnerEnv = {
   VITE_OPENSCIENCE_SERVER_PORT: String(serverPort),
   VITE_OPENSCIENCE_SERVER_USERNAME: e2eServerUsername,
   VITE_OPENSCIENCE_SERVER_PASSWORD: e2eServerPassword,
+  // Playwright workers run under Node even though the harness is launched by
+  // Bun. Preserve the exact Bun executable for trusted fixture seed helpers.
+  OPENSCIENCE_E2E_RUNTIME: process.execPath,
   PLAYWRIGHT_PORT: String(webPort),
 } satisfies Record<string, string>
 

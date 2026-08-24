@@ -200,7 +200,7 @@ export type UserMessage = {
       }
     | {
         type: "continuation"
-        kind: "output" | "contract" | "review" | "review-summary" | "compaction" | "task"
+        kind: "output" | "contract" | "compaction" | "task"
         text: string
         epoch: string
         transaction: string
@@ -1842,7 +1842,7 @@ export type Config = {
    */
   default_agent?: string
   /**
-   * Managed Credits vs bring-your-own-key spend for LLM inference.
+   * How LLM inference is paid for when using Ace or user-owned credentials.
    */
   billing?: {
     /**
@@ -2686,7 +2686,7 @@ export type AccountGetResponses = {
   200: {
     session: boolean
     user?: unknown
-    balance_usd: number
+    balance_usd: number | null
     billing_mode: {
       mode: "byok" | "managed"
       balance_cents: number
@@ -2710,7 +2710,7 @@ export type AccountBalanceResponses = {
    * Balance
    */
   200: {
-    balance_usd: number
+    balance_usd: number | null
   }
 }
 
@@ -4396,21 +4396,6 @@ export type SettingsComputeJobsListResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -5147,21 +5132,6 @@ export type SettingsComputeJobsStartResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -6097,21 +6067,6 @@ export type SettingsComputeJobsRetryResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -6819,21 +6774,6 @@ export type SettingsComputeJobsReleaseResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -7537,21 +7477,6 @@ export type SettingsComputeJobsCancelResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -7717,56 +7642,6 @@ export type SettingsComputeJobsCancelResponses = {
 
 export type SettingsComputeJobsCancelResponse =
   SettingsComputeJobsCancelResponses[keyof SettingsComputeJobsCancelResponses]
-
-export type SettingsReviewGetData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/settings/review"
-}
-
-export type SettingsReviewGetResponses = {
-  /**
-   * Reviewer preferences
-   */
-  200: {
-    auto: boolean
-    model?: {
-      providerID: string
-      modelID: string
-    } | null
-  }
-}
-
-export type SettingsReviewGetResponse = SettingsReviewGetResponses[keyof SettingsReviewGetResponses]
-
-export type SettingsReviewSetData = {
-  body?: {
-    auto: boolean
-    model?: {
-      providerID: string
-      modelID: string
-    } | null
-  }
-  path?: never
-  query?: never
-  url: "/settings/review"
-}
-
-export type SettingsReviewSetResponses = {
-  /**
-   * Updated preferences
-   */
-  200: {
-    auto: boolean
-    model?: {
-      providerID: string
-      modelID: string
-    } | null
-  }
-}
-
-export type SettingsReviewSetResponse = SettingsReviewSetResponses[keyof SettingsReviewSetResponses]
 
 export type SettingsPreferencesGetData = {
   body?: never
@@ -8002,7 +7877,7 @@ export type SettingsWalletGetResponses = {
     balanceUsd: number | null
     billingMode: "managed" | "byok" | null
     managedSupported: boolean
-    lifetimeSpentUsd: number
+    lifetimeSpentUsd: number | null
     transactions: Array<{
       id: string
       amountCents: number
@@ -8051,18 +7926,17 @@ export type SettingsResearchToolsGetResponses = {
    */
   200: {
     signedIn: boolean
-    wallet: {
-      mode: "payg"
-      balanceUsd: number | null
-    }
     search: {
-      route: "enhanced" | "community"
-      enhancedAvailable: boolean
+      route: "credits" | "community"
+      state: "available" | "basic" | "conditional"
+      enabled: boolean
+      balanceUsd: number | null
+      communityFlagEnabled: boolean
     }
     telemetry: {
       analyticsEnabled: boolean
-      researchContentEnabled: false
-      source: "default" | "local" | "account"
+      researchContentEnabled: boolean
+      source: "default" | "account"
       signedIn: boolean
       consentVersion: string
       pending: boolean
@@ -8090,18 +7964,17 @@ export type SettingsResearchToolsTelemetryUpdateResponses = {
    */
   200: {
     signedIn: boolean
-    wallet: {
-      mode: "payg"
-      balanceUsd: number | null
-    }
     search: {
-      route: "enhanced" | "community"
-      enhancedAvailable: boolean
+      route: "credits" | "community"
+      state: "available" | "basic" | "conditional"
+      enabled: boolean
+      balanceUsd: number | null
+      communityFlagEnabled: boolean
     }
     telemetry: {
       analyticsEnabled: boolean
-      researchContentEnabled: false
-      source: "default" | "local" | "account"
+      researchContentEnabled: boolean
+      source: "default" | "account"
       signedIn: boolean
       consentVersion: string
       pending: boolean
@@ -9362,6 +9235,8 @@ export type SessionTraceResponses = {
       path?: string
       kind?: string
       sha256?: string
+      provenanceID?: string
+      producedAt?: number
       durable: boolean
       completedAt?: number
     }>
@@ -9442,7 +9317,7 @@ export type SessionTraceResponses = {
       status: "unconfigured" | "running" | "blocked" | "ready"
       readiness: number
       gates: Array<{
-        id: "stages" | "deliverables" | "checks" | "review" | "runtime"
+        id: "stages" | "deliverables" | "checks" | "runtime"
         label: string
         status: "passed" | "pending" | "failed"
         complete: number
@@ -9450,7 +9325,6 @@ export type SessionTraceResponses = {
         detail: string
       }>
       missing: Array<string>
-      openFindings: number
       failedCandidates: number
       strategy: {
         mode: "explore" | "refine" | "pivot" | "fuse" | "verify"
@@ -9520,6 +9394,19 @@ export type SessionTraceResponses = {
           detail?: string
           updatedAt: number
         }>
+        preregistration?: {
+          artifact: {
+            ref: string
+            note?: string
+            verifiedAt: number
+            kind: "artifact"
+            artifactID: string
+            versionID: string
+            path: string
+            sha256: string
+          }
+          frozenAt: number
+        }
         failures: Array<{
           id: string
           stage: string
@@ -9821,95 +9708,6 @@ export type SessionTodoResponses = {
 }
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
-
-export type SessionReviewData = {
-  body?: never
-  path: {
-    /**
-     * Session ID
-     */
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/session/{sessionID}/review"
-}
-
-export type SessionReviewErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionReviewError = SessionReviewErrors[keyof SessionReviewErrors]
-
-export type SessionReviewResponses = {
-  /**
-   * Review started
-   */
-  200: {
-    started: boolean
-  }
-}
-
-export type SessionReviewResponse = SessionReviewResponses[keyof SessionReviewResponses]
-
-export type SessionReviewArtifactData = {
-  body?: {
-    artifactID: string
-    versionID: string
-  }
-  path: {
-    /**
-     * Session ID
-     */
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/session/{sessionID}/review/artifact"
-}
-
-export type SessionReviewArtifactErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionReviewArtifactError = SessionReviewArtifactErrors[keyof SessionReviewArtifactErrors]
-
-export type SessionReviewArtifactResponses = {
-  /**
-   * Exact-version review started
-   */
-  200: {
-    started: boolean
-    target: {
-      id: string
-      artifactID: string
-      versionID: string
-      version: number
-      filename: string
-      mimeType: string
-      size: number
-      sha256: string
-    }
-  }
-}
-
-export type SessionReviewArtifactResponse = SessionReviewArtifactResponses[keyof SessionReviewArtifactResponses]
 
 export type SessionInitData = {
   body?: {
@@ -15293,7 +15091,7 @@ export type ProvenanceRecordData = {
       [key: string]: unknown
     }
     derived_from?: string
-    relation?: "produced" | "consumed" | "derived-from" | "supports" | "refutes"
+    relation?: "produced" | "consumed" | "derived-from"
   }
   path?: never
   query?: {
@@ -15327,65 +15125,7 @@ export type ProvenanceReviewsListData = {
 
 export type ProvenanceReviewsListResponses = {
   /**
-   * Reviewer findings
-   */
-  200: unknown
-}
-
-export type ProvenanceReviewData = {
-  body?: {
-    target: string
-    claim: string
-    issue: string
-    severity: "blocking" | "major" | "minor" | "info"
-    evidence: string
-    verdict?: "refutes" | "supports"
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/provenance/reviews"
-}
-
-export type ProvenanceReviewErrors = {
-  /**
-   * Invalid target
-   */
-  400: unknown
-}
-
-export type ProvenanceReviewResponses = {
-  /**
-   * Recorded finding
-   */
-  200: unknown
-}
-
-export type ProvenanceReviewsResolveData = {
-  body?: {
-    actor: string
-    reason: string
-  }
-  path: {
-    id: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/provenance/reviews/{id}/resolve"
-}
-
-export type ProvenanceReviewsResolveErrors = {
-  /**
-   * Not a refuting finding
-   */
-  400: unknown
-}
-
-export type ProvenanceReviewsResolveResponses = {
-  /**
-   * Resolution node
+   * Historical review findings
    */
   200: unknown
 }

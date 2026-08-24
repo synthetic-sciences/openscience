@@ -24,6 +24,7 @@ import { ErrorPage } from "./pages/error"
 import { URLS } from "@/config/urls"
 import { resolveDefaultServerUrl } from "@/config/server-url"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
+import { AccountGate } from "@/atlas/AccountGate"
 import Home from "@/pages/home"
 import { Session } from "@/pages/session-loader"
 import { DEFAULT_PANEL, preloadPanel } from "@/components/settings/registry"
@@ -125,55 +126,57 @@ export function AppInterface(props: { defaultUrl?: string }) {
   return (
     <ServerProvider defaultUrl={defaultServerUrl()}>
       <ServerKey>
-        <GlobalSDKProvider>
-          <GlobalSyncProvider>
-            <Router
-              root={(props) => (
-                <SettingsProvider>
-                  <StartupUpdateCheck />
-                  <PermissionProvider>
-                    <LayoutProvider>
-                      <NotificationProvider>
-                        <ModelsProvider>
-                          <CommandProvider>
-                            <HighlightsProvider>
-                              <Layout>{props.children}</Layout>
-                            </HighlightsProvider>
-                          </CommandProvider>
-                        </ModelsProvider>
-                      </NotificationProvider>
-                    </LayoutProvider>
-                  </PermissionProvider>
-                </SettingsProvider>
-              )}
-            >
-              <Route
-                path="/"
-                component={() => (
-                  <Suspense fallback={<Loading />}>
-                    <Home />
-                  </Suspense>
+        <AccountGate>
+          <GlobalSDKProvider>
+            <GlobalSyncProvider>
+              <Router
+                root={(props) => (
+                  <SettingsProvider>
+                    <StartupUpdateCheck />
+                    <PermissionProvider>
+                      <LayoutProvider>
+                        <NotificationProvider>
+                          <ModelsProvider>
+                            <CommandProvider>
+                              <HighlightsProvider>
+                                <Layout>{props.children}</Layout>
+                              </HighlightsProvider>
+                            </CommandProvider>
+                          </ModelsProvider>
+                        </NotificationProvider>
+                      </LayoutProvider>
+                    </PermissionProvider>
+                  </SettingsProvider>
                 )}
-              />
-              <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={() => <Navigate href="session" />} />
+              >
                 <Route
-                  path="/session/:id?"
-                  component={(p) => (
-                    <Show when={p.params.id ?? "new"}>
-                      <CommentsProvider>
-                        <Suspense fallback={<Loading />}>
-                          <Session />
-                        </Suspense>
-                      </CommentsProvider>
-                    </Show>
+                  path="/"
+                  component={() => (
+                    <Suspense fallback={<Loading />}>
+                      <Home />
+                    </Suspense>
                   )}
                 />
-              </Route>
-              <Route path="*404" component={NotFound} />
-            </Router>
-          </GlobalSyncProvider>
-        </GlobalSDKProvider>
+                <Route path="/:dir" component={DirectoryLayout}>
+                  <Route path="/" component={() => <Navigate href="session" />} />
+                  <Route
+                    path="/session/:id?"
+                    component={(p) => (
+                      <Show when={p.params.id ?? "new"}>
+                        <CommentsProvider>
+                          <Suspense fallback={<Loading />}>
+                            <Session />
+                          </Suspense>
+                        </CommentsProvider>
+                      </Show>
+                    )}
+                  />
+                </Route>
+                <Route path="*404" component={NotFound} />
+              </Router>
+            </GlobalSyncProvider>
+          </GlobalSDKProvider>
+        </AccountGate>
       </ServerKey>
     </ServerProvider>
   )

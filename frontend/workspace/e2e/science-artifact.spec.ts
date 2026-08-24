@@ -1,4 +1,7 @@
+import { execFile } from "node:child_process"
 import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
 import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "./fixtures"
 import { createSdk } from "./utils"
@@ -62,6 +65,31 @@ interface BrowserFixture {
   gotoSession: (sessionID?: string) => Promise<void>
 }
 
+const backend = fileURLToPath(new URL("../../../backend/cli", import.meta.url))
+const seed = fileURLToPath(new URL("../../../backend/cli/script/seed-e2e.ts", import.meta.url))
+const execute = promisify(execFile)
+
+async function seedArtifactPart(input: ArtifactFixture & { sessionID: string; messageID: string }) {
+  const runtime = process.env.OPENSCIENCE_E2E_RUNTIME
+  if (!runtime) throw new Error("The isolated E2E runtime path is unavailable")
+  const result = await execute(runtime, [seed], {
+    cwd: backend,
+    env: {
+      ...process.env,
+      OPENSCIENCE_E2E_ARTIFACT: JSON.stringify(input),
+    },
+    maxBuffer: 1_000_000,
+  })
+  return parsePart(JSON.parse(result.stdout)).partID
+}
+
+function parsePart(value: unknown) {
+  if (!value || typeof value !== "object" || !("partID" in value) || typeof value.partID !== "string") {
+    throw new Error("Artifact seed helper did not return a part id")
+  }
+  return { partID: value.partID }
+}
+
 async function seedArtifact(sdk: Sdk, fixture: ArtifactFixture) {
   const created = await sdk.session
     .create({ title: `science artifact ${fixture.kind} ${Date.now()}` })
@@ -77,41 +105,25 @@ async function seedArtifact(sdk: Sdk, fixture: ArtifactFixture) {
     })
     .then((result) => result.data)
 
-  const source = reply?.parts.find((part) => part.type === "text")
-  if (!reply?.info.id || !source) throw new Error("Deterministic model did not return an assistant text part")
+  if (!reply?.info.id || !reply.parts.some((part) => part.type === "text")) {
+    throw new Error("Deterministic model did not return an assistant text part")
+  }
 
   // SessionTurn is anchored by the user message but discovers steps and
   // promoted results only from its assistant children. Keep the synthetic
   // tool on this assistant reply; replacing the user part hides the fixture.
 
-  const now = Date.now()
-  await sdk.part.update({
+  // The public part-edit route deliberately cannot mint parts or change a
+  // part's type. Seed this trusted fixture through the same internal session
+  // writer used by the runtime, leaving the transcript-integrity guard intact.
+  const partID = await seedArtifactPart({
     sessionID,
     messageID: reply.info.id,
-    partID: source.id,
-    part: {
-      id: source.id,
-      sessionID,
-      messageID: reply.info.id,
-      type: "tool",
-      callID: `call_science_${fixture.kind.replace(/[^a-z0-9]/gi, "_")}_${now}`,
-      tool: fixture.tool ?? "__artifact__",
-      state: {
-        status: "completed",
-        input: fixture.input ?? {},
-        output: `${fixture.kind} fixture ready`,
-        title: fixture.title ?? `${fixture.kind} fixture`,
-        metadata: {
-          title: fixture.title ?? `${fixture.kind} fixture`,
-          artifact: { kind: fixture.kind, data: fixture.data },
-        },
-        time: { start: now, end: now },
-      },
-    },
+    ...fixture,
   })
 
   const stored = await sdk.session.messages({ sessionID, limit: 50 }).then((result) => result.data ?? [])
-  const storedPart = stored.flatMap((message) => message.parts).find((part) => part.id === source.id)
+  const storedPart = stored.flatMap((message) => message.parts).find((part) => part.id === partID)
   expect(storedPart?.type).toBe("tool")
   if (storedPart?.type !== "tool") throw new Error("Updated tool part was not persisted")
   expect(storedPart.tool).toBe(fixture.tool ?? "__artifact__")

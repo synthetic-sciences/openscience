@@ -4,18 +4,7 @@ import { TokenUsage } from "@synsci/util/token-usage"
 export type TraceActivity = {
   id: string
   at: number
-  kind:
-    | "model"
-    | "tool"
-    | "child"
-    | "search"
-    | "kernel"
-    | "job"
-    | "approval"
-    | "artifact"
-    | "review"
-    | "failure"
-    | "retry"
+  kind: "model" | "tool" | "child" | "search" | "kernel" | "job" | "approval" | "artifact" | "failure" | "retry"
   label: string
   detail: string
   status?: string
@@ -50,7 +39,6 @@ const childLabel = (value: string) => {
   const normalized = value.trim().toLowerCase()
   if (normalized === "explore") return "Exploration task"
   if (normalized === "execute") return "Execution task"
-  if (normalized === "review") return "Review task"
   return "Research task"
 }
 
@@ -272,7 +260,6 @@ export function traceCounts(trace: SessionTraceResponse) {
     { label: "searches", value: trace.summary.searchCount, note: `${trace.summary.dedupeHits} reused` },
     { label: "approvals", value: trace.summary.approvalCount },
     { label: "artifacts", value: trace.summary.artifactSaves },
-    { label: "findings", value: trace.summary.reviewerFindings },
     { label: "failures", value: trace.summary.failureCount },
     { label: "retries", value: trace.summary.retryCount },
   ]
@@ -293,16 +280,6 @@ export function resultTrend(trace: SessionTraceResponse): ResultTrendPoint[] {
       risks: item.status === "failed" ? 1 : 0,
     })),
     ...(contract?.failures ?? []).map((item) => ({ at: item.recordedAt, verified: 0, risks: 1 })),
-    ...trace.reviewerFindings.map((item) => ({
-      at: item.completedAt ?? trace.session.updatedAt,
-      verified: item.relation === "supports" || item.status === "confirmed" ? 1 : 0,
-      risks:
-        item.relation === "refutes" &&
-        item.status !== "confirmed" &&
-        (item.severity === "blocking" || item.severity === "major")
-          ? 1
-          : 0,
-    })),
     ...trace.failures.map((item) => ({ at: item.createdAt, verified: 0, risks: 1 })),
   ].toSorted((a, b) => a.at - b.at)
   const timed = [{ at: trace.session.createdAt, verified: 0, risks: 0 }, ...events]
@@ -408,17 +385,6 @@ export function traceActivity(trace: SessionTraceResponse): TraceActivity[] {
     detail: `${item.action} · ${item.durable ? "durable" : "session only"}`,
     status: "completed",
   }))
-  const findings = trace.reviewerFindings.map((item) => ({
-    id: `review:${item.toolID}:${item.id ?? item.completedAt ?? "finding"}`,
-    at: item.completedAt ?? trace.session.updatedAt,
-    kind: "review" as const,
-    label: item.issue || item.claim || "Reviewer finding",
-    detail: [item.severity, item.relation, item.status, item.target].filter(Boolean).join(" · ") || "reviewed",
-    status:
-      (item.severity === "blocking" || item.severity === "major") && item.status !== "confirmed"
-        ? "error"
-        : "completed",
-  }))
   const failures = trace.failures.map((item) => ({
     id: `failure:${item.kind}:${item.id}`,
     at: item.createdAt,
@@ -444,7 +410,6 @@ export function traceActivity(trace: SessionTraceResponse): TraceActivity[] {
     ...jobs,
     ...approvals,
     ...artifacts,
-    ...findings,
     ...failures,
     ...retries,
   ].toSorted((a, b) => a.at - b.at)

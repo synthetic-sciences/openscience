@@ -43,29 +43,9 @@ test("production release preparation jobs can write their draft GitHub release",
   }
 })
 
-test("production publish derives stable versions only from a required monotonic bump", async () => {
+test("production publish requires the synsci launcher to ship with the wrapper", async () => {
   const source = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const bump = source.slice(source.indexOf("      bump:"), source.indexOf("# One release at a time"))
+  const publish = source.slice(source.indexOf("\n  publish:"), source.indexOf("\n  deployment:"))
 
-  expect(bump).toContain("required: true")
-  expect(source).not.toContain("inputs.version")
-  expect(source).not.toContain("Override version")
-  expect(source).not.toContain("OPENSCIENCE_VERSION: ${{ inputs.version }}")
-})
-
-test("production release requires this build's cleaned launcher to publish before undrafting", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const script = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/publish.ts")).text()
-
-  expect(workflow).toContain('OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"')
-  expect(script).toContain("if (requireLauncherPublish)")
-  expect(script).toContain("refusing to complete the release without publishing the cleaned launcher")
-  expect(script).toContain("refusing to accept an unverified registry tarball")
-
-  const launcher = script.indexOf("=== launcher (openscience) ===")
-  const failureGate = script.indexOf("if (failures.length > 0)")
-  const undraft = script.indexOf("--draft=false")
-  expect(launcher).toBeGreaterThan(-1)
-  expect(failureGate).toBeGreaterThan(launcher)
-  expect(undraft).toBeGreaterThan(failureGate)
+  expect(publish).toContain('OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"')
 })

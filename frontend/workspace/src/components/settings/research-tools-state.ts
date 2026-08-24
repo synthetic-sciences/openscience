@@ -1,17 +1,18 @@
+import { formatCreditBalance } from "./credit-balance"
+
 export interface ResearchToolsStatus {
   signedIn: boolean
-  wallet: {
-    mode: "payg"
-    balanceUsd: number | null
-  }
   search: {
-    route: "enhanced" | "community"
-    enhancedAvailable: boolean
+    route: "credits" | "community"
+    state: "available" | "basic" | "conditional"
+    enabled: boolean
+    balanceUsd: number | null
+    communityFlagEnabled: boolean
   }
   telemetry: {
     analyticsEnabled: boolean
-    researchContentEnabled: false
-    source: "default" | "local" | "account"
+    researchContentEnabled: boolean
+    source: "default" | "account"
     signedIn: boolean
     consentVersion: string
     pending: boolean
@@ -22,35 +23,44 @@ export interface ResearchToolsStatus {
 
 export function searchStatus(status: ResearchToolsStatus) {
   const search = status.search
-  if (search.route === "enhanced") {
+  if (search.route === "community") {
     return {
-      label: "Enhanced",
-      detail: "Available through your connected Synthetic Sciences account, with basic search as a fallback.",
-      tone: "success" as const,
+      label: "Community",
+      detail: search.communityFlagEnabled
+        ? "Available on supported community-search model routes."
+        : "Available when the selected model route supports community search.",
+      tone: "neutral" as const,
     }
   }
-  return {
-    label: "Community",
-    detail: "Basic search remains available without wallet credits or a connected account.",
-    tone: "neutral" as const,
+  if (search.state === "basic") {
+    return {
+      label: "Basic",
+      detail:
+        search.balanceUsd === null
+          ? "Basic community search is available. Enhanced search status could not be checked."
+          : "Basic community search is available. Add credits for enhanced search.",
+      tone: "neutral" as const,
+    }
   }
-}
-
-export function walletStatus(status: ResearchToolsStatus) {
-  if (!status.signedIn) return { label: "Not connected", tone: "neutral" as const }
-  if (status.wallet.balanceUsd === null) return { label: "Balance unavailable", tone: "neutral" as const }
-  const balance = status.wallet.balanceUsd
+  const balance = search.balanceUsd ?? 0
   return {
-    label: `$${balance.toFixed(balance >= 100 ? 0 : 2)} ${balance >= 0 ? "available" : "balance"}`,
-    tone: balance > 0 ? ("success" as const) : ("warning" as const),
+    label: "Ready",
+    detail: `${formatCreditBalance(balance)} available for credit-backed models and enhanced search.`,
+    tone: "success" as const,
   }
 }
 
 export function dataSharingDetail(status: ResearchToolsStatus) {
-  if (status.telemetry.corrupt) return "The consent record could not be read, so sharing is off until you choose again."
-  if (!status.telemetry.analyticsEnabled)
-    return "Off. Any queued structural usage has been removed from this installation."
-  if (status.telemetry.source === "default") return "On by default. You can turn it off at any time."
-  if (status.telemetry.pending) return "Saved locally and waiting to sync with your account."
-  return status.telemetry.source === "account" ? "On for this account." : "On for this installation."
+  if (status.telemetry.corrupt) return "Off until you choose this setting again."
+  if (status.telemetry.pending && (!status.telemetry.analyticsEnabled || !status.telemetry.researchContentEnabled))
+    return "Off on this device. Deletion finishes when OpenScience reconnects."
+  if (!status.telemetry.analyticsEnabled || !status.telemetry.researchContentEnabled)
+    return "Off. New activity stays on this device."
+  if (status.telemetry.pending) return "Saved on this device. It will sync when OpenScience reconnects."
+  if (status.telemetry.source === "default") return "On by default for this account."
+  return "On for this account."
+}
+
+export function dataSharingEnabled(status: ResearchToolsStatus) {
+  return !status.telemetry.corrupt && status.telemetry.analyticsEnabled && status.telemetry.researchContentEnabled
 }

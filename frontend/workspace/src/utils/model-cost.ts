@@ -64,18 +64,16 @@ export function pricingLines(cost?: ModelCost | null): PricingLines {
  */
 export type ModelSource = "managed" | "signed-in" | "byok"
 
-/** Managed (metered / wallet-debiting) providers reached through the Atlas seam. */
-const MANAGED_PROVIDERS = new Set(["synsci"])
-
 export interface SourceInput {
   providerID: string
   connected: boolean
+  credential?: "env" | "synced" | "config" | "custom" | "api" | "managed"
   /** Available auth methods for the provider (from `provider.auth()`). */
   authMethods?: Array<{ type: "oauth" | "api" }>
 }
 
 export function resolveModelSource(input: SourceInput): ModelSource {
-  if (MANAGED_PROVIDERS.has(input.providerID)) return "managed"
+  if (input.providerID === "openrouter" && input.credential === "managed") return "managed"
   const methods = input.authMethods ?? []
   const hasOauth = methods.some((m) => m.type === "oauth")
   const hasApi = methods.some((m) => m.type === "api")

@@ -415,6 +415,10 @@ export function classifyKeyTarget(arg?: string): { endpointUrl?: string; presele
   return preselect ? { preselect } : {}
 }
 
+export function isRetiredHostedProvider(provider: string | undefined): boolean {
+  return provider === "synsci" || provider?.startsWith("synsci-") === true
+}
+
 export const AuthLoginCommand = cmd({
   command: ["add [url]", "login [url]"],
   describe: "add a provider API key (BYOK)",
@@ -439,6 +443,13 @@ export const AuthLoginCommand = cmd({
         const { endpointUrl, preselect } = classifyKeyTarget(args.url)
         if (args.url && !endpointUrl && !preselect) {
           prompts.log.warn(`"${args.url}" is neither a URL nor a valid provider id — choose a provider below.`)
+        }
+        if (isRetiredHostedProvider(preselect)) {
+          prompts.log.error(
+            "The retired hosted provider is no longer available. Use OpenRouter for credit-backed models.",
+          )
+          prompts.outro("Done")
+          return
         }
 
         if (endpointUrl) {
@@ -480,6 +491,7 @@ export const AuthLoginCommand = cmd({
         const providers = await ModelsDev.get().then((x) => {
           const filtered: Record<string, (typeof x)[string]> = {}
           for (const [key, value] of Object.entries(x)) {
+            if (isRetiredHostedProvider(key)) continue
             if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
               filtered[key] = value
             }
@@ -488,7 +500,6 @@ export const AuthLoginCommand = cmd({
         })
 
         const priority: Record<string, number> = {
-          synsci: 0,
           anthropic: 1,
           "github-copilot": 2,
           openai: 3,
@@ -503,7 +514,6 @@ export const AuthLoginCommand = cmd({
           "local",
           "other",
           "amazon-bedrock",
-          "synsci",
           "vercel",
           "cloudflare",
           "cloudflare-ai-gateway",
@@ -546,7 +556,6 @@ export const AuthLoginCommand = cmd({
                   label: x.name,
                   value: x.id,
                   hint: {
-                    synsci: "Synthetic Sciences — recommended",
                     anthropic: "Claude Max or API key",
                     openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
                   }[x.id],
@@ -628,10 +637,6 @@ export const AuthLoginCommand = cmd({
               "Configure via openscience.json options (profile, region, endpoint) or\n" +
               "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
           )
-        }
-
-        if (provider === "synsci") {
-          prompts.log.info("Create an API key at https://app.syntheticsciences.ai/cli")
         }
 
         if (provider === "vercel") {

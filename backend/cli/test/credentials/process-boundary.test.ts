@@ -26,3 +26,9 @@ test("credential-bearing subprocess snapshots only appear behind the admitted sp
   expect(lifecycle.match(/return await action\(\)/g)?.length).toBe(2)
   expect(lifecycle).not.toMatch(/await using lease[\s\S]{0,160}return action\(\)/)
 })
+
+test("credential mutation boundaries outwait the complete bounded telemetry request sequence", async () => {
+  const lifecycle = await Bun.file(path.resolve(import.meta.dir, "../../src/credentials/lifecycle.ts")).text()
+  expect(lifecycle).toContain("const mutationLeaseTimeout = 30_000")
+  expect(lifecycle.match(/FileLease\.acquire\(mutationLock, mutationLeaseTimeout\)/g)).toHaveLength(3)
+})

@@ -72,10 +72,8 @@ export const CodexConnection: Component<{
         <div class="models-connection-identity">
           <ProviderLogo id="openai-codex" label="OpenAI" />
           <div class="flex min-w-0 flex-col gap-0.5">
-            <span class="text-13-medium text-text-strong">Sign in with ChatGPT</span>
-            <span class="text-12-regular text-text-weak">
-              Keep Codex model access through your ChatGPT Plus, Pro, or Business plan.
-            </span>
+            <span class="text-13-medium text-text-strong">ChatGPT / Codex</span>
+            <span class="text-12-regular text-text-weak">Use models included with your ChatGPT plan.</span>
           </div>
         </div>
         <Show
@@ -107,7 +105,7 @@ export const CodexConnection: Component<{
               disabled={busy()}
               onClick={() => void connect()}
             >
-              {busy() ? "Waiting for ChatGPT…" : "Sign in with ChatGPT"}
+              {busy() ? "Waiting for ChatGPT…" : "Sign in"}
             </Button>
           </span>
         </Show>

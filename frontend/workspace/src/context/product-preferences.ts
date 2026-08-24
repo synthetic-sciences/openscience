@@ -6,17 +6,18 @@ export type ProductPreferences = {
   show_local_models: boolean
 }
 
-const [trace, setTrace] = createSignal(false)
-const [atlas, setAtlas] = createSignal(false)
 const [localModels, setLocalModels] = createSignal(true)
 
+// Gateway and Trace remain backend preferences for compatibility, but they are
+// not public navigation surfaces. Keep legacy `true` values from reviving an
+// entry point after an upgrade.
+const hiddenSurface = () => false
+
 export const productPreferences = {
-  trace,
-  atlas,
+  trace: hiddenSurface,
+  atlas: hiddenSurface,
   localModels,
   sync(preferences: Partial<ProductPreferences>) {
-    if (preferences.show_trace !== undefined) setTrace(preferences.show_trace === true)
-    if (preferences.atlas_enabled !== undefined) setAtlas(preferences.atlas_enabled === true)
     if (preferences.show_local_models !== undefined) setLocalModels(preferences.show_local_models === true)
   },
 }

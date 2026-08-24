@@ -36,14 +36,13 @@ const mount = (view: () => JSX.Element) => {
 
 const child = (name: string, calls: string[]) => () => {
   calls.push(name)
-  const node = document.createElement(name === "strip" ? "details" : "section")
-  if (name === "strip") node.className = "activity-surface__capacity"
+  const node = document.createElement("section")
   node.dataset.computeChild = name
   return node
 }
 
 describe("compute surface", () => {
-  test("renders one project-wide execution inventory with capacity collapsed", () => {
+  test("renders one static telemetry strip and one live inventory", () => {
     const calls: string[] = []
     const host = mount(() => subject.ComputeSurface({ strip: child("strip", calls), kernels: child("kernels", calls) }))
 
@@ -51,45 +50,38 @@ describe("compute surface", () => {
     expect(host.querySelector('[aria-label="Compute"]')).not.toBeNull()
     expect(host.querySelector('[data-compute-child="strip"]')).not.toBeNull()
     expect(host.querySelector('[data-compute-child="kernels"]')).not.toBeNull()
-    expect(host.querySelector<HTMLDetailsElement>(".activity-surface__capacity")?.open).toBe(false)
-    expect(host.querySelector('[role="tablist"]')).toBeNull()
+    expect(host.querySelector("button, details, summary, [role=tablist]")).toBeNull()
   })
 
   test("keeps the former export as a compatibility alias", () => {
     expect(subject.ActivitySurface).toBe(subject.ComputeSurface)
   })
 
-  test("contains no manual launcher or separate jobs mode", () => {
+  test("documents the tracking-only boundary", () => {
     const source = readFileSync(fileURLToPath(new URL("./ComputeSurface.tsx", import.meta.url)), "utf8")
 
+    expect(source).toContain("read-only instrument panel")
+    expect(source).toContain("Compute only tracks what")
+    expect(source).toContain("still needs operational attention")
+    expect(source).toContain("owns no")
+    expect(source).toContain("lifecycle controls")
+    expect(source).toContain("completed-history workflow")
     expect(source).not.toContain("ComputeJobs")
     expect(source).not.toContain("New kernel")
-    expect(source).not.toContain("onEnsureSession")
-    expect(source).not.toContain('role="tab"')
-    expect(source).not.toContain("href=")
-    expect(source).not.toContain("Coming soon")
-    expect(source).not.toContain("Atlas Compute preview")
-    expect(source).toContain("Compute reflects what happened and what is live")
-    expect(source).toContain("governed remote GPU jobs")
-    expect(source).toContain("Completed remote results stay")
   })
 
   test("uses its own width for narrow layouts", () => {
     const css = readFileSync(fileURLToPath(new URL("./ComputeSurface.css", import.meta.url)), "utf8")
-    const host = readFileSync(fileURLToPath(new URL("./HostStrip.css", import.meta.url)), "utf8")
+    const strip = readFileSync(fileURLToPath(new URL("./HostStrip.css", import.meta.url)), "utf8")
 
     expect(css).toContain("container: compute / inline-size")
     expect(css).toContain("@container compute (max-width: 470px)")
     expect(css).toContain("@container compute (max-width: 350px)")
-    expect(css).toContain(".compute-surface .activity-card")
-    expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto")
-    expect(css).not.toContain('.activity-boundary[data-location="research"]')
-    expect(host).toContain("@container compute (max-width: 500px)")
-    expect(css).not.toContain("--activity-research:")
-    expect(css).toContain("height: 32px")
-    expect(css).toContain("@media (pointer: coarse)")
-    expect(css).toContain("min-height: 44px")
+    expect(css).toContain(".compute-row")
+    expect(css).not.toContain(".activity-card")
+    expect(css).not.toContain(".activity-disclosure")
+    expect(strip).toContain("@container compute (max-width: 470px)")
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/)
-    expect(host).not.toMatch(/#[0-9a-fA-F]{3,8}/)
+    expect(strip).not.toMatch(/#[0-9a-fA-F]{3,8}/)
   })
 })

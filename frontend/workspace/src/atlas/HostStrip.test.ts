@@ -131,8 +131,10 @@ describe("host strip", () => {
     const source = readFileSync(fileURLToPath(new URL("./HostStrip.tsx", import.meta.url)), "utf8")
 
     expect(source).toContain('<span class="host-strip__label">Memory</span>')
-    expect(source).toContain('<span class="host-strip__label">Running</span>')
-    expect(source).toContain('aria-label="Machine resources"')
+    expect(source).toContain('<span class="host-strip__label">Kernels</span>')
+    expect(source).toContain('aria-label="Current local compute"')
+    expect(source).not.toContain("<details")
+    expect(source).not.toContain("<summary")
   })
 
   test("states the machine's capacity once a poll succeeds", async () => {
@@ -143,13 +145,10 @@ describe("host strip", () => {
     expect(host.querySelector("[data-boundary]")).toBeNull()
     expect(values(host)).toEqual(["412.0 MB", "~0.4 of 8"])
     expect(host.textContent).toContain("of 16.0 GB")
-    expect(host.textContent).toContain("1process")
-    expect(host.querySelector('[data-host-tile="kernels"] p')?.getAttribute("title")).toContain("2 kernels · 1 running")
-    expect(host.querySelector<HTMLDetailsElement>(".activity-surface__capacity")?.open).toBe(false)
-    expect(host.querySelector(".activity-surface__capacity-reading")?.textContent).toContain("412.0 MB")
-    expect(host.querySelector(".activity-surface__capacity-reading")?.textContent).toContain("~0.4/8")
-    expect(host.querySelector(".activity-surface__capacity-reading")?.textContent).toContain("Running1")
-    expect(host.querySelector(".activity-surface__capacity-title")?.textContent).toContain("Live")
+    expect(host.textContent).toContain("2kernels · 1 running")
+    expect(host.querySelector('[data-host-tile="kernels"] p')?.getAttribute("aria-label")).toBe("2 kernels, 1 running")
+    expect(host.querySelector("details")).toBeNull()
+    expect(host.querySelector("summary")).toBeNull()
   })
 
   test("asks the route the compute strip is served from, naming itself to the server", async () => {

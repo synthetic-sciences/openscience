@@ -8,6 +8,7 @@ import {
   classifyInitFailure,
   computeDedupeKey,
   initProjectDetailed,
+  mergeProjectRootsAndPin,
   parseStageNodeInput,
   pinMatchesKey,
 } from "../../src/server/routes/atlas-bridge"
@@ -89,6 +90,80 @@ describe("classifyInitFailure", () => {
   test("non-JSON bodies fall back to trimmed raw text", () => {
     expect(classifyInitFailure(500, "  Bad Gateway  ").message).toBe("Bad Gateway")
     expect(classifyInitFailure(500, "").message).toBeUndefined()
+  })
+})
+
+describe("project root merge", () => {
+  test("uses the current merge endpoint and writes the pin only after success", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await fs.writeFile(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir()
+    const requests: Array<{ path: string; body: unknown }> = []
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      requests.push({ path: url.pathname, body: JSON.parse(String(init?.body)) })
+      return Response.json({
+        canonical_id: "project-a",
+        absorbed: ["project-b"],
+        reparented_edges: 2,
+        deleted_nodes: 1,
+      })
+    }) as typeof fetch
+
+    const result = await mergeProjectRootsAndPin(tmp.path, "repo:github.com/example/project", "project-a", [
+      "project-b",
+    ])
+
+    expect(result).toMatchObject({ merge: { canonical_id: "project-a", deleted_nodes: 1 }, pinned: true })
+    expect(requests).toEqual([
+      {
+        path: "/api/v1/projects/merge",
+        body: { canonical_id: "project-a", duplicate_ids: ["project-b"] },
+      },
+    ])
+    expect(JSON.parse(await fs.readFile(path.join(tmp.path, ".openscience/project.json"), "utf8"))).toMatchObject({
+      project_id: "project-a",
+      dedupe_key: "repo:github.com/example/project",
+    })
+  })
+
+  test("falls back to the historical merge endpoint only when v1 is retired", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await fs.writeFile(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir()
+    const requests: string[] = []
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname
+      requests.push(path)
+      if (path === "/api/v1/projects/merge") return new Response("retired", { status: 404 })
+      if (path === "/api/agent/projects/merge") {
+        return Response.json({ canonical_id: "project-a", absorbed: ["project-b"], deleted_nodes: 1 })
+      }
+      return new Response("unexpected", { status: 500 })
+    }) as typeof fetch
+
+    const result = await mergeProjectRootsAndPin(tmp.path, "local-folder:/project", "project-a", ["project-b"])
+
+    expect(result.pinned).toBe(true)
+    expect(requests).toEqual(["/api/v1/projects/merge", "/api/agent/projects/merge"])
+  })
+
+  test("does not fall back or write a pin for a real v1 merge failure", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await fs.writeFile(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir()
+    const requests: string[] = []
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname
+      requests.push(path)
+      return Response.json({ detail: "merge transaction failed" }, { status: 503 })
+    }) as typeof fetch
+
+    await expect(
+      mergeProjectRootsAndPin(tmp.path, "local-folder:/project", "project-a", ["project-b"]),
+    ).rejects.toThrow("HTTP 503")
+    expect(requests).toEqual(["/api/v1/projects/merge"])
+    expect(await fs.stat(path.join(tmp.path, ".openscience/project.json")).catch(() => null)).toBeNull()
   })
 })
 
@@ -288,6 +363,101 @@ describe("initProjectDetailed", () => {
     const result = await initProjectDetailed("")
     expect(result.projectId).toBeNull()
     expect(result.failure?.kind).toBe("backend")
+  })
+
+  test("dedupes two fresh clones through the current projects endpoint", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using first = await tmpdir({ git: true })
+    await using second = await tmpdir({ git: true })
+    for (const directory of [first.path, second.path]) {
+      await $`git remote add origin https://github.com/synthetic-sciences/openscience.git`.cwd(directory).quiet()
+    }
+    let created = false
+    const requests: string[] = []
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      requests.push(`${init?.method ?? "GET"} ${url.pathname}`)
+      if (url.pathname !== "/api/v1/projects") return new Response("unexpected", { status: 500 })
+      if ((init?.method ?? "GET") === "GET") {
+        return Response.json({ projects: created ? [{ project_id: "project-shared" }] : [] })
+      }
+      created = true
+      return Response.json({ project_id: "project-shared", deduped: false }, { status: 201 })
+    }) as typeof fetch
+
+    expect(await initProjectDetailed(first.path)).toEqual({ projectId: "project-shared" })
+    expect(await initProjectDetailed(second.path)).toEqual({ projectId: "project-shared" })
+    expect(requests.filter((request) => request === "POST /api/v1/projects")).toHaveLength(1)
+    expect(requests.some((request) => request.includes("/api/agent/projects"))).toBe(false)
+    expect(requests.some((request) => request.includes("/api/v1/nodes/commit-new"))).toBe(false)
+  })
+
+  test("recovers a created project after its first response is lost without generic node fallback", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir({ git: true })
+    await $`git remote add origin https://github.com/synthetic-sciences/response-loss.git`.cwd(tmp.path).quiet()
+    let created = false
+    const requests: string[] = []
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      const method = init?.method ?? "GET"
+      requests.push(`${method} ${url.pathname}`)
+      if (url.pathname !== "/api/v1/projects") return new Response("unexpected", { status: 500 })
+      if (method === "GET") return Response.json({ projects: created ? [{ project_id: "project-recovered" }] : [] })
+      created = true
+      throw new TypeError("connection reset after commit")
+    }) as typeof fetch
+
+    const lost = await initProjectDetailed(tmp.path)
+    expect(lost).toMatchObject({ projectId: null, failure: { kind: "unreachable" } })
+    expect(await initProjectDetailed(tmp.path)).toEqual({ projectId: "project-recovered" })
+    expect(requests.filter((request) => request === "POST /api/v1/projects")).toHaveLength(1)
+    expect(requests.some((request) => request.includes("/api/v1/nodes/commit-new"))).toBe(false)
+  })
+
+  test("falls back to the legacy projects endpoint only when v1 is retired", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir({ git: true })
+    const requests: string[] = []
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      const method = init?.method ?? "GET"
+      requests.push(`${method} ${url.pathname}`)
+      if (url.pathname === "/api/v1/projects") return new Response("retired", { status: 404 })
+      if (url.pathname === "/api/agent/projects" && method === "GET") return Response.json({ projects: [] })
+      if (url.pathname === "/api/agent/projects" && method === "POST") {
+        return Response.json({ project_id: "project-legacy" }, { status: 201 })
+      }
+      return new Response("unexpected", { status: 500 })
+    }) as typeof fetch
+
+    expect(await initProjectDetailed(tmp.path)).toEqual({ projectId: "project-legacy" })
+    expect(requests).toEqual([
+      "GET /api/v1/projects",
+      "GET /api/agent/projects",
+      "POST /api/v1/projects",
+      "POST /api/agent/projects",
+    ])
+  })
+
+  test("does not create a generic root when the project service fails", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir({ git: true })
+    const requests: string[] = []
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      requests.push(`${init?.method ?? "GET"} ${url.pathname}`)
+      if ((init?.method ?? "GET") === "GET") return Response.json({ projects: [] })
+      return Response.json({ detail: "project service unavailable" }, { status: 503 })
+    }) as typeof fetch
+
+    const result = await initProjectDetailed(tmp.path)
+    expect(result).toMatchObject({ projectId: null, failure: { kind: "unreachable", status: 503 } })
+    expect(requests).toEqual(["GET /api/v1/projects", "POST /api/v1/projects"])
   })
 })
 

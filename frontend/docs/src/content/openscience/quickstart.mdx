@@ -4,7 +4,7 @@ description: "Install OpenScience, set a provider key, and run your first resear
 icon: "rocket"
 ---
 
-Five minutes from zero to a running research session. No account required.
+Five minutes from zero to a running research session. Sign in once with a free Synthetic Sciences account, then use your own providers, eligible ChatGPT access, local models, or Ace.
 
 <Steps>
   <Step title="Install">
@@ -16,7 +16,14 @@ Five minutes from zero to a running research session. No account required.
 
     Linux requires kernel 5.1 or newer. Glibc builds require glibc 2.17 or newer, and musl builds are selected separately. CentOS 7's stock 3.10 kernel is not supported; use a newer host kernel or VM.
   </Step>
-  <Step title="Set a provider key">
+  <Step title="Connect your free account">
+    ```bash
+    openscience login
+    ```
+
+    OpenScience requires a free [Synthetic Sciences account](/openscience/gateway) for installation identity, trace ownership, and settings continuity. No paid plan is required. **Use my data** is on by default and shares a redacted complete research trajectory; turn it off anytime in Settings.
+  </Step>
+  <Step title="Choose model access">
     ```bash
     export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
     ```
@@ -43,13 +50,6 @@ Five minutes from zero to a running research session. No account required.
     ```bash
     openscience run "Profile train.py and find the input-pipeline bottleneck"
     ```
-  </Step>
-  <Step title="Optional: connect Synthetic Sciences">
-    ```bash
-    openscience login
-    ```
-
-    Connecting a [Synthetic Sciences](/openscience/gateway) account adds private research graphs and pay-as-you-go model and enhanced-search credits. OpenScience never requires it; local, BYOK, and eligible ChatGPT/Codex routes continue without managed credits.
   </Step>
 </Steps>
 

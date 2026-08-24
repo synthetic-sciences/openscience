@@ -35,6 +35,10 @@ test("lives in a project-owned sibling frame instead of the session route", () =
   expect(session).not.toContain("<RightPane")
   expect(frameStyles).toContain(".project-workspace-frame")
   expect(frameStyles).toContain(".project-workspace-frame__route")
+  expect(frameStyles).toMatch(/\.project-workspace-frame\s*\{[^}]*height: 100%;/s)
+  expect(frameStyles).not.toContain("height: 100dvh")
+  expect(session).toContain('height: "100%"')
+  expect(session).not.toContain('height: "100dvh"')
   expect(styles).not.toContain(".project-workspace-frame")
 })
 
@@ -44,6 +48,7 @@ test("artifact context keeps the pane header as its only close or back action", 
   expect(source).toContain('aria-label={narrow() ? "Back to conversation" : "Close context"}')
   expect(source).toContain("<ArtifactInspector context={current()} />")
   expect(source).not.toContain("<ArtifactInspector context={current()} onClose=")
+  expect(source).not.toContain("onDirtyChange={(dirty) => markDirty(tab.id, dirty)}\n                      onClose=")
 })
 
 test("keeps modal focus inside visible content and moves focus with roving tabs", () => {
@@ -54,6 +59,26 @@ test("keeps modal focus inside visible content and moves focus with roving tabs"
   expect(source).toContain('event.currentTarget.closest(".inspector-tabs")')
   expect(source).toContain(".find((item) => item.dataset.workTab === target.id)")
   expect(source).toContain("?.focus()")
+  expect(source).toContain("let strip: HTMLElement | undefined")
+  expect(source).toContain('?.scrollIntoView({ block: "nearest", inline: "nearest" })')
+})
+
+test("gives contextual work tabs recognizable icons without collapsing the horizontal strip", () => {
+  const source = read("./RightPane.tsx")
+  const styles = read("./right-pane-tabs.css")
+
+  expect(source).toContain("function workTabIcon(tab: WorkTab)")
+  expect(source).toContain('class="inspector-tab__icon"')
+  expect(source).toContain("<IconBookOpen")
+  expect(source).toContain("<IconTable")
+  expect(source).toContain("<IconBraces")
+  expect(source).toContain("<IconCpu")
+  expect(source).toContain('canvas: "Synthetic Sciences"')
+  expect(styles).toContain(".inspector-tab__icon")
+  expect(styles).toMatch(/\.inspector-tab-pair \.inspector-tab\s*\{[^}]*gap: 6px;/s)
+  expect(styles).toMatch(/\.inspector-tab__icon\s*\{[^}]*width: 16px;[^}]*height: 16px;[^}]*flex: 0 0 16px;/s)
+  expect(styles).toMatch(/\.inspector-tabs\s*\{[^}]*overflow-x: auto/s)
+  expect(styles).toMatch(/\.inspector-tab-pair\s*\{[^}]*flex: 0 0 auto/s)
 })
 
 test("resize separator exposes keyboard and range semantics", () => {
@@ -71,7 +96,12 @@ test("resize separator exposes keyboard and range semantics", () => {
   expect(source).not.toContain('class="research-inspector__resize-grip"')
   expect(source).toContain('aria-label="Split workspace evenly"')
   expect(source).toContain("new ResizeObserver(measure)")
-  expect(source).toContain("setWorkspace(parent.clientWidth || window.innerWidth)")
+  expect(source).toContain('element.closest<HTMLElement>(".project-workspace-frame")')
+  expect(source).toContain('querySelector<HTMLElement>(".project-workspace-frame__route .session-sidebar")')
+  expect(source).toContain("setPersistentSidebar(frame.sidebar?.getBoundingClientRect().width")
+  expect(source).toContain("frame.observer.observe(boundary)")
+  expect(source).toContain("frame.observer?.observe(frame.sidebar)")
+  expect(source).toContain("new MutationObserver(attachSidebar)")
   expect(source).not.toContain("main.clientWidth + element.clientWidth")
 })
 

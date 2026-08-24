@@ -223,8 +223,8 @@ describe("native provider system and continuation boundaries", () => {
               delegation: false,
               system: `${marker}explicit-${adapter}`,
               parts: [
-                { type: "text", text: "Ask the explicitly attached review agent to inspect the evidence." },
-                { type: "agent", name: "review" },
+                { type: "text", text: "Ask the explicitly attached execution agent to inspect the evidence." },
+                { type: "agent", name: "execute" },
               ],
             })
 

@@ -158,13 +158,12 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Preserve the selected layout at every width. A compact grid remains a grid;
- * silently drawing it as a list would make aria-checked and the visible result
- * disagree. Two equal columns keep the choice useful at the narrowest pane. */
+/* Preserve the selected layout at every width. Auto-fit collapses unused
+ * tracks, so one Result gets a legible preview while two still form a grid. */
 @container files-pane (max-width: 400px) {
   .artifact-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(152px, 100%), 1fr));
     gap: 8px;
   }
 
@@ -181,13 +180,13 @@
 
   .artifact-grid .artifact-card[data-layout="grid"] .artifact-thumb {
     width: 100%;
-    height: 52px;
+    height: 82px;
     border-radius: 0;
   }
 
   .artifact-grid .artifact-card[data-layout="grid"] .artifact-thumb--text {
-    padding: 6px;
-    font-size: 6.5px;
+    padding: 8px;
+    font-size: 8px;
   }
 
   .artifact-grid .artifact-card[data-layout="grid"] .artifact-thumb--binary span {
@@ -197,7 +196,7 @@
 
   .artifact-grid .artifact-card[data-layout="grid"] .artifact-card__label {
     min-width: 0;
-    padding: 6px 7px 7px;
+    padding: 7px 8px 8px;
   }
 
   .artifact-grid .artifact-card[data-layout="grid"] .artifact-card__name {

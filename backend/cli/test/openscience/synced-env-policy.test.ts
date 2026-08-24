@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import {
   isSyncedEnvAllowed,
   BLOCKED_SYNCED_ENV,
+  RETIRED_SYNCED_COMPUTE_ENV_KEYS,
   SYNCED_SERVICE_ENV_KEYS,
   managedOpenRouterBaseURL,
 } from "../../src/openscience/synced-env-policy"
@@ -35,30 +36,67 @@ test("allows user-owned provider keys and blocks synced provider base URLs", () 
   }
 })
 
-test("allows the OpenRouter managed route and compute / ML-service keys", () => {
+test("allows the OpenRouter managed route and non-compute integrations", () => {
   const allowed = [
     "OPENROUTER_API_KEY",
-    "OPENROUTER_BASE_URL",
-    "TINKER_API_KEY",
     "WANDB_API_KEY",
     "HF_TOKEN",
-    "MODAL_TOKEN_ID",
-    "LAMBDA_API_KEY",
     "PINECONE_API_KEY",
-    "AWS_ACCESS_KEY_ID",
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    "AZURE_CLIENT_SECRET",
     "GITHUB_TOKEN",
     "OPENALEX_API_KEY",
     "SEMANTIC_SCHOLAR_API_KEY",
     "NVIDIA_API_KEY",
-    "PATH",
   ]
   for (const key of allowed) {
     expect(isSyncedEnvAllowed(key)).toBe(true)
   }
-  expect(SYNCED_SERVICE_ENV_KEYS).toContain("RUNPOD_API_KEY")
+  expect(isSyncedEnvAllowed("OPENROUTER_BASE_URL", managedOpenRouterBaseURL())).toBe(true)
   expect(SYNCED_SERVICE_ENV_KEYS).not.toContain("MODAL_TOKEN_SECRET")
+})
+
+test("fails closed for arbitrary environment fields and Modal control-plane tokens", () => {
+  for (const key of ["PATH", "OPENSCIENCE_ARBITRARY_SYNC_VALUE", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"]) {
+    expect(isSyncedEnvAllowed(key, "account-value")).toBe(false)
+  }
+  expect(isSyncedEnvAllowed("OPENROUTER_BASE_URL")).toBe(false)
+})
+
+test("rejects every retired account-synced compute credential", () => {
+  const retired = [
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_PROFILE",
+    "AWS_DEFAULT_REGION",
+    "AWS_REGION",
+    "GOOGLE_CLOUD_PROJECT",
+    "GCLOUD_PROJECT",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_APPLICATION_CREDENTIALS_JSON",
+    "AZURE_TENANT_ID",
+    "AZURE_CLIENT_ID",
+    "AZURE_CLIENT_SECRET",
+    "AZURE_SUBSCRIPTION_ID",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "TINKER_API_KEY",
+    "TINKER_BASE_URL",
+    "TENSORPOOL_KEY",
+    "TENSORPOOL_API_KEY",
+    "LAMBDA_API_KEY",
+    "LAMBDA_LABS_API_KEY",
+    "PRIME_API_KEY",
+    "PRIME_INTELLECT_API_KEY",
+    "VAST_API_KEY",
+    "RUNPOD_API_KEY",
+  ]
+
+  expect([...RETIRED_SYNCED_COMPUTE_ENV_KEYS]).toEqual(retired)
+  for (const key of retired) {
+    expect(isSyncedEnvAllowed(key, "user-owned-but-account-synced")).toBe(false)
+    expect(SYNCED_SERVICE_ENV_KEYS).not.toContain(key as never)
+  }
 })
 
 test("OpenRouter accepts BYOK or managed keys but only the matching Atlas proxy URL", () => {

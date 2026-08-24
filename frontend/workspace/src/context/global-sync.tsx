@@ -46,6 +46,11 @@ export function syncErrorMessage(error: unknown): string {
   if (typeof value.status === "number") return `Request failed with status ${value.status}.`
   return "The server returned an unexpected response."
 }
+
+export function handleInstanceDisposed(clearSessionStatus: () => void, scheduleSync: () => void) {
+  clearSessionStatus()
+  scheduleSync()
+}
 import {
   batch,
   createContext,
@@ -815,7 +820,10 @@ function createGlobalSync() {
 
     switch (event.type) {
       case "server.instance.disposed": {
-        push(directory)
+        handleInstanceDisposed(
+          () => setStore("session_status", reconcile({})),
+          () => push(directory),
+        )
         return
       }
       case "session.created": {

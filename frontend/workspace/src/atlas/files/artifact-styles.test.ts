@@ -71,11 +71,22 @@ describe("artifact grid styles", () => {
     expect(styles).toMatch(/\.files-browser__toolbar \.files-source\s*\{[^}]*max-width: min\(48cqi, 210px\)/s)
     expect(styles).toMatch(/\.files-search\s*\{[^}]*flex: 1 1 160px;[^}]*min-height: 30px/s)
     expect(styles).toMatch(
-      /\.artifact-grid\s*\{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(min\(128px, 100%\), 1fr\)\)/s,
+      /\.artifact-grid\s*\{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(min\(164px, 100%\), 1fr\)\)/s,
     )
     expect(styles).toMatch(
-      /\.artifact-card\[data-layout="grid"\] \.artifact-card__name\s*\{[^}]*overflow-wrap: anywhere;[^}]*-webkit-line-clamp: 2/s,
+      /\.artifact-card\[data-layout="grid"\] \.artifact-card__name\s*\{[^}]*overflow-wrap: anywhere;[^}]*-webkit-line-clamp: 3/s,
     )
+  })
+
+  test("lets sparse Result grids use the pane and keeps code thumbnails legible", () => {
+    const styles = css()
+    const responsive = readFileSync(fileURLToPath(new URL("./file-items.css", import.meta.url)), "utf8")
+
+    expect(styles).toMatch(/\.artifact-thumb--text\s*\{[^}]*font-size: 8px;[^}]*line-height: 1\.5;/s)
+    expect(responsive).toMatch(
+      /@container files-pane \(max-width: 400px\)[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(152px, 100%\), 1fr\)\)/,
+    )
+    expect(responsive).toMatch(/\.artifact-thumb\s*\{[^}]*height: 82px;/s)
   })
 
   test("uses spacing and hover states instead of nested file borders", () => {

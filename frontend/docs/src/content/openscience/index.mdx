@@ -8,7 +8,7 @@ icon: "flask-conical"
 
 OpenScience is an AI workbench for scientific research. You give it a goal, and it works through the research loop the way a capable collaborator would: it reads the papers that matter, forms a hypothesis, writes and runs code, runs experiments on real compute, queries the major scientific databases, and writes up the result.
 
-It runs as a workspace in your browser, works with any frontier or open-weight model using your own API keys, and requires no account. It is model-agnostic, Apache-2.0 licensed, and built to do real work in machine learning, biology, physics, and chemistry.
+It runs as a workspace in your browser and works with frontier or open-weight models through your own API keys, eligible ChatGPT/Codex access, local endpoints, or optional Ace credits. A free Synthetic Sciences account is required; no paid plan is. It is model-agnostic, Apache-2.0 licensed, and built to do real work in machine learning, biology, physics, and chemistry.
 
 ```bash
 npm install -g @synsci/openscience
@@ -26,7 +26,7 @@ Everything below ships in the open-source CLI — no gated tiers, no server-side
     Literature review, hypothesis, code, experiment, analysis, and write-up in one continuous session. Queue follow-up prompts while it streams; rewind with undo-from-here.
   </Card>
   <Card title="One adaptive Research agent" icon="bot" href="/openscience/agents">
-    One user-facing harness owns the task end to end, loads domain skills lazily, and delegates bounded Explore, Execute, or Review work only when useful. Includes Normal and Ultra effort plus read-only plan mode.
+    One user-facing harness owns the task end to end, loads domain skills lazily, and delegates bounded research work only when useful. Includes Normal and Ultra effort plus read-only plan mode.
   </Card>
   <Card title="295 bundled skills" icon="book-open" href="/openscience/skills">
     Training (DeepSpeed, PEFT, TRL), evaluation, dataset work, molecular and clinical biology, cheminformatics, papers and LaTeX, figures, and user-configured scientific runtimes.
@@ -55,16 +55,16 @@ OpenScience routes to frontier and open-weight models from Anthropic, OpenAI, Go
 
 ## Open source, all the way down
 
-The workbench is [Apache-2.0 on GitHub](https://github.com/synthetic-sciences/openscience). No account and no closed core: the agent loop, skills, database tools, and workspace are all in the repo. Content-free product telemetry can be disabled in Settings; research content is not collected or shared in this release.
+The workbench is [Apache-2.0 on GitHub](https://github.com/synthetic-sciences/openscience). There is no closed core: the agent loop, skills, database tools, and workspace are all in the repo. A free Synthetic Sciences account is required, while paid Ace credits remain optional. **Use my data** is on by default and shares a redacted complete research trajectory; turn it off anytime in Settings.
 
 - **Site** — [openscience.sh](https://openscience.sh)
 - **Issues and ideas** — [github.com/synthetic-sciences/openscience/issues](https://github.com/synthetic-sciences/openscience/issues)
 - **Releases and platform binaries** — [GitHub Releases](https://github.com/synthetic-sciences/openscience/releases)
 - **Package** — [`@synsci/openscience` on npm](https://www.npmjs.com/package/@synsci/openscience)
 
-## Works with Synthetic Sciences, never requires it
+## Free account, optional Ace
 
-Connect a Synthetic Sciences account for [private research graphs](/openscience/gateway) and pay-as-you-go model and enhanced-search credits. Standalone mode keeps local, BYOK, and eligible ChatGPT/Codex workflows independent from the service.
+Connect a free Synthetic Sciences account once for identity, trace ownership, and settings continuity. [Ace](/openscience/gateway) adds optional pay-as-you-go model and enhanced-search credits; local, BYOK, and eligible ChatGPT/Codex routes do not debit the wallet.
 
 ## Start here
 

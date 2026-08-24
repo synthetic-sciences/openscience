@@ -11,15 +11,15 @@ import {
   type JSX,
 } from "solid-js"
 import { Button } from "@synsci/ui/button"
-import { IconButton } from "@synsci/ui/icon-button"
 import { Markdown } from "@synsci/ui/markdown"
 import { TextField } from "@synsci/ui/text-field"
 import { useSDK } from "@/context/sdk"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
-import { IconDownload, IconFile, IconMoreH, IconTrash } from "@/atlas/shared/Icon"
+import { IconDownload, IconEdit, IconFile, IconMoreH, IconTrash } from "@/atlas/shared/Icon"
 import { toast } from "@/atlas/Toast"
 import { uiStore } from "@/atlas/store/ui"
 import { PdfViewer } from "@/science/renderers/documents/PdfViewer"
+import { moveStoredArtifactMenuFocus } from "@/artifacts/stored-artifact-menu"
 import {
   downloadBlob,
   loadStoredArtifactPreview,
@@ -63,6 +63,8 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
   const [name, setName] = createSignal(props.artifact.title)
   const [busy, setBusy] = createSignal(false)
   const [downloading, setDownloading] = createSignal(false)
+  let actionTrigger: HTMLButtonElement | undefined
+  let actionPanelElement: HTMLElement | undefined
   const [detail, detailActions] = createResource(
     () => props.artifact.id,
     async (id) => {
@@ -81,6 +83,10 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
   createEffect(() => {
     if (action() === "rename" || !detail.latest?.title) return
     setName(detail.latest.title)
+  })
+  createEffect(() => {
+    if (!action()) return
+    queueMicrotask(() => actionPanelElement?.querySelector<HTMLElement>('input, [role="menuitem"], button')?.focus())
   })
   onMount(() => {
     const refresh = () => {
@@ -139,7 +145,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
         if (!updated) throw new Error("The renamed Result record is malformed.")
         uiStore.updateSaved(updated)
         setName(updated.title)
-        setAction()
+        closeActions(true)
         void detailActions.refetch()
         window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
         toast.success("Result renamed", updated.title)
@@ -160,6 +166,10 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
       })
       .catch((error) => toast.error("delete failed", error instanceof Error ? error.message : String(error)))
       .finally(() => setBusy(false))
+  }
+  const closeActions = (restoreFocus = false) => {
+    setAction()
+    if (restoreFocus) queueMicrotask(() => actionTrigger?.focus())
   }
 
   return (
@@ -200,110 +210,142 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
             </Button>
           )}
         </Show>
-        <Button
-          type="button"
-          size="small"
-          variant="secondary"
-          aria-label="Manage Result"
-          aria-expanded={action() !== undefined}
-          onClick={() => setAction(action() ? undefined : "menu")}
-        >
-          <IconMoreH size={14} strokeWidth={1.6} />
-          Manage
-        </Button>
-      </header>
+        <span style={actionAnchor()}>
+          <Button
+            ref={actionTrigger}
+            type="button"
+            size="small"
+            variant="secondary"
+            aria-label="Manage Result"
+            aria-haspopup="menu"
+            aria-expanded={action() !== undefined}
+            onClick={() => (action() ? closeActions() : setAction("menu"))}
+          >
+            <IconMoreH size={14} strokeWidth={1.6} />
+            Manage
+          </Button>
 
-      <Show when={action()}>
-        {(current) => (
-          <section aria-label="Result actions" style={actionPanel()}>
-            <div style={actionHead()}>
-              <strong style={heading()}>
-                {current() === "rename" ? "Rename Result" : current() === "delete" ? "Move to Trash" : "Manage"}
-              </strong>
-              <IconButton
-                type="button"
-                icon="close"
-                variant="ghost"
-                aria-label="Close Result actions"
-                onClick={() => setAction()}
-              />
-            </div>
-            <Switch>
-              <Match when={current() === "menu"}>
-                <div style={actionRow()}>
-                  <Button type="button" size="small" variant="secondary" onClick={() => setAction("rename")}>
-                    Rename
-                  </Button>
-                  <Button
-                    type="button"
-                    size="small"
-                    variant="secondary"
-                    onClick={() => setAction("delete")}
-                    style={dangerText()}
-                  >
-                    <IconTrash size={14} strokeWidth={1.6} />
-                    Delete
-                  </Button>
-                </div>
-                <p style={copy()}>Delete moves this Result and its saved history to recoverable Trash for 30 days.</p>
-              </Match>
-              <Match when={current() === "rename"}>
-                <form onSubmit={rename} style={actionForm()}>
-                  <TextField
-                    type="text"
-                    label="Result name"
-                    value={name()}
-                    onChange={setName}
-                    maxlength={240}
-                    autofocus
-                  />
-                  <div style={actionRow()}>
-                    <Button type="submit" size="small" variant="primary" disabled={!name().trim() || busy()}>
-                      {busy() ? "Saving…" : "Save name"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="small"
-                      variant="ghost"
-                      onClick={() => setAction("menu")}
-                      disabled={busy()}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </form>
-              </Match>
-              <Match when={current() === "delete"}>
-                <p style={copy()}>
-                  Saved history remains recoverable for 30 days. This does not delete the source file.
-                </p>
-                <div style={actionRow()}>
-                  <Button
-                    type="button"
-                    size="small"
-                    variant="secondary"
-                    onClick={remove}
-                    disabled={busy()}
-                    style={dangerText()}
-                  >
-                    <IconTrash size={14} strokeWidth={1.6} />
-                    {busy() ? "Moving…" : "Move to trash"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="small"
-                    variant="ghost"
-                    onClick={() => setAction("menu")}
-                    disabled={busy()}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </Match>
-            </Switch>
-          </section>
-        )}
-      </Show>
+          <Show when={action()}>
+            {(current) => (
+              <>
+                <button
+                  type="button"
+                  tabindex={-1}
+                  aria-hidden="true"
+                  style={actionScrim()}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => closeActions(true)}
+                />
+                <section
+                  ref={actionPanelElement}
+                  aria-label="Result actions"
+                  role={current() === "menu" ? "menu" : "dialog"}
+                  style={actionPanel()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault()
+                      closeActions(true)
+                      return
+                    }
+                    if (current() !== "menu") return
+                    if (!moveStoredArtifactMenuFocus(event.currentTarget, event.target, event.key)) return
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  onFocusOut={(event) => {
+                    if (current() !== "menu") return
+                    const next = event.relatedTarget
+                    if (next instanceof Node && event.currentTarget.contains(next)) return
+                    closeActions()
+                  }}
+                >
+                  <Switch>
+                    <Match when={current() === "menu"}>
+                      <Button
+                        type="button"
+                        size="small"
+                        variant="ghost"
+                        role="menuitem"
+                        tabindex={0}
+                        style={menuItem()}
+                        onClick={() => setAction("rename")}
+                      >
+                        <IconEdit size={14} strokeWidth={1.55} />
+                        Rename
+                      </Button>
+                      <Button
+                        type="button"
+                        size="small"
+                        variant="ghost"
+                        role="menuitem"
+                        tabindex={-1}
+                        style={{ ...menuItem(), ...dangerText() }}
+                        onClick={() => setAction("delete")}
+                      >
+                        <IconTrash size={14} strokeWidth={1.55} />
+                        Move to trash
+                      </Button>
+                    </Match>
+                    <Match when={current() === "rename"}>
+                      <form onSubmit={rename} style={actionForm()}>
+                        <strong style={heading()}>Rename Result</strong>
+                        <TextField
+                          type="text"
+                          label="Result name"
+                          value={name()}
+                          onChange={setName}
+                          maxlength={240}
+                          autofocus
+                        />
+                        <div style={actionRow()}>
+                          <Button type="submit" size="small" variant="primary" disabled={!name().trim() || busy()}>
+                            {busy() ? "Saving…" : "Save name"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="small"
+                            variant="ghost"
+                            onClick={() => setAction("menu")}
+                            disabled={busy()}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </form>
+                    </Match>
+                    <Match when={current() === "delete"}>
+                      <strong style={heading()}>Move to Trash?</strong>
+                      <p style={copy()}>The Result stays recoverable from Files for 30 days.</p>
+                      <div style={actionRow()}>
+                        <Button
+                          type="button"
+                          size="small"
+                          variant="secondary"
+                          onClick={remove}
+                          disabled={busy()}
+                          style={dangerText()}
+                        >
+                          <IconTrash size={14} strokeWidth={1.6} />
+                          {busy() ? "Moving…" : "Move to trash"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="small"
+                          variant="ghost"
+                          onClick={() => setAction("menu")}
+                          disabled={busy()}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </Match>
+                  </Switch>
+                </section>
+              </>
+            )}
+          </Show>
+        </span>
+      </header>
 
       <div class="atlas-scroll" style={body()}>
         <Show when={!detail.loading} fallback={<p style={empty()}>Loading immutable record…</p>}>
@@ -382,12 +424,24 @@ function Preview(props: {
 }
 
 const header = (): JSX.CSSProperties => ({
+  position: "relative",
   display: "flex",
   "align-items": "center",
   gap: "10px",
   padding: "14px 16px",
   "border-bottom": "1px solid var(--border-weak-base)",
   background: "var(--surface-raised-stronger-non-alpha)",
+})
+const actionAnchor = (): JSX.CSSProperties => ({ position: "relative", display: "inline-flex", flex: "none" })
+const actionScrim = (): JSX.CSSProperties => ({
+  position: "fixed",
+  inset: 0,
+  "z-index": 4,
+  width: "100%",
+  padding: 0,
+  border: 0,
+  background: "transparent",
+  cursor: "default",
 })
 const fileIcon = (): JSX.CSSProperties => ({
   width: "32px",
@@ -414,19 +468,36 @@ const meta = (): JSX.CSSProperties => ({
   "font-size": "11px",
 })
 const actionPanel = (): JSX.CSSProperties => ({
-  margin: "10px 12px 0",
-  padding: "12px",
+  position: "absolute",
+  top: "calc(100% + 6px)",
+  right: 0,
+  "z-index": 5,
+  width: "min(280px, calc(100vw - 32px))",
+  padding: "6px",
   display: "flex",
   "flex-direction": "column",
-  gap: "10px",
-  background: "var(--surface-raised-base)",
+  gap: "4px",
+  border: "1px solid var(--border-weak-base)",
+  background: "var(--surface-raised-stronger-non-alpha)",
   "border-radius": "var(--radius-md)",
+  "box-shadow": "var(--atlas-shadow-md)",
 })
-const actionHead = (): JSX.CSSProperties => ({
+const menuItem = (): JSX.CSSProperties => ({
+  appearance: "none",
+  width: "100%",
+  "min-height": "36px",
   display: "flex",
   "align-items": "center",
-  "justify-content": "space-between",
   gap: "8px",
+  padding: "0 9px",
+  border: 0,
+  "border-radius": "var(--radius-sm)",
+  background: "transparent",
+  color: "var(--text-strong)",
+  "font-family": FONT_SANS,
+  "font-size": "12px",
+  "text-align": "left",
+  cursor: "pointer",
 })
 const actionRow = (): JSX.CSSProperties => ({
   display: "flex",
@@ -434,7 +505,12 @@ const actionRow = (): JSX.CSSProperties => ({
   gap: "8px",
   "flex-wrap": "wrap",
 })
-const actionForm = (): JSX.CSSProperties => ({ display: "flex", "flex-direction": "column", gap: "10px" })
+const actionForm = (): JSX.CSSProperties => ({
+  display: "flex",
+  "flex-direction": "column",
+  gap: "10px",
+  padding: "6px",
+})
 const dangerText = (): JSX.CSSProperties => ({ color: "var(--text-on-critical-base)" })
 const body = (): JSX.CSSProperties => ({ flex: 1, "min-height": 0, overflow: "auto" })
 const section = (): JSX.CSSProperties => ({
@@ -460,14 +536,21 @@ const image = (): JSX.CSSProperties => ({
   margin: "16px auto",
   "object-fit": "contain",
 })
-const document = (): JSX.CSSProperties => ({ margin: "0 auto", padding: "24px", width: "min(100%, 760px)" })
+const document = (): JSX.CSSProperties => ({
+  margin: "0 auto",
+  padding: "clamp(24px, 5cqi, 44px) clamp(20px, 5cqi, 40px) 56px",
+  width: "min(100%, 760px)",
+  color: "var(--text-strong)",
+  "font-size": "15px",
+  "line-height": 1.65,
+})
 const pre = (): JSX.CSSProperties => ({
   margin: 0,
-  padding: "20px",
+  padding: "20px 18px 48px",
   color: "var(--text-strong)",
   "font-family": FONT_MONO,
-  "font-size": "11px",
-  "line-height": 1.55,
+  "font-size": "12px",
+  "line-height": 1.65,
   "white-space": "pre-wrap",
   "overflow-wrap": "anywhere",
 })

@@ -1,11 +1,9 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createResource, createSignal, type JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { useDialog } from "@synsci/ui/context/dialog"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { uiStore } from "@/atlas/store/ui"
 import { toast } from "@/atlas/Toast"
-import { promptDialog } from "@/atlas/dialogs"
 import {
   IconBookOpen,
   IconBraces,
@@ -22,11 +20,11 @@ import { FONT_CODE, FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { resolveArtifactPath, type ArtifactContext } from "./context"
 import { downloadBlob } from "./bytes"
 import {
-  filterReviewerFindings,
+  filterHistoricalReviews,
   inspectorTabs,
   normalizeInspectorData,
   normalizePublicationReview,
-  normalizeReviewerFindings,
+  normalizeHistoricalReviews,
   type InspectorData,
   type InspectorState,
   type InspectorTab,
@@ -34,7 +32,7 @@ import {
   type LineageRun,
   type PublicationReviewFinding,
   type PublicationReviewState,
-  type ReviewerFinding,
+  type HistoricalReviewFinding,
 } from "./inspector"
 
 const labels: Record<InspectorTab, string> = {
@@ -118,7 +116,6 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
   const sdk = useSDK()
   const prompt = usePrompt()
   const params = useParams()
-  const dialog = useDialog()
   const [tab, setTab] = createSignal<InspectorTab>("details")
   const path = () => resolveArtifactPath(props.context.directory, props.context.path)
   const query = (path?: string) => ({
@@ -158,7 +155,9 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
   })
   const review = createMemo(() => normalizePublicationReview(props.context.format, records()?.review))
   const session = () => (params.id && params.id !== "new" ? params.id : undefined)
-  const findings = createMemo(() => filterReviewerFindings(normalizeReviewerFindings(records()?.reviews), session()))
+  const historicalReviews = createMemo(() =>
+    filterHistoricalReviews(normalizeHistoricalReviews(records()?.reviews), session()),
+  )
 
   createEffect(() => {
     props.context.id
@@ -245,40 +244,6 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
     return true
   }
   const actor = () => model().provenance?.commit?.author ?? "Local user"
-  // Reviewer findings live in the provenance graph. Marking one addressed is an
-  // append-only resolution; it stays unconfirmed until a later reviewer pass
-  // records a supporting finding on the same target.
-  const addressFinding = async (finding: ReviewerFinding) => {
-    const reason = await promptDialog(dialog, {
-      title: "Mark finding addressed",
-      message:
-        "Describe the fix in one line. The record stays 'addressed' — only a later reviewer pass can confirm it.",
-      placeholder: "What change addresses this finding?",
-      confirmLabel: "Record fix",
-    })
-    const note = reason?.trim()
-    if (!note) return
-    const response = await sdk
-      .request(
-        `/provenance/reviews/${finding.id}/resolve`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ actor: actor(), reason: note }),
-        },
-        query(),
-      )
-      .catch(() => undefined)
-    if (!response?.ok) {
-      const payload = (await response?.json().catch(() => undefined)) as { error?: unknown } | undefined
-      const detail =
-        typeof payload?.error === "string" ? payload.error : response ? `${response.status}` : "Request failed"
-      toast.error("Could not record the fix", detail)
-      return
-    }
-    toast.success("Finding marked addressed", note)
-    await api.refetch()
-  }
   const runReview = () =>
     mutateReview("/file/reviews", "POST", {
       path: path(),
@@ -479,13 +444,12 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
             <Match when={tab() === "review"}>
               <Review
                 state={review()}
-                findings={findings()}
+                historicalReviews={historicalReviews()}
                 scoped={Boolean(session())}
                 annotations={annotations(records()?.notes)}
                 onRun={runReview}
                 onFinding={resolveFinding}
                 onFinalize={finalizeReview}
-                onAddress={addressFinding}
                 onAdd={addAnnotation}
                 onUpdate={updateAnnotation}
               />
@@ -502,13 +466,12 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
 
 function Review(props: {
   state: PublicationReviewState
-  findings: ReviewerFinding[]
+  historicalReviews: HistoricalReviewFinding[]
   scoped: boolean
   annotations: Annotation[]
   onRun(): Promise<boolean>
   onFinding(report: string, finding: string, status: "resolved" | "overridden", reason: string): Promise<boolean>
   onFinalize(report: string): Promise<boolean>
-  onAddress(finding: ReviewerFinding): Promise<void>
   onAdd(body: string): Promise<boolean>
   onUpdate(id: string, body: Record<string, unknown>): Promise<boolean>
 }): JSX.Element {
@@ -676,23 +639,21 @@ function Review(props: {
           )}
         </Show>
       </section>
-      <section data-component="reviewer-findings" style={card()}>
+      <section data-component="historical-review-records" style={card()}>
         <div style={{ display: "grid", gap: "6px" }}>
-          <Heading icon="review">Reviewer findings</Heading>
+          <Heading icon="review">Historical review records</Heading>
           <p style={copyStyle()}>
             {props.scoped
-              ? "Findings the independent reviewer recorded in this session. They are project-wide provenance records, not filtered to this artifact."
-              : "All reviewer findings recorded in this project's provenance graph."}
+              ? "Read-only records created for this session by earlier OpenScience versions. They are project-wide provenance records, not filtered to this artifact."
+              : "Read-only review records created by earlier OpenScience versions in this project's provenance graph."}
           </p>
         </div>
         <Show
-          when={props.findings.length}
-          fallback={<p style={copyStyle()}>No reviewer findings are recorded. Run a review from the session menu.</p>}
+          when={props.historicalReviews.length}
+          fallback={<p style={copyStyle()}>No historical review records are stored for this scope.</p>}
         >
           <div style={{ display: "grid", gap: "14px" }}>
-            <For each={props.findings}>
-              {(finding) => <ReviewerFindingCard finding={finding} onAddress={props.onAddress} />}
-            </For>
+            <For each={props.historicalReviews}>{(finding) => <HistoricalReviewCard finding={finding} />}</For>
           </div>
         </Show>
       </section>
@@ -949,20 +910,10 @@ function ReviewFindingCard(props: {
   )
 }
 
-function ReviewerFindingCard(props: {
-  finding: ReviewerFinding
-  onAddress(finding: ReviewerFinding): Promise<void>
-}): JSX.Element {
-  const [busy, setBusy] = createSignal(false)
-  const address = async () => {
-    if (busy()) return
-    setBusy(true)
-    await props.onAddress(props.finding)
-    setBusy(false)
-  }
+function HistoricalReviewCard(props: { finding: HistoricalReviewFinding }): JSX.Element {
   return (
     <article
-      data-component="reviewer-finding"
+      data-component="historical-review-record"
       data-finding-id={props.finding.id}
       data-finding-status={props.finding.status}
       style={{
@@ -979,7 +930,7 @@ function ReviewerFindingCard(props: {
         <span style={findingBadge()}>{sentence(props.finding.verdict)}</span>
         <Show when={props.finding.status}>
           {(status) => (
-            <span data-chip="finding-status" style={{ ...reviewerStatusBadge(status()), "margin-left": "auto" }}>
+            <span data-chip="finding-status" style={{ ...historicalStatusBadge(status()), "margin-left": "auto" }}>
               {sentence(status())}
             </span>
           )}
@@ -1000,7 +951,7 @@ function ReviewerFindingCard(props: {
       </blockquote>
       <p style={copyStyle()}>{props.finding.issue}</p>
       <pre
-        data-section="reviewer-evidence"
+        data-section="historical-review-evidence"
         class="atlas-scroll"
         style={{
           margin: 0,
@@ -1020,7 +971,7 @@ function ReviewerFindingCard(props: {
         {props.finding.evidence}
       </pre>
       <span style={{ "font-family": FONT_MONO, "font-size": META_FONT_SIZE, color: "var(--color-text-faint)" }}>
-        {props.finding.reviewer} · {new Date(props.finding.recordedAt).toLocaleString()}
+        {props.finding.recordedBy} · {new Date(props.finding.recordedAt).toLocaleString()}
       </span>
       <Show when={props.finding.resolution}>
         {(resolution) => (
@@ -1028,16 +979,6 @@ function ReviewerFindingCard(props: {
             Fix recorded by {resolution().actor}: {resolution().reason}
           </p>
         )}
-      </Show>
-      <Show when={props.finding.verdict === "refutes" && props.finding.status === "open"}>
-        <button
-          type="button"
-          disabled={busy()}
-          style={{ ...actionButton(), "justify-self": "start", opacity: busy() ? 0.45 : 1 }}
-          onClick={() => void address()}
-        >
-          {busy() ? "Recording…" : "Mark addressed"}
-        </button>
       </Show>
     </article>
   )
@@ -1691,7 +1632,7 @@ function runBadge(status: "ok" | "error"): JSX.CSSProperties {
   }
 }
 
-function reviewerStatusBadge(status: NonNullable<ReviewerFinding["status"]>): JSX.CSSProperties {
+function historicalStatusBadge(status: NonNullable<HistoricalReviewFinding["status"]>): JSX.CSSProperties {
   const color =
     status === "open"
       ? "var(--color-warning)"

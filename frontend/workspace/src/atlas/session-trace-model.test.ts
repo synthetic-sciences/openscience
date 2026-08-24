@@ -147,7 +147,6 @@ const trace: SessionTraceResponse = {
     readiness: 0,
     gates: [],
     missing: [],
-    openFindings: 0,
     failedCandidates: 0,
     strategy,
   },
@@ -178,10 +177,24 @@ describe("session trace presentation", () => {
     })
     expect(traceCounts(trace).map((item) => item.label)).toContain("approvals")
     expect(traceCounts(trace).map((item) => item.label)).toContain("failures")
+    expect(traceCounts(trace).map((item) => item.label)).not.toContain("findings")
   })
 
   test("builds a chronological observable timeline without hashes, patterns, or tool output", () => {
-    const activity = traceActivity(trace)
+    const activity = traceActivity({
+      ...trace,
+      reviewerFindings: [
+        {
+          toolID: "legacy_review",
+          messageID: "legacy_message",
+          relation: "refutes",
+          severity: "major",
+          issue: "Legacy finding",
+          status: "open",
+          completedAt: 3_500,
+        },
+      ],
+    })
     expect(activity.map((item) => item.kind)).toEqual(["model", "approval", "tool", "search", "retry"])
     expect(activity.find((item) => item.kind === "search")?.detail).toContain("reused local result")
     expect(activity.find((item) => item.kind === "approval")?.detail).toBe("approved: once")
@@ -189,6 +202,7 @@ describe("session trace presentation", () => {
     expect(JSON.stringify(activity)).not.toContain("/data")
     expect(JSON.stringify(activity)).not.toContain("patterns")
     expect(JSON.stringify(activity)).not.toContain("output")
+    expect(JSON.stringify(activity)).not.toContain("Legacy finding")
   })
 
   test("builds an observable result chart from saved Results, checks, and surfaced risks", () => {
@@ -210,7 +224,6 @@ describe("session trace presentation", () => {
         readiness: 55,
         gates: [],
         missing: ["report.md"],
-        openFindings: 0,
         failedCandidates: 1,
         strategy: {
           ...strategy,
