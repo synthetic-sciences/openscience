@@ -10,8 +10,10 @@ const publicSources = [
   "../atlas/AtlasCanvas.tsx",
   "../atlas/kernel-runtime.ts",
   "../atlas/SessionTraceSurface.tsx",
+  "../i18n/zh.ts",
   "./settings/General.tsx",
   "./settings/ProviderKeys.tsx",
+  "./settings/ResearchTools.tsx",
 ] as const
 
 function renderedSource(value: string) {
@@ -21,12 +23,24 @@ function renderedSource(value: string) {
     .replace(/^\s*import\s.*$/gm, "")
 }
 
-describe("public Gateway branding allowlist", () => {
+describe("public Synthetic Sciences branding", () => {
   test("retains internal Atlas component names without rendering the old standalone brand", async () => {
     const violations: string[] = []
     for (const file of publicSources) {
       const source = renderedSource(await Bun.file(new URL(file, import.meta.url)).text())
       if (/\bAtlas\b/.test(source)) violations.push(file)
+    }
+    expect(violations).toEqual([])
+  })
+
+  test("does not render Gateway as the Synthetic Sciences product name", async () => {
+    const violations: string[] = []
+    for (const file of publicSources) {
+      const source = renderedSource(await Bun.file(new URL(file, import.meta.url)).text()).replaceAll(
+        "AI Gateway",
+        "",
+      )
+      if (/\bGateway\b/.test(source)) violations.push(file)
     }
     expect(violations).toEqual([])
   })
@@ -46,7 +60,9 @@ describe("public Gateway branding allowlist", () => {
     expect(combined).toContain("Synthetic Sciences account")
     expect(combined).toContain("Synthetic Sciences credits")
     expect(combined).toContain("Connected to Synthetic Sciences")
+    expect(combined).toContain("openscience login")
     expect(combined).not.toMatch(/OpenScience (?:account|identity|credits|plan)/)
     expect(combined).not.toMatch(/(?:Sign in to|Connected to) Gateway/)
+    expect(combined).not.toContain("openscience connect login")
   })
 })

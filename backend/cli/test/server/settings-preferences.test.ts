@@ -10,6 +10,12 @@ test("advanced navigation is opt-in by default", () => {
   })
 })
 
+test("legacy managed-compute budget preferences are ignored", () => {
+  const preferences = Preferences.parse({ extra_budget_usd: 250 })
+
+  expect(preferences).not.toHaveProperty("extra_budget_usd")
+})
+
 test("composer preferences persist through the settings route", async () => {
   const app = SettingsPreferencesRoutes()
   const update = await app.request("/", {

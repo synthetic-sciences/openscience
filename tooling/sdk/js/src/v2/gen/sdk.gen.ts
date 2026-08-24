@@ -1707,7 +1707,6 @@ export class Preferences extends HeyApiClient {
     parameters?: {
       reasoning_effort?: "minimal" | "low" | "medium" | "high"
       intent?: "commercial" | "non-commercial"
-      extra_budget_usd?: number
       show_trace?: boolean
       show_local_models?: boolean
       atlas_enabled?: boolean
@@ -1723,7 +1722,6 @@ export class Preferences extends HeyApiClient {
           args: [
             { in: "body", key: "reasoning_effort" },
             { in: "body", key: "intent" },
-            { in: "body", key: "extra_budget_usd" },
             { in: "body", key: "show_trace" },
             { in: "body", key: "show_local_models" },
             { in: "body", key: "atlas_enabled" },
@@ -1748,7 +1746,7 @@ export class Preferences extends HeyApiClient {
 
 export class Billing extends HeyApiClient {
   /**
-   * Get billing spend toggles + wallet status
+   * Get LLM billing mode and wallet status
    */
   public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<SettingsBillingGetResponses, unknown, ThrowOnError>({
@@ -1758,12 +1756,11 @@ export class Billing extends HeyApiClient {
   }
 
   /**
-   * Update billing spend toggles (managed vs BYOK)
+   * Update the LLM billing mode (managed vs BYOK)
    */
   public update<ThrowOnError extends boolean = false>(
     parameters?: {
       llm?: "managed" | "byok" | null
-      compute?: "managed" | "byok"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1773,7 +1770,6 @@ export class Billing extends HeyApiClient {
         {
           args: [
             { in: "body", key: "llm" },
-            { in: "body", key: "compute" },
           ],
         },
       ],
@@ -1793,7 +1789,7 @@ export class Billing extends HeyApiClient {
 
 export class Wallet extends HeyApiClient {
   /**
-   * Get credit balance, plan mode, and recent transactions
+   * Get wallet balance, routing mode, and recent transactions
    */
   public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<SettingsWalletGetResponses, unknown, ThrowOnError>({
@@ -1852,7 +1848,7 @@ export class Telemetry extends HeyApiClient {
 
 export class ResearchTools extends HeyApiClient {
   /**
-   * Get plan, research-search, and data-sharing status
+   * Get wallet, enhanced-search, and data-sharing status
    */
   public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<SettingsResearchToolsGetResponses, unknown, ThrowOnError>({

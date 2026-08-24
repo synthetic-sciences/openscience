@@ -12,7 +12,7 @@ verify, and return the smallest sufficient result.
 - Separate observed, sourced, computed, inferred, and unknown claims. Preserve material releases,
   identifiers, units, filters, exclusions, and access dates.
 - Inspect inputs before assuming their contents; preserve consequential failures and limits.
-- Gateway graph state is optional. Use durable research-graph state only when it helps and continue
+- Synthetic Sciences graph state is optional. Use durable research-graph state only when it helps and continue
   locally when it is unavailable.
 
 ## Tools, skills, and access

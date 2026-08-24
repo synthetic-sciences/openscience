@@ -10,13 +10,12 @@ export interface AtlasPackageResolutionOptions {
   resolvePackageJson?: () => string
 }
 
-/** Locate the bundled @synsci/atlas package.
+/** Locate a separately installed legacy @synsci/atlas package.
  *
- * Compiled npm installs run the native binary from a platform package such as
- * `node_modules/@synsci/openscience-darwin-arm64/bin/openscience`, while Atlas
- * is a sibling dependency at `node_modules/@synsci/atlas`. A compiled bundle's
- * import.meta.url is not a reliable anchor for that install tree, so walk from
- * process.execPath first, then retain the source-mode module/cwd fallbacks. */
+ * OpenScience no longer depends on or installs this package. During the
+ * transition, an existing sibling installation can still be discovered from a
+ * compiled native package, where import.meta.url is not a reliable anchor.
+ * Walk from process.execPath first, then retain source-mode fallbacks. */
 export function resolveAtlasPackageDir(options: AtlasPackageResolutionOptions = {}): string | null {
   const moduleUrl = options.moduleUrl ?? import.meta.url
   try {

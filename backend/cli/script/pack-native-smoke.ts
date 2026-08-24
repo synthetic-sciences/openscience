@@ -3,7 +3,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import pkg from "../package.json"
-import { createWrapperPackageManifest } from "./publish-manifest"
+import { assertPublicPackageSurface, createWrapperPackageManifest } from "./publish-manifest"
 
 const outputArg = process.argv[2]
 if (!outputArg) throw new Error("usage: pack-native-smoke.ts <output-directory>")
@@ -69,11 +69,17 @@ if (metadata?.version !== packageVersion) {
 const wrapper = path.join(output, "wrapper")
 await fs.mkdir(wrapper, { recursive: true })
 await fs.cp(path.join(cli, "bin"), path.join(wrapper, "bin"), { recursive: true })
+await fs.copyFile(path.join(cli, "README.md"), path.join(wrapper, "README.md"))
 await fs.copyFile(path.join(cli, "script", "preinstall.mjs"), path.join(wrapper, "preinstall.mjs"))
 await fs.copyFile(path.join(cli, "script", "postinstall.mjs"), path.join(wrapper, "postinstall.mjs"))
 
 const manifest = createWrapperPackageManifest({ source: pkg, version: packageVersion, binaries })
 await fs.writeFile(path.join(wrapper, "package.json"), JSON.stringify(manifest, null, 2) + "\n")
+assertPublicPackageSurface({
+  "README.md": await fs.readFile(path.join(wrapper, "README.md"), "utf8"),
+  "package.json": await fs.readFile(path.join(wrapper, "package.json"), "utf8"),
+  "bin/openscience": await fs.readFile(path.join(wrapper, "bin", "openscience"), "utf8"),
+})
 
 const wrapperTarball = await pack(wrapper)
 await fs.copyFile(wrapperTarball, path.join(output, "wrapper.tgz"))
@@ -88,6 +94,10 @@ await Promise.all([
 const launcherManifest = await Bun.file(path.join(launcherSource, "package.json")).json()
 launcherManifest.version = packageVersion
 await fs.writeFile(path.join(launcher, "package.json"), JSON.stringify(launcherManifest, null, 2) + "\n")
+assertPublicPackageSurface({
+  "launcher/package.json": await fs.readFile(path.join(launcher, "package.json"), "utf8"),
+  "launcher/bin/synsci.mjs": await fs.readFile(path.join(launcher, "bin", "synsci.mjs"), "utf8"),
+})
 const launcherTarball = await pack(launcher)
 await fs.copyFile(launcherTarball, path.join(output, "launcher.tgz"))
 

@@ -47,12 +47,12 @@ except ImportError:
 
 
 def _byok_key(value: Optional[str]) -> Optional[str]:
-    """Return only a user-owned OpenRouter key, never an Atlas proxy token."""
+    """Return only a user-owned OpenRouter key, never a managed proxy token."""
     return value if value and not value.startswith("thk_") else None
 
 
 def _byok_base_url() -> str:
-    """Keep BYOK off the Atlas Credits proxy even if a stale base URL leaked in."""
+    """Keep BYOK off the Synthetic Sciences credits proxy if a stale base URL leaked in."""
     value = (os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1").rstrip("/")
     return "https://openrouter.ai/api/v1" if "/api/llm/proxy/" in value else value
 
@@ -195,7 +195,7 @@ STYLE:
         if not self.api_key:
             raise ValueError(
                 "OpenRouter BYOK is not connected. Add an OpenRouter key in OpenScience Settings → "
-                "Models & providers, or set OPENROUTER_API_KEY for this run. Atlas Credits are not "
+                "Models & providers, or set OPENROUTER_API_KEY for this run. Synthetic Sciences credits are not "
                 "required for BYOK image generation. Inside OpenScience, call the native generate_image "
                 "tool to use a funded wallet instead. Get a key from https://openrouter.ai/keys"
             )

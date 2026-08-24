@@ -279,7 +279,7 @@ export function AtlasCanvas(): JSX.Element {
       runWithOwner(owner, () => {
         if (graphId() === undefined) {
           // Unlinked (Initialize hero showing): an agent-driven `openscience project init`
-          // (e.g. from the initialize-atlas-graph skill) may have just created this
+          // (e.g. from the initialize-research-graph skill) may have just created this
           // folder's graph. Re-arm the one-shot auto-select and re-resolve so the new
           // graph is picked up and selected automatically.
           settled = false
@@ -572,7 +572,7 @@ export function AtlasCanvas(): JSX.Element {
       // throws before this point.
       if (!project_id)
         throw new Error(
-          result.message ?? `atlas project initialization failed${result.error ? `: ${result.error}` : ""}`,
+          result.message ?? `research graph initialization failed${result.error ? `: ${result.error}` : ""}`,
         )
       settled = true
       await refetchAll()
@@ -745,7 +745,7 @@ export function AtlasCanvas(): JSX.Element {
             <IconNetwork size={13} strokeWidth={1.6} />
           </span>
           <span
-            title={selectedGraph()?.title || selectedGraph()?.node_id || "Gateway graph (account-scoped)"}
+            title={selectedGraph()?.title || selectedGraph()?.node_id || "Synthetic Sciences graph (account-scoped)"}
             style={{
               "font-family": FONT_SANS,
               "font-size": "13px",
@@ -836,10 +836,10 @@ export function AtlasCanvas(): JSX.Element {
                           // selects the new root, and toasts a typed error on failure.
                           onInit={() => void initGraph()}
                           // Secondary: route through the agent — drop the
-                          // initialize-atlas-graph skill invocation in the composer
+                          // initialize-research-graph skill invocation in the composer
                           // WITHOUT sending, so the user can review/run it (useful when
                           // the direct call reports a plan/auth issue to resolve in chat).
-                          onChat={() => uiStore.setPrefill("/initialize-atlas-graph")}
+                          onChat={() => uiStore.setPrefill("/initialize-research-graph")}
                           busy={initializing()}
                         />
                       }
@@ -856,7 +856,7 @@ export function AtlasCanvas(): JSX.Element {
                       "letter-spacing": "0.04em",
                     }}
                   >
-                    loading atlas nodes…
+                    loading research nodes…
                   </span>
                 </Show>
               }
@@ -872,7 +872,7 @@ export function AtlasCanvas(): JSX.Element {
             width="100%"
             height="100%"
             role="group"
-            aria-label="Gateway research graph. Use Tab to move between nodes and Enter to open one."
+            aria-label="Synthetic Sciences research graph. Use Tab to move between nodes and Enter to open one."
             style={{ display: "block", cursor: panStart ? "grabbing" : "grab", "touch-action": "none" }}
             onpointerdown={onPointerDown}
             onpointermove={onPointerMove}
@@ -1624,7 +1624,7 @@ function InitHero(props: { onInit: () => void; onChat: () => void; busy: boolean
           "line-height": 1.55,
         }}
       >
-        This folder isn't linked to a Gateway research graph yet. Initialize one to start tracking hypotheses,
+        This folder isn't linked to a Synthetic Sciences research graph yet. Initialize one to start tracking hypotheses,
         experiments, and decisions here.
       </div>
       <button

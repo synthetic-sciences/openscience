@@ -29,7 +29,7 @@ async function syncAndReport() {
     return
   }
   prompts.log.warn(
-    `Could not sync services from ${API_BASE} — the backend may be unreachable or your plan inactive. Provider keys/config were not updated.`,
+    `Could not sync services from ${API_BASE} — the backend may be unreachable or your saved key may no longer be active. Provider keys/config were not updated.`,
   )
 }
 
@@ -94,7 +94,7 @@ async function manualKeyLogin(): Promise<boolean> {
   return await finishWithKey(pasted)
 }
 
-/** Core Atlas sign-in, shared by `openscience login` and the setup wizard.
+/** Core Synthetic Sciences sign-in, shared by `openscience login` and the setup wizard.
  *  Returns true if the CLI is authenticated when it finishes. Carries no
  *  intro/outro framing so callers own the surrounding UI. */
 export async function runAtlasLogin(args: { key?: string; browser?: boolean } = {}): Promise<boolean> {
@@ -122,7 +122,7 @@ export async function runAtlasLogin(args: { key?: string; browser?: boolean } = 
 
 export const LoginCommand = cmd({
   command: "login",
-  describe: "log in to your Gateway account (managed models, wallet, sync)",
+  describe: "log in to your Synthetic Sciences account (wallet credits, enhanced search, sync)",
   builder: (yargs) =>
     yargs
       .option("key", {
@@ -144,14 +144,14 @@ export const LoginCommand = cmd({
 
 export const LogoutCommand = cmd({
   command: "logout",
-  describe: "log out of your Gateway account",
+  describe: "log out of your Synthetic Sciences account",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.warn("Not signed in to Gateway.")
+      prompts.log.warn("Not signed in to Synthetic Sciences.")
       prompts.log.info("To remove a saved provider key instead, use `openscience keys rm`.")
       prompts.outro("Done")
       return
@@ -161,7 +161,7 @@ export const LogoutCommand = cmd({
     // the call, then clear every local credential artifact.
     const revoked = await OpenScience.revokeCurrentDevice()
     await OpenScience.clearSession()
-    prompts.log.success("Signed out of Gateway")
+    prompts.log.success("Signed out of Synthetic Sciences")
     if (!revoked) {
       prompts.log.info(
         "Could not revoke this device's key server-side — remove it from the Devices tab at app.syntheticsciences.ai if needed",
@@ -173,14 +173,14 @@ export const LogoutCommand = cmd({
 
 export const StatusCommand = cmd({
   command: ["status", "whoami"],
-  describe: "show Gateway connection, account, and wallet",
+  describe: "show Synthetic Sciences connection, account, and credits",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.warn("Not connected to Gateway")
+      prompts.log.warn("Not connected to Synthetic Sciences")
       prompts.log.info("Run `openscience login` to connect, or `openscience keys add` to use your own key.")
       prompts.outro("Done")
       return
@@ -196,9 +196,6 @@ export const StatusCommand = cmd({
       if (result.user.email) prompts.log.info(`Email: ${result.user.email}`)
       const noun = result.credentials === 1 ? "credential" : "credentials"
       prompts.log.info(`Services: ${result.credentials} ${noun} synced`)
-      if (result.user.subscription_status) {
-        prompts.log.info(`Subscription: ${result.user.subscription_status}`)
-      }
     } else if (!(await OpenScience.getSession())) {
       prompts.log.warn(`${API_BASE} rejected your saved key. Run \`openscience login\` to re-authenticate.`)
     } else {
@@ -207,7 +204,7 @@ export const StatusCommand = cmd({
       )
     }
 
-    // Keep account status focused on billing and recent managed usage. Every
+    // Keep account status focused on wallet billing and recent usage. Every
     // probe degrades to silence so an unavailable backend does not block CLI use.
     const [mode, credits, txns] = await Promise.all([
       OpenScience.getBillingMode().catch(() => null),
@@ -220,7 +217,7 @@ export const StatusCommand = cmd({
       prompts.log.info(`Wallet: $${balanceUsd.toFixed(2)}${spent}`)
     }
     if (mode) {
-      prompts.log.info("Routing: per-provider (auto) — your key if set, else Gateway managed (debits wallet).")
+      prompts.log.info("Routing: per-provider (auto) — your key if set, else Synthetic Sciences credits.")
     }
     if (txns && txns.length > 0) {
       const noun = txns.length === 1 ? "charge" : "charges"
@@ -232,7 +229,7 @@ export const StatusCommand = cmd({
 
 export const SyncCommand = cmd({
   command: "sync",
-  describe: "sync service credentials from your Gateway account",
+  describe: "sync service credentials from your Synthetic Sciences account",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
@@ -295,8 +292,8 @@ export const DevicesCommand = cmd({
   },
 })
 
-// Atlas is `login` / `logout` (+ `status` / `sync` / `devices`), all top-level.
+// The managed account uses `login` / `logout` (+ `status` / `sync` / `devices`), all top-level.
 // The `connect` / `disconnect` verbs now belong to Codex (see cli/cmd/auth.ts):
 // `connect` signs in with ChatGPT, `disconnect` signs out. Keeping the two
 // account types on distinct verb pairs removes the old ambiguity where
-// `connect login` and `login` both meant the Atlas account.
+// `connect login` and `login` both meant the managed account.

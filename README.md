@@ -13,7 +13,7 @@ Give it a goal. It reads the literature, writes and runs code, runs the experime
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![docs](https://img.shields.io/badge/docs-openscience.sh-0d9488.svg)](https://openscience.sh/docs)
 
-[Install](#install) · [Quickstart](#quickstart) · [Docs](https://openscience.sh/docs) · [Gateway](#gateway)
+[Install](#install) · [Quickstart](#quickstart) · [Docs](https://openscience.sh/docs) · [Synthetic Sciences](#synthetic-sciences)
 
 </div>
 
@@ -41,7 +41,7 @@ npm install -g @synsci/openscience
 openscience
 ```
 
-The command is `openscience`, and it opens the workspace in your browser without requiring an account or setup wizard. Connect ChatGPT/Codex, your own provider keys, or optional Gateway-managed models from **Customize → Models** when you want them. If you would rather not install it globally, `npx synsci` does the same thing in a single step:
+The command is `openscience`, and it opens the workspace in your browser without requiring an account or setup wizard. Connect ChatGPT/Codex, your own provider keys, or optional managed credits from Synthetic Sciences in **Customize → Models** when you want them. If you would rather not install it globally, `npx synsci` does the same thing in a single step:
 
 ```bash
 npx synsci
@@ -66,20 +66,20 @@ openscience
 openscience ~/code/my-project
 ```
 
-## Gateway
+## Synthetic Sciences
 
-[The managed Gateway from Synthetic Sciences](https://app.syntheticsciences.ai) is optional. It adds synced private research graphs, managed models, and managed research search without becoming a dependency for local, BYOK, or ChatGPT/Codex-backed work.
+[A Synthetic Sciences account](https://app.syntheticsciences.ai) is optional. It adds synced private research graphs, managed model credits, and managed research search without becoming a dependency for local, BYOK, or ChatGPT/Codex-backed work.
 
 ```bash
 openscience login          # connect your Synthetic Sciences account
 openscience wallet         # check your balance and top up
 ```
 
-Ace is $20/month with **20 credits**, a **Generous research quota**, Synthetic Scientists access, and auto-reload enabled by default. Ace+ is $100/month with **150 credits**, a **3x research quota**, the same Synthetic Scientists access, priority support, and early access. Auto-reload can be turned off during checkout or anytime in Billing. Bring-your-own-key, local-model, and eligible ChatGPT/Codex usage remain independent of those plans and are never charged against managed credits. Use `openscience status` to see what you are connected to, and `openscience logout` to disconnect.
+Managed usage is pay as you go: **20 credits add $20 to your wallet**. One credit is $1 of wallet value shared by managed model calls and enhanced research search. Usage is debited at the underlying provider cost plus a 2% service margin; the payment-processing fee is shown separately before checkout. Auto-reload adds 20 credits when the balance falls below 5, and you can change or disable it anytime in Billing. There is no subscription or monthly top-up. Bring-your-own-key, local-model, and eligible ChatGPT/Codex usage remain independent and never debit the wallet. Use `openscience status` to see what you are connected to, and `openscience logout` to disconnect.
 
 ## How it works
 
-OpenScience runs a local server that hosts the workspace UI, the agent runtime, the complete default skill library, and the tool layer. The agent plans with a research harness, calls tools (shell, editor, LSP, MCP servers, scientific connectors, and skills), and streams its work back to the browser. Models are routed per request, so you can switch between providers or run local models without changing anything else. Sessions, skills, artifacts, and provenance are stored on disk. The Gateway adds optional managed models, credential sync, private research graphs, and managed search after login.
+OpenScience runs a local server that hosts the workspace UI, the agent runtime, the complete default skill library, and the tool layer. The agent plans with a research harness, calls tools (shell, editor, LSP, MCP servers, scientific connectors, and skills), and streams its work back to the browser. Models are routed per request, so you can switch between providers or run local models without changing anything else. Sessions, skills, artifacts, and provenance are stored on disk. Synthetic Sciences adds optional managed credits, credential sync, private research graphs, and managed search after login.
 
 | Path                 | Contents                                                     |
 | -------------------- | ------------------------------------------------------------ |
@@ -111,7 +111,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for how the system fits together, [CONTRI
 
 ## Security
 
-The permission system keeps you aware of what the agent is doing; it is not an isolation boundary by itself. New local installs start in **Approve for me**: the project is trusted, while commands run inside macOS Seatbelt or Linux bubblewrap containment. The composer’s **Research tools → Action approval** menu can switch to **Ask for approval** (sandboxed and project trust revoked) or deliberately enable **Full access** (trusted project with containment off). Managed policy may enforce a stricter boundary. The sandbox is not a full jail, so use a container or VM for hostile code. Gateway tokens stay out of general subprocess environments, arbitrary Python/R kernels receive a minimal environment, and credential-shaped values are redacted from output. Content-free product telemetry is enabled by default and can be disabled in Settings; prompts, responses, files, notebook cells, and shell output require a separate explicit research-content opt-in. To inspect or verify containment, run `openscience sandbox` and `openscience sandbox test`; to report a vulnerability, see [SECURITY.md](SECURITY.md).
+The permission system keeps you aware of what the agent is doing; it is not an isolation boundary by itself. New local installs start in **Approve for me**: the project is trusted, while commands run inside macOS Seatbelt or Linux bubblewrap containment. The composer’s **Research tools → Action approval** menu can switch to **Ask for approval** (sandboxed and project trust revoked) or deliberately enable **Full access** (trusted project with containment off). Managed policy may enforce a stricter boundary. The sandbox is not a full jail, so use a container or VM for hostile code. Synthetic Sciences account tokens stay out of general subprocess environments, arbitrary Python/R kernels receive a minimal environment, and credential-shaped values are redacted from output. Content-free product telemetry is enabled by default and can be disabled in Settings; prompts, responses, files, notebook cells, and shell output require a separate explicit research-content opt-in. To inspect or verify containment, run `openscience sandbox` and `openscience sandbox test`; to report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 

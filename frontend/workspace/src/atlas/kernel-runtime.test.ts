@@ -290,8 +290,8 @@ describe("kernel runtime presentation", () => {
     expect(kernelUptimeLabel(kernel({ started_at: 1_000 }), 66_000)).toBe("1m 5s")
   })
 
-  test("states the Gateway credential and source boundary", () => {
-    expect(kernelAtlasLabel(kernel())).toBe("Gateway access pending")
+  test("states the Synthetic Sciences credential and source boundary", () => {
+    expect(kernelAtlasLabel(kernel())).toBe("Synthetic Sciences access pending")
     expect(
       kernelAtlasLabel(
         kernel({
@@ -313,7 +313,7 @@ describe("kernel runtime presentation", () => {
           },
         }),
       ),
-    ).toBe("Gateway host broker · credentials withheld · source IDs only")
+    ).toBe("Synthetic Sciences host broker · credentials withheld · source IDs only")
   })
 
   test("reuses the route session without creating a second owner", async () => {

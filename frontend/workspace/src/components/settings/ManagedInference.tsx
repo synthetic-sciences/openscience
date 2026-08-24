@@ -17,19 +17,19 @@ type Wallet = {
 
 const MODES: { value: Mode; title: string; body: string }[] = [
   {
+    value: null,
+    title: "Automatic",
+    body: "Use the selected model's best available access route.",
+  },
+  {
     value: "managed",
-    title: "Managed",
-    body: "Use your Synthetic Sciences credits. No provider key is required.",
+    title: "Credits",
+    body: "Use your Synthetic Sciences credits. No provider account is required.",
   },
   {
     value: "byok",
-    title: "BYOK",
-    body: "Use only the provider keys and subscriptions connected below.",
-  },
-  {
-    value: null,
-    title: "Automatic",
-    body: "Use the selected model's available access route.",
+    title: "Accounts",
+    body: "Use only the provider accounts and API keys connected below.",
   },
 ]
 
@@ -62,7 +62,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   const [mode, setMode] = createSignal<Mode>(globalSync.data.config.billing?.llm ?? null)
   const [busy, setBusy] = createSignal(false)
   const [refreshing, setRefreshing] = createSignal(false)
-  const selected = createMemo(() => MODES.find((item) => item.value === mode()) ?? MODES[2])
+  const selected = createMemo(() => MODES.find((item) => item.value === mode()) ?? MODES[0])
 
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const fail = (error: unknown) => {
@@ -80,7 +80,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
           if (!busy()) setMode(result.data.llm)
           return
         }
-        fail("Couldn't load managed inference settings.")
+        fail("Couldn't load model access settings.")
       })
       .catch(fail)
   const refresh = () => {
@@ -104,7 +104,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
       .then((ok) => {
         if (!ok) {
           setMode(previous)
-          fail("Couldn't save managed inference settings.")
+          fail("Couldn't save model access settings.")
           return
         }
 
@@ -117,7 +117,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
           .refreshProviders()
           .catch((error) =>
             props.onError?.(
-              `Managed inference settings saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
+              `Model access settings saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
             ),
           )
           .finally(() => setRefreshing(false))
@@ -132,7 +132,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   // The mode can change without this panel touching it: saving an own provider
   // key in Provider keys below makes the server flip billing.llm managed →
   // byok (Auth.set). That happens in the same window, so no `focus` event ever
-  // fires and the toggle would keep showing Managed — highlighted, and
+  // fires and the toggle would keep showing Credits — highlighted, and
   // contradicting the row underneath — until a reload. Every credential change
   // already funnels through refreshProviders, so re-read the mode there.
   const unsubscribe = globalSync.onProvidersRefreshed(() => void loadBilling())
@@ -187,7 +187,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
                 class="models-routing__option"
                 title={
                   unsupported(option.value)
-                    ? "Managed inference requires a signed-in account with managed billing enabled"
+                    ? "Credits requires a signed-in Synthetic Sciences account with wallet billing available"
                     : undefined
                 }
                 onClick={() => update(option.value)}
@@ -212,7 +212,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
 
       <Show when={wallet() && !wallet()!.signedIn}>
         <p class="settings-inline-note text-12-regular text-text-weak">
-          Sign in from General to enable managed credits. Own-key and automatic routing remain available.
+          Sign in from General to use Credits. Accounts and Automatic remain available.
         </p>
       </Show>
     </div>

@@ -17,15 +17,15 @@ OpenScience ships a real [execution sandbox](/openscience/sandbox), and **Approv
 | Surface | Where | Notes |
 | --- | --- | --- |
 | BYOK provider keys | Environment variables or `<data-root>/auth.json` | Model requests go straight to the provider. No account required. Approved skill subprocesses can receive supported user-owned keys; arbitrary Python/R kernels receive a minimal environment without provider keys. |
-| Gateway session | `<data-root>/openscience-session.json` | `thk_*` key created by `openscience login`; revocable from the dashboard. |
-| Synced service credentials | `<data-root>/credentials.json` | Present only when [connected to Gateway](/openscience/gateway); encrypted at rest and refreshed with `openscience sync`. |
+| Synthetic Sciences session | `<data-root>/openscience-session.json` | `thk_*` key created by `openscience login`; revocable from the dashboard. |
+| Synced service credentials | `<data-root>/credentials.json` | Present only when [connected to Synthetic Sciences](/openscience/gateway); encrypted at rest and refreshed with `openscience sync`. |
 | Native binary (curl install) | `~/.openscience/bin/openscience` | Added to PATH through your shell rc. |
 
 The data root defaults to `~/.openscience` and can be relocated from Storage settings or with `OPENSCIENCE_DATA_DIR`. Override the config directory with `OPENSCIENCE_CONFIG_DIR` (or its XDG parent with `XDG_CONFIG_HOME`). Run `openscience debug paths` to print the resolved data, config, cache, and state directories on your machine.
 
 ## Subprocess environment boundaries
 
-Shell tools receive a sanitized environment: managed Gateway tokens and control-plane variables are stripped, while ordinary user environment values and supported user-owned provider or service credentials may be available to approved commands. Credential files, SSH/cloud config, and other sensitive paths are denied to OS-sandboxed Python/R kernels; kernels also receive a minimal runtime and locale environment without provider, Gateway, or cloud keys.
+Shell tools receive a sanitized environment: managed Synthetic Sciences tokens and control-plane variables are stripped, while ordinary user environment values and supported user-owned provider or service credentials may be available to approved commands. Credential files, SSH/cloud config, and other sensitive paths are denied to OS-sandboxed Python/R kernels; kernels also receive a minimal runtime and locale environment without provider, managed-routing, or cloud keys.
 
 The browser's interactive system terminal is a user-owned shell rather than an agent tool. It inherits the user's environment (minus terminal-session bookkeeping), so treat it like any terminal you launch yourself.
 
@@ -43,10 +43,10 @@ For defense in depth on a shared host or behind a reverse proxy, set `OPENSCIENC
 
 - Prompts and responses sent to your model provider, governed by that provider's policy.
 - Content-free product telemetry, enabled by default and disableable in Settings. It contains only allowlisted operational fields and aggregate usage; it rejects prompts, responses, file paths and content, notebook cells, shell output, environment values, credentials, and arbitrary metadata.
-- Managed-search queries when you intentionally use Gateway research search. They are sent to the Gateway and its configured search provider; routine telemetry does not retain the query text.
-- Synced credentials and authoritative managed usage when you [connect the Gateway](/openscience/gateway).
+- Enhanced-search queries when you intentionally use Synthetic Sciences research search. They are sent to the configured search provider; routine telemetry does not retain the query text.
+- Synced credentials and authoritative managed usage when you [connect Synthetic Sciences](/openscience/gateway).
 
-Research content is not collected or shared, and there is no content-sharing setting in this release. Source files stay local unless the agent explicitly uploads them through a tool you approve. Approved shell commands and user-owned terminals can still access credentials in their environment, while Python/R kernels stay on the minimal environment described above. Telemetry upload failure never blocks research and can never debit the Gateway wallet.
+Research content is not collected or shared, and there is no content-sharing setting in this release. Source files stay local unless the agent explicitly uploads them through a tool you approve. Approved shell commands and user-owned terminals can still access credentials in their environment, while Python/R kernels stay on the minimal environment described above. Telemetry upload failure never blocks research and can never debit the Synthetic Sciences wallet.
 
 ## Reporting a vulnerability
 

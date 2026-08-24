@@ -23,7 +23,7 @@ If the user provided enough detail, proceed without another question. Ask only w
 1. Restate the goal briefly in working terms.
 2. Keep a short visible checklist while working.
 3. Prefer real verification over confidence: tests, builds, local runs, screenshots, logs, or provider/API checks as appropriate.
-4. Persist durable checkpoints in project files, commits, PRs, or Gateway graph records when the user asks for persistence or the repository already uses that workflow.
+4. Persist durable checkpoints in project files, commits, PRs, or Synthetic Sciences research-graph records when the user asks for persistence or the repository already uses that workflow.
 5. Update the user when the goal changes, a stop condition is hit, or verification gives new evidence.
 
 ## Completion

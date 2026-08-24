@@ -17740,11 +17740,6 @@
                         "non-commercial"
                       ]
                     },
-                    "extra_budget_usd": {
-                      "default": 0,
-                      "type": "number",
-                      "minimum": 0
-                    },
                     "show_trace": {
                       "default": false,
                       "type": "boolean"
@@ -17814,11 +17809,6 @@
                         "non-commercial"
                       ]
                     },
-                    "extra_budget_usd": {
-                      "default": 0,
-                      "type": "number",
-                      "minimum": 0
-                    },
                     "show_trace": {
                       "default": false,
                       "type": "boolean"
@@ -17875,11 +17865,6 @@
                       "commercial",
                       "non-commercial"
                     ]
-                  },
-                  "extra_budget_usd": {
-                    "default": 0,
-                    "type": "number",
-                    "minimum": 0
                   },
                   "show_trace": {
                     "default": false,
@@ -18213,7 +18198,7 @@
     "/settings/billing": {
       "get": {
         "operationId": "settings.billing.get",
-        "summary": "Get billing spend toggles + wallet status",
+        "summary": "Get LLM billing mode and wallet status",
         "responses": {
           "200": {
             "description": "Billing state",
@@ -18236,18 +18221,11 @@
                         }
                       ]
                     },
-                    "compute": {
-                      "type": "string",
-                      "enum": [
-                        "managed",
-                        "byok"
-                      ]
-                    },
                     "wallet": {
                       "type": "object",
                       "properties": {
                         "signedIn": {
-                          "description": "Whether a Gateway session (thk_ key) is available",
+                          "description": "Whether a Synthetic Sciences session is available",
                           "type": "boolean"
                         },
                         "balanceUsd": {
@@ -18270,7 +18248,6 @@
                   },
                   "required": [
                     "llm",
-                    "compute",
                     "wallet"
                   ]
                 }
@@ -18287,7 +18264,7 @@
       },
       "put": {
         "operationId": "settings.billing.update",
-        "summary": "Update billing spend toggles (managed vs BYOK)",
+        "summary": "Update the LLM billing mode (managed vs BYOK)",
         "responses": {
           "200": {
             "description": "Updated billing state",
@@ -18310,18 +18287,11 @@
                         }
                       ]
                     },
-                    "compute": {
-                      "type": "string",
-                      "enum": [
-                        "managed",
-                        "byok"
-                      ]
-                    },
                     "wallet": {
                       "type": "object",
                       "properties": {
                         "signedIn": {
-                          "description": "Whether a Gateway session (thk_ key) is available",
+                          "description": "Whether a Synthetic Sciences session is available",
                           "type": "boolean"
                         },
                         "balanceUsd": {
@@ -18344,7 +18314,6 @@
                   },
                   "required": [
                     "llm",
-                    "compute",
                     "wallet"
                   ]
                 }
@@ -18371,13 +18340,6 @@
                         "type": "null"
                       }
                     ]
-                  },
-                  "compute": {
-                    "type": "string",
-                    "enum": [
-                      "managed",
-                      "byok"
-                    ]
                   }
                 }
               }
@@ -18395,7 +18357,7 @@
     "/settings/wallet": {
       "get": {
         "operationId": "settings.wallet.get",
-        "summary": "Get credit balance, plan mode, and recent transactions",
+        "summary": "Get wallet balance, routing mode, and recent transactions",
         "responses": {
           "200": {
             "description": "Wallet state",
@@ -18546,7 +18508,7 @@
     "/settings/research-tools": {
       "get": {
         "operationId": "settings.researchTools.get",
-        "summary": "Get plan, research-search, and data-sharing status",
+        "summary": "Get wallet, enhanced-search, and data-sharing status",
         "responses": {
           "200": {
             "description": "Research tools status",
@@ -18558,19 +18520,17 @@
                     "signedIn": {
                       "type": "boolean"
                     },
-                    "plan": {
+                    "wallet": {
                       "type": "object",
                       "properties": {
-                        "id": {
-                          "type": "string"
+                        "mode": {
+                          "type": "string",
+                          "const": "payg"
                         },
-                        "label": {
-                          "type": "string"
-                        },
-                        "status": {
+                        "balanceUsd": {
                           "anyOf": [
                             {
-                              "type": "string"
+                              "type": "number"
                             },
                             {
                               "type": "null"
@@ -18579,9 +18539,8 @@
                         }
                       },
                       "required": [
-                        "id",
-                        "label",
-                        "status"
+                        "mode",
+                        "balanceUsd"
                       ]
                     },
                     "search": {
@@ -18590,83 +18549,17 @@
                         "route": {
                           "type": "string",
                           "enum": [
-                            "managed",
+                            "enhanced",
                             "community"
                           ]
                         },
-                        "state": {
-                          "type": "string",
-                          "enum": [
-                            "available",
-                            "near_limit",
-                            "critical",
-                            "exhausted",
-                            "conditional",
-                            "unavailable"
-                          ]
-                        },
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "limit": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "used": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "remaining": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "resetAt": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "communityFlagEnabled": {
+                        "enhancedAvailable": {
                           "type": "boolean"
                         }
                       },
                       "required": [
                         "route",
-                        "state",
-                        "enabled",
-                        "limit",
-                        "used",
-                        "remaining",
-                        "resetAt",
-                        "communityFlagEnabled"
+                        "enhancedAvailable"
                       ]
                     },
                     "telemetry": {
@@ -18717,7 +18610,7 @@
                   },
                   "required": [
                     "signedIn",
-                    "plan",
+                    "wallet",
                     "search",
                     "telemetry"
                   ]
@@ -18749,19 +18642,17 @@
                     "signedIn": {
                       "type": "boolean"
                     },
-                    "plan": {
+                    "wallet": {
                       "type": "object",
                       "properties": {
-                        "id": {
-                          "type": "string"
+                        "mode": {
+                          "type": "string",
+                          "const": "payg"
                         },
-                        "label": {
-                          "type": "string"
-                        },
-                        "status": {
+                        "balanceUsd": {
                           "anyOf": [
                             {
-                              "type": "string"
+                              "type": "number"
                             },
                             {
                               "type": "null"
@@ -18770,9 +18661,8 @@
                         }
                       },
                       "required": [
-                        "id",
-                        "label",
-                        "status"
+                        "mode",
+                        "balanceUsd"
                       ]
                     },
                     "search": {
@@ -18781,83 +18671,17 @@
                         "route": {
                           "type": "string",
                           "enum": [
-                            "managed",
+                            "enhanced",
                             "community"
                           ]
                         },
-                        "state": {
-                          "type": "string",
-                          "enum": [
-                            "available",
-                            "near_limit",
-                            "critical",
-                            "exhausted",
-                            "conditional",
-                            "unavailable"
-                          ]
-                        },
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "limit": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "used": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "remaining": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "resetAt": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "communityFlagEnabled": {
+                        "enhancedAvailable": {
                           "type": "boolean"
                         }
                       },
                       "required": [
                         "route",
-                        "state",
-                        "enabled",
-                        "limit",
-                        "used",
-                        "remaining",
-                        "resetAt",
-                        "communityFlagEnabled"
+                        "enhancedAvailable"
                       ]
                     },
                     "telemetry": {
@@ -18908,7 +18732,7 @@
                   },
                   "required": [
                     "signedIn",
-                    "plan",
+                    "wallet",
                     "search",
                     "telemetry"
                   ]
@@ -51556,7 +51380,7 @@
             "type": "string"
           },
           "billing": {
-            "description": "Managed Credits vs bring-your-own-key spend, toggled independently for LLM inference and compute.",
+            "description": "Managed Credits vs bring-your-own-key spend for LLM inference.",
             "type": "object",
             "properties": {
               "llm": {
@@ -51572,14 +51396,6 @@
                   {
                     "type": "null"
                   }
-                ]
-              },
-              "compute": {
-                "description": "How GPU/compute is paid for. 'managed' runs on Gateway-provisioned compute billed to your wallet (via the bundled gateway CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.",
-                "type": "string",
-                "enum": [
-                  "managed",
-                  "byok"
                 ]
               }
             }

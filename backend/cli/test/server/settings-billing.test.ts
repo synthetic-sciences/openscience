@@ -63,3 +63,40 @@ test("PUT llm null sets the toggle back to auto", async () => {
   const written = JSON.parse(await Bun.file(file).text())
   expect(written.billing.llm).toBeNull()
 })
+
+test("legacy compute billing input is ignored and never returned", async () => {
+  await fs.mkdir(Global.Path.config, { recursive: true })
+  await Bun.write(file, JSON.stringify({ billing: { llm: "byok", compute: "managed" } }, null, 2))
+
+  const read = await BillingSettingsRoutes().request("/")
+  expect(read.status).toBe(200)
+  const state = await read.json()
+  expect(state.llm).toBe("byok")
+  expect(state).not.toHaveProperty("compute")
+
+  const update = await BillingSettingsRoutes().request("/", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ compute: "managed" }),
+  })
+  expect(update.status).toBe(200)
+  expect(await update.json()).not.toHaveProperty("compute")
+})
+
+test("published settings contracts do not advertise managed compute", async () => {
+  const root = path.resolve(import.meta.dir, "../../../..")
+  const [openapi, types, sdk, computePanel] = await Promise.all([
+    Bun.file(path.join(root, "tooling/sdk/openapi.json")).text(),
+    Bun.file(path.join(root, "tooling/sdk/js/src/v2/gen/types.gen.ts")).text(),
+    Bun.file(path.join(root, "tooling/sdk/js/src/v2/gen/sdk.gen.ts")).text(),
+    Bun.file(path.join(root, "frontend/workspace/src/atlas/KernelPanel.tsx")).text(),
+  ])
+
+  for (const contract of [openapi, types, sdk]) {
+    expect(contract).not.toContain("extra_budget_usd")
+    expect(contract).not.toContain("Gateway-provisioned compute")
+  }
+  expect(types).not.toMatch(/compute\??: "managed" \| "byok"/)
+  expect(sdk).not.toContain('{ in: "body", key: "compute" }')
+  expect(computePanel).not.toContain("managed compute")
+})

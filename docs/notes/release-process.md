@@ -35,8 +35,9 @@ branch.
 
 - The repo bundles features into **patch** bumps unless a change is breaking —
   a feature release does not automatically imply a minor bump here.
-- `bump` accepts `patch`, `minor`, or `major`; a `version` input can override
-  the computed value explicitly.
+- `bump` accepts `patch`, `minor`, or `major`. Production releases do not
+  accept an arbitrary version override; the workflow derives the next stable
+  version from the current npm `latest` so it is monotonic.
 - The tag (`vX.Y.Z`) points at the exact tree that was published.
 
 ## Verifying a release
@@ -45,14 +46,16 @@ branch.
 npm view @synsci/openscience version
 npm view @synsci/sdk version
 npm view @synsci/plugin version
+npm view synsci version
 gh release view vX.Y.Z --json isDraft,tagName,targetCommitish,assets
 ```
 
-Confirm that the three npm packages report the new version, the GitHub release
+Confirm that all four npm packages report the new version, the GitHub release
 is not a draft, the tag targets the release commit, and the assets include the
 platform archives plus `checksums.txt`. Inspect the publish run for Homebrew or
-launcher warnings; those updates are deliberately non-fatal and may need owner
-follow-up.
+launcher warnings. Homebrew updates remain non-fatal and may need owner
+follow-up. Publishing the `synsci` launcher is required in both test and
+production releases; a launcher failure leaves the GitHub release as a draft.
 
 See [verification.md](verification.md) for the local gates to run before you
 push to `main`.

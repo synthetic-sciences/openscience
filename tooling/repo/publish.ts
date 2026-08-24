@@ -2,6 +2,7 @@
 
 import { $ } from "bun"
 import { Script } from "@synsci/script"
+import { assertPublicPackageSurface } from "../../backend/cli/script/publish-manifest"
 
 const highlightsTemplate = `
 <!--
@@ -133,19 +134,24 @@ try {
   // without polluting node_modules/.bin in the npx temp tree.
   delete launcherPkg.dependencies
   await Bun.file(`${launcherDir}/package.json`).write(JSON.stringify(launcherPkg, null, 2))
+  assertPublicPackageSurface({
+    "launcher/package.json": JSON.stringify(launcherPkg),
+    "launcher/bin/synsci.mjs": await Bun.file(`${launcherDir}/bin/synsci.mjs`).text(),
+  })
   const result = await $`cd ${launcherDir} && npm publish --access public --tag ${Script.channel}`.quiet().nothrow()
   process.stdout.write(result.stdout.toString())
   process.stderr.write(result.stderr.toString())
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString()
+    const requireLauncherPublish = process.env.OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH === "true"
     // The unscoped `synsci` package has its own npm owner list; a token
-    // whose account isn't on it gets E403. That's an ownership grant to
-    // chase (`npm owner add <token-user> synsci`), not a broken release —
-    // every other package shipped, so warn loudly instead of failing.
+    // whose account isn't on it gets E403. Production requires the cleaned
+    // launcher to publish in the same release, otherwise `npx synsci` keeps
+    // serving the previous public surface and the draft must not be undrafted.
     if (stderr.includes("E403") || stderr.includes("do not have permission")) {
-      if (process.env.OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH === "true") {
+      if (requireLauncherPublish) {
         throw new Error(
-          "npm token's account is not an owner of the 'synsci' package; refusing to pass the test publish without launcher coverage",
+          "npm token's account is not an owner of the 'synsci' package; refusing to complete the release without publishing the cleaned launcher",
         )
       }
       // A GitHub Actions annotation, so this shows on the run summary
@@ -154,9 +160,11 @@ try {
         "::warning title=launcher not published::npm token's account is not an owner of the 'synsci' package — users keep getting the previous launcher. Fix: an owner runs `npm owner add <token-user> synsci`, then re-release.",
       )
     } else if (stderr.includes("cannot publish over") || stderr.includes("previously published")) {
-      // The launcher sometimes ships out-of-band between releases. That
-      // means the release-built launcher for this version will never ship,
-      // so surface it on the run summary rather than silently skipping.
+      if (requireLauncherPublish) {
+        throw new Error(
+          `synsci@${Script.version} already exists; refusing to accept an unverified registry tarball in place of this release's cleaned launcher`,
+        )
+      }
       console.warn(
         `::warning title=launcher skipped::synsci@${Script.version} already exists on the registry (published out-of-band) — the release-built launcher was NOT published.`,
       )

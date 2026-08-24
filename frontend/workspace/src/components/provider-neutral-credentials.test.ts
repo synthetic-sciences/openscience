@@ -6,8 +6,8 @@ const setup = await Bun.file(new URL("../atlas/SetupDialog.tsx", import.meta.url
 const providers = await Bun.file(new URL("./settings/model-providers.ts", import.meta.url)).text()
 
 test("shares the complete provider-key catalog across setup and settings", () => {
-  expect(managed).toContain('title: "Managed"')
-  expect(managed).toContain('title: "BYOK"')
+  expect(managed).toContain('title: "Credits"')
+  expect(managed).toContain('title: "Accounts"')
   expect(keys).toContain('from "./model-providers"')
   expect(setup).toContain('from "@/components/settings/model-providers"')
   expect(keys).not.toContain("const PROVIDERS")

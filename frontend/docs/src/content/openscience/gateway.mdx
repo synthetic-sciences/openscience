@@ -1,18 +1,17 @@
 ---
 title: "Connect Synthetic Sciences"
-description: "Optionally add managed credits, research capacity, synced credentials, and private research graphs without changing local or BYOK workflows."
+description: "Optionally add pay-as-you-go model and search credits, synced credentials, and private research graphs without changing local or BYOK workflows."
 icon: "link"
 ---
 
-OpenScience never requires an account. Local models, your own provider keys, eligible ChatGPT/Codex access, scientific tools, Python/R, and direct downloads continue to work without a plan. Connecting a **Synthetic Sciences account** adds the optional managed Gateway.
+OpenScience never requires an account. Local models, your own provider keys, eligible ChatGPT/Codex access, scientific tools, Python/R, and direct downloads continue to work without a plan. Connecting a **Synthetic Sciences account** adds optional pay-as-you-go credits and sync.
 
 ## What connecting adds
 
-- **Managed model credits.** Use supported models without configuring a provider key. Only Gateway-served calls use managed credits.
-- **Managed research capacity.** Ace includes a generous research quota. Ace+ includes 3x the research quota across managed research services.
+- **One managed wallet.** Use supported models without configuring a provider key and spend the same balance on enhanced research search.
+- **OpenRouter model routing.** Managed LLM calls use the curated OpenRouter catalog; your own provider keys still call providers directly.
 - **Private research graphs.** Sync durable claims, runs, evidence, and decisions that are visible only to owners and explicitly invited collaborators.
 - **Synced service credentials.** Store supported service keys on your account and pull them to another signed-in machine.
-- **Hosted researchers.** Ace and Ace+ include the same Synthetic Scientists access under the same concurrency policy.
 
 ## Link your account
 
@@ -27,39 +26,34 @@ OpenScience never requires an account. Local models, your own provider keys, eli
     ```bash
     openscience status
     ```
-    Shows the connected user, subscription, credit balance, research quota, synced services, and recent managed usage.
+    Shows the connected user, credit balance, synced services, and recent managed usage.
   </Step>
   <Step title="Sync credentials">
     ```bash
     openscience sync
     ```
-    Refreshes supported credentials after you change them in the Gateway.
+    Refreshes supported credentials after you change them in Synthetic Sciences.
   </Step>
 </Steps>
 
-## Ace plans
+## Pay as you go
 
-| Plan | Monthly price | Credits | Research quota | Included access |
-| --- | ---: | ---: | --- | --- |
-| Ace | $20 | **20 credits** | **Generous research quota** | Synthetic Scientists access and standard support |
-| Ace+ | $100 | **150 credits** | **3x research quota** | The same Synthetic Scientists access, priority support, and early access |
+**20 credits add $20 to your wallet.** One credit is $1 of wallet value shared by managed model calls and enhanced research search. Usage is debited at the underlying provider cost plus a 2% service margin. The payment-processing fee is shown separately before checkout.
 
-Eligible `.edu` accounts receive 50% off the first month. Card processing is included in the plan price with no additional checkout fee.
-
-Auto-reload is enabled by default for new Ace subscriptions. Checkout shows the reload amount, threshold, and monthly cap before payment. You can turn it off during checkout or anytime in Billing. Existing accounts are not enrolled without consent.
+Auto-reload adds 20 credits when your balance falls below 5. You can change the reload amount or disable auto-reload anytime in Billing. There is no subscription and no scheduled monthly top-up.
 
 ## Routing and billing
 
-Routing and plan status are independent. An Ace subscriber may still use local, BYOK, or ChatGPT/Codex-backed models without a Gateway charge.
+Managed credits are independent of local, BYOK, and ChatGPT/Codex-backed models.
 
 | Path | What runs where | Billing |
 | --- | --- | --- |
-| Local | OpenScience calls a local endpoint. | No Gateway charge. |
-| BYOK | OpenScience calls your provider directly. | Your provider account; no Gateway charge. |
-| ChatGPT/Codex | OpenScience uses the eligible signed-in route. | Your subscription; no Gateway charge. |
-| Gateway managed | OpenScience calls the Gateway, which calls the provider. | Managed credits. |
+| Local | OpenScience calls a local endpoint. | No wallet debit. |
+| BYOK | OpenScience calls your provider directly. | Your provider account; no wallet debit. |
+| ChatGPT/Codex | OpenScience uses the eligible signed-in route. | Your ChatGPT subscription; no wallet debit. |
+| Synthetic Sciences | Managed LLM calls route through OpenRouter; enhanced search uses the managed search service. | Shared pay-as-you-go credits. |
 
-Managed research queries are sent to the Gateway and its configured provider. If the Gateway is unavailable or a research quota is exhausted, OpenScience keeps non-managed routes working and explains the available fallback.
+Basic research search remains available without managed credits. Enhanced search debits the same wallet as managed model calls; if the managed service or balance is unavailable, OpenScience keeps basic search and non-managed model routes working.
 
 ## Privacy
 
@@ -70,8 +64,8 @@ Content-free product telemetry is enabled by default and can be disabled in Sett
 | Command | Use |
 | --- | --- |
 | `openscience login` | Authenticate this device. |
-| `openscience status` | Inspect connection, plan, credits, research quota, and recent usage. |
-| `openscience wallet` | Inspect the managed balance and auto-reload state. |
+| `openscience status` | Inspect connection, credits, and recent usage. |
+| `openscience wallet` | Inspect the wallet balance and open Billing. |
 | `openscience sync` | Refresh synced supported credentials. |
 | `openscience devices` | List authenticated devices. |
 | `openscience logout` | Disconnect this machine; local and BYOK routes keep working. |

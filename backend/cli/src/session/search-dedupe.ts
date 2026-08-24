@@ -76,9 +76,14 @@ export namespace SearchDedupe {
 
   function dynamicTerminal(part: MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted }) {
     if (!RESEARCH_SEARCH_IDS.has(part.tool)) return false
+    if (part.state.metadata.managedFallback === true) return true
     try {
       const output = JSON.parse(part.state.output) as Record<string, unknown>
-      return output.type === "search_unavailable" || output.type === "search_allowance_exhausted"
+      return (
+        output.managedFallback === true ||
+        output.type === "search_unavailable" ||
+        output.type === "search_allowance_exhausted"
+      )
     } catch {
       return false
     }

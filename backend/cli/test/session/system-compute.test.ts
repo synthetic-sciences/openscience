@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { SystemPrompt } from "../../src/session/system"
 import { ComputePrompt } from "../../src/compute/prompt"
 
-test("system prompt describes enabled Modal as OpenScience-managed compute", async () => {
+test("system prompt describes enabled user-connected Modal compute", async () => {
   const marker = "as-agent-must-never-see-this"
   const section = await SystemPrompt.compute({
     providers: {

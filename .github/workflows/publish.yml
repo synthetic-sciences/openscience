@@ -1,21 +1,17 @@
 name: prod publish
-run-name: "${{ inputs.version && format('prod publish {0}', inputs.version) || format('prod publish {0}', inputs.bump) }}"
+run-name: "prod publish ${{ inputs.bump }}"
 
 on:
   workflow_dispatch:
     inputs:
       bump:
         description: "Bump major, minor, or patch"
-        required: false
+        required: true
         type: choice
         options:
           - major
           - minor
           - patch
-      version:
-        description: "Override version (optional)"
-        required: false
-        type: string
 
 # One release at a time. Keying the group on the inputs let a `patch` and a
 # `minor` dispatch run concurrently and race on tags and the GitHub release.
@@ -48,12 +44,6 @@ jobs:
       # version.ts creates the draft GitHub release before build/publish.
       contents: write
     steps:
-      - name: Require a bump or version input
-        if: ${{ !inputs.bump && !inputs.version }}
-        run: |
-          echo "::error::Provide 'bump' or 'version'. An empty dispatch would publish a 0.0.0-main preview to npm as if it were a release."
-          exit 1
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -65,7 +55,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OPENSCIENCE_BUMP: ${{ inputs.bump }}
-          OPENSCIENCE_VERSION: ${{ inputs.version }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
@@ -214,6 +203,9 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
+          # The release must not go public while `npx synsci` still serves an
+          # older launcher that advertises the retired Atlas surface.
+          OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"
 
   # Record the npm release as a GitHub deployment so it shows up in the
   # repo's Deployments sidebar next to the Vercel Production/Preview entries.

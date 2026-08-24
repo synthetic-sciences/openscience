@@ -96,7 +96,7 @@ print(json.dumps(errors))
   const errors = JSON.parse(output) as string[]
   expect(errors).toHaveLength(2)
   expect(errors.every((error) => error.includes("OpenRouter BYOK is not connected"))).toBe(true)
-  expect(errors.every((error) => error.includes("Atlas Credits are not required"))).toBe(true)
+  expect(errors.every((error) => error.includes("Synthetic Sciences credits are not required"))).toBe(true)
   expect(errors.every((error) => error.includes("native generate_image tool"))).toBe(true)
 })
 
@@ -122,7 +122,7 @@ test("standalone wrappers direct OpenScience sessions to the wallet-capable nati
     const text = `${output}\n${error}`
     expect(await proc.exited).toBe(1)
     expect(text).toContain("OpenRouter BYOK is not connected")
-    expect(text).toContain("Atlas Credits are not required")
+    expect(text).toContain("Synthetic Sciences credits are not required")
     expect(text).toContain("native generate_image tool")
     expect(text).not.toContain("OPENROUTER_API_KEY environment variable not set")
   }

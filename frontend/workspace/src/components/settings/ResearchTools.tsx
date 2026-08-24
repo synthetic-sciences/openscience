@@ -18,7 +18,7 @@ import {
 } from "../research-access"
 import { Card, PanelBody, PanelHeader, PanelScroll, Row, RowCopy, Section } from "./_shared"
 import { settingsApi } from "./api"
-import { dataSharingDetail, searchStatus, type ResearchToolsStatus } from "./research-tools-state"
+import { dataSharingDetail, searchStatus, walletStatus, type ResearchToolsStatus } from "./research-tools-state"
 import "./preference-panels.css"
 
 export default function ResearchTools() {
@@ -78,6 +78,10 @@ export default function ResearchTools() {
   const search = createMemo(() => {
     const current = state()
     return current ? searchStatus(current) : undefined
+  })
+  const wallet = createMemo(() => {
+    const current = state()
+    return current ? walletStatus(current) : undefined
   })
 
   const updateSharing = async (analyticsEnabled: boolean) => {
@@ -173,7 +177,7 @@ export default function ResearchTools() {
       )
       if (!result.ok) throw new Error(result.message || "Account analytics could not be deleted.")
       await load()
-      showToast({ title: "Analytics deleted", description: "Gateway deleted account-linked usage analytics." })
+      showToast({ title: "Analytics deleted", description: "Synthetic Sciences deleted account-linked usage analytics." })
     } catch (cause) {
       showToast({
         variant: "error",
@@ -190,7 +194,7 @@ export default function ResearchTools() {
       <div class="settings-preferences-panel settings-preferences-panel--research-tools">
         <PanelHeader
           title="Research tools"
-          description="See your plan, search allowance, and exactly what structural usage OpenScience may share."
+          description="See your wallet, search access, and exactly what structural usage OpenScience may share."
         />
         <PanelBody>
           <Show when={error()}>
@@ -203,22 +207,24 @@ export default function ResearchTools() {
           </Show>
 
           <Section
-            title="Plan and search"
-            description="Managed search is included by plan; community search stays model-route dependent."
+            title="Wallet and search"
+            description="Usage is pay as you go. Enhanced search uses your connected account, with basic search as a fallback."
           >
             <Card>
               <Row>
                 <span class="settings-preference-icon">
-                  <Icon name="star" size="small" />
+                  <Icon name="bolt" size="small" />
                 </span>
                 <RowCopy
-                  title={state()?.plan.label ?? "Loading…"}
+                  title={wallet()?.label ?? "Loading…"}
                   description={
-                    state()?.signedIn ? "Current Synthetic Sciences plan" : "Sign in to see managed plan entitlements"
+                    state()?.signedIn
+                      ? "Pay as you go with wallet credits. Auto-reload can keep usage uninterrupted."
+                      : "Connect a Synthetic Sciences account to use wallet-backed models and enhanced search."
                   }
                 />
                 <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
-                  Manage plan
+                  Open billing
                 </Button>
               </Row>
               <Row>

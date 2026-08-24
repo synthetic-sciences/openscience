@@ -40,7 +40,7 @@ export const AccountRoutes = lazy(() =>
       "/session",
       describeRoute({
         summary: "Get local session status",
-        description: "Check whether this OpenScience server has a local Gateway session without contacting Gateway.",
+        description: "Check whether this OpenScience server has a local Synthetic Sciences session without a network request.",
         operationId: "account.session",
         responses: {
           200: {
@@ -168,7 +168,7 @@ export const AccountRoutes = lazy(() =>
     .post(
       "/login-key",
       describeRoute({
-        summary: "Sign in with a Gateway API key",
+        summary: "Sign in with a Synthetic Sciences API key",
         operationId: "account.loginKey",
         responses: {
           200: {

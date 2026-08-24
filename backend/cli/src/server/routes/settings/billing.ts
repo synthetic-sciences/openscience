@@ -9,15 +9,13 @@ import { Log } from "../../../util/log"
 
 const log = Log.create({ service: "settings-billing" })
 
-// The two independent spend toggles (Settings → Spend), backed by the strict
-// config (`billing.llm` / `billing.compute`). "managed" runs on Credits;
-// "byok" runs on the user's own keys/OAuth and is never billed. LLM is nullable
-// (unset = auto-detect from the resolved credential); compute defaults to byok.
+// The LLM spend toggle (Settings → Spend), backed by strict `billing.llm`
+// config. "managed" runs on Credits; "byok" runs on the user's own keys/OAuth
+// and is never billed. Null means auto-detect from the resolved credential.
 export const BillingState = z.object({
   llm: z.enum(["managed", "byok"]).nullable(),
-  compute: z.enum(["managed", "byok"]),
   wallet: z.object({
-    signedIn: z.boolean().describe("Whether a Gateway session (thk_ key) is available"),
+    signedIn: z.boolean().describe("Whether a Synthetic Sciences session is available"),
     balanceUsd: z.number().nullable().describe("Credit balance in USD; null when signed out or unavailable"),
   }),
 })
@@ -27,7 +25,6 @@ export type BillingState = z.infer<typeof BillingState>
 // credential); omitting a field leaves it untouched.
 const BillingPatch = z.object({
   llm: z.enum(["managed", "byok"]).nullable().optional(),
-  compute: z.enum(["managed", "byok"]).optional(),
 })
 
 async function readState(): Promise<BillingState> {
@@ -36,7 +33,6 @@ async function readState(): Promise<BillingState> {
   const balanceUsd = session ? await OpenScience.getBalance().catch(() => null) : null
   return {
     llm: cfg.billing?.llm ?? null,
-    compute: cfg.billing?.compute ?? "byok",
     wallet: { signedIn: !!session, balanceUsd },
   }
 }
@@ -46,7 +42,7 @@ export const BillingSettingsRoutes = lazy(() =>
     .get(
       "/",
       describeRoute({
-        summary: "Get billing spend toggles + wallet status",
+        summary: "Get LLM billing mode and wallet status",
         operationId: "settings.billing.get",
         responses: {
           200: {
@@ -60,7 +56,7 @@ export const BillingSettingsRoutes = lazy(() =>
     .put(
       "/",
       describeRoute({
-        summary: "Update billing spend toggles (managed vs BYOK)",
+        summary: "Update the LLM billing mode (managed vs BYOK)",
         operationId: "settings.billing.update",
         responses: {
           200: {

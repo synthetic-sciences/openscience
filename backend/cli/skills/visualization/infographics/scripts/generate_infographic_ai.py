@@ -270,10 +270,10 @@ PALETTE_PRESETS = {
 
 
 def _synced_env() -> dict:
-    """Read OpenScience's managed synced env (written by `openscience connect sync`).
+    """Read OpenScience's managed synced env (written by `openscience sync`).
 
     In managed mode this holds OPENROUTER_API_KEY (the managed thk_ token) and
-    OPENROUTER_BASE_URL (the Atlas proxy), so generation can route through the
+    OPENROUTER_BASE_URL (the Synthetic Sciences proxy), so generation can route through the
     managed key — billed to the user's wallet — without a user-provided key. The
     managed token is stripped from the subprocess env on purpose, so we read the
     file the CLI already persisted (same data, no broad env leak).
@@ -362,7 +362,7 @@ IMPORTANT - NO META CONTENT:
             _load_env_file()
             self.api_key = os.getenv("OPENROUTER_API_KEY")
         
-        # Fall back to the OpenScience managed credential (routes through the Atlas
+        # Fall back to the OpenScience managed credential (routes through the Synthetic Sciences
         # proxy, billed to the user's wallet) so generation works without a
         # user-provided key.
         synced = _synced_env()

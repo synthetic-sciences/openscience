@@ -90,7 +90,7 @@ Environment Variables:
     args = parser.parse_args()
 
     # Pass an explicit/BYOK key when present. Otherwise let the AI entry point
-    # report that OpenRouter BYOK is not connected. Managed Atlas credentials
+    # report that OpenRouter BYOK is not connected. Synthetic Sciences managed credentials
     # are intentionally unavailable to this user-key workflow.
     api_key = args.api_key or os.getenv("OPENROUTER_API_KEY")
 

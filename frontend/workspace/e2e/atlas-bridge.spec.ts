@@ -57,7 +57,6 @@ test("Gateway canvas distinguishes a connected graph from an unavailable bridge"
       body: JSON.stringify({
         reasoning_effort: "medium",
         intent: "non-commercial",
-        extra_budget_usd: 0,
         show_trace: false,
         atlas_enabled: true,
         delegation_enabled: true,

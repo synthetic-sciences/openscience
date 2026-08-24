@@ -546,7 +546,7 @@ export const AuthLoginCommand = cmd({
                   label: x.name,
                   value: x.id,
                   hint: {
-                    synsci: "Gateway — recommended",
+                    synsci: "Synthetic Sciences — recommended",
                     anthropic: "Claude Max or API key",
                     openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
                   }[x.id],
@@ -864,7 +864,7 @@ async function revokeCodexOnBackend(): Promise<void> {
   const session = await OpenScience.getSession?.()
   const thkToken = session?.api_key
   if (!thkToken) {
-    log.warn("no atlas session; skipping backend codex revoke")
+    log.warn("no managed account session; skipping backend codex revoke")
     return
   }
   try {

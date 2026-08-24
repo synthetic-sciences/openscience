@@ -1,19 +1,12 @@
 export interface ResearchToolsStatus {
   signedIn: boolean
-  plan: {
-    id: string
-    label: string
-    status: string | null
+  wallet: {
+    mode: "payg"
+    balanceUsd: number | null
   }
   search: {
-    route: "managed" | "community"
-    state: "available" | "near_limit" | "critical" | "exhausted" | "conditional" | "unavailable"
-    enabled: boolean
-    limit: number | null
-    used: number | null
-    remaining: number | null
-    resetAt: string | null
-    communityFlagEnabled: boolean
+    route: "enhanced" | "community"
+    enhancedAvailable: boolean
   }
   telemetry: {
     analyticsEnabled: boolean
@@ -29,31 +22,27 @@ export interface ResearchToolsStatus {
 
 export function searchStatus(status: ResearchToolsStatus) {
   const search = status.search
-  if (search.route === "community") {
+  if (search.route === "enhanced") {
     return {
-      label: "Community",
-      detail: search.communityFlagEnabled
-        ? "Available on supported community-search model routes."
-        : "Available when the selected model route supports community search.",
-      tone: "neutral" as const,
+      label: "Enhanced",
+      detail: "Available through your connected Synthetic Sciences account, with basic search as a fallback.",
+      tone: "success" as const,
     }
   }
-  if (search.state === "exhausted") {
-    return { label: "Allowance used", detail: resetDetail(search.resetAt), tone: "warning" as const }
-  }
-  if (search.state === "unavailable") {
-    return {
-      label: "Allowance unavailable",
-      detail: "The Gateway could not load the current allowance. Retry in a moment.",
-      tone: "neutral" as const,
-    }
-  }
-  const remaining = search.remaining ?? 0
-  const limit = search.limit ?? 0
   return {
-    label: `${remaining.toLocaleString()} left`,
-    detail: `${remaining.toLocaleString()} of ${limit.toLocaleString()} managed searches remain${resetDetail(search.resetAt, true)}.`,
-    tone: search.state === "near_limit" || search.state === "critical" ? ("warning" as const) : ("success" as const),
+    label: "Community",
+    detail: "Basic search remains available without wallet credits or a connected account.",
+    tone: "neutral" as const,
+  }
+}
+
+export function walletStatus(status: ResearchToolsStatus) {
+  if (!status.signedIn) return { label: "Not connected", tone: "neutral" as const }
+  if (status.wallet.balanceUsd === null) return { label: "Balance unavailable", tone: "neutral" as const }
+  const balance = status.wallet.balanceUsd
+  return {
+    label: `$${balance.toFixed(balance >= 100 ? 0 : 2)} ${balance >= 0 ? "available" : "balance"}`,
+    tone: balance > 0 ? ("success" as const) : ("warning" as const),
   }
 }
 
@@ -64,12 +53,4 @@ export function dataSharingDetail(status: ResearchToolsStatus) {
   if (status.telemetry.source === "default") return "On by default. You can turn it off at any time."
   if (status.telemetry.pending) return "Saved locally and waiting to sync with your account."
   return status.telemetry.source === "account" ? "On for this account." : "On for this installation."
-}
-
-function resetDetail(value: string | null, inline = false) {
-  if (!value) return inline ? "" : "The next allowance reset date is not available."
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return inline ? "" : "The next allowance reset date is not available."
-  const label = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date)
-  return inline ? ` until ${label}` : `Resets ${label}.`
 }

@@ -99,7 +99,7 @@ const required = (value: string | undefined, name: string) => {
 
 const sources = (values: string[] | undefined) => {
   if (!values?.length) return
-  if (values.length > 100) throw new AtlasBrokerError("source_ids accepts at most 100 Gateway identifiers")
+  if (values.length > 100) throw new AtlasBrokerError("source_ids accepts at most 100 Synthetic Sciences identifiers")
   const result = new Set<string>()
   for (const raw of values) {
     const value = raw.trim()
@@ -114,7 +114,7 @@ const sources = (values: string[] | undefined) => {
       normalized.startsWith("~/") ||
       segments.includes(".") ||
       segments.includes("..")
-    if (local) throw new AtlasBrokerError("source_ids must contain Gateway identifiers, not local folder paths")
+    if (local) throw new AtlasBrokerError("source_ids must contain Synthetic Sciences identifiers, not local folder paths")
     result.add(value)
   }
   return [...result]
@@ -579,7 +579,7 @@ async function request(
   preflight?: () => Promise<void>,
 ) {
   const session = await OpenScience.getSession()
-  if (!session?.api_key) throw new AtlasBrokerError("Sign in to Gateway before using the host broker.", 401)
+  if (!session?.api_key) throw new AtlasBrokerError("Sign in to Synthetic Sciences before using the host broker.", 401)
   const limit = AbortSignal.timeout(timeout)
   const send = async () => {
     await preflight?.()
@@ -598,7 +598,7 @@ async function request(
   const response = preflight ? await AuthoritySignal.exclusive(send) : await send()
   if (!response.ok) {
     const detail = await response.text().catch(() => "")
-    throw new AtlasBrokerError(detail || `Gateway request failed with HTTP ${response.status}`, response.status)
+    throw new AtlasBrokerError(detail || `Synthetic Sciences request failed with HTTP ${response.status}`, response.status)
   }
   return response.json() as Promise<unknown>
 }

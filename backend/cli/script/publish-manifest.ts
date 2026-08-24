@@ -9,6 +9,28 @@ export interface WrapperPackageManifestOptions {
   binaries: Record<string, string>
 }
 
+const retiredPublicCopy = [
+  /\bAtlas\b/i,
+  /managed compute/i,
+  /cloud compute/i,
+  /Ace\+/i,
+  /150 credits/i,
+  /research quota/i,
+  /Synthetic Scientists access/i,
+  /recurring monthly/i,
+  /\$50 or \$200/i,
+] as const
+
+/** Fail packaging when an npm-visible text file reintroduces a retired public
+ * product or billing contract. Internal compatibility identifiers are not
+ * scanned; callers pass only the files npm users can read or execute. */
+export function assertPublicPackageSurface(files: Record<string, string>) {
+  for (const [file, content] of Object.entries(files)) {
+    const match = retiredPublicCopy.find((pattern) => pattern.test(content))
+    if (match) throw new Error(`${file} contains retired public copy matching ${match}`)
+  }
+}
+
 /** Build the npm wrapper manifest without discarding declared optional
  * companions. Platform binaries are added alongside them. */
 export function createWrapperPackageManifest(options: WrapperPackageManifestOptions) {

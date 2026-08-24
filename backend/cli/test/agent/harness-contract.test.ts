@@ -46,7 +46,7 @@ test("every provider receives one compact product operating contract", () => {
   expect(SystemPrompt.provider(undefined as never)[0]?.trim()).toBe(instructions)
   expect(instructions.length).toBeLessThan(4_000)
   expect(instructions).toContain("Keep simple work simple")
-  expect(instructions).toContain("Gateway graph state is optional")
+  expect(instructions).toContain("Synthetic Sciences graph state is optional")
   expect(instructions).toContain("default to zero children")
   expect(instructions).toContain("Explore, Execute, or Review")
   expect(instructions).toContain("large or binary scientific data")
@@ -99,7 +99,7 @@ test("the primary, domain, and specialist prompts stay adaptive instead of proce
   }
   expect(research).toContain("Answer a direct question directly")
   expect(research).toContain("Default to zero children")
-  expect(research).toContain("Gateway graph state is optional")
+  expect(research).toContain("Synthetic Sciences graph state is optional")
   expect(research).toContain("lazy skills")
   expect(research).toContain("bounded pages")
   expect(research).toContain("claim/evidence matrix")

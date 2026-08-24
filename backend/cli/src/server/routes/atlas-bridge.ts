@@ -237,7 +237,7 @@ async function stageNode(input: StageNodeInput & { directory: string }): Promise
   })
   if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
   const data = await res.json()
-  if (!nodeIdOf(data)) throw new Error("Gateway returned no node id")
+  if (!nodeIdOf(data)) throw new Error("Synthetic Sciences returned no node id")
   return data
 }
 
@@ -247,15 +247,15 @@ function mutationError(error: unknown): { status: number; detail: string } {
   if (error instanceof BackendHttpError) {
     return {
       status: error.status,
-      detail: backendMessage(error.body) ?? `Gateway request failed with HTTP ${error.status}`,
+      detail: backendMessage(error.body) ?? `Synthetic Sciences request failed with HTTP ${error.status}`,
     }
   }
   if (error instanceof Error && error.message === "unauthenticated") {
-    return { status: 401, detail: "Sign in to Gateway before changing the graph." }
+    return { status: 401, detail: "Sign in to Synthetic Sciences before changing the graph." }
   }
   return {
     status: 502,
-    detail: error instanceof Error ? error.message : "Gateway is unavailable",
+    detail: error instanceof Error ? error.message : "Synthetic Sciences is unavailable",
   }
 }
 
@@ -264,15 +264,15 @@ function readError(error: unknown): { status: number; detail: string } {
   if (error instanceof BackendHttpError) {
     return {
       status: error.status,
-      detail: backendMessage(error.body) ?? `Gateway request failed with HTTP ${error.status}`,
+      detail: backendMessage(error.body) ?? `Synthetic Sciences request failed with HTTP ${error.status}`,
     }
   }
   if (error instanceof Error && error.message === "unauthenticated") {
-    return { status: 401, detail: "Sign in to Gateway to load the graph." }
+    return { status: 401, detail: "Sign in to Synthetic Sciences to load the graph." }
   }
   return {
     status: 502,
-    detail: error instanceof Error ? error.message : "Gateway is unavailable",
+    detail: error instanceof Error ? error.message : "Synthetic Sciences is unavailable",
   }
 }
 
@@ -384,14 +384,14 @@ async function resolveProjectId(directory: string): Promise<string | null> {
 
 // ── graph-init failure classification ────────────────────────────────────
 // `project init` used to collapse EVERY failure (no session, DNS failure,
-// revoked key, no plan, backend 4xx/5xx) into `null` → one misleading
-// "check login and plan" message. Classify instead, so the CLI and the
-// initialize-atlas-graph skill can tell the user the actual fix.
+// revoked key, access rejection, backend 4xx/5xx) into `null` → one misleading
+// "check login" message. Classify instead, so the CLI and the
+// initialize-research-graph skill can tell the user the actual fix.
 
 export type InitProjectFailureKind =
   | "unauthenticated" // no session, or the backend rejected the key (401/403)
   | "unreachable" // network/DNS error or 5xx — the service couldn't be reached
-  | "plan" // authenticated, but no active Gateway plan (402 / plan-coded 4xx)
+  | "access" // authenticated, but the service denied graph access (402 / legacy plan-coded 4xx)
   | "backend" // any other backend answer — pass its message through
 
 export interface InitProjectFailure {
@@ -424,17 +424,17 @@ function backendMessage(body: string): string | undefined {
   return trimmed ? trimmed.slice(0, 300) : undefined
 }
 
-/** Classify a non-2xx backend answer. Mirrors the backend contract: 401/403 =
- *  key rejected; 402 (`plan_quota_exhausted` / `collaboration_gated`) = plan
- *  gating; 5xx = service not reachable/healthy; anything else passes through. */
+/** Classify a non-2xx backend answer. Mirrors the compatibility contract:
+ * 401/403 = key rejected; 402 or a legacy plan-coded answer = account access
+ * denied; 5xx = service not reachable/healthy; anything else passes through. */
 export function classifyInitFailure(status: number, body: string): InitProjectFailure {
   const message = backendMessage(body)
   const host = API_BASE
   if (status === 401 || status === 403) return { kind: "unauthenticated", status, message, host }
-  const planCoded = /plan_quota_exhausted|collaboration_gated/.test(body)
-  const planWorded = /\b(plan|subscription)\b/i.test(message ?? "")
-  if (status === 402 || (status >= 400 && status < 500 && (planCoded || planWorded)))
-    return { kind: "plan", status, message, host }
+  const legacyAccessCode = /plan_quota_exhausted|collaboration_gated/.test(body)
+  const legacyAccessWording = /\b(plan|subscription)\b/i.test(message ?? "")
+  if (status === 402 || (status >= 400 && status < 500 && (legacyAccessCode || legacyAccessWording)))
+    return { kind: "access", status, host }
   if (status >= 500) return { kind: "unreachable", status, message, host }
   return { kind: "backend", status, message, host }
 }
@@ -452,7 +452,7 @@ function failureFromError(e: unknown): InitProjectFailure {
 // the proven commit-new fallback's failure.
 const FAILURE_RANK: Record<InitProjectFailureKind, number> = {
   unauthenticated: 0,
-  plan: 1,
+  access: 1,
   unreachable: 2,
   backend: 3,
 }
@@ -480,7 +480,7 @@ export async function initProject(directory: string): Promise<string | null> {
 }
 
 /** Like initProject, but never throws and reports WHY init failed so callers
- *  can print an actionable message instead of a blanket "check login/plan". */
+ *  can print an actionable message instead of a blanket "check login". */
 export async function initProjectDetailed(directory: string): Promise<InitProjectResult> {
   if (!directory)
     return { projectId: null, failure: { kind: "backend", message: "no directory provided", host: API_BASE } }
@@ -540,10 +540,10 @@ export async function initProjectDetailed(directory: string): Promise<InitProjec
       parentIDs: [],
       title: `Project: ${name}`,
       kind: "insight",
-      summary: `Gateway research-graph root for ${name}.`,
+      summary: `Synthetic Sciences research-graph root for ${name}.`,
       hypothesis: "",
       content: "",
-      reason: "Initialized as this repo's Gateway research-graph root.",
+      reason: "Initialized as this repo's Synthetic Sciences research-graph root.",
       context: { ...ctx, external_transcript_ref: `atlas-project-dedupe:${key}` },
     })
     if (node_id) {
@@ -689,7 +689,7 @@ export const AtlasBridgeRoutes = lazy(() =>
         result.failure.status ??
         (result.failure.kind === "unauthenticated"
           ? 401
-          : result.failure.kind === "plan"
+          : result.failure.kind === "access"
             ? 402
             : result.failure.kind === "backend" && result.failure.message === "no directory provided"
               ? 400
@@ -697,13 +697,13 @@ export const AtlasBridgeRoutes = lazy(() =>
       const detail =
         result.failure.message ??
         (result.failure.kind === "unauthenticated"
-          ? "Sign in to Gateway before initializing the project graph."
-          : result.failure.kind === "plan"
-            ? "An active Gateway plan is required to initialize the project graph."
+          ? "Sign in to Synthetic Sciences before initializing the project graph."
+          : result.failure.kind === "access"
+            ? "This account does not currently have access to initialize the project graph."
             : result.failure.kind === "unreachable"
-              ? `Gateway is unavailable at ${result.failure.host}.`
-              : "Gateway could not initialize the project graph.")
+              ? `Synthetic Sciences is unavailable at ${result.failure.host}.`
+              : "Synthetic Sciences could not initialize the project graph.")
       return c.json({ ...payload, detail }, status as any)
     })
-    .all("/*", (c) => c.json({ detail: "Gateway bridge route not found" }, 404)),
+    .all("/*", (c) => c.json({ detail: "Synthetic Sciences bridge route not found" }, 404)),
 )

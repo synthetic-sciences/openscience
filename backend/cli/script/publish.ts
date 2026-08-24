@@ -3,7 +3,7 @@ import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@synsci/script"
 import { fileURLToPath } from "url"
-import { createWrapperPackageManifest } from "./publish-manifest"
+import { assertPublicPackageSurface, createWrapperPackageManifest } from "./publish-manifest"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -23,12 +23,17 @@ const version = Object.values(binaries)[0]
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
+await $`cp ./README.md ./dist/${pkg.name}/README.md`
 await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 
-await Bun.file(`./dist/${pkg.name}/package.json`).write(
-  JSON.stringify(createWrapperPackageManifest({ source: pkg, version, binaries }), null, 2),
-)
+const wrapperManifest = createWrapperPackageManifest({ source: pkg, version, binaries })
+await Bun.file(`./dist/${pkg.name}/package.json`).write(JSON.stringify(wrapperManifest, null, 2))
+assertPublicPackageSurface({
+  "README.md": await Bun.file(`./dist/${pkg.name}/README.md`).text(),
+  "package.json": JSON.stringify(wrapperManifest),
+  "bin/openscience": await Bun.file(`./dist/${pkg.name}/bin/openscience`).text(),
+})
 
 // Publish platform packages SEQUENTIALLY with retries. Each tarball is ~90MB;
 // publishing all 11 in parallel saturates the uplink and npm times out.

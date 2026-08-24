@@ -37,12 +37,12 @@ def check_env_file() -> Optional[str]:
 
 
 def byok_key(value: Optional[str]) -> Optional[str]:
-    """Return only a user-owned OpenRouter key, never an Atlas proxy token."""
+    """Return only a user-owned OpenRouter key, never a managed proxy token."""
     return value if value and not value.startswith("thk_") else None
 
 
 def byok_base_url() -> str:
-    """Keep BYOK off the Atlas Credits proxy even if a stale base URL leaked in."""
+    """Keep BYOK off the Synthetic Sciences credits proxy if a stale base URL leaked in."""
     value = (os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1").rstrip("/")
     return "https://openrouter.ai/api/v1" if "/api/llm/proxy/" in value else value
 
@@ -113,7 +113,7 @@ def generate_image(
     # Resolve the key: explicit arg → OpenScience-injected BYOK env var → .env.
     # The env var path matters most: the CLI injects OPENROUTER_API_KEY into the
     # subprocess env, so reading only .env (the old behavior) made the key invisible.
-    # BYOK bypasses the Atlas wallet; managed thk_* credentials stay unavailable.
+    # BYOK bypasses the Synthetic Sciences wallet; managed thk_* credentials stay unavailable.
     if not api_key:
         api_key = byok_key(os.getenv("OPENROUTER_API_KEY")) or byok_key(check_env_file())
 
@@ -123,7 +123,7 @@ def generate_image(
         print("❌ Error: OpenRouter BYOK is not connected!")
         print("\nAdd an OpenRouter key in OpenScience Settings → Models & providers,")
         print("or set it for this run: export OPENROUTER_API_KEY=your-api-key-here.")
-        print("Atlas Credits are not required for BYOK image generation.")
+        print("Synthetic Sciences credits are not required for BYOK image generation.")
         print("Inside OpenScience, call the native generate_image tool to use a funded wallet instead.")
         print("\nGet your own API key from: https://openrouter.ai/keys")
         sys.exit(1)

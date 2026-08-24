@@ -233,7 +233,7 @@ type ConsentFile = z.infer<typeof ConsentFile>
 const QueueRow = z.object({ subject: z.string(), queued_at: z.number().int(), event: Event })
 type QueueRow = z.infer<typeof QueueRow>
 
-// A signed-in account must be checked against Gateway once per installation
+// A signed-in account must be checked against Synthetic Sciences once per installation
 // before any event is queued. Keep the proof process-local: a restart or an
 // account switch revalidates consent instead of trusting stale disk state.
 const authoritativeConsent = new Set<string>()
@@ -291,9 +291,9 @@ async function readConsent(): Promise<{ value: ConsentFile; absent: boolean; cor
 }
 
 /**
- * Return only the non-secret identifier embedded in a Gateway API key.
+ * Return only the non-secret identifier embedded in a Synthetic Sciences API key.
  *
- * Gateway keys are `thk_<32 hex chars>.<random secret>`. The identifier is
+ * Synthetic Sciences keys are `thk_<32 hex chars>.<random secret>`. The identifier is
  * safe to use for local account switching; the credential itself must never
  * be hashed, persisted, or turned into telemetry identity material.
  */
@@ -656,7 +656,7 @@ export namespace OutboundTelemetry {
     if (!who.signedIn) return true
     const key = consentKey(consent.value, who)
     if (authoritativeConsent.has(key)) return true
-    // Provider/model setup must never wait for the optional Gateway. Until the
+    // Provider/model setup must never wait for the optional account service. Until the
     // account's setting is confirmed, AI-SDK telemetry stays off; a background
     // refresh can enable it for a later call without delaying this one.
     void ensureAuthoritativeConsent(consent.value, who).catch(() => undefined)

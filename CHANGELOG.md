@@ -20,6 +20,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 - Stopped bundling or offering Atlas through the OpenScience npm distribution
   and `synsci` launcher while preserving automatic native-binary installation.
+- Replaced the retired Ace subscription copy with pay-as-you-go managed credits:
+  one wallet for OpenRouter model usage and enhanced search, 20-credit reloads
+  below a 5-credit balance, and no scheduled monthly top-up.
+- Removed managed-compute billing and budget contracts while preserving local,
+  SSH, scheduler, and other user-owned compute workflows.
 - Added Ask for approval, Approve for me, and Full access presets directly to
   the composer’s Research tools menu, with trusted Full access as the default
   for new local projects and explicit or managed restrictions preserved.

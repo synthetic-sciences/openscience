@@ -42,69 +42,35 @@ describe("research entitlement rollout compatibility", () => {
     ).toMatchObject({ enabled: false, limit: 0 })
   })
 
-  test("bounds managed entitlement caching and refreshes after the TTL", async () => {
+  test("authenticated routing ignores legacy plan and allowance decisions", async () => {
     await Bun.write(session, JSON.stringify({ api_key: "thk_entitlement", user_id: "user_entitlement" }))
-    let now = 1_000_000
-    let reads = 0
-    const clock = spyOn(Date, "now").mockImplementation(() => now)
     const fetcher = spyOn(globalThis, "fetch").mockImplementation((async (input) => {
       expect(String(input).endsWith("/api/v1/entitlements")).toBe(true)
-      reads++
       return Response.json({
-        plan: reads === 1 ? "ace" : "free",
+        plan: "free",
         managed_search: {
-          enabled: true,
-          available: reads === 1,
-          allowance: { limit: reads === 1 ? 500 : 0, used: 0, reserved: 0, remaining: reads === 1 ? 500 : 0 },
+          enabled: false,
+          available: false,
+          allowance: { limit: 0, used: 0, reserved: 0, remaining: 0 },
         },
       })
     }) as typeof fetch)
     try {
       OpenScience.invalidateResearchEntitlements()
-      expect((await OpenScience.getResearchEntitlements())?.managed_search?.enabled).toBe(true)
+      expect((await OpenScience.getResearchEntitlements())?.managed_search?.enabled).toBe(false)
       expect(await OpenScience.resolveManagedSearchEntitlement()).toBe(true)
-      expect(await OpenScience.resolveManagedSearchEntitlement()).toBe(true)
-      expect(reads).toBe(1)
-
-      now += 30_001
-      // Stale state is used immediately while the Gateway refreshes in the
-      // background; the next call observes the refreshed Free entitlement.
-      expect(await OpenScience.resolveManagedSearchEntitlement()).toBe(true)
-      for (let attempt = 0; attempt < 20 && reads < 2; attempt++) await Bun.sleep(1)
-      expect(reads).toBe(2)
-      expect(await OpenScience.resolveManagedSearchEntitlement()).toBe(false)
     } finally {
       fetcher.mockRestore()
-      clock.mockRestore()
     }
   })
 
-  test("falls back immediately and coalesces refresh while the Gateway is stalled", async () => {
-    await Bun.write(session, JSON.stringify({ api_key: "thk_stalled", user_id: "user_stalled" }))
-    let release!: (value: Response) => void
-    let reads = 0
-    const stalled = new Promise<Response>((resolve) => {
-      release = resolve
-    })
-    const fetcher = spyOn(globalThis, "fetch").mockImplementation((async () => {
-      reads++
-      return stalled
-    }) as unknown as typeof fetch)
+  test("signed-out routing uses basic search without reading entitlements", async () => {
+    const fetcher = spyOn(globalThis, "fetch")
     try {
       OpenScience.invalidateResearchEntitlements()
-      expect(
-        await Promise.race([
-          OpenScience.resolveManagedSearchEntitlement(),
-          Bun.sleep(100).then(() => "timed-out" as const),
-        ]),
-      ).toBe(false)
       expect(await OpenScience.resolveManagedSearchEntitlement()).toBe(false)
-      expect(reads).toBe(1)
-      release(Response.json({ plan: "free", managed_search: { enabled: false, limit: 0 } }))
-      await Bun.sleep(10)
-      expect(await OpenScience.resolveManagedSearchEntitlement()).toBe(false)
+      expect(fetcher).not.toHaveBeenCalled()
     } finally {
-      release(Response.json({ plan: "free", managed_search: { enabled: false, limit: 0 } }))
       fetcher.mockRestore()
     }
   })

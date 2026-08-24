@@ -23,13 +23,12 @@ import "./preference-panels.css"
 
 type Account = {
   session?: boolean
-  user?: Record<string, unknown> & { email?: string; subscription_plan?: string }
+  user?: Record<string, unknown> & { email?: string }
   balance_usd?: number
   billing_mode?: { mode: "byok" | "managed" } | null
 }
 
 type Preferences = {
-  extra_budget_usd: number
   show_trace: boolean
   atlas_enabled: boolean
 }
@@ -113,11 +112,6 @@ export default function General() {
     }
   }
 
-  const plan = () => {
-    const value = account()?.user?.subscription_plan as string | undefined
-    if (!value) return "Not available"
-    return `${value.charAt(0).toLocaleUpperCase()}${value.slice(1)}`
-  }
   const org = () => {
     const u = account()?.user ?? {}
     return (u.organization ?? u.org ?? u.team ?? u.organization_name) as string | undefined
@@ -135,16 +129,13 @@ export default function General() {
           </Show>
 
           {/* Account */}
-          <Section title="Account" description="Your Synthetic Sciences identity and subscription.">
+          <Section title="Account" description="Your Synthetic Sciences identity and wallet.">
             <div class="settings-card settings-preferences-card">
               <Row icon="providers" title="Email">
                 <span class="settings-account-value">
                   {(account()?.user?.email as string) ??
                     (account()?.session === false ? "Not connected" : "Not available")}
                 </span>
-              </Row>
-              <Row icon="star" title="Plan">
-                <span class="settings-account-value">{plan()}</span>
               </Row>
               <Show when={org()}>
                 <Row icon="home" title="Organization">
@@ -153,11 +144,11 @@ export default function General() {
               </Show>
               <Row
                 icon="bolt"
-                title="Billing"
-                description="Manage your Synthetic Sciences subscription, credits, and invoices."
+                title="Wallet and billing"
+                description="Pay as you go with wallet credits. Review usage, auto-reload, and invoices."
               >
                 <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
-                  Manage
+                  Open billing
                 </Button>
               </Row>
               <Row
@@ -177,7 +168,7 @@ export default function General() {
               <Show when={account()?.session === false}>
                 <div class="px-4 py-3">
                   <p class="text-12-regular text-text-weak">
-                    Signed out. Run <code class="font-mono text-11-regular">openscience connect login</code> in a
+                    Signed out. Run <code class="font-mono text-11-regular">openscience login</code> in a
                     terminal to reconnect this machine.
                   </p>
                 </div>
@@ -189,8 +180,8 @@ export default function General() {
             <div class="settings-card settings-preferences-card">
               <Row
                 icon="branch"
-                title="Gateway"
-                description="Show the Gateway research map in project navigation. Your map data is never changed."
+                title="Synthetic Sciences"
+                description="Show the Synthetic Sciences research map in project navigation. Your map data is never changed."
               >
                 <Switch
                   hideLabel
@@ -198,7 +189,7 @@ export default function General() {
                   disabled={!prefs() || preferenceBusy()}
                   onChange={(atlas_enabled) => void savePref({ atlas_enabled })}
                 >
-                  Show Gateway
+                  Show Synthetic Sciences
                 </Switch>
               </Row>
               <Row

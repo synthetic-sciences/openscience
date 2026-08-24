@@ -1,18 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { dataSharingDetail, searchStatus, type ResearchToolsStatus } from "./research-tools-state"
+import { dataSharingDetail, searchStatus, walletStatus, type ResearchToolsStatus } from "./research-tools-state"
 
 const status = (patch?: Partial<ResearchToolsStatus>): ResearchToolsStatus => ({
   signedIn: true,
-  plan: { id: "ace", label: "Ace", status: "active" },
+  wallet: { mode: "payg", balanceUsd: 23.45 },
   search: {
-    route: "managed",
-    state: "available",
-    enabled: true,
-    limit: 500,
-    used: 125,
-    remaining: 375,
-    resetAt: "2026-09-01T00:00:00.000Z",
-    communityFlagEnabled: false,
+    route: "enhanced",
+    enhancedAvailable: true,
   },
   telemetry: {
     analyticsEnabled: true,
@@ -28,38 +22,28 @@ const status = (patch?: Partial<ResearchToolsStatus>): ResearchToolsStatus => ({
 })
 
 describe("Research Tools settings", () => {
-  test("summarizes managed and community search without inventing an allowance", () => {
-    expect(searchStatus(status())).toMatchObject({ label: "375 left", tone: "success" })
+  test("summarizes wallet-backed enhanced search and the community fallback", () => {
+    expect(searchStatus(status())).toMatchObject({ label: "Enhanced", tone: "success" })
+    expect(walletStatus(status())).toMatchObject({ label: "$23.45 available", tone: "success" })
     expect(
       searchStatus(
         status({
           search: {
             ...status().search,
             route: "community",
-            enabled: false,
-            state: "conditional",
-            limit: null,
-            used: null,
-            remaining: null,
-            resetAt: null,
+            enhancedAvailable: false,
           },
         }),
       ),
     ).toMatchObject({ label: "Community", tone: "neutral" })
-
-    expect(
-      searchStatus(
-        status({
-          search: {
-            ...status().search,
-            state: "unavailable",
-            limit: null,
-            used: null,
-            remaining: null,
-          },
-        }),
-      ),
-    ).toMatchObject({ label: "Allowance unavailable", tone: "neutral" })
+    expect(walletStatus(status({ signedIn: false, wallet: { mode: "payg", balanceUsd: null } }))).toMatchObject({
+      label: "Not connected",
+      tone: "neutral",
+    })
+    expect(walletStatus(status({ wallet: { mode: "payg", balanceUsd: -1 } }))).toMatchObject({
+      label: "$-1.00 balance",
+      tone: "warning",
+    })
   })
 
   test("discloses default-on sharing and corrupt-record fail-closed behavior", () => {
@@ -88,5 +72,18 @@ describe("Research Tools settings", () => {
     expect(source).toContain("Prompts, responses, tool inputs and outputs")
     expect(source).toContain("separate from the local session trace and billing")
     expect(source).toContain('method: "DELETE"')
+  })
+
+  test("shows PAYG wallet and search status without retired plan or quota copy", async () => {
+    const sources = await Promise.all(
+      ["ResearchTools.tsx", "research-tools-state.ts", "General.tsx"].map((file) =>
+        Bun.file(new URL(`./${file}`, import.meta.url)).text(),
+      ),
+    )
+    for (const source of sources) {
+      expect(source).not.toMatch(/\b(?:Ace\+?|Legacy Pro|Legacy Starter|subscription|search allowance|Manage plan)\b/i)
+    }
+    expect(sources[0]).toContain("Usage is pay as you go")
+    expect(sources[0]).toContain("Open billing")
   })
 })

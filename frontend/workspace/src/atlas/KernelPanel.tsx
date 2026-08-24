@@ -358,7 +358,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
                         <header class="activity-boundary__header">
                           <span class="activity-boundary__title">
                             <strong>Remote</strong>
-                            <span>SSH, schedulers, and managed compute</span>
+                            <span>SSH, schedulers, and user-owned compute</span>
                           </span>
                           <span class="activity-boundary__count">{plural(group().jobs.length, "job")}</span>
                         </header>

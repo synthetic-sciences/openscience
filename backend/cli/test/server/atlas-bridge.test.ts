@@ -58,20 +58,20 @@ describe("classifyInitFailure", () => {
     expect(classifyInitFailure(401, "").host).toBeTruthy()
   })
 
-  test("402 with the backend's plan_quota_exhausted payload is a plan failure", () => {
+  test("402 with a legacy plan-coded payload is an account-access failure", () => {
     const body = JSON.stringify({
       detail: { code: "plan_quota_exhausted", message: "Monthly quota exhausted", upgrade_url: "/billing" },
     })
     const failure = classifyInitFailure(402, body)
-    expect(failure.kind).toBe("plan")
-    expect(failure.message).toBe("Monthly quota exhausted")
+    expect(failure.kind).toBe("access")
+    expect(failure.message).toBeUndefined()
     expect(failure.status).toBe(402)
   })
 
-  test("a plan-worded 4xx is a plan failure even without a 402 status", () => {
+  test("a legacy plan-worded 4xx is an account-access failure", () => {
     const failure = classifyInitFailure(400, JSON.stringify({ detail: "no active subscription" }))
-    expect(failure.kind).toBe("plan")
-    expect(failure.message).toBe("no active subscription")
+    expect(failure.kind).toBe("access")
+    expect(failure.message).toBeUndefined()
   })
 
   test("5xx means the service could not be reached", () => {
@@ -231,7 +231,7 @@ describe("read bridge failures", () => {
     const response = await AtlasBridgeRoutes().request("/nodes")
 
     expect(response.status).toBe(401)
-    expect(await response.json()).toEqual({ detail: "Sign in to Gateway to load the graph." })
+    expect(await response.json()).toEqual({ detail: "Sign in to Synthetic Sciences to load the graph." })
   })
 
   test("propagates an Atlas backend failure instead of impersonating an empty account", async () => {
@@ -263,7 +263,7 @@ describe("read bridge failures", () => {
     const response = await AtlasBridgeRoutes().request("/not-a-real-route")
 
     expect(response.status).toBe(404)
-    expect(await response.json()).toEqual({ detail: "Gateway bridge route not found" })
+    expect(await response.json()).toEqual({ detail: "Synthetic Sciences bridge route not found" })
   })
 })
 
@@ -302,11 +302,11 @@ describe("project init route", () => {
     expect(await response.json()).toMatchObject({
       project_id: null,
       error: "unauthenticated",
-      detail: "Sign in to Gateway before initializing the project graph.",
+      detail: "Sign in to Synthetic Sciences before initializing the project graph.",
     })
   })
 
-  test("preserves a classified plan error and backend message", async () => {
+  test("replaces a legacy plan error with neutral account-access guidance", async () => {
     await fs.mkdir(Global.Path.data, { recursive: true })
     await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
     globalThis.fetch = (async () =>
@@ -323,8 +323,8 @@ describe("project init route", () => {
     expect(response.status).toBe(402)
     expect(await response.json()).toMatchObject({
       project_id: null,
-      error: "plan",
-      detail: "monthly quota exhausted",
+      error: "access",
+      detail: "This account does not currently have access to initialize the project graph.",
     })
   })
 })

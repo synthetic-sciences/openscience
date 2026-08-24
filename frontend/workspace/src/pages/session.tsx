@@ -581,7 +581,7 @@ export default function Page(): JSX.Element {
         ? [
             {
               id: "project.atlas",
-              title: "Open Gateway",
+              title: "Open Synthetic Sciences",
               description: "View this project's research map",
               category: "Project",
               onSelect: () => openContext("canvas"),

@@ -1,8 +1,9 @@
 # Deferred work & owner decisions
 
-Companion to `docs/plans/`. Records what the Atlas-polish sprint deliberately did
-**not** ship, and why — so nothing silently reads as "done." Anything here needs
-either an owner/Atlas-team decision or a follow-up sprint. Updated 2026-07-06.
+Historical companion to `docs/plans/`. It records the 2026-07-06 sprint state
+and is not a current product-offering document. Atlas distribution and managed
+compute resale were subsequently retired; references below are retained only as
+implementation history.
 
 ## What shipped this sprint
 
@@ -13,7 +14,7 @@ either an owner/Atlas-team decision or a follow-up sprint. Updated 2026-07-06.
 | **3**  | Atlas sync correctness                   | ✅ shell-export precedence (no billing flip), atomic writes, torn-file tolerance + test |
 | **4**  | Browser onboarding                       | ✅ browser Atlas login (`/account/login-key` + SetupDialog) + no-model dead-end killed  |
 | **5**  | UX polish                                | ✅ transition typos + real file error states (retry on read/permission/listing failure) |
-| **6**  | Compute / atlas version                  | ✅ `@synsci/atlas` `^0.5.12` → `^0.13.2` (managed compute resolves)                     |
+| **6**  | Historical companion version             | ✅ Version alignment completed at the time; the companion is no longer distributed    |
 | **7**  | Atlas experience — **A1 unified status** | ✅ `openscience status` = connection + plan + wallet + usage + compute + companion      |
 | **8**  | Wallet (backend + panel)                 | ✅ `/settings/wallet` + Wallet panel; routes verified live, UI typecheck-only           |
 | **9**  | arXiv retrieval                          | ✅ throttle, PDF/error parsing, graceful degrade, 20 tests (merged)                     |
@@ -57,11 +58,10 @@ The wire identifiers (`synsci` provider id, `thk_`, `THESIS_*`) are contract and
 low-risk copy sweep, batched separately to keep the wire contract untouched.
 The Atlas-side `/cli` page rebrand already shipped in PR #188.
 
-### Managed-compute live leasing (Modal end-to-end)
+### Retired: managed-compute live leasing
 
-`atlas compute:*` resolves now (WS6), but a real managed lease bills the wallet and
-touches Modal/Daytona provisioning. The live end-to-end lease test was explicitly
-parked ("let the modal test be for now"). **Unblock:** owner OKs a billed live run.
+This is no longer deferred work. OpenScience does not resell compute. Local,
+SSH, scheduler, and directly connected user-owned compute remain supported.
 
 ### Codex managed-proxy (P0 from WS2)
 

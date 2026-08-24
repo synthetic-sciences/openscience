@@ -23,8 +23,8 @@ import { ToolOutputPath } from "../tool/tool-output-path"
 
 const log = Log.create({ service: "openscience" })
 
-// Atlas is the unified backend for openscience-cli auth, BYOK, and billing. The
-// base URL resolves through the shared endpoints module (neutral public
+// Synthetic Sciences is the unified backend for OpenScience auth, BYOK, and
+// billing. The base URL resolves through the shared endpoints module (neutral public
 // default + SYNSC_API_BASE / MANAGED_API_BASE / ATLAS_BASE_URL override), so
 // self-hosters and dev stacks can repoint the client without code changes.
 const DEFAULT_API_BASE = DEFAULT_MANAGED_API_BASE
@@ -37,8 +37,8 @@ export const API_BASE = MANAGED_API_BASE
 // renders when both stdout AND stderr are TTYs. Piping to a log file
 // no longer drops a one-line dev banner into structured output.
 // User-facing URL the CLI prints during `openscience login`. Defaults
-// to the unified Atlas frontend's /cli route — Plan tab, key management,
-// and billing all live there. SYNSC_AUTH_URL overrides (e.g. point at a
+// to the Synthetic Sciences dashboard's /cli route — wallet, key management,
+// and account controls live there. SYNSC_AUTH_URL overrides (e.g. point at a
 // staging frontend or the old auth.syntheticsciences.ai surface).
 const VERIFICATION_PAGE = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || "https://app.syntheticsciences.ai/cli"
 
@@ -225,7 +225,7 @@ export interface ResearchEntitlements {
   }
 }
 
-/** Accept both the initial Gateway entitlement shape (`available` plus a
+/** Accept both the initial Synthetic Sciences entitlement shape (`available` plus a
  * nested `allowance`) and the rollout aliases (`enabled` plus flat counts).
  * Consumers see one flat contract while mixed-version clients and servers
  * coexist. */
@@ -237,7 +237,7 @@ export function normalizeResearchEntitlements(value: ResearchEntitlements): Rese
     managed_search: {
       ...(search.allowance ?? {}),
       ...search,
-      // During rollout some Gateway builds used `enabled` for provider
+      // During rollout some backend builds used `enabled` for provider
       // readiness, even on Free. `available` is the account-level decision
       // whenever present; only older responses fall back to `enabled`.
       enabled: search.available ?? search.enabled ?? false,
@@ -268,11 +268,11 @@ function describeReason(provider: string, reason: SyncedServiceReason | undefine
     case "no_credits":
       return `${provider}: Credits are empty - top up at https://app.syntheticsciences.ai/billing.`
     case "ineligible_plan":
-      return `${provider}: refresh Gateway and reconnect the key — BYOK is available on every plan.`
+      return `${provider}: refresh Synthetic Sciences and reconnect the key — BYOK remains available without wallet billing.`
     case "proxy_disabled":
-      return `${provider}: Gateway managed mode is disabled on this deployment — BYOK only.`
+      return `${provider}: Synthetic Sciences managed mode is disabled on this deployment — BYOK only.`
     case "managed_key_unconfigured":
-      return `${provider}: Gateway managed mode unavailable on this deployment — ask the admin.`
+      return `${provider}: Synthetic Sciences managed mode is unavailable on this deployment — ask the admin.`
     case "managed_via_openrouter":
       return `${provider}: wallet access to ${provider} models routes through the openrouter provider — pick them there, or add your own ${provider} key for direct access.`
     default:
@@ -282,7 +282,7 @@ function describeReason(provider: string, reason: SyncedServiceReason | undefine
 
 /**
  * Thrown when the backend rejects a usage report because the user is
- * out of credits (managed mode) or has no active subscription. Halts
+ * out of wallet credits. Halts
  * the session so the agent loop doesn't keep racking up calls the
  * user can't pay for. Caught at the session boundary; surfaced to the
  * user as "Insufficient credits - top up at app.syntheticsciences.ai/billing".
@@ -296,22 +296,16 @@ export class InsufficientCreditsError extends Error {
   }
 }
 
-// ── Bundled atlas CLI resolution ─────────────────────────────────────────
-// The @synsci/atlas package ships as a dependency; its `atlas` binary lives in
-// node_modules. The agent shells out to native `atlas` commands (the research
-// prompts drive the map + managed-compute path through it), so the
-// binary must be on the subprocess PATH without requiring a separate global
-// install. We resolve the package, prefer the npm-generated `.bin/atlas` shim,
-// and otherwise synthesize a tiny launcher in the openscience data dir that runs the
-// package's declared bin entry via node. Result is cached; every step is
-// best-effort and never throws — if atlas can't be found the agent's
-// `atlas doctor` gate degrades gracefully.
+// ── Legacy companion compatibility ───────────────────────────────────────
+// OpenScience no longer depends on, installs, or advertises @synsci/atlas. If
+// an existing installation still makes that package resolvable, preserve its
+// PATH behavior during the transition. This compatibility path is best-effort
+// and never required for OpenScience itself.
 let atlasBinDirCache: string | null | undefined
 
 /** Resolve (and cache) the directory that should be prepended to a subprocess
- *  PATH so `atlas` resolves to the bundled CLI. Returns null when the package
- *  can't be located (e.g. a standalone compiled binary with no node_modules) —
- *  callers treat that as "atlas unavailable" and continue. */
+ *  PATH for a separately installed legacy companion. Returns null when the
+ *  package cannot be located; callers continue without it. */
 function ensureAtlasBinDir(): string | null {
   if (atlasBinDirCache !== undefined) return atlasBinDirCache
   atlasBinDirCache = null
@@ -347,9 +341,8 @@ function ensureAtlasBinDir(): string | null {
   return atlasBinDirCache
 }
 
-/** Prepend the bundled atlas CLI's directory to a subprocess PATH so the agent
- *  can run native `atlas` commands without a separate global install. No-op
- *  when the CLI can't be located or is already on PATH. */
+/** Preserve a separately installed legacy companion on a subprocess PATH.
+ *  No-op when the package cannot be located or is already on PATH. */
 function withAtlasOnPath(env: Record<string, string>): Record<string, string> {
   const dir = ensureAtlasBinDir()
   if (!dir) return env
@@ -499,12 +492,9 @@ export namespace OpenScience {
   }
 
   /**
-   * Seed the bundled `atlas` CLI's own config (`~/.config/atlas-cli/config.json`)
-   * from the OpenScience session so the agent can run native `atlas` commands. The
-   * key lives in atlas's on-disk config (file-based auth, like the OpenScience
-   * session file itself) — it is never put in the agent's shell env, so the
-   * `thk_`-stripping boundary in filterEnvForSubprocess stays intact. Pinned to
-   * the same backend the OpenScience key is issued for. Best-effort; never throws.
+   * Keep an existing legacy companion config in sync for people who previously
+   * installed it. A clean OpenScience login must never create this file or copy
+   * the account key into a second credential store. Best-effort; never throws.
    */
   export async function ensureAtlasCliConfig(session?: OpenScienceSession | null): Promise<void> {
     const active = session ?? (await getSession())
@@ -512,10 +502,13 @@ export namespace OpenScience {
     try {
       const configPath =
         process.env.ATLAS_CLI_CONFIG_PATH || path.join(os.homedir(), ".config", "atlas-cli", "config.json")
-      let existing: any = {}
+      let existing: any
       try {
         existing = JSON.parse(await fs.readFile(configPath, "utf8"))
-      } catch {}
+      } catch {
+        return
+      }
+      if (!existing || typeof existing !== "object" || Array.isArray(existing)) return
       const profiles = existing.profiles && typeof existing.profiles === "object" ? { ...existing.profiles } : {}
       profiles.default = {
         ...(profiles.default ?? {}),
@@ -523,10 +516,9 @@ export namespace OpenScience {
         base_url: `${API_BASE}/api/v1`,
       }
       const next = { ...existing, active_profile: existing.active_profile ?? "default", profiles }
-      await fs.mkdir(path.dirname(configPath), { recursive: true, mode: 0o700 })
       await atomicWrite(configPath, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 })
     } catch (e) {
-      log.warn("could not seed atlas-cli config", { error: e instanceof Error ? e.message : String(e) })
+      log.warn("could not update legacy companion config", { error: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -684,10 +676,10 @@ export namespace OpenScience {
     return syncedSecretValues.get(key) === value
   }
 
-  /** Clear the api_key this CLI seeded into the bundled atlas CLI's config
+  /** Clear the api_key this CLI seeded into a legacy companion's config
    *  (see ensureAtlasCliConfig). Only removes the key when it is the one the
    *  session seeded (or, with no readable session, when the profile points at
-   *  our backend), so a hand-configured atlas profile survives. Best-effort. */
+   *  our backend), so a hand-configured legacy profile survives. Best-effort. */
   async function clearAtlasCliConfig(session: OpenScienceSession | null): Promise<void> {
     try {
       const configPath =
@@ -811,9 +803,8 @@ export namespace OpenScience {
     "<p style=color:#9aa>The callback could not be verified. Return to your terminal and try again.</p></div>"
 
   /** Spin up an ephemeral loopback server that waits for the browser to
-   *  redirect back with the approved exchange token. Mirrors the
-   *  @synsci/atlas reference client: random port, ``/callback`` path, and
-   *  a strict ``state`` check to defeat CSRF. */
+   *  redirect back with the approved exchange token. Uses a random port, a
+   *  ``/callback`` path, and a strict ``state`` check to defeat CSRF. */
   function startCallbackServer(expectedState: string): {
     port: number
     done: Promise<{ exchange_token: string }>
@@ -1007,7 +998,7 @@ export namespace OpenScience {
         if (res.status === 402) {
           // Legacy Atlas deployments can report wallet eligibility here. Keep
           // the valid session: local and dashboard-saved BYOK remain free.
-          log.warn("Gateway wallet unavailable - BYOK remains available on every plan")
+          log.warn("Synthetic Sciences wallet unavailable - BYOK remains available without wallet billing")
           return null
         }
         log.warn("sync failed", { status: res.status })
@@ -1040,8 +1031,8 @@ export namespace OpenScience {
           if (!current || current.api_key !== session.api_key) {
             throw new Error("Managed session changed while services were syncing; discarded the stale response")
           }
-          // Keep the bundled atlas CLI authenticated for the agent on every
-          // successful sync (covers existing sessions that never re-run login).
+          // Keep a separately installed legacy companion authenticated during
+          // the transition (covers existing sessions that never re-run login).
           await ensureAtlasCliConfig(session)
 
           // Atlas transfers a GCP service-account document as an in-memory secret.
@@ -1499,8 +1490,8 @@ export namespace OpenScience {
     await CredentialLifecycle.ensureFresh()
     const base = filterEnvForSubprocess(env)
     const auth = await Auth.all().catch(() => ({}) as Record<string, Auth.Info>)
-    // Prepend the bundled atlas CLI to PATH so the agent's native `atlas`
-    // commands resolve without a separate global install.
+    // Preserve a separately installed legacy companion on PATH during the
+    // transition. OpenScience itself does not install or require it.
     return {
       ...withAtlasOnPath(mergeByokEnv(base, auth)),
       GIT_CONFIG_NOSYSTEM: "1",
@@ -1601,27 +1592,8 @@ export namespace OpenScience {
     return request
   }
 
-  /**
-   * Resolve managed-search eligibility from state already observed during
-   * account sync or a status read. Tool registry construction never performs
-   * an entitlement request; the Gateway confirms the entitlement again when
-   * the search is dispatched.
-   */
-  function profileHasManagedSearchEntitlement(): boolean {
-    const plan = cachedProfile?.subscription_plan?.toLowerCase()
-    const status = cachedProfile?.subscription_status?.toLowerCase()
-    if (plan !== "ace" && plan !== "ace_plus") return false
-    return status === "active" || status === "trialing" || status === "grace"
-  }
-
-  export function hasManagedSearchEntitlement(): boolean {
-    if (cachedEntitlements?.managed_search?.enabled === true) return true
-    if (cachedEntitlements?.managed_search?.enabled === false) return false
-    return profileHasManagedSearchEntitlement()
-  }
-
   /** Drop managed-search capability state after an account transition or a
-   * Gateway rejection. The next execution performs a bounded entitlement read;
+   * backend rejection. The next execution performs a bounded entitlement read;
    * it never touches the wallet or dispatches a search. */
   export function invalidateResearchEntitlements() {
     cachedEntitlements = undefined
@@ -1633,42 +1605,15 @@ export namespace OpenScience {
     entitlementsGeneration++
   }
 
-  /** Resolve managed-search eligibility at execution time. Cached decisions
-   * are bounded so a plan change is observed without refreshing on every tool
-   * call. A transient entitlement-read failure may use the last same-account
-   * decision, but an explicit Gateway rejection uses the strict refresh below. */
+  /** Authenticated users may attempt enhanced search. The server is the sole
+   * settlement authority: it charges wallet Credits or rejects the request,
+   * after which the tool falls back to basic search when available. */
   export async function resolveManagedSearchEntitlement(): Promise<boolean> {
-    const session = await getSession()
-    if (!session) return false
-    const account = accountTag(session)
-    const matching = cachedEntitlementsAccount === account
-    if (
-      matching &&
-      cachedEntitlements?.managed_search?.enabled !== undefined &&
-      Date.now() - cachedEntitlementsAt < ENTITLEMENTS_CACHE_TTL_MS
-    ) {
-      return cachedEntitlements.managed_search.enabled === true
-    }
-    const fallback = matching ? cachedEntitlements?.managed_search?.enabled : profileHasManagedSearchEntitlement()
-    // A Gateway outage must not delay Free, BYOK, ChatGPT-subscription, or
-    // local research. Use only account state already observed locally and
-    // refresh the short-lived entitlement cache in the background.
-    void readResearchEntitlements(session).catch(() => undefined)
-    return fallback ?? false
+    return !!(await getSession())
   }
 
-  /** Reconcile a stale optimistic entitlement after Gateway rejects a search.
-   * Failure is deliberately false: retrying the charged endpoint or trusting
-   * the rejected cache would route Free accounts back into managed search. */
-  export async function refreshManagedSearchEntitlementAfterRejection(): Promise<boolean> {
-    invalidateResearchEntitlements()
-    const session = await getSession()
-    if (!session) return false
-    const value = await readResearchEntitlements(session)
-    return value?.managed_search?.enabled === true
-  }
-
-  /** Read the Gateway plan/search allowance contract for user-facing status. */
+  /** Read the legacy search capability payload for compatibility diagnostics.
+   * Local routing never treats its plan ids or counters as billing authority. */
   export async function getResearchEntitlements(): Promise<ResearchEntitlements | null> {
     const session = await getSession()
     if (!session) return null
@@ -1734,7 +1679,7 @@ export namespace OpenScience {
     }
   }
 
-  /** One top-level Gateway search dispatch. No billing or wallet endpoint is touched. */
+  /** One top-level Synthetic Sciences search dispatch. */
   export async function dispatchResearchSearch(
     input: ResearchSearchInput,
     operationID: string,
@@ -1764,14 +1709,18 @@ export namespace OpenScience {
             try {
               return JSON.parse(text) as unknown
             } catch {
-              return { detail: { code: "search_unavailable", message: `Gateway search returned HTTP ${res.status}` } }
+              return {
+                detail: { code: "search_unavailable", message: `Synthetic Sciences search returned HTTP ${res.status}` },
+              }
             }
           })()
         : {}
       return { status: res.status, body }
     } catch (error) {
       if (signal.aborted) throw error
-      log.warn("Gateway research search failed", { error: error instanceof Error ? error.message : String(error) })
+      log.warn("Synthetic Sciences research search failed", {
+        error: error instanceof Error ? error.message : String(error),
+      })
       return null
     }
   }
@@ -1892,8 +1841,8 @@ export namespace OpenScience {
         }
         return { ok: true, permanent: false, data }
       }
-      // 402 = no active CLI subscription, OR insufficient managed-mode
-      // balance. Both should halt the session — surface as modelBlocked
+      // 402 = insufficient wallet balance. Halt the session and surface it as
+      // modelBlocked
       // so the processor throws InsufficientCreditsError.
       if (res.status === 402) {
         let body: any = {}
@@ -1911,7 +1860,7 @@ export namespace OpenScience {
               `https://app.syntheticsciences.ai/billing or switch to BYOK.`,
           )
         } else {
-          log.warn("usage report 402 — subscription required or balance empty")
+          log.warn("usage report 402 — wallet credits unavailable")
         }
         return { ok: false, permanent: true, modelBlocked: true }
       }
@@ -2164,7 +2113,7 @@ export namespace OpenScience {
     }
   }
 
-  /** Version of the bundled @synsci/atlas companion CLI, or null if unresolved. */
+  /** Version of a separately installed legacy companion, or null if unresolved. */
   export async function atlasCliVersion(): Promise<string | null> {
     const dir = resolveAtlasPackageDir()
     if (!dir) return null

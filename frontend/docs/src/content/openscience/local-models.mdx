@@ -91,6 +91,6 @@ A local endpoint is just a provider block in `openscience.json`. `openscience lo
 
 ## Notes
 
-- **Billing:** local providers are always classified as your-own (BYOK) — never wallet-gated, never billed. They stay available even if your Gateway LLM spend is set to *managed* (the wallet routes through the curated OpenRouter catalog and the direct Meta/Muse proxy, never through local endpoints).
+- **Billing:** local providers are always classified as your-own (BYOK) — never wallet-gated, never billed. They stay available when managed routing is selected; Synthetic Sciences routes managed LLM calls through OpenRouter, never through local endpoints.
 - **Tools & reasoning:** models are registered with `tool_call: true` by default. If a local model doesn't support tool calling, set `"tool_call": false` on that model in config.
 - **New models:** after `ollama pull <model>`, re-run `openscience local add` to register it, or add it under `models` in config.

@@ -92,7 +92,6 @@ export namespace SessionPrompt {
   const LOOP_LEASE_TIMEOUT = 24 * 60 * 60 * 1_000
   const ATTACHMENT_LIMIT = 32 * 1024 * 1024
   // Scientific agents can still consume session-scoped artifact references.
-  // Science agents that dispatch GPU/compute work and should honor billing.compute.
   const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
 
   type TestHooks = {

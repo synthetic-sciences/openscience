@@ -38,6 +38,7 @@ test("preserves a genuine negative balance instead of aliasing it to unavailable
   const walletResponse = await WalletSettingsRoutes().request("/")
   const wallet = await walletResponse.json()
   expect(wallet).toMatchObject({ signedIn: true, balanceUsd: -1, lifetimeSpentUsd: 2.5 })
+  expect(wallet).not.toHaveProperty("plan")
 
   const billingResponse = await BillingSettingsRoutes().request("/")
   const billing = await billingResponse.json()
@@ -54,4 +55,11 @@ test("uses null only when the signed-in balance is genuinely unavailable", async
   const billingResponse = await BillingSettingsRoutes().request("/")
   const billing = await billingResponse.json()
   expect(billing.wallet).toEqual({ signedIn: true, balanceUsd: null })
+})
+
+test("wallet route presents PAYG billing without plan copy", async () => {
+  const source = await Bun.file(new URL("../../src/server/routes/settings/wallet.ts", import.meta.url)).text()
+  expect(source).toContain("pay-as-you-go Credits")
+  expect(source).toContain("Get wallet balance, routing mode, and recent transactions")
+  expect(source).not.toMatch(/subscription|plan mode|manage plan/i)
 })
