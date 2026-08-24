@@ -70,7 +70,10 @@ describe("research entitlement rollout compatibility", () => {
       // Stale state is used immediately while the Gateway refreshes in the
       // background; the next call observes the refreshed Free entitlement.
       expect(await OpenScience.resolveManagedSearchEntitlement()).toBe(true)
-      for (let attempt = 0; attempt < 20 && reads < 2; attempt++) await Bun.sleep(1)
+      // A fetch invocation only proves that the request started. Authenticated
+      // control-plane responses may still be finishing account reconciliation,
+      // so await the coalesced public status read before observing the cache.
+      expect((await OpenScience.getResearchEntitlements())?.managed_search?.enabled).toBe(false)
       expect(reads).toBe(2)
       expect(await OpenScience.resolveManagedSearchEntitlement()).toBe(false)
     } finally {

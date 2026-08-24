@@ -48,6 +48,7 @@ export namespace LLM {
     direct?: boolean
     inspection?: boolean
     trace?: { messageID: string; attempt: number }
+    route?: string
     onReasoningEffortResolved?: (effort: string | undefined) => void | Promise<void>
   }
 
@@ -248,11 +249,64 @@ export namespace LLM {
           .catch((error) => l.warn("failed to record harness fingerprint", { error }))
       : undefined
 
+    const providerMessages: ModelMessage[] = [
+      ...(isCodex
+        ? [
+            {
+              role: "user" as const,
+              content: system.join("\n\n"),
+            },
+          ]
+        : system.map(
+            (x): ModelMessage => ({
+              role: "system",
+              content: x,
+            }),
+          )),
+      ...input.messages,
+    ]
+    const traceMessageID = input.trace?.messageID ?? input.user.id
+    const traceAttempt = input.trace?.attempt ?? 1
+    await OutboundTelemetry.modelRequest({
+      sessionID: input.sessionID,
+      messageID: traceMessageID,
+      attempt: traceAttempt,
+      route: input.route ?? "custom",
+      provider: routed.providerID,
+      model: routed.id,
+      system,
+      messages: providerMessages,
+      tools,
+      parameters: {
+        temperature: params.temperature,
+        topP: params.topP,
+        topK: params.topK,
+        providerOptions: ProviderTransform.providerOptions(input.model, params.options),
+        activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+        maxOutputTokens,
+        headers: { ...input.model.headers, ...tier.headers, ...headers },
+      },
+    }).catch(() => undefined)
+
     const result = streamText({
       onError(error) {
         l.error("stream error", {
           error,
         })
+      },
+      async onFinish(output) {
+        await OutboundTelemetry.modelResponse({
+          sessionID: input.sessionID,
+          messageID: traceMessageID,
+          attempt: traceAttempt,
+          route: input.route ?? "custom",
+          provider: routed.providerID,
+          model: routed.id,
+          message: output,
+          parts: [],
+          tokens: output.totalUsage,
+          finish: output.finishReason,
+        }).catch(() => undefined)
       },
       async experimental_repairToolCall(failed) {
         const repaired = await repairToolCall(failed, tools)
@@ -278,7 +332,7 @@ export namespace LLM {
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
-        ...(input.model.providerID.startsWith("synsci")
+        ...(routed.providerID === "openrouter" && input.route === "managed"
           ? {
               "x-openscience-project": Instance.project.id,
               "x-openscience-session": input.sessionID,
@@ -295,22 +349,7 @@ export namespace LLM {
         ...headers,
       },
       maxRetries: input.retries ?? 0,
-      messages: [
-        ...(isCodex
-          ? [
-              {
-                role: "user",
-                content: system.join("\n\n"),
-              } as ModelMessage,
-            ]
-          : system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            )),
-        ...input.messages,
-      ],
+      messages: providerMessages,
       model: wrapLanguageModel({
         model: language,
         middleware: [

@@ -192,22 +192,23 @@ export namespace CredentialLifecycle {
     return checking
   }
 
-  /**
-   * Serialize and publish a credential-bearing mutation. The updating marker
-   * is visible before `action` runs, closing the store-write/revision race.
-   */
-  export async function mutate<T>(
+  async function runMutation<T>(
     reason: string,
     action: () => T | Promise<T>,
     options: { reconcileLocal?: boolean } = {},
-  ): Promise<T> {
-    let ready!: Revision
+    condition?: () => boolean | Promise<boolean>,
+  ): Promise<{ applied: false } | { applied: true; value: T }> {
+    let ready: Revision | undefined
     let value: T | undefined
     let failure: unknown
     let failed = false
     {
       await using lease = await FileLease.acquire(mutationLock)
       await lease.during(async () => {
+        // Evaluate the condition under the same lease as the mutation. This
+        // is the compare-and-mutate seam for account-key revocation: a late
+        // response for key A cannot clear key B after B has been saved.
+        if (condition && !(await condition())) return
         const token = crypto.randomUUID()
         const base = {
           version: 1 as const,
@@ -229,10 +230,36 @@ export namespace CredentialLifecycle {
       })
     }
 
+    if (!ready) return { applied: false }
     if (options.reconcileLocal === false) seen = ready.token
     else await reconcile(ready, true)
     if (failed) throw failure
-    return value as T
+    return { applied: true, value: value as T }
+  }
+
+  /**
+   * Serialize and publish a credential-bearing mutation. The updating marker
+   * is visible before `action` runs, closing the store-write/revision race.
+   */
+  export async function mutate<T>(
+    reason: string,
+    action: () => T | Promise<T>,
+    options: { reconcileLocal?: boolean } = {},
+  ): Promise<T> {
+    const result = await runMutation(reason, action, options)
+    if (!result.applied) throw new Error("unconditional credential mutation was not applied")
+    return result.value
+  }
+
+  /** Compare-and-mutate under the credential lease. A false condition does
+   * not publish a revision or invoke refresh/revoke handlers. */
+  export async function mutateIf<T>(
+    reason: string,
+    condition: () => boolean | Promise<boolean>,
+    action: () => T | Promise<T>,
+    options: { reconcileLocal?: boolean } = {},
+  ): Promise<{ applied: false } | { applied: true; value: T }> {
+    return runMutation(reason, action, options, condition)
   }
 
   /** Start a low-cost process-local watcher; spawn boundaries still check synchronously. */

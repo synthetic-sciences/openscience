@@ -928,12 +928,12 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
   })
 
   test("preserves metadata using providerID key when store is false", () => {
-    const openscienceModel = {
+    const customModel = {
       ...openaiModel,
-      providerID: "synsci",
+      providerID: "custom",
       api: {
-        id: "openscience-test",
-        url: "https://api.syntheticsciences.ai",
+        id: "custom-test",
+        url: "https://api.example.test",
         npm: "@ai-sdk/openai-compatible",
       },
     }
@@ -945,7 +945,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
             type: "text",
             text: "Hello",
             providerOptions: {
-              synsci: {
+              custom: {
                 itemId: "msg_123",
                 otherOption: "value",
               },
@@ -955,19 +955,19 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, openscienceModel, { store: false }) as any[]
+    const result = ProviderTransform.message(msgs, customModel, { store: false }) as any[]
 
-    expect(result[0].content[0].providerOptions?.synsci?.itemId).toBe("msg_123")
-    expect(result[0].content[0].providerOptions?.synsci?.otherOption).toBe("value")
+    expect(result[0].content[0].providerOptions?.custom?.itemId).toBe("msg_123")
+    expect(result[0].content[0].providerOptions?.custom?.otherOption).toBe("value")
   })
 
   test("preserves itemId across all providerOptions keys", () => {
-    const openscienceModel = {
+    const customModel = {
       ...openaiModel,
-      providerID: "synsci",
+      providerID: "custom",
       api: {
-        id: "openscience-test",
-        url: "https://api.syntheticsciences.ai",
+        id: "custom-test",
+        url: "https://api.example.test",
         npm: "@ai-sdk/openai-compatible",
       },
     }
@@ -976,7 +976,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
         role: "assistant",
         providerOptions: {
           openai: { itemId: "msg_root" },
-          synsci: { itemId: "msg_synsci" },
+          custom: { itemId: "msg_custom" },
           extra: { itemId: "msg_extra" },
         },
         content: [
@@ -985,7 +985,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
             text: "Hello",
             providerOptions: {
               openai: { itemId: "msg_openai_part" },
-              synsci: { itemId: "msg_synsci_part" },
+              custom: { itemId: "msg_custom_part" },
               extra: { itemId: "msg_extra_part" },
             },
           },
@@ -993,13 +993,13 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, openscienceModel, { store: false }) as any[]
+    const result = ProviderTransform.message(msgs, customModel, { store: false }) as any[]
 
     expect(result[0].providerOptions?.openai?.itemId).toBe("msg_root")
-    expect(result[0].providerOptions?.synsci?.itemId).toBe("msg_synsci")
+    expect(result[0].providerOptions?.custom?.itemId).toBe("msg_custom")
     expect(result[0].providerOptions?.extra?.itemId).toBe("msg_extra")
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_openai_part")
-    expect(result[0].content[0].providerOptions?.synsci?.itemId).toBe("msg_synsci_part")
+    expect(result[0].content[0].providerOptions?.custom?.itemId).toBe("msg_custom_part")
     expect(result[0].content[0].providerOptions?.extra?.itemId).toBe("msg_extra_part")
   })
 

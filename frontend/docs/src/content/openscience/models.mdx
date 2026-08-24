@@ -1,10 +1,10 @@
 ---
 title: "Models & providers"
-description: "Bring your own keys, use eligible ChatGPT/Codex access, run local models, or optionally route managed calls through the Gateway."
+description: "Bring your own keys, use eligible ChatGPT/Codex access, run local models, or route managed calls through Ace."
 icon: "package-check"
 ---
 
-OpenScience is model-agnostic. A **model** is one inference endpoint the agent routes through; a **provider** is a vendor that exposes models. Routing happens on your machine: with your own keys (the default), each call goes straight from your machine to the provider — no gateway in the middle, no account required.
+OpenScience is model-agnostic. A **model** is one inference endpoint the agent routes through; a **provider** is a vendor that exposes models. A free Synthetic Sciences account identifies the installation and owns its session traces. With your own keys, each model call still goes straight from your machine to the provider; the account does not proxy or bill that inference.
 
 ## Bring your own keys
 
@@ -23,9 +23,9 @@ The current frontier families are available on both paths:
 | --- | --- | --- |
 | GPT-5.6 Sol / Terra / Luna | `openai/gpt-5.6-*` | `openrouter/openai/gpt-5.6-*` |
 | Grok 4.5 | `xai/grok-4.5` | `openrouter/x-ai/grok-4.5` |
-| Muse Spark 1.1 | `meta/muse-spark-1.1` | `meta/muse-spark-1.1` through the Gateway Meta proxy |
+| Other supported families | Native provider model id | The corresponding `openrouter/<provider>/<model>` route |
 
-For BYOK, use `OPENAI_API_KEY`, `XAI_API_KEY`, or `META_MODEL_API_KEY`. The managed Meta route sends only your Gateway session token and proxy URL to OpenScience; the Gateway keeps its shared Meta credential server-side.
+For BYOK, use the provider's own environment variable or Credentials setting. Ace-managed inference is intentionally one route: OpenScience calls the Synthetic Sciences Gateway, and the Gateway calls OpenRouter. There are no hidden direct-provider managed fallbacks.
 
 Current frontier families include:
 
@@ -70,20 +70,20 @@ openscience run --model moonshotai/kimi-k3 "Implement the pipeline"
 
 `--model <provider>/<model>` overrides the default for one run; in the workspace, use the model selector per session. `--variant` picks a reasoning-effort tier — `minimal`, `high`, `max`, and so on. Available tiers depend on the model: Claude Opus 5 and GPT-5.6 extend through `xhigh` and `max`, Kimi K3 supports `low`, `high`, and `max`, and current Grok models expose their provider-supported ladders.
 
-## Gateway managed (optional)
+## Ace managed (optional)
 
-[Gateway](/openscience/gateway) is the optional managed service. Connecting adds supported models billed from a prepaid wallet, so you can skip per-provider keys when you choose:
+[Ace](/openscience/gateway) is the optional managed service. Add 20 credits and supported managed models are billed from the same prepaid Wallet as enhanced search:
 
 ```bash
 openscience login   # defaults to app.syntheticsciences.ai
 ```
 
-Once connected, Settings → Billing lets you choose managed or user-funded model routing. A plan never disables BYOK, local, or eligible ChatGPT/Codex routes; only calls served by the Gateway debit its wallet.
+Once connected, choose a managed model when you want Ace. There is no subscription. Auto-reload adds 20 credits when Wallet falls below 5 by default, and can be changed or disabled in Billing. BYOK, local, and eligible ChatGPT/Codex routes remain separate; only calls served through Ace debit Wallet.
 
 | Path | What runs where | Billing |
 | --- | --- | --- |
 | BYOK (default) | Your machine calls the provider directly. | Your provider account. |
-| Gateway managed | Your machine calls the Gateway, which calls the provider. | Gateway wallet. See [Connect the Gateway](/openscience/gateway). |
+| Ace managed | Your machine calls the Gateway, which calls OpenRouter. | Ace Wallet. See [Connect Ace](/openscience/gateway). |
 
 ## Key hygiene
 

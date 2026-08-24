@@ -16,7 +16,7 @@ OpenScience ships a real [execution sandbox](/openscience/sandbox), and **Approv
 
 | Surface | Where | Notes |
 | --- | --- | --- |
-| BYOK provider keys | Environment variables or `<data-root>/auth.json` | Model requests go straight to the provider. No account required. Approved skill subprocesses can receive supported user-owned keys; arbitrary Python/R kernels receive a minimal environment without provider keys. |
+| BYOK provider keys | Environment variables or `<data-root>/auth.json` | Model requests go straight to the provider and are not billed by Ace. A Synthetic Sciences account is still required for installation identity and trace ownership. Approved skill subprocesses can receive supported user-owned keys; arbitrary Python/R kernels receive a minimal environment without provider keys. |
 | Gateway session | `<data-root>/openscience-session.json` | `thk_*` key created by `openscience login`; revocable from the dashboard. |
 | Synced service credentials | `<data-root>/credentials.json` | Present only when [connected to Gateway](/openscience/gateway); encrypted at rest and refreshed with `openscience sync`. |
 | Native binary (curl install) | `~/.openscience/bin/openscience` | Added to PATH through your shell rc. |
@@ -27,7 +27,7 @@ The data root defaults to `~/.openscience` and can be relocated from Storage set
 
 Shell tools receive a sanitized environment: managed Gateway tokens and control-plane variables are stripped, while ordinary user environment values and supported user-owned provider or service credentials may be available to approved commands. Credential files, SSH/cloud config, and other sensitive paths are denied to OS-sandboxed Python/R kernels; kernels also receive a minimal runtime and locale environment without provider, Gateway, or cloud keys.
 
-Managed Modal credentials are narrower still: they resolve only inside the trusted compute adapter after approval and are not injected into general shell or kernel environments.
+Your Modal credentials are narrower still: they resolve only inside the trusted compute adapter after approval and are not injected into general shell or kernel environments.
 
 The browser's interactive system terminal is a user-owned shell rather than an agent tool. It inherits the user's environment (minus terminal-session bookkeeping), so treat it like any terminal you launch yourself.
 
@@ -44,11 +44,11 @@ For defense in depth on a shared host or behind a reverse proxy, set `OPENSCIENC
 ## What leaves your machine
 
 - Prompts and responses sent to your model provider, governed by that provider's policy.
-- Content-free product telemetry, enabled by default and disableable in Settings. It contains only allowlisted operational fields and aggregate usage; it rejects prompts, responses, file paths and content, notebook cells, shell output, environment values, credentials, and arbitrary metadata.
-- Managed-search queries when you intentionally use Gateway research search. They are sent to the Gateway and its configured search provider; routine telemetry does not retain the query text.
+- Full research traces when **Use my data** is enabled. A trace links prompts, model and assistant responses, tool calls and results, searches, artifacts, retries, errors, and session lifecycle events. The client removes known credentials and secret values before upload, and the Gateway applies a second redaction pass before retention.
+- Managed-search queries when you use Gateway research search. They are sent to the Gateway and its configured search provider. Search content is retained with the trace only while **Use my data** is enabled; billing and idempotency records remain content-free.
 - Synced credentials and authoritative managed usage when you [connect the Gateway](/openscience/gateway).
 
-Research content is not collected or shared, and there is no content-sharing setting in this release. Source files stay local unless the agent explicitly uploads them through a tool you approve. Approved shell commands and user-owned terminals can still access credentials in their environment, while Python/R kernels stay on the minimal environment described above. Telemetry upload failure never blocks research and can never debit the Gateway wallet.
+**Use my data** is the single account setting for cloud trace collection. It is on by default for a newly connected account. Turning it off stops new trace uploads and clears pending events without disabling local sessions, BYOK, ChatGPT/Codex, Ace, search, or user-owned compute. Source files stay local unless their contents appear in a traced tool result or the agent explicitly uploads them through a tool you approve. Approved shell commands and user-owned terminals can still access credentials in their environment, while Python/R kernels stay on the minimal environment described above. Trace upload failure never blocks research and can never debit the Gateway wallet.
 
 ## Reporting a vulnerability
 

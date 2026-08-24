@@ -13,8 +13,8 @@ either an owner/Atlas-team decision or a follow-up sprint. Updated 2026-07-06.
 | **3**  | Atlas sync correctness                   | ✅ shell-export precedence (no billing flip), atomic writes, torn-file tolerance + test |
 | **4**  | Browser onboarding                       | ✅ browser Atlas login (`/account/login-key` + SetupDialog) + no-model dead-end killed  |
 | **5**  | UX polish                                | ✅ transition typos + real file error states (retry on read/permission/listing failure) |
-| **6**  | Compute / atlas version                  | ✅ `@synsci/atlas` `^0.5.12` → `^0.13.2` (managed compute resolves)                     |
-| **7**  | Atlas experience — **A1 unified status** | ✅ `openscience status` = connection + plan + wallet + usage + compute + companion      |
+| **6**  | Atlas companion version                  | ✅ `@synsci/atlas` `^0.5.12` → `^0.13.2`; its former compute product is now retired     |
+| **7**  | Atlas experience — **A1 unified status** | ✅ `openscience status` = connection + account + wallet + usage + companion             |
 | **8**  | Wallet (backend + panel)                 | ✅ `/settings/wallet` + Wallet panel; routes verified live, UI typecheck-only           |
 | **9**  | arXiv retrieval                          | ✅ throttle, PDF/error parsing, graceful degrade, 20 tests (merged)                     |
 | **11** | Reviewer gate                            | ✅ Level 0 annotate-only, code-level, flag-gated (`experimental.reviewGate`)            |
@@ -41,12 +41,9 @@ instruction.
 
 ### WS7 A3 — BYOK key source of truth
 
-BYOK keys live in three unreconciled stores (local Compute panel, local
-Credentials panel, Atlas server-side `compute_keys_service`). No single authority,
-so a key can be silently shadowed across execution contexts. **Recommendation in
-the plan:** local stores authoritative for local skill runs; Atlas vault for
-managed sandboxes; a labeled one-way sync. **Unblock:** owner + Atlas-team ratify
-the source-of-truth rule before code moves keys around.
+Resolved by the Ace PAYG transition. Compute credentials are local and are used
+only for direct user-owned execution. The Gateway no longer stores compute keys,
+provisions compute, or bills compute through Wallet credits.
 
 ### WS7 A6 — name/brand pass
 
@@ -56,19 +53,6 @@ The wire identifiers (`synsci` provider id, `thk_`, `THESIS_*`) are contract and
 `Device: synsci · …` (the device name is stamped at login). This is a broad,
 low-risk copy sweep, batched separately to keep the wire contract untouched.
 The Atlas-side `/cli` page rebrand already shipped in PR #188.
-
-### Managed-compute live leasing (Modal end-to-end)
-
-`atlas compute:*` resolves now (WS6), but a real managed lease bills the wallet and
-touches Modal/Daytona provisioning. The live end-to-end lease test was explicitly
-parked ("let the modal test be for now"). **Unblock:** owner OKs a billed live run.
-
-### Codex managed-proxy (P0 from WS2)
-
-Codex OAuth tokens are pushed to Atlas but have **zero consumers** server-side — no
-managed proxy routes ChatGPT-subscription inference through them, so today the
-tokens power only a status dot. **Unblock:** Atlas-team decision + route work; this
-is an Atlas-repo change, not a CLI one.
 
 ### SSH-hosts / custom model-endpoints removal
 

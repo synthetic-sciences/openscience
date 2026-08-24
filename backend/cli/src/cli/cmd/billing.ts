@@ -32,14 +32,14 @@ const BillingShowCommand = cmd({
       prompts.outro("Done")
       return
     }
-    prompts.log.info(`Credits     : $${mode.balance_usd.toFixed(2)}`)
-    prompts.log.info("Key routing : per-provider (auto). BYOK key if set, else Gateway managed (debits wallet).")
+    prompts.log.info(`Wallet      : ${mode.balance_usd.toFixed(2)} credits`)
+    prompts.log.info("Key routing : direct BYOK, OAuth, and local routes stay direct. Ace models use OpenRouter.")
     if (!mode.managed_supported) {
       prompts.log.warn(
         "Gateway managed fallback is not provisioned on this deployment — set a BYOK key for each provider.",
       )
     }
-    prompts.log.info("Manage plans + top up at " + PLAN_URL + " (Plan tab).")
+    prompts.log.info("Add credits or manage auto-reload at " + PLAN_URL)
     prompts.outro("Done")
   },
 })
@@ -51,8 +51,9 @@ const BillingTopupCommand = cmd({
     UI.empty()
     prompts.intro("openscience billing")
     prompts.log.info(`Open: ${PLAN_URL}`)
-    prompts.log.info("Credit top-ups: $50 or $200, one-time or recurring monthly.")
-    prompts.log.info("BYOK works on every plan — bring your own provider keys at any tier.")
+    prompts.log.info("Add 20 credits. Stripe processing is shown separately before payment.")
+    prompts.log.info("Auto-reload adds 20 credits below 5 by default. You can turn it off at any time.")
+    prompts.log.info("BYOK, OAuth, and local models remain direct and do not spend Wallet credits.")
     // Open the URL using execFile (no shell) so PLAN_URL can't be
     // interpreted as a shell expression. PLAN_URL itself is either an
     // operator-set env var or the hardcoded default above.

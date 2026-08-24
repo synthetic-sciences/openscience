@@ -268,9 +268,11 @@ describe("Atlas host broker", () => {
       fn: async () => {
         const session = await Session.create({ title: "one-shot indexing" })
         try {
-          const calls = { external: 0, network: 0 }
-          globalThis.fetch = (async () => {
-            calls.network++
+          const calls = { external: 0, sourceUploads: 0, telemetry: 0 }
+          globalThis.fetch = (async (input: string | URL | Request) => {
+            const pathname = new URL(String(input)).pathname
+            if (pathname.includes("/telemetry/")) calls.telemetry++
+            else calls.sourceUploads++
             return Response.json({ source_id: "one-shot-source" }, { status: 201 })
           }) as unknown as typeof fetch
 
@@ -300,7 +302,8 @@ describe("Atlas host broker", () => {
             },
           )
 
-          expect(calls).toEqual({ external: 1, network: 1 })
+          expect(calls.external).toBe(1)
+          expect(calls.sourceUploads).toBe(1)
           expect(JSON.parse(result.output)).toMatchObject({
             source: { source_id: "one-shot-source" },
             collection: { files: 1 },
@@ -554,7 +557,9 @@ describe("Atlas host broker", () => {
             authorized,
           })
           const calls = { network: 0 }
-          globalThis.fetch = (async () => {
+          globalThis.fetch = (async (input: string | URL | Request) => {
+            const pathname = new URL(input instanceof Request ? input.url : String(input)).pathname
+            if (pathname.includes("/telemetry/")) return Response.json({ enabled: false })
             calls.network++
             return Response.json({ source_id: "must-not-upload" }, { status: 201 })
           }) as unknown as typeof fetch
@@ -603,7 +608,9 @@ describe("Atlas host broker", () => {
             await Bun.write(path.join(folder, `filler-${String(index).padStart(3, "0")}.md`), `safe ${index}\n`)
           }
           const request = { body: {} as Record<string, unknown> }
-          globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+          globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+            const pathname = new URL(input instanceof Request ? input.url : String(input)).pathname
+            if (pathname.includes("/telemetry/")) return Response.json({ enabled: false })
             request.body = JSON.parse(String(init?.body))
             return Response.json({ source_id: "race-safe" }, { status: 201 })
           }) as typeof fetch
@@ -975,7 +982,6 @@ describe("Atlas host broker", () => {
                 ],
               },
               handoff: {
-                atlas_compute_id: { status: "unavailable", reason: "not_implemented" },
                 atlas_run_id: { status: "unavailable", reason: "not_published" },
               },
             },

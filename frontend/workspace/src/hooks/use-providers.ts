@@ -3,8 +3,6 @@ import { createMemo } from "solid-js"
 import { currentDirectory, currentProjectID } from "@/utils/base64"
 
 // Provider-agnostic ordering: lead with the mainstream BYOK/OAuth providers.
-// `synsci` (the managed Atlas provider) stays selectable but is not forced to the front — the
-// OSS client is BYOK-first and must not privilege the managed provider by default.
 export const popularProviders = [
   "anthropic",
   "openai",
@@ -17,7 +15,6 @@ export const popularProviders = [
   "meta",
   "openrouter",
   "vercel",
-  "synsci",
 ]
 
 export function useProviders() {
@@ -36,9 +33,7 @@ export function useProviders() {
     return projectStore.provider
   })
   const connected = createMemo(() => providers().all.filter((p) => providers().connected.includes(p.id)))
-  const paid = createMemo(() =>
-    connected().filter((p) => p.id !== "synsci" || Object.values(p.models).find((m) => m.cost?.input)),
-  )
+  const paid = createMemo(() => connected())
   const popular = createMemo(() => providers().all.filter((p) => popularProviders.includes(p.id)))
   return {
     all: createMemo(() => providers().all),

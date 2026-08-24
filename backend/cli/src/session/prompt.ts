@@ -81,6 +81,7 @@ import { TaskAttempt } from "@/tool/task-attempt"
 import { Token } from "@/util/token"
 import { Auth } from "@/auth"
 import { SafeFileIO } from "@/file/safe-io"
+import { OutboundTelemetry } from "@/telemetry/outbound"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -92,7 +93,6 @@ export namespace SessionPrompt {
   const LOOP_LEASE_TIMEOUT = 24 * 60 * 60 * 1_000
   const ATTACHMENT_LIMIT = 32 * 1024 * 1024
   // Scientific agents can still consume session-scoped artifact references.
-  // Science agents that dispatch GPU/compute work and should honor billing.compute.
   const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
 
   type TestHooks = {
@@ -2307,6 +2307,12 @@ export namespace SessionPrompt {
     for (const part of parts) {
       await Session.updatePart(part)
     }
+    void OutboundTelemetry.userMessage({
+      sessionID: input.sessionID,
+      messageID: info.id,
+      message: info,
+      parts,
+    }).catch(() => undefined)
 
     return {
       info,
@@ -2467,6 +2473,12 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       synthetic: true,
     }
     await Session.updatePart(userPart)
+    void OutboundTelemetry.userMessage({
+      sessionID: input.sessionID,
+      messageID: userMsg.id,
+      message: userMsg,
+      parts: [userPart],
+    }).catch(() => undefined)
 
     const msg: MessageV2.Assistant = {
       id: await MessageV2.nextMessageID(input.sessionID),
@@ -2511,6 +2523,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       },
     }
     await Session.updatePart(part)
+    void OutboundTelemetry.tool(part as MessageV2.ToolPart).catch(() => undefined)
     const shell = Shell.preferred()
     const shellName = (
       process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
@@ -2697,6 +2710,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         output,
       }
       await Session.updatePart(part)
+      void OutboundTelemetry.tool(part as MessageV2.ToolPart).catch(() => undefined)
     }
     return { info: msg, parts: [part] }
   }
@@ -2775,6 +2789,12 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     }
     await Session.updateMessage(user)
     await Session.updatePart(userPart)
+    void OutboundTelemetry.userMessage({
+      sessionID: input.sessionID,
+      messageID: user.id,
+      message: user,
+      parts: [userPart],
+    }).catch(() => undefined)
 
     const assistant: MessageV2.Assistant = {
       id: await MessageV2.nextMessageID(input.sessionID),
@@ -2803,6 +2823,16 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     }
     await Session.updateMessage(assistant)
     await Session.updatePart(part)
+    await OutboundTelemetry.assistantMessage({
+      sessionID: input.sessionID,
+      messageID: assistant.id,
+      attempt: 1,
+      route: "local",
+      provider: assistant.providerID,
+      model: assistant.modelID,
+      message: assistant,
+      parts: [part],
+    }).catch(() => undefined)
     Bus.publish(Command.Event.Executed, {
       name: input.command,
       sessionID: input.sessionID,

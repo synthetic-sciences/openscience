@@ -1,10 +1,10 @@
 const dir = process.env.OPENSCIENCE_E2E_PROJECT_DIR ?? process.cwd()
 const title = process.env.OPENSCIENCE_E2E_SESSION_TITLE ?? "E2E Session"
 const text = process.env.OPENSCIENCE_E2E_MESSAGE ?? "Seeded for UI e2e"
-const model = process.env.OPENSCIENCE_E2E_MODEL ?? "synsci/gpt-5-nano"
+const model = process.env.OPENSCIENCE_E2E_MODEL ?? "openrouter/openai/gpt-5-nano"
 const parts = model.split("/")
-const providerID = parts[0] ?? "synsci"
-const modelID = parts[1] ?? "gpt-5-nano"
+const providerID = parts[0] ?? "openrouter"
+const modelID = parts.slice(1).join("/") || "openai/gpt-5-nano"
 const now = Date.now()
 
 const seed = async () => {

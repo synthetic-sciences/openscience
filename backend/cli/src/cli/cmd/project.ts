@@ -96,7 +96,7 @@ function reportInitFailure(failure: InitProjectFailure | undefined) {
       break
     case "plan":
       prompts.log.error(`Authenticated against ${f.host}, but your account has no active Gateway plan${detail}.`)
-      prompts.log.info("Manage your plan at https://app.syntheticsciences.ai/billing.")
+      prompts.log.info("Manage Ace credits at https://app.syntheticsciences.ai/billing.")
       break
     default:
       prompts.log.error(

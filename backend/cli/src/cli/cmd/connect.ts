@@ -207,22 +207,16 @@ export const StatusCommand = cmd({
       )
     }
 
-    // Unified Atlas surface (WS7 A1): wallet + lifetime spend, recent usage,
-    // managed-compute availability, and the bundled `atlas` companion version —
-    // one answer to "what's my Atlas state?". Every probe degrades to silence.
-    const [mode, credits, txns] = await Promise.all([
-      OpenScience.getBillingMode().catch(() => null),
+    // Compact account surface: wallet + lifetime spend, recent usage, and the
+    // bundled `atlas` companion version. Every probe degrades to silence.
+    const [credits, txns] = await Promise.all([
       OpenScience.getCredits().catch(() => null),
       OpenScience.getTransactions(5).catch(() => null),
     ])
-    const balanceUsd = credits?.balanceUsd ?? mode?.balance_usd
+    const balanceUsd = credits?.balanceUsd
     if (balanceUsd !== undefined) {
       const spent = credits ? ` (spent $${(credits.lifetimeSpentCents / 100).toFixed(2)} lifetime)` : ""
       prompts.log.info(`Wallet: $${balanceUsd.toFixed(2)}${spent}`)
-    }
-    if (mode) {
-      prompts.log.info(`Managed compute: ${mode.managed_supported ? "available" : "unavailable"}`)
-      prompts.log.info("Routing: per-provider (auto) — your key if set, else Gateway managed (debits wallet).")
     }
     if (txns && txns.length > 0) {
       const noun = txns.length === 1 ? "charge" : "charges"

@@ -1707,7 +1707,6 @@ export class Preferences extends HeyApiClient {
     parameters?: {
       reasoning_effort?: "minimal" | "low" | "medium" | "high"
       intent?: "commercial" | "non-commercial"
-      extra_budget_usd?: number
       show_trace?: boolean
       show_local_models?: boolean
       atlas_enabled?: boolean
@@ -1723,7 +1722,6 @@ export class Preferences extends HeyApiClient {
           args: [
             { in: "body", key: "reasoning_effort" },
             { in: "body", key: "intent" },
-            { in: "body", key: "extra_budget_usd" },
             { in: "body", key: "show_trace" },
             { in: "body", key: "show_local_models" },
             { in: "body", key: "atlas_enabled" },
@@ -1748,7 +1746,7 @@ export class Preferences extends HeyApiClient {
 
 export class Billing extends HeyApiClient {
   /**
-   * Get billing spend toggles + wallet status
+   * Get the LLM spend preference and wallet status
    */
   public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<SettingsBillingGetResponses, unknown, ThrowOnError>({
@@ -1758,26 +1756,15 @@ export class Billing extends HeyApiClient {
   }
 
   /**
-   * Update billing spend toggles (managed vs BYOK)
+   * Update the LLM spend preference (managed vs BYOK)
    */
   public update<ThrowOnError extends boolean = false>(
     parameters?: {
       llm?: "managed" | "byok" | null
-      compute?: "managed" | "byok"
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "body", key: "llm" },
-            { in: "body", key: "compute" },
-          ],
-        },
-      ],
-    )
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "llm" }] }])
     return (options?.client ?? this.client).put<SettingsBillingUpdateResponses, unknown, ThrowOnError>({
       url: "/settings/billing",
       ...options,
@@ -1817,7 +1804,7 @@ export class Updates extends HeyApiClient {
 
 export class Telemetry extends HeyApiClient {
   /**
-   * Update structural usage sharing consent
+   * Update OpenScience data-use consent
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1839,7 +1826,7 @@ export class Telemetry extends HeyApiClient {
   }
 
   /**
-   * Delete account-linked usage analytics
+   * Delete account-linked OpenScience trace data
    */
   public delete<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).delete<
@@ -1852,7 +1839,7 @@ export class Telemetry extends HeyApiClient {
 
 export class ResearchTools extends HeyApiClient {
   /**
-   * Get plan, research-search, and data-sharing status
+   * Get credit-backed search and data-sharing status
    */
   public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<SettingsResearchToolsGetResponses, unknown, ThrowOnError>({

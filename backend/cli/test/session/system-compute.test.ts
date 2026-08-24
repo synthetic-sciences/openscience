@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { SystemPrompt } from "../../src/session/system"
 import { ComputePrompt } from "../../src/compute/prompt"
 
-test("system prompt describes enabled Modal as OpenScience-managed compute", async () => {
+test("system prompt describes Modal as user-owned reviewed execution", async () => {
   const marker = "as-agent-must-never-see-this"
   const section = await SystemPrompt.compute({
     providers: {
@@ -68,7 +68,8 @@ test("Modal skills cannot reintroduce direct credentials or CLI dispatch", async
 
   for (const name of ["modal-serverless-gpu", "modal-ml-training", "modal-research-gpu"]) {
     const content = await ComputePrompt.skill(name, legacy, stored)
-    expect(content).toContain("OpenScience-governed Modal compute")
+    expect(content).toContain("User-owned Modal execution through OpenScience")
+    expect(content).toContain("never as compute resold by OpenScience")
     expect(content).toContain("ordinary shell command")
     expect(content).toContain("call `compute_job`")
     expect(content).toContain('target `{ kind: "modal" }`')

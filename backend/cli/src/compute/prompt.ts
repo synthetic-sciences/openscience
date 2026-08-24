@@ -72,14 +72,14 @@ export namespace ComputePrompt {
     if (!skills.has(name)) return content
     const capability = await system(value)
     return [
-      "# OpenScience-governed Modal compute",
+      "# User-owned Modal execution through OpenScience",
       "",
       capability,
       "",
-      "This runtime uses Modal as a governed sandbox provider, not as an agent-controlled Python SDK or CLI.",
+      "This runtime uses the user's own Modal account as a reviewed sandbox target, not as an agent-controlled Python SDK or CLI and never as compute resold by OpenScience.",
       'For ordinary runs, prepare normal project files and call `compute_job` with target `{ kind: "modal" }` and an ordinary shell command. Use `python analysis.py`, list `analysis.py` in `uploads`, list third-party requirements in `packages`, use GPU `none` for CPU-only work, and choose an explicit `resources.time_minutes` from the expected runtime plus a reasonable safety margin. The JobBroker owns review, dispatch, job state, and logs.',
       "Do not inspect credential environment variables or ~/.modal.toml. Do not install or invoke Modal, write a Modal-decorated application, present a prose approval card, ask for chat approval, or send the user to manually recreate the job in Compute. Once the files and parameters are ready, call `compute_job` immediately and let its governed card request approval.",
-      "The cached skill content and its reference files describe a legacy direct-SDK integration and are intentionally superseded for this OpenScience runtime. If the user explicitly wants to author an independent Modal Python application, explain that it is a separate workflow outside governed OpenScience Compute; provide conceptual help only and do not execute it here.",
+      "The cached skill content and its reference files describe a legacy direct-SDK integration and are intentionally superseded for this OpenScience runtime. If the user explicitly wants to author an independent Modal Python application, explain that it is a separate workflow outside OpenScience's reviewed job flow; provide conceptual help only and do not execute it here.",
     ].join("\n")
   }
 }

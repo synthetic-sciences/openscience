@@ -1,24 +1,16 @@
 export interface ResearchToolsStatus {
   signedIn: boolean
-  plan: {
-    id: string
-    label: string
-    status: string | null
-  }
   search: {
-    route: "managed" | "community"
-    state: "available" | "near_limit" | "critical" | "exhausted" | "conditional" | "unavailable"
+    route: "credits" | "community"
+    state: "available" | "basic" | "conditional"
     enabled: boolean
-    limit: number | null
-    used: number | null
-    remaining: number | null
-    resetAt: string | null
+    balanceCredits: number | null
     communityFlagEnabled: boolean
   }
   telemetry: {
     analyticsEnabled: boolean
-    researchContentEnabled: false
-    source: "default" | "local" | "account"
+    researchContentEnabled: boolean
+    source: "default" | "account"
     signedIn: boolean
     consentVersion: string
     pending: boolean
@@ -38,38 +30,29 @@ export function searchStatus(status: ResearchToolsStatus) {
       tone: "neutral" as const,
     }
   }
-  if (search.state === "exhausted") {
-    return { label: "Allowance used", detail: resetDetail(search.resetAt), tone: "warning" as const }
-  }
-  if (search.state === "unavailable") {
+  if (search.state === "basic") {
     return {
-      label: "Allowance unavailable",
-      detail: "The Gateway could not load the current allowance. Retry in a moment.",
+      label: "Basic",
+      detail:
+        search.balanceCredits === null
+          ? "Basic community search is available. Enhanced search status could not be checked."
+          : "Basic community search is available. Add credits for enhanced search.",
       tone: "neutral" as const,
     }
   }
-  const remaining = search.remaining ?? 0
-  const limit = search.limit ?? 0
+  const balance = search.balanceCredits ?? 0
   return {
-    label: `${remaining.toLocaleString()} left`,
-    detail: `${remaining.toLocaleString()} of ${limit.toLocaleString()} managed searches remain${resetDetail(search.resetAt, true)}.`,
-    tone: search.state === "near_limit" || search.state === "critical" ? ("warning" as const) : ("success" as const),
+    label: "Ready",
+    detail: `${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} credits available for managed models and search.`,
+    tone: "success" as const,
   }
 }
 
 export function dataSharingDetail(status: ResearchToolsStatus) {
-  if (status.telemetry.corrupt) return "The consent record could not be read, so sharing is off until you choose again."
-  if (!status.telemetry.analyticsEnabled)
-    return "Off. Any queued structural usage has been removed from this installation."
-  if (status.telemetry.source === "default") return "On by default. You can turn it off at any time."
-  if (status.telemetry.pending) return "Saved locally and waiting to sync with your account."
-  return status.telemetry.source === "account" ? "On for this account." : "On for this installation."
-}
-
-function resetDetail(value: string | null, inline = false) {
-  if (!value) return inline ? "" : "The next allowance reset date is not available."
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return inline ? "" : "The next allowance reset date is not available."
-  const label = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date)
-  return inline ? ` until ${label}` : `Resets ${label}.`
+  if (status.telemetry.corrupt) return "Off until you choose this setting again."
+  if (!status.telemetry.analyticsEnabled || !status.telemetry.researchContentEnabled)
+    return "Off. New activity stays on this device."
+  if (status.telemetry.pending) return "Saved on this device. It will sync when OpenScience reconnects."
+  if (status.telemetry.source === "default") return "On by default for this account."
+  return "On for this account."
 }

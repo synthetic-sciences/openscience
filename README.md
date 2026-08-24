@@ -19,7 +19,7 @@ Give it a goal. It reads the literature, writes and runs code, runs the experime
 
 ---
 
-OpenScience is an AI workbench for scientific research. You give it a goal, and it works through the research loop the way a capable collaborator would. It reads the papers that matter, forms a hypothesis, writes and runs code, runs experiments on real compute, queries the major scientific databases, and writes up the result. It runs as a workspace in your browser and works with any frontier or open-weight model from Anthropic, OpenAI, Google, and dozens of other providers, using your own API keys. No account is required.
+OpenScience is an AI workbench for scientific research. You give it a goal, and it works through the research loop the way a capable collaborator would. It reads the papers that matter, forms a hypothesis, writes and runs code, runs experiments on your compute, queries the major scientific databases, and writes up the result. It runs as a workspace in your browser and works with frontier or open-weight models using your own keys, eligible ChatGPT access, local models, or Ace. A free Synthetic Sciences account links the installation once and keeps research sessions available as an observable trace; Ace remains optional.
 
 It is model-agnostic, open source, and built to do real work in machine learning, biology, physics, and chemistry.
 
@@ -41,7 +41,7 @@ npm install -g @synsci/openscience
 openscience
 ```
 
-The command is `openscience`, and it opens the workspace in your browser without requiring an account or setup wizard. Connect ChatGPT/Codex, your own provider keys, or optional Gateway-managed models from **Customize → Models** when you want them. If you would rather not install it globally, `npx synsci` does the same thing in a single step:
+The command is `openscience`, and it opens the workspace in your browser. The first launch links a free Synthetic Sciences account and keeps a revocable device credential, so later launches do not repeat browser sign-in. Connect ChatGPT/Codex, your own provider keys, local models, or optional Ace-managed models from **Customize → Models**. If you would rather not install it globally, `npx synsci` does the same thing in a single step:
 
 ```bash
 npx synsci
@@ -66,16 +66,16 @@ openscience
 openscience ~/code/my-project
 ```
 
-## Gateway
+## Synthetic Sciences account and Ace
 
-[The managed Gateway from Synthetic Sciences](https://app.syntheticsciences.ai) is optional. It adds synced private research graphs, managed models, and managed research search without becoming a dependency for local, BYOK, or ChatGPT/Codex-backed work.
+OpenScience uses a free [Synthetic Sciences account](https://app.syntheticsciences.ai) to connect sessions, settings, and optional synced services. Sign in once and the device keeps a revocable API key, so local, BYOK, and eligible ChatGPT/Codex-backed work does not require repeated browser logins. Ace is the optional pay-as-you-go Gateway for managed models and enhanced search.
 
 ```bash
-openscience login          # connect your Synthetic Sciences account
-openscience wallet         # check your balance and top up
+openscience login          # connect this device once
+openscience wallet         # check Ace credits and auto-reload
 ```
 
-Ace is $20/month with **20 credits**, a **Generous research quota**, Synthetic Scientists access, and auto-reload enabled by default. Ace+ is $100/month with **150 credits**, a **3x research quota**, the same Synthetic Scientists access, priority support, and early access. Auto-reload can be turned off during checkout or anytime in Billing. Bring-your-own-key, local-model, and eligible ChatGPT/Codex usage remain independent of those plans and are never charged against managed credits. Use `openscience status` to see what you are connected to, and `openscience logout` to disconnect.
+Ace has no subscription. Add **20 credits** for $20 plus the processing fee shown before payment. Managed models run through OpenRouter, and the same balance covers enhanced managed search. By default, Ace adds 20 credits when the balance falls below 5; change the amount, set a monthly limit, or turn it off anytime in Billing. BYOK, local-model, and eligible ChatGPT/Codex usage remain separate and are never charged against Ace credits.
 
 ## How it works
 
@@ -111,7 +111,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for how the system fits together, [CONTRI
 
 ## Security
 
-The permission system keeps you aware of what the agent is doing; it is not an isolation boundary by itself. New local installs start in **Approve for me**: the project is trusted, while commands run inside macOS Seatbelt or Linux bubblewrap containment. The composer’s **Research tools → Action approval** menu can switch to **Ask for approval** (sandboxed and project trust revoked) or deliberately enable **Full access** (trusted project with containment off). Managed policy may enforce a stricter boundary. The sandbox is not a full jail, so use a container or VM for hostile code. Gateway tokens stay out of general subprocess environments, arbitrary Python/R kernels receive a minimal environment, and credential-shaped values are redacted from output. Content-free product telemetry is enabled by default and can be disabled in Settings; prompts, responses, files, notebook cells, and shell output require a separate explicit research-content opt-in. To inspect or verify containment, run `openscience sandbox` and `openscience sandbox test`; to report a vulnerability, see [SECURITY.md](SECURITY.md).
+The permission system keeps you aware of what the agent is doing; it is not an isolation boundary by itself. New local installs start in **Approve for me**: the project is trusted, while commands run inside macOS Seatbelt or Linux bubblewrap containment. The composer’s **Research tools → Action approval** menu can switch to **Ask for approval** (sandboxed and project trust revoked) or deliberately enable **Full access** (trusted project with containment off). Managed policy may enforce a stricter boundary. The sandbox is not a full jail, so use a container or VM for hostile code. Account and provider credentials stay out of general subprocess environments, arbitrary Python/R kernels receive a minimal environment, and credential-shaped values are redacted from output. **Use my data** is enabled by default after sign-in and uploads the complete research trajectory, including prompts, model responses, tool calls, and results, with credentials redacted. Turn the single setting off to stop uploads and clear pending events; local sessions continue to work. To inspect or verify containment, run `openscience sandbox` and `openscience sandbox test`; to report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 

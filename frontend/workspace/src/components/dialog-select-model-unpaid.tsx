@@ -7,6 +7,7 @@ import { type Component, onCleanup, onMount, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { isFreeCost } from "@/utils/model-cost"
 
 export const DialogSelectModelUnpaid: Component = () => {
   const local = useLocal()
@@ -44,13 +45,7 @@ export const DialogSelectModelUnpaid: Component = () => {
               class="w-full"
               placement="right-start"
               gutter={12}
-              value={
-                <ModelTooltip
-                  model={item}
-                  latest={item.latest}
-                  free={item.provider.id === "synsci" && (!item.cost || item.cost.input === 0)}
-                />
-              }
+              value={<ModelTooltip model={item} latest={item.latest} free={isFreeCost(item.cost)} />}
             >
               {node}
             </Tooltip>

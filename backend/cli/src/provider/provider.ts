@@ -537,10 +537,9 @@ export namespace Provider {
     )
   }
 
-  /** A user-owned (BYOK) key: a real, non-managed credential. Excludes the
-   *  "public" sentinel used for the zero-cost openscience demo models. */
+  /** A user-owned (BYOK) key: a real, non-managed credential. */
   function isByokKey(key: unknown): key is string {
-    return typeof key === "string" && key.length > 0 && key !== "public" && !Auth.isAtlasApiKey(key)
+    return typeof key === "string" && key.length > 0 && !Auth.isAtlasApiKey(key)
   }
 
   /** The credential that actually authenticates a provider: an explicit apiKey
@@ -566,18 +565,17 @@ export namespace Provider {
    *  When the LLM spend toggle is explicitly "managed", every wallet inference
    *  call flows through OpenRouter. The other first-party managed proxies
    *  (anthropic / openai / google / xAI / Meta) are taken out of the managed
-   *  path entirely; the hosted
-   *  zero-cost `synsci` demo provider is kept. BYOK and the legacy
-   *  auto-detect path (`billing.llm` unset / null / "byok") are UNTOUCHED —
-   *  this only fires on an explicit managed-wallet opt-in. Pure + sync. */
+   *  path entirely. This helper controls the extra catalog curation applied by
+   *  an explicit managed-wallet opt-in. Credential safety is enforced
+   *  independently: non-OpenRouter thk_* routes are rejected in every mode.
+   *  Pure + sync. */
   export function managedRoutesCuratedProvidersOnly(config: Config.Info): boolean {
     return config.billing?.llm === "managed"
   }
 
-  /** Providers a managed wallet session may load: OpenRouter for aggregated
-   *  inference, plus the hosted `synsci` demo. Pure. */
+  /** The only provider allowed to spend Ace credits. */
   export function managedProviderAllowed(providerID: string): boolean {
-    return providerID === "openrouter" || providerID.startsWith("synsci")
+    return providerID === "openrouter"
   }
 
   const OPENROUTER_VENDOR_PREFIX: Record<string, string> = {
@@ -673,34 +671,6 @@ export namespace Provider {
               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
         },
-      }
-    },
-    // Keyed on the catalog provider id `synsci` (the Atlas wire-contract id) — a
-    // stale `openscience` key here never matched database["openscience"], so the
-    // loop logged "Provider does not exist in model list openscience" and this
-    // loader never ran: the zero-cost demo's `apiKey: "public"` sentinel was
-    // never set (new keyless users couldn't use the demo at all) and the
-    // "drop paid models when no key" gating was skipped.
-    async synsci(input) {
-      const hasKey = await (async () => {
-        const env = Env.all()
-        if (input.env.some((item) => env[item])) return true
-        if (await Auth.get(input.id)) return true
-        const config = await Config.get()
-        if (config.provider?.[input.id]?.options?.apiKey) return true
-        return false
-      })()
-
-      if (!hasKey) {
-        for (const [key, value] of Object.entries(input.models)) {
-          if (value.cost.input === 0) continue
-          delete input.models[key]
-        }
-      }
-
-      return {
-        autoload: Object.keys(input.models).length > 0,
-        options: hasKey ? {} : { apiKey: "public" },
       }
     },
     openai: async () => {
@@ -1575,11 +1545,11 @@ export namespace Provider {
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+    const authEntries = await Auth.all()
     // Managed wallet ⇒ curated routes only. OpenRouter handles the aggregated
-    // catalog. Every other first-party managed proxy is dropped. Gated on the
-    // explicit toggle, so
-    // BYOK and legacy auto-detect sessions see every provider as before. This is
-    // the single seam that makes defaultModel()/getSmallModel() managed-safe.
+    // catalog. The explicit toggle additionally hides unconfigured providers;
+    // the credential-level guard below independently rejects stale non-OpenRouter
+    // thk_* routes in every mode, including legacy auto-detect sessions.
     const managedCuratedProvidersOnly = managedRoutesCuratedProvidersOnly(config)
     // Config-registered providers pointing at the local machine (Ollama, LM
     // Studio, any OpenAI-compatible localhost endpoint). They're free and run on
@@ -1588,23 +1558,37 @@ export namespace Provider {
     // managed proxies.
     const localProviderIds = new Set(
       Object.entries(config.provider ?? {})
-        .filter(([, p]) => isLocalBaseURL(p?.options?.baseURL ?? p?.api))
+        .filter(([, p]) => {
+          const baseURL = p?.options?.baseURL ?? p?.api
+          return isLocalBaseURL(baseURL) && !hasManagedProxyPath(baseURL)
+        })
         .map(([id]) => id),
     )
 
     function isProviderAllowed(providerID: string): boolean {
-      // Codex OAuth (openai-codex) is the user's own ChatGPT subscription: it
-      // routes straight to chatgpt.com and never debits the managed wallet, so a
-      // completed sign-in must surface regardless of managed-mode routing or the
-      // synced managed catalog whitelist. Treat it as BYOK-class (like a local
-      // provider) — only an explicit `disabled` entry hides it. Without this,
-      // managed users finish the ChatGPT login (the credential persists) but the
-      // provider is filtered out and the UI never flips to Connected.
-      if (providerID === "openai-codex") return !disabled.has(providerID)
-      if (managedCuratedProvidersOnly && !managedProviderAllowed(providerID) && !localProviderIds.has(providerID))
-        return false
-      if (enabled && !enabled.has(providerID)) return false
+      // The former hosted/demo catalog is retired. Keep the package namespace
+      // and launcher compatibility, but never surface these provider ids from
+      // models.dev, env, auth, or user config.
+      if (providerID === "synsci" || providerID.startsWith("synsci-")) return false
       if (disabled.has(providerID)) return false
+      const credential = authEntries[providerID]
+      const baseURL = providers[providerID]?.options?.["baseURL"]
+      const direct =
+        providerID === "openai-codex" ||
+        localProviderIds.has(providerID) ||
+        (isLocalBaseURL(baseURL) && !hasManagedProxyPath(baseURL)) ||
+        credential?.type === "oauth" ||
+        (credential?.type === "api" && isByokKey(credential.key)) ||
+        isByokKey(providers[providerID] ? effectiveKey(providers[providerID]) : undefined)
+      // Managed mode curates only the credit-spending catalog. Explicit direct
+      // integrations remain visible and call their provider without touching
+      // Ace, even when the account's synced managed whitelist omits them.
+      if (managedCuratedProvidersOnly && !managedProviderAllowed(providerID) && !direct) return false
+      // A user- or administrator-authored enabled_providers list is an
+      // explicit local restriction and applies to direct providers too. The
+      // dashboard's managed recommendation is stripped before config merge, so
+      // respecting this list cannot hide BYOK merely because Atlas omitted it.
+      if (enabled && !enabled.has(providerID)) return false
       return true
     }
 
@@ -1801,7 +1785,7 @@ export namespace Provider {
     }
 
     // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
+    for (const [providerID, provider] of Object.entries(authEntries)) {
       if (disabled.has(providerID)) continue
       if (provider.type === "api") {
         mergeProvider(providerID, {
@@ -1889,7 +1873,7 @@ export namespace Provider {
       // a `config.provider` entry that only supplies a `whitelist`, `name`,
       // etc. is not where the credential came from. "custom" is excluded from
       // this protection: it's loader-assigned (not credential-derived) and an
-      // autoloaded provider (AWS-profile Bedrock, google-vertex, synsci,
+      // autoloaded provider (AWS-profile Bedrock, google-vertex,
       // cloudflare-ai-gateway, gitlab, sap-ai-core, ...) that also appears in
       // config.provider for its whitelist has always been, and must stay,
       // "config" here.
@@ -1908,6 +1892,42 @@ export namespace Provider {
         continue
       }
 
+      const auth = authEntries[providerID]
+      // An explicit OAuth record is the credential authority. Old synced env
+      // snapshots may still contribute a thk_* key and Atlas proxy base URL to
+      // the provider merge, but neither may survive into the OAuth SDK request.
+      // Remove only managed-shaped leftovers; ordinary user configuration is
+      // left intact. With no baseURL override, the model's direct provider URL
+      // is selected below when the SDK is constructed.
+      if (auth?.type === "oauth") {
+        if (Auth.isAtlasApiKey(provider.key)) provider.key = undefined
+        if (Auth.isAtlasApiKey(provider.options?.["apiKey"])) delete provider.options["apiKey"]
+        if (hasManagedProxyPath(provider.options?.["baseURL"])) delete provider.options["baseURL"]
+        provider.env = []
+      }
+
+      // A thk_* token is an Atlas-managed credential, regardless of the old
+      // billing.llm toggle. Ace has one managed inference seam: OpenRouter.
+      // Legacy sync snapshots used to broadcast that token to Anthropic,
+      // OpenAI, Google, xAI, and Meta too; leaving those providers visible when
+      // billing.llm was unset let a stale client call discontinued proxy routes.
+      // Preserve genuine direct integrations: an explicit OAuth record, Codex
+      // OAuth, a user's own effective API key, or a localhost endpoint never
+      // reaches this managed-credential branch.
+      const baseURL = provider.options?.["baseURL"] ?? config.provider?.[providerID]?.api
+      const credential = effectiveKey(provider)
+      const directRoute =
+        providerID === "openai-codex" ||
+        auth?.type === "oauth" ||
+        (auth?.type === "api" && isByokKey(auth.key)) ||
+        isByokKey(credential) ||
+        (isLocalBaseURL(baseURL) && !hasManagedProxyPath(baseURL))
+      const managedRoute = Auth.isAtlasApiKey(credential) || hasManagedProxyPath(baseURL)
+      if (!managedProviderAllowed(providerID) && !directRoute && managedRoute) {
+        delete providers[providerID]
+        continue
+      }
+
       // Under an EXPLICIT byok toggle, drop any provider whose effective
       // credential is a managed Atlas (thk_) key. The managed sync writes
       // OPENROUTER_BASE_URL + a thk_ OPENROUTER_API_KEY into the environment and
@@ -1917,29 +1937,6 @@ export namespace Provider {
       // only; auto-detect (billing unset) is left alone so a thk_ key can still
       // resolve to managed there.
       if (config.billing?.llm === "byok" && Auth.isAtlasApiKey(effectiveKey(provider))) {
-        delete providers[providerID]
-        continue
-      }
-
-      // The managed mirror of the guard above. Under an EXPLICIT managed
-      // toggle the OpenRouter loader declines to route on a stored own key,
-      // but declining is not enough on its own: "load apikeys" already stamped
-      // provider.key from auth.json, and getSDK picks that up with baseURL
-      // falling back to public OpenRouter. A user whose Atlas session lapsed
-      // would keep chatting on their OWN key while the toggle still reads
-      // "Managed" and the wallet is never touched. Drop the provider instead —
-      // seeing no OpenRouter models is honest, silently spending a BYOK key is
-      // not. Exempt the two provider classes this file already treats as
-      // BYOK-by-design, since neither can debit the wallet and both are
-      // deliberately kept in managed mode: the user's own ChatGPT subscription
-      // (see isProviderAllowed) and anything served from their own machine
-      // (see isLocalBaseURL). Auto-detect (billing unset / null) and byok never
-      // reach this branch.
-      const exempt =
-        providerID === "openai-codex" ||
-        localProviderIds.has(providerID) ||
-        isLocalBaseURL(provider.options?.["baseURL"])
-      if (managedCuratedProvidersOnly && !exempt && isByokKey(effectiveKey(provider))) {
         delete providers[providerID]
         continue
       }
@@ -2334,18 +2331,6 @@ export namespace Provider {
     }
   }
 
-  /** Whether a managed (Atlas) session is active. Only then should the hosted
-   *  `openscience` provider participate in DEFAULT model selection — a fresh
-   *  BYOK/OAuth clone must default to the user's own provider. */
-  async function hasManagedSession(): Promise<boolean> {
-    try {
-      const session = await OpenScience.getSession()
-      return !!session?.api_key
-    } catch {
-      return false
-    }
-  }
-
   export async function getSmallModel(providerID: string) {
     const cfg = await Config.get()
 
@@ -2365,9 +2350,6 @@ export namespace Provider {
         "gemini-2.5-flash",
         "gpt-5-nano",
       ]
-      if (providerID.startsWith("synsci")) {
-        priority = ["gpt-5-nano"]
-      }
       if (providerID.startsWith("github-copilot")) {
         // prioritize free models for github copilot
         priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
@@ -2376,16 +2358,6 @@ export namespace Provider {
         for (const model of Object.keys(provider.models)) {
           if (model.includes(item)) return getModel(providerID, model)
         }
-      }
-    }
-
-    // Only fall back to the hosted openscience demo small-model when a managed
-    // session is active — a BYOK/OAuth clone shouldn't silently route summaries
-    // through the hosted endpoint.
-    if (await hasManagedSession()) {
-      const openscienceProvider = await state().then((state) => state.providers["synsci"])
-      if (openscienceProvider && openscienceProvider.models["gpt-5-nano"]) {
-        return getModel("synsci", "gpt-5-nano")
       }
     }
 
@@ -2425,16 +2397,10 @@ export namespace Provider {
       log.warn("configured model is not available, falling back to default selection", parsed)
     }
 
-    const managed = await hasManagedSession()
     const providers = Object.values(available)
     const configured = (p: Info) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)
-    // Drop the hosted `openscience` provider from DEFAULT priority unless a managed
-    // session is active, then pick the first provider that actually has models.
-    // Fall back to the raw configured list so a openscience-only, unmanaged clone
-    // still resolves a default rather than throwing.
-    const candidates = providers.filter((p) => configured(p) && (managed || !p.id.startsWith("synsci")))
-    const provider =
-      candidates.find((p) => Object.keys(p.models).length > 0) ?? candidates[0] ?? providers.find(configured)
+    const candidates = providers.filter((p) => configured(p))
+    const provider = candidates.find((p) => Object.keys(p.models).length > 0) ?? candidates[0]
     if (!provider) throw new Error(NO_PROVIDER_HINT)
     const [model] = sort(Object.values(provider.models))
     if (!model) throw new Error(NO_PROVIDER_HINT)

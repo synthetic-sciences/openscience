@@ -20,23 +20,31 @@ afterEach(() => {
 })
 
 describe("research_search", () => {
-  test("stays advertised on a non-managed provider and returns a typed unavailable result", async () => {
-    restores.push(spyOn(OpenScience, "resolveManagedSearchEntitlement").mockResolvedValue(false))
-    const dispatch = spyOn(OpenScience, "dispatchResearchSearch")
+  test("falls back to community search for every model when Gateway is unavailable", async () => {
+    const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue(null)
     restores.push(dispatch)
+    const fetcher = spyOn(globalThis, "fetch").mockImplementation(
+      (async () =>
+        new Response(
+          'data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"community fallback"}]}}\n\n',
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        )) as unknown as typeof fetch,
+    )
+    restores.push(fetcher)
     const tool = await ResearchSearchTool.init({ model: { providerID: "openai", modelID: "gpt-test" } })
     const result = await tool.execute(tool.parameters.parse({ query: "current protein folding benchmarks" }), context)
     expect(JSON.parse(result.output)).toMatchObject({
       status: "completed",
-      type: "search_unavailable",
-      retryable: false,
-      alternatives: ["science_search", "science_fetch", "WebFetch"],
+      provider: "community",
+      content: "community fallback",
     })
-    expect(dispatch).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
   test("preserves the existing community search rule for the Free community route", async () => {
-    restores.push(spyOn(OpenScience, "resolveManagedSearchEntitlement").mockResolvedValue(false))
+    const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue(null)
+    restores.push(dispatch)
     const fetcher = spyOn(globalThis, "fetch").mockImplementation(
       (async () =>
         new Response(
@@ -45,48 +53,80 @@ describe("research_search", () => {
         )) as unknown as typeof fetch,
     )
     restores.push(fetcher)
-    const tool = await ResearchSearchTool.init({ model: { providerID: "synsci", modelID: "free-model" } })
+    const tool = await ResearchSearchTool.init({ model: { providerID: "openrouter", modelID: "free-model" } })
     const result = await tool.execute(tool.parameters.parse({ query: "current protein folding benchmarks" }), context)
     expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(dispatch).toHaveBeenCalledTimes(1)
     expect(JSON.parse(result.output)).toMatchObject({
       status: "completed",
       provider: "community",
       content: "community result",
     })
-    expect(result.metadata).toMatchObject({ allowanceState: "community" })
+    expect(result.metadata).toMatchObject({ creditState: "community" })
     expect(result.metadata.resultCount).toBeUndefined()
   })
 
-  test("maps Gateway allowance exhaustion to one completed terminal result", async () => {
-    restores.push(spyOn(OpenScience, "resolveManagedSearchEntitlement").mockResolvedValue(true))
+  test("lets the Gateway return basic fallback results with an empty Wallet", async () => {
+    const invalidate = spyOn(OpenScience, "invalidateBalance").mockImplementation(() => undefined)
+    restores.push(invalidate)
+    const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
+      status: 200,
+      body: {
+        operation_id: "call_search",
+        status: "completed",
+        provider: "free_search",
+        funding: "free_fallback",
+        results: [{ id: "result", title: "Basic result", url: "https://example.test" }],
+        warnings: ["Enhanced search needs credits."],
+      },
+    })
+    restores.push(dispatch)
+
+    const tool = await ResearchSearchTool.init({ model: { providerID: "openai", modelID: "gpt-test" } })
+    const result = await tool.execute(tool.parameters.parse({ query: "current protein folding benchmarks" }), context)
+
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(result.output)).toMatchObject({ provider: "free_search", funding: "free_fallback" })
+    expect(result.metadata).toMatchObject({ creditState: "free", resultCount: 1 })
+    expect(invalidate).toHaveBeenCalledTimes(1)
+  })
+
+  test("falls back to community search when a mixed-version Gateway returns credit exhaustion", async () => {
+    const invalidate = spyOn(OpenScience, "invalidateBalance").mockImplementation(() => undefined)
+    restores.push(invalidate)
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
       status: 402,
       body: {
         detail: {
-          code: "search_allowance_exhausted",
-          message: "Allowance exhausted",
-          reset_at: "2026-09-01T00:00:00Z",
-          upgrade_url: "/billing",
+          code: "insufficient_credits",
+          message: "Add credits",
+          billing_url: "/billing",
         },
       },
     })
     restores.push(dispatch)
+    const fetcher = spyOn(globalThis, "fetch").mockImplementation(
+      (async () =>
+        new Response(
+          'data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"basic fallback"}]}}\n\n',
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        )) as unknown as typeof fetch,
+    )
+    restores.push(fetcher)
     const tool = await ResearchSearchTool.init({ model: { providerID: "anthropic", modelID: "claude-test" } })
     const result = await tool.execute(tool.parameters.parse({ query: "current protein folding benchmarks" }), context)
     expect(dispatch).toHaveBeenCalledTimes(1)
     expect(JSON.parse(result.output)).toMatchObject({
       status: "completed",
-      type: "search_allowance_exhausted",
-      reset_at: "2026-09-01T00:00:00Z",
-      upgrade_url: "https://app.syntheticsciences.ai/billing",
+      provider: "community",
+      content: "basic fallback",
     })
-    expect(result.metadata).toMatchObject({ allowanceState: "exhausted" })
+    expect(result.metadata).toMatchObject({ creditState: "community" })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(invalidate).toHaveBeenCalledTimes(1)
   })
 
-  test("refreshes a rejected entitlement and falls back to the unchanged Free community route", async () => {
-    restores.push(spyOn(OpenScience, "resolveManagedSearchEntitlement").mockResolvedValue(true))
-    const refresh = spyOn(OpenScience, "refreshManagedSearchEntitlementAfterRejection").mockResolvedValue(false)
-    restores.push(refresh)
+  test("keeps the basic route for a mixed-version paid-search entitlement rejection", async () => {
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
       status: 403,
       body: { detail: { code: "search_not_entitled", message: "Managed search is not enabled." } },
@@ -100,23 +140,91 @@ describe("research_search", () => {
         )) as unknown as typeof fetch,
     )
     restores.push(fetcher)
-    const tool = await ResearchSearchTool.init({ model: { providerID: "synsci", modelID: "free-model" } })
+    const tool = await ResearchSearchTool.init({ model: { providerID: "openrouter", modelID: "free-model" } })
     const result = await tool.execute(tool.parameters.parse({ query: "current protein folding benchmarks" }), context)
     expect(dispatch).toHaveBeenCalledTimes(1)
-    expect(refresh).toHaveBeenCalledTimes(1)
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(JSON.parse(result.output)).toMatchObject({ provider: "community", content: "community fallback" })
-    expect(result.metadata).toMatchObject({ allowanceState: "community" })
+    expect(result.metadata).toMatchObject({ creditState: "community" })
   })
 
-  test("passes a stable operation id and returns the normalized Gateway response without a billing call", async () => {
-    restores.push(spyOn(OpenScience, "resolveManagedSearchEntitlement").mockResolvedValue(true))
+  test.each([
+    {
+      status: 429,
+      body: { detail: { code: "rate_limited", message: "Gateway search is busy." } },
+      warning: "Gateway search is busy. Basic community search was used.",
+    },
+    {
+      status: 503,
+      body: {
+        detail: { code: "search_unavailable", message: "Enhanced search is temporarily unavailable." },
+        warnings: ["Upstream search provider did not respond."],
+      },
+      warning: "Enhanced search is temporarily unavailable. Basic community search was used.",
+    },
+  ])("falls back transparently on transient Gateway HTTP $status responses", async ({ status, body, warning }) => {
+    const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({ status, body })
+    restores.push(dispatch)
+    const invalidate = spyOn(OpenScience, "invalidateBalance").mockImplementation(() => undefined)
+    restores.push(invalidate)
+    const fetcher = spyOn(globalThis, "fetch").mockImplementation(
+      (async () =>
+        new Response(
+          'data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"basic fallback"}]}}\n\n',
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        )) as unknown as typeof fetch,
+    )
+    restores.push(fetcher)
+
+    const tool = await ResearchSearchTool.init({ model: { providerID: "openrouter", modelID: "test-model" } })
+    const result = await tool.execute(tool.parameters.parse({ query: "current protein folding benchmarks" }), context)
+    const output = JSON.parse(result.output) as { provider: string; content: string; warnings: string[] }
+
+    expect(output).toMatchObject({ provider: "community", content: "basic fallback" })
+    expect(output.warnings).toContain(warning)
+    if (status === 503) expect(output.warnings).toContain("Upstream search provider did not respond.")
+    expect(result.metadata).toMatchObject({ creditState: "community" })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    // A failed enhanced request never creates a client-side wallet mutation.
+    expect(invalidate).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    { status: 401, code: "invalid_api_key" },
+    { status: 403, code: "account_disabled" },
+    { status: 422, code: "invalid_search_request" },
+  ])("surfaces Gateway HTTP $status errors that require user action", async ({ status, code }) => {
+    const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
+      status,
+      body: { detail: { code, message: "Reconnect or correct the request." } },
+    })
+    restores.push(dispatch)
+    const fetcher = spyOn(globalThis, "fetch").mockImplementation((async () => {
+      throw new Error("community search must not hide account or request errors")
+    }) as unknown as typeof fetch)
+    restores.push(fetcher)
+
+    const tool = await ResearchSearchTool.init({ model: { providerID: "openrouter", modelID: "test-model" } })
+    const result = await tool.execute(tool.parameters.parse({ query: "current protein folding benchmarks" }), context)
+
+    expect(JSON.parse(result.output)).toMatchObject({
+      type: "search_unavailable",
+      message: "Reconnect or correct the request.",
+    })
+    expect(result.metadata).toMatchObject({ creditState: "unavailable" })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  test("passes a stable operation id and invalidates the displayed balance after funded settlement", async () => {
+    const invalidate = spyOn(OpenScience, "invalidateBalance").mockImplementation(() => undefined)
+    restores.push(invalidate)
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
       status: 200,
       body: {
         operation_id: "call_search",
         status: "completed",
         provider: "gateway",
+        funding: "wallet",
         results: [{ id: "result", title: "Paper", url: "https://example.test" }],
         warnings: [],
         cache: { hit: false },
@@ -131,7 +239,13 @@ describe("research_search", () => {
     )
     expect(dispatch).toHaveBeenCalledTimes(1)
     expect(dispatch.mock.calls[0]?.[1]).toBe("call_search")
+    expect(invalidate).toHaveBeenCalledTimes(1)
     expect(JSON.parse(result.output)).toMatchObject({ status: "completed", provider: "gateway" })
-    expect(result.metadata).toMatchObject({ searchSource: "web", searchMode: "fast", resultCount: 1 })
+    expect(result.metadata).toMatchObject({
+      searchSource: "web",
+      searchMode: "fast",
+      resultCount: 1,
+      creditState: "funded",
+    })
   })
 })

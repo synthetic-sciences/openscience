@@ -47,8 +47,8 @@ const press = async (target: HTMLElement, key: string) => {
 
 describe("inference source classification", () => {
   test("labels provider routes by the access the user controls", () => {
-    expect(subject.inferenceSource({ providerID: "synsci", credential: "custom" })).toBe("managed")
-    expect(subject.inferenceSource({ providerID: "synsci-demo", credential: "env" })).toBe("managed")
+    expect(subject.inferenceSource({ providerID: "synsci", credential: "custom" })).toBeUndefined()
+    expect(subject.inferenceSource({ providerID: "anthropic", credential: "managed" })).toBeUndefined()
     expect(subject.inferenceSource({ providerID: "openai-codex", credential: "custom" })).toBe("chatgpt")
     expect(subject.inferenceSource({ providerID: "anthropic", credential: "api" })).toBe("byok")
     expect(subject.inferenceSource({ providerID: "anthropic", credential: "env" })).toBe("byok")

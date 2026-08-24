@@ -6227,50 +6227,6 @@
                           "handoff": {
                             "type": "object",
                             "properties": {
-                              "atlas_compute_id": {
-                                "anyOf": [
-                                  {
-                                    "type": "object",
-                                    "properties": {
-                                      "status": {
-                                        "type": "string",
-                                        "const": "available"
-                                      },
-                                      "value": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "status",
-                                      "value"
-                                    ]
-                                  },
-                                  {
-                                    "type": "object",
-                                    "properties": {
-                                      "status": {
-                                        "type": "string",
-                                        "const": "unavailable"
-                                      },
-                                      "reason": {
-                                        "type": "string",
-                                        "enum": [
-                                          "not_applicable",
-                                          "not_captured",
-                                          "not_implemented",
-                                          "not_published",
-                                          "not_versioned",
-                                          "remote_unverified"
-                                        ]
-                                      }
-                                    },
-                                    "required": [
-                                      "status",
-                                      "reason"
-                                    ]
-                                  }
-                                ]
-                              },
                               "atlas_run_id": {
                                 "anyOf": [
                                   {
@@ -6317,7 +6273,6 @@
                               }
                             },
                             "required": [
-                              "atlas_compute_id",
                               "atlas_run_id"
                             ]
                           }
@@ -8635,50 +8590,6 @@
                         "handoff": {
                           "type": "object",
                           "properties": {
-                            "atlas_compute_id": {
-                              "anyOf": [
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "status": {
-                                      "type": "string",
-                                      "const": "available"
-                                    },
-                                    "value": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "status",
-                                    "value"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "status": {
-                                      "type": "string",
-                                      "const": "unavailable"
-                                    },
-                                    "reason": {
-                                      "type": "string",
-                                      "enum": [
-                                        "not_applicable",
-                                        "not_captured",
-                                        "not_implemented",
-                                        "not_published",
-                                        "not_versioned",
-                                        "remote_unverified"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "status",
-                                    "reason"
-                                  ]
-                                }
-                              ]
-                            },
                             "atlas_run_id": {
                               "anyOf": [
                                 {
@@ -8725,7 +8636,6 @@
                             }
                           },
                           "required": [
-                            "atlas_compute_id",
                             "atlas_run_id"
                           ]
                         }
@@ -11976,50 +11886,6 @@
                         "handoff": {
                           "type": "object",
                           "properties": {
-                            "atlas_compute_id": {
-                              "anyOf": [
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "status": {
-                                      "type": "string",
-                                      "const": "available"
-                                    },
-                                    "value": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "status",
-                                    "value"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "status": {
-                                      "type": "string",
-                                      "const": "unavailable"
-                                    },
-                                    "reason": {
-                                      "type": "string",
-                                      "enum": [
-                                        "not_applicable",
-                                        "not_captured",
-                                        "not_implemented",
-                                        "not_published",
-                                        "not_versioned",
-                                        "remote_unverified"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "status",
-                                    "reason"
-                                  ]
-                                }
-                              ]
-                            },
                             "atlas_run_id": {
                               "anyOf": [
                                 {
@@ -12066,7 +11932,6 @@
                             }
                           },
                           "required": [
-                            "atlas_compute_id",
                             "atlas_run_id"
                           ]
                         }
@@ -14413,50 +14278,6 @@
                         "handoff": {
                           "type": "object",
                           "properties": {
-                            "atlas_compute_id": {
-                              "anyOf": [
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "status": {
-                                      "type": "string",
-                                      "const": "available"
-                                    },
-                                    "value": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "status",
-                                    "value"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "status": {
-                                      "type": "string",
-                                      "const": "unavailable"
-                                    },
-                                    "reason": {
-                                      "type": "string",
-                                      "enum": [
-                                        "not_applicable",
-                                        "not_captured",
-                                        "not_implemented",
-                                        "not_published",
-                                        "not_versioned",
-                                        "remote_unverified"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "status",
-                                    "reason"
-                                  ]
-                                }
-                              ]
-                            },
                             "atlas_run_id": {
                               "anyOf": [
                                 {
@@ -14503,7 +14324,6 @@
                             }
                           },
                           "required": [
-                            "atlas_compute_id",
                             "atlas_run_id"
                           ]
                         }
@@ -16850,50 +16670,6 @@
                         "handoff": {
                           "type": "object",
                           "properties": {
-                            "atlas_compute_id": {
-                              "anyOf": [
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "status": {
-                                      "type": "string",
-                                      "const": "available"
-                                    },
-                                    "value": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "status",
-                                    "value"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "status": {
-                                      "type": "string",
-                                      "const": "unavailable"
-                                    },
-                                    "reason": {
-                                      "type": "string",
-                                      "enum": [
-                                        "not_applicable",
-                                        "not_captured",
-                                        "not_implemented",
-                                        "not_published",
-                                        "not_versioned",
-                                        "remote_unverified"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "status",
-                                    "reason"
-                                  ]
-                                }
-                              ]
-                            },
                             "atlas_run_id": {
                               "anyOf": [
                                 {
@@ -16940,7 +16716,6 @@
                             }
                           },
                           "required": [
-                            "atlas_compute_id",
                             "atlas_run_id"
                           ]
                         }
@@ -17740,11 +17515,6 @@
                         "non-commercial"
                       ]
                     },
-                    "extra_budget_usd": {
-                      "default": 0,
-                      "type": "number",
-                      "minimum": 0
-                    },
                     "show_trace": {
                       "default": false,
                       "type": "boolean"
@@ -17814,11 +17584,6 @@
                         "non-commercial"
                       ]
                     },
-                    "extra_budget_usd": {
-                      "default": 0,
-                      "type": "number",
-                      "minimum": 0
-                    },
                     "show_trace": {
                       "default": false,
                       "type": "boolean"
@@ -17875,11 +17640,6 @@
                       "commercial",
                       "non-commercial"
                     ]
-                  },
-                  "extra_budget_usd": {
-                    "default": 0,
-                    "type": "number",
-                    "minimum": 0
                   },
                   "show_trace": {
                     "default": false,
@@ -18213,7 +17973,7 @@
     "/settings/billing": {
       "get": {
         "operationId": "settings.billing.get",
-        "summary": "Get billing spend toggles + wallet status",
+        "summary": "Get the LLM spend preference and wallet status",
         "responses": {
           "200": {
             "description": "Billing state",
@@ -18236,13 +17996,6 @@
                         }
                       ]
                     },
-                    "compute": {
-                      "type": "string",
-                      "enum": [
-                        "managed",
-                        "byok"
-                      ]
-                    },
                     "wallet": {
                       "type": "object",
                       "properties": {
@@ -18270,7 +18023,6 @@
                   },
                   "required": [
                     "llm",
-                    "compute",
                     "wallet"
                   ]
                 }
@@ -18287,7 +18039,7 @@
       },
       "put": {
         "operationId": "settings.billing.update",
-        "summary": "Update billing spend toggles (managed vs BYOK)",
+        "summary": "Update the LLM spend preference (managed vs BYOK)",
         "responses": {
           "200": {
             "description": "Updated billing state",
@@ -18310,13 +18062,6 @@
                         }
                       ]
                     },
-                    "compute": {
-                      "type": "string",
-                      "enum": [
-                        "managed",
-                        "byok"
-                      ]
-                    },
                     "wallet": {
                       "type": "object",
                       "properties": {
@@ -18344,7 +18089,6 @@
                   },
                   "required": [
                     "llm",
-                    "compute",
                     "wallet"
                   ]
                 }
@@ -18370,13 +18114,6 @@
                       {
                         "type": "null"
                       }
-                    ]
-                  },
-                  "compute": {
-                    "type": "string",
-                    "enum": [
-                      "managed",
-                      "byok"
                     ]
                   }
                 }
@@ -18546,7 +18283,7 @@
     "/settings/research-tools": {
       "get": {
         "operationId": "settings.researchTools.get",
-        "summary": "Get plan, research-search, and data-sharing status",
+        "summary": "Get credit-backed search and data-sharing status",
         "responses": {
           "200": {
             "description": "Research tools status",
@@ -18558,39 +18295,13 @@
                     "signedIn": {
                       "type": "boolean"
                     },
-                    "plan": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "label": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "label",
-                        "status"
-                      ]
-                    },
                     "search": {
                       "type": "object",
                       "properties": {
                         "route": {
                           "type": "string",
                           "enum": [
-                            "managed",
+                            "credits",
                             "community"
                           ]
                         },
@@ -18598,56 +18309,17 @@
                           "type": "string",
                           "enum": [
                             "available",
-                            "near_limit",
-                            "critical",
-                            "exhausted",
-                            "conditional",
-                            "unavailable"
+                            "basic",
+                            "conditional"
                           ]
                         },
                         "enabled": {
                           "type": "boolean"
                         },
-                        "limit": {
+                        "balanceCredits": {
                           "anyOf": [
                             {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "used": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "remaining": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "resetAt": {
-                          "anyOf": [
-                            {
-                              "type": "string"
+                              "type": "number"
                             },
                             {
                               "type": "null"
@@ -18662,10 +18334,7 @@
                         "route",
                         "state",
                         "enabled",
-                        "limit",
-                        "used",
-                        "remaining",
-                        "resetAt",
+                        "balanceCredits",
                         "communityFlagEnabled"
                       ]
                     },
@@ -18676,14 +18345,12 @@
                           "type": "boolean"
                         },
                         "researchContentEnabled": {
-                          "type": "boolean",
-                          "const": false
+                          "type": "boolean"
                         },
                         "source": {
                           "type": "string",
                           "enum": [
                             "default",
-                            "local",
                             "account"
                           ]
                         },
@@ -18717,7 +18384,6 @@
                   },
                   "required": [
                     "signedIn",
-                    "plan",
                     "search",
                     "telemetry"
                   ]
@@ -18737,7 +18403,7 @@
     "/settings/research-tools/telemetry": {
       "put": {
         "operationId": "settings.researchTools.telemetry.update",
-        "summary": "Update structural usage sharing consent",
+        "summary": "Update OpenScience data-use consent",
         "responses": {
           "200": {
             "description": "Updated research tools status",
@@ -18749,39 +18415,13 @@
                     "signedIn": {
                       "type": "boolean"
                     },
-                    "plan": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "label": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "label",
-                        "status"
-                      ]
-                    },
                     "search": {
                       "type": "object",
                       "properties": {
                         "route": {
                           "type": "string",
                           "enum": [
-                            "managed",
+                            "credits",
                             "community"
                           ]
                         },
@@ -18789,56 +18429,17 @@
                           "type": "string",
                           "enum": [
                             "available",
-                            "near_limit",
-                            "critical",
-                            "exhausted",
-                            "conditional",
-                            "unavailable"
+                            "basic",
+                            "conditional"
                           ]
                         },
                         "enabled": {
                           "type": "boolean"
                         },
-                        "limit": {
+                        "balanceCredits": {
                           "anyOf": [
                             {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "used": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "remaining": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "resetAt": {
-                          "anyOf": [
-                            {
-                              "type": "string"
+                              "type": "number"
                             },
                             {
                               "type": "null"
@@ -18853,10 +18454,7 @@
                         "route",
                         "state",
                         "enabled",
-                        "limit",
-                        "used",
-                        "remaining",
-                        "resetAt",
+                        "balanceCredits",
                         "communityFlagEnabled"
                       ]
                     },
@@ -18867,14 +18465,12 @@
                           "type": "boolean"
                         },
                         "researchContentEnabled": {
-                          "type": "boolean",
-                          "const": false
+                          "type": "boolean"
                         },
                         "source": {
                           "type": "string",
                           "enum": [
                             "default",
-                            "local",
                             "account"
                           ]
                         },
@@ -18908,7 +18504,6 @@
                   },
                   "required": [
                     "signedIn",
-                    "plan",
                     "search",
                     "telemetry"
                   ]
@@ -18945,7 +18540,7 @@
     "/settings/research-tools/telemetry/account-data": {
       "delete": {
         "operationId": "settings.researchTools.telemetry.delete",
-        "summary": "Delete account-linked usage analytics",
+        "summary": "Delete account-linked OpenScience trace data",
         "responses": {
           "200": {
             "description": "Deletion status",
@@ -22070,6 +21665,12 @@
                           "sha256": {
                             "type": "string"
                           },
+                          "provenanceID": {
+                            "type": "string"
+                          },
+                          "producedAt": {
+                            "type": "number"
+                          },
                           "durable": {
                             "type": "boolean"
                           },
@@ -22842,6 +22443,68 @@
                                   "updatedAt"
                                 ]
                               }
+                            },
+                            "preregistration": {
+                              "type": "object",
+                              "properties": {
+                                "artifact": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 1000
+                                    },
+                                    "note": {
+                                      "type": "string",
+                                      "maxLength": 1000
+                                    },
+                                    "verifiedAt": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "artifact"
+                                    },
+                                    "artifactID": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "versionID": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "path": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "ref",
+                                    "verifiedAt",
+                                    "kind",
+                                    "artifactID",
+                                    "versionID",
+                                    "path",
+                                    "sha256"
+                                  ]
+                                },
+                                "frozenAt": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "artifact",
+                                "frozenAt"
+                              ]
                             },
                             "failures": {
                               "type": "array",
@@ -51556,7 +51219,7 @@
             "type": "string"
           },
           "billing": {
-            "description": "Managed Credits vs bring-your-own-key spend, toggled independently for LLM inference and compute.",
+            "description": "How LLM inference is paid for when using Ace or user-owned credentials.",
             "type": "object",
             "properties": {
               "llm": {
@@ -51572,14 +51235,6 @@
                   {
                     "type": "null"
                   }
-                ]
-              },
-              "compute": {
-                "description": "How GPU/compute is paid for. 'managed' runs on Gateway-provisioned compute billed to your wallet (via the bundled gateway CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.",
-                "type": "string",
-                "enum": [
-                  "managed",
-                  "byok"
                 ]
               }
             }

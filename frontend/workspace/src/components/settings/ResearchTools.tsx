@@ -29,7 +29,6 @@ export default function ResearchTools() {
   const [state, setState] = createSignal<ResearchToolsStatus>()
   const [error, setError] = createSignal<string>()
   const [saving, setSaving] = createSignal(false)
-  const [deleting, setDeleting] = createSignal(false)
   const [access, setAccess] = createSignal<{
     root: string
     trusted: boolean
@@ -154,43 +153,12 @@ export default function ResearchTools() {
     }
   }
 
-  const deleteAccountAnalytics = async () => {
-    const confirmed = await confirmDialog(dialog, {
-      title: "Delete account analytics?",
-      message:
-        "This deletes content-free usage analytics linked to your account. Local research, conversations, files, and artifacts are unaffected.",
-      confirmLabel: "Delete analytics",
-      danger: true,
-    })
-    if (!confirmed) return
-    setDeleting(true)
-    try {
-      const result = await settingsApi<{ ok: boolean; message?: string }>(
-        server.url,
-        fetchFn(),
-        "/settings/research-tools/telemetry/account-data",
-        { method: "DELETE" },
-      )
-      if (!result.ok) throw new Error(result.message || "Account analytics could not be deleted.")
-      await load()
-      showToast({ title: "Analytics deleted", description: "Gateway deleted account-linked usage analytics." })
-    } catch (cause) {
-      showToast({
-        variant: "error",
-        title: "Analytics deletion failed",
-        description: cause instanceof Error ? cause.message : String(cause),
-      })
-    } finally {
-      setDeleting(false)
-    }
-  }
-
   return (
     <PanelScroll>
       <div class="settings-preferences-panel settings-preferences-panel--research-tools">
         <PanelHeader
           title="Research tools"
-          description="See your plan, search allowance, and exactly what structural usage OpenScience may share."
+          description="Manage research access, search, and how OpenScience uses your activity."
         />
         <PanelBody>
           <Show when={error()}>
@@ -202,30 +170,16 @@ export default function ResearchTools() {
             </div>
           </Show>
 
-          <Section
-            title="Plan and search"
-            description="Managed search is included by plan; community search stays model-route dependent."
-          >
+          <Section title="Search" description="Ace credits cover managed model and search usage.">
             <Card>
-              <Row>
-                <span class="settings-preference-icon">
-                  <Icon name="star" size="small" />
-                </span>
-                <RowCopy
-                  title={state()?.plan.label ?? "Loading…"}
-                  description={
-                    state()?.signedIn ? "Current Synthetic Sciences plan" : "Sign in to see managed plan entitlements"
-                  }
-                />
-                <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
-                  Manage plan
-                </Button>
-              </Row>
               <Row>
                 <span class="settings-preference-icon" data-tone={search()?.tone}>
                   <Icon name="magnifying-glass" size="small" />
                 </span>
-                <RowCopy title={`${search()?.label ?? "Loading…"} search`} description={search()?.detail} />
+                <RowCopy
+                  title="Research search"
+                  description={search()?.detail ?? "Basic community search is available. Checking enhanced search…"}
+                />
                 <Show when={search()}>
                   {(value) => (
                     <span class="settings-preference-status" data-tone={value().tone} aria-live="polite">
@@ -233,6 +187,9 @@ export default function ResearchTools() {
                     </span>
                   )}
                 </Show>
+                <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
+                  Manage credits
+                </Button>
               </Row>
             </Card>
           </Section>
@@ -274,10 +231,7 @@ export default function ResearchTools() {
             </div>
           </Section>
 
-          <Section
-            title="Data sharing"
-            description="Help improve reliability with bounded, content-free structural usage from completed actions."
-          >
+          <Section title="Data use" description="Choose whether activity from this device helps improve OpenScience.">
             <Card>
               <Row>
                 <span
@@ -287,7 +241,7 @@ export default function ResearchTools() {
                   <Icon name="activity" size="small" />
                 </span>
                 <RowCopy
-                  title="Share structural usage"
+                  title="Use my data to improve OpenScience"
                   description={state() ? dataSharingDetail(state()!) : "Loading consent…"}
                 />
                 <Switch
@@ -296,56 +250,16 @@ export default function ResearchTools() {
                   disabled={!state() || saving()}
                   onChange={(enabled) => void updateSharing(enabled)}
                 >
-                  Share content-free structural usage
+                  Use my data to improve OpenScience
                 </Switch>
-              </Row>
-              <Row>
-                <span class="settings-preference-icon" data-tone="success">
-                  <Icon name="shield" size="small" />
-                </span>
-                <RowCopy
-                  title="Research content is never shared"
-                  description="Prompts, responses, tool inputs and outputs, retrieved content, URLs, file paths, file contents, and secret values are excluded."
-                />
-                <span class="settings-preference-status" data-tone="success">
-                  Always off
-                </span>
               </Row>
             </Card>
             <p class="settings-research-tools-note">
-              Sharing is on by default for new installations and accounts, disclosed here, and can be disabled at any
-              time. Events are allowlisted, bounded, and sent only after an assistant response, tool, or artifact
-              completes. This is separate from the local session trace and billing.
+              When enabled, OpenScience shares conversations, model activity, tool runs, searches, errors, and artifact
+              records to help improve the product. Credentials and secret values are removed before upload. Turning it
+              off removes activity previously shared from this account.
             </p>
           </Section>
-
-          <Show when={state()?.telemetry.deletionAvailable}>
-            <Section
-              title="Account analytics"
-              description="Remove previously collected structural usage linked to this account."
-            >
-              <Card>
-                <Row>
-                  <span class="settings-preference-icon">
-                    <Icon name="trash" size="small" />
-                  </span>
-                  <RowCopy
-                    title="Delete account analytics"
-                    description="This does not delete local projects, conversations, files, artifacts, or research results."
-                  />
-                  <button
-                    type="button"
-                    class="settings-preference-action"
-                    data-variant="danger"
-                    disabled={deleting()}
-                    onClick={() => void deleteAccountAnalytics()}
-                  >
-                    {deleting() ? "Deleting…" : "Delete analytics"}
-                  </button>
-                </Row>
-              </Card>
-            </Section>
-          </Show>
         </PanelBody>
       </div>
     </PanelScroll>

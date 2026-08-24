@@ -23,6 +23,8 @@ import { Plugin } from "@/plugin"
 import { State } from "@/project/state"
 import { OutboundTelemetry } from "@/telemetry/outbound"
 import { ProjectTrust } from "@/project/trust"
+import { resolveCredentialSource, type CredentialSource } from "@/session/billing-gate"
+import { randomUUID } from "node:crypto"
 
 export namespace Agent {
   export const Info = z
@@ -584,28 +586,58 @@ export namespace Agent {
     return primaryVisible.name
   }
 
+  function generationRoute(source: CredentialSource, model: Provider.Model) {
+    if (
+      model.providerID === "ollama" ||
+      model.providerID === "lmstudio" ||
+      Provider.isLocalBaseURL(model.options?.baseURL ?? model.api.url)
+    ) {
+      return "local"
+    }
+    if (source === "managed") return "managed"
+    if (source === "oauth-free" && model.providerID === "openai-codex") return "chatgpt"
+    if (source === "oauth-free") return "subscription"
+    return "byok"
+  }
+
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
-    const cfg = await Config.getExecution()
-    const sharing = await OutboundTelemetry.enabled()
-    const defaultModel = input.model ?? (await Provider.defaultModel())
-    const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
-    const language = await Provider.getLanguage(model)
+    // This command is not part of a durable research conversation, but the
+    // model call still belongs to one coherent trace. Use an explicit
+    // short-lived lineage instead of attaching it to an unrelated session.
+    const sessionID = `agent-config:${randomUUID()}`
+    const messageID = `agent-config-request:${randomUUID()}`
+    const purpose = "agent_config_generation"
+    let model: Provider.Model | undefined
+    let route = "custom"
+    let requestStarted = false
+    let outcome = "error"
 
-    const system = [PROMPT_GENERATE]
-    await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
-    const existing = await list()
+    await OutboundTelemetry.sessionStarted({
+      sessionID,
+      session: { purpose, source: "cli", ephemeral: true },
+    }).catch(() => false)
+    await OutboundTelemetry.userMessage({
+      sessionID,
+      messageID,
+      message: { role: "user", purpose },
+      parts: [{ type: "text", text: input.description }],
+    }).catch(() => false)
 
-    const params = {
-      experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry === true && sharing,
-        recordInputs: false,
-        recordOutputs: false,
-        metadata: {
-          userId: cfg.username ?? "unknown",
-        },
-      },
-      temperature: 0.3,
-      messages: [
+    try {
+      const defaultModel = input.model ?? (await Provider.defaultModel())
+      model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
+      const language = await Provider.getLanguage(model)
+      route = generationRoute(await resolveCredentialSource(model.providerID, model.id), model)
+
+      const system = [PROMPT_GENERATE]
+      await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
+      const existing = await list()
+      const schema = z.object({
+        identifier: z.string(),
+        whenToUse: z.string(),
+        systemPrompt: z.string(),
+      })
+      const messages: ModelMessage[] = [
         ...system.map(
           (item): ModelMessage => ({
             role: "system",
@@ -616,31 +648,117 @@ export namespace Agent {
           role: "user",
           content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
         },
-      ],
-      model: language,
-      schema: z.object({
-        identifier: z.string(),
-        whenToUse: z.string(),
-        systemPrompt: z.string(),
-      }),
-    } satisfies Parameters<typeof generateObject>[0]
+      ]
+      const params = {
+        // OpenScience owns content tracing, redaction, consent, and deletion.
+        // Never let provider-dependent AI SDK telemetry become a second path.
+        experimental_telemetry: {
+          isEnabled: false,
+          recordInputs: false,
+          recordOutputs: false,
+        },
+        temperature: 0.3,
+        messages,
+        model: language,
+        schema,
+      } satisfies Parameters<typeof generateObject>[0]
+      const oauthStream =
+        defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth"
+      const providerOptions = oauthStream
+        ? ProviderTransform.providerOptions(model, {
+            instructions: SystemPrompt.instructions(),
+            store: false,
+          })
+        : undefined
 
-    if (defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth") {
-      const result = streamObject({
-        ...params,
-        providerOptions: ProviderTransform.providerOptions(model, {
-          instructions: SystemPrompt.instructions(),
-          store: false,
-        }),
-        onError: () => {},
-      })
-      for await (const part of result.fullStream) {
-        if (part.type === "error") throw part.error
+      await OutboundTelemetry.modelRequest({
+        sessionID,
+        messageID,
+        attempt: 1,
+        route,
+        provider: model.providerID,
+        model: model.id,
+        system,
+        messages,
+        tools: {},
+        parameters: {
+          purpose,
+          temperature: params.temperature,
+          schema: ["identifier", "whenToUse", "systemPrompt"],
+          structuredOutput: true,
+          streaming: oauthStream,
+          providerOptions,
+        },
+      }).catch(() => false)
+      requestStarted = true
+      const requestContext = { sessionID, messageID, attempt: 1 }
+
+      if (oauthStream) {
+        const result = Provider.withRequestContext(requestContext, () =>
+          streamObject({
+            ...params,
+            providerOptions,
+            onError: () => {},
+          }),
+        )
+        for await (const part of Provider.withRequestContextIterable(requestContext, result.fullStream)) {
+          if (part.type === "error") throw part.error
+        }
+        const object = await result.object
+        const [tokens, finish] = await Promise.all([
+          result.usage.catch(() => undefined),
+          result.finishReason.catch(() => undefined),
+        ])
+        await OutboundTelemetry.modelResponse({
+          sessionID,
+          messageID,
+          attempt: 1,
+          route,
+          provider: model.providerID,
+          model: model.id,
+          message: { role: "assistant", purpose },
+          parts: [{ type: "json", value: object }],
+          tokens,
+          finish,
+        }).catch(() => false)
+        outcome = "completed"
+        return object
       }
-      return result.object
-    }
 
-    const result = await generateObject(params)
-    return result.object
+      const result = await Provider.withRequestContext(requestContext, () => generateObject(params))
+      await OutboundTelemetry.modelResponse({
+        sessionID,
+        messageID,
+        attempt: 1,
+        route,
+        provider: model.providerID,
+        model: model.id,
+        message: { role: "assistant", purpose },
+        parts: [{ type: "json", value: result.object }],
+        tokens: result.usage,
+        finish: result.finishReason,
+      }).catch(() => false)
+      outcome = "completed"
+      return result.object
+    } catch (error) {
+      await OutboundTelemetry.error({
+        sessionID,
+        messageID,
+        attempt: 1,
+        parentSpanID: requestStarted ? `${messageID}:model:1:request` : messageID,
+        route,
+        provider: model?.providerID ?? input.model?.providerID,
+        model: model?.id ?? input.model?.modelID,
+        error,
+        context: { purpose, phase: requestStarted ? "model_generation" : "setup" },
+      }).catch(() => false)
+      throw error
+    } finally {
+      await OutboundTelemetry.sessionCompleted({
+        sessionID,
+        reason: outcome,
+        session: { purpose, source: "cli", ephemeral: true },
+      }).catch(() => false)
+    }
   }
 }

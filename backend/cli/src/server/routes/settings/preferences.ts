@@ -20,9 +20,6 @@ export const Preferences = z.object({
   // Licensing use-intent (General → Licensing). Persisted for provenance /
   // downstream policy; drives no gate here beyond being recorded.
   intent: z.enum(["commercial", "non-commercial"]).default("non-commercial"),
-  // Soft managed-compute spend ceiling in USD the user sets for themselves
-  // (Usage → Extra usage budget). 0 = no extra budget beyond the plan.
-  extra_budget_usd: z.number().min(0).default(0),
   // The session trace is an advanced observability surface. Keep the regular
   // workspace quiet unless the user explicitly enables it in General.
   show_trace: z.boolean().default(false),

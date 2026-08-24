@@ -109,7 +109,6 @@ test("canonical runtime records agent kernel executions with outputs", async () 
               completed_at: { status: "available", value: expect.any(String) },
             },
             handoff: {
-              atlas_compute_id: { status: "unavailable", reason: "not_implemented" },
               atlas_run_id: { status: "unavailable", reason: "not_published" },
             },
           },

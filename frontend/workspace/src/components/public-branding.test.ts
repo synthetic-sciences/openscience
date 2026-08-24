@@ -6,6 +6,7 @@ const publicSources = [
   "../pages/home-workbench.tsx",
   "../pages/home.tsx",
   "../atlas/SetupDialog.tsx",
+  "../atlas/AccountGate.tsx",
   "../atlas/RightPane.tsx",
   "../atlas/AtlasCanvas.tsx",
   "../atlas/kernel-runtime.ts",
@@ -35,6 +36,7 @@ describe("public Gateway branding allowlist", () => {
     const sources = await Promise.all(
       [
         "../atlas/SetupDialog.tsx",
+        "../atlas/AccountGate.tsx",
         "./settings/General.tsx",
         "./settings/ManagedInference.tsx",
         "./settings/ProviderKeys.tsx",

@@ -217,8 +217,7 @@ function isConnected() {
   if (!sessionPath) return false
   try {
     const data = JSON.parse(readFileSync(sessionPath, "utf-8"))
-    if (!data.access_token || !data.expires_at) return false
-    return new Date(data.expires_at) > new Date()
+    return typeof data.api_key === "string" && /^thk_[^.]+\.[A-Za-z0-9_-]+$/.test(data.api_key)
   } catch {
     return false
   }
@@ -371,13 +370,13 @@ async function main() {
   console.log(`  ${BOLD}How do you want to run it?${RESET}`)
   console.log()
   console.log(
-    `    ${BOLD}1${RESET}  ${CYAN}OpenScience${RESET}         ${DIM}free and open source, bring your own API keys, no account${RESET}`,
+    `    ${BOLD}1${RESET}  ${CYAN}OpenScience${RESET}       ${DIM}BYOK, ChatGPT/Codex, and local models${RESET}`,
   )
   console.log(
-    `    ${BOLD}2${RESET}  ${CYAN}OpenScience + Atlas${RESET} ${DIM}managed models, wallet billing, research graph & compute${RESET}`,
+    `    ${BOLD}2${RESET}  ${CYAN}OpenScience Ace${RESET}   ${DIM}OpenRouter models and enhanced search, pay as you use${RESET}`,
   )
   console.log(
-    `    ${BOLD}3${RESET}  ${CYAN}Atlas CLI${RESET}           ${DIM}just the Atlas research CLI — maps, runs, and compute from the terminal${RESET}`,
+    `    ${BOLD}3${RESET}  ${CYAN}Atlas CLI${RESET}         ${DIM}research maps, sources, and runs from the terminal${RESET}`,
   )
   console.log()
 
@@ -400,9 +399,7 @@ async function main() {
       ok("Connected to Atlas")
     } else {
       console.log()
-      console.log(
-        `  ${DIM}Connect your Atlas account for managed credentials:${RESET} ${CYAN}openscience connect login${RESET}`,
-      )
+      console.log(`  ${DIM}Connect your Synthetic Sciences account:${RESET} ${CYAN}openscience login${RESET}`)
     }
     console.log()
     console.log(`  ${BOLD}Next steps${RESET}`)
@@ -412,18 +409,19 @@ async function main() {
     process.exit(0)
   }
 
-  if (setup === "2") {
-    await installOrUpdateAtlas()
-    if (isConnected()) {
-      ok("Connected to Atlas")
-    } else {
-      console.log()
-      try {
-        execCli(cliPath, ["connect", "login"], { stdio: "inherit" })
-      } catch {}
-    }
+  if (isConnected()) {
+    ok("Connected to Synthetic Sciences")
   } else {
-    ok(`BYOK mode ${DIM}add provider keys inside the app (or via env vars like ANTHROPIC_API_KEY)${RESET}`)
+    console.log()
+    try {
+      execCli(cliPath, ["login"], { stdio: "inherit" })
+    } catch {}
+  }
+
+  if (setup === "2") {
+    ok(`Ace ready ${DIM}add 20 credits in Billing; automatic reload is on by default${RESET}`)
+  } else {
+    ok(`Provider setup ${DIM}add your keys, connect ChatGPT/Codex, or choose a local model in the app${RESET}`)
   }
 
   console.log()

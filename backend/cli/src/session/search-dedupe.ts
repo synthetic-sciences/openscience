@@ -78,7 +78,11 @@ export namespace SearchDedupe {
     if (!RESEARCH_SEARCH_IDS.has(part.tool)) return false
     try {
       const output = JSON.parse(part.state.output) as Record<string, unknown>
-      return output.type === "search_unavailable" || output.type === "search_allowance_exhausted"
+      return (
+        output.type === "search_unavailable" ||
+        output.type === "credits_exhausted" ||
+        output.type === "search_allowance_exhausted"
+      )
     } catch {
       return false
     }

@@ -29,17 +29,13 @@ export namespace Inference {
     baseURL?: string
     auth?: Auth.Info["type"]
   }): Source {
-    if (input.providerID.startsWith("synsci")) return "managed"
     if (input.providerID === "openai-codex") return "chatgpt"
     if (local(input.baseURL)) return "local"
-    if (input.providerID === "openrouter" && input.billing === "managed") return "managed"
+    if (input.providerID === "openrouter" && input.providerSource === "managed") return "managed"
     if (input.auth === "oauth") return "oauth"
     if (input.auth === "api" || input.auth === "wellknown") return "byok"
-    // Auto-detect (billing unset) never sets `billing === "managed"` above, but a
-    // synced thk_ token with no own key still genuinely routes through the Atlas
-    // proxy — provider.source already says "managed" (provider.ts's openrouter
-    // loader), so trust it here too instead of falling through to "unknown".
-    if (input.providerSource === "managed") return "managed"
+    // The resolved provider source is the route authority. A billing preference
+    // alone cannot turn a surviving user-owned OpenRouter key into managed spend.
     if (
       input.providerSource === "env" ||
       input.providerSource === "synced" ||

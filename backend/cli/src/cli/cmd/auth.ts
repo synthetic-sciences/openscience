@@ -440,6 +440,11 @@ export const AuthLoginCommand = cmd({
         if (args.url && !endpointUrl && !preselect) {
           prompts.log.warn(`"${args.url}" is neither a URL nor a valid provider id — choose a provider below.`)
         }
+        if (preselect === "synsci" || preselect?.startsWith("synsci-")) {
+          prompts.log.error("The retired hosted provider is no longer available. Use OpenRouter for Ace models.")
+          prompts.outro("Done")
+          return
+        }
 
         if (endpointUrl) {
           const wellknown = await fetchWellKnownAuth(endpointUrl)
@@ -480,6 +485,7 @@ export const AuthLoginCommand = cmd({
         const providers = await ModelsDev.get().then((x) => {
           const filtered: Record<string, (typeof x)[string]> = {}
           for (const [key, value] of Object.entries(x)) {
+            if (key === "synsci" || key.startsWith("synsci-")) continue
             if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
               filtered[key] = value
             }
@@ -488,7 +494,6 @@ export const AuthLoginCommand = cmd({
         })
 
         const priority: Record<string, number> = {
-          synsci: 0,
           anthropic: 1,
           "github-copilot": 2,
           openai: 3,
@@ -503,7 +508,6 @@ export const AuthLoginCommand = cmd({
           "local",
           "other",
           "amazon-bedrock",
-          "synsci",
           "vercel",
           "cloudflare",
           "cloudflare-ai-gateway",
@@ -546,7 +550,6 @@ export const AuthLoginCommand = cmd({
                   label: x.name,
                   value: x.id,
                   hint: {
-                    synsci: "Gateway — recommended",
                     anthropic: "Claude Max or API key",
                     openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
                   }[x.id],
@@ -628,10 +631,6 @@ export const AuthLoginCommand = cmd({
               "Configure via openscience.json options (profile, region, endpoint) or\n" +
               "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
           )
-        }
-
-        if (provider === "synsci") {
-          prompts.log.info("Create an API key at https://app.syntheticsciences.ai/cli")
         }
 
         if (provider === "vercel") {

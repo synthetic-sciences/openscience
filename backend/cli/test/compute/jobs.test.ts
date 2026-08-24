@@ -689,7 +689,6 @@ describe("ComputeJobs local lifecycle", () => {
         completed_at: { status: "unavailable", reason: "not_captured" },
       },
       handoff: {
-        atlas_compute_id: { status: "unavailable", reason: "not_implemented" },
         atlas_run_id: { status: "unavailable", reason: "not_published" },
       },
     })

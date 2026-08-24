@@ -298,7 +298,8 @@ describe("composer control consolidation", () => {
   test("keeps billing source details out of the model trigger", () => {
     expect(popover).not.toContain("data-model-source-label")
     expect(popover).toContain("inferenceSource({")
-    expect(modelCatalog).toContain('if (input.providerID.startsWith("synsci")) return "managed"')
+    expect(modelCatalog).not.toContain('input.providerID.startsWith("synsci")')
+    expect(modelCatalog).toContain('input.providerID === "openrouter" && input.credential === "managed"')
     expect(modelCatalog).toContain('if (input.providerID === "openai-codex") return "chatgpt"')
     expect(modelCatalog).toContain('if (input.credential === "api") return "byok"')
     expect(modelCatalog).toContain('input.billing === "byok" ? "byok" : undefined')

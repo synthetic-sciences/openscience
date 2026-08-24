@@ -94,7 +94,6 @@ export namespace ProvenanceEnvelope {
       completed_at: field(z.string()),
     }),
     handoff: z.object({
-      atlas_compute_id: field(z.string()),
       atlas_run_id: field(z.string()),
     }),
   })
@@ -269,7 +268,6 @@ export namespace ProvenanceEnvelope {
         completed_at: time(input.completedAt, "not_captured"),
       },
       handoff: {
-        atlas_compute_id: unavailable("not_implemented"),
         atlas_run_id: unavailable("not_published"),
       },
     })

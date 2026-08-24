@@ -20,6 +20,8 @@ import { resolveAtlasPackageDir } from "./atlas-package"
 import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ToolOutputPath } from "../tool/tool-output-path"
+import { GlobalBus } from "../bus/global"
+import { Event as ServerEvent } from "../server/event"
 
 const log = Log.create({ service: "openscience" })
 
@@ -57,8 +59,10 @@ const QUOTED_SECRET =
 const BARE_SECRET =
   /(\b(?:[A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)|api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password|authorization)\b\s*[:=]\s*)((?!Bearer\b)[^\s"'[,;}\]]{4,})/gi
 const BEARER_SECRET = /(\bBearer\s+)[A-Za-z0-9._~+/-]{4,}=*/gi
+const JWT_SECRET = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g
+const PRIVATE_KEY_SECRET = /-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----[\s\S]*?-----END(?: [A-Z0-9]+)? PRIVATE KEY-----/g
 const SECRET_FIELD =
-  /(^|[_-])(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|credential|authorization)($|[_-])|^(apiKey|accessToken|refreshToken|authToken|clientSecret|secretKey)$/i
+  /(^|[_-])(api[_-]?key|private[_-]?key|signing[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|passphrase|credential|authorization|cookie|deletion[_-]?proof)($|[_-])|^(apiKey|privateKey|signingKey|accessToken|refreshToken|authToken|clientSecret|secretKey|deletionProof|access|refresh|key)$/i
 
 function isManagedAtlasKey(value: string): boolean {
   return isAtlasManagedKey(value)
@@ -421,6 +425,56 @@ export namespace OpenScience {
     return fetch(input, { ...init, signal })
   }
 
+  let rejectedSessionClear: { apiKey: string; promise: Promise<void> } | undefined
+
+  /** Clear a revoked account exactly once, but only if the rejected request
+   * still belongs to the active local session. A late 401 from account A must
+   * never sign out a newly authenticated account B. */
+  async function clearRejectedSession(apiKey: string): Promise<void> {
+    if (rejectedSessionClear?.apiKey === apiKey) return rejectedSessionClear.promise
+    const promise = (async () => {
+      // The match is checked inside the credential mutation lease. Checking it
+      // here and calling an unconditional clear created a TOCTOU window where
+      // a newly saved account could be deleted by an old request's late 401.
+      const cleared = await clearSession(apiKey)
+      if (!cleared) return
+      log.info("authenticated control-plane request rejected the local session; clearing")
+      // clearSession invalidates account/search state and publishes the
+      // cross-process credential revision. Provider state is process-local, so
+      // drop it explicitly before telling the workspace to remount its gate.
+      const { Provider } = await import("../provider/provider")
+      Provider.invalidate()
+      GlobalBus.emit("event", {
+        directory: "global",
+        payload: { type: ServerEvent.Disposed.type, properties: {} },
+      })
+    })()
+    rejectedSessionClear = { apiKey, promise }
+    try {
+      await promise
+    } finally {
+      if (rejectedSessionClear?.promise === promise) rejectedSessionClear = undefined
+    }
+  }
+
+  /** Authenticated Atlas control-plane request. A definitive 401 means this
+   * device key was revoked or expired, so clear only that matching session.
+   * Network failures, 5xx responses, and 403 policy/consent responses remain
+   * fail-open and leave the local session usable offline. */
+  async function authenticatedAtlasFetch(
+    session: OpenScienceSession,
+    input: string,
+    init: RequestInit = {},
+    timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
+  ): Promise<Response> {
+    const headers = new Headers(init.headers)
+    headers.set("Authorization", `Bearer ${session.api_key}`)
+    const response = await atlasFetch(input, { ...init, headers }, timeoutMs)
+    if (response.status === 401) await clearRejectedSession(session.api_key)
+    else await retryPendingTelemetryConsent().catch(() => false)
+    return response
+  }
+
   export async function getSession(): Promise<OpenScienceSession | null> {
     // A missing file is a genuine logout → null, silently. Distinguish it from a
     // read/parse error below so a torn file / EMFILE / permission blip isn't
@@ -470,7 +524,7 @@ export namespace OpenScience {
   export async function getProfile(): Promise<AccountProfile | null> {
     const session = await getSession()
     if (!session) return null
-    return atlasFetch(`${API_BASE}/api/cli/sync`, {
+    return authenticatedAtlasFetch(session, `${API_BASE}/api/cli/sync`, {
       headers: { Authorization: `Bearer ${session.api_key}` },
     })
       .then(async (response) => {
@@ -495,7 +549,39 @@ export namespace OpenScience {
   export async function saveSession(session: OpenScienceSession) {
     cachedProfile = undefined
     invalidateResearchEntitlements()
-    await CredentialLifecycle.mutate("managed-session.set", () => writeSession(session))
+    await CredentialLifecycle.mutate("managed-session.set", async () => {
+      const previous = await getSession()
+      const replacingCredential = previous?.api_key !== session.api_key
+      const changingSubject = previous?.user_id !== session.user_id
+      if (previous && (replacingCredential || changingSubject)) {
+        // Give account A's still-present credential the first chance to finish
+        // its opt-out. If it is offline or revoked, the telemetry state already
+        // holds a fixed-target deletion capability, so replacing the account
+        // cannot orphan the purge or replay it against account B.
+        await retryPendingTelemetryConsent().catch(() => false)
+      }
+      if (replacingCredential) {
+        // A pasted key can replace an account without an explicit logout. Tear
+        // down account A's complete credential snapshot before publishing B's
+        // session, so a failed B sync can never fall back to A's keys/files/env.
+        await clearSyncedCredentialArtifacts(previous)
+        await dropUsageQueue()
+        await resetTelemetryAccountSession()
+      } else if (previous && changingSubject && !(await preserveTelemetryConsentForSession(session))) {
+        // A legacy key-only session and its canonical user-id session are the
+        // same account. Copy the privacy setting before changing the durable
+        // identity so a crash cannot silently restore the default-on state.
+        throw new Error("OpenScience could not safely preserve the current data-use setting. Try again.")
+      }
+      await writeSession(session)
+    })
+    // Authentication is the first point at which cloud trace sharing can be
+    // attributed safely. Initialize the default-on account setting after the
+    // durable device credential is present; backend availability never blocks
+    // login and the trace client will sync when connectivity returns.
+    await import("@/telemetry/outbound")
+      .then(({ OutboundTelemetry }) => OutboundTelemetry.initializeAccount())
+      .catch((error) => log.warn("could not initialize account trace state", { error: String(error) }))
   }
 
   /**
@@ -568,7 +654,7 @@ export namespace OpenScience {
 
     let v: number | null = null
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/sync/version`, {
+      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/sync/version`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
       if (!res.ok) return // fail open — keep current env
@@ -723,6 +809,42 @@ export namespace OpenScience {
     }
   }
 
+  /** Purge account-scoped traces and rotate their local installation identity.
+   * This is deliberately dynamic to keep the OpenScience <-> telemetry module
+   * cycle lazy at startup. */
+  async function resetTelemetryAccountSession(): Promise<void> {
+    await import("@/telemetry/outbound").then(({ OutboundTelemetry }) => OutboundTelemetry.resetAccountSession())
+  }
+
+  /** Retry a pending account-bound consent write while the matching session
+   * credential is still active. The telemetry module verifies the subject and
+   * token again under its cross-process lease. */
+  async function retryPendingTelemetryConsent(): Promise<boolean> {
+    return import("@/telemetry/outbound").then(({ OutboundTelemetry }) => OutboundTelemetry.retryPendingConsent())
+  }
+
+  /** Carry consent across a key-only -> canonical account-id migration while
+   * the old session is still active and verifiable. */
+  async function preserveTelemetryConsentForSession(session: OpenScienceSession): Promise<boolean> {
+    return import("@/telemetry/outbound").then(({ OutboundTelemetry }) =>
+      OutboundTelemetry.preserveConsentForSession(session),
+    )
+  }
+
+  /** Remove every credential artifact owned by the last dashboard sync while
+   * preserving unrelated shell exports. The caller holds CredentialLifecycle's
+   * cross-process mutation lease. */
+  async function clearSyncedCredentialArtifacts(session: OpenScienceSession | null): Promise<void> {
+    const synced = await readSyncedSnapshot()
+    for (const [key, value] of syncedSecretValues.entries()) synced.set(key, value)
+    for (const name of ["synced-env.json", "openscience-synced.json", syncedGcpFilename]) {
+      await fs.unlink(path.join(getSyncedConfigDir(), name)).catch(() => undefined)
+    }
+    for (const [key, value] of synced.entries()) unsetSyncedVar(key, value)
+    syncedSecretValues.clear()
+    await clearAtlasCliConfig(session)
+  }
+
   /**
    * Sign out locally: remove the session file and every credential artifact
    * the sync path created. Without this, `synced-env.json` is replayed into
@@ -730,35 +852,41 @@ export namespace OpenScience {
    * key keeps debiting the signed-out account's wallet. Covers both explicit
    * logout and the 401-triggered clear. Best-effort; never throws.
    */
-  export async function clearSession() {
-    await CredentialLifecycle.mutate("managed-session.clear", async () => {
+  export async function clearSession(expectedApiKey?: string): Promise<boolean> {
+    const clear = async () => {
       const session = await getSession()
       // Remove the synced credential artifacts FIRST, then delete the session file
       // LAST. A crash after unlinking the session but before removing
       // synced-env.json would otherwise leave preload-env.ts replaying the managed
       // key into process.env on the next boot — the signed-out account's wallet
       // kept being debited, the exact thing this function exists to prevent.
-      // Union of what this process synced (in-memory map) and what the last
-      // sync persisted (disk snapshot, replayed by preload-env.ts at boot) —
-      // a fresh `logout` process has only the latter.
-      const synced = await readSyncedSnapshot()
-      for (const [key, value] of syncedSecretValues.entries()) synced.set(key, value)
-      for (const name of ["synced-env.json", "openscience-synced.json", syncedGcpFilename]) {
-        try {
-          await fs.unlink(path.join(getSyncedConfigDir(), name))
-        } catch {}
-      }
-      for (const [key, value] of synced.entries()) unsetSyncedVar(key, value)
-      syncedSecretValues.clear()
-      await clearAtlasCliConfig(session)
+      await clearSyncedCredentialArtifacts(session)
       await dropUsageQueue()
+      await resetTelemetryAccountSession()
       cachedProfile = undefined
       invalidateResearchEntitlements()
+      invalidateBalance()
       // Session file last, once the managed-key-replaying artifacts are gone.
       try {
         await fs.unlink(filepath)
       } catch {}
-    })
+      return true
+    }
+    const cleared =
+      expectedApiKey === undefined
+        ? await CredentialLifecycle.mutate("managed-session.clear", clear)
+        : (
+            await CredentialLifecycle.mutateIf(
+              "managed-session.clear",
+              async () => (await getSession())?.api_key === expectedApiKey,
+              clear,
+            )
+          ).applied
+    // The raw account credential is gone before this request runs. A pending
+    // opt-out can therefore carry only its fixed-target deletion capability,
+    // including after a server 401 revoked the original key.
+    if (cleared) await retryPendingTelemetryConsent().catch(() => false)
+    return cleared
   }
 
   /**
@@ -937,9 +1065,17 @@ export namespace OpenScience {
     if (!res.ok) {
       throw new Error(`Could not validate key: HTTP ${res.status}`)
     }
+    // Balance is the compatibility validation endpoint. A best-effort sync
+    // read additionally gives modern Gateway deployments' canonical user id,
+    // avoiding legacy empty-id sessions while preserving older deployments.
+    const profile = await atlasFetch(`${API_BASE}/api/cli/sync`, {
+      headers: { Authorization: `Bearer ${key}` },
+    })
+      .then(async (response) => (response.ok ? ((await response.json()) as SyncResponse) : undefined))
+      .catch(() => undefined)
     const session: OpenScienceSession = {
       api_key: key,
-      user_id: "",
+      user_id: profile?.user?.user_id || "",
       device_name: deviceName(),
     }
     await saveSession(session)
@@ -986,16 +1122,12 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/sync`, {
+      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/sync`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
 
       if (!res.ok) {
-        if (res.status === 401) {
-          log.info("session invalid, clearing")
-          await clearSession()
-          return null
-        }
+        if (res.status === 401) return null
         if (res.status === 403) {
           // 403s also come from WAFs and rate limiters, not just key
           // revocation. Destroying the session on one silently signed the
@@ -1044,33 +1176,16 @@ export namespace OpenScience {
           // successful sync (covers existing sessions that never re-run login).
           await ensureAtlasCliConfig(session)
 
-          // Atlas transfers a GCP service-account document as an in-memory secret.
-          // Materialize it to an owner-only file before persistence so Google SDKs
-          // receive their standard GOOGLE_APPLICATION_CREDENTIALS path and the JSON
-          // never enters an agent shell.
-          const gcp = fresh.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+          // Retired releases materialized an Atlas-delivered GCP service account.
+          // Account sync no longer distributes any compute credential, so remove
+          // that legacy artifact and filter the response before applying it.
           const gcpFile = path.join(getSyncedConfigDir(), syncedGcpFilename)
-          if (gcp) {
-            fresh.delete("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-            const dir = getSyncedConfigDir()
-            const saved = await fs
-              .mkdir(dir, { recursive: true })
-              .then(() => atomicWrite(gcpFile, gcp, { mode: 0o600 }))
-              .then(() => true)
-              .catch((error) => {
-                log.warn("failed to materialize synced GCP credentials", {
-                  error: error instanceof Error ? error.message : String(error),
-                })
-                return false
-              })
-            if (saved) fresh.set("GOOGLE_APPLICATION_CREDENTIALS", gcpFile)
-            if (!saved) await fs.unlink(gcpFile).catch(() => {})
-          }
-          if (!gcp) await fs.unlink(gcpFile).catch(() => {})
+          await fs.unlink(gcpFile).catch(() => {})
 
           // Keep user-owned provider keys and the narrow OpenRouter managed route.
-          // The policy rejects direct-provider proxy tokens and untrusted provider
-          // base URLs before anything is applied or persisted.
+          // The policy rejects account-synced compute credentials, direct-provider
+          // proxy tokens, and untrusted provider base URLs before anything is
+          // applied or persisted.
           for (const [key, value] of [...fresh.entries()]) {
             if (!isSyncedEnvAllowed(key, value)) fresh.delete(key)
           }
@@ -1207,9 +1322,16 @@ export namespace OpenScience {
     try {
       const auth = await Auth.all().catch(() => ({}) as Record<string, Auth.Info>)
       for (const info of Object.values(auth)) {
-        if (info.type !== "api") continue
-        if (!info.key || isManagedAtlasKey(info.key)) continue
-        byokSecretValues.add(info.key)
+        const values =
+          info.type === "api"
+            ? [info.key]
+            : info.type === "oauth"
+              ? [info.access, info.refresh]
+              : [info.key, info.token]
+        for (const value of values) {
+          if (!value || isManagedAtlasKey(value)) continue
+          byokSecretValues.add(value)
+        }
       }
     } catch {
       /* ignore */
@@ -1246,6 +1368,8 @@ export namespace OpenScience {
       result = result.replaceAll(value, "[REDACTED]")
     }
     for (const pattern of TOKEN_SECRET_PATTERNS) result = result.replace(pattern, "[REDACTED]")
+    result = result.replace(PRIVATE_KEY_SECRET, "[REDACTED]")
+    result = result.replace(JWT_SECRET, "[REDACTED]")
     result = result.replace(BEARER_SECRET, "$1[REDACTED]")
     result = result.replace(QUOTED_SECRET, "$1$2[REDACTED]$2")
     result = result.replace(BARE_SECRET, "$1[REDACTED]")
@@ -1575,7 +1699,7 @@ export namespace OpenScience {
       const session = await getSession()
       if (!session) return null
       try {
-        const res = await atlasFetch(`${API_BASE}/api/cli/balance`, {
+        const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/balance`, {
           headers: { Authorization: `Bearer ${session.api_key}` },
         })
         if (!res.ok) return null
@@ -1687,7 +1811,8 @@ export namespace OpenScience {
     const generation = entitlementsGeneration
     const pending = (async () => {
       try {
-        const res = await atlasFetch(
+        const res = await authenticatedAtlasFetch(
+          session,
           `${API_BASE}/api/v1/entitlements`,
           { headers: { Authorization: `Bearer ${session.api_key}`, Accept: "application/json" } },
           ENTITLEMENTS_FETCH_TIMEOUT_MS,
@@ -1734,7 +1859,8 @@ export namespace OpenScience {
     }
   }
 
-  /** One top-level Gateway search dispatch. No billing or wallet endpoint is touched. */
+  /** One top-level Gateway search dispatch. The Gateway atomically prices and
+   * debits the same Ace credit balance used by managed model calls. */
   export async function dispatchResearchSearch(
     input: ResearchSearchInput,
     operationID: string,
@@ -1743,7 +1869,8 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(
+      const res = await authenticatedAtlasFetch(
+        session,
         `${API_BASE}/api/v1/research/search`,
         {
           method: "POST",
@@ -1871,7 +1998,7 @@ export namespace OpenScience {
     session: OpenScienceSession,
   ): Promise<{ ok: boolean; permanent: boolean; data?: any; modelBlocked?: boolean }> {
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/usage`, {
+      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/usage`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.api_key}`,
@@ -2052,7 +2179,7 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/devices`, {
+      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/devices`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
       if (!res.ok) {
@@ -2071,7 +2198,7 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return false
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/devices/${encodeURIComponent(keyId)}`, {
+      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/devices/${encodeURIComponent(keyId)}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
@@ -2106,7 +2233,7 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(`${API_BASE}/api/credits`, {
+      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/credits`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
       if (!res.ok) return null
@@ -2143,7 +2270,7 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(`${API_BASE}/api/credits/transactions`, {
+      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/credits/transactions`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
       if (!res.ok) return null
@@ -2189,7 +2316,7 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/billing-mode`, {
+      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/billing-mode`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
       if (!res.ok) return null
@@ -2204,7 +2331,7 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/billing-mode`, {
+      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/billing-mode`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.api_key}`,
@@ -2239,7 +2366,8 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(
+      const res = await authenticatedAtlasFetch(
+        session,
         `${API_BASE}/api/cli/installed-skills`,
         { headers: { Authorization: `Bearer ${session.api_key}` } },
         SKILL_FETCH_TIMEOUT_MS,

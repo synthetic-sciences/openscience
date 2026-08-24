@@ -256,7 +256,7 @@ export namespace ToolRegistry {
           // `research_search` is always advertised; its execution path selects
           // managed Gateway search or the preserved community rule.
           if (t.id === "codesearch") {
-            return model.providerID === "synsci" || Flag.OPENSCIENCE_ENABLE_EXA
+            return Flag.OPENSCIENCE_ENABLE_EXA
           }
 
           // use apply tool in same format as codex

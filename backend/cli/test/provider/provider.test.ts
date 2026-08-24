@@ -1552,7 +1552,7 @@ test("multiple providers can be configured simultaneously", async () => {
   })
 })
 
-test("managed atlas proxy base URLs are forwarded for managed LLM providers", async () => {
+test("legacy managed proxy routes retain only OpenRouter", async () => {
   const proxy = `${API_BASE}/api/llm/proxy`
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -1580,15 +1580,15 @@ test("managed atlas proxy base URLs are forwarded for managed LLM providers", as
     },
     fn: async () => {
       const providers = await Provider.list()
-      expect(providers["anthropic"].options.baseURL).toBe(`${proxy}/anthropic/v1`)
-      expect(providers["openai"].options.baseURL).toBe(`${proxy}/openai/v1`)
-      expect(providers["google"].options.baseURL).toBe(`${proxy}/gemini/v1beta`)
+      expect(providers["anthropic"]).toBeUndefined()
+      expect(providers["openai"]).toBeUndefined()
+      expect(providers["google"]).toBeUndefined()
       expect(providers["openrouter"].options.baseURL).toBe(`${proxy}/openrouter/v1`)
     },
   })
 })
 
-test("managed atlas keys without proxy base URLs fail before provider SDK creation", async () => {
+test("legacy non-OpenRouter managed keys without proxy URLs are removed", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -1610,17 +1610,7 @@ test("managed atlas keys without proxy base URLs fail before provider SDK creati
     fn: async () => {
       const providers = await Provider.list()
       for (const providerID of ["openai", "google"]) {
-        const model = Object.values(providers[providerID].models)[0]
-        expect(model).toBeDefined()
-        let error: unknown
-        try {
-          await Provider.getLanguage(model!)
-        } catch (e) {
-          error = e
-        }
-        expect(error).toBeDefined()
-        expect((error as Error).cause).toBeInstanceOf(Error)
-        expect(((error as Error).cause as Error).message).toContain("managed Gateway key without a Gateway proxy URL")
+        expect(providers[providerID]).toBeUndefined()
       }
     },
   })

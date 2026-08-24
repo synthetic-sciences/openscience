@@ -8,8 +8,8 @@ import { lazy } from "@/util/lazy"
 
 const Telemetry = z.object({
   analyticsEnabled: z.boolean(),
-  researchContentEnabled: z.literal(false),
-  source: z.enum(["default", "local", "account"]),
+  researchContentEnabled: z.boolean(),
+  source: z.enum(["default", "account"]),
   signedIn: z.boolean(),
   consentVersion: z.string(),
   pending: z.boolean(),
@@ -19,67 +19,29 @@ const Telemetry = z.object({
 
 const State = z.object({
   signedIn: z.boolean(),
-  plan: z.object({ id: z.string(), label: z.string(), status: z.string().nullable() }),
   search: z.object({
-    route: z.enum(["managed", "community"]),
-    state: z.enum(["available", "near_limit", "critical", "exhausted", "conditional", "unavailable"]),
+    route: z.enum(["credits", "community"]),
+    state: z.enum(["available", "basic", "conditional"]),
     enabled: z.boolean(),
-    limit: z.number().int().nonnegative().nullable(),
-    used: z.number().int().nonnegative().nullable(),
-    remaining: z.number().int().nonnegative().nullable(),
-    resetAt: z.string().nullable(),
+    balanceCredits: z.number().nullable(),
     communityFlagEnabled: z.boolean(),
   }),
   telemetry: Telemetry,
 })
 
-function planLabel(id: string) {
-  if (id === "ace") return "Ace"
-  if (id === "ace_plus") return "Ace+"
-  if (id === "pro") return "Legacy Pro"
-  if (id === "starter") return "Legacy Starter"
-  if (id === "teams") return "Teams"
-  return "Free"
-}
-
-function allowanceState(input: {
-  enabled: boolean
-  limit: number | null
-  used: number | null
-  remaining: number | null
-}) {
-  if (!input.enabled) return "conditional" as const
-  if (input.remaining === 0) return "exhausted" as const
-  if (input.limit === null || input.used === null || input.limit <= 0) return "unavailable" as const
-  const ratio = input.used / input.limit
-  if (ratio >= 0.95) return "critical" as const
-  if (ratio >= 0.8) return "near_limit" as const
-  return "available" as const
-}
-
 async function read() {
   const session = await OpenScience.getSession().catch(() => null)
-  const [profile, entitlements, telemetry] = await Promise.all([
-    session ? OpenScience.getProfile().catch(() => null) : null,
-    session ? OpenScience.getResearchEntitlements().catch(() => null) : null,
+  const [balance, telemetry] = await Promise.all([
+    session ? OpenScience.getBalance().catch(() => null) : null,
     OutboundTelemetry.status(true),
   ])
-  const id = (entitlements?.plan ?? profile?.subscription_plan ?? "free").toLowerCase()
-  const enabled = entitlements?.managed_search?.enabled === true
-  const limit = entitlements?.managed_search?.limit ?? null
-  const used = entitlements?.managed_search?.used ?? null
-  const remaining = entitlements?.managed_search?.remaining ?? null
   return State.parse({
     signedIn: !!session,
-    plan: { id, label: planLabel(id), status: entitlements?.status ?? profile?.subscription_status ?? null },
     search: {
-      route: enabled ? "managed" : "community",
-      state: allowanceState({ enabled, limit, used, remaining }),
-      enabled,
-      limit,
-      used,
-      remaining,
-      resetAt: entitlements?.managed_search?.reset_at ?? null,
+      route: session ? "credits" : "community",
+      state: !session ? "conditional" : balance === null || balance <= 0 ? "basic" : "available",
+      enabled: !!session,
+      balanceCredits: balance,
       communityFlagEnabled: Flag.OPENSCIENCE_ENABLE_EXA,
     },
     telemetry,
@@ -91,7 +53,7 @@ export const ResearchToolsSettingsRoutes = lazy(() =>
     .get(
       "/",
       describeRoute({
-        summary: "Get plan, research-search, and data-sharing status",
+        summary: "Get credit-backed search and data-sharing status",
         operationId: "settings.researchTools.get",
         responses: {
           200: { description: "Research tools status", content: { "application/json": { schema: resolver(State) } } },
@@ -102,7 +64,7 @@ export const ResearchToolsSettingsRoutes = lazy(() =>
     .put(
       "/telemetry",
       describeRoute({
-        summary: "Update structural usage sharing consent",
+        summary: "Update OpenScience data-use consent",
         operationId: "settings.researchTools.telemetry.update",
         responses: {
           200: {
@@ -120,7 +82,7 @@ export const ResearchToolsSettingsRoutes = lazy(() =>
     .delete(
       "/telemetry/account-data",
       describeRoute({
-        summary: "Delete account-linked usage analytics",
+        summary: "Delete account-linked OpenScience trace data",
         operationId: "settings.researchTools.telemetry.delete",
         responses: {
           200: {

@@ -26,6 +26,7 @@ import { modelGroup, modelGroupLabel, modelGroupLabelRank } from "./model-groups
 import { useLanguage } from "@/context/language"
 import { displayProviderForModel } from "@/context/model-catalog"
 import type { ModelKey } from "@/context/local"
+import { isFreeCost } from "@/utils/model-cost"
 import "./dialog-select-model.css"
 
 const ModelList: Component<{
@@ -87,13 +88,7 @@ const ModelList: Component<{
           placement="right-start"
           gutter={12}
           forceMount={false}
-          value={
-            <ModelTooltip
-              model={item}
-              latest={item.latest}
-              free={item.provider.id === "synsci" && (!item.cost || item.cost.input === 0)}
-            />
-          }
+          value={<ModelTooltip model={item} latest={item.latest} free={isFreeCost(item.cost)} />}
         >
           {node}
         </Tooltip>
@@ -120,7 +115,7 @@ const ModelList: Component<{
           </span>
           <span class="flex items-center gap-x-1 ml-auto shrink-0">
             <Tag>{displayProviderForModel(i.provider, i.id).name}</Tag>
-            <Show when={i.provider.id === "synsci" && (!i.cost || i.cost?.input === 0)}>
+            <Show when={isFreeCost(i.cost)}>
               <Tag>{language.t("model.tag.free")}</Tag>
             </Show>
             <Show when={i.latest}>

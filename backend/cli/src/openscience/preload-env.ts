@@ -3,8 +3,9 @@
  *
  * Runs BEFORE any provider SDK construction (Anthropic, OpenAI,
  * @ai-sdk/google) so those SDKs see synced user-owned BYOK keys and the
- * managed OpenRouter route on startup, without waiting for
- * the asynchronous `openscience sync` call later in CLI boot.
+ * managed OpenRouter route on startup, without waiting for the asynchronous
+ * `openscience sync` call later in CLI boot. Account-synced compute
+ * credentials are rejected and removed from legacy snapshots.
  *
  * Without this, the first invocation after a fresh terminal session
  * would race: sync sets process.env in-process, but the SDK had
@@ -40,11 +41,48 @@ scrubAmbientProjectDotenv(process.cwd(), process.env)
 // been removed above.
 const { isSyncedEnvAllowed } = await import("./synced-env-policy")
 
+function removeLegacySyncedGcpFile(filepath: string): void {
+  try {
+    fs.unlinkSync(path.join(path.dirname(filepath), "atlas-gcp-service-account.json"))
+  } catch {
+    // Missing or already removed.
+  }
+}
+
+function persistFilteredSnapshot(filepath: string, env: Record<string, unknown>): Record<string, string> {
+  const filtered: Record<string, string> = {}
+  let changed = false
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value !== "string" || !isSyncedEnvAllowed(key, value)) {
+      changed = true
+      continue
+    }
+    filtered[key] = value
+  }
+  if (!changed) return filtered
+
+  const tmp = `${filepath}.${process.pid}.${Date.now()}.tmp`
+  try {
+    fs.writeFileSync(tmp, `${JSON.stringify(filtered, null, 2)}\n`, { flag: "wx", mode: 0o600 })
+    if (process.platform !== "win32") fs.chmodSync(tmp, 0o600)
+    fs.renameSync(tmp, filepath)
+  } catch {
+    try {
+      fs.unlinkSync(tmp)
+    } catch {
+      // Best-effort migration. A successful account sync rewrites the snapshot.
+    }
+  }
+  return filtered
+}
+
 // IIFE so the side effect runs the moment this module is imported.
 ;(function loadSyncedEnv() {
+  const filepath = syncedEnvPath()
+  removeLegacySyncedGcpFile(filepath)
   let raw: string
   try {
-    raw = fs.readFileSync(syncedEnvPath(), "utf-8")
+    raw = fs.readFileSync(filepath, "utf-8")
   } catch {
     // No file yet (first run / fresh install) — nothing to apply.
     return
@@ -57,11 +95,8 @@ const { isSyncedEnvAllowed } = await import("./synced-env-policy")
     return
   }
   if (!env || typeof env !== "object" || Array.isArray(env)) return
-  for (const [k, v] of Object.entries(env as Record<string, unknown>)) {
-    if (typeof v !== "string") continue
-    // Drop unsafe direct-provider proxy tokens and provider base URLs. Explicit
-    // shell/project values already won above (see synced-env-policy.ts).
-    if (!isSyncedEnvAllowed(k, v)) continue
+  const filtered = persistFilteredSnapshot(filepath, env as Record<string, unknown>)
+  for (const [k, v] of Object.entries(filtered)) {
     // Don't clobber values already set in the parent environment —
     // explicit shell exports win over persisted sync state.
     if (!process.env[k]) {

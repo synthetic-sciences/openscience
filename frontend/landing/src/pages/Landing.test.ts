@@ -13,48 +13,50 @@ describe("OpenScience landing contract", () => {
     expect(landing).toContain("Do I need Ace to use OpenScience?")
   })
 
-  test("publishes the approved Ace catalog without exposing internal credit accounting", () => {
-    expect(landing).toContain('price="$20"')
-    expect(landing).toContain('credits="20 credits"')
-    expect(landing).toContain("Generous research quota")
-    expect(landing).toContain('price="$100"')
-    expect(landing).toContain('credits="150 credits"')
-    expect(landing).toContain("3x research quota")
-    expect(landing).toContain("billing?plan=ace_plus")
-    expect(landing).not.toContain("added to Wallet")
+  test("publishes Ace as a single pay as you go offer", () => {
+    expect(landing).toContain("$20")
+    expect(landing).toContain("20 credits")
+    expect(landing).toContain("to start")
+    expect(landing).toContain("OpenScience is free. Ace is pay as you go.")
+    expect(landing).toContain("Managed models through OpenRouter")
+    expect(landing).toContain("One balance for models and enhanced search")
+    expect(landing).not.toContain("Ace+")
+    expect(landing).not.toContain("per month")
+    expect(landing).not.toContain("included every month")
     expect(landing).not.toContain("promotional credits")
-    expect(landing).not.toContain("1,000")
-    expect(landing).not.toContain("5,000")
-    expect(landing).not.toContain("5% service fee")
+    expect(landing).not.toContain("research quota")
   })
 
-  test("markets both paid plans with the same scientist access and default auto-reload", () => {
-    expect(landing).toContain("MOST POPULAR")
-    expect(landing.match(/title: "Synthetic Scientists access"/g)).toHaveLength(2)
-    expect(landing.match(/Auto-reload enabled by default/g)).toHaveLength(2)
-    expect(landing).not.toContain("hosted Synthetic Scientists research run")
-    expect(landing).toContain("Card processing is included")
+  test("explains Zen-style reload and separates the processing fee from credits", () => {
+    expect(landing).toContain("Reloads 20 credits below 5")
+    expect(landing).toContain("Change or disable it anytime")
+    expect(landing).toContain("Processing fee shown before payment")
+    expect(landing).toContain("never added to your credit balance")
+    expect(landing).not.toContain("Synthetic Scientists")
   })
 
-  test("keeps public plan copy aligned across the landing page, README, and docs", () => {
+  test("keeps public Ace copy aligned across the landing page, README, and docs", () => {
     for (const source of [landing, readme, gateway]) {
       expect(source).toContain("20 credits")
-      expect(source).toContain("150 credits")
-      expect(source).toContain("Generous research quota")
-      expect(source).toContain("3x research quota")
-      expect(source).toContain("Synthetic Scientists access")
-      expect(source).toMatch(/auto-reload (?:is )?enabled by default/i)
-      expect(source).not.toMatch(/(?:purchased|promotional) credits/i)
-      expect(source).not.toMatch(/(?:1,000|5,000) (?:completed )?managed/i)
-      expect(source).not.toMatch(/5% (?:service fee|margin)/i)
+      expect(source).toMatch(/pay[- ]as[- ]you[- ]go/i)
+      expect(source).toMatch(/OpenRouter/i)
+      expect(source).toMatch(/below 5/i)
+      expect(source).not.toMatch(/Ace\+/i)
+      expect(source).not.toMatch(/Synthetic Scientists/i)
+      expect(source).not.toMatch(/research quota/i)
     }
   })
 
-  test("does not advertise paused surfaces or old branding", () => {
-    expect(landing).not.toContain("Atlas")
+  test("states the account and full-session data contract plainly", () => {
+    expect(landing).toContain("A free Synthetic Sciences account is required")
+    expect(landing).toContain("The Use my data setting is on")
+    expect(landing).toContain("prompts, responses, tool activity, and errors")
+    expect(landing).toMatch(/Turn\s+it\s+off anytime in Settings/)
+  })
+
+  test("does not advertise retired product surfaces", () => {
     expect(landing).not.toContain("Compute")
     expect(landing).not.toContain("Explore public")
-    expect(landing).not.toContain("workspace.png")
   })
 
   test("gives visitors an explicit website analytics control", () => {

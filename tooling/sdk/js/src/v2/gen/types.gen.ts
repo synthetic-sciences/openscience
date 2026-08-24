@@ -1842,17 +1842,13 @@ export type Config = {
    */
   default_agent?: string
   /**
-   * Managed Credits vs bring-your-own-key spend, toggled independently for LLM inference and compute.
+   * How LLM inference is paid for when using Ace or user-owned credentials.
    */
   billing?: {
     /**
      * How LLM inference is paid for. 'managed' uses Credits; 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset or null = auto-detect from the resolved credential.
      */
     llm?: "managed" | "byok" | null
-    /**
-     * How GPU/compute is paid for. 'managed' runs on Gateway-provisioned compute billed to your wallet (via the bundled gateway CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.
-     */
-    compute?: "managed" | "byok"
   }
   /**
    * Custom username to display in conversations instead of system username
@@ -4400,21 +4396,6 @@ export type SettingsComputeJobsListResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -5151,21 +5132,6 @@ export type SettingsComputeJobsStartResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -6101,21 +6067,6 @@ export type SettingsComputeJobsRetryResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -6823,21 +6774,6 @@ export type SettingsComputeJobsReleaseResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -7541,21 +7477,6 @@ export type SettingsComputeJobsCancelResponses = {
             }
       }
       handoff: {
-        atlas_compute_id:
-          | {
-              status: "available"
-              value: string
-            }
-          | {
-              status: "unavailable"
-              reason:
-                | "not_applicable"
-                | "not_captured"
-                | "not_implemented"
-                | "not_published"
-                | "not_versioned"
-                | "remote_unverified"
-            }
         atlas_run_id:
           | {
               status: "available"
@@ -7786,7 +7707,6 @@ export type SettingsPreferencesGetResponses = {
   200: {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
-    extra_budget_usd?: number
     show_trace?: boolean
     show_local_models?: boolean
     atlas_enabled?: boolean
@@ -7801,7 +7721,6 @@ export type SettingsPreferencesUpdateData = {
   body?: {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
-    extra_budget_usd?: number
     show_trace?: boolean
     show_local_models?: boolean
     atlas_enabled?: boolean
@@ -7820,7 +7739,6 @@ export type SettingsPreferencesUpdateResponses = {
   200: {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
-    extra_budget_usd?: number
     show_trace?: boolean
     show_local_models?: boolean
     atlas_enabled?: boolean
@@ -7945,7 +7863,6 @@ export type SettingsBillingGetResponses = {
    */
   200: {
     llm: "managed" | "byok" | null
-    compute: "managed" | "byok"
     wallet: {
       /**
        * Whether a Gateway session (thk_ key) is available
@@ -7964,7 +7881,6 @@ export type SettingsBillingGetResponse = SettingsBillingGetResponses[keyof Setti
 export type SettingsBillingUpdateData = {
   body?: {
     llm?: "managed" | "byok" | null
-    compute?: "managed" | "byok"
   }
   path?: never
   query?: never
@@ -7977,7 +7893,6 @@ export type SettingsBillingUpdateResponses = {
    */
   200: {
     llm: "managed" | "byok" | null
-    compute: "managed" | "byok"
     wallet: {
       /**
        * Whether a Gateway session (thk_ key) is available
@@ -8061,25 +7976,17 @@ export type SettingsResearchToolsGetResponses = {
    */
   200: {
     signedIn: boolean
-    plan: {
-      id: string
-      label: string
-      status: string | null
-    }
     search: {
-      route: "managed" | "community"
-      state: "available" | "near_limit" | "critical" | "exhausted" | "conditional" | "unavailable"
+      route: "credits" | "community"
+      state: "available" | "basic" | "conditional"
       enabled: boolean
-      limit: number | null
-      used: number | null
-      remaining: number | null
-      resetAt: string | null
+      balanceCredits: number | null
       communityFlagEnabled: boolean
     }
     telemetry: {
       analyticsEnabled: boolean
-      researchContentEnabled: false
-      source: "default" | "local" | "account"
+      researchContentEnabled: boolean
+      source: "default" | "account"
       signedIn: boolean
       consentVersion: string
       pending: boolean
@@ -8107,25 +8014,17 @@ export type SettingsResearchToolsTelemetryUpdateResponses = {
    */
   200: {
     signedIn: boolean
-    plan: {
-      id: string
-      label: string
-      status: string | null
-    }
     search: {
-      route: "managed" | "community"
-      state: "available" | "near_limit" | "critical" | "exhausted" | "conditional" | "unavailable"
+      route: "credits" | "community"
+      state: "available" | "basic" | "conditional"
       enabled: boolean
-      limit: number | null
-      used: number | null
-      remaining: number | null
-      resetAt: string | null
+      balanceCredits: number | null
       communityFlagEnabled: boolean
     }
     telemetry: {
       analyticsEnabled: boolean
-      researchContentEnabled: false
-      source: "default" | "local" | "account"
+      researchContentEnabled: boolean
+      source: "default" | "account"
       signedIn: boolean
       consentVersion: string
       pending: boolean
@@ -9386,6 +9285,8 @@ export type SessionTraceResponses = {
       path?: string
       kind?: string
       sha256?: string
+      provenanceID?: string
+      producedAt?: number
       durable: boolean
       completedAt?: number
     }>
@@ -9544,6 +9445,19 @@ export type SessionTraceResponses = {
           detail?: string
           updatedAt: number
         }>
+        preregistration?: {
+          artifact: {
+            ref: string
+            note?: string
+            verifiedAt: number
+            kind: "artifact"
+            artifactID: string
+            versionID: string
+            path: string
+            sha256: string
+          }
+          frozenAt: number
+        }
         failures: Array<{
           id: string
           stage: string

@@ -96,9 +96,8 @@ export function inferenceSource(input: {
   credential: "env" | "synced" | "config" | "custom" | "api" | "managed"
   billing?: "managed" | "byok" | null
 }): InferenceSource | undefined {
-  if (input.providerID.startsWith("synsci")) return "managed"
   if (input.providerID === "openai-codex") return "chatgpt"
-  if (input.credential === "managed") return "managed"
+  if (input.providerID === "openrouter" && input.credential === "managed") return "managed"
   if (input.credential === "api") return "byok"
   if (input.providerID === "openrouter") return input.billing === "byok" ? "byok" : undefined
   if (input.credential === "env" || input.credential === "synced" || input.credential === "config") return "byok"

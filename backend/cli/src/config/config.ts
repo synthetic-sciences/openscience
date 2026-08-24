@@ -1188,15 +1188,9 @@ export namespace Config {
             .describe(
               "How LLM inference is paid for. 'managed' uses Credits; 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset or null = auto-detect from the resolved credential.",
             ),
-          compute: z
-            .enum(["managed", "byok"])
-            .optional()
-            .describe(
-              "How GPU/compute is paid for. 'managed' runs on Gateway-provisioned compute billed to your wallet (via the bundled gateway CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.",
-            ),
         })
         .optional()
-        .describe("Managed Credits vs bring-your-own-key spend, toggled independently for LLM inference and compute."),
+        .describe("How LLM inference is paid for when using Ace or user-owned credentials."),
       username: z
         .string()
         .optional()

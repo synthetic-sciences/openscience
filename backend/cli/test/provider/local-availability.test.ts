@@ -71,9 +71,10 @@ describe("local provider availability", () => {
       init: async () => Provider.invalidate(),
       fn: async () => {
         const providers = await Provider.list()
-        // managed drops anthropic/openai/google, but NOT the local endpoint.
+        // Managed routing never hides a user-owned local endpoint. Direct BYOK
+        // providers may also remain visible because they bypass Ace entirely.
         expect(providers["ollama"]).toBeDefined()
-        expect(providers["anthropic"]).toBeUndefined()
+        expect(providers["ollama"].options.baseURL).toBe("http://localhost:11434/v1")
       },
     })
   })

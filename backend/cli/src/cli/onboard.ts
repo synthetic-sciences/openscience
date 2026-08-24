@@ -30,21 +30,11 @@ async function currentConfig() {
   return Instance.provide({ directory: process.cwd(), fn: () => Config.get() })
 }
 
-/** True once the user has any usable way to run a model: a managed Gateway
- *  session, a saved BYOK key, a provider env var, or an explicit default
- *  model in config. Used to decide whether to auto-launch onboarding and
- *  whether to warn about a missing model. */
+/** Authentication is the only first-run completion condition. Provider keys
+ * and local models remain usable routes, but they do not replace the durable
+ * OpenScience account that owns settings and trace consent. */
 export async function isConfigured(): Promise<boolean> {
-  if (await OpenScience.isAuthenticated()) return true
-  if (hasProviderEnv()) return true
-  try {
-    if (Object.keys(await Auth.all()).length > 0) return true
-  } catch {}
-  try {
-    const config = await currentConfig()
-    if (config.model) return true
-  } catch {}
-  return false
+  return OpenScience.isAuthenticated()
 }
 
 async function isOnboarded(): Promise<boolean> {
@@ -68,8 +58,10 @@ export async function needsOnboarding(): Promise<boolean> {
   if (process.env.OPENSCIENCE_NO_ONBOARD === "1") return false
   if (process.env.CI) return false
   if (!process.stdin.isTTY || !process.stdout.isTTY) return false
-  if (await isOnboarded()) return false
   if (await isConfigured()) return false
+  // Legacy releases could write this marker after choosing "Not now" while
+  // still signed out. It must not bypass the account-first flow.
+  if (await isOnboarded()) return true
   return true
 }
 
@@ -163,10 +155,19 @@ async function offerAtlasCli(): Promise<void> {
   }
 }
 
-/** The first-run setup wizard. Managed-first, but bring-your-own-key and
- *  "not now" stay one keystroke away — OpenScience never requires an account. */
+/** The first-run setup wizard. Account connection comes first and persists as
+ * a device credential; model billing and credential choices remain separate. */
 export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
   prompts.intro(opts?.force ? "OpenScience setup" : "Welcome to OpenScience")
+
+  if (!(await OpenScience.isAuthenticated())) {
+    prompts.log.info("Connect a free Synthetic Sciences account once on this device.")
+    const ok = await runAtlasLogin({})
+    if (!ok) {
+      prompts.cancel("Sign-in is required. Run `openscience login` when you're ready.")
+      return
+    }
+  }
 
   const choice = await prompts.select({
     message: "How do you want to power the models?",
@@ -179,11 +180,11 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
         label: "Local models",
         hint: "Ollama · LM Studio · OpenAI-compatible endpoint · free, offline",
       },
-      { value: "skip", label: "Not now", hint: "explore without chat, set up anytime" },
+      { value: "skip", label: "Set up models later", hint: "your account is already connected" },
     ],
   })
   if (prompts.isCancel(choice)) {
-    prompts.cancel("Setup cancelled — run `openscience init` whenever you're ready.")
+    prompts.cancel("Your account is connected. Run `openscience init` to finish model setup.")
     await markOnboarded()
     return
   }
@@ -434,7 +435,16 @@ export const DoctorCommand = cmd({
       prompts.log[sandboxLine.level](sandboxLine.msg)
     } catch {}
 
-    if (!(await isConfigured())) {
+    const accountConnected = await isConfigured()
+    const modelSourceAvailable = await Instance.provide({
+      directory: process.cwd(),
+      fn: async () => Object.keys(await Provider.list()).length > 0,
+    }).catch(() => false)
+    if (!accountConnected) {
+      prompts.log.warn(
+        "A Synthetic Sciences account is required before chat. Run `openscience login` once on this device.",
+      )
+    } else if (!modelSourceAvailable) {
       prompts.log.warn("No model source configured — chat is unavailable. Run `openscience init` to connect one.")
     }
     prompts.outro("Done")
