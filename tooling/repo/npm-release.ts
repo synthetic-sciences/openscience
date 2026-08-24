@@ -709,15 +709,21 @@ async function addDistTag(name: string, version: string, tag: string, options: N
   const before = await distTags(name, options)
   if (before[tag] === version) return false
   const result = await run(["dist-tag", "add", `${name}@${version}`, tag], options)
-  const after = await distTags(name, options)
-  if (after[tag] === version) return true
+  for (let attempt = 1; attempt <= visibilityAttempts(options); attempt++) {
+    const after = await distTags(name, options)
+    if (after[tag] === version) return true
+    if (attempt < visibilityAttempts(options)) await Bun.sleep(visibilityRetryDelay(options))
+  }
   throw new Error(`Could not set ${name}'s ${tag} dist-tag to ${version}: ${failure(result)}`)
 }
 
 async function removeDistTag(name: string, tag: string, options: NpmCommandOptions) {
   const result = await run(["dist-tag", "rm", name, tag], options)
-  const after = await distTags(name, options)
-  if (!(tag in after)) return
+  for (let attempt = 1; attempt <= visibilityAttempts(options); attempt++) {
+    const after = await distTags(name, options)
+    if (!(tag in after)) return
+    if (attempt < visibilityAttempts(options)) await Bun.sleep(visibilityRetryDelay(options))
+  }
   throw new Error(`Could not remove ${name}'s ${tag} dist-tag: ${failure(result)}`)
 }
 
