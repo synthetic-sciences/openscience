@@ -126,3 +126,11 @@ test("source package versions remain 2.0.31 until the workflow release commit", 
     expect(pkg.version).toBe("2.0.31")
   }
 })
+
+test("native Windows file tests keep the repository test timeout", async () => {
+  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/ci.yml")).text()
+
+  expect(workflow).toContain(
+    "bun test --timeout 15000 test/file/safe-io.test.ts test/file/rename.test.ts test/file/trash.test.ts",
+  )
+})
