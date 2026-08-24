@@ -2,6 +2,7 @@
 
 import path from "path"
 import os from "os"
+import { createHash } from "node:crypto"
 import { copyFile, mkdir, mkdtemp, readdir, rm } from "node:fs/promises"
 import cli from "../../backend/cli/package.json"
 import { NativeTargets, nativePackageName } from "../../backend/cli/script/native-targets"
@@ -62,8 +63,28 @@ async function run(args: string[], options: NpmCommandOptions = {}): Promise<Res
   return { exitCode, stdout, stderr }
 }
 
+/** npm normally redacts credentials, but release failures are copied into CI
+ * annotations and exceptions. Redact the common token shapes, authenticated
+ * URLs, npmrc assignments, and the exact configured secrets before retaining
+ * the bounded diagnostic tail. */
+export function sanitizeNpmDiagnostic(value: string, env: Record<string, string | undefined> = process.env) {
+  let output = value
+    .replace(/\b(?:npm|gh[opurs]|github_pat)_[A-Za-z0-9_=-]{16,}\b/g, "[redacted-token]")
+    .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[redacted]@")
+    .replace(/((?:_authToken|npm-token|authorization)\s*[=:]\s*)[^\s]+/gi, "$1[redacted]")
+  for (const key of ["NODE_AUTH_TOKEN", "NPM_TOKEN", "NPM_CONFIG_TOKEN"]) {
+    const secret = env[key]
+    if (secret && secret.length >= 8) output = output.replaceAll(secret, "[redacted-token]")
+  }
+  return output
+}
+
+function diagnostic(result: Result) {
+  return sanitizeNpmDiagnostic([result.stdout, result.stderr].filter(Boolean).join("\n")).trim().slice(-2_000)
+}
+
 function failure(result: Result) {
-  return (result.stderr || result.stdout).trim().slice(-2_000) || `exit ${result.exitCode}`
+  return diagnostic(result) || `exit ${result.exitCode}`
 }
 
 function retryDelay(options: NpmCommandOptions) {
@@ -113,6 +134,18 @@ export function releaseStagingTag(version: string) {
   if (!/^\d+\.\d+\.\d+$/.test(version))
     throw new Error(`Release staging tags require stable semver, received ${version}`)
   return `release-${version.replaceAll(".", "-")}`
+}
+
+export function releaseCandidateTag(version: string) {
+  if (!/^\d+\.\d+\.\d+-test\.[0-9A-Za-z.-]+$/.test(version)) {
+    throw new Error(`Test candidate tags require a test prerelease, received ${version}`)
+  }
+  const slug = version
+    .toLowerCase()
+    .replace(/[^0-9a-z]+/g, "-")
+    .slice(0, 80)
+  const digest = createHash("sha256").update(version).digest("hex").slice(0, 12)
+  return `candidate-${slug}-${digest}`
 }
 
 export async function preflightRelease(options: NpmCommandOptions = {}) {
@@ -379,8 +412,8 @@ export async function verifyPackedModuleExports(
   }
 }
 
-async function registryIntegrity(input: PackedPackage, options: NpmCommandOptions) {
-  const spec = `${input.name}@${input.version}`
+async function registryVersionIntegrity(name: string, version: string, options: NpmCommandOptions) {
+  const spec = `${name}@${version}`
   const result = await run(["view", spec, "dist.integrity", "--json"], options)
   if (result.exitCode !== 0) {
     const detail = `${result.stdout}\n${result.stderr}`
@@ -392,6 +425,10 @@ async function registryIntegrity(input: PackedPackage, options: NpmCommandOption
     throw new Error(`npm returned no usable dist.integrity for ${spec}`)
   }
   return value
+}
+
+async function registryIntegrity(input: PackedPackage, options: NpmCommandOptions) {
+  return await registryVersionIntegrity(input.name, input.version, options)
 }
 
 async function assertEquivalent(input: PackedPackage, remote: string, options: NpmCommandOptions) {
@@ -438,6 +475,175 @@ export async function verifyPublishedPackages(inputs: PackedPackage[], options: 
     throw new AggregateError(failures, `${failures.length}/${inputs.length} packages were not verifiable on npm`)
   }
   return results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
+}
+
+async function inspectPublishedPackage(input: PackedPackage, options: NpmCommandOptions) {
+  const remote = await registryIntegrity(input, options)
+  if (!remote) return false
+  if (remote !== input.integrity) {
+    throw new NpmArtifactConflict(
+      `${input.name}@${input.version} registry integrity ${remote} does not match the immutable manifest ${input.integrity}`,
+    )
+  }
+  return true
+}
+
+async function waitForPublishedSet(inputs: PackedPackage[], options: NpmCommandOptions) {
+  const attempts = visibilityAttempts(options)
+  let missing = inputs
+  let errors: unknown[] = []
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const results = await Promise.allSettled(inputs.map((input) => inspectPublishedPackage(input, options)))
+    missing = []
+    errors = []
+    for (const [index, result] of results.entries()) {
+      if (result.status === "fulfilled") {
+        if (!result.value) missing.push(inputs[index])
+        continue
+      }
+      if (result.reason instanceof NpmArtifactConflict) throw result.reason
+      errors.push(
+        new Error(`Could not inspect ${inputs[index].name}@${inputs[index].version}`, { cause: result.reason }),
+      )
+    }
+    if (missing.length === 0 && errors.length === 0) return []
+    if (attempt === 1 || attempt === attempts || attempt % 15 === 0) {
+      console.log(
+        `  npm visibility ${attempt}/${attempts}: ${missing.length} absent, ${errors.length} read errors` +
+          `${missing.length ? ` (${missing.map((item) => item.name).join(", ")})` : ""}`,
+      )
+    }
+    if (attempt < attempts) await Bun.sleep(visibilityRetryDelay(options))
+  }
+  if (errors.length > 0) {
+    throw new AggregateError(errors, `npm registry inspection failed for ${errors.length}/${inputs.length} packages`)
+  }
+  return missing
+}
+
+export async function verifyPublishedPackageIntegrities(inputs: PackedPackage[], options: NpmCommandOptions = {}) {
+  const missing = await waitForPublishedSet(inputs, options)
+  if (missing.length > 0) {
+    throw new Error(`npm packages are not visible: ${missing.map((item) => `${item.name}@${item.version}`).join(", ")}`)
+  }
+}
+
+async function submitCandidatePackageOnce(
+  input: PackedPackage,
+  tag: string,
+  options: NpmCommandOptions,
+  phase: "initial" | "repair",
+) {
+  const result = await run(["publish", input.file, "--access", "public", "--tag", tag], options)
+  if (result.exitCode === 0) {
+    console.log(`  ${phase} submission accepted for ${input.name}@${input.version}`)
+    const response = diagnostic(result)
+    if (response) console.log(`  sanitized npm response for ${input.name}:\n${response}`)
+    return true
+  }
+  const detail = `${result.stdout}\n${result.stderr}`
+  if (isPermissionFailure(detail) && !isAlreadyPublished(detail)) {
+    throw new NpmPermissionError(`npm refused ${input.name}@${input.version}: ${failure(result)}`)
+  }
+  // A failed request can still have committed at the registry. Do not infer
+  // absence from the npm process exit code; the visibility pass below is the
+  // authoritative result and the only input to the single repair round.
+  console.warn(`  ${phase} submission uncertain for ${input.name}@${input.version}: ${failure(result)}`)
+  return false
+}
+
+function exactReleaseArtifacts(inputs: PackedPackage[]) {
+  const expected = releasePackageNames()
+  const names = inputs.map((input) => input.name)
+  const versions = new Set(inputs.map((input) => input.version))
+  if (
+    inputs.length !== expected.length ||
+    new Set(names).size !== names.length ||
+    expected.some((name) => !names.includes(name))
+  ) {
+    throw new Error(`Expected the exact ${expected.length}-package npm release set`)
+  }
+  if (versions.size !== 1) throw new Error("Every npm release artifact must have the same version")
+  const byName = new Map(inputs.map((input) => [input.name, input]))
+  return releasePromotionNames().map((name) => byName.get(name)!)
+}
+
+/** Fail closed before building a replacement artifact set. Once even one
+ * package for a version exists, only the cached source/version/integrity
+ * manifest can prove that a resume is byte-identical. */
+export async function assertReleaseVersionUnoccupied(version: string, options: NpmCommandOptions = {}) {
+  const names = releasePackageNames()
+  const results = await Promise.allSettled(names.map((name) => registryVersionIntegrity(name, version, options)))
+  const present: string[] = []
+  const failures: unknown[] = []
+  for (const [index, result] of results.entries()) {
+    if (result.status === "rejected") {
+      failures.push(new Error(`Could not inspect ${names[index]}@${version}`, { cause: result.reason }))
+    } else if (result.value) {
+      present.push(names[index])
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "Cannot prove that the npm test version is unoccupied")
+  }
+  if (present.length > 0) {
+    throw new Error(
+      `Immutable npm artifact cache is missing, but ${present.length}/${names.length} packages already exist for ${version}: ${present.join(", ")}`,
+    )
+  }
+}
+
+export async function verifyReleaseOptionalDependencies(artifacts: PackedPackage[], options: NpmCommandOptions = {}) {
+  const ordered = exactReleaseArtifacts(artifacts)
+  const version = ordered[0].version
+  const result = await run(["view", `${cli.name}@${version}`, "optionalDependencies", "--json"], options)
+  if (result.exitCode !== 0) {
+    throw new Error(`Could not inspect ${cli.name}@${version} optional dependencies: ${failure(result)}`)
+  }
+  const value = JSON.parse(result.stdout || "{}") as unknown
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`npm returned invalid optional dependencies for ${cli.name}@${version}`)
+  }
+  const actual = value as Record<string, unknown>
+  const expected = nativeReleasePackageNames()
+  const unexpectedNative = Object.keys(actual).filter(
+    (name) => name.startsWith(`${cli.name}-`) && !expected.includes(name),
+  )
+  const invalid = expected.filter((name) => actual[name] !== version)
+  if (invalid.length > 0 || unexpectedNative.length > 0 || "@synsci/atlas" in actual) {
+    throw new Error(
+      `${cli.name}@${version} optional dependency matrix is invalid` +
+        `${invalid.length ? `; wrong or missing: ${invalid.join(", ")}` : ""}` +
+        `${unexpectedNative.length ? `; unexpected: ${unexpectedNative.join(", ")}` : ""}`,
+    )
+  }
+  return expected
+}
+
+/** Publish under an isolated per-version candidate tag. Every missing package
+ * gets one initial submission and, after a full visibility window, at most one
+ * repair submission from the same cached tgz. */
+export async function stageCandidateRelease(artifacts: PackedPackage[], options: NpmCommandOptions = {}) {
+  const ordered = exactReleaseArtifacts(artifacts)
+  const version = ordered[0].version
+  const tag = releaseCandidateTag(version)
+  const inspected = await Promise.all(ordered.map((artifact) => inspectPublishedPackage(artifact, options)))
+  const absent = ordered.filter((_, index) => !inspected[index])
+
+  for (const artifact of absent) await submitCandidatePackageOnce(artifact, tag, options, "initial")
+  const repair = await waitForPublishedSet(ordered, options)
+  for (const artifact of repair) await submitCandidatePackageOnce(artifact, tag, options, "repair")
+  const unresolved = repair.length > 0 ? await waitForPublishedSet(ordered, options) : []
+  if (unresolved.length > 0) {
+    throw new Error(
+      `npm candidate remains incomplete after one repair round: ${unresolved.map((item) => item.name).join(", ")}`,
+    )
+  }
+
+  await verifyPublishedPackageIntegrities(ordered, options)
+  await verifyReleaseOptionalDependencies(ordered, options)
+  await ensureReleaseStagingTags(ordered, tag, options)
+  return { tag, version }
 }
 
 export async function publishPackage(
@@ -529,37 +735,51 @@ export async function ensureReleaseStagingTags(
   }
 }
 
-export async function promoteRelease(artifacts: PackedPackage[], options: NpmCommandOptions = {}) {
-  const byName = new Map(artifacts.map((artifact) => [artifact.name, artifact]))
-  const ordered = releasePromotionNames().map((name) => {
-    const artifact = byName.get(name)
-    if (!artifact) throw new Error(`Missing release artifact for promotion: ${name}`)
-    return artifact
-  })
+export async function verifyReleaseTags(artifacts: PackedPackage[], tag: string, options: NpmCommandOptions = {}) {
+  const ordered = exactReleaseArtifacts(artifacts)
+  const failures: string[] = []
+  for (const artifact of ordered) {
+    const tags = await distTags(artifact.name, options)
+    if (tags[tag] !== artifact.version) {
+      failures.push(`${artifact.name}=${tags[tag] ?? "unset"}`)
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`npm ${tag} snapshot does not match the candidate: ${failures.join(", ")}`)
+  }
+}
+
+export async function promoteReleaseToTag(artifacts: PackedPackage[], tag: string, options: NpmCommandOptions = {}) {
+  if (!/^[a-z][a-z0-9._-]*$/i.test(tag)) throw new Error(`Invalid npm promotion tag: ${tag}`)
+  const ordered = exactReleaseArtifacts(artifacts)
   const previous = new Map<string, string | undefined>()
-  for (const artifact of ordered) previous.set(artifact.name, (await distTags(artifact.name, options)).latest)
+  for (const artifact of ordered) previous.set(artifact.name, (await distTags(artifact.name, options))[tag])
   try {
     for (const artifact of ordered) {
       if (previous.get(artifact.name) === artifact.version) continue
-      await addDistTag(artifact.name, artifact.version, "latest", options)
-      console.log(`  promoted ${artifact.name}@${artifact.version} to latest`)
+      await addDistTag(artifact.name, artifact.version, tag, options)
+      console.log(`  promoted ${artifact.name}@${artifact.version} to ${tag}`)
     }
   } catch (error) {
     const rollbackErrors: unknown[] = []
     for (const artifact of [...ordered].reverse()) {
       try {
         const prior = previous.get(artifact.name)
-        if (prior) await addDistTag(artifact.name, prior, "latest", options)
-        else await removeDistTag(artifact.name, "latest", options)
+        if (prior) await addDistTag(artifact.name, prior, tag, options)
+        else await removeDistTag(artifact.name, tag, options)
       } catch (rollbackError) {
         rollbackErrors.push(rollbackError)
       }
     }
     if (rollbackErrors.length > 0) {
-      throw new AggregateError([error, ...rollbackErrors], "npm latest promotion failed and rollback was incomplete")
+      throw new AggregateError([error, ...rollbackErrors], `npm ${tag} promotion failed and rollback was incomplete`)
     }
     throw error
   }
+}
+
+export async function promoteRelease(artifacts: PackedPackage[], options: NpmCommandOptions = {}) {
+  await promoteReleaseToTag(artifacts, "latest", options)
 }
 
 if (import.meta.main) {

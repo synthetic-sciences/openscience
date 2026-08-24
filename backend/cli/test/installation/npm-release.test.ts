@@ -5,17 +5,24 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import {
   NpmArtifactConflict,
   NpmPermissionError,
+  assertReleaseVersionUnoccupied,
   createCompiledPackageManifest,
   loadReleaseArtifacts,
   packPackage,
   preflightRelease,
   promoteRelease,
+  promoteReleaseToTag,
   publishPackage,
   releasePackageNames,
+  releaseCandidateTag,
   releasePromotionNames,
   saveReleaseArtifacts,
+  sanitizeNpmDiagnostic,
+  stageCandidateRelease,
   verifyPackedModuleExports,
+  verifyPublishedPackageIntegrities,
   verifyPublishedPackages,
+  verifyReleaseOptionalDependencies,
   type NpmCommandOptions,
   type PackedPackage,
 } from "../../../../tooling/repo/npm-release"
@@ -24,10 +31,13 @@ type FakeState = {
   diff?: string
   failTagReadAfterAdd?: string
   identity: string
+  optionalDependencies?: Record<string, Record<string, string>>
   owners: string[]
   packages: Record<string, { integrity: string; visibilityReads?: number }>
   publishCalls: number
-  publishMode?: "already" | "permission" | "success"
+  publishFailures?: Record<string, number>
+  publishMode?: "already" | "ghost" | "permission" | "success"
+  publishSpecs?: string[]
   publishVisibilityReads?: number
   tagAdds?: string[]
   tags: Record<string, Record<string, string>>
@@ -80,6 +90,16 @@ function options(file: string, spec?: string): NpmCommandOptions {
       FAKE_NPM_STATE: file,
       OPENSCIENCE_NPM_RETRY_MS: "0",
       OPENSCIENCE_NPM_VISIBILITY_RETRY_MS: "0",
+    },
+  }
+}
+
+function fastOptions(file: string): NpmCommandOptions {
+  return {
+    ...options(file),
+    env: {
+      ...options(file).env,
+      OPENSCIENCE_NPM_VISIBILITY_ATTEMPTS: "1",
     },
   }
 }
@@ -244,6 +264,93 @@ test("release artifacts persist exact packed bytes and reject a different source
   await expect(loadReleaseArtifacts({ directory, source, version: "2.0.32" })).rejects.toThrow("expected 2.0.32")
 })
 
+test("a missing artifact cache fails closed when any package version already exists", async () => {
+  const version = "2.0.32-test.12345"
+  const occupied = `${releasePackageNames()[0]}@${version}`
+  const file = await stateFile({ packages: { [occupied]: { integrity: "sha512-existing" } } })
+
+  await expect(assertReleaseVersionUnoccupied(version, options(file))).rejects.toThrow(
+    "Immutable npm artifact cache is missing",
+  )
+  expect((await readState(file)).publishCalls).toBe(0)
+
+  const empty = await stateFile()
+  await assertReleaseVersionUnoccupied(version, options(empty))
+})
+
+test("test candidate tags cannot collide across distinct valid versions", () => {
+  const versions = ["2.0.32-test.a.b", "2.0.32-test.a-b", "2.0.32-test.A-B"]
+  expect(new Set(versions.map(releaseCandidateTag)).size).toBe(versions.length)
+})
+
+test("test candidates use one repair round for only absent immutable artifacts", async () => {
+  const version = "2.0.32-test.12345"
+  const artifacts: PackedPackage[] = []
+  for (const name of releasePackageNames()) artifacts.push(await fixturePackage(name, version))
+  const repairName = "@synsci/sdk"
+  const native = releasePackageNames().filter((name) => name.startsWith("@synsci/openscience-"))
+  const optionalDependencies = Object.fromEntries(native.map((name) => [name, version]))
+  const file = await stateFile({
+    optionalDependencies: { [`@synsci/openscience@${version}`]: optionalDependencies },
+    publishFailures: { [`${repairName}@${version}`]: 1 },
+  })
+
+  const result = await stageCandidateRelease(artifacts, fastOptions(file))
+
+  expect(result).toEqual({ tag: releaseCandidateTag(version), version })
+  const state = await readState(file)
+  expect(state.publishCalls).toBe(16)
+  expect(state.publishSpecs?.filter((spec) => spec === `${repairName}@${version}`)).toHaveLength(2)
+  for (const name of releasePackageNames()) {
+    expect(state.tags[name][releaseCandidateTag(version)]).toBe(version)
+  }
+  expect(await verifyReleaseOptionalDependencies(artifacts, options(file))).toHaveLength(11)
+
+  const unrepaired = await stateFile({
+    optionalDependencies: { [`@synsci/openscience@${version}`]: optionalDependencies },
+    publishFailures: { [`${repairName}@${version}`]: 2 },
+  })
+  await expect(stageCandidateRelease(artifacts, fastOptions(unrepaired))).rejects.toThrow(
+    "remains incomplete after one repair round",
+  )
+  expect(
+    (await readState(unrepaired)).publishSpecs?.filter((spec) => spec === `${repairName}@${version}`),
+  ).toHaveLength(2)
+
+  const ghostPackages = Object.fromEntries(
+    artifacts
+      .filter((artifact) => artifact.name !== repairName)
+      .map((artifact) => [`${artifact.name}@${version}`, { integrity: artifact.integrity }]),
+  )
+  const previousTags = Object.fromEntries(releasePackageNames().map((name) => [name, { test: "2.0.31-test.safe" }]))
+  const acknowledgedButMissing = await stateFile({
+    optionalDependencies: { [`@synsci/openscience@${version}`]: optionalDependencies },
+    packages: ghostPackages,
+    publishMode: "ghost",
+    tags: previousTags,
+  })
+  await expect(stageCandidateRelease(artifacts, fastOptions(acknowledgedButMissing))).rejects.toThrow(
+    "remains incomplete after one repair round",
+  )
+  const ghostState = await readState(acknowledgedButMissing)
+  expect(ghostState.publishCalls).toBe(2)
+  for (const name of releasePackageNames()) expect(ghostState.tags[name].test).toBe("2.0.31-test.safe")
+})
+
+test("npm diagnostics redact configured and recognizable credentials", () => {
+  const configured = "npm_configured_secret_123456789"
+  const diagnostic = [
+    `NODE_AUTH_TOKEN=${configured}`,
+    "npm token npm_abcdefghijklmnopqrstuvwxyz012345",
+    "https://publisher:password@registry.npmjs.org/package",
+  ].join("\n")
+
+  const sanitized = sanitizeNpmDiagnostic(diagnostic, { NODE_AUTH_TOKEN: configured })
+  expect(sanitized).not.toContain(configured)
+  expect(sanitized).not.toContain("password")
+  expect(sanitized).not.toContain("npm_abcdefghijklmnopqrstuvwxyz012345")
+})
+
 test("publish resumes missing, byte-identical, and content-equivalent artifacts without overwriting conflicts", async () => {
   const artifact = await fixturePackage()
   const spec = `${artifact.name}@${artifact.version}`
@@ -269,6 +376,18 @@ test("publish resumes missing, byte-identical, and content-equivalent artifacts 
     NpmArtifactConflict,
   )
   expect((await readState(file)).publishCalls).toBe(1)
+})
+
+test("candidate verification requires the registry integrity from the immutable manifest", async () => {
+  const artifact = await fixturePackage()
+  const spec = `${artifact.name}@${artifact.version}`
+  const exact = await stateFile({ packages: { [spec]: { integrity: artifact.integrity } } })
+  await verifyPublishedPackageIntegrities([artifact], fastOptions(exact))
+
+  const repacked = await stateFile({ diff: "", packages: { [spec]: { integrity: "sha512-repacked" } } })
+  await expect(verifyPublishedPackageIntegrities([artifact], fastOptions(repacked))).rejects.toBeInstanceOf(
+    NpmArtifactConflict,
+  )
 })
 
 test("successful and existing publishes outwait the short publish retry window", async () => {
@@ -324,6 +443,24 @@ test("latest promotion is ordered with launcher last", async () => {
   expect(state.tagAdds?.at(-1)).toBe("synsci@2.0.32:latest")
 })
 
+test("test promotion moves the full snapshot in release order without changing latest", async () => {
+  const base = await fixturePackage()
+  const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
+  const tags = Object.fromEntries(
+    artifacts.map((artifact) => [artifact.name, { latest: "2.0.31", test: "2.0.30-test.1" }]),
+  )
+  const file = await stateFile({ tags })
+
+  await promoteReleaseToTag(artifacts, "test", options(file))
+
+  const state = await readState(file)
+  expect(state.tagAdds).toEqual(releasePromotionNames().map((name) => `${name}@2.0.32:test`))
+  for (const name of releasePackageNames()) {
+    expect(state.tags[name].test).toBe("2.0.32")
+    expect(state.tags[name].latest).toBe("2.0.31")
+  }
+})
+
 test("promotion rolls the full snapshot back when mutation succeeds but verification read fails", async () => {
   const base = await fixturePackage()
   const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
@@ -335,4 +472,17 @@ test("promotion rolls the full snapshot back when mutation succeeds but verifica
 
   const restored = await readState(file)
   for (const name of releasePackageNames()) expect(restored.tags[name].latest).toBe("2.0.31")
+})
+
+test("test promotion rolls the full snapshot back on a verified tag-write failure", async () => {
+  const base = await fixturePackage()
+  const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
+  const tags = Object.fromEntries(artifacts.map((artifact) => [artifact.name, { test: "2.0.30-test.1" }]))
+  const first = releasePromotionNames()[0]
+  const file = await stateFile({ failTagReadAfterAdd: first, tags })
+
+  await expect(promoteReleaseToTag(artifacts, "test", options(file))).rejects.toThrow("transient dist-tag read failure")
+
+  const restored = await readState(file)
+  for (const name of releasePackageNames()) expect(restored.tags[name].test).toBe("2.0.30-test.1")
 })

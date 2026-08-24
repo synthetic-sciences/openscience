@@ -175,6 +175,46 @@ test("packaged npm rehearsal imports every public SDK and plugin export", async 
   }
 })
 
+test("npm test rehearsal stages immutable exact artifacts and promotes only after every smoke gate", async () => {
+  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
+  const helper = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/npm-test-release.ts")).text()
+  const release = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/npm-release.ts")).text()
+  const versionJob = workflow.slice(workflow.indexOf("\n  version:"), workflow.indexOf("\n  build-cli:"))
+  const build = workflow.slice(workflow.indexOf("\n  build-cli:"), workflow.indexOf("\n  prepare-npm:"))
+  const prepare = workflow.slice(workflow.indexOf("\n  prepare-npm:"), workflow.indexOf("\n  publish-test:"))
+  const stage = workflow.slice(workflow.indexOf("\n  publish-test:"), workflow.indexOf("\n  packaged-e2e:"))
+  const promotion = workflow.slice(workflow.indexOf("\n  promote-test:"))
+
+  expect(versionJob).toContain("-test.${GITHUB_RUN_ID}")
+  expect(versionJob).not.toContain("GITHUB_RUN_ATTEMPT")
+  expect(build).toContain("lookup-only: true")
+  expect(build).toContain(
+    "if: steps.npm-artifacts-cache.outputs.cache-hit != 'true' && steps.cli-build-cache.outputs.cache-hit != 'true'",
+  )
+  expect(prepare).toContain(
+    "key: npm-test-artifacts-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}",
+  )
+  expect(prepare.indexOf("Fail closed if an uncached version is occupied")).toBeLessThan(
+    prepare.indexOf("Pack the complete 15-package candidate once"),
+  )
+  expect(prepare.indexOf("Restore immutable npm test artifacts")).toBeLessThan(
+    prepare.indexOf("Restore immutable CLI build"),
+  )
+  expect(prepare).toContain("run: ./tooling/repo/prepare-npm.ts")
+  expect(stage).toContain("run: ./tooling/repo/npm-test-release.ts stage")
+  expect(stage).not.toContain("./tooling/repo/publish.ts")
+  expect(workflow).toContain("@synsci/openscience-linux-x64-baseline-musl@${{ needs.publish-test.outputs.version }}")
+  expect(promotion).toContain("- packaged-e2e")
+  expect(promotion).toContain("- os-smoke")
+  expect(promotion).toContain("- musl-baseline-smoke")
+  expect(promotion).toContain("run: ./tooling/repo/npm-test-release.ts promote-test")
+  expect(helper.indexOf("verifyReleaseTags(artifacts, releaseCandidateTag(version))")).toBeLessThan(
+    helper.indexOf('promoteReleaseToTag(artifacts, "test")'),
+  )
+  expect(release).toContain('createHash("sha256").update(version).digest("hex").slice(0, 12)')
+  expect(release).toContain('await promoteReleaseToTag(artifacts, "latest", options)')
+})
+
 test("compiled plugin source uses Node-compatible local ESM specifiers", async () => {
   const directory = path.join(import.meta.dir, "../../../../tooling/plugin/src")
   for (const file of ["index.ts", "example.ts"]) {

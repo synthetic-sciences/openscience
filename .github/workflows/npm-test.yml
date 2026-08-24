@@ -9,12 +9,12 @@ on:
         required: false
         type: string
       run_packaged_e2e:
-        description: "Install @synsci/openscience@test and run packaged browser e2e"
+        description: "Install the exact candidate version and run packaged browser e2e"
         required: false
         type: boolean
         default: true
       run_os_smoke:
-        description: "Install @synsci/openscience@test on Linux, macOS, and Windows"
+        description: "Install the exact candidate on Linux, macOS, Windows, and musl"
         required: false
         type: boolean
         default: true
@@ -47,17 +47,23 @@ jobs:
     timeout-minutes: 10
     outputs:
       version: ${{ steps.version.outputs.version }}
+      source: ${{ steps.version.outputs.source }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: version
         shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          if [ -n "${{ inputs.version }}" ]; then
-            version="${{ inputs.version }}"
+          source="$(git rev-parse HEAD)"
+          if [ -n "$INPUT_VERSION" ]; then
+            version="$INPUT_VERSION"
           else
-            latest="$(npm view @synsci/openscience@latest version)"
-            IFS=. read -r major minor patch <<< "$latest"
-            version="${major}.${minor}.$((patch + 1))-test.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+            current="$(node -p 'require("./backend/cli/package.json").version')"
+            core="${current%%-*}"
+            IFS=. read -r major minor patch <<< "$core"
+            version="${major}.${minor}.$((patch + 1))-test.${GITHUB_RUN_ID}"
           fi
 
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-test\.[0-9A-Za-z.-]+$ ]]; then
@@ -66,7 +72,8 @@ jobs:
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Publishing npm test version $version"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "Preparing immutable npm test version $version from $source"
 
   build-cli:
     needs: version
@@ -74,49 +81,133 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.source }}
       - uses: ./.github/actions/setup-bun
+      - name: Look up immutable npm test artifacts
+        id: npm-artifacts-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release/npm-test/${{ needs.version.outputs.version }}
+          key: npm-test-artifacts-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
+          lookup-only: true
+      - name: Restore immutable CLI build
+        id: cli-build-cache
+        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: npm-test-cli-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
       - name: Build all npm CLI packages
+        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true' && steps.cli-build-cache.outputs.cache-hit != 'true'
         run: ./backend/cli/script/build.ts
         env:
           OPENSCIENCE_CHANNEL: test
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           GH_TOKEN: ${{ github.token }}
-      - name: Cache CLI build
+      - name: Cache immutable CLI build
+        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true' && steps.cli-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: backend/cli/dist
-          key: npm-test-cli-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: npm-test-cli-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
 
-  publish-test:
+  prepare-npm:
     needs:
       - version
       - build-cli
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    outputs:
-      version: ${{ needs.version.outputs.version }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ needs.version.outputs.source }}
+      - uses: ./.github/actions/setup-bun
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Restore immutable npm test artifacts
+        id: npm-artifacts-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release/npm-test/${{ needs.version.outputs.version }}
+          key: npm-test-artifacts-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
+      - name: Restore immutable CLI build
+        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: npm-test-cli-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
+          fail-on-cache-miss: true
+      - name: Fail closed if an uncached version is occupied
+        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
+        run: ./tooling/repo/npm-test-release.ts assert-empty
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.source }}
+      - name: Pack the complete 15-package candidate once
+        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
+        run: ./tooling/repo/prepare-npm.ts
+        env:
+          HUSKY: "0"
+          OPENSCIENCE_CHANNEL: test
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm-test/${{ needs.version.outputs.version }}
+      - name: Verify immutable manifest and packed module exports
+        run: ./tooling/repo/verify-npm-artifacts.ts
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm-test/${{ needs.version.outputs.version }}
+      - name: Cache immutable source, version, integrity, and tarballs
+        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release/npm-test/${{ needs.version.outputs.version }}
+          key: npm-test-artifacts-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
+
+  publish-test:
+    needs:
+      - version
+      - prepare-npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ needs.version.outputs.version }}
+      source: ${{ needs.version.outputs.source }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.version.outputs.source }}
       - uses: ./.github/actions/setup-bun
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
-      - name: Restore CLI build
+      - name: Restore immutable npm test artifacts
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: backend/cli/dist
-          key: npm-test-cli-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .release/npm-test/${{ needs.version.outputs.version }}
+          key: npm-test-artifacts-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
           fail-on-cache-miss: true
-      - name: Publish npm test packages
-        run: ./tooling/repo/publish.ts
+      - name: Stage and verify the complete npm candidate
+        run: ./tooling/repo/npm-test-release.ts stage
         env:
-          HUSKY: "0"
-          OPENSCIENCE_CHANNEL: test
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"
+          OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm-test/${{ needs.version.outputs.version }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
 
@@ -130,6 +221,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.publish-test.outputs.source }}
       - uses: ./.github/actions/setup-bun
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -378,3 +471,76 @@ jobs:
           } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           }
+
+  musl-baseline-smoke:
+    needs: publish-test
+    if: inputs.run_os_smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container: node:24-alpine
+    steps:
+      - name: Install Alpine smoke dependencies
+        shell: sh
+        run: apk add --no-cache curl libstdc++
+      - name: Install and smoke the exact x64 musl baseline
+        shell: sh
+        run: |
+          set -eu
+          prefix="$RUNNER_TEMP/openscience-musl-baseline"
+          npm install --prefix "$prefix" "@synsci/openscience-linux-x64-baseline-musl@${{ needs.publish-test.outputs.version }}"
+          bin="$prefix/node_modules/@synsci/openscience-linux-x64-baseline-musl/bin/openscience"
+          "$bin" --version > "$RUNNER_TEMP/openscience-musl-version.txt"
+          grep -Fx "${{ needs.publish-test.outputs.version }}" "$RUNNER_TEMP/openscience-musl-version.txt"
+          OPENSCIENCE_DISABLE_SHARE=true \
+            OPENSCIENCE_DISABLE_LSP_DOWNLOAD=true \
+            OPENSCIENCE_DISABLE_DEFAULT_PLUGINS=true \
+            OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER=true \
+            "$bin" serve --port 4096 > "$RUNNER_TEMP/openscience-musl-smoke.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          i=0
+          while [ "$i" -lt 90 ]; do
+            if curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null; then
+              exit 0
+            fi
+            i=$((i + 1))
+            sleep 1
+          done
+          echo "musl baseline server never became healthy" >&2
+          sed -n '1,200p' "$RUNNER_TEMP/openscience-musl-smoke.log" >&2 || true
+          exit 1
+
+  promote-test:
+    needs:
+      - version
+      - publish-test
+      - packaged-e2e
+      - os-smoke
+      - musl-baseline-smoke
+    if: inputs.run_packaged_e2e && inputs.run_os_smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.version.outputs.source }}
+      - uses: ./.github/actions/setup-bun
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      - name: Restore immutable npm test artifacts
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release/npm-test/${{ needs.version.outputs.version }}
+          key: npm-test-artifacts-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
+          fail-on-cache-miss: true
+      - name: Promote the verified snapshot to test
+        run: ./tooling/repo/npm-test-release.ts promote-test
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm-test/${{ needs.version.outputs.version }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

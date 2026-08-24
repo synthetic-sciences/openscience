@@ -3,10 +3,13 @@ type State = {
   failTagReadAfterAdd?: string
   failTagReadOnce?: boolean
   identity: string
+  optionalDependencies?: Record<string, Record<string, string>>
   owners: string[]
   packages: Record<string, { integrity: string; visibilityReads?: number }>
   publishCalls: number
-  publishMode?: "already" | "permission" | "success"
+  publishFailures?: Record<string, number>
+  publishMode?: "already" | "ghost" | "permission" | "success"
+  publishSpecs?: string[]
   publishVisibilityReads?: number
   tagAdds?: string[]
   tags: Record<string, Record<string, string>>
@@ -48,6 +51,11 @@ if (args[0] === "view" && args[2] === "dist.integrity") {
   process.exit(0)
 }
 
+if (args[0] === "view" && args[2] === "optionalDependencies") {
+  console.log(JSON.stringify(state.optionalDependencies?.[args[1]] ?? {}))
+  process.exit(0)
+}
+
 if (args[0] === "diff") {
   if (state.diff) console.log(state.diff)
   process.exit(0)
@@ -55,8 +63,25 @@ if (args[0] === "diff") {
 
 if (args[0] === "publish") {
   state.publishCalls++
-  const spec = process.env.FAKE_NPM_SPEC
-  if (!spec) throw new Error("FAKE_NPM_SPEC is required for publish")
+  const archive = Bun.spawn(["tar", "-xOzf", args[1], "package/package.json"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const manifest = JSON.parse(await new Response(archive.stdout).text()) as { name: string; version: string }
+  if ((await archive.exited) !== 0) throw new Error("Could not inspect fake npm package")
+  const spec = process.env.FAKE_NPM_SPEC ?? `${manifest.name}@${manifest.version}`
+  state.publishSpecs ??= []
+  state.publishSpecs.push(spec)
+  if ((state.publishFailures?.[spec] ?? 0) > 0) {
+    state.publishFailures![spec]--
+    await save()
+    fail("npm error code E500\ntransient publish failure")
+  }
+  if (state.publishMode === "ghost") {
+    await save()
+    console.log(`+ ${spec}`)
+    process.exit(0)
+  }
   if (state.publishMode === "permission") {
     await save()
     fail("npm error code E403\nYou do not have permission to publish this package")
