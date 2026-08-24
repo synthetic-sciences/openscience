@@ -58,7 +58,7 @@ while [[ $# -gt 0 ]]; do
             no_modify_path=true
             shift
             ;;
-        --no-atlas|--no-gateway)
+        --no-gateway)
             # Retained as a no-op for installer-script compatibility. The
             # OpenScience installer no longer offers a separate companion.
             shift

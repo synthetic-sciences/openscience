@@ -27,8 +27,6 @@ The data root defaults to `~/.openscience` and can be relocated from Storage set
 
 Shell tools receive a sanitized environment: managed Gateway tokens and control-plane variables are stripped, while ordinary user environment values and supported user-owned provider or service credentials may be available to approved commands. Credential files, SSH/cloud config, and other sensitive paths are denied to OS-sandboxed Python/R kernels; kernels also receive a minimal runtime and locale environment without provider, Gateway, or cloud keys.
 
-Managed Modal credentials are narrower still: they resolve only inside the trusted compute adapter after approval and are not injected into general shell or kernel environments.
-
 The browser's interactive system terminal is a user-owned shell rather than an agent tool. It inherits the user's environment (minus terminal-session bookkeeping), so treat it like any terminal you launch yourself.
 
 ## Output redaction

@@ -119,8 +119,5 @@
     "yargs": "18.0.0",
     "zod": "catalog:",
     "zod-to-json-schema": "3.24.5"
-  },
-  "optionalDependencies": {
-    "@synsci/atlas": "^0.13.2"
   }
 }

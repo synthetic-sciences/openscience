@@ -207,9 +207,8 @@ export const StatusCommand = cmd({
       )
     }
 
-    // Unified Atlas surface (WS7 A1): wallet + lifetime spend, recent usage,
-    // managed-compute availability, and the bundled `atlas` companion version —
-    // one answer to "what's my Atlas state?". Every probe degrades to silence.
+    // Keep account status focused on billing and recent managed usage. Every
+    // probe degrades to silence so an unavailable backend does not block CLI use.
     const [mode, credits, txns] = await Promise.all([
       OpenScience.getBillingMode().catch(() => null),
       OpenScience.getCredits().catch(() => null),
@@ -221,19 +220,12 @@ export const StatusCommand = cmd({
       prompts.log.info(`Wallet: $${balanceUsd.toFixed(2)}${spent}`)
     }
     if (mode) {
-      prompts.log.info(`Managed compute: ${mode.managed_supported ? "available" : "unavailable"}`)
       prompts.log.info("Routing: per-provider (auto) — your key if set, else Gateway managed (debits wallet).")
     }
     if (txns && txns.length > 0) {
       const noun = txns.length === 1 ? "charge" : "charges"
       prompts.log.info(`Recent usage: ${txns.length} ${noun} — latest ${txns[0].description.slice(0, 64)}`)
     }
-    const atlasVer = await OpenScience.atlasCliVersion()
-    if (atlasVer) {
-      const drift = atlasVer.startsWith("0.13.") ? "" : " (expected ^0.13.2 — run `npm i -g @synsci/atlas@latest`)"
-      prompts.log.info(`atlas companion: v${atlasVer}${drift}`)
-    }
-
     prompts.outro("Done")
   },
 })

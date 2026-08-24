@@ -66,16 +66,6 @@ if (metadata?.version !== packageVersion) {
   )
 }
 
-// Keep the wrapper's companion dependency hermetic as well. The smoke test is
-// for npm layout and platform resolution, not registry availability.
-const atlasStub = path.join(output, "atlas-stub")
-await fs.mkdir(atlasStub, { recursive: true })
-await fs.writeFile(
-  path.join(atlasStub, "package.json"),
-  JSON.stringify({ name: "@synsci/atlas", version: "0.13.2", private: false }, null, 2) + "\n",
-)
-const atlasTarball = await pack(atlasStub)
-
 const wrapper = path.join(output, "wrapper")
 await fs.mkdir(wrapper, { recursive: true })
 await fs.cp(path.join(cli, "bin"), path.join(wrapper, "bin"), { recursive: true })
@@ -83,7 +73,6 @@ await fs.copyFile(path.join(cli, "script", "preinstall.mjs"), path.join(wrapper,
 await fs.copyFile(path.join(cli, "script", "postinstall.mjs"), path.join(wrapper, "postinstall.mjs"))
 
 const manifest = createWrapperPackageManifest({ source: pkg, version: packageVersion, binaries })
-manifest.optionalDependencies["@synsci/atlas"] = `file:${atlasTarball}`
 await fs.writeFile(path.join(wrapper, "package.json"), JSON.stringify(manifest, null, 2) + "\n")
 
 const wrapperTarball = await pack(wrapper)

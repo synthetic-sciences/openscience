@@ -9,9 +9,8 @@ export interface WrapperPackageManifestOptions {
   binaries: Record<string, string>
 }
 
-/** Build the npm wrapper manifest without discarding optional companions from
- * the source package. Platform binaries are added alongside packages such as
- * @synsci/atlas; they are not a replacement for them. */
+/** Build the npm wrapper manifest without discarding declared optional
+ * companions. Platform binaries are added alongside them. */
 export function createWrapperPackageManifest(options: WrapperPackageManifestOptions) {
   return {
     name: options.source.name,

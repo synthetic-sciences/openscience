@@ -157,6 +157,10 @@ jobs:
             echo "::error::npm installed the non-native optional package $OTHER_PACKAGE"
             exit 1
           fi
+          if WRAPPER_DIR="$wrapper_dir" node -e 'require.resolve("@synsci/atlas/package.json", { paths: [process.env.WRAPPER_DIR] })' 2>/dev/null; then
+            echo "::error::@synsci/openscience still installs the discontinued @synsci/atlas companion"
+            exit 1
+          fi
           "$prefix/bin/openscience" --version
 
   publish:

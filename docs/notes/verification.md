@@ -39,5 +39,5 @@ Notes:
   and let the docs build validate them.
 - The model catalog is fixtured in tests, so the suite is deterministic and runs
   offline; a nightly job checks the live catalog for delistings separately.
-- Atlas-dependent code paths degrade gracefully when signed out or offline —
-  exercise both states when touching them.
+- Synthetic Sciences account routes degrade gracefully when signed out or
+  offline — exercise both states when touching them.

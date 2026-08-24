@@ -136,33 +136,6 @@ function onboardSkip(): void {
   )
 }
 
-async function offerAtlasCli(): Promise<void> {
-  if (Bun.which("atlas")) return
-  const yes = await prompts.confirm({
-    message: "Install the Gateway CLI companion? (research graph — maps, runs, library)",
-    initialValue: false,
-  })
-  if (prompts.isCancel(yes) || !yes) return
-
-  if (!Bun.which("npm")) {
-    prompts.log.info("Install it later with: npm i -g @synsci/atlas@latest")
-    return
-  }
-  const spin = prompts.spinner()
-  spin.start("Installing @synsci/atlas…")
-  try {
-    const proc = Bun.spawn(["npm", "install", "-g", "@synsci/atlas@latest"], { stdout: "ignore", stderr: "pipe" })
-    const code = await proc.exited
-    if (code === 0) {
-      spin.stop("Gateway CLI installed — it shares your session, so it's already signed in.")
-    } else {
-      spin.stop("Couldn't install automatically. Run: npm i -g @synsci/atlas@latest", 1)
-    }
-  } catch {
-    spin.stop("Couldn't install automatically. Run: npm i -g @synsci/atlas@latest", 1)
-  }
-}
-
 /** The first-run setup wizard. Managed-first, but bring-your-own-key and
  *  "not now" stay one keystroke away — OpenScience never requires an account. */
 export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
@@ -193,7 +166,6 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
   else if (choice === "local") await onboardLocal()
   else onboardSkip()
 
-  await offerAtlasCli()
   await markOnboarded()
   prompts.outro("You're all set.")
 }

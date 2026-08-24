@@ -207,7 +207,6 @@ const PAGE_ALIASES: Record<string, string> = {
   "first-session": "sessions",
   "sub-agents": "agents",
   "web-ui": "workspace",
-  atlas: "gateway",
   credentials: "gateway",
 }
 

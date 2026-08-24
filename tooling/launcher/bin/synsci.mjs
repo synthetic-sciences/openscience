@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
-// `npx synsci`: the OpenScience install wizard.
+// `npx synsci`: the OpenScience installer and launcher.
 //
 // The npm package (and this bin) keep the historical `synsci` name so the
 // one-liner everyone knows keeps working; everything it installs is the
-// OpenScience CLI (`@synsci/openscience`, binary `openscience`), optionally with the
-// Atlas managed platform on top.
+// OpenScience CLI (`@synsci/openscience`, binary `openscience`).
 
 // Hard guard against recursive invocation. If a check ever resolves to the
 // launcher itself, this prevents an infinite spawn chain that exhausts memory.
@@ -20,8 +19,7 @@ process.env.__SYNSCI_LAUNCHER_PID = String(process.pid)
 import { execFileSync, execSync, spawn } from "node:child_process"
 import { existsSync, readFileSync, realpathSync } from "node:fs"
 import { homedir } from "node:os"
-import { join, resolve } from "node:path"
-import { createInterface } from "node:readline"
+import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { npmDistTag, opensciencePackageSpec } from "../lib/channel.mjs"
 
@@ -196,82 +194,6 @@ function hasDeprecatedCli() {
   }
 }
 
-function isConnected() {
-  const explicit = process.env.OPENSCIENCE_DATA_DIR?.trim()
-  const xdgData = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share")
-  const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config")
-  const pointerPath = join(xdgConfig, "openscience", "data-location")
-  const pointer = (() => {
-    try {
-      return readFileSync(pointerPath, "utf-8").trim()
-    } catch {
-      return ""
-    }
-  })()
-  const roots = explicit
-    ? [resolve(explicit)]
-    : pointer
-      ? [resolve(pointer)]
-      : [join(homedir(), ".openscience"), join(xdgData, "openscience")]
-  const sessionPath = roots.map((root) => join(root, "openscience-session.json")).find(existsSync)
-  if (!sessionPath) return false
-  try {
-    const data = JSON.parse(readFileSync(sessionPath, "utf-8"))
-    if (!data.access_token || !data.expires_at) return false
-    return new Date(data.expires_at) > new Date()
-  } catch {
-    return false
-  }
-}
-
-function atlasVersion() {
-  // `atlas` on PATH may be Ariga Atlas or the MongoDB Atlas CLI, whose
-  // --version output also survives the digit filter. Only trust the command
-  // when the global @synsci/atlas package is present to own it.
-  const owned = runQuiet("npm ls -g @synsci/atlas --depth=0")
-  if (!owned || !owned.includes("@synsci/atlas")) return null
-  const raw = runQuiet("atlas --version")
-  return raw ? raw.replace(/[^0-9.]/g, "") : null
-}
-
-// Install the Atlas CLI, or bring an existing install up to date. Returns
-// true when a working `atlas` binary is on PATH afterwards.
-async function installOrUpdateAtlas() {
-  const current = atlasVersion()
-  if (current) {
-    const s = spinner("Checking Atlas CLI for updates...")
-    const latest = runQuiet("npm view @synsci/atlas version")
-    if (!latest || current === latest) {
-      s.ok(`atlas ${current} ${DIM}(up to date)${RESET}`)
-      return true
-    }
-    s.update(`Upgrading Atlas CLI ${current} → ${latest}...`)
-    if (runQuiet("npm i -g @synsci/atlas@latest") !== null) {
-      s.ok(`Upgraded Atlas CLI to ${latest}`)
-    } else {
-      s.warn(`Atlas CLI upgrade failed, continuing with ${current}`)
-    }
-    return true
-  }
-  const s = spinner("Installing Atlas CLI...")
-  if (runQuiet("npm i -g @synsci/atlas@latest") !== null && atlasVersion()) {
-    s.ok("Installed Atlas CLI")
-    return true
-  }
-  s.warn(`Atlas CLI install failed, you can retry later: ${CYAN}npm i -g @synsci/atlas${RESET}`)
-  return false
-}
-
-async function ask(question) {
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close()
-      resolve(answer.trim())
-    })
-  })
-}
-
 async function main() {
   process.on("exit", () => process.stdout.write(SHOW_CURSOR))
   process.on("SIGINT", () => {
@@ -283,9 +205,7 @@ async function main() {
   console.log()
   for (const line of LOGO) console.log(`   ${CYAN}${line}${RESET}`)
   console.log()
-  console.log(
-    `   ${BOLD}Synthetic Sciences${RESET} ${DIM}OpenScience, the open-source AI research workspace · Atlas, the research platform${RESET}`,
-  )
+  console.log(`   ${BOLD}Synthetic Sciences${RESET} ${DIM}OpenScience, the open-source AI research workspace${RESET}`)
   console.log()
 
   // --- Step 1: Install or upgrade the OpenScience CLI ---
@@ -366,69 +286,7 @@ async function main() {
     }
   }
 
-  // --- Step 2: Choose a setup ---
-  console.log()
-  console.log(`  ${BOLD}How do you want to run it?${RESET}`)
-  console.log()
-  console.log(
-    `    ${BOLD}1${RESET}  ${CYAN}OpenScience${RESET}         ${DIM}free and open source, bring your own API keys, no account${RESET}`,
-  )
-  console.log(
-    `    ${BOLD}2${RESET}  ${CYAN}OpenScience + Atlas${RESET} ${DIM}managed models, wallet billing, research graph & compute${RESET}`,
-  )
-  console.log(
-    `    ${BOLD}3${RESET}  ${CYAN}Atlas CLI${RESET}           ${DIM}just the Atlas research CLI — maps, runs, and compute from the terminal${RESET}`,
-  )
-  console.log()
-
-  const setup = await ask(`  ${DIM}❯${RESET} Choose [1/2/3]: `)
-  console.log()
-
-  if (setup === "3") {
-    // Atlas-CLI-only path: install/upgrade, verify, hand off to `atlas`.
-    // No workspace launch — this option exists for people who want the
-    // research CLI on a box without opening the browser app.
-    const installed = await installOrUpdateAtlas()
-    if (!installed) process.exit(1)
-    const s = spinner("Running atlas doctor...")
-    if (runQuiet("atlas doctor") !== null) {
-      s.ok("atlas doctor passed")
-    } else {
-      s.warn(`atlas doctor reported issues — run ${CYAN}atlas doctor${RESET} for details`)
-    }
-    if (isConnected()) {
-      ok("Connected to Atlas")
-    } else {
-      console.log()
-      console.log(
-        `  ${DIM}Connect your Atlas account for managed credentials:${RESET} ${CYAN}openscience connect login${RESET}`,
-      )
-    }
-    console.log()
-    console.log(`  ${BOLD}Next steps${RESET}`)
-    console.log(`    ${CYAN}atlas --help${RESET}   ${DIM}see everything the CLI can do${RESET}`)
-    console.log(`    ${CYAN}atlas doctor${RESET}   ${DIM}check credentials and environment${RESET}`)
-    console.log()
-    process.exit(0)
-  }
-
-  if (setup === "2") {
-    await installOrUpdateAtlas()
-    if (isConnected()) {
-      ok("Connected to Atlas")
-    } else {
-      console.log()
-      try {
-        execCli(cliPath, ["connect", "login"], { stdio: "inherit" })
-      } catch {}
-    }
-  } else {
-    ok(`BYOK mode ${DIM}add provider keys inside the app (or via env vars like ANTHROPIC_API_KEY)${RESET}`)
-  }
-
-  console.log()
-
-  // --- Step 3: Launch the workspace ---
+  // --- Step 2: Launch the workspace ---
   console.log(`  ${DIM}Opening the workspace in your browser…${RESET}`)
   console.log()
 

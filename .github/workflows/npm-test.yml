@@ -162,18 +162,10 @@ jobs:
           "$prefix/bin/openscience" --version | tee "$RUNNER_TEMP/openscience-version.txt"
           grep -Fx "${{ needs.publish-test.outputs.version }}" "$RUNNER_TEMP/openscience-version.txt"
           wrapper_dir="$prefix/lib/node_modules/@synsci/openscience"
-          WRAPPER_DIR="$wrapper_dir" node - <<'NODE'
-          const path = require("node:path")
-          const { execFileSync } = require("node:child_process")
-          const pkg = require.resolve("@synsci/atlas/package.json", { paths: [process.env.WRAPPER_DIR] })
-          const atlas = require(pkg)
-          if (!atlas.version) throw new Error("@synsci/atlas resolved without a version")
-          console.log(`resolved @synsci/atlas ${atlas.version} from ${path.dirname(pkg)}`)
-          const rel = typeof atlas.bin === "string" ? atlas.bin : atlas.bin?.atlas
-          if (!rel) throw new Error("@synsci/atlas package does not expose an atlas bin")
-          const bin = path.join(path.dirname(pkg), rel)
-          console.log(execFileSync(bin, ["--version"], { encoding: "utf8" }).trim())
-          NODE
+          if WRAPPER_DIR="$wrapper_dir" node -e 'require.resolve("@synsci/atlas/package.json", { paths: [process.env.WRAPPER_DIR] })' 2>/dev/null; then
+            echo "::error::@synsci/openscience still installs the discontinued @synsci/atlas companion"
+            exit 1
+          fi
 
           launcher_prefix="$RUNNER_TEMP/synsci-npm-test-prefix"
           npm install --global --prefix "$launcher_prefix" "synsci@${{ needs.publish-test.outputs.version }}"
@@ -187,29 +179,6 @@ jobs:
         env:
           HOME: ${{ runner.temp }}/openscience-npm-test-home
           OPENSCIENCE_VERSION: ${{ needs.publish-test.outputs.version }}
-      - name: Run optional authenticated Atlas smoke
-        run: |
-          set -euo pipefail
-          if [ -z "${ATLAS_TEST_API_KEY:-}" ]; then
-            echo "ATLAS_TEST_API_KEY is not set; skipping authenticated Atlas smoke."
-            exit 0
-          fi
-          wrapper_dir="$RUNNER_TEMP/openscience-npm-test-prefix/lib/node_modules/@synsci/openscience"
-          WRAPPER_DIR="$wrapper_dir" node - <<'NODE'
-          const path = require("node:path")
-          const { execFileSync } = require("node:child_process")
-          const pkg = require.resolve("@synsci/atlas/package.json", { paths: [process.env.WRAPPER_DIR] })
-          const atlas = require(pkg)
-          const rel = typeof atlas.bin === "string" ? atlas.bin : atlas.bin?.atlas
-          if (!rel) throw new Error("@synsci/atlas package does not expose an atlas bin")
-          const bin = path.join(path.dirname(pkg), rel)
-          execFileSync(bin, ["doctor", "--format=json"], {
-            env: { ...process.env, ATLAS_API_KEY: process.env.ATLAS_TEST_API_KEY },
-            stdio: "inherit",
-          })
-          NODE
-        env:
-          ATLAS_TEST_API_KEY: ${{ secrets.ATLAS_TEST_API_KEY }}
       - name: Set isolated OpenScience paths
         run: |
           PASS="ci-$(openssl rand -hex 16)"

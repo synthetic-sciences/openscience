@@ -18,6 +18,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Stopped bundling or offering Atlas through the OpenScience npm distribution
+  and `synsci` launcher while preserving automatic native-binary installation.
 - Added Ask for approval, Approve for me, and Full access presets directly to
   the composer’s Research tools menu, with trusted Full access as the default
   for new local projects and explicit or managed restrictions preserved.

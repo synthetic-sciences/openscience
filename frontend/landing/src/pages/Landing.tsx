@@ -16,7 +16,7 @@ const LOGOS = [
 ] as const
 
 /* OpenScience. CMU Concrete, warm dark, coral accents.
-   Same design family as the Atlas landing page.
+   Same design family as the Synthetic Sciences product pages.
 
    Type system, used consistently:
      H_HUGE  dither statements and the closing banner only
@@ -937,7 +937,7 @@ export default function Landing({
                 },
                 {
                   q: "Which models can it use?",
-                  a: "Use frontier providers, open-weight models, local models, or Atlas-managed models. You can switch mid-project without changing the project itself.",
+                  a: "Use frontier providers, open-weight models, local models, or managed routes through Synthetic Sciences. You can switch mid-project without changing the project itself.",
                 },
                 {
                   q: "Where does my work live?",
@@ -952,8 +952,8 @@ export default function Landing({
                   a: "Yes. Add skills, plugins, MCP servers, custom agents and commands, or use the TypeScript SDK to connect a private lab tool.",
                 },
                 {
-                  q: "What is Atlas?",
-                  a: "Synthetic Sciences' managed platform for research graphs, source-grounded context, models, and compute. OpenScience works with Atlas but never requires it.",
+                  q: "Do I need a Synthetic Sciences account?",
+                  a: "No. OpenScience works with your own provider keys, eligible ChatGPT access, or local models. A Synthetic Sciences account is optional when you want managed model credits and research search.",
                 },
               ]}
             />
@@ -1090,7 +1090,7 @@ export default function Landing({
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Atlas
+                    Account
                     <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
                       <path d="M2 8 L8 2 M4 2 L8 2 L8 6" stroke="currentColor" fill="none" />
                     </svg>
