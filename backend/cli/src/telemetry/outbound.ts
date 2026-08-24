@@ -260,8 +260,15 @@ export function telemetryDeletionProof(
     return undefined
   }
   const prefixHex = Buffer.from(prefix, "utf8").toString("hex")
+  // The input is an authenticated, server-issued random API credential, not a
+  // human password. Atlas stores this exact SHA-256 verifier, so a password KDF
+  // would break cross-repository proof verification.
+  // codeql[js/insufficient-password-hash]
   const keyHash = createHash("sha256").update(value).digest()
   const message = `${DELETION_PROOF_DOMAIN}\n${prefixHex}\n${consentEpoch}\n${nonceHex}`
+  // This HMAC is a domain-separated, one-shot deletion capability keyed by the
+  // API-key verifier; it is never used as a password verifier or persisted raw.
+  // codeql[js/insufficient-password-hash]
   const mac = createHmac("sha256", keyHash).update(message).digest("hex")
   return `odp_v2.${prefixHex}.${consentEpoch}.${nonceHex}.${mac}`
 }
@@ -273,6 +280,9 @@ function subjectForSession(session: { api_key: string; user_id?: string }) {
   const account =
     session.user_id ||
     telemetryKeyID(session.api_key) ||
+    // The server-issued random API credential is pseudonymized for local queue
+    // partitioning only. This is not password storage or authentication.
+    // codeql[js/insufficient-password-hash]
     `key-subject-v1:${createHmac("sha256", SUBJECT_DOMAIN).update(session.api_key).digest("hex")}`
   return `account:${account}`
 }
@@ -320,6 +330,10 @@ async function migrateLegacy(state: ConsentFile, subject: string): Promise<boole
 async function ensureSubject(state: ConsentFile, subject: string, token?: string) {
   let changed = false
   if (token) {
+    // Recompute the retired local subject key solely to migrate and delete it.
+    // Matching the legacy SHA-256 identifier is required; it is not an auth
+    // verifier, and the value is removed rather than newly persisted.
+    // codeql[js/insufficient-password-hash]
     const legacySubject = `account:key-sha256:${createHash("sha256").update(token).digest("hex")}`
     const legacy = state.subjects[legacySubject]
     if (legacy) {

@@ -801,6 +801,10 @@ describe("outbound OpenScience trace contract", () => {
     restores.push(offline)
     expect(await OutboundTelemetry.setAnalytics(false)).toMatchObject({ pending: true })
 
+    // Test-only reconstruction of Atlas's API-key verifier proves that neither
+    // the reusable verifier nor the raw random credential reaches local disk.
+    // This does not implement password storage.
+    // codeql[js/insufficient-password-hash]
     const rawHash = createHash("sha256").update(apiKey).digest("hex")
     const beforeLogout = await Bun.file(consent).text()
     expect(beforeLogout).not.toContain(apiKey)
