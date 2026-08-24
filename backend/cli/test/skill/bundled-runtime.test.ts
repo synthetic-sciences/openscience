@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { directoryDigest } from "../../src/skill/bundle-format"
+import { assertNoRetiredProductSkills, directoryDigest } from "../../src/skill/bundle-format"
 import { BundledSkills } from "../../src/skill/bundled"
 
 test("materializes and verifies the complete bundled skill archive offline", async () => {
@@ -42,4 +42,33 @@ test("materializes and verifies the complete bundled skill archive offline", asy
   } finally {
     await fs.rm(tmp, { recursive: true, force: true })
   }
+})
+
+test("rejects retired Atlas and graph skills before archive generation", () => {
+  for (const name of [
+    "atlas",
+    "atlas-lab",
+    "atlas-survey-cli",
+    "initialize-atlas-graph",
+    "initialize-research-graph",
+  ]) {
+    expect(() =>
+      assertNoRetiredProductSkills([
+        {
+          path: `research/${name}/SKILL.md`,
+          bytes: new TextEncoder().encode(`---\nname: ${name}\ndescription: retired\n---\n`),
+        },
+      ]),
+    ).toThrow(`Retired product skill ${name}`)
+  }
+  expect(() =>
+    assertNoRetiredProductSkills([
+      {
+        path: "biology/human-protein-atlas/SKILL.md",
+        bytes: new TextEncoder().encode(
+          "---\nname: human-protein-atlas\ndescription: Query the Human Protein Atlas.\n---\n",
+        ),
+      },
+    ]),
+  ).not.toThrow()
 })

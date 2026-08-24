@@ -20,6 +20,13 @@ export const Preferences = z.object({
   // Licensing use-intent (General → Licensing). Persisted for provenance /
   // downstream policy; drives no gate here beyond being recorded.
   intent: z.enum(["commercial", "non-commercial"]).default("non-commercial"),
+  // Retained as a no-op so existing 2.x SDK clients and settings files continue
+  // to round-trip. OpenScience does not sell or budget managed compute.
+  extra_budget_usd: z
+    .number()
+    .min(0)
+    .default(0)
+    .describe("@deprecated No billing effect. OpenScience compute is user-owned."),
   // The session trace is an advanced observability surface. Keep the regular
   // workspace quiet unless the user explicitly enables it in General.
   show_trace: z.boolean().default(false),

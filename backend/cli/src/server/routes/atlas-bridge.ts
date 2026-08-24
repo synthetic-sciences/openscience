@@ -401,8 +401,8 @@ async function resolveProjectId(directory: string): Promise<string | null> {
 // ── graph-init failure classification ────────────────────────────────────
 // `project init` used to collapse EVERY failure (no session, DNS failure,
 // revoked key, access rejection, backend 4xx/5xx) into `null` → one misleading
-// "check login" message. Classify instead, so the CLI and the
-// initialize-research-graph skill can tell the user the actual fix.
+// "check login" message. Classify instead, so every local caller can tell the
+// user the actual fix.
 
 export type InitProjectFailureKind =
   | "unauthenticated" // no session, or the backend rejected the key (401/403)

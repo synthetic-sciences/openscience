@@ -182,7 +182,8 @@ test("discovers global skills from ~/.claude/skills/ directory", async () => {
       },
     })
   } finally {
-    process.env.OPENSCIENCE_TEST_HOME = originalHome
+    if (originalHome === undefined) delete process.env.OPENSCIENCE_TEST_HOME
+    else process.env.OPENSCIENCE_TEST_HOME = originalHome
   }
 })
 
@@ -196,6 +197,81 @@ test("returns empty array when no skills exist", async () => {
       expect(skills).toEqual([])
     },
   })
+})
+
+test("retired Atlas and graph skills cannot re-enter through project skill directories", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      for (const name of [
+        "atlas",
+        "atlas-lab",
+        "atlas-survey-cli",
+        "initialize-atlas-graph",
+        "initialize-research-graph",
+        "initialize-research-graphs",
+        "atlas-labs",
+      ]) {
+        await Bun.write(
+          path.join(dir, ".openscience", "skill", name, "SKILL.md"),
+          `---\nname: ${name}\ndescription: Local ${name} test skill.\n---\n\n# ${name}\n`,
+        )
+      }
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      expect((await Skill.all()).map((skill) => skill.name).toSorted()).toEqual([
+        "atlas-labs",
+        "initialize-research-graphs",
+      ])
+      expect(await Skill.get("atlas")).toBeUndefined()
+      expect(await Skill.get("ATLAS-LAB")).toBeUndefined()
+      expect(await Skill.get("initialize-atlas-graph")).toBeUndefined()
+      expect(await Skill.get("INITIALIZE-RESEARCH-GRAPH")).toBeUndefined()
+    },
+  })
+})
+
+test("removes only global Claude symlinks created by the retired Atlas package", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const originalHome = process.env.OPENSCIENCE_TEST_HOME
+  process.env.OPENSCIENCE_TEST_HOME = tmp.path
+
+  try {
+    const packageSkills = path.join(tmp.path, "node_modules", "@synsci", "atlas", "skills")
+    for (const name of ["atlas", "atlas-lab"]) {
+      const target = path.join(packageSkills, name)
+      await Bun.write(path.join(target, "SKILL.md"), `---\nname: ${name}\ndescription: Retired package skill.\n---\n`)
+      await fs.mkdir(path.join(tmp.path, ".claude", "skills"), { recursive: true })
+      await fs.symlink(target, path.join(tmp.path, ".claude", "skills", name))
+    }
+    await Bun.write(
+      path.join(tmp.path, ".claude", "skills", "atlas-map", "SKILL.md"),
+      `---\nname: atlas-map\ndescription: User-owned same-name directory.\n---\n`,
+    )
+    await Bun.write(
+      path.join(tmp.path, ".claude", "skills", "atlas-labs", "SKILL.md"),
+      `---\nname: atlas-labs\ndescription: Similar third-party skill.\n---\n`,
+    )
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect((await Skill.all()).map((skill) => skill.name)).toEqual(["atlas-labs"])
+      },
+    })
+
+    expect(await fs.lstat(path.join(tmp.path, ".claude", "skills", "atlas")).catch(() => undefined)).toBeUndefined()
+    expect(await fs.lstat(path.join(tmp.path, ".claude", "skills", "atlas-lab")).catch(() => undefined)).toBeUndefined()
+    expect(await Bun.file(path.join(tmp.path, ".claude", "skills", "atlas-map", "SKILL.md")).exists()).toBe(true)
+  } finally {
+    if (originalHome === undefined) delete process.env.OPENSCIENCE_TEST_HOME
+    else process.env.OPENSCIENCE_TEST_HOME = originalHome
+  }
 })
 
 test("disabled frontmatter keeps a skill out of the catalog without shadowing enabled skills", async () => {

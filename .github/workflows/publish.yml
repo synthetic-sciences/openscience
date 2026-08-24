@@ -1,5 +1,5 @@
 name: prod publish
-run-name: "prod publish ${{ inputs.bump }}"
+run-name: "prod publish ${{ inputs.version || inputs.bump }}"
 
 on:
   workflow_dispatch:
@@ -12,6 +12,10 @@ on:
           - major
           - minor
           - patch
+      version:
+        description: "Exact stable version to publish or resume (overrides bump, for example 2.0.32)"
+        required: false
+        type: string
 
 # One release at a time. Keying the group on the inputs let a `patch` and a
 # `minor` dispatch run concurrently and race on tags and the GitHub release.
@@ -29,15 +33,50 @@ jobs:
     steps:
       - name: Require the protected default branch
         shell: bash
+        env:
+          EXACT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REPOSITORY,,}" != "synthetic-sciences/openscience" || "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::Production releases must be dispatched from synthetic-sciences/OpenScience main; received $GITHUB_REPOSITORY at $GITHUB_REF."
+          if [[ "${GITHUB_REPOSITORY,,}" != "synthetic-sciences/openscience" ]]; then
+            echo "::error::Production releases must run in synthetic-sciences/OpenScience; received $GITHUB_REPOSITORY."
+            exit 1
+          fi
+          if [[ -n "$EXACT_VERSION" && ! "$EXACT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Exact production version must be stable semver such as 2.0.32; received '$EXACT_VERSION'."
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != "refs/heads/main" && ( -z "$EXACT_VERSION" || "$GITHUB_REF" != "refs/tags/v$EXACT_VERSION" ) ]]; then
+            echo "::error::Production releases must start on main; an exact-version resume may run only from its immutable refs/tags/v<version> tag. Received $GITHUB_REF."
             exit 1
           fi
 
-  version:
+  npm-preflight:
     needs: release-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      # Authenticate and prove ownership of every package before creating a
+      # draft release or making the first immutable npm registry write.
+      - name: Preflight npm publisher identity and ownership
+        run: ./tooling/repo/npm-release.ts preflight
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  version:
+    needs:
+      - release-source
+      - npm-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -55,39 +94,63 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OPENSCIENCE_BUMP: ${{ inputs.bump }}
+          OPENSCIENCE_VERSION: ${{ inputs.version }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
       tag: ${{ steps.version.outputs.tag }}
+      source: ${{ steps.version.outputs.source }}
+      artifact_source: ${{ steps.version.outputs.artifact_source }}
 
   build-cli:
     needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
-      # build.ts uploads the native archives and checksums to the draft release.
+      # The job verifies/uploads native archives and checksums to the draft release.
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-tags: true
+          fetch-depth: 0
+          ref: ${{ needs.version.outputs.source }}
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Restore immutable CLI build
+        id: cli-build-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: cli-build-${{ needs.version.outputs.version }}
+
       - name: Build
+        if: steps.cli-build-cache.outputs.cache-hit != 'true'
         run: ./backend/cli/script/build.ts
         env:
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
           GH_TOKEN: ${{ github.token }}
 
-      - name: Cache CLI build
+      - name: Cache immutable CLI build
+        if: steps.cli-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-${{ github.run_id }}
+          key: cli-build-${{ needs.version.outputs.version }}
+
+      # Persist the nondeterministic binary build before the first draft-asset
+      # mutation. A retry can then verify/upload these exact bytes.
+      - name: Verify or upload immutable draft assets
+        run: ./tooling/repo/release-assets.ts backend/cli/dist
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
+          GH_TOKEN: ${{ github.token }}
 
     outputs:
       version: ${{ needs.version.outputs.version }}
@@ -110,6 +173,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.source }}
 
       - uses: ./.github/actions/setup-bun
 
@@ -123,7 +188,7 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-${{ github.run_id }}
+          key: cli-build-${{ needs.version.outputs.version }}
           fail-on-cache-miss: true
 
       - name: Install the native npm distribution
@@ -152,11 +217,59 @@ jobs:
           fi
           "$prefix/bin/openscience" --version
 
-  publish:
+  prepare-npm:
     needs:
       - version
       - build-cli
       - verify-native-cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.version.outputs.source }}
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Restore immutable CLI build
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: cli-build-${{ needs.version.outputs.version }}
+          fail-on-cache-miss: true
+
+      - name: Restore immutable npm artifacts
+        id: npm-artifacts-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release/npm/${{ needs.version.outputs.version }}
+          key: npm-release-${{ needs.version.outputs.version }}
+
+      - name: Pack the complete npm release set
+        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
+        run: ./tooling/repo/prepare-npm.ts
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
+          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}
+
+      - name: Cache immutable npm artifacts
+        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release/npm/${{ needs.version.outputs.version }}
+          key: npm-release-${{ needs.version.outputs.version }}
+
+  publish:
+    needs:
+      - version
+      - prepare-npm
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -169,6 +282,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ needs.version.outputs.source }}
 
       - uses: ./.github/actions/setup-bun
 
@@ -182,13 +296,20 @@ jobs:
           git config user.email "openscience@syntheticsciences.dev"
           git config user.name "openscience"
 
-      - name: Restore CLI build
+      - name: Restore immutable npm artifacts
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release/npm/${{ needs.version.outputs.version }}
+          key: npm-release-${{ needs.version.outputs.version }}
+          fail-on-cache-miss: true
+
+      - name: Restore immutable CLI build for downstream registries
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-${{ github.run_id }}
+          key: cli-build-${{ needs.version.outputs.version }}
           fail-on-cache-miss: true
 
       - name: Publish
@@ -197,6 +318,9 @@ jobs:
           HUSKY: "0"
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
+          OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
+          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}
           GITHUB_TOKEN: ${{ github.token }}
           # Fine-grained PAT with push access to synthetic-sciences/homebrew-tap;
           # github.token is repo-scoped and can't update the tap.

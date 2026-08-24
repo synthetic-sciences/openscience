@@ -12,9 +12,12 @@ const RECOVERY_COMMANDS = new Set([
   "completion",
   "web",
   "serve",
+  // Internal, read-only OpenAPI generation used by the SDK and release build.
+  // It reads local route metadata and must work in a clean CI home.
+  "generate",
 ])
 
-/** Commands needed to authenticate, inspect, repair, or host the sign-in UI. */
+/** Commands that are safe and necessary before an account session exists. */
 export function requiresOpenScienceAccount(command: string | undefined, argv: string[]): boolean {
   if (argv.some((value) => value === "--help" || value === "-h" || value === "--version" || value === "-v")) {
     return false

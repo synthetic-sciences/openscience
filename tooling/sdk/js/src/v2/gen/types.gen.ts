@@ -200,7 +200,7 @@ export type UserMessage = {
       }
     | {
         type: "continuation"
-        kind: "output" | "contract" | "compaction" | "task"
+        kind: "output" | "contract" | "review" | "review-summary" | "compaction" | "task"
         text: string
         epoch: string
         transaction: string
@@ -1842,13 +1842,17 @@ export type Config = {
    */
   default_agent?: string
   /**
-   * How LLM inference is paid for when using Ace or user-owned credentials.
+   * How LLM inference is paid for when using Ace or user-owned credentials. Legacy compute is ignored.
    */
   billing?: {
     /**
      * How LLM inference is paid for. 'managed' uses Credits; 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset or null = auto-detect from the resolved credential.
      */
     llm?: "managed" | "byok" | null
+    /**
+     * @deprecated Retained only so existing 2.x config files keep parsing. Managed compute is retired; all compute uses user-owned routes regardless of this value.
+     */
+    compute?: "managed" | "byok"
   }
   /**
    * Custom username to display in conversations instead of system username
@@ -4396,6 +4400,24 @@ export type SettingsComputeJobsListResponses = {
             }
       }
       handoff: {
+        /**
+         * @deprecated Compatibility field. Managed compute is retired and this value is always unavailable.
+         */
+        atlas_compute_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
         atlas_run_id:
           | {
               status: "available"
@@ -5132,6 +5154,24 @@ export type SettingsComputeJobsStartResponses = {
             }
       }
       handoff: {
+        /**
+         * @deprecated Compatibility field. Managed compute is retired and this value is always unavailable.
+         */
+        atlas_compute_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
         atlas_run_id:
           | {
               status: "available"
@@ -6067,6 +6107,24 @@ export type SettingsComputeJobsRetryResponses = {
             }
       }
       handoff: {
+        /**
+         * @deprecated Compatibility field. Managed compute is retired and this value is always unavailable.
+         */
+        atlas_compute_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
         atlas_run_id:
           | {
               status: "available"
@@ -6774,6 +6832,24 @@ export type SettingsComputeJobsReleaseResponses = {
             }
       }
       handoff: {
+        /**
+         * @deprecated Compatibility field. Managed compute is retired and this value is always unavailable.
+         */
+        atlas_compute_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
         atlas_run_id:
           | {
               status: "available"
@@ -7477,6 +7553,24 @@ export type SettingsComputeJobsCancelResponses = {
             }
       }
       handoff: {
+        /**
+         * @deprecated Compatibility field. Managed compute is retired and this value is always unavailable.
+         */
+        atlas_compute_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
         atlas_run_id:
           | {
               status: "available"
@@ -7657,6 +7751,10 @@ export type SettingsPreferencesGetResponses = {
   200: {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
+    /**
+     * @deprecated No billing effect. OpenScience compute is user-owned.
+     */
+    extra_budget_usd?: number
     show_trace?: boolean
     show_local_models?: boolean
     atlas_enabled?: boolean
@@ -7671,6 +7769,10 @@ export type SettingsPreferencesUpdateData = {
   body?: {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
+    /**
+     * @deprecated No billing effect. OpenScience compute is user-owned.
+     */
+    extra_budget_usd?: number
     show_trace?: boolean
     show_local_models?: boolean
     atlas_enabled?: boolean
@@ -7689,6 +7791,10 @@ export type SettingsPreferencesUpdateResponses = {
   200: {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
+    /**
+     * @deprecated No billing effect. OpenScience compute is user-owned.
+     */
+    extra_budget_usd?: number
     show_trace?: boolean
     show_local_models?: boolean
     atlas_enabled?: boolean
@@ -7813,6 +7919,10 @@ export type SettingsBillingGetResponses = {
    */
   200: {
     llm: "managed" | "byok" | null
+    /**
+     * @deprecated Compatibility field. Compute always uses user-owned infrastructure.
+     */
+    compute: "managed" | "byok"
     wallet: {
       /**
        * Whether a Synthetic Sciences session is available
@@ -7831,6 +7941,10 @@ export type SettingsBillingGetResponse = SettingsBillingGetResponses[keyof Setti
 export type SettingsBillingUpdateData = {
   body?: {
     llm?: "managed" | "byok" | null
+    /**
+     * @deprecated Accepted for 2.x clients and ignored. Compute always uses user-owned infrastructure.
+     */
+    compute?: "managed" | "byok"
   }
   path?: never
   query?: never
@@ -7843,6 +7957,10 @@ export type SettingsBillingUpdateResponses = {
    */
   200: {
     llm: "managed" | "byok" | null
+    /**
+     * @deprecated Compatibility field. Compute always uses user-owned infrastructure.
+     */
+    compute: "managed" | "byok"
     wallet: {
       /**
        * Whether a Synthetic Sciences session is available
@@ -7926,17 +8044,41 @@ export type SettingsResearchToolsGetResponses = {
    */
   200: {
     signedIn: boolean
+    /**
+     * @deprecated Compatibility summary. Billing is wallet-based and has no search quota.
+     */
+    plan: {
+      id: string
+      label: string
+      status: string | null
+    }
     search: {
-      route: "credits" | "community"
-      state: "available" | "basic" | "conditional"
+      route: "credits" | "managed" | "community"
+      state: "available" | "basic" | "conditional" | "near_limit" | "critical" | "exhausted" | "unavailable"
       enabled: boolean
       balanceUsd: number | null
+      /**
+       * @deprecated Always null; enhanced search draws from the shared wallet.
+       */
+      limit: number | null
+      /**
+       * @deprecated Always null; enhanced search draws from the shared wallet.
+       */
+      used: number | null
+      /**
+       * @deprecated Always null; use balanceUsd.
+       */
+      remaining: number | null
+      /**
+       * @deprecated Always null; wallet credits do not reset.
+       */
+      resetAt: string | null
       communityFlagEnabled: boolean
     }
     telemetry: {
       analyticsEnabled: boolean
       researchContentEnabled: boolean
-      source: "default" | "account"
+      source: "default" | "local" | "account"
       signedIn: boolean
       consentVersion: string
       pending: boolean
@@ -7964,17 +8106,41 @@ export type SettingsResearchToolsTelemetryUpdateResponses = {
    */
   200: {
     signedIn: boolean
+    /**
+     * @deprecated Compatibility summary. Billing is wallet-based and has no search quota.
+     */
+    plan: {
+      id: string
+      label: string
+      status: string | null
+    }
     search: {
-      route: "credits" | "community"
-      state: "available" | "basic" | "conditional"
+      route: "credits" | "managed" | "community"
+      state: "available" | "basic" | "conditional" | "near_limit" | "critical" | "exhausted" | "unavailable"
       enabled: boolean
       balanceUsd: number | null
+      /**
+       * @deprecated Always null; enhanced search draws from the shared wallet.
+       */
+      limit: number | null
+      /**
+       * @deprecated Always null; enhanced search draws from the shared wallet.
+       */
+      used: number | null
+      /**
+       * @deprecated Always null; use balanceUsd.
+       */
+      remaining: number | null
+      /**
+       * @deprecated Always null; wallet credits do not reset.
+       */
+      resetAt: string | null
       communityFlagEnabled: boolean
     }
     telemetry: {
       analyticsEnabled: boolean
       researchContentEnabled: boolean
-      source: "default" | "account"
+      source: "default" | "local" | "account"
       signedIn: boolean
       consentVersion: string
       pending: boolean
@@ -9317,7 +9483,7 @@ export type SessionTraceResponses = {
       status: "unconfigured" | "running" | "blocked" | "ready"
       readiness: number
       gates: Array<{
-        id: "stages" | "deliverables" | "checks" | "runtime"
+        id: "stages" | "deliverables" | "checks" | "review" | "runtime"
         label: string
         status: "passed" | "pending" | "failed"
         complete: number
@@ -9325,6 +9491,10 @@ export type SessionTraceResponses = {
         detail: string
       }>
       missing: Array<string>
+      /**
+       * @deprecated Always zero; reviewer-gated research completion is retired.
+       */
+      openFindings?: number
       failedCandidates: number
       strategy: {
         mode: "explore" | "refine" | "pivot" | "fuse" | "verify"
@@ -15091,7 +15261,7 @@ export type ProvenanceRecordData = {
       [key: string]: unknown
     }
     derived_from?: string
-    relation?: "produced" | "consumed" | "derived-from"
+    relation?: "produced" | "consumed" | "derived-from" | "supports" | "refutes"
   }
   path?: never
   query?: {

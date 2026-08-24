@@ -163,7 +163,6 @@ if (Script.release) {
   }
   // sha256sum-compatible manifest; the install script verifies against it
   await Bun.write(path.resolve(dir, "dist/checksums.txt"), checksums.join("\n") + "\n")
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz ./dist/checksums.txt --clobber`
 }
 
 export { binaries }

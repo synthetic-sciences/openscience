@@ -14,6 +14,7 @@ describe("CLI account gate", () => {
       "local",
       "web",
       "serve",
+      "generate",
     ]) {
       expect(requiresOpenScienceAccount(command, [command])).toBe(false)
     }

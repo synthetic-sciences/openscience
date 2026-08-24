@@ -3,7 +3,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { bundleDigest } from "../src/skill/bundle-format"
+import { assertNoRetiredProductSkills, bundleDigest } from "../src/skill/bundle-format"
 
 const file = fileURLToPath(import.meta.url)
 const cli = path.resolve(path.dirname(file), "..")
@@ -36,6 +36,7 @@ for (const entry of files) {
   entries.push({ path: rel, bytes })
 }
 
+assertNoRetiredProductSkills(entries)
 const digest = bundleDigest(entries)
 await fs.mkdir(path.dirname(bundle), { recursive: true })
 await Bun.Archive.write(bundle, data, { compress: "gzip", level: 9 })

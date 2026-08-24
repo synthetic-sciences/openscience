@@ -14,6 +14,7 @@ const names = ["init", "plan", "goal", "status", "context", "stop", "resume", "c
 const workflows = ["review", "verify", "reproduce", "compare", "sources", "export"]
 const actions = ["init", "stop", "handoff", "checkpoint"]
 const primary = ["compact", "context", "plan", "goal", "resume", "status"]
+const retiredGraphSkills = ["initialize-atlas-graph", "initialize-research-graph"]
 
 async function seed(sessionID: string) {
   const message: MessageV2.User = {
@@ -66,6 +67,7 @@ describe("research slash commands", () => {
 
         expect(commands.has("goals")).toBe(false)
         for (const name of workflows) expect(commands.has(name), name).toBe(false)
+        for (const name of retiredGraphSkills) expect(commands.has(name), name).toBe(false)
 
         for (const name of workflows) {
           const content = await Bun.file(path.join(import.meta.dir, `../../skills/research/${name}/SKILL.md`)).text()

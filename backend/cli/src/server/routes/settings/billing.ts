@@ -3,7 +3,6 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { Config } from "../../../config/config"
 import { OpenScience } from "../../../openscience"
-import { Provider } from "../../../provider/provider"
 import { lazy } from "../../../util/lazy"
 import { Log } from "../../../util/log"
 
@@ -14,6 +13,9 @@ const log = Log.create({ service: "settings-billing" })
 // and is never billed. Null means auto-detect from the resolved credential.
 export const BillingState = z.object({
   llm: z.enum(["managed", "byok"]).nullable(),
+  compute: z
+    .enum(["managed", "byok"])
+    .describe("@deprecated Compatibility field. Compute always uses user-owned infrastructure."),
   wallet: z.object({
     signedIn: z.boolean().describe("Whether a Synthetic Sciences session is available"),
     balanceUsd: z.number().nullable().describe("Credit balance in USD; null when signed out or unavailable"),
@@ -25,6 +27,10 @@ export type BillingState = z.infer<typeof BillingState>
 // credential); omitting a field leaves it untouched.
 const BillingPatch = z.object({
   llm: z.enum(["managed", "byok"]).nullable().optional(),
+  compute: z
+    .enum(["managed", "byok"])
+    .optional()
+    .describe("@deprecated Accepted for 2.x clients and ignored. Compute always uses user-owned infrastructure."),
 })
 
 async function readState(): Promise<BillingState> {
@@ -33,6 +39,7 @@ async function readState(): Promise<BillingState> {
   const credits = session ? await OpenScience.getCredits().catch(() => null) : null
   return {
     llm: cfg.billing?.llm ?? null,
+    compute: "byok",
     wallet: { signedIn: !!session, balanceUsd: credits?.balanceUsd ?? null },
   }
 }
@@ -78,9 +85,6 @@ export const BillingSettingsRoutes = lazy(() =>
           // equivalent. Current Atlas retires the mirror endpoint and the
           // background compatibility pass becomes a no-op.
           await OpenScience.setBillingMode(patch.llm ?? "byok", patch.llm ?? null)
-        } else {
-          await Config.updateGlobal({ billing: patch })
-          Provider.invalidate()
         }
         log.info("update", { keys: Object.keys(patch) })
         const session = await OpenScience.getSession().catch(() => null)
@@ -90,6 +94,7 @@ export const BillingSettingsRoutes = lazy(() =>
         // local routing change wait on a stalled account service.
         return c.json({
           llm: saved.billing?.llm ?? null,
+          compute: "byok",
           wallet: { signedIn: !!session, balanceUsd: null },
         } satisfies BillingState)
       },

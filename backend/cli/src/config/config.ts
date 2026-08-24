@@ -1188,9 +1188,15 @@ export namespace Config {
             .describe(
               "How LLM inference is paid for. 'managed' uses Credits; 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset or null = auto-detect from the resolved credential.",
             ),
+          compute: z
+            .enum(["managed", "byok"])
+            .optional()
+            .describe(
+              "@deprecated Retained only so existing 2.x config files keep parsing. Managed compute is retired; all compute uses user-owned routes regardless of this value.",
+            ),
         })
         .optional()
-        .describe("How LLM inference is paid for when using Ace or user-owned credentials."),
+        .describe("How LLM inference is paid for when using Ace or user-owned credentials. Legacy compute is ignored."),
       username: z
         .string()
         .optional()

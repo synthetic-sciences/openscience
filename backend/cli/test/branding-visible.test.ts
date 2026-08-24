@@ -21,7 +21,6 @@ const publicSources = [
   "src/session/prompt/core.txt",
   "src/agent/prompt/research.txt",
   "src/skill/system/goal.txt",
-  "src/skill/system/initialize-research-graph.txt",
   "src/skill/migrate.ts",
   "skills/llm-tools/generate-image/scripts/generate_image.py",
   "skills/writing/scientific-slides/scripts/generate_slide_image.py",

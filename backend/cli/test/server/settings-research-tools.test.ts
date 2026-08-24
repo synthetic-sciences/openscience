@@ -31,7 +31,16 @@ describe("research tools settings route", () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       signedIn: false,
-      search: { route: "community", state: "conditional", enabled: false },
+      plan: { id: "credits", label: "Credits", status: null },
+      search: {
+        route: "community",
+        state: "conditional",
+        enabled: false,
+        limit: null,
+        used: null,
+        remaining: null,
+        resetAt: null,
+      },
       telemetry: { analyticsEnabled: true, researchContentEnabled: true, deletionAvailable: false },
     })
   })
@@ -47,11 +56,16 @@ describe("research tools settings route", () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       signedIn: true,
+      plan: { id: "credits", label: "Credits", status: "active" },
       search: {
         route: "credits",
         state: "available",
         enabled: true,
         balanceUsd: 18.75,
+        limit: null,
+        used: null,
+        remaining: null,
+        resetAt: null,
       },
       telemetry: { source: "account", researchContentEnabled: true },
     })

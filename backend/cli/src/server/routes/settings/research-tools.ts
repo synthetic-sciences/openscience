@@ -9,7 +9,7 @@ import { lazy } from "@/util/lazy"
 const Telemetry = z.object({
   analyticsEnabled: z.boolean(),
   researchContentEnabled: z.boolean(),
-  source: z.enum(["default", "account"]),
+  source: z.enum(["default", "local", "account"]),
   signedIn: z.boolean(),
   consentVersion: z.string(),
   pending: z.boolean(),
@@ -19,11 +19,28 @@ const Telemetry = z.object({
 
 const State = z.object({
   signedIn: z.boolean(),
+  plan: z
+    .object({ id: z.string(), label: z.string(), status: z.string().nullable() })
+    .describe("@deprecated Compatibility summary. Billing is wallet-based and has no search quota."),
   search: z.object({
-    route: z.enum(["credits", "community"]),
-    state: z.enum(["available", "basic", "conditional"]),
+    route: z.enum(["credits", "managed", "community"]),
+    state: z.enum(["available", "basic", "conditional", "near_limit", "critical", "exhausted", "unavailable"]),
     enabled: z.boolean(),
     balanceUsd: z.number().nullable(),
+    limit: z
+      .number()
+      .int()
+      .nonnegative()
+      .nullable()
+      .describe("@deprecated Always null; enhanced search draws from the shared wallet."),
+    used: z
+      .number()
+      .int()
+      .nonnegative()
+      .nullable()
+      .describe("@deprecated Always null; enhanced search draws from the shared wallet."),
+    remaining: z.number().int().nonnegative().nullable().describe("@deprecated Always null; use balanceUsd."),
+    resetAt: z.string().nullable().describe("@deprecated Always null; wallet credits do not reset."),
     communityFlagEnabled: z.boolean(),
   }),
   telemetry: Telemetry,
@@ -37,11 +54,16 @@ async function read() {
   ])
   return State.parse({
     signedIn: !!session,
+    plan: { id: "credits", label: "Credits", status: session ? "active" : null },
     search: {
       route: session ? "credits" : "community",
       state: !session ? "conditional" : balance === null || balance <= 0 ? "basic" : "available",
       enabled: !!session,
       balanceUsd: balance,
+      limit: null,
+      used: null,
+      remaining: null,
+      resetAt: null,
       communityFlagEnabled: Flag.OPENSCIENCE_ENABLE_EXA,
     },
     telemetry,

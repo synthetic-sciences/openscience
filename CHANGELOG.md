@@ -19,12 +19,14 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 ### Changed
 
 - Stopped bundling or offering Atlas through the OpenScience npm distribution
-  and `synsci` launcher while preserving automatic native-binary installation.
+  and `synsci` launcher, including both graph-initialization slash-command
+  skills, while preserving automatic native-binary installation.
 - Replaced the retired Ace subscription copy with pay-as-you-go managed credits:
   one wallet for OpenRouter model usage and enhanced search, 20-credit reloads
   below a 5-credit balance, and no scheduled monthly top-up.
-- Removed managed-compute billing and budget contracts while preserving local,
-  SSH, scheduler, and other user-owned compute workflows.
+- Retired managed-compute billing and budget behavior while preserving local,
+  SSH, scheduler, and other user-owned compute workflows. Deprecated 2.x config
+  and SDK fields remain as inert compatibility shims for this patch release.
 - Added Ask for approval, Approve for me, and Full access presets directly to
   the composer’s Research tools menu, with trusted Full access as the default
   for new local projects and explicit or managed restrictions preserved.
@@ -223,14 +225,6 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   free of the wallet.
 
 ## v1.2.7 — 2026-07-06
-
-### Fixed
-
-- The `initialize-atlas-graph` system skill — invoked by the canvas and the
-  research agent — now resolves in every install. Released builds load skills
-  from the Atlas catalog, which omitted it, so it failed with "Skill not found"
-  outside a source checkout; it is now embedded and materialized locally when the
-  catalog lacks it.
 
 ### Changed
 

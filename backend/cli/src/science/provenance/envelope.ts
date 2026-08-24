@@ -94,6 +94,9 @@ export namespace ProvenanceEnvelope {
       completed_at: field(z.string()),
     }),
     handoff: z.object({
+      atlas_compute_id: field(z.string()).describe(
+        "@deprecated Compatibility field. Managed compute is retired and this value is always unavailable.",
+      ),
       atlas_run_id: field(z.string()),
     }),
   })
@@ -268,6 +271,7 @@ export namespace ProvenanceEnvelope {
         completed_at: time(input.completedAt, "not_captured"),
       },
       handoff: {
+        atlas_compute_id: unavailable("not_applicable"),
         atlas_run_id: unavailable("not_published"),
       },
     })

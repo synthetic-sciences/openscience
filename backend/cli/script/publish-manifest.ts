@@ -19,6 +19,7 @@ const retiredPublicCopy = [
   /Synthetic Scientists access/i,
   /recurring monthly/i,
   /\$50 or \$200/i,
+  /initialize-(?:atlas|research)-graph/i,
 ] as const
 
 /** Fail packaging when an npm-visible text file reintroduces a retired public

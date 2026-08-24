@@ -263,9 +263,12 @@ export namespace SessionLoopState {
         return !message.parts.some((part) => part.id === id && part.type === "compaction")
       }
       if (intent?.type !== "continuation") return false
+      const kind = compatibleContinuation(intent.kind)
+      if (!kind) return false
       const id = partID(intent.transaction || message.info.id, "continuation")
+      const legacyReviewer = intent.kind === "review" || intent.kind === "review-summary"
       return !message.parts.some(
-        (part) => part.id === id && part.type === "text" && continuationKind(part) === intent.kind,
+        (part) => (part.id === id || legacyReviewer) && part.type === "text" && continuationKind(part) === kind,
       )
     })
   }
@@ -283,12 +286,14 @@ export namespace SessionLoopState {
       }
     }
     if (intent?.type !== "continuation") return
+    const kind = compatibleContinuation(intent.kind)
+    if (!kind) return
     return {
       id: partID(intent.transaction || message.id, "continuation"),
       type: "text" as const,
       text: intent.text,
       synthetic: true,
-      metadata: continuation(intent.kind),
+      metadata: continuation(kind),
     }
   }
 

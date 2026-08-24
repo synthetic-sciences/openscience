@@ -6241,6 +6241,51 @@
                           "handoff": {
                             "type": "object",
                             "properties": {
+                              "atlas_compute_id": {
+                                "description": "@deprecated Compatibility field. Managed compute is retired and this value is always unavailable.",
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "status": {
+                                        "type": "string",
+                                        "const": "available"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "value"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "status": {
+                                        "type": "string",
+                                        "const": "unavailable"
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "not_applicable",
+                                          "not_captured",
+                                          "not_implemented",
+                                          "not_published",
+                                          "not_versioned",
+                                          "remote_unverified"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "reason"
+                                    ]
+                                  }
+                                ]
+                              },
                               "atlas_run_id": {
                                 "anyOf": [
                                   {
@@ -6287,6 +6332,7 @@
                               }
                             },
                             "required": [
+                              "atlas_compute_id",
                               "atlas_run_id"
                             ]
                           }
@@ -8604,6 +8650,51 @@
                         "handoff": {
                           "type": "object",
                           "properties": {
+                            "atlas_compute_id": {
+                              "description": "@deprecated Compatibility field. Managed compute is retired and this value is always unavailable.",
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
                             "atlas_run_id": {
                               "anyOf": [
                                 {
@@ -8650,6 +8741,7 @@
                             }
                           },
                           "required": [
+                            "atlas_compute_id",
                             "atlas_run_id"
                           ]
                         }
@@ -11900,6 +11992,51 @@
                         "handoff": {
                           "type": "object",
                           "properties": {
+                            "atlas_compute_id": {
+                              "description": "@deprecated Compatibility field. Managed compute is retired and this value is always unavailable.",
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
                             "atlas_run_id": {
                               "anyOf": [
                                 {
@@ -11946,6 +12083,7 @@
                             }
                           },
                           "required": [
+                            "atlas_compute_id",
                             "atlas_run_id"
                           ]
                         }
@@ -14292,6 +14430,51 @@
                         "handoff": {
                           "type": "object",
                           "properties": {
+                            "atlas_compute_id": {
+                              "description": "@deprecated Compatibility field. Managed compute is retired and this value is always unavailable.",
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
                             "atlas_run_id": {
                               "anyOf": [
                                 {
@@ -14338,6 +14521,7 @@
                             }
                           },
                           "required": [
+                            "atlas_compute_id",
                             "atlas_run_id"
                           ]
                         }
@@ -16684,6 +16868,51 @@
                         "handoff": {
                           "type": "object",
                           "properties": {
+                            "atlas_compute_id": {
+                              "description": "@deprecated Compatibility field. Managed compute is retired and this value is always unavailable.",
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
                             "atlas_run_id": {
                               "anyOf": [
                                 {
@@ -16730,6 +16959,7 @@
                             }
                           },
                           "required": [
+                            "atlas_compute_id",
                             "atlas_run_id"
                           ]
                         }
@@ -17381,6 +17611,12 @@
                         "non-commercial"
                       ]
                     },
+                    "extra_budget_usd": {
+                      "description": "@deprecated No billing effect. OpenScience compute is user-owned.",
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    },
                     "show_trace": {
                       "default": false,
                       "type": "boolean"
@@ -17450,6 +17686,12 @@
                         "non-commercial"
                       ]
                     },
+                    "extra_budget_usd": {
+                      "description": "@deprecated No billing effect. OpenScience compute is user-owned.",
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    },
                     "show_trace": {
                       "default": false,
                       "type": "boolean"
@@ -17506,6 +17748,12 @@
                       "commercial",
                       "non-commercial"
                     ]
+                  },
+                  "extra_budget_usd": {
+                    "description": "@deprecated No billing effect. OpenScience compute is user-owned.",
+                    "default": 0,
+                    "type": "number",
+                    "minimum": 0
                   },
                   "show_trace": {
                     "default": false,
@@ -17862,6 +18110,14 @@
                         }
                       ]
                     },
+                    "compute": {
+                      "description": "@deprecated Compatibility field. Compute always uses user-owned infrastructure.",
+                      "type": "string",
+                      "enum": [
+                        "managed",
+                        "byok"
+                      ]
+                    },
                     "wallet": {
                       "type": "object",
                       "properties": {
@@ -17889,6 +18145,7 @@
                   },
                   "required": [
                     "llm",
+                    "compute",
                     "wallet"
                   ]
                 }
@@ -17928,6 +18185,14 @@
                         }
                       ]
                     },
+                    "compute": {
+                      "description": "@deprecated Compatibility field. Compute always uses user-owned infrastructure.",
+                      "type": "string",
+                      "enum": [
+                        "managed",
+                        "byok"
+                      ]
+                    },
                     "wallet": {
                       "type": "object",
                       "properties": {
@@ -17955,6 +18220,7 @@
                   },
                   "required": [
                     "llm",
+                    "compute",
                     "wallet"
                   ]
                 }
@@ -17980,6 +18246,14 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "compute": {
+                    "description": "@deprecated Accepted for 2.x clients and ignored. Compute always uses user-owned infrastructure.",
+                    "type": "string",
+                    "enum": [
+                      "managed",
+                      "byok"
                     ]
                   }
                 }
@@ -18168,6 +18442,33 @@
                     "signedIn": {
                       "type": "boolean"
                     },
+                    "plan": {
+                      "description": "@deprecated Compatibility summary. Billing is wallet-based and has no search quota.",
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "status"
+                      ]
+                    },
                     "search": {
                       "type": "object",
                       "properties": {
@@ -18175,6 +18476,7 @@
                           "type": "string",
                           "enum": [
                             "credits",
+                            "managed",
                             "community"
                           ]
                         },
@@ -18183,7 +18485,11 @@
                           "enum": [
                             "available",
                             "basic",
-                            "conditional"
+                            "conditional",
+                            "near_limit",
+                            "critical",
+                            "exhausted",
+                            "unavailable"
                           ]
                         },
                         "enabled": {
@@ -18199,6 +18505,56 @@
                             }
                           ]
                         },
+                        "limit": {
+                          "description": "@deprecated Always null; enhanced search draws from the shared wallet.",
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "used": {
+                          "description": "@deprecated Always null; enhanced search draws from the shared wallet.",
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "remaining": {
+                          "description": "@deprecated Always null; use balanceUsd.",
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "resetAt": {
+                          "description": "@deprecated Always null; wallet credits do not reset.",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "communityFlagEnabled": {
                           "type": "boolean"
                         }
@@ -18208,6 +18564,10 @@
                         "state",
                         "enabled",
                         "balanceUsd",
+                        "limit",
+                        "used",
+                        "remaining",
+                        "resetAt",
                         "communityFlagEnabled"
                       ]
                     },
@@ -18224,6 +18584,7 @@
                           "type": "string",
                           "enum": [
                             "default",
+                            "local",
                             "account"
                           ]
                         },
@@ -18257,6 +18618,7 @@
                   },
                   "required": [
                     "signedIn",
+                    "plan",
                     "search",
                     "telemetry"
                   ]
@@ -18288,6 +18650,33 @@
                     "signedIn": {
                       "type": "boolean"
                     },
+                    "plan": {
+                      "description": "@deprecated Compatibility summary. Billing is wallet-based and has no search quota.",
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "status"
+                      ]
+                    },
                     "search": {
                       "type": "object",
                       "properties": {
@@ -18295,6 +18684,7 @@
                           "type": "string",
                           "enum": [
                             "credits",
+                            "managed",
                             "community"
                           ]
                         },
@@ -18303,7 +18693,11 @@
                           "enum": [
                             "available",
                             "basic",
-                            "conditional"
+                            "conditional",
+                            "near_limit",
+                            "critical",
+                            "exhausted",
+                            "unavailable"
                           ]
                         },
                         "enabled": {
@@ -18319,6 +18713,56 @@
                             }
                           ]
                         },
+                        "limit": {
+                          "description": "@deprecated Always null; enhanced search draws from the shared wallet.",
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "used": {
+                          "description": "@deprecated Always null; enhanced search draws from the shared wallet.",
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "remaining": {
+                          "description": "@deprecated Always null; use balanceUsd.",
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "resetAt": {
+                          "description": "@deprecated Always null; wallet credits do not reset.",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "communityFlagEnabled": {
                           "type": "boolean"
                         }
@@ -18328,6 +18772,10 @@
                         "state",
                         "enabled",
                         "balanceUsd",
+                        "limit",
+                        "used",
+                        "remaining",
+                        "resetAt",
                         "communityFlagEnabled"
                       ]
                     },
@@ -18344,6 +18792,7 @@
                           "type": "string",
                           "enum": [
                             "default",
+                            "local",
                             "account"
                           ]
                         },
@@ -18377,6 +18826,7 @@
                   },
                   "required": [
                     "signedIn",
+                    "plan",
                     "search",
                     "telemetry"
                   ]
@@ -21961,6 +22411,7 @@
                                   "stages",
                                   "deliverables",
                                   "checks",
+                                  "review",
                                   "runtime"
                                 ]
                               },
@@ -22004,6 +22455,13 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "openFindings": {
+                          "description": "@deprecated Always zero; reviewer-gated research completion is retired.",
+                          "default": 0,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
                         },
                         "failedCandidates": {
                           "type": "integer",
@@ -43682,7 +44140,9 @@
                     "enum": [
                       "produced",
                       "consumed",
-                      "derived-from"
+                      "derived-from",
+                      "supports",
+                      "refutes"
                     ]
                   }
                 },
@@ -46316,6 +46776,8 @@
                     "enum": [
                       "output",
                       "contract",
+                      "review",
+                      "review-summary",
                       "compaction",
                       "task"
                     ]
@@ -50729,7 +51191,7 @@
             "type": "string"
           },
           "billing": {
-            "description": "How LLM inference is paid for when using Ace or user-owned credentials.",
+            "description": "How LLM inference is paid for when using Ace or user-owned credentials. Legacy compute is ignored.",
             "type": "object",
             "properties": {
               "llm": {
@@ -50745,6 +51207,14 @@
                   {
                     "type": "null"
                   }
+                ]
+              },
+              "compute": {
+                "description": "@deprecated Retained only so existing 2.x config files keep parsing. Managed compute is retired; all compute uses user-owned routes regardless of this value.",
+                "type": "string",
+                "enum": [
+                  "managed",
+                  "byok"
                 ]
               }
             }

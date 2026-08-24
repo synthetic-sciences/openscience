@@ -9,7 +9,7 @@ import { lazy } from "../../util/lazy"
 import { ExecutionHistory } from "../../science/execution/history"
 
 const Kind = z.enum(["artifact", "run", "source", "claim"])
-const Relation = z.enum(["produced", "consumed", "derived-from"])
+const Relation = z.enum(["produced", "consumed", "derived-from", "supports", "refutes"])
 const NodeInput = z.object({
   kind: Kind,
   label: z.string().trim().min(1).max(240),
@@ -97,6 +97,9 @@ export const ProvenanceRoutes = lazy(() =>
       validator("json", NodeInput),
       async (c) => {
         const input = c.req.valid("json")
+        if (input.relation === "supports" || input.relation === "refutes") {
+          return c.json({ error: "Reviewer provenance writes are retired" }, 400)
+        }
         const graph = input.derived_from ? await Provenance.project(scope()) : undefined
         if (input.derived_from && !graph?.nodes.some((node) => node.id === input.derived_from)) {
           return c.json({ error: "The provenance link target was not found" }, 400)

@@ -18,6 +18,13 @@ import { Session } from "@/session"
 import { ProjectTrust } from "@/project/trust"
 import { BundledSkills } from "./bundled"
 import { lazy } from "@/util/lazy"
+import { Install } from "./install/install"
+import {
+  isRetiredProductSkillName,
+  isRetiredProductSkillPath,
+  RETIRED_ATLAS_SKILL_NAMES,
+  RETIRED_PRODUCT_SKILL_NAMES,
+} from "./retired"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -68,6 +75,28 @@ export namespace Skill {
   const UserSkillName = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
   const priority = { default: 0, installed: 1, user: 2, project: 3 } as const
 
+  function pointsToRetiredAtlasPackage(target: string): boolean {
+    return target.replaceAll("\\", "/").toLowerCase().includes("/@synsci/atlas/skills/")
+  }
+
+  /** `atlas install` created these global Claude symlinks. Remove only exact
+   * links that resolve into the retired npm package; never delete a real
+   * user-owned directory with the same name. */
+  async function purgeRetiredAtlasPackageLinks(globalClaude: string): Promise<void> {
+    for (const name of RETIRED_ATLAS_SKILL_NAMES) {
+      const link = path.join(globalClaude, "skills", name)
+      const stat = await fs.lstat(link).catch(() => undefined)
+      if (!stat?.isSymbolicLink()) continue
+      const rawTarget = await fs.readlink(link).catch(() => "")
+      if (!rawTarget) continue
+      const resolved = path.resolve(path.dirname(link), rawTarget)
+      const realTarget = await fs.realpath(resolved).catch(() => resolved)
+      if (!pointsToRetiredAtlasPackage(realTarget) && !pointsToRetiredAtlasPackage(resolved)) continue
+      await fs.rm(link, { force: true }).catch(() => {})
+      log.info("Removed retired Atlas package skill link", { name, path: link })
+    }
+  }
+
   async function read(match: string, origin: Info["origin"]): Promise<Info | undefined> {
     const md = await ConfigMarkdown.parse(match).catch((err) => {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
@@ -81,6 +110,11 @@ export namespace Skill {
 
     const parsed = Frontmatter.safeParse(md.data)
     if (!parsed.success) return
+
+    if (isRetiredProductSkillName(parsed.data.name) || isRetiredProductSkillPath(match)) {
+      log.info("Skipped retired product skill", { name: parsed.data.name, path: match })
+      return
+    }
 
     if (parsed.data.disabled) {
       log.info("Skipped skill disabled by frontmatter", { name: parsed.data.name, path: match })
@@ -133,6 +167,7 @@ export namespace Skill {
 
     const add = (skill: Info) => {
       const directory = path.basename(path.dirname(skill.location))
+      if (isRetiredProductSkillName(skill.name) || isRetiredProductSkillName(directory)) return
       if (disabled.has(skill.name) || disabled.has(directory)) {
         log.info("Skipped skill disabled by operator policy", { name: skill.name, directory, path: skill.location })
         return
@@ -186,6 +221,7 @@ export namespace Skill {
       }
 
       const globalClaude = `${Global.Path.home}/.claude`
+      await purgeRetiredAtlasPackageLinks(globalClaude)
       if (await Filesystem.isDir(globalClaude)) {
         for await (const match of CLAUDE_SKILL_GLOB.scan({
           cwd: globalClaude,
@@ -233,6 +269,9 @@ export namespace Skill {
     for (const skill of await defaults()) add(skill)
 
     // === User Skills: authored locally via openscience/web, private by default ===
+    for (const name of RETIRED_PRODUCT_SKILL_NAMES) {
+      await fs.rm(path.join(USER_SKILL_DIR, name), { recursive: true, force: true }).catch(() => {})
+    }
     if (await Filesystem.isDir(USER_SKILL_DIR)) {
       let userCount = 0
       for await (const match of SKILL_GLOB.scan({
@@ -255,6 +294,10 @@ export namespace Skill {
     // mirroring the upstream plugin convention. The repository pointer,
     // pinned SHA and local security verdict live beside the installed files.
     const installedDir = path.join(Global.Path.data, "installed-skills")
+
+    // Remove only the exact retired product commands from the local install
+    // store. Similarly named third-party skills remain untouched.
+    await Install.purgeRetired()
 
     // One-time on-disk migration from the legacy flat layout
     // (<ns>/<name>/SKILL.md) → plugin layout (<ns>/skills/<name>/SKILL.md).
@@ -374,6 +417,9 @@ export namespace Skill {
     const name = UserSkillName.parse(input.name)
     const dir = path.join(USER_SKILL_DIR, name)
     const file = path.join(dir, "SKILL.md")
+    if (isRetiredProductSkillName(name)) {
+      throw new InvalidError({ path: file, message: `Skill ${name} has been retired and cannot be restored.` })
+    }
     const tmp = path.join(USER_SKILL_DIR, `${name}.${Date.now()}.tmp.md`)
     await fs.mkdir(USER_SKILL_DIR, { recursive: true })
     await Bun.write(tmp, input.content, { mode: 0o600 })
@@ -392,6 +438,12 @@ export namespace Skill {
           path: file,
           expected: name,
           actual: parsed.data.name,
+        })
+      }
+      if (isRetiredProductSkillName(parsed.data.name)) {
+        throw new InvalidError({
+          path: file,
+          message: `Skill ${parsed.data.name} has been retired and cannot be restored.`,
         })
       }
       // Server-side moderation: block injection / catastrophic patterns the
@@ -438,6 +490,7 @@ export namespace Skill {
   }
 
   export async function get(name: string) {
+    if (isRetiredProductSkillName(name)) return undefined
     return state().then((x) => x[name])
   }
 
@@ -445,7 +498,7 @@ export namespace Skill {
     const current = await state()
     const cached = lists.get(current)
     if (cached) return cached
-    const value = Object.values(current)
+    const value = Object.values(current).filter((skill) => !isRetiredProductSkillName(skill.name))
     lists.set(current, value)
     return value
   }

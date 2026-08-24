@@ -12,6 +12,7 @@ import {
 } from "./review"
 import { Progress } from "./progress"
 import { gitFetchPinned } from "./git-fetch"
+import { isRetiredProductSkillName, RETIRED_PRODUCT_SKILL_NAMES } from "../retired"
 
 export interface InstallOptions {
   confirm?: boolean
@@ -55,9 +56,14 @@ export namespace Install {
     try {
       progress.update("Performing security checks")
 
+      const retired = manifest
+        .filter((skill) => isRetiredProductSkillName(skill.name))
+        .map((skill) => ({ name: skill.name, reason: "retired product skill" }))
+      const eligible = manifest.filter((skill) => !isRetiredProductSkillName(skill.name))
+
       // Layer 1
-      const l1 = runtimeRegexPass(manifest)
-      let surviving = manifest.filter((s) => !l1.rejected.find((r) => r.name === s.name))
+      const l1 = runtimeRegexPass(eligible)
+      let surviving = eligible.filter((s) => !l1.rejected.find((r) => r.name === s.name))
 
       // Layer 2
       const l2 = classifierInjectionRegexPass(surviving)
@@ -68,7 +74,7 @@ export namespace Install {
 
       progress.done("Security checks complete")
 
-      const rejected = [...l1.rejected, ...l2.rejected]
+      const rejected = [...retired, ...l1.rejected, ...l2.rejected]
 
       if (confirm && !(await confirmInteractive(parsed, sha, surviving, l4.warnings, reasoningByName))) {
         return {
@@ -90,7 +96,10 @@ export namespace Install {
         // Persist the repo's entry manifest (or absence thereof) so the
         // loader can filter user-facing skills from internal helpers.
         if (entries !== null) {
-          await fs.writeFile(path.join(nsDir, "openscience-skills.json"), JSON.stringify({ entries }, null, 2))
+          await fs.writeFile(
+            path.join(nsDir, "openscience-skills.json"),
+            JSON.stringify({ entries: entries.filter((name) => !isRetiredProductSkillName(name)) }, null, 2),
+          )
         }
         for (const skill of surviving) {
           const skillDir = path.join(skillsDir, skill.name)
@@ -138,6 +147,59 @@ export namespace Install {
     }
   }
 
+  /** Remove only exact retired product skills from the local install store,
+   * including the pre-plugin flat layout, and scrub their local metadata. */
+  export async function purgeRetired(): Promise<number> {
+    const root = installedDir()
+    const namespaces = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
+    let removed = 0
+    for (const namespace of namespaces) {
+      if (!namespace.isDirectory()) continue
+      const dir = path.join(root, namespace.name)
+      for (const name of RETIRED_PRODUCT_SKILL_NAMES) {
+        for (const target of [path.join(dir, "skills", name), path.join(dir, name)]) {
+          const exists = await fs
+            .stat(target)
+            .then(() => true)
+            .catch(() => false)
+          if (exists) removed++
+          await fs.rm(target, { recursive: true, force: true }).catch(() => {})
+        }
+      }
+
+      const ledgerPath = path.join(dir, LEDGER)
+      const ledger = await Bun.file(ledgerPath)
+        .json()
+        .then((value) => (value && typeof value === "object" ? (value as Record<string, unknown>) : undefined))
+        .catch(() => undefined)
+      if (ledger && Array.isArray(ledger.skills)) {
+        const skills = ledger.skills.filter((skill) => {
+          if (!skill || typeof skill !== "object") return true
+          const name = (skill as { name?: unknown }).name
+          return typeof name !== "string" || !isRetiredProductSkillName(name)
+        })
+        if (skills.length !== ledger.skills.length) {
+          await Bun.write(ledgerPath, JSON.stringify({ ...ledger, skills }, null, 2) + "\n")
+        }
+      }
+
+      const manifestPath = path.join(dir, "openscience-skills.json")
+      const manifest = await Bun.file(manifestPath)
+        .json()
+        .then((value) => value as { entries?: unknown })
+        .catch(() => undefined)
+      if (manifest && Array.isArray(manifest.entries)) {
+        const entries = manifest.entries.filter(
+          (entry): entry is string => typeof entry === "string" && !isRetiredProductSkillName(entry),
+        )
+        if (entries.length !== manifest.entries.length) {
+          await Bun.write(manifestPath, JSON.stringify({ ...manifest, entries }, null, 2) + "\n")
+        }
+      }
+    }
+    return removed
+  }
+
   /** Remove an installed skill (namespace or namespace/name) locally. */
   export async function remove(target: string): Promise<{ archived: number }> {
     const [namespace, name] = target.split("/", 2)
@@ -164,6 +226,7 @@ export namespace Install {
   }
 
   export async function list(): Promise<{ namespace: string; name: string; description: string; verdict: string }[]> {
+    await purgeRetired()
     const root = installedDir()
     const namespaces = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
     const groups = await Promise.all(
@@ -196,7 +259,7 @@ export namespace Install {
           )
         }),
     )
-    return groups.flat()
+    return groups.flat().filter((skill) => !isRetiredProductSkillName(skill.name))
   }
 
   /** One-time compatibility import for installations that previously kept
@@ -211,6 +274,8 @@ export namespace Install {
       review_verdict: string
     }[],
   ): Promise<number> {
+    await purgeRetired()
+    rows = rows.filter((row) => !isRetiredProductSkillName(row.name))
     const root = installedDir()
     const groups = Map.groupBy(rows, (row) => row.namespace)
     const counts = await Promise.all(

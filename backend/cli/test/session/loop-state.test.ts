@@ -480,6 +480,16 @@ describe("session loop restart state", () => {
 
     expect(SessionLoopState.messageKind(legacy.info)).toBe("task")
     expect(SessionLoopState.continuationKind(legacy.parts[0])).toBe("task")
+    expect(SessionLoopState.incomplete([legacy])).toHaveLength(0)
+
+    const interrupted = structuredClone(legacy)
+    interrupted.parts = []
+    if (interrupted.info.role !== "user") throw new Error("bad fixture")
+    expect(SessionLoopState.incomplete([interrupted]).map((message) => message.info.id)).toEqual([legacy.info.id])
+    expect(SessionLoopState.repair(interrupted.info)).toMatchObject({
+      id: SessionLoopState.partID(legacy.info.id, "continuation"),
+      metadata: SessionLoopState.continuation("task"),
+    })
   })
 
   test("legacy breaker metadata cannot seed a transcript after modern epochs exist", () => {

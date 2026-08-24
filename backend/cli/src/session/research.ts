@@ -246,7 +246,7 @@ export namespace SessionResearch {
   export type Contract = z.infer<typeof Contract>
 
   export const Gate = z.object({
-    id: z.enum(["stages", "deliverables", "checks", "runtime"]),
+    id: z.enum(["stages", "deliverables", "checks", "review", "runtime"]),
     label: z.string(),
     status: z.enum(["passed", "pending", "failed"]),
     complete: z.number().int().nonnegative(),
@@ -272,6 +272,12 @@ export namespace SessionResearch {
     readiness: z.number().int().min(0).max(100),
     gates: z.array(Gate),
     missing: z.array(z.string()),
+    openFindings: z
+      .number()
+      .int()
+      .nonnegative()
+      .default(0)
+      .describe("@deprecated Always zero; reviewer-gated research completion is retired."),
     failedCandidates: z.number().int().nonnegative(),
     strategy: Strategy,
   })
@@ -1157,7 +1163,9 @@ export namespace SessionResearch {
                 : "Kernels and compute settled cleanly",
       },
     ]
-    const weights = { stages: 25, deliverables: 30, checks: 30, runtime: 15 }
+    // `review` stays in the public enum for 2.x SDK compatibility but is never
+    // emitted as a gate and therefore carries no readiness weight.
+    const weights = { stages: 25, deliverables: 30, checks: 30, review: 0, runtime: 15 }
     const readiness = Math.round(
       gates.reduce((total, gate) => total + ratio(gate.complete, gate.total) * weights[gate.id], 0),
     )

@@ -1649,6 +1649,7 @@ export class Preferences extends HeyApiClient {
     parameters?: {
       reasoning_effort?: "minimal" | "low" | "medium" | "high"
       intent?: "commercial" | "non-commercial"
+      extra_budget_usd?: number
       show_trace?: boolean
       show_local_models?: boolean
       atlas_enabled?: boolean
@@ -1664,6 +1665,7 @@ export class Preferences extends HeyApiClient {
           args: [
             { in: "body", key: "reasoning_effort" },
             { in: "body", key: "intent" },
+            { in: "body", key: "extra_budget_usd" },
             { in: "body", key: "show_trace" },
             { in: "body", key: "show_local_models" },
             { in: "body", key: "atlas_enabled" },
@@ -1703,10 +1705,21 @@ export class Billing extends HeyApiClient {
   public update<ThrowOnError extends boolean = false>(
     parameters?: {
       llm?: "managed" | "byok" | null
+      compute?: "managed" | "byok"
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "llm" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "llm" },
+            { in: "body", key: "compute" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).put<SettingsBillingUpdateResponses, unknown, ThrowOnError>({
       url: "/settings/billing",
       ...options,
@@ -6552,7 +6565,7 @@ export class Provenance extends HeyApiClient {
         [key: string]: unknown
       }
       derived_from?: string
-      relation?: "produced" | "consumed" | "derived-from"
+      relation?: "produced" | "consumed" | "derived-from" | "supports" | "refutes"
     },
     options?: Options<never, ThrowOnError>,
   ) {

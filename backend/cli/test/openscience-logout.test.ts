@@ -3,7 +3,7 @@ import os from "os"
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../src/global"
-import { OpenScience, API_BASE } from "../src/openscience"
+import { OpenScience } from "../src/openscience"
 
 // XDG dirs are isolated per test run by test/preload.ts, so these paths all
 // live under the throwaway temp tree — never the developer's real config.
@@ -15,18 +15,13 @@ const gcp = path.join(synced, "atlas-gcp-service-account.json")
 const queue = path.join(Global.Path.data, "usage-queue.jsonl")
 const traceQueue = path.join(Global.Path.data, "telemetry-queue-v2.jsonl")
 const traceConsent = path.join(Global.Path.data, "telemetry-consent-v2.json")
-const atlas = path.join(os.tmpdir(), `openscience-test-atlas-${process.pid}`, "config.json")
-const sandboxAtlasConfig = process.env.ATLAS_CLI_CONFIG_PATH
-
 const INJECTED = "OPENSCIENCE_TEST_SYNCED_VAR"
 const EXPORTED = "OPENSCIENCE_TEST_EXPORTED_VAR"
 
 afterEach(async () => {
   delete process.env[INJECTED]
   delete process.env[EXPORTED]
-  if (sandboxAtlasConfig) process.env.ATLAS_CLI_CONFIG_PATH = sandboxAtlasConfig
-  else delete process.env.ATLAS_CLI_CONFIG_PATH
-  for (const file of [session, snapshot, managed, gcp, queue, traceQueue, traceConsent, atlas]) {
+  for (const file of [session, snapshot, managed, gcp, queue, traceQueue, traceConsent]) {
     await fs.rm(file, { force: true }).catch(() => {})
   }
 })
@@ -34,7 +29,6 @@ afterEach(async () => {
 test("clearSession removes every synced credential artifact", async () => {
   await fs.mkdir(Global.Path.data, { recursive: true })
   await fs.mkdir(synced, { recursive: true })
-  await fs.mkdir(path.dirname(atlas), { recursive: true })
 
   await Bun.write(session, JSON.stringify({ api_key: "thk_test.secret", user_id: "user-1" }))
   // The persisted snapshot preload-env.ts replays into process.env at boot.
@@ -43,18 +37,6 @@ test("clearSession removes every synced credential artifact", async () => {
   await Bun.write(gcp, JSON.stringify({ private_key: "gcp-secret" }))
   await Bun.write(queue, JSON.stringify({ service: "llm", event_type: "chat", tokens_used: 10 }) + "\n")
   await Bun.write(traceQueue, '{"queued":"account-trace"}\n')
-
-  process.env.ATLAS_CLI_CONFIG_PATH = atlas
-  await Bun.write(
-    atlas,
-    JSON.stringify({
-      active_profile: "default",
-      profiles: {
-        default: { api_key: "thk_test.secret", base_url: `${API_BASE}/api/v1` },
-        personal: { api_key: "thk_other.key", base_url: "https://example.test/api/v1" },
-      },
-    }),
-  )
 
   // Simulate preload-env.ts having injected the synced value at boot…
   process.env[INJECTED] = "thk_injected_value"
@@ -73,46 +55,6 @@ test("clearSession removes every synced credential artifact", async () => {
   // The injected var is gone; the shell export survives.
   expect(process.env[INJECTED]).toBeUndefined()
   expect(process.env[EXPORTED]).toBe("user-exported-value")
-
-  // The seeded atlas-cli profile lost its api_key; everything else intact.
-  const config = JSON.parse(await Bun.file(atlas).text())
-  expect(config.profiles.default.api_key).toBeUndefined()
-  expect(config.profiles.default.base_url).toBe(`${API_BASE}/api/v1`)
-  expect(config.profiles.personal.api_key).toBe("thk_other.key")
-})
-
-test("clearSession without a session still clears the seeded atlas profile by base_url", async () => {
-  await fs.mkdir(path.dirname(atlas), { recursive: true })
-  process.env.ATLAS_CLI_CONFIG_PATH = atlas
-  await Bun.write(
-    atlas,
-    JSON.stringify({
-      active_profile: "default",
-      profiles: { default: { api_key: "thk_stale.secret", base_url: `${API_BASE}/api/v1` } },
-    }),
-  )
-
-  await OpenScience.clearSession()
-
-  const config = JSON.parse(await Bun.file(atlas).text())
-  expect(config.profiles.default.api_key).toBeUndefined()
-})
-
-test("clearSession leaves a hand-configured atlas profile alone", async () => {
-  await fs.mkdir(path.dirname(atlas), { recursive: true })
-  process.env.ATLAS_CLI_CONFIG_PATH = atlas
-  await Bun.write(
-    atlas,
-    JSON.stringify({
-      active_profile: "default",
-      profiles: { default: { api_key: "thk_mine.secret", base_url: "https://selfhosted.example/api/v1" } },
-    }),
-  )
-
-  await OpenScience.clearSession()
-
-  const config = JSON.parse(await Bun.file(atlas).text())
-  expect(config.profiles.default.api_key).toBe("thk_mine.secret")
 })
 
 test("logout in one server removes synced env and revokes inherited children in another", async () => {

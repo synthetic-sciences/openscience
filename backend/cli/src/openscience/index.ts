@@ -1,7 +1,7 @@
 import path from "path"
 import os from "os"
 import fs from "fs/promises"
-import { existsSync, readFileSync, writeFileSync, chmodSync } from "fs"
+import { existsSync, readFileSync } from "fs"
 import { randomUUID, createHash } from "crypto"
 import { Global } from "../global"
 import { DataRootBarrier } from "../global/data-root-barrier"
@@ -16,7 +16,6 @@ import {
   managedOpenRouterBaseURL,
 } from "./synced-env-policy"
 import { isAtlasManagedKey } from "../credentials/managed-key"
-import { resolveAtlasPackageDir } from "./atlas-package"
 import { BILLING_URL, DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ToolOutputPath } from "../tool/tool-output-path"
@@ -298,63 +297,6 @@ export class InsufficientCreditsError extends Error {
   }
 }
 
-// ── Legacy companion compatibility ───────────────────────────────────────
-// OpenScience no longer depends on, installs, or advertises @synsci/atlas. If
-// an existing installation still makes that package resolvable, preserve its
-// PATH behavior during the transition. This compatibility path is best-effort
-// and never required for OpenScience itself.
-let atlasBinDirCache: string | null | undefined
-
-/** Resolve (and cache) the directory that should be prepended to a subprocess
- *  PATH for a separately installed legacy companion. Returns null when the
- *  package cannot be located; callers continue without it. */
-function ensureAtlasBinDir(): string | null {
-  if (atlasBinDirCache !== undefined) return atlasBinDirCache
-  atlasBinDirCache = null
-  const pkgDir = resolveAtlasPackageDir()
-  if (!pkgDir) return atlasBinDirCache
-  // Prefer the npm-generated .bin shim — cross-platform + already executable.
-  try {
-    const nmBin = path.join(pkgDir, "..", "..", ".bin")
-    if (existsSync(path.join(nmBin, "atlas")) || existsSync(path.join(nmBin, "atlas.cmd"))) {
-      atlasBinDirCache = nmBin
-      return atlasBinDirCache
-    }
-  } catch {}
-  // Fallback: synthesize a launcher that runs the package's bin entry via node.
-  try {
-    const pkg = JSON.parse(readFileSync(path.join(pkgDir, "package.json"), "utf8")) as {
-      bin?: string | Record<string, string>
-    }
-    const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.atlas
-    if (!rel) return atlasBinDirCache
-    const entry = path.join(pkgDir, rel)
-    if (!existsSync(entry)) return atlasBinDirCache
-    const launcher = path.join(Global.Path.bin, "atlas")
-    const script = `#!/bin/sh\nexec node ${JSON.stringify(entry)} "$@"\n`
-    let current = ""
-    try {
-      current = readFileSync(launcher, "utf8")
-    } catch {}
-    if (current !== script) writeFileSync(launcher, script, { mode: 0o755 })
-    chmodSync(launcher, 0o755)
-    atlasBinDirCache = Global.Path.bin
-  } catch {}
-  return atlasBinDirCache
-}
-
-/** Preserve a separately installed legacy companion on a subprocess PATH.
- *  No-op when the package cannot be located or is already on PATH. */
-function withAtlasOnPath(env: Record<string, string>): Record<string, string> {
-  const dir = ensureAtlasBinDir()
-  if (!dir) return env
-  const sep = process.platform === "win32" ? ";" : ":"
-  const key = Object.keys(env).find((k) => k.toUpperCase() === "PATH") ?? "PATH"
-  const parts = (env[key] ?? "").split(sep).filter(Boolean)
-  if (parts.includes(dir)) return env
-  return { ...env, [key]: [dir, ...parts].join(sep) }
-}
-
 export namespace OpenScience {
   let cachedProfile: AccountProfile | null | undefined
   let cachedEntitlements: ResearchEntitlements | undefined
@@ -534,7 +476,6 @@ export namespace OpenScience {
     // Atomic temp+rename so a crash or a concurrent reader never sees a torn
     // session file (which getSession would mis-read as a logout).
     await atomicWrite(filepath, JSON.stringify(session, null, 2), { mode: 0o600 })
-    await ensureAtlasCliConfig(session)
   }
 
   export async function saveSession(session: OpenScienceSession) {
@@ -555,7 +496,7 @@ export namespace OpenScience {
         // A pasted key can replace an account without an explicit logout. Tear
         // down account A's complete credential snapshot before publishing B's
         // session, so a failed B sync can never fall back to A's keys/files/env.
-        await clearSyncedCredentialArtifacts(previous)
+        await clearSyncedCredentialArtifacts()
         await dropUsageQueue()
         await resetTelemetryAccountSession()
       } else if (previous && changingSubject && !(await preserveTelemetryConsentForSession(session))) {
@@ -575,37 +516,6 @@ export namespace OpenScience {
       .catch((error) => log.warn("could not initialize account trace state", { error: String(error) }))
   }
 
-  /**
-   * Keep an existing legacy companion config in sync for people who previously
-   * installed it. A clean OpenScience login must never create this file or copy
-   * the account key into a second credential store. Best-effort; never throws.
-   */
-  export async function ensureAtlasCliConfig(session?: OpenScienceSession | null): Promise<void> {
-    const active = session ?? (await getSession())
-    if (!active?.api_key) return
-    try {
-      const configPath =
-        process.env.ATLAS_CLI_CONFIG_PATH || path.join(os.homedir(), ".config", "atlas-cli", "config.json")
-      let existing: any
-      try {
-        existing = JSON.parse(await fs.readFile(configPath, "utf8"))
-      } catch {
-        return
-      }
-      if (!existing || typeof existing !== "object" || Array.isArray(existing)) return
-      const profiles = existing.profiles && typeof existing.profiles === "object" ? { ...existing.profiles } : {}
-      profiles.default = {
-        ...(profiles.default ?? {}),
-        api_key: active.api_key,
-        base_url: `${API_BASE}/api/v1`,
-      }
-      const next = { ...existing, active_profile: existing.active_profile ?? "default", profiles }
-      await atomicWrite(configPath, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 })
-    } catch (e) {
-      log.warn("could not update legacy companion config", { error: e instanceof Error ? e.message : String(e) })
-    }
-  }
-
   /** Merge-update the persisted session. Fetches current session, spreads
    *  the patch on top, and writes back. No-ops when unauthenticated. Serialized
    *  under a lock so two concurrent patches (e.g. an interactive last_check_ts
@@ -618,7 +528,6 @@ export namespace OpenScience {
       if (!session) return
       // Sync bookkeeping is not credential material; publishing a credential
       // revision for every TTL timestamp would unnecessarily stop live children.
-      // Do not rewrite the Atlas credential mirror for a timestamp-only patch.
       await atomicWrite(filepath, JSON.stringify({ ...session, ...patch }, null, 2), { mode: 0o600 })
     })
   }
@@ -760,31 +669,6 @@ export namespace OpenScience {
     return syncedSecretValues.get(key) === value
   }
 
-  /** Clear the api_key this CLI seeded into a legacy companion's config
-   *  (see ensureAtlasCliConfig). Only removes the key when it is the one the
-   *  session seeded (or, with no readable session, when the profile points at
-   *  our backend), so a hand-configured legacy profile survives. Best-effort. */
-  async function clearAtlasCliConfig(session: OpenScienceSession | null): Promise<void> {
-    try {
-      const configPath =
-        process.env.ATLAS_CLI_CONFIG_PATH || path.join(os.homedir(), ".config", "atlas-cli", "config.json")
-      const existing: unknown = JSON.parse(await fs.readFile(configPath, "utf8"))
-      if (!existing || typeof existing !== "object") return
-      const profiles = (existing as Record<string, unknown>).profiles
-      if (!profiles || typeof profiles !== "object") return
-      const profile = (profiles as Record<string, unknown>).default
-      if (!profile || typeof profile !== "object") return
-      const record = profile as Record<string, unknown>
-      if (typeof record.api_key !== "string" || !record.api_key) return
-      const seeded = session?.api_key ? record.api_key === session.api_key : record.base_url === `${API_BASE}/api/v1`
-      if (!seeded) return
-      delete record.api_key
-      await atomicWrite(configPath, JSON.stringify(existing, null, 2) + "\n", { mode: 0o600 })
-    } catch {
-      /* missing/unreadable config — nothing to clear */
-    }
-  }
-
   /** Delete queued usage rows. They were produced under the signed-out
    *  account's key; flushing them after a different account logs in would
    *  bill that account for someone else's usage. */
@@ -824,7 +708,7 @@ export namespace OpenScience {
   /** Remove every credential artifact owned by the last dashboard sync while
    * preserving unrelated shell exports. The caller holds CredentialLifecycle's
    * cross-process mutation lease. */
-  async function clearSyncedCredentialArtifacts(session: OpenScienceSession | null): Promise<void> {
+  async function clearSyncedCredentialArtifacts(): Promise<void> {
     const synced = await readSyncedSnapshot()
     for (const [key, value] of syncedSecretValues.entries()) synced.set(key, value)
     for (const name of ["synced-env.json", "openscience-synced.json", syncedGcpFilename]) {
@@ -832,7 +716,6 @@ export namespace OpenScience {
     }
     for (const [key, value] of synced.entries()) unsetSyncedVar(key, value)
     syncedSecretValues.clear()
-    await clearAtlasCliConfig(session)
   }
 
   /**
@@ -844,13 +727,12 @@ export namespace OpenScience {
    */
   export async function clearSession(expectedApiKey?: string): Promise<boolean> {
     const clear = async () => {
-      const session = await getSession()
       // Remove the synced credential artifacts FIRST, then delete the session file
       // LAST. A crash after unlinking the session but before removing
       // synced-env.json would otherwise leave preload-env.ts replaying the managed
       // key into process.env on the next boot — the signed-out account's wallet
       // kept being debited, the exact thing this function exists to prevent.
-      await clearSyncedCredentialArtifacts(session)
+      await clearSyncedCredentialArtifacts()
       await dropUsageQueue()
       await resetTelemetryAccountSession()
       cachedProfile = undefined
@@ -1161,10 +1043,6 @@ export namespace OpenScience {
           if (!current || current.api_key !== session.api_key) {
             throw new Error("Managed session changed while services were syncing; discarded the stale response")
           }
-          // Keep a separately installed legacy companion authenticated during
-          // the transition (covers existing sessions that never re-run login).
-          await ensureAtlasCliConfig(session)
-
           // Retired releases materialized an Atlas-delivered GCP service account.
           // Account sync no longer distributes any compute credential, so remove
           // that legacy artifact and filter the response before applying it.
@@ -1612,10 +1490,8 @@ export namespace OpenScience {
     await CredentialLifecycle.ensureFresh()
     const base = filterEnvForSubprocess(env)
     const auth = await Auth.all().catch(() => ({}) as Record<string, Auth.Info>)
-    // Preserve a separately installed legacy companion on PATH during the
-    // transition. OpenScience itself does not install or require it.
     return {
-      ...withAtlasOnPath(mergeByokEnv(base, auth)),
+      ...mergeByokEnv(base, auth),
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: os.devNull,
       GIT_TERMINAL_PROMPT: "0",
@@ -2292,18 +2168,6 @@ export namespace OpenScience {
       }))
     } catch (e) {
       log.warn("getTransactions error", { error: e instanceof Error ? e.message : String(e) })
-      return null
-    }
-  }
-
-  /** Version of a separately installed legacy companion, or null if unresolved. */
-  export async function atlasCliVersion(): Promise<string | null> {
-    const dir = resolveAtlasPackageDir()
-    if (!dir) return null
-    try {
-      const pkg = (await Bun.file(path.join(dir, "package.json")).json()) as { version?: string }
-      return pkg.version ?? null
-    } catch {
       return null
     }
   }

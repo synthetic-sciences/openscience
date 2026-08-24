@@ -10,6 +10,13 @@ const asset = docs.match(/assets\/(index-[^"']+\.js)/)?.[1]
 if (!asset) throw new Error("Built docs index does not reference a JavaScript bundle")
 const bundle = await Bun.file(new URL(`../../public/docs/assets/${asset}`, import.meta.url)).text()
 
+test("keeps the public bundled-skill count current", () => {
+  expect(readme).toContain("310 bundled skills")
+  expect(bundle).toContain("310 bundled skills")
+  expect(`${readme}\n${bundle}`).not.toContain("295 bundled")
+  expect(`${readme}\n${bundle}`).not.toContain("295-skill")
+})
+
 describe("OpenScience landing contract", () => {
   test("keeps the free product independent from Ace", () => {
     expect(landing).toContain("The desktop and local runtime remain free")

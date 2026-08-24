@@ -115,6 +115,34 @@ test("availableSkills injects call-first routing only for a known slash skill", 
   })
 })
 
+test("availableSkills never restores retired Atlas or graph slash commands from local copies", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await writeSkill(dir, "initialize-atlas-graph", "research")
+      await writeSkill(dir, "initialize-research-graph", "research")
+      await writeSkill(dir, "atlas", "research")
+      await writeSkill(dir, "atlas-lab", "research")
+      await writeSkill(dir, "initialize-research-graphs", "research")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const atlas = await SystemPrompt.availableSkills([], "/initialize-atlas-graph")
+      const research = await SystemPrompt.availableSkills([], "/initialize-research-graph")
+      const atlasLab = await SystemPrompt.availableSkills([], "/atlas-lab")
+      const similar = await SystemPrompt.availableSkills([], "/initialize-research-graphs")
+      expect(atlas).not.toContain("slash-skill-invocation")
+      expect(research).not.toContain("slash-skill-invocation")
+      expect(atlasLab).not.toContain("slash-skill-invocation")
+      expect(similar).toContain('skill({name:"initialize-research-graphs"})')
+    },
+  })
+})
+
 test("availableSkills offers a bounded request-relevant shortlist", async () => {
   await using tmp = await tmpdir({
     git: true,

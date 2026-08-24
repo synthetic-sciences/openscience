@@ -138,7 +138,7 @@ test("persists, resumes, and truthfully assesses a research completion contract"
       kernels: [{ status: "completed" }],
       busy: false,
     })
-    expect(assessment).toMatchObject({ status: "ready", readiness: 100, failedCandidates: 1 })
+    expect(assessment).toMatchObject({ status: "ready", readiness: 100, openFindings: 0, failedCandidates: 1 })
 
     const recovered = SessionResearch.assess(contract, {
       artifacts,

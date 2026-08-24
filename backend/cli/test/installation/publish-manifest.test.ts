@@ -62,6 +62,8 @@ describe("wrapper package manifest", () => {
       "Ace+ includes 150 credits",
       "Synthetic Scientists access",
       "$50 or $200, one-time or recurring monthly",
+      "/initialize-atlas-graph",
+      "/initialize-research-graph",
     ]) {
       expect(() => assertPublicPackageSurface({ "README.md": copy })).toThrow("retired public copy")
     }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { Script } from "@synsci/script"
-import { $ } from "bun"
+import { packPackage, publishPackage } from "../../../repo/npm-release"
 
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
@@ -17,8 +17,8 @@ for (const [key, value] of Object.entries(pkg.exports)) {
 }
 await Bun.write("package.json", JSON.stringify(pkg, null, 2))
 try {
-  await $`bun pm pack`
-  await $`npm publish *.tgz --tag ${Script.channel} --access public`
+  const artifact = await packPackage({ cwd: dir, name: pkg.name, version: Script.version })
+  await publishPackage({ ...artifact, tag: Script.channel })
 } finally {
   await Bun.write("package.json", JSON.stringify(original, null, 2))
 }

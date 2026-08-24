@@ -74,9 +74,9 @@ Skills are instruction bundles the agent loads on demand (`src/skill`). The cano
 
 Global config lives in `~/.config/openscience/openscience.json`; project config in `openscience.json` or a `.openscience/` directory at the repo root. Persistent application data (sessions, auth, credentials, binaries, and logs) defaults to the stable `~/.openscience` data root and can be relocated; config, cache, and state use their resolved XDG directories. `src/global/index.ts` owns those paths. Installs made before the OpenScience rename import or migrate the legacy `synsc` directories on first run.
 
-## Gateway integration
+## Synthetic Sciences integration
 
-The Gateway is a separate managed service. Only its optional client lives here. OpenScience starts and remains useful without a Gateway installation, login, or network connection. After login, the client can enable managed models, wallet and credential synchronization, private research graphs, and managed research search. The legacy `@synsci/atlas` package and `atlas` binary names remain compatibility-only implementation identifiers; new product copy calls the service Gateway. The wire contract uses the `synsci` model provider id, `thk_` wallet keys, and `/api/cli/*`, with `app.syntheticsciences.ai` as the default managed base URL (`src/endpoints.ts`). Skills are explicitly outside this contract.
+Synthetic Sciences is a separate managed service; only its client lives here. Normal OpenScience use requires a free Synthetic Sciences account, while Ace credits remain optional. A saved account session keeps local and own-key work available offline; managed models, wallet and credential synchronization, private research graphs, and enhanced search require the service. The legacy `@synsci/atlas` package, `atlas` binary, resolver, and bundled Atlas skills are retired. Only managed `/api/cli/*` compatibility routes and internal wire identifiers remain. The wire contract uses the `synsci` model provider id, `thk_` wallet keys, and `app.syntheticsciences.ai` as the default managed base URL (`src/endpoints.ts`).
 
 ## Build and release
 
