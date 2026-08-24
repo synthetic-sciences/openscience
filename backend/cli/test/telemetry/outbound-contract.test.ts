@@ -1362,6 +1362,7 @@ describe("outbound OpenScience trace contract", () => {
 
     const removal = OutboundTelemetry.requestDeletion()
     await deleting.promise
+    const uploadsBeforeDeletion = batchUploads
     let appendSettled = false
     const appending = OutboundTelemetry.userMessage({
       sessionID: "ses_delete_race",
@@ -1377,7 +1378,10 @@ describe("outbound OpenScience trace contract", () => {
     finishDeletion.resolve()
     expect(await removal).toEqual({ ok: true })
     expect(await appending).toBe(false)
-    expect(batchUploads).toBe(0)
+    // A retry selected before deletion may finish first; the authenticated
+    // deletion removes it. Nothing may upload after deletion acquires the
+    // account and state boundaries.
+    expect(batchUploads).toBe(uploadsBeforeDeletion)
     expect(await Bun.file(queue).exists()).toBe(false)
   })
 

@@ -266,7 +266,7 @@ test("authenticated control-plane activity retries an offline opt-out without re
   expect(await OutboundTelemetry.status()).toMatchObject({ analyticsEnabled: false, pending: false })
 })
 
-test("account replacement retains A's deletion proof without applying it to B", async () => {
+test("account replacement never turns A's opt-out into deletion against B", async () => {
   const accountA = {
     api_key: `thk_${"a".repeat(32)}.${"account-a-secret".repeat(2)}`,
     user_id: "account-a",
@@ -284,24 +284,17 @@ test("account replacement retains A's deletion proof without applying it to B", 
   await OpenScience.saveSession(accountB)
   expect(await OpenScience.getSession()).toMatchObject(accountB)
 
-  const proofRequests: Array<{ authorization: string | null; proof: string | null }> = []
+  const deletionRequests: string[] = []
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith("/api/cli/balance")) return Response.json({ balance_usd: 9 })
-    expect(url).toEndWith("/api/v1/telemetry/account-data/by-key-proof")
-    const headers = new Headers(init?.headers)
-    proofRequests.push({
-      authorization: headers.get("authorization"),
-      proof: headers.get("x-openscience-telemetry-deletion-proof"),
-    })
-    return Response.json({ status: "completed", scope: "traces" })
+    if (url.includes("/api/v1/telemetry/account-data")) deletionRequests.push(url)
+    return new Response("not found", { status: 404 })
   }) as typeof fetch
 
   OpenScience.invalidateBalance()
   expect(await OpenScience.getBalance()).toBe(9)
-  expect(proofRequests).toHaveLength(1)
-  expect(proofRequests[0]).toMatchObject({ authorization: null })
-  expect(Buffer.from(proofRequests[0].proof!.split(".")[1], "hex").toString()).toBe(`thk_${"a".repeat(8)}`)
+  expect(deletionRequests).toEqual([])
   expect(await OpenScience.getSession()).toMatchObject(accountB)
   const localConsent = await Bun.file(traceConsent).text()
   expect(localConsent).not.toContain(accountA.api_key)
@@ -586,7 +579,7 @@ test("a 401 cleanup waits for an in-flight opt-out without deadlocking", async (
   }
 })
 
-test("a revoked legacy-key 401 retries an offline opt-out after clearing the raw session", async () => {
+test("a revoked legacy-key 401 preserves the local opt-out without inventing deletion authority", async () => {
   const apiKey = `thk_revoked_device.${"revoked-device-secret".repeat(2)}`
   const account = { api_key: apiKey, user_id: "revoked-proof-account" }
   await OpenScience.saveSession(account)
@@ -595,27 +588,18 @@ test("a revoked legacy-key 401 retries an offline opt-out after clearing the raw
   }) as unknown as typeof fetch
   expect(await OutboundTelemetry.setAnalytics(false)).toMatchObject({ pending: true })
 
-  const proofRequests: Array<{ authorization: string | null; proof: string | null }> = []
+  const deletionRequests: string[] = []
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith("/api/cli/balance")) return new Response("revoked", { status: 401 })
-    if (url.endsWith("/api/v1/telemetry/account-data/by-key-proof")) {
-      const headers = new Headers(init?.headers)
-      proofRequests.push({
-        authorization: headers.get("authorization"),
-        proof: headers.get("x-openscience-telemetry-deletion-proof"),
-      })
-      return Response.json({ status: "completed", scope: "traces" })
-    }
+    if (url.includes("/api/v1/telemetry/account-data")) deletionRequests.push(url)
     return new Response("not found", { status: 404 })
   }) as typeof fetch
 
   OpenScience.invalidateBalance()
   expect(await OpenScience.getBalance()).toBeNull()
   expect(await OpenScience.getSession()).toBeNull()
-  expect(proofRequests).toHaveLength(1)
-  expect(proofRequests[0]).toMatchObject({ authorization: null })
-  expect(proofRequests[0].proof).toMatch(/^odp_v2\.[a-f0-9]{10,138}\.[a-f0-9]{32}\.[a-f0-9]{32}\.[a-f0-9]{64}$/)
+  expect(deletionRequests).toEqual([])
   const state = await Bun.file(traceConsent).text()
   expect(state).not.toContain(apiKey)
   expect(state).not.toContain("deletion_proof")

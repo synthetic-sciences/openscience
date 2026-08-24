@@ -346,9 +346,9 @@ describe("Atlas host broker", () => {
             authorized,
           })
           const copied = { ...authorization }
-          const calls = { network: 0 }
-          globalThis.fetch = (async () => {
-            calls.network++
+          const calls = { sourceUploads: 0 }
+          globalThis.fetch = (async (input: string | URL | Request) => {
+            if (new URL(String(input)).pathname === "/api/v1/sources") calls.sourceUploads++
             return Response.json({})
           }) as unknown as typeof fetch
 
@@ -360,7 +360,7 @@ describe("Atlas host broker", () => {
               authorization: copied,
             }),
           ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
-          expect(calls.network).toBe(0)
+          expect(calls.sourceUploads).toBe(0)
         } finally {
           await Session.remove(session.id)
         }

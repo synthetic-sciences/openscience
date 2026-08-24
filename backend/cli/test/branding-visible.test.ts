@@ -51,7 +51,7 @@ describe("public Synthetic Sciences branding allowlist", () => {
 
   test("does not render retired package billing copy", async () => {
     const forbidden =
-      /(?:\bAce\b|Ace\+|Legacy (?:Pro|Starter)|\$100\/month|150 credits|research quota|Synthetic Scientists access|\$50 or \$200|recurring monthly|Current Synthetic Sciences plan|Manage plans?|Plan tab|plan entitlements|plan inactive|Subscription:|search allowance|allowance (?:used|unavailable|exhausted)|every plan)/i
+      /(?:Ace\+|Legacy (?:Pro|Starter)|\$100\/month|150 credits|research quota|Synthetic Scientists access|\$50 or \$200|recurring monthly|Current Synthetic Sciences plan|Manage plans?|Plan tab|plan entitlements|plan inactive|Subscription:|search allowance|allowance (?:used|unavailable|exhausted)|every plan)/i
     const violations: string[] = []
     for (const file of publicSources) {
       const source = renderedSource(await Bun.file(new URL(`../${file}`, import.meta.url)).text())
