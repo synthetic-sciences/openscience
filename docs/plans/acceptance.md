@@ -4,7 +4,7 @@ Status values are `todo`, `active`, `verified`, and `deferred`.
 
 | ID      | Outcome                                                                           | Status   | Launch evidence                                        |
 | ------- | --------------------------------------------------------------------------------- | -------- | ------------------------------------------------------ |
-| FLOW-00 | A new user reaches a reloadable, reviewed artifact in under five minutes          | todo     | Packaged clean-root walkthrough                        |
+| FLOW-00 | A new user reaches a reloadable, inspectable artifact in under five minutes       | todo     | Packaged clean-root walkthrough                        |
 | NOW-00  | No fake UI or forced launch dependency                                            | active   | Visible-control audit and offline walkthrough          |
 | NOW-01  | Stable session tabs and contextual work pane                                      | active   | Rapid switching, reload, keyboard, responsive tests    |
 | NOW-02  | Calm Inter-based visual system                                                    | active   | Token audit and macOS/Linux screenshots                |
@@ -14,13 +14,13 @@ Status values are `todo`, `active`, `verified`, and `deferred`.
 | NOW-06  | One enforcing access broker                                                       | active   | Escape, revoke, Plan-mode, and network tests           |
 | NOW-07  | Persistent local kernels and staged SSH Compute                                   | todo     | Restart, timeout, quota, reconnect, and staging tests  |
 | NOW-08  | Immutable transactional artifact record                                           | active   | Concurrency, rollback, hash, reopen, and lineage tests |
-| NOW-09  | Coherent Files, previews, and Review                                              | active   | Exact-version and reviewer tests                       |
+| NOW-09  | Coherent Files, previews, and artifact management                                 | active   | Exact-version, menu, edit, and download tests          |
 | NOW-10  | Provider-native auth, models, and effort                                          | todo     | Route-specific live smokes                             |
 | NOW-11  | Safe install, update, export, deletion, and support bundle                        | todo     | Clean-root, upgrade, rollback, and trash tests         |
 | HAR-00  | One primary research agent                                                        | todo     | Prompt and trace inspection                            |
 | HAR-01  | Bounded delegation                                                                | todo     | Tool-level limits and trace inspection                 |
 | HAR-02  | Tasteful tools and compute                                                        | todo     | Representative research traces                         |
-| HAR-03  | Direct useful review                                                              | todo     | Exact-version review flow                              |
+| HAR-03  | Inspectable provenance and result validation                                      | todo     | Exact-version provenance flow                          |
 | HAR-04  | One inspectable harness trace                                                     | todo     | Trace schema and redaction tests                       |
 | ATL     | Atlas remains unchanged during this pass                                          | deferred | No Atlas diff                                          |
 | MEMORY  | Existing Memory remains intact; redesign later from Hermes/company-brain research | deferred | No Memory implementation diff                          |
@@ -108,18 +108,14 @@ Status values are `todo`, `active`, `verified`, and `deferred`.
 - Renaming changes only record metadata. Delete moves the artifact and all
   versions to recoverable Trash; Restore returns it to Files, and trash older
   than 30 days removes only blobs no remaining version references.
-- Review binds one selected version to a project-owned provenance target whose
-  identity includes the immutable version ID and SHA-256. The dedicated
-  artifact reviewer receives only `artifact_snapshot`, `provenance_query`, and
-  append-only `provenance_review`; live workspace reads, commands, skills, and
-  mutation tools are absent.
-- `artifact_snapshot` revalidates project ownership, version ID, byte count, and
-  hash before returning paged text or an exact image/PDF attachment. Unsupported
-  binary formats produce an explicit no-verdict limitation.
-- The saved artifact Review tab requests the selected artifact/version pair,
-  verifies the server-confirmed target and hash, and displays only findings
-  linked to that target. A launch or failed model run is never presented as a
-  scientific pass.
+- Provenance binds a selected version to a project-owned target whose identity
+  includes the immutable version ID and SHA-256. Later records remain linked to
+  that exact version instead of silently following a mutable file path.
+- The saved-artifact menu keeps preview, edit, version history, rename, download,
+  and recoverable deletion compact and explicit. Unsupported binary formats
+  state their limitation instead of inventing a verdict.
+- A launch or failed model run is never presented as a scientific pass. Result
+  cards distinguish produced artifacts from validated empirical claims.
 
 ### Local evidence
 

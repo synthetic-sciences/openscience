@@ -471,7 +471,14 @@
                     },
                     "user": {},
                     "balance_usd": {
-                      "type": "number"
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "billing_mode": {
                       "anyOf": [
@@ -539,7 +546,14 @@
                   "type": "object",
                   "properties": {
                     "balance_usd": {
-                      "type": "number"
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -17852,7 +17866,7 @@
                       "type": "object",
                       "properties": {
                         "signedIn": {
-                          "description": "Whether a Gateway session (thk_ key) is available",
+                          "description": "Whether a Synthetic Sciences session (thk_ key) is available",
                           "type": "boolean"
                         },
                         "balanceUsd": {
@@ -17918,7 +17932,7 @@
                       "type": "object",
                       "properties": {
                         "signedIn": {
-                          "description": "Whether a Gateway session (thk_ key) is available",
+                          "description": "Whether a Synthetic Sciences session (thk_ key) is available",
                           "type": "boolean"
                         },
                         "balanceUsd": {

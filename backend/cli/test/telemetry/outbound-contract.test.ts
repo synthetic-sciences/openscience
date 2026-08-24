@@ -148,10 +148,91 @@ describe("outbound OpenScience trace contract", () => {
     expect(await Bun.file(queue).exists()).toBe(false)
   })
 
+  test("honors an existing server opt-out before the first local capture or batch", async () => {
+    await signIn("user_server_opt_out")
+    let consentGets = 0
+    let batches = 0
+    restores.push(
+      spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+        const url = String(input)
+        if (url.endsWith("/api/v1/telemetry/consent")) {
+          consentGets++
+          expect(init?.method).toBe("GET")
+          return Response.json({
+            consent_version: CONSENT_VERSION,
+            analytics_enabled: false,
+            research_content_enabled: false,
+            consent_epoch: "a".repeat(32),
+          })
+        }
+        if (url.endsWith("/api/v1/telemetry/batches")) {
+          batches++
+          return Response.json({ detail: { code: "telemetry_consent_disabled", retryable: false } }, { status: 403 })
+        }
+        throw new Error(`Unexpected request: ${url}`)
+      }) as typeof fetch),
+    )
+
+    await OutboundTelemetry.initializeAccount()
+    expect(consentGets).toBe(1)
+    expect(await OutboundTelemetry.status()).toMatchObject({
+      analyticsEnabled: false,
+      researchContentEnabled: false,
+      pending: false,
+    })
+    expect(
+      await OutboundTelemetry.userMessage({
+        sessionID: "ses_server_opt_out",
+        messageID: "msg_server_opt_out",
+        message: { role: "user" },
+        parts: [{ text: "must never leave this client" }],
+      }),
+    ).toBe(false)
+    await OutboundTelemetry.drain({ timeoutMs: 1_000 })
+    expect(batches).toBe(0)
+    expect(await Bun.file(queue).exists()).toBe(false)
+  })
+
+  test("materializes fresh server consent once and skips redundant refreshes", async () => {
+    await signIn("user_server_default")
+    const epoch = "b".repeat(32)
+    let consentGets = 0
+    restores.push(
+      spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+        expect(String(input)).toEndWith("/api/v1/telemetry/consent")
+        expect(init?.method).toBe("GET")
+        consentGets++
+        return Response.json({
+          consent_version: CONSENT_VERSION,
+          analytics_enabled: true,
+          research_content_enabled: true,
+          consent_epoch: epoch,
+        })
+      }) as typeof fetch),
+    )
+
+    await OutboundTelemetry.initializeAccount()
+    expect(consentGets).toBe(1)
+    const first = JSON.parse(await Bun.file(consent).text()) as {
+      subjects: Record<string, { consent_epoch?: string }>
+    }
+    expect(first.subjects["account:user_server_default"]?.consent_epoch).toBe(epoch)
+    expect(await OutboundTelemetry.status()).toMatchObject({
+      analyticsEnabled: true,
+      researchContentEnabled: true,
+      pending: false,
+    })
+
+    await OutboundTelemetry.initializeAccount()
+    expect(consentGets).toBe(1)
+  })
+
   test("defaults on after authentication, queues offline, and recursively redacts secrets", async () => {
     await signIn()
-    restores.push(spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")))
+    const offline = spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"))
+    restores.push(offline)
     await OutboundTelemetry.initializeAccount()
+    expect(offline).toHaveBeenCalledTimes(1)
     expect(await OutboundTelemetry.status()).toMatchObject({
       analyticsEnabled: true,
       researchContentEnabled: true,
@@ -197,6 +278,58 @@ describe("outbound OpenScience trace contract", () => {
     expect(text).not.toContain("super-secret-material")
     const row = JSON.parse(text.trim()) as { event: unknown }
     expect(Event.parse(row.event)).toMatchObject({ event_type: "user.message", schema_version: 2 })
+  })
+
+  test("appends queue rows in place and compacts only when the event cap is reached", async () => {
+    await signIn("user_append_queue")
+    restores.push(spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")))
+    await OutboundTelemetry.initializeAccount()
+    await OutboundTelemetry.userMessage({
+      sessionID: "ses_append_queue",
+      messageID: "msg_0",
+      message: { role: "user" },
+      parts: [{ text: "first" }],
+    })
+    const initial = await fs.stat(queue)
+    for (let index = 1; index < 24; index++) {
+      await OutboundTelemetry.userMessage({
+        sessionID: "ses_append_queue",
+        messageID: `msg_${index}`,
+        message: { role: "user" },
+        parts: [{ text: `event-${index}` }],
+      })
+    }
+    const appended = await fs.stat(queue)
+    expect(appended.ino).toBe(initial.ino)
+    expect((await Bun.file(queue).text()).trim().split("\n")).toHaveLength(24)
+    await OutboundTelemetry.drain({ timeoutMs: 1_000 })
+
+    const template = JSON.parse((await Bun.file(queue).text()).trim().split("\n")[0]) as {
+      subject: string
+      queued_at: number
+      event: Record<string, unknown>
+    }
+    const capped = Array.from({ length: 4096 }, (_, index) =>
+      JSON.stringify({
+        ...template,
+        queued_at: template.queued_at + index,
+        event: { ...template.event, event_id: crypto.randomUUID(), run_id: `seed_${index}` },
+      }),
+    )
+    await Bun.write(queue, `${capped.join("\n")}\n`)
+    await OutboundTelemetry.userMessage({
+      sessionID: "ses_append_queue",
+      messageID: "msg_after_cap",
+      message: { role: "user" },
+      parts: [{ text: "newest-event" }],
+    })
+    const compacted = (await Bun.file(queue).text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { event: { run_id?: string; payload?: unknown } })
+    expect(compacted).toHaveLength(4096)
+    expect(compacted.some((row) => row.event.run_id === "seed_0")).toBe(false)
+    expect(JSON.stringify(compacted.at(-1)?.event.payload)).toContain("newest-event")
   })
 
   test("redacts opaque OAuth and well-known credentials plus bare credential fields", async () => {
@@ -444,6 +577,230 @@ describe("outbound OpenScience trace contract", () => {
     expect(envelope).toMatchObject({ schema_version: 2, consent_version: CONSENT_VERSION })
     expect(envelope).not.toHaveProperty("account_id")
     expect((envelope?.events as unknown[]).map((event) => Event.parse(event))).toHaveLength(1)
+    expect(await Bun.file(queue).exists()).toBe(false)
+  })
+
+  test("does not hold the state lease while consent refresh is on the network", async () => {
+    await signIn("user_slow_consent")
+    await OutboundTelemetry.initializeAccount({ synchronize: false })
+    const started = Promise.withResolvers<void>()
+    const finish = Promise.withResolvers<void>()
+    restores.push(
+      spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+        const url = String(input)
+        if (url.endsWith("/api/v1/telemetry/consent")) {
+          expect(init?.method).toBe("GET")
+          started.resolve()
+          await finish.promise
+          return Response.json({
+            consent_version: CONSENT_VERSION,
+            analytics_enabled: true,
+            research_content_enabled: true,
+          })
+        }
+        if (url.endsWith("/api/v1/telemetry/batches")) {
+          const body = JSON.parse(gunzipSync(init?.body as Uint8Array).toString()) as {
+            events: Array<{ event_id: string }>
+          }
+          return Response.json({ accepted: body.events.map((event) => event.event_id), replayed: [], rejected: [] })
+        }
+        throw new Error(`Unexpected request: ${url}`)
+      }) as typeof fetch),
+    )
+
+    const refreshing = OutboundTelemetry.status(true)
+    await started.promise
+    const appending = OutboundTelemetry.userMessage({
+      sessionID: "ses_slow_consent",
+      messageID: "msg_during_consent",
+      message: { role: "user" },
+      parts: [{ text: "capture while consent refresh waits" }],
+    })
+    expect(await Promise.race([appending, Bun.sleep(500).then(() => "timed-out" as const)])).toBe(true)
+    finish.resolve()
+    expect(await refreshing).toMatchObject({ analyticsEnabled: true, researchContentEnabled: true })
+    await OutboundTelemetry.drain({ timeoutMs: 1_000 })
+  })
+
+  test("schedules one follow-up pass when an event is appended during an active upload", async () => {
+    await signIn("user_slow_batch_append")
+    await OutboundTelemetry.initializeAccount({ synchronize: false })
+
+    const started = Promise.withResolvers<void>()
+    const finish = Promise.withResolvers<void>()
+    const followedUp = Promise.withResolvers<void>()
+    const uploaded: string[] = []
+    let requests = 0
+    restores.push(
+      spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+        expect(String(input)).toEndWith("/api/v1/telemetry/batches")
+        const body = JSON.parse(gunzipSync(init?.body as Uint8Array).toString()) as {
+          events: Array<{ event_id: string }>
+        }
+        requests++
+        if (requests === 1) {
+          started.resolve()
+          await finish.promise
+        }
+        if (requests === 2) followedUp.resolve()
+        uploaded.push(...body.events.map((event) => event.event_id))
+        return Response.json({ accepted: body.events.map((event) => event.event_id), replayed: [], rejected: [] })
+      }) as typeof fetch),
+    )
+
+    expect(
+      await OutboundTelemetry.userMessage({
+        sessionID: "ses_slow_batch_append",
+        messageID: "msg_before_upload",
+        message: { role: "user" },
+        parts: [{ text: "selected before network" }],
+      }),
+    ).toBe(true)
+    await started.promise
+    const appending = OutboundTelemetry.userMessage({
+      sessionID: "ses_slow_batch_append",
+      messageID: "msg_during_upload",
+      message: { role: "user" },
+      parts: [{ text: "appended during network" }],
+    })
+    expect(await Promise.race([appending, Bun.sleep(500).then(() => "timed-out" as const)])).toBe(true)
+    expect((await Bun.file(queue).text()).trim().split("\n")).toHaveLength(2)
+    finish.resolve()
+    expect(await Promise.race([followedUp.promise.then(() => true), Bun.sleep(1_000).then(() => false)])).toBe(true)
+    for (let attempt = 0; attempt < 100 && (await Bun.file(queue).exists()); attempt++) await Bun.sleep(10)
+    expect(await Bun.file(queue).exists()).toBe(false)
+    await Bun.sleep(30)
+    expect(requests).toBe(2)
+    expect(new Set(uploaded).size).toBe(2)
+  })
+
+  test("coalesces concurrent consent refreshes after waiting for the network lease", async () => {
+    await signIn("user_concurrent_consent")
+    await OutboundTelemetry.initializeAccount({ synchronize: false })
+    const started = Promise.withResolvers<void>()
+    const finish = Promise.withResolvers<void>()
+    let requests = 0
+    restores.push(
+      spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+        expect(String(input)).toEndWith("/api/v1/telemetry/consent")
+        expect(init?.method).toBe("GET")
+        requests++
+        started.resolve()
+        await finish.promise
+        return Response.json({
+          consent_version: CONSENT_VERSION,
+          analytics_enabled: true,
+          research_content_enabled: true,
+        })
+      }) as typeof fetch),
+    )
+
+    const first = OutboundTelemetry.status(true)
+    const second = OutboundTelemetry.status(true)
+    await started.promise
+    // Let the second caller take its pre-lock snapshot and block behind the
+    // first request before that request is allowed to commit a new generation.
+    await Bun.sleep(20)
+    finish.resolve()
+    const statuses = await Promise.all([first, second])
+
+    expect(statuses).toEqual([
+      expect.objectContaining({ analyticsEnabled: true, researchContentEnabled: true }),
+      expect.objectContaining({ analyticsEnabled: true, researchContentEnabled: true }),
+    ])
+    expect(requests).toBe(1)
+  })
+
+  test("does not acknowledge a batch after its consent generation changes", async () => {
+    await signIn("user_generation_guard")
+    const offline = spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"))
+    restores.push(offline)
+    await OutboundTelemetry.initializeAccount()
+    await OutboundTelemetry.userMessage({
+      sessionID: "ses_generation_guard",
+      messageID: "msg_generation_guard",
+      message: { role: "user" },
+      parts: [{ text: "must survive a stale acknowledgement" }],
+    })
+    await OutboundTelemetry.drain({ timeoutMs: 1_000 })
+    offline.mockRestore()
+    restores.pop()
+
+    const started = Promise.withResolvers<void>()
+    const finish = Promise.withResolvers<void>()
+    restores.push(
+      spyOn(globalThis, "fetch").mockImplementation((async (_input, init) => {
+        started.resolve()
+        await finish.promise
+        const body = JSON.parse(gunzipSync(init?.body as Uint8Array).toString()) as {
+          events: Array<{ event_id: string }>
+        }
+        return Response.json({ accepted: body.events.map((event) => event.event_id), replayed: [], rejected: [] })
+      }) as typeof fetch),
+    )
+
+    const flushing = OutboundTelemetry.flush()
+    await started.promise
+    const state = JSON.parse(await Bun.file(consent).text()) as {
+      subjects: Record<string, { generation?: string }>
+    }
+    state.subjects["account:user_generation_guard"].generation = "f".repeat(32)
+    await Bun.write(consent, JSON.stringify(state, null, 2))
+    finish.resolve()
+    await flushing
+
+    expect(await Bun.file(queue).exists()).toBe(true)
+    expect(await Bun.file(queue).text()).toContain("must survive a stale acknowledgement")
+  })
+
+  test("finishes an in-flight batch before replacing its account credential", async () => {
+    const accountA = { api_key: "thk_upload_account_a.secret", user_id: "upload-account-a" }
+    const accountB = { api_key: "thk_upload_account_b.secret", user_id: "upload-account-b" }
+    await signIn(accountA.user_id, accountA.api_key)
+    const offline = spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"))
+    restores.push(offline)
+    await OutboundTelemetry.initializeAccount()
+    await OutboundTelemetry.userMessage({
+      sessionID: "ses_upload_replacement",
+      messageID: "msg_upload_replacement",
+      message: { role: "user" },
+      parts: [{ text: "belongs only to account A" }],
+    })
+    await OutboundTelemetry.drain({ timeoutMs: 1_000 })
+    offline.mockRestore()
+    restores.pop()
+
+    const started = Promise.withResolvers<void>()
+    const finish = Promise.withResolvers<void>()
+    const authorizations: Array<string | null> = []
+    restores.push(
+      spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+        expect(String(input)).toEndWith("/api/v1/telemetry/batches")
+        authorizations.push(new Headers(init?.headers).get("authorization"))
+        started.resolve()
+        await finish.promise
+        const body = JSON.parse(gunzipSync(init?.body as Uint8Array).toString()) as {
+          events: Array<{ event_id: string }>
+        }
+        return Response.json({ accepted: body.events.map((event) => event.event_id), replayed: [], rejected: [] })
+      }) as typeof fetch),
+    )
+
+    const flushing = OutboundTelemetry.flush()
+    await started.promise
+    let replaced = false
+    const replacement = OpenScience.saveSession(accountB).finally(() => {
+      replaced = true
+    })
+    await Bun.sleep(30)
+    expect(replaced).toBe(false)
+    expect(await OpenScience.getSession()).toMatchObject(accountA)
+
+    finish.resolve()
+    await flushing
+    await replacement
+    expect(authorizations).toEqual([`Bearer ${accountA.api_key}`])
+    expect(await OpenScience.getSession()).toMatchObject(accountB)
     expect(await Bun.file(queue).exists()).toBe(false)
   })
 

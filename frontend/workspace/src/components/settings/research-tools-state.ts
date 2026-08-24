@@ -1,3 +1,5 @@
+import { formatCreditBalance } from "./credit-balance"
+
 export interface ResearchToolsStatus {
   signedIn: boolean
   search: {
@@ -43,13 +45,15 @@ export function searchStatus(status: ResearchToolsStatus) {
   const balance = search.balanceCredits ?? 0
   return {
     label: "Ready",
-    detail: `${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} credits available for managed models and search.`,
+    detail: `${formatCreditBalance(balance)} available for managed models and enhanced search.`,
     tone: "success" as const,
   }
 }
 
 export function dataSharingDetail(status: ResearchToolsStatus) {
   if (status.telemetry.corrupt) return "Off until you choose this setting again."
+  if (status.telemetry.pending && (!status.telemetry.analyticsEnabled || !status.telemetry.researchContentEnabled))
+    return "Off on this device. Deletion finishes when OpenScience reconnects."
   if (!status.telemetry.analyticsEnabled || !status.telemetry.researchContentEnabled)
     return "Off. New activity stays on this device."
   if (status.telemetry.pending) return "Saved on this device. It will sync when OpenScience reconnects."

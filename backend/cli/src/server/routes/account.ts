@@ -70,7 +70,7 @@ export const AccountRoutes = lazy(() =>
                   z.object({
                     session: z.boolean(),
                     user: z.unknown().optional(),
-                    balance_usd: z.number(),
+                    balance_usd: z.number().nullable(),
                     billing_mode: BillingMode.nullable(),
                   }),
                 ),
@@ -87,8 +87,7 @@ export const AccountRoutes = lazy(() =>
         return c.json({
           session: !!session,
           user: user ?? (session?.user_id ? { user_id: session.user_id } : undefined),
-          // -1 is the wire encoding for "unknown" (schema: number)
-          balance_usd: balance ?? -1,
+          balance_usd: balance,
           billing_mode: billing,
         })
       },
@@ -101,11 +100,11 @@ export const AccountRoutes = lazy(() =>
         responses: {
           200: {
             description: "Balance",
-            content: { "application/json": { schema: resolver(z.object({ balance_usd: z.number() })) } },
+            content: { "application/json": { schema: resolver(z.object({ balance_usd: z.number().nullable() })) } },
           },
         },
       }),
-      async (c) => c.json({ balance_usd: (await OpenScience.getBalance()) ?? -1 }),
+      async (c) => c.json({ balance_usd: await OpenScience.getBalance() }),
     )
     .get(
       "/devices",

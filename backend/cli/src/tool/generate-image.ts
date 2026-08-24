@@ -220,7 +220,7 @@ function requestError(status: number, body: OpenRouterImage | undefined, raw: st
   const detail = (reported?.trim() || raw.trim()).replace(/\s+/g, " ").slice(0, 500)
   if (status === 402 && managed) {
     return new Error(
-      "Your OpenScience wallet does not have enough Credits for this Nano Banana request. Top up in Settings → Spend, or connect an OpenRouter key to use BYOK.",
+      "Your Ace balance does not have enough credits for this Nano Banana request. Add credits at app.syntheticsciences.ai/billing, or connect OpenRouter in Settings → Models.",
     )
   }
   if (status === 402) {
@@ -230,7 +230,7 @@ function requestError(status: number, body: OpenRouterImage | undefined, raw: st
     return new Error(
       managed
         ? "OpenScience could not authorize the wallet-backed image request. Reconnect your OpenScience account and retry."
-        : "OpenRouter rejected the connected key. Reconnect it in Settings → Models & providers and retry.",
+        : "OpenRouter rejected the connected key. Reconnect it in Settings → Models and retry.",
     )
   }
   return new Error(`Nano Banana request failed (${status})${detail ? `: ${detail}` : "."}`)
@@ -316,7 +316,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
       typeof provider?.options?.baseURL === "string" ? provider.options.baseURL.replace(/\/+$/, "") : undefined
     if (!provider || !key || !base) {
       throw new Error(
-        "Nano Banana is unavailable. Connect OpenRouter in Settings → Models & providers, or enable managed LLM spend and sign in to OpenScience so a funded wallet can be used.",
+        "Nano Banana is unavailable. Connect OpenRouter in Settings → Models, or choose Credits there and sign in with a funded Ace balance.",
       )
     }
 
@@ -341,7 +341,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
       if (balance !== null && balance <= 0) {
         OpenScience.invalidateBalance()
         throw new Error(
-          "Your OpenScience wallet has no available Credits for Nano Banana. Top up in Settings → Spend, or connect an OpenRouter key to use BYOK.",
+          "Your Ace balance has no available credits for Nano Banana. Add credits at app.syntheticsciences.ai/billing, or connect OpenRouter in Settings → Models.",
         )
       }
     }

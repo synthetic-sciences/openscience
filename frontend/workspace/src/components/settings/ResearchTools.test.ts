@@ -26,6 +26,7 @@ const status = (patch?: Partial<ResearchToolsStatus>): ResearchToolsStatus => ({
 describe("Research Tools settings", () => {
   test("summarizes shared-credit and community search without inventing an allowance", () => {
     expect(searchStatus(status())).toMatchObject({ label: "Ready", tone: "success" })
+    expect(searchStatus(status()).detail).toBe("18.75 credits available for managed models and enhanced search.")
     expect(
       searchStatus(
         status({
@@ -76,6 +77,19 @@ describe("Research Tools settings", () => {
         status({ telemetry: { ...status().telemetry, analyticsEnabled: false, corrupt: true, source: "account" } }),
       ),
     ).toContain("Off until")
+    expect(
+      dataSharingDetail(
+        status({
+          telemetry: {
+            ...status().telemetry,
+            analyticsEnabled: false,
+            researchContentEnabled: false,
+            pending: true,
+            source: "account",
+          },
+        }),
+      ),
+    ).toContain("Deletion finishes when OpenScience reconnects")
   })
 
   test("wires the real trust and sandbox contracts and warns before Full access", async () => {
@@ -95,7 +109,8 @@ describe("Research Tools settings", () => {
     expect(source).toContain("conversations, model activity, tool runs, searches, errors, and artifact")
     expect(source).toContain("Credentials and secret values are removed before upload")
     expect(source).toContain("Turning it")
-    expect(source).toContain("off removes activity previously shared")
+    expect(source).toContain("off stops new sharing immediately")
+    expect(source).toContain("reconnects")
     expect(source).not.toContain("Research content is never shared")
     expect(source).not.toContain("managed searches remain")
     expect(source).not.toContain("Delete shared data")

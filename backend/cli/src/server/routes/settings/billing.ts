@@ -9,13 +9,13 @@ import { Log } from "../../../util/log"
 
 const log = Log.create({ service: "settings-billing" })
 
-// The LLM spend preference (Settings → Spend), backed by `billing.llm`.
-// "managed" runs on Credits; "byok" runs on the user's own keys/OAuth and is
+// The model-access preference (Settings → Models), backed by `billing.llm`.
+// "managed" runs on Ace credits; "byok" runs on the user's own keys/OAuth and is
 // never billed. Null means auto-detect from the resolved credential.
 export const BillingState = z.object({
   llm: z.enum(["managed", "byok"]).nullable(),
   wallet: z.object({
-    signedIn: z.boolean().describe("Whether a Gateway session (thk_ key) is available"),
+    signedIn: z.boolean().describe("Whether a Synthetic Sciences session (thk_ key) is available"),
     balanceUsd: z.number().nullable().describe("Credit balance in USD; null when signed out or unavailable"),
   }),
 })

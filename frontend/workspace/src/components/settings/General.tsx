@@ -13,12 +13,13 @@ import { usePlatform } from "@/context/platform"
 import { URLS } from "@/config/urls"
 import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
+import { walletBalanceLabel } from "./credit-balance"
 import "./preference-panels.css"
 
 type Account = {
   session?: boolean
   user?: Record<string, unknown> & { email?: string }
-  balance_usd?: number
+  balance_usd?: number | null
   billing_mode?: { mode: "byok" | "managed" } | null
 }
 
@@ -68,9 +69,18 @@ export default function General() {
   }
 
   const wallet = () => {
-    const value = account()?.balance_usd
-    if (value === undefined || value < 0) return "Not available"
-    return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} credits`
+    const current = account()
+    if (!current) return "Checking…"
+    return walletBalanceLabel({
+      signedIn: current?.session === true,
+      balanceUsd: current?.balance_usd ?? null,
+    })
+  }
+  const accountDescription = () => {
+    const current = account()
+    if (!current) return "Checking the account connected to this device."
+    if (!current.session) return "No Synthetic Sciences account is connected to this device."
+    return "Connected to Synthetic Sciences on this device."
   }
   const org = () => {
     const u = account()?.user ?? {}
@@ -89,7 +99,7 @@ export default function General() {
           </Show>
 
           {/* Account */}
-          <Section title="Account" description="Connected to Synthetic Sciences on this device.">
+          <Section title="Account" description={accountDescription()}>
             <div class="settings-card settings-preferences-card">
               <Row icon="providers" title="Email">
                 <span class="settings-account-value">

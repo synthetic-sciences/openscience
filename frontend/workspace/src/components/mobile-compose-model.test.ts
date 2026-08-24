@@ -74,7 +74,7 @@ describe("mobile compose and model sheets", () => {
     expect(settings).toContain('class="model-settings-popover__close"')
     expect(settings).toContain('props.kind === "model" ? "model selector" : "model options"')
     expect(settings).toContain('target?.scrollIntoView({ block: "nearest" })')
-    expect(settings).not.toContain('target?.focus({ preventScroll: true })')
+    expect(settings).not.toContain("target?.focus({ preventScroll: true })")
     expect(settings).toContain("local.model.variant.set")
     expect(prompt).not.toContain("local.model.variant.set(option.id)")
     expect(prompt).not.toContain("local.model.tier.set(option.id)")

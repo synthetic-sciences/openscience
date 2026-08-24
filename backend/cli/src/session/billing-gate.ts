@@ -22,7 +22,7 @@ import { OpenScience } from "@/openscience"
 export type CredentialSource = "byok" | "managed" | "oauth-free"
 export type BillingMode = "managed" | "byok"
 
-/** The user-facing LLM spend toggle (Settings → Spend). `undefined` = auto-detect
+/** The user-facing model-access choice (Settings → Models). `undefined` = auto-detect
  *  from the resolved credential (legacy behaviour; `null` in the config file —
  *  the toggle set back to auto — normalizes to the same thing). */
 export async function llmBillingMode(): Promise<BillingMode | undefined> {

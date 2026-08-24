@@ -204,6 +204,9 @@ jobs:
           HUSKY: "0"
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
+          # A production release is incomplete if the `synsci` channel launcher
+          # is not published alongside the native wrapper packages.
+          OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"
           GITHUB_TOKEN: ${{ github.token }}
           # Fine-grained PAT with push access to synthetic-sciences/homebrew-tap;
           # github.token is repo-scoped and can't update the tap.

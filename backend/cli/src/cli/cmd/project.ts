@@ -83,7 +83,7 @@ function reportInitFailure(failure: InitProjectFailure | undefined) {
       prompts.log.error(
         f.status
           ? `${f.host} rejected your saved session (HTTP ${f.status})${detail}. Run \`openscience login\` to re-authenticate.`
-          : "Not connected to Gateway. Run `openscience login` first.",
+          : "No OpenScience account is connected. Run `openscience login` first.",
       )
       break
     case "unreachable":
@@ -95,15 +95,15 @@ function reportInitFailure(failure: InitProjectFailure | undefined) {
       )
       break
     case "plan":
-      prompts.log.error(`Authenticated against ${f.host}, but your account has no active Gateway plan${detail}.`)
-      prompts.log.info("Manage Ace credits at https://app.syntheticsciences.ai/billing.")
+      prompts.log.error(`Authenticated against ${f.host}, but graph sync is not ready for this account${detail}.`)
+      prompts.log.info("Check Credits and Accounts in Settings, then retry.")
       break
     default:
       prompts.log.error(
         `Gateway could not initialize the graph${f.status ? ` (HTTP ${f.status} from ${f.host})` : ""}${detail}.`,
       )
   }
-  if (Bun.which("atlas")) prompts.log.info("Gateway CLI detected — `atlas doctor --format=json` can help diagnose.")
+  if (Bun.which("atlas")) prompts.log.info("Research CLI detected — `atlas doctor --format=json` can help diagnose.")
 }
 
 async function git(args: string[], cwd: string): Promise<string> {

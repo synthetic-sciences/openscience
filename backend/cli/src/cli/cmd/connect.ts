@@ -122,7 +122,7 @@ export async function runAtlasLogin(args: { key?: string; browser?: boolean } = 
 
 export const LoginCommand = cmd({
   command: "login",
-  describe: "log in to your Gateway account (managed models, wallet, sync)",
+  describe: "log in to your OpenScience account (Ace credits and sync)",
   builder: (yargs) =>
     yargs
       .option("key", {
@@ -144,14 +144,14 @@ export const LoginCommand = cmd({
 
 export const LogoutCommand = cmd({
   command: "logout",
-  describe: "log out of your Gateway account",
+  describe: "log out of your OpenScience account",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.warn("Not signed in to Gateway.")
+      prompts.log.warn("No OpenScience account is signed in.")
       prompts.log.info("To remove a saved provider key instead, use `openscience keys rm`.")
       prompts.outro("Done")
       return
@@ -161,7 +161,7 @@ export const LogoutCommand = cmd({
     // the call, then clear every local credential artifact.
     const revoked = await OpenScience.revokeCurrentDevice()
     await OpenScience.clearSession()
-    prompts.log.success("Signed out of Gateway")
+    prompts.log.success("Signed out of OpenScience")
     if (!revoked) {
       prompts.log.info(
         "Could not revoke this device's key server-side — remove it from the Devices tab at app.syntheticsciences.ai if needed",
@@ -173,14 +173,14 @@ export const LogoutCommand = cmd({
 
 export const StatusCommand = cmd({
   command: ["status", "whoami"],
-  describe: "show Gateway connection, account, and wallet",
+  describe: "show OpenScience account, credits, and connected services",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.warn("Not connected to Gateway")
+      prompts.log.warn("No OpenScience account is connected")
       prompts.log.info("Run `openscience login` to connect, or `openscience keys add` to use your own key.")
       prompts.outro("Done")
       return
@@ -197,7 +197,7 @@ export const StatusCommand = cmd({
       const noun = result.credentials === 1 ? "credential" : "credentials"
       prompts.log.info(`Services: ${result.credentials} ${noun} synced`)
       if (result.user.subscription_status) {
-        prompts.log.info(`Subscription: ${result.user.subscription_status}`)
+        prompts.log.info(`Legacy billing: ${result.user.subscription_status}`)
       }
     } else if (!(await OpenScience.getSession())) {
       prompts.log.warn(`${API_BASE} rejected your saved key. Run \`openscience login\` to re-authenticate.`)
@@ -216,7 +216,7 @@ export const StatusCommand = cmd({
     const balanceUsd = credits?.balanceUsd
     if (balanceUsd !== undefined) {
       const spent = credits ? ` (spent $${(credits.lifetimeSpentCents / 100).toFixed(2)} lifetime)` : ""
-      prompts.log.info(`Wallet: $${balanceUsd.toFixed(2)}${spent}`)
+      prompts.log.info(`Ace balance: ${balanceUsd.toFixed(2)} credits${spent}`)
     }
     if (txns && txns.length > 0) {
       const noun = txns.length === 1 ? "charge" : "charges"
@@ -234,7 +234,7 @@ export const StatusCommand = cmd({
 
 export const SyncCommand = cmd({
   command: "sync",
-  describe: "sync service credentials from your Gateway account",
+  describe: "sync services from your OpenScience account",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")

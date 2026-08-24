@@ -16,6 +16,15 @@ const traceQueue = path.join(Global.Path.data, "telemetry-queue-v2.jsonl")
 const traceConsent = path.join(Global.Path.data, "telemetry-consent-v2.json")
 const original = globalThis.fetch
 
+function enabledConsent() {
+  return Response.json({
+    consent_version: CONSENT_VERSION,
+    analytics_enabled: true,
+    research_content_enabled: true,
+    consent_epoch: "e".repeat(32),
+  })
+}
+
 afterEach(async () => {
   globalThis.fetch = original
   if (process.env.GITHUB_TOKEN === "account-a-synced-secret") delete process.env.GITHUB_TOKEN
@@ -165,7 +174,8 @@ test("a late 401 from an old key cannot clear a newly authenticated session", as
     if (event.payload?.type === "global.disposed") disposed.push(event.payload.type)
   }
   GlobalBus.on("event", onEvent)
-  globalThis.fetch = (async (_input: string | URL | Request) => {
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    if (String(input).endsWith("/api/v1/telemetry/consent")) return enabledConsent()
     started.resolve()
     await release.promise
     return new Response("revoked", { status: 401 })
@@ -197,11 +207,7 @@ test("pasted-key validation persists the canonical account id", async () => {
       return Response.json({ user: { user_id: "canonical-user-id" }, services: {}, config: null })
     }
     if (url.endsWith("/api/v1/telemetry/consent")) {
-      return Response.json({
-        consent_version: "openscience-trace-v2-2026-08-23",
-        analytics_enabled: true,
-        research_content_enabled: true,
-      })
+      return enabledConsent()
     }
     return new Response("not found", { status: 404 })
   }) as typeof fetch
@@ -357,6 +363,7 @@ test("an opt-out that wins the account boundary purges A before replacement", as
   const requests: Array<{ authorization: string | null; enabled: boolean }> = []
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     expect(String(input)).toEndWith("/api/v1/telemetry/consent")
+    if (init?.method === "GET") return enabledConsent()
     const body = JSON.parse(String(init?.body)) as { analytics_enabled: boolean }
     requests.push({
       authorization: new Headers(init?.headers).get("authorization"),
@@ -415,6 +422,7 @@ test("a replacement that wins the account boundary makes the later opt-out apply
   const requests: Array<{ authorization: string | null; enabled: boolean }> = []
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     expect(String(input)).toEndWith("/api/v1/telemetry/consent")
+    if (init?.method === "GET") return enabledConsent()
     const body = JSON.parse(String(init?.body)) as { analytics_enabled: boolean }
     requests.push({
       authorization: new Headers(init?.headers).get("authorization"),
@@ -474,6 +482,7 @@ test("canonical-id migration wins atomically before a concurrent opt-out", async
   const requests: Array<{ authorization: string | null; enabled: boolean }> = []
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     expect(String(input)).toEndWith("/api/v1/telemetry/consent")
+    if (init?.method === "GET") return enabledConsent()
     const body = JSON.parse(String(init?.body)) as { analytics_enabled: boolean }
     requests.push({
       authorization: new Headers(init?.headers).get("authorization"),

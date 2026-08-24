@@ -32,6 +32,7 @@ const DELETION_PROOF_HEADER = "X-OpenScience-Telemetry-Deletion-Proof"
 const consentPath = path.join(Global.Path.data, "telemetry-consent-v2.json")
 const queuePath = path.join(Global.Path.data, "telemetry-queue-v2.jsonl")
 const stateLeasePath = path.join(Global.Path.data, "telemetry-state-v2.lock")
+const consentSyncLeasePath = path.join(Global.Path.data, "telemetry-consent-sync-v2.lock")
 const legacyConsentPath = path.join(Global.Path.data, "telemetry-consent-v1.json")
 const legacyQueuePath = path.join(Global.Path.data, "telemetry-queue-v1.jsonl")
 
@@ -39,6 +40,7 @@ type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string
 
 const captureTasks = new Set<Promise<unknown>>()
 const backgroundFlushes = new Map<string, Promise<void>>()
+const backgroundFlushPending = new Set<string>()
 
 function trackCapture<T>(task: Promise<T>): Promise<T> {
   captureTasks.add(task)
@@ -47,12 +49,21 @@ function trackCapture<T>(task: Promise<T>): Promise<T> {
 }
 
 function scheduleFlush(subject: string) {
-  if (backgroundFlushes.has(subject)) return
+  if (backgroundFlushes.has(subject)) {
+    // The active pass selected its rows before this append. Remember exactly
+    // one follow-up pass so a terminal event cannot remain queued until a
+    // later append or process shutdown. A Set intentionally bounds retries:
+    // an offline follow-up does not schedule itself again.
+    backgroundFlushPending.add(subject)
+    return
+  }
   const task = OutboundTelemetry.flush(subject).catch(() => undefined)
   backgroundFlushes.set(subject, task)
   void task
     .finally(() => {
-      if (backgroundFlushes.get(subject) === task) backgroundFlushes.delete(subject)
+      if (backgroundFlushes.get(subject) !== task) return
+      backgroundFlushes.delete(subject)
+      if (backgroundFlushPending.delete(subject)) scheduleFlush(subject)
     })
     .catch(() => undefined)
 }
@@ -124,6 +135,7 @@ const ConsentEntry = z.object({
   research_content_enabled: z.boolean(),
   updated_at: z.string().datetime(),
   pending: z.boolean().optional(),
+  generation: Hex(32).optional(),
   consent_epoch: Hex(32).optional(),
   deletion_proof: z
     .string()
@@ -155,6 +167,8 @@ const LegacyConsentFile = z.object({
 
 const QueueRow = z.object({ subject: z.string(), queued_at: z.number().int(), event: Event })
 type QueueRow = z.infer<typeof QueueRow>
+
+const queueCache: { signature?: string; rows: number } = { rows: 0 }
 
 export type Status = {
   analyticsEnabled: boolean
@@ -198,6 +212,10 @@ function fresh(): ConsentFile {
   }
 }
 
+function generation() {
+  return randomBytes(16).toString("hex")
+}
+
 async function atomic(filepath: string, value: string): Promise<void> {
   await using operation = await DataRootBarrier.enter(filepath)
   using _ = await Lock.write(filepath)
@@ -218,6 +236,11 @@ async function atomic(filepath: string, value: string): Promise<void> {
 
 async function withStateLease<T>(operation: () => Promise<T>): Promise<T> {
   await using lease = await FileLease.acquire(stateLeasePath, 30_000)
+  return lease.during(operation)
+}
+
+async function withConsentSyncLease<T>(operation: () => Promise<T>): Promise<T> {
+  await using lease = await FileLease.acquire(consentSyncLeasePath, 30_000)
   return lease.during(operation)
 }
 
@@ -323,6 +346,7 @@ async function migrateLegacy(state: ConsentFile, subject: string): Promise<boole
     research_content_enabled: false,
     updated_at: new Date().toISOString(),
     pending: false,
+    generation: generation(),
   }
   return true
 }
@@ -346,7 +370,12 @@ async function ensureSubject(state: ConsentFile, subject: string, token?: string
       changed = true
     }
   }
-  if (state.subjects[subject]) return changed
+  const existing = state.subjects[subject]
+  if (existing) {
+    if (existing.generation) return changed
+    existing.generation = generation()
+    return true
+  }
   const migrated = await migrateLegacy(state, subject)
   if (!migrated) {
     state.subjects[subject] = {
@@ -356,13 +385,13 @@ async function ensureSubject(state: ConsentFile, subject: string, token?: string
       // New authenticated accounts inherit the disclosed server default via
       // GET. Only an explicit switch action is persisted with PUT.
       pending: false,
+      generation: generation(),
     }
   }
   return true
 }
 
-async function rawRows(): Promise<QueueRow[]> {
-  const text = await fs.readFile(queuePath, "utf8").catch(() => "")
+function parseRows(text: string): QueueRow[] {
   return text
     .split("\n")
     .filter(Boolean)
@@ -373,6 +402,35 @@ async function rawRows(): Promise<QueueRow[]> {
         return []
       }
     })
+}
+
+async function rawRows(): Promise<QueueRow[]> {
+  return parseRows(await fs.readFile(queuePath, "utf8").catch(() => ""))
+}
+
+function queueSignature(stat: Awaited<ReturnType<typeof fs.stat>>) {
+  return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
+}
+
+function cacheQueue(stat: Awaited<ReturnType<typeof fs.stat>> | undefined, rows: number) {
+  queueCache.signature = stat ? queueSignature(stat) : undefined
+  queueCache.rows = rows
+}
+
+async function queueStateLocked() {
+  const stat = await fs.stat(queuePath).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined
+    throw error
+  })
+  if (!stat) {
+    cacheQueue(undefined, 0)
+    return { bytes: 0, rows: 0 }
+  }
+  const signature = queueSignature(stat)
+  if (queueCache.signature === signature) return { bytes: stat.size, rows: queueCache.rows }
+  const rows = await rawRows()
+  cacheQueue(stat, rows.length)
+  return { bytes: stat.size, rows: rows.length }
 }
 
 function boundedRows(input: QueueRow[]) {
@@ -392,13 +450,42 @@ async function writeRows(input: QueueRow[]) {
   const selected = boundedRows(input)
   if (!selected.length) {
     await fs.rm(queuePath, { force: true }).catch(() => undefined)
+    cacheQueue(undefined, 0)
     return
   }
   await atomic(queuePath, selected.map((item) => JSON.stringify(item)).join("\n") + "\n")
+  cacheQueue(await fs.stat(queuePath), selected.length)
 }
 
 async function mutateRowsLocked(operation: (rows: QueueRow[]) => QueueRow[] | Promise<QueueRow[]>) {
   await writeRows(await operation(await rawRows()))
+}
+
+async function appendRowLocked(row: QueueRow) {
+  const state = await queueStateLocked()
+  await fs.mkdir(path.dirname(queuePath), { recursive: true })
+  const appended = await (async () => {
+    const handle = await fs.open(queuePath, "a+", 0o600)
+    try {
+      const prefix = await (async () => {
+        if (!state.bytes) return ""
+        const tail = Buffer.allocUnsafe(1)
+        const read = await handle.read(tail, 0, 1, state.bytes - 1)
+        return read.bytesRead === 1 && tail[0] !== 0x0a ? "\n" : ""
+      })()
+      const value = `${prefix}${JSON.stringify(row)}\n`
+      const bytes = Buffer.byteLength(value)
+      if (state.rows + 1 > MAX_EVENTS || state.bytes + bytes > MAX_QUEUE_BYTES) return false
+      await handle.writeFile(value, "utf8")
+      await handle.sync()
+      cacheQueue(await handle.stat(), state.rows + 1)
+      return true
+    } finally {
+      await handle.close()
+    }
+  })()
+  if (appended) return
+  await writeRows([...(await rawRows()), row])
 }
 
 async function activateLocked(state: ConsentFile, subject: string) {
@@ -444,149 +531,216 @@ async function disableSubjectLocked(state: ConsentFile, subject: string) {
     research_content_enabled: false,
     updated_at: new Date().toISOString(),
     pending: false,
+    generation: generation(),
   }
   await atomic(consentPath, JSON.stringify(state, null, 2))
 }
 
-async function synchronizeDeletionProofsLocked(state: ConsentFile, skipSubject?: string) {
-  const allPending = Object.entries(state.subjects).filter(
-    ([subject, entry]) =>
-      subject !== skipSubject &&
-      entry.pending === true &&
-      (!entry.analytics_enabled || !entry.research_content_enabled) &&
-      !!entry.deletion_proof,
-  )
-  const pending = allPending
-    // Bound one automatic control-plane pass. Later startup/control-plane
-    // activity continues from the durable tombstones if an installation has
-    // accumulated an unusual number of historical accounts.
-    .slice(0, 8)
+async function synchronizeDeletionProofs(skipSubject?: string) {
+  const selected = await withStateLease(async () => {
+    const consent = await readConsent()
+    if (consent.corrupt) return []
+    return Object.entries(consent.value.subjects)
+      .filter(
+        ([subject, entry]) =>
+          subject !== skipSubject &&
+          entry.pending === true &&
+          (!entry.analytics_enabled || !entry.research_content_enabled) &&
+          !!entry.deletion_proof,
+      )
+      .slice(0, 8)
+      .map(([subject, entry]) => ({ subject, proof: entry.deletion_proof! }))
+  })
+  if (!selected.length) return true
 
-  if (!pending.length) return true
+  // Fixed-target deletion proofs are safe to send without holding the global
+  // state lease. Their acknowledgement is still compare-and-applied below so
+  // a stale response cannot clear a newer tombstone or account state.
   const results = await Promise.all(
-    pending.map(async ([subject, entry]) => {
-      const proof = entry.deletion_proof!
+    selected.map(async (item) => {
       const response = await fetch(`${API_BASE}/api/v1/telemetry/account-data/by-key-proof`, {
         method: "DELETE",
         headers: {
           Accept: "application/json",
-          [DELETION_PROOF_HEADER]: proof,
+          [DELETION_PROOF_HEADER]: item.proof,
         },
         signal: AbortSignal.timeout(5_000),
       }).catch(() => undefined)
-      return { subject, proof, completed: response?.ok === true }
+      return { ...item, completed: response?.ok === true }
     }),
   )
 
-  let changed = false
-  for (const result of results) {
-    if (!result.completed) continue
-    const current = state.subjects[result.subject]
-    if (!current || current.deletion_proof !== result.proof || current.pending !== true) continue
-    state.subjects[result.subject] = {
-      analytics_enabled: false,
-      research_content_enabled: false,
-      updated_at: new Date().toISOString(),
-      pending: false,
+  return withStateLease(async () => {
+    const consent = await readConsent()
+    if (consent.corrupt) return false
+    let changed = false
+    for (const result of results) {
+      if (!result.completed) continue
+      const current = consent.value.subjects[result.subject]
+      if (!current || current.deletion_proof !== result.proof || current.pending !== true) continue
+      consent.value.subjects[result.subject] = {
+        analytics_enabled: false,
+        research_content_enabled: false,
+        updated_at: new Date().toISOString(),
+        pending: false,
+        generation: generation(),
+      }
+      changed = true
     }
-    changed = true
-  }
-  if (changed) await atomic(consentPath, JSON.stringify(state, null, 2))
-  return allPending.length === pending.length && results.every((result) => result.completed)
+    if (changed) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
+    const remaining = Object.entries(consent.value.subjects).some(
+      ([subject, entry]) =>
+        subject !== skipSubject &&
+        entry.pending === true &&
+        (!entry.analytics_enabled || !entry.research_content_enabled) &&
+        !!entry.deletion_proof,
+    )
+    return !remaining && results.every((result) => result.completed)
+  })
 }
 
-async function synchronizeConsentLocked(who: Awaited<ReturnType<typeof identity>>) {
-  if (!who.token) return false
-  const consent = await readConsent()
-  if (consent.corrupt) return false
-  const state = consent.value
-  const activated = await activateLocked(state, who.subject)
-  const ensured = await ensureSubject(state, who.subject, who.token)
-  const changed = activated || ensured
-  if (changed) await atomic(consentPath, JSON.stringify(state, null, 2))
-  const entry = state.subjects[who.subject]
-  // A durable local opt-out/deletion tombstone is authoritative until the
-  // user explicitly turns sharing back on in this client. A later background
-  // GET must never interpret a missing/default server row as permission and
-  // resurrect capture after deletion.
-  if (!entry.pending && (!entry.analytics_enabled || !entry.research_content_enabled)) return true
-  const requestInstallation = state.installation_id
-  const requestUpdatedAt = entry?.updated_at
-  const response = await fetch(`${API_BASE}/api/v1/telemetry/consent`, {
-    method: entry?.pending ? "PUT" : "GET",
-    headers: {
-      Authorization: `Bearer ${who.token}`,
-      Accept: "application/json",
-      ...(entry?.pending ? { "Content-Type": "application/json" } : {}),
-    },
-    ...(entry?.pending
-      ? {
-          body: JSON.stringify({
-            consent_version: CONSENT_VERSION,
-            analytics_enabled: entry.analytics_enabled,
-            research_content_enabled: entry.research_content_enabled,
-            installation_id: state.installation_id,
-          }),
-        }
-      : {}),
-    signal: AbortSignal.timeout(5_000),
-  }).catch(() => undefined)
-  if (!response) return false
-  const body = (await response.json().catch(() => undefined)) as
-    | {
-        consent_version?: string
-        analytics_enabled?: boolean
-        research_content_enabled?: boolean
-        consent_epoch?: string
-        effective?: { analytics_enabled?: boolean; research_content_enabled?: boolean }
-      }
-    | undefined
-  // A consent response may arrive after the user turned sharing off, deleted
-  // data, or switched accounts. Never let that stale request resurrect the
-  // previous setting or installation id.
-  const current = await readConsent()
-  const currentEntry = current.value.subjects[who.subject]
-  if (
-    current.corrupt ||
-    current.value.installation_id !== requestInstallation ||
-    currentEntry?.updated_at !== requestUpdatedAt ||
-    currentEntry?.analytics_enabled !== entry?.analytics_enabled ||
-    currentEntry?.research_content_enabled !== entry?.research_content_enabled
-  ) {
-    return false
-  }
-  if (!response.ok) {
-    if (response.status === 403 && consentDisabled(body)) await disableSubjectLocked(current.value, who.subject)
-    return false
-  }
-  const analytics = body?.analytics_enabled ?? body?.effective?.analytics_enabled ?? entry?.analytics_enabled
-  const content =
-    body?.research_content_enabled ?? body?.effective?.research_content_enabled ?? entry?.research_content_enabled
-  if (typeof analytics !== "boolean" || typeof content !== "boolean") return false
-  if (!analytics || !content) {
-    await disableSubjectLocked(current.value, who.subject)
-    return true
-  }
-  current.value.consent_version = body?.consent_version || CONSENT_VERSION
-  current.value.subjects[who.subject] = {
-    analytics_enabled: true,
-    research_content_enabled: true,
-    updated_at: new Date().toISOString(),
-    pending: false,
-    ...(/^[a-f0-9]{32}$/.test(body?.consent_epoch || "")
-      ? { consent_epoch: body!.consent_epoch }
-      : currentEntry?.consent_epoch
-        ? { consent_epoch: currentEntry.consent_epoch }
-        : {}),
-  }
-  await atomic(consentPath, JSON.stringify(current.value, null, 2))
-  return true
+type ConsentRequest = {
+  subject: string
+  token: string
+  installation: string
+  generation: string
+  updatedAt: string
+  analytics: boolean
+  content: boolean
+  pending: boolean
 }
 
 async function synchronizeConsent(who: Awaited<ReturnType<typeof identity>>) {
-  return withStateLease(async () => {
-    if (!(await identityIsCurrent(who))) return false
-    return synchronizeConsentLocked(who)
+  // Snapshot the revision before waiting for the cross-process network lease.
+  // If another waiter refreshes this same non-pending account first, its
+  // committed generation lets us reuse that result instead of issuing the
+  // same GET serially after the lease becomes available.
+  const observed = await withStateLease(async () => {
+    if (!(await identityIsCurrent(who))) return
+    const consent = await readConsent()
+    const entry = consent.value.subjects[who.subject]
+    if (consent.corrupt || !entry) return
+    return {
+      subject: who.subject,
+      installation: consent.value.installation_id,
+      generation: entry.generation,
+      updatedAt: entry.updated_at,
+    }
+  })
+  return withConsentSyncLease(async () => {
+    if (!who.token) return false
+    const request = await withStateLease(async (): Promise<ConsentRequest | true | undefined> => {
+      if (!(await identityIsCurrent(who))) return
+      const consent = await readConsent()
+      if (consent.corrupt) return
+      const activated = await activateLocked(consent.value, who.subject)
+      const ensured = await ensureSubject(consent.value, who.subject, who.token)
+      if (activated || ensured) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
+      const entry = consent.value.subjects[who.subject]
+      // A durable local opt-out/deletion tombstone is authoritative until the
+      // user explicitly turns sharing back on in this client. A later GET must
+      // never interpret a missing/default server row as permission.
+      if (!entry.pending && (!entry.analytics_enabled || !entry.research_content_enabled)) return true
+      return {
+        subject: who.subject,
+        token: who.token!,
+        installation: consent.value.installation_id,
+        generation: entry.generation!,
+        updatedAt: entry.updated_at,
+        analytics: entry.analytics_enabled,
+        content: entry.research_content_enabled,
+        pending: entry.pending === true,
+      }
+    })
+    if (request === true) return true
+    if (!request) return false
+    if (
+      observed &&
+      !request.pending &&
+      observed.subject === request.subject &&
+      observed.installation === request.installation &&
+      (observed.generation !== request.generation || observed.updatedAt !== request.updatedAt)
+    ) {
+      return true
+    }
+
+    // Consent control-plane I/O must not stall trace capture. A dedicated
+    // cross-process lease only coalesces consent reads/writes; the queue state
+    // lease remains free while the request is on the network. The response can
+    // commit only if subject, installation, and consent generation still match.
+    const response = await fetch(`${API_BASE}/api/v1/telemetry/consent`, {
+      method: request.pending ? "PUT" : "GET",
+      headers: {
+        Authorization: `Bearer ${request.token}`,
+        Accept: "application/json",
+        ...(request.pending ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(request.pending
+        ? {
+            body: JSON.stringify({
+              consent_version: CONSENT_VERSION,
+              analytics_enabled: request.analytics,
+              research_content_enabled: request.content,
+              installation_id: request.installation,
+            }),
+          }
+        : {}),
+      signal: AbortSignal.timeout(5_000),
+    }).catch(() => undefined)
+    if (!response) return false
+    const body = (await response.json().catch(() => undefined)) as
+      | {
+          consent_version?: string
+          analytics_enabled?: boolean
+          research_content_enabled?: boolean
+          consent_epoch?: string
+          effective?: { analytics_enabled?: boolean; research_content_enabled?: boolean }
+        }
+      | undefined
+
+    return withStateLease(async () => {
+      if (!(await identityIsCurrent(who))) return false
+      const current = await readConsent()
+      const entry = current.value.subjects[request.subject]
+      if (
+        current.corrupt ||
+        current.value.active_subject !== request.subject ||
+        current.value.installation_id !== request.installation ||
+        entry?.generation !== request.generation ||
+        entry.updated_at !== request.updatedAt ||
+        entry.analytics_enabled !== request.analytics ||
+        entry.research_content_enabled !== request.content ||
+        (entry.pending === true) !== request.pending
+      ) {
+        return false
+      }
+      if (!response.ok) {
+        if (response.status === 403 && consentDisabled(body)) await disableSubjectLocked(current.value, request.subject)
+        return false
+      }
+      const analytics = body?.analytics_enabled ?? body?.effective?.analytics_enabled ?? request.analytics
+      const content = body?.research_content_enabled ?? body?.effective?.research_content_enabled ?? request.content
+      if (typeof analytics !== "boolean" || typeof content !== "boolean") return false
+      if (!analytics || !content) {
+        await disableSubjectLocked(current.value, request.subject)
+        return true
+      }
+      current.value.consent_version = body?.consent_version || CONSENT_VERSION
+      current.value.subjects[request.subject] = {
+        analytics_enabled: true,
+        research_content_enabled: true,
+        updated_at: new Date().toISOString(),
+        pending: false,
+        generation: generation(),
+        ...(/^[a-f0-9]{32}$/.test(body?.consent_epoch || "")
+          ? { consent_epoch: body!.consent_epoch }
+          : entry.consent_epoch
+            ? { consent_epoch: entry.consent_epoch }
+            : {}),
+      }
+      await atomic(consentPath, JSON.stringify(current.value, null, 2))
+      return true
+    })
   })
 }
 
@@ -814,7 +968,7 @@ async function appendUntracked(eventType: EventType, input: TraceInput) {
       ...(input.model ? { model_id: telemetryIdentifier(input.model) } : {}),
       payload,
     })
-    await mutateRowsLocked((rows) => [...rows, { subject: who.subject, queued_at: Date.now(), event }])
+    await appendRowLocked({ subject: who.subject, queued_at: Date.now(), event })
     return true
   })
   if (appended) scheduleFlush(who.subject)
@@ -957,15 +1111,15 @@ export namespace OutboundTelemetry {
   }
 
   /** Initialize the authenticated account's default-on setting and retry any
-   * durable consent write. Normal logins stay local; only a pending write can
-   * add a bounded control-plane request. */
+   * durable consent write. A fresh enabled subject performs one bounded GET to
+   * inherit an existing account choice and materialize its consent epoch. */
   export async function initializeAccount(options: { synchronize?: boolean } = {}): Promise<void> {
     const who = await identity()
     if (!who.signedIn) {
       if (options.synchronize !== false) await OutboundTelemetry.retryPendingConsent().catch(() => false)
       return
     }
-    await withStateLease(async () => {
+    const requiresAuthoritativeRefresh = await withStateLease(async () => {
       if (!(await identityIsCurrent(who))) return
       const consent = await readConsent()
       if (consent.corrupt) consent.value = fresh()
@@ -974,9 +1128,21 @@ export namespace OutboundTelemetry {
       const changed = activated || ensured
       if (changed || consent.corrupt) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
       await fs.rm(legacyQueuePath, { force: true }).catch(() => undefined)
+      const entry = consent.value.subjects[who.subject]
+      // consent_epoch is minted by the authenticated server GET/PUT. A
+      // default-on entry without it is only a local disclosed default, so it
+      // must be reconciled before normal startup permits capture. Durable local
+      // opt-outs stay authoritative and pending choices use the PUT retry path.
+      return (
+        entry?.analytics_enabled === true &&
+        entry.research_content_enabled === true &&
+        entry.pending !== true &&
+        !entry.consent_epoch
+      )
     })
     if (options.synchronize !== false) {
       await OutboundTelemetry.retryPendingConsent().catch(() => false)
+      if (requiresAuthoritativeRefresh) await synchronizeConsent(who).catch(() => false)
     }
   }
 
@@ -1007,6 +1173,7 @@ export namespace OutboundTelemetry {
           research_content_enabled: false,
           updated_at: new Date().toISOString(),
           pending: false,
+          generation: generation(),
         }
       }
       await atomic(consentPath, JSON.stringify(consent.value, null, 2))
@@ -1019,12 +1186,12 @@ export namespace OutboundTelemetry {
    * accounts use only their fixed-target deletion capabilities. */
   export async function retryPendingConsent(): Promise<boolean> {
     const who = await identity()
-    return withStateLease(async () => {
+    const prepared = await withStateLease(async () => {
       if (who.signedIn && !(await identityIsCurrent(who))) return false
       const consent = await readConsent()
       if (consent.corrupt) return false
 
-      let entry = who.signedIn ? consent.value.subjects[who.subject] : undefined
+      const entry = who.signedIn ? consent.value.subjects[who.subject] : undefined
       if (
         who.token &&
         entry?.pending &&
@@ -1037,18 +1204,27 @@ export namespace OutboundTelemetry {
           await atomic(consentPath, JSON.stringify(consent.value, null, 2))
         }
       }
-
-      const historicalResolved = await synchronizeDeletionProofsLocked(
-        consent.value,
-        who.signedIn ? who.subject : undefined,
-      )
-      if (!who.token) return historicalResolved
-      entry = (await readConsent()).value.subjects[who.subject]
-      if (!entry?.pending) return true
-      const purgePending = !entry.analytics_enabled || !entry.research_content_enabled
-      const synchronized = await synchronizeConsentLocked(who)
-      return !purgePending || synchronized
+      return true
     })
+    if (!prepared) return false
+
+    const historicalResolved = await synchronizeDeletionProofs(who.signedIn ? who.subject : undefined)
+    if (!who.token) return historicalResolved
+    const pending = await withStateLease(async () => {
+      if (!(await identityIsCurrent(who))) return { valid: false as const }
+      const consent = await readConsent()
+      if (consent.corrupt) return { valid: false as const }
+      const entry = consent.value.subjects[who.subject]
+      return {
+        valid: true as const,
+        pending: entry?.pending === true,
+        purge: !!entry && (!entry.analytics_enabled || !entry.research_content_enabled),
+      }
+    })
+    if (!pending.valid) return false
+    if (!pending.pending) return true
+    const synchronized = await synchronizeConsent(who)
+    return !pending.purge || synchronized
   }
 
   export async function status(refresh = false): Promise<Status> {
@@ -1066,21 +1242,23 @@ export namespace OutboundTelemetry {
         deletionAvailable: false,
       }
     }
-    return withStateLease(async () => {
-      if (!(await identityIsCurrent(who))) {
-        const stale = await readConsent()
-        return localStatus(stale.value, who.subject, false, stale.absent, stale.corrupt)
-      }
-      const consent = await readConsent()
-      if (consent.corrupt) return localStatus(consent.value, who.subject, true, consent.absent, true)
-      const activated = await activateLocked(consent.value, who.subject)
-      const ensured = await ensureSubject(consent.value, who.subject, who.token)
-      const changed = activated || ensured
-      if (changed) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
-      if (refresh) await synchronizeConsentLocked(who)
-      const latest = await readConsent()
-      return localStatus(latest.value, who.subject, true, latest.absent, latest.corrupt)
-    })
+    const inspect = () =>
+      withStateLease(async () => {
+        if (!(await identityIsCurrent(who))) {
+          const stale = await readConsent()
+          return localStatus(stale.value, who.subject, false, stale.absent, stale.corrupt)
+        }
+        const consent = await readConsent()
+        if (consent.corrupt) return localStatus(consent.value, who.subject, true, consent.absent, true)
+        const activated = await activateLocked(consent.value, who.subject)
+        const ensured = await ensureSubject(consent.value, who.subject, who.token)
+        if (activated || ensured) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
+        return localStatus(consent.value, who.subject, true, consent.absent, false)
+      })
+    const current = await inspect()
+    if (!refresh || !current.signedIn || current.corrupt) return current
+    await synchronizeConsent(who)
+    return inspect()
   }
 
   export async function enabled(): Promise<boolean> {
@@ -1112,6 +1290,7 @@ export namespace OutboundTelemetry {
           research_content_enabled: enabled,
           updated_at: now.toISOString(),
           pending: true,
+          generation: generation(),
           ...(currentEntry?.consent_epoch ? { consent_epoch: currentEntry.consent_epoch } : {}),
           ...(!enabled && who.token
             ? { deletion_proof: telemetryDeletionProof(who.token, currentEntry?.consent_epoch) }
@@ -1134,25 +1313,27 @@ export namespace OutboundTelemetry {
   }
 
   export async function requestDeletion(): Promise<{ ok: boolean; message?: string }> {
-    const who = await identity()
-    if (!who.token) return { ok: false, message: "Sign in to delete shared OpenScience data." }
-    return withStateLease(async () => {
-      if (!(await identityIsCurrent(who))) return { ok: false, message: "OpenScience account changed. Try again." }
-      const response = await fetch(`${API_BASE}/api/v1/telemetry/account-data`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${who.token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "traces" }),
-        signal: AbortSignal.timeout(10_000),
-      }).catch(() => undefined)
-      if (!response?.ok) return { ok: false, message: "OpenScience data could not be deleted." }
-      // Re-read while the cross-process lease is still held. A successful
-      // deletion is not allowed to leave an older in-memory consent snapshot
-      // or queue behind for another process to upload.
-      const consent = await readConsent()
-      if (consent.corrupt) consent.value = fresh()
-      consent.value.active_subject = who.subject
-      await disableSubjectLocked(consent.value, who.subject)
-      return { ok: true }
+    return CredentialLifecycle.serialized(async () => {
+      const who = await identity()
+      if (!who.token) return { ok: false, message: "Sign in to delete shared OpenScience data." }
+      return withStateLease(async () => {
+        if (!(await identityIsCurrent(who))) return { ok: false, message: "OpenScience account changed. Try again." }
+        const response = await fetch(`${API_BASE}/api/v1/telemetry/account-data`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${who.token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "traces" }),
+          signal: AbortSignal.timeout(10_000),
+        }).catch(() => undefined)
+        if (!response?.ok) return { ok: false, message: "OpenScience data could not be deleted." }
+        // An explicit deletion keeps both account and state boundaries closed
+        // until the server confirms it, so no later batch can land behind the
+        // purge and no capture can recreate the queue during the operation.
+        const consent = await readConsent()
+        if (consent.corrupt) consent.value = fresh()
+        consent.value.active_subject = who.subject
+        await disableSubjectLocked(consent.value, who.subject)
+        return { ok: true }
+      })
     })
   }
 
@@ -1162,82 +1343,101 @@ export namespace OutboundTelemetry {
       await OutboundTelemetry.retryPendingConsent().catch(() => false)
       return
     }
-    const token = who.token
     // Background flushes are scheduled by append. If the account changed
     // before that task began, the old task must not activate its stale subject
     // and purge or send the new account's queue.
     if (expectedSubject && who.subject !== expectedSubject) return
-    await withStateLease(async () => {
+    await CredentialLifecycle.serialized(async () => {
       if (!(await identityIsCurrent(who))) return
-      let consent = await readConsent()
-      if (consent.corrupt) return
-      await synchronizeDeletionProofsLocked(consent.value, who.subject)
-      consent = await readConsent()
-      const activated = await activateLocked(consent.value, who.subject)
-      const ensured = await ensureSubject(consent.value, who.subject, who.token)
-      const changed = activated || ensured
-      if (changed) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
-      let entry = consent.value.subjects[who.subject]
-      // A disabled pending entry is a server-deletion tombstone, not merely a
-      // local capture switch. Retry it before the disabled-consent return so a
-      // reconnect can finish purging previously uploaded traces.
-      if (entry.pending && !(await synchronizeConsentLocked(who))) {
-        if (!entry.analytics_enabled || !entry.research_content_enabled) await mutateRowsLocked(() => [])
-        return
-      }
+      await synchronizeDeletionProofs(who.subject)
+      const pending = await withStateLease(async () => {
+        if (!(await identityIsCurrent(who))) return false
+        const consent = await readConsent()
+        if (consent.corrupt) return false
+        const activated = await activateLocked(consent.value, who.subject)
+        const ensured = await ensureSubject(consent.value, who.subject, who.token)
+        if (activated || ensured) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
+        return consent.value.subjects[who.subject]?.pending === true
+      })
+      // A pending entry is a server consent write, including an opt-out purge.
+      // Resolve it before selecting any content for delivery.
+      if (pending && !(await synchronizeConsent(who))) return
 
-      // Consent synchronization performs network I/O. Re-read its durable
-      // result under the same lease immediately before selecting and sending.
-      consent = await readConsent()
-      entry = consent.value.subjects[who.subject]
-      if (
-        consent.corrupt ||
-        consent.value.active_subject !== who.subject ||
-        !entry?.analytics_enabled ||
-        !entry.research_content_enabled
-      ) {
-        await mutateRowsLocked(() => [])
-        return
-      }
-      const queued = await rawRows()
-      const oversized = new Set(
-        queued
-          .filter((row) => Buffer.byteLength(JSON.stringify(row.event)) > MAX_BATCH_BYTES)
-          .map((row) => row.event.event_id),
-      )
-      if (oversized.size) {
-        await mutateRowsLocked((current) => current.filter((row) => !oversized.has(row.event.event_id)))
-      }
-      const sending = selectedBatch(
-        queued.filter((row) => row.subject === who.subject && !oversized.has(row.event.event_id)),
-      )
-      if (!sending.length) return
-      const sendingInstallation = consent.value.installation_id
-      const delivery = await deliverTelemetryRows(sending, token, sendingInstallation)
-      if (delivery.consentDisabled) {
-        const latest = await readConsent()
-        await disableSubjectLocked(latest.corrupt ? fresh() : latest.value, who.subject)
-        return
-      }
+      const selection = await withStateLease(async () => {
+        if (!(await identityIsCurrent(who))) return
+        const consent = await readConsent()
+        if (consent.corrupt) return
+        const entry = consent.value.subjects[who.subject]
+        if (
+          consent.value.active_subject !== who.subject ||
+          !entry?.analytics_enabled ||
+          !entry.research_content_enabled ||
+          entry.pending === true
+        ) {
+          await mutateRowsLocked(() => [])
+          return
+        }
+        const queued = await rawRows()
+        const oversized = new Set(
+          queued
+            .filter((row) => Buffer.byteLength(JSON.stringify(row.event)) > MAX_BATCH_BYTES)
+            .map((row) => row.event.event_id),
+        )
+        if (oversized.size) {
+          await mutateRowsLocked((current) => current.filter((row) => !oversized.has(row.event.event_id)))
+        }
+        const rows = selectedBatch(
+          queued.filter((row) => row.subject === who.subject && !oversized.has(row.event.event_id)),
+        )
+        if (!rows.length) return
+        return {
+          subject: who.subject,
+          installation: consent.value.installation_id,
+          generation: entry.generation!,
+          rows,
+        }
+      })
+      if (!selection) return
 
-      // A direct/manual write should not normally bypass the lease, but fail
-      // closed if it does: never let a successful stale upload acknowledge or
-      // resurrect queue state after opt-out or deletion.
-      const latest = await readConsent()
-      const latestEntry = latest.value.subjects[who.subject]
-      if (
-        latest.corrupt ||
-        latest.value.installation_id !== sendingInstallation ||
-        !latestEntry?.analytics_enabled ||
-        !latestEntry.research_content_enabled
-      ) {
-        await mutateRowsLocked(() => [])
-        return
-      }
-      const removed = new Set([...delivery.completed, ...delivery.dropped])
-      if (removed.size) {
-        await mutateRowsLocked((current) => current.filter((row) => !removed.has(row.event.event_id)))
-      }
+      // Hold only the credential boundary across the request. Capture uses the
+      // independent state lease and remains append-only while the network is
+      // slow; account replacement, opt-out, and explicit deletion still wait
+      // until this old-credential request has conclusively finished.
+      const delivery = await deliverTelemetryRows(selection.rows, who.token!, selection.installation)
+
+      await withStateLease(async () => {
+        if (!(await identityIsCurrent(who))) return
+        const consent = await readConsent()
+        const entry = consent.value.subjects[selection.subject]
+        const stable =
+          !consent.corrupt &&
+          consent.value.active_subject === selection.subject &&
+          consent.value.installation_id === selection.installation &&
+          entry?.generation === selection.generation &&
+          entry.analytics_enabled &&
+          entry.research_content_enabled &&
+          entry.pending !== true
+        if (!stable) {
+          if (
+            consent.corrupt ||
+            consent.value.active_subject !== selection.subject ||
+            consent.value.installation_id !== selection.installation ||
+            !entry?.analytics_enabled ||
+            !entry.research_content_enabled
+          ) {
+            await mutateRowsLocked(() => [])
+          }
+          return
+        }
+        if (delivery.consentDisabled) {
+          await disableSubjectLocked(consent.value, selection.subject)
+          return
+        }
+        const removed = new Set([...delivery.completed, ...delivery.dropped])
+        if (removed.size) {
+          await mutateRowsLocked((current) => current.filter((row) => !removed.has(row.event.event_id)))
+        }
+      })
     })
   }
 

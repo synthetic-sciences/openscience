@@ -514,7 +514,7 @@ export namespace SessionProcessor {
                 // attempt instead of blocking until the TTL expires.
                 OpenScience.invalidateBalance()
                 throw new Error(
-                  "Your managed Credits balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Top up at app.syntheticsciences.ai/billing, or switch LLM spend to BYOK in Settings → Spend.",
+                  "Your Ace balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Add credits at app.syntheticsciences.ai/billing, or switch model access to Accounts in Settings → Models.",
                 )
               }
             }

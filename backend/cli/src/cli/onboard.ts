@@ -18,8 +18,8 @@ import { Installation } from "../installation"
 import { webVersion } from "../web/assets"
 import { BYOK_LLM_ENV_KEYS } from "../openscience/synced-env-policy"
 import { Instance } from "../project/instance"
+import { BILLING_URL } from "../endpoints"
 
-const PLAN_URL = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || "https://app.syntheticsciences.ai/cli"
 const MARKER = path.join(Global.Path.state, "onboarded")
 
 function hasProviderEnv(): boolean {
@@ -68,35 +68,35 @@ export async function needsOnboarding(): Promise<boolean> {
 async function onboardManaged(): Promise<void> {
   const existing = await OpenScience.getSession()
   if (existing) {
-    prompts.log.success("Already connected to your Gateway account.")
+    prompts.log.success("Already connected to your Synthetic Sciences account.")
     await OpenScience.syncServices().catch(() => {})
   } else {
     const ok = await runAtlasLogin({})
     if (!ok) {
-      prompts.log.warn("Skipped Gateway sign-in. Run `openscience login` anytime to connect.")
+      prompts.log.warn("Sign-in did not finish. Run `openscience login` anytime to connect.")
       return
     }
   }
 
   const mode = await OpenScience.getBillingMode().catch(() => null)
   const balance = mode?.balance_usd ?? (await OpenScience.getBalance().catch(() => null)) ?? 0
-  prompts.log.info(`Credits: $${balance.toFixed(2)}`)
+  prompts.log.info(`Ace balance: ${balance.toFixed(2)} credits`)
 
   if (balance <= 0) {
     const add = await prompts.confirm({
-      message: "Add funds now so you can use managed models?",
+      message: "Add Ace credits now so you can use managed models?",
       initialValue: true,
     })
     if (!prompts.isCancel(add) && add) {
-      prompts.log.info(`Opening ${PLAN_URL} …`)
-      prompts.log.message("Top up in the Plan tab, then come back here — your balance updates automatically.")
-      openUrl(PLAN_URL)
+      prompts.log.info(`Opening ${BILLING_URL} …`)
+      prompts.log.message("Add 20 credits and link a card. Auto-reload can keep the balance ready after that.")
+      openUrl(BILLING_URL)
     } else {
-      prompts.log.info(`No problem — top up anytime with \`openscience wallet\` or at ${PLAN_URL}.`)
+      prompts.log.info(`No problem — add credits anytime with \`openscience wallet\` or at ${BILLING_URL}.`)
     }
   }
   prompts.log.info(
-    "Managed models are metered from your wallet. Switch to your own keys anytime with `openscience keys add`.",
+    "Ace-managed models use credits. Switch to provider-billed Accounts anytime with `openscience keys add`.",
   )
 }
 
@@ -122,8 +122,8 @@ function onboardSkip(): void {
   prompts.log.info("No problem — you can explore projects and files without a model.")
   prompts.log.message(
     "Connect a model before using chat:\n" +
-      "  openscience login       connect Gateway managed models (prepaid wallet)\n" +
-      "  openscience keys add    add your own provider key (always free)\n" +
+      "  openscience login       connect Ace-managed models (pay as you go)\n" +
+      "  openscience keys add    add a provider-billed account or key\n" +
       "  openscience local add   use a local model (Ollama / LM Studio / OpenAI-compatible)",
   )
 }
@@ -131,7 +131,7 @@ function onboardSkip(): void {
 async function offerAtlasCli(): Promise<void> {
   if (Bun.which("atlas")) return
   const yes = await prompts.confirm({
-    message: "Install the Gateway CLI companion? (research graph — maps, runs, library)",
+    message: "Install the research CLI companion? (graphs, runs, and library)",
     initialValue: false,
   })
   if (prompts.isCancel(yes) || !yes) return
@@ -146,7 +146,7 @@ async function offerAtlasCli(): Promise<void> {
     const proc = Bun.spawn(["npm", "install", "-g", "@synsci/atlas@latest"], { stdout: "ignore", stderr: "pipe" })
     const code = await proc.exited
     if (code === 0) {
-      spin.stop("Gateway CLI installed — it shares your session, so it's already signed in.")
+      spin.stop("Research CLI installed — it shares your session, so it's already signed in.")
     } else {
       spin.stop("Couldn't install automatically. Run: npm i -g @synsci/atlas@latest", 1)
     }
@@ -173,8 +173,8 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
     message: "How do you want to power the models?",
     initialValue: "managed",
     options: [
-      { value: "managed", label: "Gateway managed", hint: "★ recommended · prepaid wallet · zero setup" },
-      { value: "byok", label: "Your own keys", hint: "Anthropic · OpenAI · Google · 100+ providers · always free" },
+      { value: "managed", label: "Ace credits", hint: "★ recommended · pay as you go · zero setup" },
+      { value: "byok", label: "Provider accounts", hint: "Anthropic · OpenAI · Google · billed by provider" },
       {
         value: "local",
         label: "Local models",
@@ -201,7 +201,7 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
 
 export const InitCommand = cmd({
   command: ["init", "onboard"],
-  describe: "set up OpenScience — models, keys, and Gateway",
+  describe: "set up OpenScience — models, accounts, and Ace credits",
   async handler() {
     UI.empty()
     UI.println(UI.logo("  "))
@@ -391,14 +391,14 @@ export const DoctorCommand = cmd({
 
     const session = await OpenScience.getSession()
     if (session) {
-      prompts.log.success("Gateway account: connected")
+      prompts.log.success("OpenScience account: connected")
       const mode = await OpenScience.getBillingMode().catch(() => null)
       if (mode) {
-        const suffix = mode.managed_supported ? "" : " (managed not provisioned)"
-        prompts.log.info(`Wallet: $${mode.balance_usd.toFixed(2)}${suffix}`)
+        const suffix = mode.managed_supported ? "" : " (Ace not provisioned)"
+        prompts.log.info(`Ace balance: ${mode.balance_usd.toFixed(2)} credits${suffix}`)
       }
     } else {
-      prompts.log.info("Gateway account: not connected  (run `openscience login`)")
+      prompts.log.info("OpenScience account: not connected  (run `openscience login`)")
     }
 
     try {

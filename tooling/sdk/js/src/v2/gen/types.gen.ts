@@ -2686,7 +2686,7 @@ export type AccountGetResponses = {
   200: {
     session: boolean
     user?: unknown
-    balance_usd: number
+    balance_usd: number | null
     billing_mode: {
       mode: "byok" | "managed"
       balance_cents: number
@@ -2710,7 +2710,7 @@ export type AccountBalanceResponses = {
    * Balance
    */
   200: {
-    balance_usd: number
+    balance_usd: number | null
   }
 }
 
@@ -7815,7 +7815,7 @@ export type SettingsBillingGetResponses = {
     llm: "managed" | "byok" | null
     wallet: {
       /**
-       * Whether a Gateway session (thk_ key) is available
+       * Whether a Synthetic Sciences session (thk_ key) is available
        */
       signedIn: boolean
       /**
@@ -7845,7 +7845,7 @@ export type SettingsBillingUpdateResponses = {
     llm: "managed" | "byok" | null
     wallet: {
       /**
-       * Whether a Gateway session (thk_ key) is available
+       * Whether a Synthetic Sciences session (thk_ key) is available
        */
       signedIn: boolean
       /**

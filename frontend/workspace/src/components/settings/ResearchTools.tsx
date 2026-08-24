@@ -257,7 +257,8 @@ export default function ResearchTools() {
             <p class="settings-research-tools-note">
               When enabled, OpenScience shares conversations, model activity, tool runs, searches, errors, and artifact
               records to help improve the product. Credentials and secret values are removed before upload. Turning it
-              off removes activity previously shared from this account.
+              off stops new sharing immediately; previously shared activity is removed now or when OpenScience next
+              reconnects.
             </p>
           </Section>
         </PanelBody>

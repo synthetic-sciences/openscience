@@ -6,6 +6,9 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
+import { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
+
+export { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
 
 type Mode = SettingsBillingGetResponse["llm"]
 type Wallet = {
@@ -32,16 +35,6 @@ const MODES: { value: Mode; title: string; body: string }[] = [
     body: "Use only connected provider keys and subscriptions.",
   },
 ]
-
-export const formatCreditBalance = (value: number) => `$${value.toFixed(2)}`
-
-export function walletBalanceLabel(wallet: Pick<Wallet, "signedIn" | "balanceUsd">) {
-  if (!wallet.signedIn) return "Not signed in"
-  if (wallet.balanceUsd === null) return "Balance unavailable"
-  return wallet.balanceUsd >= 0
-    ? `${formatCreditBalance(wallet.balanceUsd)} available`
-    : `${formatCreditBalance(wallet.balanceUsd)} balance`
-}
 
 /**
  * Persist and apply the small billing response independently of the much larger
@@ -82,7 +75,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
           if (!busy()) setMode(result.data.llm)
           return
         }
-        fail("Couldn't load managed inference settings.")
+        fail("Couldn't load model access settings.")
       })
       .catch(fail)
   const refresh = () => {
@@ -106,7 +99,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
       .then((ok) => {
         if (!ok) {
           setMode(previous)
-          fail("Couldn't save managed inference settings.")
+          fail("Couldn't save model access settings.")
           return
         }
 
@@ -119,7 +112,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
           .refreshProviders()
           .catch((error) =>
             props.onError?.(
-              `Managed inference settings saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
+              `Model access was saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
             ),
           )
           .finally(() => setRefreshing(false))
@@ -168,11 +161,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
                 aria-busy={busy()}
                 disabled={busy() || unsupported(option.value)}
                 class="models-routing__option"
-                title={
-                  unsupported(option.value)
-                    ? "Credits require a signed-in account with managed billing enabled"
-                    : undefined
-                }
+                title={unsupported(option.value) ? "Credits require a signed-in account with Ace enabled" : undefined}
                 onClick={() => update(option.value)}
               >
                 <span class="models-routing__option-label">
@@ -210,7 +199,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
             variant="secondary"
             onClick={() => platform.openLink(URLS.dashboardBilling)}
           >
-            Add funds
+            Add credits
           </Button>
         </span>
       </div>

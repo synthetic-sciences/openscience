@@ -24,6 +24,11 @@ export namespace CredentialLifecycle {
   const revisionFile = path.join(Global.Path.data, "credential-revision.json")
   const mutationLock = `${revisionFile}.lock`
   const waitTimeout = 10_000
+  // Telemetry can hold this boundary across a bounded deletion proof (5s),
+  // consent sync (5s), and batch upload (10s). Account replacement, opt-out,
+  // and process admission must outwait that valid sequence rather than fail at
+  // FileLease's 10s default.
+  const mutationLeaseTimeout = 30_000
 
   type Phase = "updating" | "ready"
   interface Revision {
@@ -151,7 +156,7 @@ export namespace CredentialLifecycle {
 
   /** Serialize credential-adjacent metadata writes without publishing a revision. */
   export async function serialized<T>(action: () => T | Promise<T>): Promise<T> {
-    await using lease = await FileLease.acquire(mutationLock)
+    await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
     return await lease.during(async () => {
       return await action()
     })
@@ -160,7 +165,7 @@ export namespace CredentialLifecycle {
   /** Hold the cross-process mutation lease from freshness check through child
    * spawn and durable owner registration, closing the snapshot-to-spawn race. */
   export async function admit<T>(action: () => T | Promise<T>): Promise<T> {
-    await using lease = await FileLease.acquire(mutationLock)
+    await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
     return await lease.during(async () => {
       await ensureFresh()
       return await action()
@@ -203,7 +208,7 @@ export namespace CredentialLifecycle {
     let failure: unknown
     let failed = false
     {
-      await using lease = await FileLease.acquire(mutationLock)
+      await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
       await lease.during(async () => {
         // Evaluate the condition under the same lease as the mutation. This
         // is the compare-and-mutate seam for account-key revocation: a late

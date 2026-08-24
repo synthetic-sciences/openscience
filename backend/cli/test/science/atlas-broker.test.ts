@@ -503,7 +503,9 @@ describe("Atlas host broker", () => {
             scope: "session",
           })
           const state = { settled: false, revocation: undefined as Promise<unknown> | undefined }
-          globalThis.fetch = (async () => {
+          globalThis.fetch = (async (input: string | URL | Request) => {
+            const pathname = new URL(input instanceof Request ? input.url : String(input)).pathname
+            if (pathname.includes("/telemetry/")) return Response.json({ enabled: false })
             state.revocation = SessionFilesystem.revoke(session.id, grant.id).then((value) => {
               state.settled = true
               return value

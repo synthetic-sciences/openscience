@@ -41,5 +41,19 @@ export function managedApiBase(env: NodeJS.ProcessEnv = process.env): string {
   return stripTrailingSlashes(override || DEFAULT_MANAGED_API_BASE)
 }
 
+/** Resolve a dashboard page without losing staging/self-host frontend overrides. */
+export function dashboardUrl(pathname: string, env: NodeJS.ProcessEnv = process.env): string {
+  const frontend = env.SYNSC_AUTH_URL?.trim() || managedApiBase(env)
+  const fallback = new URL(pathname, `${DEFAULT_MANAGED_API_BASE}/`).toString()
+  try {
+    return new URL(pathname, `${stripTrailingSlashes(frontend)}/`).toString()
+  } catch {
+    return fallback
+  }
+}
+
 /** The resolved managed base URL for this process. */
 export const MANAGED_API_BASE = managedApiBase()
+
+/** The resolved Ace billing page for this process. */
+export const BILLING_URL = dashboardUrl("/billing")

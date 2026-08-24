@@ -17,7 +17,7 @@ import {
 } from "./synced-env-policy"
 import { isAtlasManagedKey } from "../credentials/managed-key"
 import { resolveAtlasPackageDir } from "./atlas-package"
-import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
+import { BILLING_URL, DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ToolOutputPath } from "../tool/tool-output-path"
 import { GlobalBus } from "../bus/global"
@@ -39,8 +39,8 @@ export const API_BASE = MANAGED_API_BASE
 // renders when both stdout AND stderr are TTYs. Piping to a log file
 // no longer drops a one-line dev banner into structured output.
 // User-facing URL the CLI prints during `openscience login`. Defaults
-// to the unified Atlas frontend's /cli route — Plan tab, key management,
-// and billing all live there. SYNSC_AUTH_URL overrides (e.g. point at a
+// to the unified Atlas frontend's /cli route — account connection, key
+// management, and billing all live there. SYNSC_AUTH_URL overrides (e.g. point at a
 // staging frontend or the old auth.syntheticsciences.ai surface).
 const VERIFICATION_PAGE = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || "https://app.syntheticsciences.ai/cli"
 
@@ -268,15 +268,15 @@ export interface ResearchSearchInput {
 function describeReason(provider: string, reason: SyncedServiceReason | undefined): string {
   switch (reason) {
     case "missing_key":
-      return `${provider}: no key set — add one in the dashboard or top up credits.`
+      return `${provider}: no account is connected — add one in Settings → Models or choose Credits.`
     case "no_credits":
       return `${provider}: Credits are empty - top up at https://app.syntheticsciences.ai/billing.`
     case "ineligible_plan":
-      return `${provider}: refresh Gateway and reconnect the key — BYOK is available on every plan.`
+      return `${provider}: refresh your account and reconnect the key — provider accounts never require Ace.`
     case "proxy_disabled":
-      return `${provider}: Gateway managed mode is disabled on this deployment — BYOK only.`
+      return `${provider}: Ace is disabled on this deployment — connect a provider account instead.`
     case "managed_key_unconfigured":
-      return `${provider}: Gateway managed mode unavailable on this deployment — ask the admin.`
+      return `${provider}: Ace is unavailable on this deployment — connect a provider account instead.`
     case "managed_via_openrouter":
       return `${provider}: wallet access to ${provider} models routes through the openrouter provider — pick them there, or add your own ${provider} key for direct access.`
     default:
@@ -285,16 +285,14 @@ function describeReason(provider: string, reason: SyncedServiceReason | undefine
 }
 
 /**
- * Thrown when the backend rejects a usage report because the user is
- * out of credits (managed mode) or has no active subscription. Halts
+ * Thrown when the backend rejects a usage report because the managed route is
+ * out of credits or unavailable for the account. Halts
  * the session so the agent loop doesn't keep racking up calls the
  * user can't pay for. Caught at the session boundary; surfaced to the
  * user as "Insufficient credits - top up at app.syntheticsciences.ai/billing".
  */
 export class InsufficientCreditsError extends Error {
-  constructor(
-    message: string = "Credits are empty. Top up at app.syntheticsciences.ai/billing or switch back to your own keys.",
-  ) {
+  constructor(message: string = `Credits are empty. Add credits at ${BILLING_URL} or switch back to your own keys.`) {
     super(message)
     this.name = "InsufficientCreditsError"
   }
@@ -2019,8 +2017,8 @@ export namespace OpenScience {
         }
         return { ok: true, permanent: false, data }
       }
-      // 402 = no active CLI subscription, OR insufficient managed-mode
-      // balance. Both should halt the session — surface as modelBlocked
+      // 402 = insufficient balance or another permanent account-level block.
+      // Both should halt the session — surface as modelBlocked
       // so the processor throws InsufficientCreditsError.
       if (res.status === 402) {
         let body: any = {}
@@ -2035,10 +2033,10 @@ export namespace OpenScience {
           log.warn(
             `Insufficient balance for this call — need $${need.toFixed(2)}, ` +
               `have $${have.toFixed(2)} available. Top up at ` +
-              `https://app.syntheticsciences.ai/billing or switch to BYOK.`,
+              `${BILLING_URL} or switch to a provider account.`,
           )
         } else {
-          log.warn("usage report 402 — subscription required or balance empty")
+          log.warn("usage report 402 — account blocked or credit balance empty")
         }
         return { ok: false, permanent: true, modelBlocked: true }
       }

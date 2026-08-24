@@ -13,11 +13,11 @@ either an owner/Atlas-team decision or a follow-up sprint. Updated 2026-07-06.
 | **3**  | Atlas sync correctness                   | ✅ shell-export precedence (no billing flip), atomic writes, torn-file tolerance + test |
 | **4**  | Browser onboarding                       | ✅ browser Atlas login (`/account/login-key` + SetupDialog) + no-model dead-end killed  |
 | **5**  | UX polish                                | ✅ transition typos + real file error states (retry on read/permission/listing failure) |
-| **6**  | Atlas companion version                  | ✅ `@synsci/atlas` `^0.5.12` → `^0.13.2`; its former compute product is now retired     |
+| **6**  | Atlas companion version                  | ✅ release line updated with the retired compute and hosted-job surfaces removed        |
 | **7**  | Atlas experience — **A1 unified status** | ✅ `openscience status` = connection + account + wallet + usage + companion             |
 | **8**  | Wallet (backend + panel)                 | ✅ `/settings/wallet` + Wallet panel; routes verified live, UI typecheck-only           |
 | **9**  | arXiv retrieval                          | ✅ throttle, PDF/error parsing, graceful degrade, 20 tests (merged)                     |
-| **11** | Reviewer gate                            | ✅ Level 0 annotate-only, code-level, flag-gated (`experimental.reviewGate`)            |
+| **11** | Dedicated reviewer workflow              | Retired; exact-version provenance remains without a hidden reviewer model or gate       |
 | —      | Atlas repo rebrand + sync-hash parity    | ✅ draft PR `synthetic-sciences/atlas#188`                                              |
 | —      | >60-min hang fix                         | ✅ all Atlas calls timeout-bounded; verified fail-fast e2e                              |
 
@@ -69,12 +69,10 @@ a bug. Left as-is.
   `source_error`), but not the typed union.
 - **WS9 A7** — allowlist `export.arxiv.org` in `settings/network.ts` (that file was
   outside the agent's allowed edit paths).
-- **WS11 Level 1/2** — the soft gate (inject findings, bounded fix-cycles) and hard
-  gate (refuse to finalize on unresolved blocking findings). Level 0 (annotate) is
-  the shipped, non-breaking default; promotion needs the fix-cycle loop + a seeded
-  blocking-finding test. Also open from the plan's menu: wire `reviewer` into the
-  `research`/`biology`/`physics` prompts (currently `ml`-only) for advisory
-  coverage alongside the code gate.
+- **Former WS11 reviewer levels** — superseded by the single adaptive Research
+  agent, bounded Explore/Execute delegation, immutable Result lineage, and
+  append-only provenance. Do not reintroduce a hidden reviewer model or a
+  completion gate under this item.
 - **Atlas PR #188 flag** — `backend/app/routes/cli.py:150` carries a user-facing 402
   message with the old `synsc` spelling, sitting inside the auth/billing gate. Left
   untouched to honor "don't touch billing/auth"; rebrand it in a separate pass.

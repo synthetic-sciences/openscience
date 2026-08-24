@@ -2,15 +2,15 @@ import { expect, test } from "bun:test"
 import { commitBilling, formatCreditBalance, walletBalanceLabel } from "./ManagedInference"
 
 test("keeps a real negative wallet balance distinct from an unavailable balance", () => {
-  expect(walletBalanceLabel({ signedIn: true, balanceUsd: -1 })).toBe("$-1.00 balance")
+  expect(walletBalanceLabel({ signedIn: true, balanceUsd: -1 })).toBe("-1.00 credits balance")
   expect(walletBalanceLabel({ signedIn: true, balanceUsd: null })).toBe("Balance unavailable")
   expect(walletBalanceLabel({ signedIn: false, balanceUsd: -1 })).toBe("Not signed in")
 })
 
 test("formats the purchased-credit balance to exact cents", () => {
-  expect(formatCreditBalance(984)).toBe("$984.00")
-  expect(formatCreditBalance(984.6)).toBe("$984.60")
-  expect(formatCreditBalance(0)).toBe("$0.00")
+  expect(formatCreditBalance(984)).toBe("984.00 credits")
+  expect(formatCreditBalance(984.6)).toBe("984.60 credits")
+  expect(formatCreditBalance(0)).toBe("0.00 credits")
 })
 
 // The provider catalog is intentionally not part of this helper. It is a

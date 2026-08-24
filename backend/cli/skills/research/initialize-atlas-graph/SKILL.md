@@ -46,9 +46,9 @@ Run this skill when:
      reached (network/DNS error or 5xx). The user IS logged in; suggest checking
      connectivity and any `OPENSCIENCE_API_BASE`/`SYNSC_API_BASE` override, then
      retrying — not re-authenticating.
-   - `"plan"` — authenticated, but the account has no active Gateway plan. Point
-     the user at https://app.syntheticsciences.ai/billing; include the
-     backend `message` if present.
+   - `"plan"` — authenticated, but graph sync is not ready for the account.
+     Point the user to Credits and Accounts in Settings; include the backend
+     `message` if present.
    - `"backend"` — anything else; show the backend's `status`/`message` verbatim.
 
 3. **Confirm to the user.** Report the `project_id` and tell them the graph now

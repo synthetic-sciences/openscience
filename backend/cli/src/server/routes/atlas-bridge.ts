@@ -391,7 +391,7 @@ async function resolveProjectId(directory: string): Promise<string | null> {
 export type InitProjectFailureKind =
   | "unauthenticated" // no session, or the backend rejected the key (401/403)
   | "unreachable" // network/DNS error or 5xx — the service couldn't be reached
-  | "plan" // authenticated, but no active Gateway plan (402 / plan-coded 4xx)
+  | "plan" // authenticated, but the account is not ready (legacy 402 / plan-coded 4xx)
   | "backend" // any other backend answer — pass its message through
 
 export interface InitProjectFailure {
@@ -699,7 +699,7 @@ export const AtlasBridgeRoutes = lazy(() =>
         (result.failure.kind === "unauthenticated"
           ? "Sign in to Gateway before initializing the project graph."
           : result.failure.kind === "plan"
-            ? "An active Gateway plan is required to initialize the project graph."
+            ? "Graph sync is not ready for this account. Check Credits and Accounts in Settings."
             : result.failure.kind === "unreachable"
               ? `Gateway is unavailable at ${result.failure.host}.`
               : "Gateway could not initialize the project graph.")

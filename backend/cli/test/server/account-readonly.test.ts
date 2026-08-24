@@ -46,6 +46,27 @@ test("account GET reads the profile without publishing a credential revision", a
   expect(await Bun.file(revision).exists()).toBe(false)
 })
 
+test("account routes keep unavailable distinct from a real negative balance", async () => {
+  const signedOut = await AccountRoutes().request("/")
+  expect(await signedOut.json()).toMatchObject({ session: false, balance_usd: null })
+
+  await Bun.write(session, JSON.stringify({ api_key: "thk_test.secret", user_id: "user-1" }))
+  OpenScience.invalidateBalance()
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input)
+    if (url.endsWith("/api/cli/balance")) return Response.json({ balance_usd: -1 })
+    return new Response("not found", { status: 404 })
+  }) as typeof fetch
+
+  const negative = await AccountRoutes().request("/balance")
+  expect(await negative.json()).toEqual({ balance_usd: -1 })
+
+  OpenScience.invalidateBalance()
+  globalThis.fetch = (async () => new Response("unavailable", { status: 503 })) as unknown as typeof fetch
+  const unavailable = await AccountRoutes().request("/balance")
+  expect(await unavailable.json()).toEqual({ balance_usd: null })
+})
+
 test("concurrent balance reads share one control-plane request", async () => {
   await Bun.write(session, JSON.stringify({ api_key: "thk_test.secret", user_id: "user-1" }))
   OpenScience.invalidateBalance()

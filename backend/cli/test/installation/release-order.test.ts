@@ -42,3 +42,10 @@ test("production release preparation jobs can write their draft GitHub release",
     expect(job).toContain("contents: write")
   }
 })
+
+test("production publish requires the synsci launcher to ship with the wrapper", async () => {
+  const source = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
+  const publish = source.slice(source.indexOf("\n  publish:"), source.indexOf("\n  deployment:"))
+
+  expect(publish).toContain('OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"')
+})
