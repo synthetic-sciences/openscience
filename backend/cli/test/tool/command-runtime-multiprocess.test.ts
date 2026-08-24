@@ -68,6 +68,18 @@ import fs from "node:fs/promises"
 
 const mode = process.argv[2]
 const workspace = process.argv[3]
+async function publishedPID(marker, description) {
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const value = await fs.readFile(marker, "utf8").catch((error) => {
+      if (error?.code === "ENOENT") return ""
+      throw error
+    })
+    const pid = Number(value.trim())
+    if (Number.isSafeInteger(pid) && pid > 0) return pid
+    await Bun.sleep(10)
+  }
+  throw new Error(description + " did not publish a valid pid")
+}
 async function escapedCommand(marker) {
   if (process.platform !== "linux" || !marker) return "sleep 60"
   const python = Bun.which("python3")
@@ -127,11 +139,10 @@ if (mode === "owner") {
           exited: () => child.exitCode !== null || child.signalCode !== null,
           detached: true,
         }), { windowsRelease: wrapped.release })
-        for (let attempt = 0; attempt < 300 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(10)
-        if (!(await Bun.file(marker).exists())) throw new Error("host-mode setsid child did not start")
+        const descendantPID = await publishedPID(marker, "host-mode setsid child")
         console.log(JSON.stringify({
           pid: entry.process_id,
-          descendantPID: Number((await fs.readFile(marker, "utf8")).trim()),
+          descendantPID,
           projectID: Instance.project.id,
           sessionID: session.id,
         }))
@@ -166,8 +177,7 @@ if (mode === "owner") {
           const marker = process.argv[5]
           let descendantPID
           if (process.platform === "linux" && marker) {
-            for (let attempt = 0; attempt < 500 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(10)
-            descendantPID = Number((await fs.readFile(marker, "utf8")).trim())
+            descendantPID = await publishedPID(marker, surface + " descendant")
           }
           console.log(JSON.stringify({ pid: command.process_id, descendantPID, projectID: Instance.project.id, sessionID: session.id }))
           await new Promise(() => {})
@@ -210,8 +220,7 @@ if (mode === "owner") {
           command,
         })
       }
-      for (let attempt = 0; attempt < 500 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(10)
-      const pid = Number((await fs.readFile(marker, "utf8")).trim())
+      const pid = await publishedPID(marker, surface + " stop daemon")
       const identity = await ProcessIdentity.capture(pid)
       if (!identity) throw new Error("surface stop daemon identity was not captured")
       if (surface !== "bash-timeout") SessionPrompt.cancel(session.id)

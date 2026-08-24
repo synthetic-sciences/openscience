@@ -84,10 +84,16 @@ async function within<T>(promise: Promise<T>, timeout = 15_000) {
   return Promise.race([promise, expired.promise]).finally(() => clearTimeout(timer))
 }
 
-function worker(mode: string, directory: string, seed: Seed, ready: string, budgetMs?: number) {
+function worker(mode: string, directory: string, seed: Seed, ready: string, budgetMs?: number, attemptAgeMs?: number) {
   return spawn([process.execPath, fixture, mode, directory, seed.parentID, seed.messageID, seed.callID, ready], {
     cwd: directory,
-    env: budgetMs ? { OPENSCIENCE_TEST_TASK_BUDGET_MS: String(budgetMs) } : undefined,
+    env:
+      budgetMs || attemptAgeMs
+        ? {
+            ...(budgetMs && { OPENSCIENCE_TEST_TASK_BUDGET_MS: String(budgetMs) }),
+            ...(attemptAgeMs && { OPENSCIENCE_TEST_TASK_ATTEMPT_AGE_MS: String(attemptAgeMs) }),
+          }
+        : undefined,
     stdout: "pipe",
     stderr: "pipe",
   })
@@ -368,20 +374,23 @@ describe("durable Task attempts across Bun processes", () => {
   test("resumed Task execution keeps unused active budget after longer process downtime", async () => {
     const local = provider(true, 40)
     const processes = new Set<ReturnType<typeof worker>>()
-    const budgetMs = 600
+    // Attempt age and active execution are independent clocks. Backdate the
+    // reservation in the fixture so its elapsed age exceeds the budget without
+    // turning a 600 ms provider round trip into an accidental CI performance SLA.
+    const budgetMs = 5_000
+    const attemptAgeMs = budgetMs + 1_000
     try {
       await using tmp = await tmpdir({
         git: true,
         config: stressProviderConfig(`http://127.0.0.1:${local.server.port}/v1`),
       })
       const input = await seed(tmp.path)
-      const first = worker("run", tmp.path, input, path.join(tmp.path, "budget-first.ready"), budgetMs)
+      const first = worker("run", tmp.path, input, path.join(tmp.path, "budget-first.ready"), budgetMs, attemptAgeMs)
       processes.add(first)
       await within(local.entered.promise)
       first.kill("SIGKILL")
       await within(first.exited)
 
-      await Bun.sleep(budgetMs + 150)
       local.release.resolve()
       const second = worker("run", tmp.path, input, path.join(tmp.path, "budget-second.ready"), budgetMs)
       processes.add(second)

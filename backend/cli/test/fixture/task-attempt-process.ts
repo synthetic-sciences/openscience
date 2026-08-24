@@ -14,6 +14,7 @@ const budget = Number(process.env.OPENSCIENCE_TEST_TASK_BUDGET_MS)
 if (Number.isSafeInteger(budget) && budget > 0) {
   Object.assign(TASK_WALL_CLOCK_MS, { normal: budget, ultra: budget })
 }
+const attemptAge = Number(process.env.OPENSCIENCE_TEST_TASK_ATTEMPT_AGE_MS)
 
 if (!mode || !ready) throw new Error("Missing durable Task fixture arguments")
 
@@ -122,6 +123,8 @@ if (mode === "loop-parent") {
       const task = await TaskTool.init({ agent })
       const messages = await Session.messages({ sessionID: parentID })
       const blocked = { value: false }
+      const now = Date.now.bind(Date)
+      if (Number.isSafeInteger(attemptAge) && attemptAge > 0) Date.now = () => now() - attemptAge
       const result = await task.execute(
         {
           description: "Durable restart fixture",
@@ -139,6 +142,9 @@ if (mode === "loop-parent") {
           async metadata(input) {
             if (!blocked.value) {
               blocked.value = true
+              // Only the durable reservation is aged. Restore the real clock
+              // before active provider work so activeMs stays authoritative.
+              Date.now = now
               await fs.writeFile(ready, JSON.stringify(input.metadata ?? {}))
               if (mode === "bind-block") await new Promise(() => {})
             }
