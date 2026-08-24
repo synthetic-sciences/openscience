@@ -14,7 +14,7 @@ implementation history.
 | **3**  | Atlas sync correctness                   | ✅ shell-export precedence (no billing flip), atomic writes, torn-file tolerance + test |
 | **4**  | Browser onboarding                       | ✅ browser Atlas login (`/account/login-key` + SetupDialog) + no-model dead-end killed  |
 | **5**  | UX polish                                | ✅ transition typos + real file error states (retry on read/permission/listing failure) |
-| **6**  | Historical companion version             | ✅ Version alignment completed at the time; the companion is no longer distributed    |
+| **6**  | Historical companion version             | ✅ Version alignment completed at the time; the companion is no longer distributed      |
 | **7**  | Atlas experience — **A1 unified status** | ✅ `openscience status` = connection + plan + wallet + usage + compute + companion      |
 | **8**  | Wallet (backend + panel)                 | ✅ `/settings/wallet` + Wallet panel; routes verified live, UI typecheck-only           |
 | **9**  | arXiv retrieval                          | ✅ throttle, PDF/error parsing, graceful degrade, 20 tests (merged)                     |

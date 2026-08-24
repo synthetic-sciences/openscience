@@ -40,7 +40,8 @@ export const AccountRoutes = lazy(() =>
       "/session",
       describeRoute({
         summary: "Get local session status",
-        description: "Check whether this OpenScience server has a local Synthetic Sciences session without a network request.",
+        description:
+          "Check whether this OpenScience server has a local Synthetic Sciences session without a network request.",
         operationId: "account.session",
         responses: {
           200: {

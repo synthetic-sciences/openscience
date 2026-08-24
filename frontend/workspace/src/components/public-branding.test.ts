@@ -36,10 +36,7 @@ describe("public Synthetic Sciences branding", () => {
   test("does not render Gateway as the Synthetic Sciences product name", async () => {
     const violations: string[] = []
     for (const file of publicSources) {
-      const source = renderedSource(await Bun.file(new URL(file, import.meta.url)).text()).replaceAll(
-        "AI Gateway",
-        "",
-      )
+      const source = renderedSource(await Bun.file(new URL(file, import.meta.url)).text()).replaceAll("AI Gateway", "")
       if (/\bGateway\b/.test(source)) violations.push(file)
     }
     expect(violations).toEqual([])

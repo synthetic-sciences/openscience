@@ -1624,8 +1624,8 @@ function InitHero(props: { onInit: () => void; onChat: () => void; busy: boolean
           "line-height": 1.55,
         }}
       >
-        This folder isn't linked to a Synthetic Sciences research graph yet. Initialize one to start tracking hypotheses,
-        experiments, and decisions here.
+        This folder isn't linked to a Synthetic Sciences research graph yet. Initialize one to start tracking
+        hypotheses, experiments, and decisions here.
       </div>
       <button
         onClick={() => !props.busy && props.onInit()}

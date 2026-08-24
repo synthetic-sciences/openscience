@@ -34,7 +34,17 @@ describe("OpenScience landing contract", () => {
   })
 
   test("does not advertise paused surfaces or old branding", () => {
-    for (const source of [landing, readme, packageReadme, gateway, docsIndex, skills, installer, graphSkill, docsBundle]) {
+    for (const source of [
+      landing,
+      readme,
+      packageReadme,
+      gateway,
+      docsIndex,
+      skills,
+      installer,
+      graphSkill,
+      docsBundle,
+    ]) {
       expect(source).not.toMatch(/\b(?:Atlas|managed compute|cloud compute)\b/i)
     }
     expect(landing).not.toContain("Explore public")

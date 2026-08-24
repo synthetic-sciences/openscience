@@ -1710,7 +1710,10 @@ export namespace OpenScience {
               return JSON.parse(text) as unknown
             } catch {
               return {
-                detail: { code: "search_unavailable", message: `Synthetic Sciences search returned HTTP ${res.status}` },
+                detail: {
+                  code: "search_unavailable",
+                  message: `Synthetic Sciences search returned HTTP ${res.status}`,
+                },
               }
             }
           })()

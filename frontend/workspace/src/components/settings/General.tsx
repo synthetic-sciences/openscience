@@ -168,8 +168,8 @@ export default function General() {
               <Show when={account()?.session === false}>
                 <div class="px-4 py-3">
                   <p class="text-12-regular text-text-weak">
-                    Signed out. Run <code class="font-mono text-11-regular">openscience login</code> in a
-                    terminal to reconnect this machine.
+                    Signed out. Run <code class="font-mono text-11-regular">openscience login</code> in a terminal to
+                    reconnect this machine.
                   </p>
                 </div>
               </Show>

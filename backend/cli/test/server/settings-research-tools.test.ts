@@ -72,14 +72,10 @@ describe("research tools settings route", () => {
   })
 
   test("keeps the checked-in OpenAPI and SDK on the PAYG search contract", async () => {
-    const openapi = await Bun.file(
-      new URL("../../../../tooling/sdk/openapi.json", import.meta.url),
-    ).json()
+    const openapi = await Bun.file(new URL("../../../../tooling/sdk/openapi.json", import.meta.url)).json()
     const route = openapi.paths["/settings/research-tools"]
     const telemetryRoute = openapi.paths["/settings/research-tools/telemetry"]
-    const sdk = await Bun.file(
-      new URL("../../../../tooling/sdk/js/src/v2/gen/types.gen.ts", import.meta.url),
-    ).text()
+    const sdk = await Bun.file(new URL("../../../../tooling/sdk/js/src/v2/gen/types.gen.ts", import.meta.url)).text()
     const published = JSON.stringify([route, telemetryRoute])
 
     expect(route.get.summary).toBe("Get wallet, enhanced-search, and data-sharing status")

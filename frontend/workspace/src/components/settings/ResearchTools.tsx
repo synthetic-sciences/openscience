@@ -177,7 +177,10 @@ export default function ResearchTools() {
       )
       if (!result.ok) throw new Error(result.message || "Account analytics could not be deleted.")
       await load()
-      showToast({ title: "Analytics deleted", description: "Synthetic Sciences deleted account-linked usage analytics." })
+      showToast({
+        title: "Analytics deleted",
+        description: "Synthetic Sciences deleted account-linked usage analytics.",
+      })
     } catch (cause) {
       showToast({
         variant: "error",

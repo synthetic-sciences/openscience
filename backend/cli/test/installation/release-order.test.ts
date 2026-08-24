@@ -47,10 +47,10 @@ test("production publish derives stable versions only from a required monotonic 
   const source = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
   const bump = source.slice(source.indexOf("      bump:"), source.indexOf("# One release at a time"))
 
-  expect(bump).toContain('required: true')
+  expect(bump).toContain("required: true")
   expect(source).not.toContain("inputs.version")
   expect(source).not.toContain("Override version")
-  expect(source).not.toContain('OPENSCIENCE_VERSION: ${{ inputs.version }}')
+  expect(source).not.toContain("OPENSCIENCE_VERSION: ${{ inputs.version }}")
 })
 
 test("production release requires this build's cleaned launcher to publish before undrafting", async () => {

@@ -35,9 +35,7 @@ const BillingShowCommand = cmd({
     prompts.log.info(`Credits     : $${mode.balance_usd.toFixed(2)}`)
     prompts.log.info("Key routing : per-provider (auto). BYOK key if set, else Synthetic Sciences credits.")
     if (!mode.managed_supported) {
-      prompts.log.warn(
-        "Managed routing is not provisioned on this deployment — set a BYOK key for each provider.",
-      )
+      prompts.log.warn("Managed routing is not provisioned on this deployment — set a BYOK key for each provider.")
     }
     prompts.log.info("Review wallet, auto-reload, and usage at " + BILLING_URL + ".")
     prompts.outro("Done")
