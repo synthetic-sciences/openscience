@@ -180,7 +180,7 @@ OpenScience requires a free **Synthetic Sciences account** for installation iden
 
 **20 credits add $20 to your wallet.** One credit is $1 of wallet value shared by managed model calls and enhanced research search. Usage is debited at the underlying provider cost plus a 2% service margin. The payment-processing fee is shown separately before checkout.
 
-Auto-reload adds 20 credits when your balance falls below 5. You can change the reload amount or disable auto-reload anytime in Billing. There is no subscription and no scheduled monthly top-up.
+Auto-reload is one on/off setting. When enabled, it adds 20 credits whenever your purchased balance falls below 2. Turning it off stops future automatic payments and leaves the remaining balance available. There is no subscription and no scheduled monthly top-up.
 
 ## Routing and billing
 

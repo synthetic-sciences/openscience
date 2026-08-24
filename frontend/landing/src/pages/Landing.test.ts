@@ -40,8 +40,10 @@ describe("OpenScience landing contract", () => {
   })
 
   test("explains Zen-style reload and separates the processing fee from credits", () => {
-    expect(landing).toContain("Reloads 20 credits below 5")
-    expect(landing).toContain("Change or disable it anytime")
+    expect(landing).toContain("Reloads 20 credits below 2")
+    expect(landing).toContain("Turn auto-reload off any time")
+    expect(landing).not.toContain("Set a monthly cap")
+    expect(landing).toContain("One on/off setting. Your remaining balance stays available.")
     expect(landing).toContain("Processing fee shown before payment")
     expect(landing).toContain("never added to your credit balance")
     expect(landing).not.toContain("Synthetic Scientists")
@@ -52,7 +54,7 @@ describe("OpenScience landing contract", () => {
       expect(source).toContain("20 credits")
       expect(source).toMatch(/pay[- ]as[- ]you[- ]go/i)
       expect(source).toMatch(/OpenRouter/i)
-      expect(source).toMatch(/below 5/i)
+      expect(source).toMatch(/below 2/i)
       expect(source).not.toMatch(/Ace\+/i)
       expect(source).not.toMatch(/Synthetic Scientists/i)
       expect(source).not.toMatch(/research quota/i)

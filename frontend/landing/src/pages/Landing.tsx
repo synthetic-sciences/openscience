@@ -886,8 +886,8 @@ export default function Landing({
                 {[
                   ["Credit-backed models through OpenRouter", "A curated route without provider setup."],
                   ["One balance for models and enhanced search", "Free basic search still works without Ace."],
-                  ["Reloads 20 credits below 5", "On after card setup. Change or disable it anytime."],
-                  ["Stay in control", "Set a monthly cap and review every charge in Billing."],
+                  ["Reloads 20 credits below 2", "One on/off setting. Your remaining balance stays available."],
+                  ["Stay in control", "Turn auto-reload off any time and review every charge in Billing."],
                 ].map(([title, copy]) => (
                   <div key={title} className="bg-background/90 p-5">
                     <h3 className="text-[15px] leading-6 text-foreground/90">{title}</h3>
