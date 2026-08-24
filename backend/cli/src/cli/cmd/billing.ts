@@ -52,7 +52,9 @@ const BillingTopupCommand = cmd({
     prompts.intro("openscience billing")
     prompts.log.info(`Open: ${BILLING_URL}`)
     prompts.log.info("20 credits add $20 to your wallet; the processing fee is shown separately at checkout.")
-    prompts.log.info("Auto-reload adds 20 credits below a 2-credit purchased balance; turn it on or off anytime in Billing.")
+    prompts.log.info(
+      "Auto-reload adds 20 credits below a 2-credit purchased balance; turn it on or off anytime in Billing.",
+    )
     prompts.log.info("Provider accounts and local models remain available and never draw down your wallet.")
     // Open the URL using execFile (no shell) so BILLING_URL can't be
     // interpreted as a shell expression. BILLING_URL itself is either an
