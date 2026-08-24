@@ -50,6 +50,7 @@ import { Global } from "./global"
 import { disposeDataRootOperation, runDataRootMiddleware } from "./cli/cmd/cmd"
 import { ACCOUNT_REQUIRED_MESSAGE, requiresOpenScienceAccount } from "./cli/account-gate"
 import { OutboundTelemetry } from "./telemetry/outbound"
+import { purgeRetiredAtlasAgentInstall } from "./skill/retired-install"
 
 if (process.argv[2] === WINDOWS_JOB_LAUNCHER_ARG) {
   try {
@@ -90,6 +91,15 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+// Yargs handles --help/--version before middleware. Run the exact, fail-safe
+// retirement migration here so the first post-upgrade invocation cleans old
+// agent instructions even when it exits through those built-in paths. Internal
+// process launchers return above and never touch user configuration.
+let retiredAgentInstallCleanupError: unknown
+await purgeRetiredAtlasAgentInstall(Global.Path.home).catch((error) => {
+  retiredAgentInstallCleanupError = error
+})
+
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("openscience")
@@ -127,6 +137,10 @@ const cli = yargs(hideBin(process.argv))
         version: Installation.VERSION,
         args: process.argv.slice(2),
       })
+
+      if (retiredAgentInstallCleanupError) {
+        Log.Default.warn("failed to purge retired Atlas agent install", { error: retiredAgentInstallCleanupError })
+      }
 
       // A consent-off write may have been saved while offline. Retry it on
       // every startup, including after logout/401 when only its deletion-only

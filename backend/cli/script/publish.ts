@@ -4,7 +4,12 @@ import pkg from "../package.json"
 import { Script } from "@synsci/script"
 import { fileURLToPath } from "url"
 import { assertPublicPackageSurface, createWrapperPackageManifest } from "./publish-manifest"
-import { packPackage, publishPackage } from "../../../tooling/repo/npm-release"
+import {
+  packPackage,
+  publishPackage,
+  verifyPublishedPackages,
+  type PackedPackage,
+} from "../../../tooling/repo/npm-release"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -41,13 +46,15 @@ if (!process.argv.includes("--homebrew-only")) {
   // all 11 in parallel saturates the uplink and npm times out. The shared helper
   // verifies an existing immutable version byte-for-byte before skipping it.
   const results: PromiseSettledResult<string>[] = []
+  const artifacts: PackedPackage[] = []
   for (const [name] of Object.entries(binaries)) {
     try {
       if (!name.includes("windows")) {
         await $`chmod 755 ./dist/${name}/bin/openscience`
       }
       const artifact = await packPackage({ cwd: `${dir}/dist/${name}`, name, version })
-      await publishPackage({ ...artifact, tag: Script.channel })
+      await publishPackage({ ...artifact, deferVerification: true, tag: Script.channel })
+      artifacts.push(artifact)
       results.push({ status: "fulfilled", value: name })
     } catch (e) {
       results.push({ status: "rejected", reason: e })
@@ -64,7 +71,10 @@ if (!process.argv.includes("--homebrew-only")) {
     console.log(`${succeeded.length}/${results.length} binary packages published or verified successfully`)
   }
   const wrapper = await packPackage({ cwd: `${dir}/dist/${pkg.name}`, name: pkg.name, version })
-  await publishPackage({ ...wrapper, tag: Script.channel })
+  await publishPackage({ ...wrapper, deferVerification: true, tag: Script.channel })
+  artifacts.push(wrapper)
+  await verifyPublishedPackages(artifacts)
+  console.log(`${artifacts.length}/${artifacts.length} CLI packages verified on npm`)
 }
 
 // registries (Homebrew tap, AUR) — non-fatal, npm publish above is what matters

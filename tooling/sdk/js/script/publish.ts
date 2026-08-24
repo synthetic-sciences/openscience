@@ -1,24 +1,18 @@
 #!/usr/bin/env bun
 
 import { Script } from "@synsci/script"
-import { packPackage, publishPackage } from "../../../repo/npm-release"
+import { createCompiledPackageManifest, packPackage, publishPackage } from "../../../repo/npm-release"
 
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
-const pkg = await import("../package.json").then((m) => m.default)
-const original = JSON.parse(JSON.stringify(pkg))
-for (const [key, value] of Object.entries(pkg.exports)) {
-  const file = value.replace("./src/", "./dist/").replace(".ts", "")
-  pkg.exports[key] = {
-    import: file + ".js",
-    types: file + ".d.ts",
-  }
-}
-await Bun.write("package.json", JSON.stringify(pkg, null, 2))
+const packageFile = new URL("../package.json", import.meta.url)
+const original = await Bun.file(packageFile).text()
+const pkg = createCompiledPackageManifest(original, Script.version, { preserveSourceDirectory: true })
+await Bun.write(packageFile, JSON.stringify(pkg, null, 2))
 try {
   const artifact = await packPackage({ cwd: dir, name: pkg.name, version: Script.version })
   await publishPackage({ ...artifact, tag: Script.channel })
 } finally {
-  await Bun.write("package.json", JSON.stringify(original, null, 2))
+  await Bun.write(packageFile, original)
 }

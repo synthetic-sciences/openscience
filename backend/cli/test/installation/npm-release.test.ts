@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import {
   NpmArtifactConflict,
   NpmPermissionError,
+  createCompiledPackageManifest,
   loadReleaseArtifacts,
   packPackage,
   preflightRelease,
@@ -13,6 +14,8 @@ import {
   releasePackageNames,
   releasePromotionNames,
   saveReleaseArtifacts,
+  verifyPackedModuleExports,
+  verifyPublishedPackages,
   type NpmCommandOptions,
   type PackedPackage,
 } from "../../../../tooling/repo/npm-release"
@@ -76,6 +79,7 @@ function options(file: string, spec?: string): NpmCommandOptions {
       FAKE_NPM_SPEC: spec,
       FAKE_NPM_STATE: file,
       OPENSCIENCE_NPM_RETRY_MS: "0",
+      OPENSCIENCE_NPM_VISIBILITY_RETRY_MS: "0",
     },
   }
 }
@@ -91,6 +95,118 @@ test("packPackage uses Bun's supported destination-only form and inspects the re
   expect(artifact.name).toBe("@synsci/release-fixture")
   expect(artifact.version).toBe("2.0.32")
   expect(artifact.integrity).toMatch(/^sha512-/)
+})
+
+test("compiled SDK manifests match the emitted dist/src layout and restore the exact source", async () => {
+  const directory = path.join(root, "compiled-sdk")
+  await mkdir(directory, { recursive: true })
+  const file = path.join(directory, "package.json")
+  const original = `${JSON.stringify(
+    {
+      name: "@synsci/compiled-fixture",
+      version: "2.0.31",
+      files: ["dist"],
+      exports: { ".": "./src/index.ts" },
+    },
+    null,
+    2,
+  )}\n`
+  await Bun.write(file, original)
+  await mkdir(path.join(directory, "dist/src"), { recursive: true })
+  await Bun.write(path.join(directory, "dist/src/index.js"), "export const version = true\n")
+  await Bun.write(path.join(directory, "dist/src/index.d.ts"), "export declare const version: boolean\n")
+
+  const pkg = createCompiledPackageManifest(original, "2.0.32-test.98.1", { preserveSourceDirectory: true })
+  await Bun.write(file, `${JSON.stringify(pkg, null, 2)}\n`)
+  try {
+    const artifact = await packPackage({ cwd: directory, name: pkg.name, version: pkg.version })
+    expect(artifact.name).toBe("@synsci/compiled-fixture")
+    expect(artifact.version).toBe("2.0.32-test.98.1")
+    expect(pkg.exports).toEqual({ ".": { import: "./dist/src/index.js", types: "./dist/src/index.d.ts" } })
+    const entries = await Bun.$`tar -tzf ${artifact.file}`.text()
+    expect(entries).toContain("package/dist/src/index.js")
+  } finally {
+    await Bun.write(file, original)
+  }
+  expect(await Bun.file(file).text()).toBe(original)
+})
+
+test("compiled plugin manifests match the flat dist layout", async () => {
+  const directory = path.join(root, "compiled-plugin")
+  await mkdir(path.join(directory, "dist"), { recursive: true })
+  const file = path.join(directory, "package.json")
+  const original = `${JSON.stringify(
+    {
+      name: "@synsci/plugin-fixture",
+      version: "2.0.31",
+      files: ["dist"],
+      exports: { ".": "./src/index.ts" },
+    },
+    null,
+    2,
+  )}\n`
+  await Bun.write(file, original)
+  await Bun.write(path.join(directory, "dist/index.js"), "export const version = true\n")
+  await Bun.write(path.join(directory, "dist/index.d.ts"), "export declare const version: boolean\n")
+
+  const pkg = createCompiledPackageManifest(original, "2.0.32-test.98.1")
+  await Bun.write(file, `${JSON.stringify(pkg, null, 2)}\n`)
+  try {
+    const artifact = await packPackage({ cwd: directory, name: pkg.name, version: pkg.version })
+    expect(pkg.exports).toEqual({ ".": { import: "./dist/index.js", types: "./dist/index.d.ts" } })
+    const entries = await Bun.$`tar -tzf ${artifact.file}`.text()
+    expect(entries).toContain("package/dist/index.js")
+  } finally {
+    await Bun.write(file, original)
+  }
+  expect(await Bun.file(file).text()).toBe(original)
+})
+
+test("packed SDK and plugin exports must load in Node before publication", async () => {
+  const version = "2.0.32-test.98.1"
+  const sdkDirectory = path.join(root, "node-sdk")
+  await mkdir(path.join(sdkDirectory, "dist/src"), { recursive: true })
+  await Bun.write(
+    path.join(sdkDirectory, "package.json"),
+    `${JSON.stringify({
+      name: "@synsci/sdk",
+      version,
+      type: "module",
+      files: ["dist"],
+      exports: { ".": { import: "./dist/src/index.js" } },
+    })}\n`,
+  )
+  await Bun.write(path.join(sdkDirectory, "dist/src/index.js"), "export const sdk = true\n")
+
+  const pluginDirectory = path.join(root, "node-plugin")
+  await mkdir(path.join(pluginDirectory, "dist"), { recursive: true })
+  await Bun.write(
+    path.join(pluginDirectory, "package.json"),
+    `${JSON.stringify({
+      name: "@synsci/plugin",
+      version,
+      type: "module",
+      files: ["dist"],
+      exports: {
+        ".": { import: "./dist/index.js" },
+        "./tool": { import: "./dist/tool.js" },
+      },
+    })}\n`,
+  )
+  await Bun.write(path.join(pluginDirectory, "dist/tool.js"), "export const tool = true\n")
+  const sdkArtifact = await packPackage({ cwd: sdkDirectory, name: "@synsci/sdk", version })
+
+  await Bun.write(path.join(pluginDirectory, "dist/index.js"), 'export * from "./tool"\n')
+  const broken = await packPackage({ cwd: pluginDirectory, name: "@synsci/plugin", version })
+  await expect(verifyPackedModuleExports([sdkArtifact, broken])).rejects.toThrow("do not load in Node")
+
+  await Bun.write(path.join(pluginDirectory, "dist/index.js"), 'export * from "./tool.js"\n')
+  const pluginArtifact = await packPackage({ cwd: pluginDirectory, name: "@synsci/plugin", version })
+  expect(await verifyPackedModuleExports([sdkArtifact, pluginArtifact])).toEqual([
+    "@synsci/sdk",
+    "@synsci/plugin",
+    "@synsci/plugin/tool",
+  ])
 })
 
 test("preflight authenticates and proves ownership of all 15 packages before mutation", async () => {
@@ -155,18 +271,43 @@ test("publish resumes missing, byte-identical, and content-equivalent artifacts 
   expect((await readState(file)).publishCalls).toBe(1)
 })
 
-test("already-published responses wait for visibility while genuine owner E403 fails immediately", async () => {
+test("successful and existing publishes outwait the short publish retry window", async () => {
   const artifact = await fixturePackage()
   const spec = `${artifact.name}@${artifact.version}`
-  const delayed = await stateFile({ publishMode: "already", publishVisibilityReads: 2 })
+  const delayed = await stateFile({ publishMode: "success", publishVisibilityReads: 7 })
 
-  expect(await publishPackage({ ...artifact, tag: "release-2-0-32" }, options(delayed, spec))).toBe("verified")
+  expect(await publishPackage({ ...artifact, tag: "release-2-0-32" }, options(delayed, spec))).toBe("published")
   expect((await readState(delayed)).publishCalls).toBe(1)
 
+  const existing = await stateFile({ publishMode: "already", publishVisibilityReads: 7 })
+  expect(await publishPackage({ ...artifact, tag: "release-2-0-32" }, options(existing, spec))).toBe("verified")
+  expect((await readState(existing)).publishCalls).toBe(1)
+})
+
+test("deferred publishes verify the complete set concurrently after every upload", async () => {
+  const first = await fixturePackage("@synsci/release-first")
+  const second = await fixturePackage("@synsci/release-second")
+  const firstSpec = `${first.name}@${first.version}`
+  const secondSpec = `${second.name}@${second.version}`
+  const file = await stateFile({ publishMode: "success" })
+
+  await publishPackage({ ...first, deferVerification: true, tag: "release-2-0-32" }, options(file, firstSpec))
+  await publishPackage({ ...second, deferVerification: true, tag: "release-2-0-32" }, options(file, secondSpec))
+
+  const state = await readState(file)
+  expect(state.publishCalls).toBe(2)
+  expect(state.packages[firstSpec]).toBeDefined()
+  expect(state.packages[secondSpec]).toBeDefined()
+  await verifyPublishedPackages([first, second], options(file))
+})
+
+test("genuine owner E403 fails immediately", async () => {
+  const artifact = await fixturePackage()
+
   const denied = await stateFile({ publishMode: "permission" })
-  await expect(publishPackage({ ...artifact, tag: "release-2-0-32" }, options(denied, spec))).rejects.toBeInstanceOf(
-    NpmPermissionError,
-  )
+  await expect(
+    publishPackage({ ...artifact, tag: "release-2-0-32" }, options(denied, `${artifact.name}@${artifact.version}`)),
+  ).rejects.toBeInstanceOf(NpmPermissionError)
   expect((await readState(denied)).publishCalls).toBe(1)
 })
 

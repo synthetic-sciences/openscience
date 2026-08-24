@@ -176,6 +176,24 @@ jobs:
           if (spec !== "@synsci/openscience@test") throw new Error(`synsci@test resolves ${spec}`)
           console.log(`synsci@test resolves ${spec}`)
           NODE
+
+          sdk_probe="$RUNNER_TEMP/openscience-sdk-probe"
+          mkdir -p "$sdk_probe"
+          npm install --prefix "$sdk_probe" \
+            "@synsci/sdk@${{ needs.publish-test.outputs.version }}" \
+            "@synsci/plugin@${{ needs.publish-test.outputs.version }}"
+          cat > "$sdk_probe/probe.mjs" <<'NODE'
+          await import("@synsci/sdk")
+          await import("@synsci/sdk/client")
+          await import("@synsci/sdk/server")
+          await import("@synsci/sdk/v2")
+          await import("@synsci/sdk/v2/client")
+          await import("@synsci/sdk/v2/server")
+          await import("@synsci/plugin")
+          await import("@synsci/plugin/tool")
+          console.log("published SDK and plugin exports resolve")
+          NODE
+          node "$sdk_probe/probe.mjs"
         env:
           HOME: ${{ runner.temp }}/openscience-npm-test-home
           OPENSCIENCE_VERSION: ${{ needs.publish-test.outputs.version }}

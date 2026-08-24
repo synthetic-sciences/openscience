@@ -2,7 +2,7 @@
 
 import path from "path"
 import os from "os"
-import { copyFile, mkdir, mkdtemp, readdir } from "node:fs/promises"
+import { copyFile, mkdir, mkdtemp, readdir, rm } from "node:fs/promises"
 import cli from "../../backend/cli/package.json"
 import { NativeTargets, nativePackageName } from "../../backend/cli/script/native-targets"
 import sdk from "../sdk/js/package.json"
@@ -42,7 +42,8 @@ type ArtifactManifest = {
 export class NpmArtifactConflict extends Error {}
 export class NpmPermissionError extends Error {}
 
-const attempts = [1, 2, 3, 4, 5] as const
+const publishAttempts = [1, 2, 3, 4, 5] as const
+const defaultVisibilityAttempts = 180
 
 async function run(args: string[], options: NpmCommandOptions = {}): Promise<Result> {
   const configured = options.command ?? process.env.OPENSCIENCE_NPM_COMMAND ?? "npm"
@@ -68,6 +69,22 @@ function failure(result: Result) {
 function retryDelay(options: NpmCommandOptions) {
   const value = Number(options.env?.OPENSCIENCE_NPM_RETRY_MS ?? process.env.OPENSCIENCE_NPM_RETRY_MS ?? 1_000)
   return Number.isFinite(value) && value >= 0 ? value : 1_000
+}
+
+function visibilityAttempts(options: NpmCommandOptions) {
+  const value = Number(
+    options.env?.OPENSCIENCE_NPM_VISIBILITY_ATTEMPTS ??
+      process.env.OPENSCIENCE_NPM_VISIBILITY_ATTEMPTS ??
+      defaultVisibilityAttempts,
+  )
+  return Number.isInteger(value) && value > 0 ? value : defaultVisibilityAttempts
+}
+
+function visibilityRetryDelay(options: NpmCommandOptions) {
+  const value = Number(
+    options.env?.OPENSCIENCE_NPM_VISIBILITY_RETRY_MS ?? process.env.OPENSCIENCE_NPM_VISIBILITY_RETRY_MS ?? 2_000,
+  )
+  return Number.isFinite(value) && value >= 0 ? value : 2_000
 }
 
 function isAlreadyPublished(detail: string) {
@@ -139,13 +156,41 @@ async function packedManifest(file: string) {
     proc.exited,
   ])
   if (exitCode !== 0) throw new Error(`Could not inspect npm tarball ${file}: ${stderr.trim()}`)
-  return JSON.parse(stdout) as { name?: string; version?: string }
+  return JSON.parse(stdout) as { exports?: unknown; name?: string; version?: string }
 }
 
 export async function packedIntegrity(file: string) {
   const bytes = await Bun.file(file).arrayBuffer()
   const digest = new Bun.CryptoHasher("sha512").update(bytes).digest("base64")
   return `sha512-${digest}`
+}
+
+export function createCompiledPackageManifest(
+  source: string,
+  version: string,
+  options: { preserveSourceDirectory?: boolean } = {},
+) {
+  const parsed = JSON.parse(source) as Record<string, unknown>
+  if (
+    typeof parsed.name !== "string" ||
+    !parsed.exports ||
+    typeof parsed.exports !== "object" ||
+    Array.isArray(parsed.exports)
+  ) {
+    throw new Error("Compiled npm packages require a name and exports object")
+  }
+  const exports = Object.fromEntries(
+    Object.entries(parsed.exports).map(([key, value]) => {
+      if (typeof value !== "string") throw new Error(`Compiled npm export ${key} must be a source path`)
+      if (!value.startsWith("./src/") || !value.endsWith(".ts")) {
+        throw new Error(`Compiled npm export ${key} must point to a TypeScript file under ./src`)
+      }
+      const output = options.preserveSourceDirectory ? "./dist/src/" : "./dist/"
+      const file = value.replace("./src/", output).replace(/\.ts$/, "")
+      return [key, { import: `${file}.js`, types: `${file}.d.ts` }]
+    }),
+  )
+  return { ...parsed, exports, name: parsed.name, version }
 }
 
 async function assertPackedIdentity(input: { file: string; name: string; version: string }) {
@@ -263,6 +308,77 @@ export async function loadReleaseArtifacts(input: { directory: string; source: s
   return artifacts
 }
 
+function publicImportSpecifiers(manifest: Awaited<ReturnType<typeof packedManifest>>) {
+  if (
+    typeof manifest.name !== "string" ||
+    !manifest.exports ||
+    typeof manifest.exports !== "object" ||
+    Array.isArray(manifest.exports)
+  ) {
+    throw new Error("Packed module requires a package name and exports object")
+  }
+  return Object.keys(manifest.exports).map((key) => {
+    if (key === ".") return manifest.name!
+    if (!key.startsWith("./")) throw new Error(`Unsupported packed module export: ${key}`)
+    return `${manifest.name}/${key.slice(2)}`
+  })
+}
+
+/** Install the exact packed SDK and plugin together, then import every public
+ * export with Node. This runs before caching or publishing, so broken ESM
+ * specifiers and missing packed files cannot become immutable npm releases. */
+export async function verifyPackedModuleExports(
+  artifacts: PackedPackage[],
+  options: { nodeCommand?: string | string[]; npmCommand?: string | string[] } = {},
+) {
+  const targets = [sdk.name, plugin.name].map((name) => {
+    const artifact = artifacts.find((value) => value.name === name)
+    if (!artifact) throw new Error(`Missing packed module for import verification: ${name}`)
+    return artifact
+  })
+  const specifiers = (
+    await Promise.all(targets.map(async (artifact) => publicImportSpecifiers(await packedManifest(artifact.file))))
+  ).flat()
+  const directory = await mkdtemp(path.join(os.tmpdir(), "openscience-packed-modules-"))
+  try {
+    const install = await run(
+      [
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--package-lock=false",
+        "--prefix",
+        directory,
+        ...targets.map((artifact) => artifact.file),
+      ],
+      { command: options.npmCommand ?? "npm", cwd: directory },
+    )
+    if (install.exitCode !== 0) throw new Error(`Could not install packed SDK/plugin: ${failure(install)}`)
+    const probe = path.join(directory, "verify-exports.mjs")
+    await Bun.write(probe, `${specifiers.map((value) => `await import(${JSON.stringify(value)})`).join("\n")}\n`)
+    const configured = options.nodeCommand ?? "node"
+    const command = Array.isArray(configured) ? configured : [configured]
+    const proc = Bun.spawn([...command, probe], {
+      cwd: directory,
+      env: process.env,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ])
+    if (exitCode !== 0) {
+      throw new Error(`Packed SDK/plugin exports do not load in Node: ${(stderr || stdout).trim().slice(-2_000)}`)
+    }
+    return specifiers
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
+
 async function registryIntegrity(input: PackedPackage, options: NpmCommandOptions) {
   const spec = `${input.name}@${input.version}`
   const result = await run(["view", spec, "dist.integrity", "--json"], options)
@@ -296,7 +412,8 @@ async function assertEquivalent(input: PackedPackage, remote: string, options: N
 
 export async function verifyPublishedPackage(input: PackedPackage, options: NpmCommandOptions = {}) {
   const errors: unknown[] = []
-  for (const attempt of attempts) {
+  const attempts = visibilityAttempts(options)
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const remote = await registryIntegrity(input, options)
       if (remote) return await assertEquivalent(input, remote, options)
@@ -305,17 +422,30 @@ export async function verifyPublishedPackage(input: PackedPackage, options: NpmC
       if (error instanceof NpmArtifactConflict) throw error
       errors.push(error)
     }
-    if (attempt < attempts.length) await Bun.sleep(retryDelay(options))
+    if (attempt < attempts) await Bun.sleep(visibilityRetryDelay(options))
   }
   throw errors.at(-1)
 }
 
+export async function verifyPublishedPackages(inputs: PackedPackage[], options: NpmCommandOptions = {}) {
+  const results = await Promise.allSettled(inputs.map((input) => verifyPublishedPackage(input, options)))
+  const failures = results.flatMap((result, index) => {
+    if (result.status === "fulfilled") return []
+    const input = inputs[index]
+    return [new Error(`Could not verify ${input.name}@${input.version}`, { cause: result.reason })]
+  })
+  if (failures.length > 0) {
+    throw new AggregateError(failures, `${failures.length}/${inputs.length} packages were not verifiable on npm`)
+  }
+  return results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
+}
+
 export async function publishPackage(
-  input: PackedPackage & { tag: string },
+  input: PackedPackage & { deferVerification?: boolean; tag: string },
   options: NpmCommandOptions = {},
 ): Promise<"published" | "verified"> {
   const errors: unknown[] = []
-  for (const attempt of attempts) {
+  for (const attempt of publishAttempts) {
     try {
       const remote = await registryIntegrity(input, options)
       if (remote) {
@@ -330,8 +460,9 @@ export async function publishPackage(
 
     const result = await run(["publish", input.file, "--access", "public", "--tag", input.tag], options)
     if (result.exitCode === 0) {
-      await verifyPublishedPackage(input, options)
-      console.log(`  published ${input.name}@${input.version} under ${input.tag}`)
+      if (!input.deferVerification) await verifyPublishedPackage(input, options)
+      const status = input.deferVerification ? "submitted" : "published"
+      console.log(`  ${status} ${input.name}@${input.version} under ${input.tag}`)
       return "published"
     }
 
@@ -350,7 +481,7 @@ export async function publishPackage(
       throw new NpmPermissionError(`npm refused ${input.name}@${input.version}: ${failure(result)}`)
     }
 
-    if (attempt < attempts.length) {
+    if (attempt < publishAttempts.length) {
       console.warn(`  retry ${input.name} (attempt ${attempt})`)
       await Bun.sleep(retryDelay(options))
     }

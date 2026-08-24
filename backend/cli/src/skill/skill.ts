@@ -19,12 +19,8 @@ import { ProjectTrust } from "@/project/trust"
 import { BundledSkills } from "./bundled"
 import { lazy } from "@/util/lazy"
 import { Install } from "./install/install"
-import {
-  isRetiredProductSkillName,
-  isRetiredProductSkillPath,
-  RETIRED_ATLAS_SKILL_NAMES,
-  RETIRED_PRODUCT_SKILL_NAMES,
-} from "./retired"
+import { isRetiredProductSkillName, isRetiredProductSkillPath, RETIRED_PRODUCT_SKILL_NAMES } from "./retired"
+import { purgeRetiredAtlasAgentInstall } from "./retired-install"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -74,28 +70,6 @@ export namespace Skill {
   const USER_SKILL_DIR = path.join(Global.Path.data, "user-skills")
   const UserSkillName = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
   const priority = { default: 0, installed: 1, user: 2, project: 3 } as const
-
-  function pointsToRetiredAtlasPackage(target: string): boolean {
-    return target.replaceAll("\\", "/").toLowerCase().includes("/@synsci/atlas/skills/")
-  }
-
-  /** `atlas install` created these global Claude symlinks. Remove only exact
-   * links that resolve into the retired npm package; never delete a real
-   * user-owned directory with the same name. */
-  async function purgeRetiredAtlasPackageLinks(globalClaude: string): Promise<void> {
-    for (const name of RETIRED_ATLAS_SKILL_NAMES) {
-      const link = path.join(globalClaude, "skills", name)
-      const stat = await fs.lstat(link).catch(() => undefined)
-      if (!stat?.isSymbolicLink()) continue
-      const rawTarget = await fs.readlink(link).catch(() => "")
-      if (!rawTarget) continue
-      const resolved = path.resolve(path.dirname(link), rawTarget)
-      const realTarget = await fs.realpath(resolved).catch(() => resolved)
-      if (!pointsToRetiredAtlasPackage(realTarget) && !pointsToRetiredAtlasPackage(resolved)) continue
-      await fs.rm(link, { force: true }).catch(() => {})
-      log.info("Removed retired Atlas package skill link", { name, path: link })
-    }
-  }
 
   async function read(match: string, origin: Info["origin"]): Promise<Info | undefined> {
     const md = await ConfigMarkdown.parse(match).catch((err) => {
@@ -200,6 +174,14 @@ export namespace Skill {
           }),
         )
       : []
+    const globalClaude = `${Global.Path.home}/.claude`
+    // Startup performs this before account gating. Keep the catalog boundary
+    // defensive too for SDK consumers that call Skill directly.
+    const retired = await purgeRetiredAtlasAgentInstall(Global.Path.home).catch((error) => {
+      log.warn("failed to purge retired Atlas agent install", { error })
+      return 0
+    })
+    if (retired > 0) log.info("Removed retired Atlas agent install artifacts", { count: retired })
     if (!Flag.OPENSCIENCE_DISABLE_CLAUDE_CODE_SKILLS) {
       for (const dir of claudeDirs) {
         const matches = await Array.fromAsync(
@@ -220,8 +202,6 @@ export namespace Skill {
         }
       }
 
-      const globalClaude = `${Global.Path.home}/.claude`
-      await purgeRetiredAtlasPackageLinks(globalClaude)
       if (await Filesystem.isDir(globalClaude)) {
         for await (const match of CLAUDE_SKILL_GLOB.scan({
           cwd: globalClaude,

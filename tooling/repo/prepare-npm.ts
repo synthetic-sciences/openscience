@@ -5,7 +5,7 @@ import { cp, copyFile, mkdir } from "node:fs/promises"
 import { $ } from "bun"
 import { Script } from "@synsci/script"
 import { assertPublicPackageSurface, createWrapperPackageManifest } from "../../backend/cli/script/publish-manifest"
-import { packPackage, saveReleaseArtifacts, type PackedPackage } from "./npm-release"
+import { createCompiledPackageManifest, packPackage, saveReleaseArtifacts, type PackedPackage } from "./npm-release"
 import { assertReleaseSource, releaseRoot, setWorkspaceVersion } from "./release-workspace"
 
 const source = await assertReleaseSource()
@@ -55,14 +55,10 @@ for (const name of Object.keys(binaries).sort()) {
 }
 artifacts.push(await packPackage({ cwd: wrapperDir, name: cliPackage.name, version }))
 
-async function packCompiledPackage(directory: string) {
+async function packCompiledPackage(directory: string, options: { preserveSourceDirectory?: boolean } = {}) {
   const packageFile = path.join(directory, "package.json")
   const original = await Bun.file(packageFile).text()
-  const pkg = JSON.parse(original)
-  for (const [key, value] of Object.entries(pkg.exports as Record<string, string>)) {
-    const file = value.replace("./src/", "./dist/").replace(".ts", "")
-    pkg.exports[key] = { import: `${file}.js`, types: `${file}.d.ts` }
-  }
+  const pkg = createCompiledPackageManifest(original, version, options)
   await Bun.write(packageFile, JSON.stringify(pkg, null, 2))
   try {
     return await packPackage({ cwd: directory, name: pkg.name, version })
@@ -72,7 +68,7 @@ async function packCompiledPackage(directory: string) {
 }
 
 const sdkDir = path.join(releaseRoot, "tooling/sdk/js")
-artifacts.push(await packCompiledPackage(sdkDir))
+artifacts.push(await packCompiledPackage(sdkDir, { preserveSourceDirectory: true }))
 
 const pluginDir = path.join(releaseRoot, "tooling/plugin")
 await $`bun tsc`.cwd(pluginDir)

@@ -10,7 +10,7 @@ import {
   publishPackage,
   releasePromotionNames,
   releaseStagingTag,
-  verifyPublishedPackage,
+  verifyPublishedPackages,
 } from "./npm-release"
 import { assertReleaseSource, releaseRoot, setWorkspaceVersion } from "./release-workspace"
 
@@ -43,16 +43,16 @@ if (Script.preview) {
 
   if (!promotionOnly) {
     console.log(`\n=== publishing ${artifacts.length} packages under ${stagingTag} ===\n`)
-    for (const artifact of ordered) await publishPackage({ ...artifact, tag: stagingTag })
+    for (const artifact of ordered) {
+      await publishPackage({ ...artifact, deferVerification: true, tag: stagingTag })
+    }
   } else {
     console.log(`\n=== promotion-only resume from ${source}; no npm package writes are allowed ===\n`)
   }
 
   console.log("\n=== verifying the complete npm release set ===\n")
-  for (const artifact of ordered) {
-    await verifyPublishedPackage(artifact)
-    console.log(`  verified ${artifact.name}@${artifact.version}`)
-  }
+  await verifyPublishedPackages(ordered)
+  for (const artifact of ordered) console.log(`  verified ${artifact.name}@${artifact.version}`)
   await ensureReleaseStagingTags(ordered, stagingTag)
 
   let releaseSha = source
