@@ -298,6 +298,8 @@ jobs:
             echo "VITE_OPENSCIENCE_SERVER_PASSWORD=$PASS"
             echo "OPENSCIENCE_E2E_ROOT=$RUNNER_TEMP/openscience-e2e"
             echo "OPENSCIENCE_TEST_HOME=$RUNNER_TEMP/openscience-e2e/home"
+            echo "OPENSCIENCE_CONFIG_DIR=$RUNNER_TEMP/openscience-e2e/config/openscience"
+            echo "OPENSCIENCE_DATA_DIR=$RUNNER_TEMP/openscience-e2e/data"
             echo "XDG_DATA_HOME=$RUNNER_TEMP/openscience-e2e/share"
             echo "XDG_CACHE_HOME=$RUNNER_TEMP/openscience-e2e/cache"
             echo "XDG_CONFIG_HOME=$RUNNER_TEMP/openscience-e2e/config"
@@ -326,7 +328,9 @@ jobs:
           exit 1
       - name: Seed OpenScience data
         working-directory: backend/cli
-        run: bun script/seed-e2e.ts
+        run: |
+          bun script/seed-e2e.ts
+          test -s "$OPENSCIENCE_DATA_DIR/openscience-session.json"
         env:
           OPENSCIENCE_DISABLE_SHARE: "true"
           OPENSCIENCE_DISABLE_LSP_DOWNLOAD: "true"
@@ -357,7 +361,15 @@ jobs:
       - name: Wait for published OpenScience server
         run: |
           for _ in $(seq 1 120); do
-            curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null && exit 0
+            if curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null; then
+              SESSION=$(curl -fsS -u "openscience:$OPENSCIENCE_SERVER_PASSWORD" \
+                "http://127.0.0.1:4096/account/session")
+              if [[ "$SESSION" == '{"session":true}' ]]; then
+                exit 0
+              fi
+              echo "::error::published OpenScience server did not load the isolated account session"
+              exit 1
+            fi
             sleep 1
           done
           echo "::error::published openscience server never became healthy on 127.0.0.1:4096"

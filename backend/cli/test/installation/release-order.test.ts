@@ -186,6 +186,15 @@ test("packaged npm rehearsal imports every public SDK and plugin export", async 
   }
 })
 
+test("packaged npm rehearsal pins and verifies one account data root", async () => {
+  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
+
+  expect(workflow).toContain('echo "OPENSCIENCE_DATA_DIR=$RUNNER_TEMP/openscience-e2e/data"')
+  expect(workflow).toContain('test -s "$OPENSCIENCE_DATA_DIR/openscience-session.json"')
+  expect(workflow).toContain('"http://127.0.0.1:4096/account/session"')
+  expect(workflow).toContain('[[ "$SESSION" == \'{"session":true}\' ]]')
+})
+
 test("npm test rehearsal stages immutable exact artifacts and promotes only after every smoke gate", async () => {
   const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
   const helper = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/npm-test-release.ts")).text()
