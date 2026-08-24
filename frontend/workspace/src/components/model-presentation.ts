@@ -17,6 +17,8 @@ const names: Record<string, string> = {
   xhigh: "Extra high",
 }
 
+const hiddenComposerEfforts = new Set(["max", "ultra"])
+
 const label = (id: string) => {
   const name = names[id]
   if (name) return name
@@ -50,9 +52,16 @@ export function serviceOption(id: string) {
 
 export function modelControl(input: ModelControlInput) {
   const variants = unique(input.variants)
-  const efforts = variants.filter((id) => id !== "none" || !variants.includes("standard")).map(effortOption)
+  const efforts = variants
+    .filter((id) => !hiddenComposerEfforts.has(id))
+    .filter((id) => id !== "none" || !variants.includes("standard"))
+    .map(effortOption)
   const services = unique(input.modes).map(serviceOption)
-  const currentEffort = selected(efforts, input.currentEffort)
+  const currentEffort = hiddenComposerEfforts.has(input.currentEffort ?? "")
+    ? (efforts.find((option) => option.id === "xhigh") ??
+      efforts.find((option) => option.id === "high") ??
+      selected(efforts))
+    : selected(efforts, input.currentEffort)
   const currentSpeed = selected(services, input.currentSpeed)
   const effort = currentEffort
     ? {

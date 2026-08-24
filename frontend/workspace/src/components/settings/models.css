@@ -59,6 +59,10 @@
   margin-left: auto;
 }
 
+.models-account-summary__balance {
+  font-variant-numeric: tabular-nums;
+}
+
 .settings-dialog .settings-models-panel [data-component="button"] {
   min-height: var(--models-control-height);
   height: var(--models-control-height);

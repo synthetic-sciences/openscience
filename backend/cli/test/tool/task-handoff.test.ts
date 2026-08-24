@@ -49,7 +49,7 @@ describe("Task tool-output handoff", () => {
             sessionID: child.id,
             messageID: "msg_handoff",
             callID: "call_handoff",
-            agent: "reviewer",
+            agent: "execute",
             abort: AbortSignal.any([]),
             messages: [],
             metadata: () => {},

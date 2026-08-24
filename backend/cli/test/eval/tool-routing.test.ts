@@ -27,7 +27,6 @@ describe("launch evaluation tool routing", () => {
     ).toBe(true)
 
     expect(keeps("citation-literature", "science_search")).toBe(true)
-    expect(keeps("citation-literature", "provenance_review")).toBe(true)
 
     expect(keeps("python-csv-report", "python")).toBe(true)
     expect(keeps("python-csv-report", "artifact")).toBe(true)
@@ -41,11 +40,7 @@ describe("launch evaluation tool routing", () => {
     expect(keeps("denied-network-retry", "compute_job")).toBe(false)
     expect(keeps("denied-network-retry", "python")).toBe(false)
 
-    expect(keeps("reviewer-unsupported-number", "artifact")).toBe(true)
-    expect(keeps("reviewer-unsupported-number", "provenance_review")).toBe(true)
-
     expect(keeps("kdense-deliverable", "python")).toBe(true)
     expect(keeps("kdense-deliverable", "science_search")).toBe(true)
-    expect(keeps("kdense-deliverable", "provenance_review")).toBe(true)
   })
 })

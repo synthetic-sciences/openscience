@@ -1,5 +1,5 @@
 import { Show, type JSX } from "solid-js"
-import { IconActivity, IconCpu, IconFile, IconFolderTree, IconLayoutGrid, IconTerminal } from "@/atlas/shared/Icon"
+import { IconCpu, IconFile, IconFolder, IconTerminal } from "@/atlas/shared/Icon"
 import { preloadTerminal } from "@/components/terminal"
 import "./session-sidebar.css"
 
@@ -8,8 +8,6 @@ export type SessionContext = "files" | "terminal" | "canvas" | "kernels" | "trac
 export function CompactContextActions(props: {
   context: SessionContext
   contextOpen: boolean
-  atlas: boolean
-  trace?: boolean
   onContext: (context: SessionContext) => void
 }): JSX.Element {
   return (
@@ -20,7 +18,7 @@ export function CompactContextActions(props: {
         aria-pressed={props.context === "files" && props.contextOpen}
         onClick={() => props.onContext("files")}
       >
-        <IconFolderTree size={13} strokeWidth={1.5} />
+        <IconFolder size={16} strokeWidth={1.5} />
         Files
       </button>
       <button
@@ -31,7 +29,7 @@ export function CompactContextActions(props: {
         onFocus={preloadTerminal}
         onClick={() => props.onContext("terminal")}
       >
-        <IconTerminal size={13} strokeWidth={1.5} />
+        <IconTerminal size={16} strokeWidth={1.5} />
         Terminal
       </button>
       <button
@@ -40,31 +38,9 @@ export function CompactContextActions(props: {
         aria-pressed={props.context === "kernels" && props.contextOpen}
         onClick={() => props.onContext("kernels")}
       >
-        <IconCpu size={13} strokeWidth={1.5} />
+        <IconCpu size={16} strokeWidth={1.5} />
         Compute
       </button>
-      <Show when={props.trace}>
-        <button
-          type="button"
-          role="menuitem"
-          aria-pressed={props.context === "trace" && props.contextOpen}
-          onClick={() => props.onContext("trace")}
-        >
-          <IconActivity size={13} strokeWidth={1.5} />
-          Trace
-        </button>
-      </Show>
-      <Show when={props.atlas}>
-        <button
-          type="button"
-          role="menuitem"
-          aria-pressed={props.context === "canvas" && props.contextOpen}
-          onClick={() => props.onContext("canvas")}
-        >
-          <IconLayoutGrid size={13} strokeWidth={1.5} />
-          Gateway
-        </button>
-      </Show>
     </div>
   )
 }
@@ -112,8 +88,6 @@ export function SessionSidebarActions(props: {
   context: SessionContext
   contextOpen: boolean
   artifact: boolean
-  atlas: boolean
-  trace?: boolean
   onContext: (context: SessionContext) => void
 }): JSX.Element {
   return (
@@ -129,7 +103,7 @@ export function SessionSidebarActions(props: {
           active={props.context === "files" && props.contextOpen}
           onClick={(_event?: Event) => props.onContext("files")}
         >
-          <IconFolderTree size={15} strokeWidth={1.5} />
+          <IconFolder size={16} strokeWidth={1.5} />
         </SidebarAction>
         <SidebarAction
           label="Terminal"
@@ -140,19 +114,8 @@ export function SessionSidebarActions(props: {
           onWarm={preloadTerminal}
           onClick={(_event?: Event) => props.onContext("terminal")}
         >
-          <IconTerminal size={15} strokeWidth={1.5} />
+          <IconTerminal size={16} strokeWidth={1.5} />
         </SidebarAction>
-        <Show when={props.atlas}>
-          <SidebarAction
-            label="Gateway"
-            detail="Research map"
-            ariaLabel="Open Gateway"
-            active={props.context === "canvas" && props.contextOpen}
-            onClick={(_event?: Event) => props.onContext("canvas")}
-          >
-            <IconLayoutGrid size={15} strokeWidth={1.5} />
-          </SidebarAction>
-        </Show>
         <SidebarAction
           label="Compute"
           detail="Runtimes and jobs"
@@ -160,19 +123,8 @@ export function SessionSidebarActions(props: {
           active={props.context === "kernels" && props.contextOpen}
           onClick={(_event?: Event) => props.onContext("kernels")}
         >
-          <IconCpu size={15} strokeWidth={1.5} />
+          <IconCpu size={16} strokeWidth={1.5} />
         </SidebarAction>
-        <Show when={props.trace}>
-          <SidebarAction
-            label="Trace"
-            detail="Time, cost, trust"
-            ariaLabel="Open session trace"
-            active={props.context === "trace" && props.contextOpen}
-            onClick={(_event?: Event) => props.onContext("trace")}
-          >
-            <IconActivity size={15} strokeWidth={1.5} />
-          </SidebarAction>
-        </Show>
         <Show when={props.artifact}>
           <SidebarAction
             label="Details"

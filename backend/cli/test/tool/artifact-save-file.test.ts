@@ -1,11 +1,10 @@
-import { expect, spyOn, test } from "bun:test"
+import { expect, test } from "bun:test"
 import path from "node:path"
 import { ArtifactStore } from "../../src/artifact/store"
 import { Instance } from "../../src/project/instance"
 import { ProvenanceEnvelope } from "../../src/science/provenance/envelope"
 import { Provenance } from "../../src/science/provenance/store"
 import { SessionFilesystem } from "../../src/session/filesystem"
-import { SessionReview } from "../../src/session/review"
 import { ArtifactTool } from "../../src/tool/artifact"
 import { executionSession, tmpdir } from "../fixture/fixture"
 
@@ -27,7 +26,6 @@ test("artifact save_file promotes a workspace result into immutable versions", a
     fn: async () => {
       const session = await executionSession()
       const tool = await ArtifactTool.init()
-      const autoReview = spyOn(SessionReview, "auto").mockResolvedValue(undefined)
       const workspace = await SessionFilesystem.workspace(session.id)
       const target = path.join(workspace, "results", "titanic-report.md")
       await Bun.write(target, "# Titanic analysis\n\nFirst verified result.\n")
@@ -42,10 +40,6 @@ test("artifact save_file promotes a workspace result into immutable versions", a
         context(session.id),
       )
       const firstSaved = first.metadata.savedArtifact as { id: string }
-
-      expect(autoReview).toHaveBeenCalledTimes(2)
-      expect(autoReview).toHaveBeenCalledWith(session.id, "research")
-      autoReview.mockRestore()
 
       expect(first.title).toBe("Saved Result: Titanic analysis report")
       expect(first.metadata.savedArtifact).toMatchObject({

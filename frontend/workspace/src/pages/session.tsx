@@ -65,6 +65,7 @@ import { SIDEBAR_WIDTH, clampSidebarWidth } from "@/pages/session-sidebar-size"
 import { URLS } from "@/config/urls"
 import { SessionTabStrip, sessionTabID, type SessionTabItem } from "@/pages/session-tabs"
 import { sessionUnavailable } from "@/pages/session-availability"
+import { publicContextAvailable, sanitizePublicContexts } from "@/pages/public-contexts"
 import { useExecutionAuthority } from "@/atlas/use-execution-authority"
 import "./session-header.css"
 import "../components/chat-surface.css"
@@ -186,6 +187,8 @@ export default function Page(): JSX.Element {
     ),
   )
 
+  createEffect(on(uiStore.scope, () => sanitizePublicContexts(uiStore)))
+
   function newSession() {
     if (!params.id || params.id === "new") {
       prompt.reset()
@@ -226,16 +229,8 @@ export default function Page(): JSX.Element {
     return task
   }
 
-  const atlasAvailable = () => productPreferences.atlas()
-
-  createEffect(() => {
-    if (productPreferences.atlas()) return
-    if (uiStore.context() !== "canvas" || !uiStore.open()) return
-    uiStore.closeContext()
-  })
-
   const openContext = (context: SessionContext) => {
-    if (context === "canvas" && !atlasAvailable()) return
+    if (!publicContextAvailable(context)) return
     uiStore.openContext(context)
     if (context !== "terminal") return
     void ensureSession()
@@ -577,28 +572,6 @@ export default function Page(): JSX.Element {
         category: "Project",
         onSelect: () => openContext("kernels"),
       },
-      ...(productPreferences.atlas()
-        ? [
-            {
-              id: "project.atlas",
-              title: "Open Gateway",
-              description: "View this project's research map",
-              category: "Project",
-              onSelect: () => openContext("canvas"),
-            } satisfies CommandOption,
-          ]
-        : []),
-      ...(productPreferences.trace()
-        ? [
-            {
-              id: "session.trace",
-              title: "Open session trace",
-              description: "Inspect time, cost, and trust signals",
-              category: "Session",
-              onSelect: () => openContext("trace"),
-            } satisfies CommandOption,
-          ]
-        : []),
       ...(artifactContext.active()
         ? [
             {
@@ -843,7 +816,7 @@ export default function Page(): JSX.Element {
         flex: 1,
         display: "flex",
         "flex-direction": "column",
-        height: "100dvh",
+        height: "100%",
         overflow: "hidden",
         background: "var(--color-bg)",
       }}
@@ -910,8 +883,6 @@ export default function Page(): JSX.Element {
           context={uiStore.context()}
           contextOpen={uiStore.open()}
           artifact={Boolean(artifactContext.active())}
-          atlas={atlasAvailable()}
-          trace={productPreferences.trace()}
           onSelect={(id) => {
             setMobileSessionsOpen(false)
             sessionTabs.open(id)
@@ -1299,8 +1270,6 @@ function SessionsSidebar(props: {
   context: SessionContext
   contextOpen: boolean
   artifact: boolean
-  atlas: boolean
-  trace: boolean
   onSelect: (id: string) => void
   onWarm: (id: string) => void
   onDelete: (id: string) => void
@@ -1452,8 +1421,6 @@ function SessionsSidebar(props: {
           context={props.context}
           contextOpen={props.contextOpen}
           artifact={props.artifact}
-          atlas={props.atlas}
-          trace={props.trace}
           onContext={props.onContext}
         />
       </nav>

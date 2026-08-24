@@ -20,6 +20,6 @@ A minimum record for material work includes input references or hashes, code, pa
 
 ## Review
 
-Request the built-in reviewer for material claims and artifacts. It compares claims with the record but does not rerun the analysis or choose the best scientific method. Address findings. Pair review with executable tests, domain diagnostics, and a specialist when methodological judgment is needed.
+Verify material claims and artifacts against the observable record. Run executable tests and domain diagnostics, inspect the saved outputs directly, and use a biology, physics, or ML specialist when methodological judgment is needed. Address or disclose every failed or inconclusive check before handoff.
 
 Before handoff, check that every reported computation ran, every material citation supports its claim, identifiers and units are consistent, planned steps are complete or marked incomplete, artifacts open, and no credential or unauthorized data escaped into an output.

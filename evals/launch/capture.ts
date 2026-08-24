@@ -44,7 +44,6 @@ type Trace = {
     dedupeHits: number
     approvalCount: number
     artifactSaves: number
-    reviewerFindings: number
     failureCount: number
     retryCount: number
   }
@@ -97,7 +96,6 @@ type Trace = {
     cost?: number
   }>
   artifacts: unknown[]
-  reviewerFindings: Array<{ relation?: "refutes" | "supports"; severity?: string }>
   failures: unknown[]
   retries: unknown[]
   privacy: {
@@ -225,10 +223,6 @@ function observables(trace: Trace) {
     children: {
       total: trace.children.length,
       failed: trace.children.filter((child) => child.status === "error").length,
-    },
-    reviewer: {
-      findings: trace.reviewerFindings.length,
-      refutations: trace.reviewerFindings.filter((finding) => finding.relation === "refutes").length,
     },
     failures: trace.summary.failureCount,
     retries: trace.summary.retryCount,
@@ -387,7 +381,6 @@ export async function captureRun(options: CaptureOptions) {
       planUseful: null,
       citationSupport: null,
       artifactOpenChecks: null,
-      reviewerPrecision: null,
       uiResetCount: null,
       irrelevantToolCalls: null,
       unsupportedClaims: null,

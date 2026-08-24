@@ -18,7 +18,6 @@ import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { SessionFilesystem } from "../../session/filesystem"
-import { SessionReview } from "../../session/review"
 import { SessionTrace } from "../../session/trace"
 import { RuntimeEvents } from "../../runtime/events"
 import { SessionLoopState } from "../../session/loop-state"
@@ -299,61 +298,6 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const todos = await Todo.get(sessionID)
         return c.json(todos)
-      },
-    )
-    .post(
-      "/:sessionID/review",
-      describeRoute({
-        summary: "Run an independent reviewer pass",
-        description:
-          "Launches the reviewer directly on this session: session-level permission rules restore its provenance tools and it receives a structured context message. Returns immediately; the review streams into the session like any other turn.",
-        operationId: "session.review",
-        responses: {
-          200: {
-            description: "Review started",
-            content: { "application/json": { schema: resolver(z.object({ started: z.boolean() })) } },
-          },
-          ...errors(400, 404),
-        },
-      }),
-      validator("param", z.object({ sessionID: z.string().meta({ description: "Session ID" }) })),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        await Session.get(sessionID)
-        await SessionReview.start(sessionID)
-        return c.json({ started: true })
-      },
-    )
-    .post(
-      "/:sessionID/review/artifact",
-      describeRoute({
-        summary: "Review one immutable artifact version",
-        description:
-          "Launches a read-only reviewer against one exact artifact-store version. The returned target binds the version id, byte count, MIME type, and SHA-256 used by every recorded finding.",
-        operationId: "session.reviewArtifact",
-        responses: {
-          200: {
-            description: "Exact-version review started",
-            content: {
-              "application/json": {
-                schema: resolver(z.object({ started: z.boolean(), target: SessionReview.Bound })),
-              },
-            },
-          },
-          ...errors(400, 404),
-        },
-      }),
-      validator("param", z.object({ sessionID: z.string().meta({ description: "Session ID" }) })),
-      validator("json", SessionReview.Target),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        await Session.get(sessionID)
-        const target = await SessionReview.start(sessionID, c.req.valid("json")).catch((error) =>
-          error instanceof Error ? error : new Error(String(error)),
-        )
-        if (target instanceof Error) return c.json({ error: target.message }, 400)
-        if (!target) return c.json({ error: "The immutable artifact review target was not created" }, 400)
-        return c.json({ started: true, target })
       },
     )
     .post(

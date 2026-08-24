@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
+import { For, Show, createMemo, createResource, type JSX } from "solid-js"
 import type { SessionTraceResponse } from "@synsci/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
 import { IconRefresh } from "@/atlas/shared/Icon"
@@ -24,23 +24,6 @@ export function SessionTraceSurface(props: { session: string }): JSX.Element {
     },
   )
   const activity = createMemo(() => (trace() ? traceActivity(trace()!) : []))
-  const [reviewing, setReviewing] = createSignal(false)
-  const [reviewState, setReviewState] = createSignal<"idle" | "started" | "error">("idle")
-
-  const review = async () => {
-    if (reviewing()) return
-    setReviewing(true)
-    setReviewState("idle")
-    try {
-      await sdk.client.session.review({ sessionID: props.session })
-      setReviewState("started")
-      await api.refetch()
-    } catch {
-      setReviewState("error")
-    } finally {
-      setReviewing(false)
-    }
-  }
 
   return (
     <section class="session-trace" aria-label="Session trace">
@@ -170,9 +153,7 @@ export function SessionTraceSurface(props: { session: string }): JSX.Element {
                             <strong>{contract().template} contract</strong>
                             <small>
                               {data().research.failedCandidates} failed{" "}
-                              {data().research.failedCandidates === 1 ? "candidate" : "candidates"} ·{" "}
-                              {data().research.openFindings} open major{" "}
-                              {data().research.openFindings === 1 ? "finding" : "findings"}
+                              {data().research.failedCandidates === 1 ? "candidate" : "candidates"}
                             </small>
                           </div>
                         </div>
@@ -208,26 +189,6 @@ export function SessionTraceSurface(props: { session: string }): JSX.Element {
                           )}
                         </For>
                       </div>
-
-                      <footer class="session-trace__review">
-                        <div>
-                          <strong>Independent reviewer</strong>
-                          <span>
-                            {reviewState() === "started"
-                              ? "Review queued. Findings will appear in this trace."
-                              : reviewState() === "error"
-                                ? "Review could not be started. Check the active model and try again."
-                                : "Audit the exact Results and record finding lifecycle."}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          disabled={reviewing() || data().session.status !== "idle"}
-                          onClick={() => void review()}
-                        >
-                          {reviewing() ? "Starting review…" : "Run independent review"}
-                        </button>
-                      </footer>
                     </section>
                   )}
                 </Show>

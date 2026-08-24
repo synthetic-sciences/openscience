@@ -200,7 +200,7 @@ export type UserMessage = {
       }
     | {
         type: "continuation"
-        kind: "output" | "contract" | "review" | "review-summary" | "compaction" | "task"
+        kind: "output" | "contract" | "compaction" | "task"
         text: string
         epoch: string
         transaction: string
@@ -7643,56 +7643,6 @@ export type SettingsComputeJobsCancelResponses = {
 export type SettingsComputeJobsCancelResponse =
   SettingsComputeJobsCancelResponses[keyof SettingsComputeJobsCancelResponses]
 
-export type SettingsReviewGetData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/settings/review"
-}
-
-export type SettingsReviewGetResponses = {
-  /**
-   * Reviewer preferences
-   */
-  200: {
-    auto: boolean
-    model?: {
-      providerID: string
-      modelID: string
-    } | null
-  }
-}
-
-export type SettingsReviewGetResponse = SettingsReviewGetResponses[keyof SettingsReviewGetResponses]
-
-export type SettingsReviewSetData = {
-  body?: {
-    auto: boolean
-    model?: {
-      providerID: string
-      modelID: string
-    } | null
-  }
-  path?: never
-  query?: never
-  url: "/settings/review"
-}
-
-export type SettingsReviewSetResponses = {
-  /**
-   * Updated preferences
-   */
-  200: {
-    auto: boolean
-    model?: {
-      providerID: string
-      modelID: string
-    } | null
-  }
-}
-
-export type SettingsReviewSetResponse = SettingsReviewSetResponses[keyof SettingsReviewSetResponses]
-
 export type SettingsPreferencesGetData = {
   body?: never
   path?: never
@@ -9367,7 +9317,7 @@ export type SessionTraceResponses = {
       status: "unconfigured" | "running" | "blocked" | "ready"
       readiness: number
       gates: Array<{
-        id: "stages" | "deliverables" | "checks" | "review" | "runtime"
+        id: "stages" | "deliverables" | "checks" | "runtime"
         label: string
         status: "passed" | "pending" | "failed"
         complete: number
@@ -9375,7 +9325,6 @@ export type SessionTraceResponses = {
         detail: string
       }>
       missing: Array<string>
-      openFindings: number
       failedCandidates: number
       strategy: {
         mode: "explore" | "refine" | "pivot" | "fuse" | "verify"
@@ -9759,95 +9708,6 @@ export type SessionTodoResponses = {
 }
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
-
-export type SessionReviewData = {
-  body?: never
-  path: {
-    /**
-     * Session ID
-     */
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/session/{sessionID}/review"
-}
-
-export type SessionReviewErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionReviewError = SessionReviewErrors[keyof SessionReviewErrors]
-
-export type SessionReviewResponses = {
-  /**
-   * Review started
-   */
-  200: {
-    started: boolean
-  }
-}
-
-export type SessionReviewResponse = SessionReviewResponses[keyof SessionReviewResponses]
-
-export type SessionReviewArtifactData = {
-  body?: {
-    artifactID: string
-    versionID: string
-  }
-  path: {
-    /**
-     * Session ID
-     */
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/session/{sessionID}/review/artifact"
-}
-
-export type SessionReviewArtifactErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionReviewArtifactError = SessionReviewArtifactErrors[keyof SessionReviewArtifactErrors]
-
-export type SessionReviewArtifactResponses = {
-  /**
-   * Exact-version review started
-   */
-  200: {
-    started: boolean
-    target: {
-      id: string
-      artifactID: string
-      versionID: string
-      version: number
-      filename: string
-      mimeType: string
-      size: number
-      sha256: string
-    }
-  }
-}
-
-export type SessionReviewArtifactResponse = SessionReviewArtifactResponses[keyof SessionReviewArtifactResponses]
 
 export type SessionInitData = {
   body?: {
@@ -15231,7 +15091,7 @@ export type ProvenanceRecordData = {
       [key: string]: unknown
     }
     derived_from?: string
-    relation?: "produced" | "consumed" | "derived-from" | "supports" | "refutes"
+    relation?: "produced" | "consumed" | "derived-from"
   }
   path?: never
   query?: {
@@ -15265,65 +15125,7 @@ export type ProvenanceReviewsListData = {
 
 export type ProvenanceReviewsListResponses = {
   /**
-   * Reviewer findings
-   */
-  200: unknown
-}
-
-export type ProvenanceReviewData = {
-  body?: {
-    target: string
-    claim: string
-    issue: string
-    severity: "blocking" | "major" | "minor" | "info"
-    evidence: string
-    verdict?: "refutes" | "supports"
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/provenance/reviews"
-}
-
-export type ProvenanceReviewErrors = {
-  /**
-   * Invalid target
-   */
-  400: unknown
-}
-
-export type ProvenanceReviewResponses = {
-  /**
-   * Recorded finding
-   */
-  200: unknown
-}
-
-export type ProvenanceReviewsResolveData = {
-  body?: {
-    actor: string
-    reason: string
-  }
-  path: {
-    id: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/provenance/reviews/{id}/resolve"
-}
-
-export type ProvenanceReviewsResolveErrors = {
-  /**
-   * Not a refuting finding
-   */
-  400: unknown
-}
-
-export type ProvenanceReviewsResolveResponses = {
-  /**
-   * Resolution node
+   * Historical review findings
    */
   200: unknown
 }

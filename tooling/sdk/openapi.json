@@ -17337,154 +17337,6 @@
         ]
       }
     },
-    "/settings/review": {
-      "get": {
-        "operationId": "settings.review.get",
-        "summary": "Get reviewer preferences",
-        "responses": {
-          "200": {
-            "description": "Reviewer preferences",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "auto": {
-                      "type": "boolean"
-                    },
-                    "model": {
-                      "default": null,
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "providerID": {
-                              "type": "string"
-                            },
-                            "modelID": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "providerID",
-                            "modelID"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "auto"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.review.get({\n  ...\n})"
-          }
-        ]
-      },
-      "put": {
-        "operationId": "settings.review.set",
-        "summary": "Update reviewer preferences",
-        "responses": {
-          "200": {
-            "description": "Updated preferences",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "auto": {
-                      "type": "boolean"
-                    },
-                    "model": {
-                      "default": null,
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "providerID": {
-                              "type": "string"
-                            },
-                            "modelID": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "providerID",
-                            "modelID"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "auto"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "auto": {
-                    "type": "boolean"
-                  },
-                  "model": {
-                    "default": null,
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "providerID": {
-                            "type": "string"
-                          },
-                          "modelID": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "providerID",
-                          "modelID"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "auto"
-                ]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.review.set({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/settings/preferences": {
       "get": {
         "operationId": "settings.preferences.get",
@@ -22088,7 +21940,6 @@
                                   "stages",
                                   "deliverables",
                                   "checks",
-                                  "review",
                                   "runtime"
                                 ]
                               },
@@ -22132,11 +21983,6 @@
                           "items": {
                             "type": "string"
                           }
-                        },
-                        "openFindings": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
                         },
                         "failedCandidates": {
                           "type": "integer",
@@ -22967,7 +22813,6 @@
                         "readiness",
                         "gates",
                         "missing",
-                        "openFindings",
                         "failedCandidates",
                         "strategy"
                       ]
@@ -23667,215 +23512,6 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.todo({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/session/{sessionID}/review": {
-      "post": {
-        "operationId": "session.review",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "sessionID",
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "description": "Session ID"
-          }
-        ],
-        "summary": "Run an independent reviewer pass",
-        "description": "Launches the reviewer directly on this session: session-level permission rules restore its provenance tools and it receives a structured context message. Returns immediately; the review streams into the session like any other turn.",
-        "responses": {
-          "200": {
-            "description": "Review started",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "started": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "started"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.review({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/session/{sessionID}/review/artifact": {
-      "post": {
-        "operationId": "session.reviewArtifact",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "sessionID",
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "description": "Session ID"
-          }
-        ],
-        "summary": "Review one immutable artifact version",
-        "description": "Launches a read-only reviewer against one exact artifact-store version. The returned target binds the version id, byte count, MIME type, and SHA-256 used by every recorded finding.",
-        "responses": {
-          "200": {
-            "description": "Exact-version review started",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "started": {
-                      "type": "boolean"
-                    },
-                    "target": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "artifactID": {
-                          "type": "string"
-                        },
-                        "versionID": {
-                          "type": "string"
-                        },
-                        "version": {
-                          "type": "integer",
-                          "exclusiveMinimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "filename": {
-                          "type": "string"
-                        },
-                        "mimeType": {
-                          "type": "string"
-                        },
-                        "size": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "sha256": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "artifactID",
-                        "versionID",
-                        "version",
-                        "filename",
-                        "mimeType",
-                        "size",
-                        "sha256"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "started",
-                    "target"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "artifactID": {
-                    "type": "string",
-                    "pattern": "^art_.*"
-                  },
-                  "versionID": {
-                    "type": "string",
-                    "pattern": "^ver_.*"
-                  }
-                },
-                "required": [
-                  "artifactID",
-                  "versionID"
-                ]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.reviewArtifact({\n  ...\n})"
           }
         ]
       }
@@ -43924,7 +43560,7 @@
           }
         ],
         "summary": "List the project provenance graph",
-        "description": "Returns project-scoped artifacts, runs, sources, claims, reviewer findings, and typed edges.",
+        "description": "Returns project-scoped artifacts, runs, sources, claims, historical review records, and typed edges.",
         "responses": {
           "200": {
             "description": "Project provenance graph"
@@ -44025,9 +43661,7 @@
                     "enum": [
                       "produced",
                       "consumed",
-                      "derived-from",
-                      "supports",
-                      "refutes"
+                      "derived-from"
                     ]
                   }
                 },
@@ -44048,86 +43682,6 @@
       }
     },
     "/provenance/reviews": {
-      "post": {
-        "operationId": "provenance.review",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Record a reviewer finding",
-        "responses": {
-          "200": {
-            "description": "Recorded finding"
-          },
-          "400": {
-            "description": "Invalid target"
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "target": {
-                    "type": "string"
-                  },
-                  "claim": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 10000
-                  },
-                  "issue": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 10000
-                  },
-                  "severity": {
-                    "type": "string",
-                    "enum": [
-                      "blocking",
-                      "major",
-                      "minor",
-                      "info"
-                    ]
-                  },
-                  "evidence": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 20000
-                  },
-                  "verdict": {
-                    "default": "refutes",
-                    "type": "string",
-                    "enum": [
-                      "refutes",
-                      "supports"
-                    ]
-                  }
-                },
-                "required": [
-                  "target",
-                  "claim",
-                  "issue",
-                  "severity",
-                  "evidence"
-                ]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.provenance.review({\n  ...\n})"
-          }
-        ]
-      },
       "get": {
         "operationId": "provenance.reviews.list",
         "parameters": [
@@ -44139,80 +43693,17 @@
             }
           }
         ],
-        "summary": "List reviewer findings with lifecycle status",
-        "description": "Every reviewer finding in the project. Refuting findings carry a derived status: open, addressed (a fix was recorded), or confirmed (a later reviewer pass verified the target).",
+        "summary": "List historical review findings with lifecycle status",
+        "description": "Read-only compatibility view of findings recorded by earlier OpenScience versions. Refuting findings carry their derived historical lifecycle status.",
         "responses": {
           "200": {
-            "description": "Reviewer findings"
+            "description": "Historical review findings"
           }
         },
         "x-codeSamples": [
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.provenance.reviews.list({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/provenance/reviews/{id}/resolve": {
-      "post": {
-        "operationId": "provenance.reviews.resolve",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "id",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          }
-        ],
-        "summary": "Mark a reviewer finding as addressed",
-        "description": "Records an append-only resolution against a refuting finding. The finding is only confirmed closed once a later reviewer pass records a supports finding on the same target.",
-        "responses": {
-          "200": {
-            "description": "Resolution node"
-          },
-          "400": {
-            "description": "Not a refuting finding"
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "actor": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 240
-                  },
-                  "reason": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 10000
-                  }
-                },
-                "required": [
-                  "actor",
-                  "reason"
-                ]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.provenance.reviews.resolve({\n  ...\n})"
           }
         ]
       }
@@ -46804,8 +46295,6 @@
                     "enum": [
                       "output",
                       "contract",
-                      "review",
-                      "review-summary",
                       "compaction",
                       "task"
                     ]

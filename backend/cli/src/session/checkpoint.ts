@@ -191,13 +191,6 @@ export namespace SessionCheckpoint {
         ) ?? []),
         ...trace.failures.map((failure) => `- ${failure.kind} ${failure.id}: ${clean(clip(failure.message, 700))}`),
       ]),
-      ...section(
-        "Reviewer findings",
-        trace.reviewerFindings.map(
-          (finding) =>
-            `- ${finding.severity ?? "unrated"} ${finding.status ?? "open"}: ${clean(clip(finding.issue ?? finding.claim ?? finding.id ?? "finding", 700))}${finding.target ? ` (target: ${finding.target})` : ""}`,
-        ),
-      ),
       ...section("Uncertain in-flight outcomes", unknown, "No in-flight tool, compute, or kernel outcome detected"),
       ...section(
         "Known gaps",

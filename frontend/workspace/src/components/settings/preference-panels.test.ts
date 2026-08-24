@@ -44,7 +44,9 @@ describe("minimal grouped settings panels", () => {
     expect(source("Sandbox")).toContain('call<SelfTest>("/test", { method: "POST" })')
     expect(source("Sandbox")).toContain('aria-live="polite"')
     expect(source("General")).toContain("sdk.client.account.logout()")
-    expect(source("General")).toContain('settingsApi<Preferences>(base(), fetchFn(), "/settings/preferences"')
+    expect(source("General")).not.toContain('settingsApi<Preferences>(base(), fetchFn(), "/settings/preferences"')
+    expect(source("General")).not.toContain('title="Gateway"')
+    expect(source("General")).not.toContain('title="Trace"')
   })
 
   test("avoids the previous nested form divider in storage", () => {

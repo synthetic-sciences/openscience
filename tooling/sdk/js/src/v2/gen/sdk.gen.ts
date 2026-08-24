@@ -192,11 +192,7 @@ import type {
   ProvenanceListResponses,
   ProvenanceRecordErrors,
   ProvenanceRecordResponses,
-  ProvenanceReviewErrors,
-  ProvenanceReviewResponses,
   ProvenanceReviewsListResponses,
-  ProvenanceReviewsResolveErrors,
-  ProvenanceReviewsResolveResponses,
   ProvenanceTraceErrors,
   ProvenanceTraceResponses,
   ProviderAuthResponses,
@@ -265,10 +261,6 @@ import type {
   SessionPromptResponses,
   SessionRevertErrors,
   SessionRevertResponses,
-  SessionReviewArtifactErrors,
-  SessionReviewArtifactResponses,
-  SessionReviewErrors,
-  SessionReviewResponses,
   SessionShellErrors,
   SessionShellResponses,
   SessionStatusErrors,
@@ -336,8 +328,6 @@ import type {
   SettingsResearchToolsGetResponses,
   SettingsResearchToolsTelemetryDeleteResponses,
   SettingsResearchToolsTelemetryUpdateResponses,
-  SettingsReviewGetResponses,
-  SettingsReviewSetResponses,
   SettingsSkillsInstallErrors,
   SettingsSkillsInstallResponses,
   SettingsStorageRelocateErrors,
@@ -1641,54 +1631,6 @@ export class Compute extends HeyApiClient {
   }
 }
 
-export class Review extends HeyApiClient {
-  /**
-   * Get reviewer preferences
-   */
-  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<SettingsReviewGetResponses, unknown, ThrowOnError>({
-      url: "/settings/review",
-      ...options,
-    })
-  }
-
-  /**
-   * Update reviewer preferences
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters: {
-      auto: boolean
-      model?: {
-        providerID: string
-        modelID: string
-      } | null
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "body", key: "auto" },
-            { in: "body", key: "model" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<SettingsReviewSetResponses, unknown, ThrowOnError>({
-      url: "/settings/review",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
 export class Preferences extends HeyApiClient {
   /**
    * Get settings preferences
@@ -1988,11 +1930,6 @@ export class Settings extends HeyApiClient {
   private _compute?: Compute
   get compute(): Compute {
     return (this._compute ??= new Compute({ client: this.client }))
-  }
-
-  private _review?: Review
-  get review(): Review {
-    return (this._review ??= new Review({ client: this.client }))
   }
 
   private _preferences?: Preferences
@@ -3187,79 +3124,6 @@ export class Session extends HeyApiClient {
       url: "/session/{sessionID}/todo",
       ...options,
       ...params,
-    })
-  }
-
-  /**
-   * Run an independent reviewer pass
-   *
-   * Launches the reviewer directly on this session: session-level permission rules restore its provenance tools and it receives a structured context message. Returns immediately; the review streams into the session like any other turn.
-   */
-  public review<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionReviewResponses, SessionReviewErrors, ThrowOnError>({
-      url: "/session/{sessionID}/review",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Review one immutable artifact version
-   *
-   * Launches a read-only reviewer against one exact artifact-store version. The returned target binds the version id, byte count, MIME type, and SHA-256 used by every recorded finding.
-   */
-  public reviewArtifact<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      artifactID: string
-      versionID: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "artifactID" },
-            { in: "body", key: "versionID" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      SessionReviewArtifactResponses,
-      SessionReviewArtifactErrors,
-      ThrowOnError
-    >({
-      url: "/session/{sessionID}/review/artifact",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
     })
   }
 
@@ -6631,9 +6495,9 @@ export class Notebook extends HeyApiClient {
 
 export class Reviews2 extends HeyApiClient {
   /**
-   * List reviewer findings with lifecycle status
+   * List historical review findings with lifecycle status
    *
-   * Every reviewer finding in the project. Refuting findings carry a derived status: open, addressed (a fix was recorded), or confirmed (a later reviewer pass verified the target).
+   * Read-only compatibility view of findings recorded by earlier OpenScience versions. Refuting findings carry their derived historical lifecycle status.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -6648,56 +6512,13 @@ export class Reviews2 extends HeyApiClient {
       ...params,
     })
   }
-
-  /**
-   * Mark a reviewer finding as addressed
-   *
-   * Records an append-only resolution against a refuting finding. The finding is only confirmed closed once a later reviewer pass records a supports finding on the same target.
-   */
-  public resolve<ThrowOnError extends boolean = false>(
-    parameters: {
-      id: string
-      directory?: string
-      actor: string
-      reason: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "id" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "actor" },
-            { in: "body", key: "reason" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      ProvenanceReviewsResolveResponses,
-      ProvenanceReviewsResolveErrors,
-      ThrowOnError
-    >({
-      url: "/provenance/reviews/{id}/resolve",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
 }
 
 export class Provenance extends HeyApiClient {
   /**
    * List the project provenance graph
    *
-   * Returns project-scoped artifacts, runs, sources, claims, reviewer findings, and typed edges.
+   * Returns project-scoped artifacts, runs, sources, claims, historical review records, and typed edges.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -6731,7 +6552,7 @@ export class Provenance extends HeyApiClient {
         [key: string]: unknown
       }
       derived_from?: string
-      relation?: "produced" | "consumed" | "derived-from" | "supports" | "refutes"
+      relation?: "produced" | "consumed" | "derived-from"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6758,49 +6579,6 @@ export class Provenance extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<ProvenanceRecordResponses, ProvenanceRecordErrors, ThrowOnError>({
       url: "/provenance/nodes",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Record a reviewer finding
-   */
-  public review<ThrowOnError extends boolean = false>(
-    parameters: {
-      directory?: string
-      target: string
-      claim: string
-      issue: string
-      severity: "blocking" | "major" | "minor" | "info"
-      evidence: string
-      verdict?: "refutes" | "supports"
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "target" },
-            { in: "body", key: "claim" },
-            { in: "body", key: "issue" },
-            { in: "body", key: "severity" },
-            { in: "body", key: "evidence" },
-            { in: "body", key: "verdict" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<ProvenanceReviewResponses, ProvenanceReviewErrors, ThrowOnError>({
-      url: "/provenance/reviews",
       ...options,
       ...params,
       headers: {

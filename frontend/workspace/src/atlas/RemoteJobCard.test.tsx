@@ -46,8 +46,7 @@ const job = {
   completed_at: "2026-08-08T10:01:01.000Z",
   exit_code: 0,
   resources: { cpus: 4, gpus: 1, memory_gb: 16 },
-  artifacts: [{ path: "model.pkl", size: 10, sha256: "a".repeat(64), modified_at: "2026-08-08" }],
-  lifecycle: { execution: "succeeded", delivery: "delivered", resource: "closed" as const, recoverable: false },
+  lifecycle: { execution: "succeeded", delivery: "complete", resource: "closed" as const, recoverable: false },
   modal: {
     app: "openscience",
     image: "python:3.12",
@@ -61,92 +60,123 @@ const job = {
   },
 }
 
-test("completed Modal GPU work leads with the result and keeps logs, files, and resources inspectable", async () => {
-  const host = mount(() =>
-    subject.RemoteJobCard({
-      job,
-      action: "",
-      onCancel: async () => undefined,
-      onRetry: async () => undefined,
-      onRelease: async () => undefined,
-      onOutput: async () => "accuracy=0.91",
-    }),
-  )
-
-  expect(host.querySelector(".activity-card__kind")?.textContent).toBe("Remote GPU")
-  expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Exit 0 · 1 file")
-  expect(host.querySelector(".activity-card__status")).toBeNull()
-  expect(host.textContent).toContain("A100 · 4 CPU · 16 GB memory")
-  expect(host.textContent).not.toContain("Cancel")
-  const logs = Array.from(host.querySelectorAll<HTMLDetailsElement>("details")).find(
-    (item) => item.querySelector("summary")?.textContent === "Logs",
-  )
-  expect(logs?.open).toBe(false)
-  logs?.querySelector<HTMLElement>("summary")?.click()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  expect(host.textContent).toContain("accuracy=0.91")
+test("finished jobs leave the live tracker", () => {
+  expect(subject.jobLive(job)).toBe(false)
+  expect(subject.visibleJobs([job])).toEqual([])
 })
 
-test("a live Modal job remains cancellable and counts as live", () => {
+test("a live Modal job is passive but keeps billing and requested resources visible", () => {
   const running = {
     ...job,
     status: "running" as const,
     completed_at: undefined,
     lifecycle: { ...job.lifecycle, execution: "running", resource: "active" as const },
   }
-  const host = mount(() =>
-    subject.RemoteJobCard({
-      job: running,
-      action: "",
-      onCancel: async () => undefined,
-      onRetry: async () => undefined,
-      onRelease: async () => undefined,
-      onOutput: async () => "",
-    }),
-  )
+  const host = mount(() => subject.RemoteJobCard({ job: running }))
 
   expect(subject.jobLive(running)).toBe(true)
   expect(subject.jobStatusLabel("interrupted")).toBe("Interrupted")
-  expect(host.textContent).toContain("Cancel")
-  expect(host.textContent).toContain("Modal billing may continue")
+  expect(host.querySelector('.compute-row__kind [data-icon="cloud"]')).not.toBeNull()
+  expect(host.textContent).toContain("Running")
+  expect(host.textContent).toContain("Billing can continue")
   expect(host.textContent).toContain("10-minute timeout")
+  expect(host.textContent).toContain("A100 · 4 CPU · 16 GB")
+  expect(host.querySelector("button, details, summary, pre, code")).toBeNull()
 })
 
-test("keeps live work and a bounded newest-first set of completed results", () => {
-  const running = {
+test("a terminal Modal resource stays visible until cleanup is known", () => {
+  const uncertain = {
     ...job,
-    id: "job_running",
+    lifecycle: { ...job.lifecycle, resource: "unknown" as const },
+  }
+  const host = mount(() => subject.RemoteJobCard({ job: uncertain }))
+
+  expect(subject.visibleJobs([job, uncertain]).map((item) => item.id)).toEqual(["job_gpu"])
+  expect(host.textContent).toContain("Succeeded · remote cleanup pending")
+})
+
+test("terminal Modal output collection stays visible without a closed-resource billing warning", () => {
+  const collecting = {
+    ...job,
+    id: "job_collecting",
+    lifecycle: { ...job.lifecycle, delivery: "pending", resource: "closed" as const },
+  }
+  const host = mount(() => subject.RemoteJobCard({ job: collecting }))
+
+  expect(subject.jobLive(collecting)).toBe(true)
+  expect(subject.visibleJobs([collecting])).toEqual([collecting])
+  expect(host.textContent).toContain("Succeeded · collecting output")
+  expect(host.textContent).not.toContain("Billing can continue")
+})
+
+test("terminal SSH work stays visible while output is collecting or recoverable", () => {
+  const collecting = {
+    ...job,
+    id: "job_collecting",
+    target: { kind: "ssh" as const, host_id: "cluster" },
+    target_label: "Research cluster",
+    modal: undefined,
+    lifecycle: { ...job.lifecycle, delivery: "pending", resource: "closed" as const },
+  }
+  const recovering = {
+    ...collecting,
+    id: "job_recovering",
+    status: "failed" as const,
+    resources: { ...job.resources, gpus: 2 },
+    capture_error: "SSH output recovery failed",
+    lifecycle: { execution: "failed", delivery: "failed", resource: "unknown" as const, recoverable: true },
+  }
+  const cleaning = {
+    ...collecting,
+    id: "job_cleaning",
+    lifecycle: { ...job.lifecycle, resource: "unknown" as const },
+  }
+  const collectingHost = mount(() => subject.RemoteJobCard({ job: collecting }))
+  const recoveringHost = mount(() => subject.RemoteJobCard({ job: recovering }))
+  const cleaningHost = mount(() => subject.RemoteJobCard({ job: cleaning }))
+
+  expect(subject.visibleJobs([job, collecting, recovering, cleaning]).map((item) => item.id)).toEqual([
+    "job_collecting",
+    "job_recovering",
+    "job_cleaning",
+  ])
+  expect(collectingHost.textContent).toContain("Succeeded · collecting output")
+  expect(recoveringHost.textContent).toContain("Failed · output recovery pending")
+  expect(recoveringHost.textContent).toContain("2 GPUs · 4 CPU · 16 GB")
+  expect(cleaningHost.textContent).toContain("Succeeded · remote cleanup pending")
+})
+
+test("cleanup warnings take precedence and Modal billing copy tolerates missing legacy details", () => {
+  const uncertain = {
+    ...job,
+    status: "failed" as const,
+    error: "The command failed",
+    capture_error: "Output capture failed",
+    cleanup_error: "Remote cleanup failed; billing may continue",
+    lifecycle: { execution: "failed", delivery: "failed", resource: "unknown" as const, recoverable: true },
+    modal: undefined,
+  }
+  const host = mount(() => subject.RemoteJobCard({ job: uncertain }))
+
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("Remote cleanup failed; billing may continue")
+  expect(host.textContent).toContain("Billing can continue until the remote resource exits or is released.")
+  expect(host.textContent).not.toContain("undefined-minute")
+  expect(host.querySelector("button, details, summary, pre, code")).toBeNull()
+})
+
+test("a detached job on this machine is labeled as local", () => {
+  const local = {
+    ...job,
+    id: "job_local",
     status: "running" as const,
     completed_at: undefined,
-    lifecycle: { ...job.lifecycle, execution: "running", resource: "active" as const },
+    target: { kind: "local" as const },
+    target_label: "This Mac",
+    modal: undefined,
+    lifecycle: { ...job.lifecycle, execution: "running", resource: "none" as const },
   }
-  const older = {
-    ...job,
-    id: "job_older",
-    completed_at: "2026-08-08T09:01:01.000Z",
-  }
-  const newer = {
-    ...job,
-    id: "job_newer",
-    completed_at: "2026-08-08T11:01:01.000Z",
-  }
+  const host = mount(() => subject.RemoteJobCard({ job: local }))
 
-  expect(subject.visibleJobs([older, running, newer], 1).map((item) => item.id)).toEqual(["job_running", "job_newer"])
-})
-
-test("never hides an older failed job behind newer successful history", () => {
-  const failed = {
-    ...job,
-    id: "job_failed",
-    status: "failed" as const,
-    completed_at: "2026-08-08T08:01:01.000Z",
-  }
-  const successes = Array.from({ length: 8 }, (_, index) => ({
-    ...job,
-    id: `job_success_${index}`,
-    completed_at: `2026-08-08T${String(10 + index).padStart(2, "0")}:01:01.000Z`,
-  }))
-
-  expect(subject.visibleJobs([failed, ...successes], 2).map((item) => item.id)).toContain("job_failed")
-  expect(subject.visibleJobs([failed, ...successes], 2)).toHaveLength(3)
+  expect(host.querySelector(".compute-row__kind")?.getAttribute("aria-label")).toBe("Local job")
+  expect(host.querySelector('.compute-row__kind [data-icon="cpu"]')).not.toBeNull()
 })

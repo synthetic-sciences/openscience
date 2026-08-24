@@ -7,6 +7,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { useModels } from "@/context/models"
 import { foldedRouteMode, routableModelKey } from "@/context/model-catalog"
 import { modelTierOptions, normalizedTier, promptTier, resolvedTier } from "@/context/model-tier"
+import { resolveModelAccessRoute, type ModelAccessRoute, type ModelRouteAccess } from "@/context/model-route-resolution"
 import { modelVariantOptions, normalizedVariant, promptVariant } from "@/context/model-variant"
 
 export type ModelKey = { providerID: string; modelID: string }
@@ -113,9 +114,37 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (sync.data.config.model) {
           const [providerID, ...parts] = sync.data.config.model.split("/")
           const modelID = parts.join("/")
-          const resolved = resolveModel({ providerID, modelID })
-          if (resolved) return resolved
+          const configured = { providerID, modelID }
+          // Settings owns the exact default route. Never silently replace it
+          // with a managed/native route for the same logical model.
+          return isExactModelValid(configured) ? configured : undefined
         }
+
+        // Resolve one connected Sol route without treating provider identities
+        // as interchangeable. Automatic prefers ChatGPT (and therefore its
+        // advertised Fast tier), while explicit Credits and Accounts remain on
+        // the access surface the user selected.
+        const connected = new Map(providers.connected().map((provider) => [provider.id, provider]))
+        const candidates = [
+          { providerID: "openai", modelID: "gpt-5.6-sol" },
+          { providerID: "openai-codex", modelID: "gpt-5.6-sol" },
+          { providerID: "openrouter", modelID: "openai/gpt-5.6-sol" },
+        ].flatMap((route): ModelAccessRoute[] => {
+          const provider = connected.get(route.providerID)
+          if (!provider?.models[route.modelID]) return []
+          const access: ModelRouteAccess =
+            provider.id === "openai-codex"
+              ? "chatgpt"
+              : provider.source === "managed" || provider.id.startsWith("synsci")
+                ? "managed"
+                : "byok"
+          return [{ ...route, access }]
+        })
+        const initial = resolveModelAccessRoute({
+          routes: candidates,
+          billing: sync.data.config.billing?.llm,
+        })
+        if (initial) return initial
 
         for (const item of models.recent.list()) {
           const resolved = resolveModel(item)
@@ -142,11 +171,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const selected = createMemo(() => {
         const a = agent.current()
         if (!a) return undefined
-        return getFirstValidModel(
-          () => ephemeral.model[a.name],
-          () => a.model,
-          fallbackModel,
-        )
+        const explicit = ephemeral.model[a.name]
+        // A composer selection is an exact provider contract, even if a
+        // provider refresh temporarily makes that route unavailable.
+        if (explicit) return isExactModelValid(explicit) ? explicit : undefined
+        return getFirstValidModel(() => a.model, fallbackModel)
       })
 
       const current = createMemo(() => {
@@ -202,7 +231,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
             const currentAgent = agent.current()
-            const selected = model ? (resolveModel(model) ?? model) : undefined
+            const selected = model
             const next = selected ?? fallbackModel()
             if (currentAgent) setEphemeral("model", currentAgent.name, next)
             if (selected) models.setVisibility(selected, true)

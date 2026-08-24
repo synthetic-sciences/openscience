@@ -45,7 +45,6 @@ import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
-import { ReviewSettingsRoutes } from "./routes/settings/review"
 import { SearchRoutes } from "./routes/search"
 import { GlobalRoutes } from "./routes/global"
 import { AccountRoutes } from "./routes/account"
@@ -265,7 +264,6 @@ export namespace Server {
         .route("/settings/credentials", CredentialsRoutes())
         .route("/settings/storage", StorageRoutes())
         .route("/settings/compute", ComputeSettingsRoutes())
-        .route("/settings/review", ReviewSettingsRoutes())
         .route("/settings/preferences", SettingsPreferencesRoutes())
         .route("/settings/local", LocalModelsRoutes())
         .route("/settings/sandbox", SandboxSettingsRoutes())

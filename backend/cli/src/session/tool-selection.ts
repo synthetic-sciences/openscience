@@ -4,15 +4,12 @@ import { PermissionNext } from "@/permission/next"
 export namespace ToolSelection {
   const domain = new Set([
     "artifact",
-    "artifact_snapshot",
     "atlas",
     "atlas_record",
     "compute_job",
     "generate_image",
     "provenance_query",
     "provenance_record",
-    "provenance_resolve",
-    "provenance_review",
     "python",
     "r",
     "research_contract",

@@ -16,7 +16,7 @@ Create the smallest self-contained package that preserves:
 - code revision, dirty-state caveat, data identities, licenses, and access boundaries;
 - environment and dependency specification, hardware-sensitive settings, seeds, and configuration;
 - exact reproduction commands and expected outputs;
-- verification ledger, reviewer state, failed or inconclusive checks, limitations, and provenance links;
+- verification ledger, failed or inconclusive checks, limitations, and provenance links;
 - checksums for material files when practical.
 
 Reuse existing export or publication paths. Preserve source files and never overwrite an existing destination without explicit authorization.

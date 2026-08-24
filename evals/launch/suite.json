@@ -3,7 +3,7 @@
   "frozen": true,
   "source": "fixes.docx EVAL-00",
   "splitPolicy": {
-    "development": 6,
+    "development": 5,
     "heldOut": 4,
     "heldOutVisibleDuringTuning": false
   },
@@ -16,12 +16,12 @@
   },
   "flows": [
     {
-      "id": "oauth-reviewed-artifact",
+      "id": "oauth-artifact",
       "split": "held_out",
-      "title": "First reviewed artifact with ChatGPT OAuth and Atlas offline",
+      "title": "First artifact with ChatGPT OAuth and Atlas offline",
       "prompt": "Using the attached assay note, create a concise Markdown decision memo with a findings table, limitations, and next experiment. Save it as assay-decision.md and review every numeric claim before finishing.",
       "fixtures": ["fixtures/assay-note.md"],
-      "coverage": ["chatgpt_oauth", "atlas_offline", "artifact", "reviewer"],
+      "coverage": ["chatgpt_oauth", "atlas_offline", "artifact"],
       "setup": [
         "Start from a fresh local profile",
         "Authenticate through ChatGPT OAuth",
@@ -38,10 +38,10 @@
       "acceptance": [
         "The first useful output appears before the final answer",
         "The saved memo opens and contains findings, limitations, and a next experiment",
-        "Reviewer findings are visible and every number matches the fixture",
+        "Every number in the memo matches the fixture",
         "Atlas unavailability does not block the local artifact"
       ],
-      "observe": ["timing", "inference_source", "artifacts", "reviewer", "failures", "ui_resets"],
+      "observe": ["timing", "inference_source", "artifacts", "failures", "ui_resets"],
       "repeat": 1
     },
     {
@@ -57,9 +57,9 @@
         "At least three primary sources are cited with openable links",
         "The comparison is supported by the cited sources",
         "Equivalent searches are reused instead of spawning a duplicate search swarm",
-        "No unsupported quantitative claim survives Reviewer"
+        "No unsupported quantitative claim remains"
       ],
-      "observe": ["searches", "dedupe_hits", "citations", "children", "tools", "cost", "reviewer"],
+      "observe": ["searches", "dedupe_hits", "citations", "children", "tools", "cost"],
       "repeat": 3
     },
     {
@@ -192,31 +192,6 @@
       "repeat": 3
     },
     {
-      "id": "reviewer-unsupported-number",
-      "split": "development",
-      "title": "Reviewer catches a seeded unsupported numeric claim",
-      "prompt": "Review draft-claim.md against source-results.csv. Correct unsupported claims, preserve supported statements, and save the reviewed result as reviewed-claim.md with a short review finding.",
-      "fixtures": ["fixtures/draft-claim.md", "fixtures/source-results.csv"],
-      "coverage": ["reviewer", "unsupported_number", "artifact"],
-      "setup": ["Provide only the two listed fixtures as evidence"],
-      "artifacts": [
-        {
-          "path": "reviewed-claim.md",
-          "type": "markdown",
-          "required": true,
-          "openable": true
-        }
-      ],
-      "acceptance": [
-        "Reviewer identifies the seeded 47% claim as unsupported",
-        "The reviewed artifact does not present 47% as a supported result",
-        "Supported sample size and response values remain accurate",
-        "The review finding names the evidence mismatch without inventing evidence"
-      ],
-      "observe": ["reviewer", "artifacts", "tools", "claim_support"],
-      "repeat": 1
-    },
-    {
       "id": "simple-question",
       "split": "held_out",
       "title": "Simple question without planning or delegation ceremony",
@@ -237,9 +212,9 @@
       "id": "kdense-deliverable",
       "split": "development",
       "title": "Long-form K-Dense-style scientific analysis with saved deliverables",
-      "prompt": "Act as a computational drug-discovery analyst. Using kinase-screen.csv and project-brief.md, rank the compounds, justify the top three using potency, selectivity, and toxicity evidence, verify the target-mechanism context with primary literature, and state uncertainty. Save a reviewed decision report as compound-prioritization.md, the complete scored ranking as compound-ranking.csv, and a PNG trade-off chart.",
+      "prompt": "Act as a computational drug-discovery analyst. Using kinase-screen.csv and project-brief.md, rank the compounds, justify the top three using potency, selectivity, and toxicity evidence, verify the target-mechanism context with primary literature, and state uncertainty. Save a decision report as compound-prioritization.md, the complete scored ranking as compound-ranking.csv, and a PNG trade-off chart.",
       "fixtures": ["fixtures/kinase-screen.csv", "fixtures/project-brief.md"],
-      "coverage": ["long_research", "literature", "python", "citations", "multiple_artifacts", "reviewer"],
+      "coverage": ["long_research", "literature", "python", "citations", "multiple_artifacts"],
       "setup": [
         "Copy both fixtures into a writable granted workspace",
         "Use the normal scoped network approval path for literature retrieval"
@@ -269,7 +244,7 @@
         "The top-three rationale matches the fixture values and cites primary mechanism sources",
         "The report distinguishes fixture evidence, literature evidence, and inference",
         "All three artifacts exist, open, and agree with one another",
-        "Reviewer leaves no unsupported numeric claim unresolved"
+        "No unsupported numeric claim remains"
       ],
       "observe": [
         "plans",
@@ -279,7 +254,6 @@
         "kernels",
         "children",
         "artifacts",
-        "reviewer",
         "timing",
         "cost"
       ],

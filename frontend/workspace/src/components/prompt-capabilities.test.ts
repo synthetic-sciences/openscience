@@ -4,7 +4,7 @@ import { delegatedSpecialist, isCoreSpecialist, specialistLabel } from "./prompt
 describe("prompt capabilities", () => {
   test("keeps the curated scientific specialists readable", () => {
     expect(isCoreSpecialist("biology")).toBe(true)
-    expect(isCoreSpecialist("reviewer")).toBe(false)
+    expect(isCoreSpecialist("critique")).toBe(false)
     expect(specialistLabel("ml")).toBe("ML")
   })
 

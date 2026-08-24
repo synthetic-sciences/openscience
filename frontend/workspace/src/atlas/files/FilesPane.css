@@ -1029,11 +1029,12 @@
   white-space: nowrap;
 }
 
-/* auto-fill, so a wider pane gains columns instead of stretching cards. */
+/* auto-fit lets a sparse Result set use the available pane instead of leaving
+   an empty phantom column; denser sets still gain columns as the pane grows. */
 .artifact-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(128px, 100%), 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(164px, 100%), 1fr));
+  gap: 10px;
 }
 .artifact-list {
   display: flex;
@@ -1049,7 +1050,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 0;
-  border-radius: var(--atlas-radius-sm);
+  border-radius: var(--atlas-radius-md);
   background: var(--color-bg-subtle);
   transition:
     background-color 150ms ease,
@@ -1101,7 +1102,7 @@
   min-width: 0;
 }
 .artifact-card[data-layout="grid"] .artifact-card__label {
-  padding: 6px 8px 8px;
+  padding: 8px 10px 10px;
 }
 .artifact-card[data-layout="list"] .artifact-card__label {
   flex: 1;
@@ -1117,20 +1118,20 @@
 }
 .artifact-card[data-layout="grid"] .artifact-card__name {
   display: -webkit-box;
-  min-height: 2.7em;
+  min-height: 4.05em;
   line-height: 1.35;
   overflow-wrap: anywhere;
   text-overflow: clip;
   white-space: normal;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
 }
 .artifact-card[data-layout="list"] .artifact-card__name {
   flex: 1;
 }
 .artifact-card__sub {
   color: var(--color-text-faint);
-  font-size: 10.5px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1141,7 +1142,7 @@
   background: var(--color-bg-subtle);
 }
 .artifact-card[data-layout="grid"] .artifact-thumb {
-  height: clamp(56px, 18cqi, 74px);
+  height: clamp(74px, 24cqi, 94px);
   border: 0;
 }
 .artifact-card[data-layout="list"] .artifact-thumb {
@@ -1169,8 +1170,8 @@
   overflow: hidden;
   color: var(--color-text-weak);
   font-family: var(--font-code);
-  font-size: 7.4px;
-  line-height: 1.55;
+  font-size: 8px;
+  line-height: 1.5;
   white-space: pre;
 }
 .artifact-card[data-layout="list"] .artifact-thumb--text {

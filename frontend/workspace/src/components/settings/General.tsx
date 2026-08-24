@@ -1,23 +1,17 @@
-// General — account, workspace navigation, and appearance
-// controls. Everything here is wired to a real endpoint:
+// General — account and appearance controls. Everything here is wired to a
+// real endpoint:
 //   • Account   → client.account.get / client.account.logout, billing link.
-//   • Licensing  → /settings/preferences (real JSON store, persisted to ~/.openscience).
 //   • Appearance → the extracted AppearanceSections (display mode, sounds, updates, …).
 import { Component, Show, createSignal, onMount, type JSX } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon, type IconProps } from "@synsci/ui/icon"
 import { useDialog } from "@synsci/ui/context/dialog"
-import { Switch } from "@synsci/ui/switch"
 import { showToast } from "@synsci/ui/toast"
 import { confirmDialog } from "@/atlas/dialogs"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
-import { useServer } from "@/context/server"
 import { URLS } from "@/config/urls"
 import { AppearanceSections } from "../settings-general"
-import { settingsApi } from "./api"
-import { commitPreference } from "./preference-write"
-import { productPreferences } from "@/context/product-preferences"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import "./preference-panels.css"
 
@@ -28,25 +22,14 @@ type Account = {
   billing_mode?: { mode: "byok" | "managed" } | null
 }
 
-type Preferences = {
-  show_trace: boolean
-  atlas_enabled: boolean
-}
-
 export default function General() {
   const sdk = useGlobalSDK()
   const platform = usePlatform()
-  const server = useServer()
   const dialog = useDialog()
 
-  const fetchFn = () => platform.fetch ?? fetch
-  const base = () => server.url
-
   const [account, setAccount] = createSignal<Account | undefined>()
-  const [prefs, setPrefs] = createSignal<Preferences | undefined>()
   const [error, setError] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
-  const [preferenceBusy, setPreferenceBusy] = createSignal(false)
   const [showAdvanced, setShowAdvanced] = createSignal(false)
 
   const loadAccount = async () => {
@@ -57,38 +40,9 @@ export default function General() {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
-  const loadPrefs = async () => {
-    try {
-      const next = await settingsApi<Preferences>(base(), fetchFn(), "/settings/preferences")
-      setPrefs(next)
-      productPreferences.sync(next)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
   onMount(() => {
     void loadAccount()
-    void loadPrefs()
   })
-
-  const savePref = async (patch: Partial<Preferences>) => {
-    if (preferenceBusy()) return
-    setPreferenceBusy(true)
-    setError(undefined)
-    const result = await commitPreference(
-      () =>
-        settingsApi<Preferences>(base(), fetchFn(), "/settings/preferences", {
-          method: "PATCH",
-          body: JSON.stringify(patch),
-        }),
-      (next) => {
-        setPrefs(next)
-        productPreferences.sync(next)
-      },
-    )
-    if (!result.ok) setError(result.error)
-    setPreferenceBusy(false)
-  }
 
   const signOut = async () => {
     const confirmed = await confirmDialog(dialog, {
@@ -182,39 +136,6 @@ export default function General() {
                   </p>
                 </div>
               </Show>
-            </div>
-          </Section>
-
-          <Section title="Navigation" description="Choose which optional research surfaces appear in each project.">
-            <div class="settings-card settings-preferences-card">
-              <Row
-                icon="branch"
-                title="Gateway"
-                description="Show the Gateway research map in project navigation. Your map data is never changed."
-              >
-                <Switch
-                  hideLabel
-                  checked={prefs()?.atlas_enabled ?? false}
-                  disabled={!prefs() || preferenceBusy()}
-                  onChange={(atlas_enabled) => void savePref({ atlas_enabled })}
-                >
-                  Show Gateway
-                </Switch>
-              </Row>
-              <Row
-                icon="activity"
-                title="Trace"
-                description="Show the local time, cost, and activity trace in session navigation."
-              >
-                <Switch
-                  hideLabel
-                  checked={prefs()?.show_trace ?? false}
-                  disabled={!prefs() || preferenceBusy()}
-                  onChange={(show_trace) => void savePref({ show_trace })}
-                >
-                  Show Trace
-                </Switch>
-              </Row>
             </div>
           </Section>
 

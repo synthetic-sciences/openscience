@@ -48,7 +48,8 @@ test("every provider receives one compact product operating contract", () => {
   expect(instructions).toContain("Keep simple work simple")
   expect(instructions).toContain("Gateway graph state is optional")
   expect(instructions).toContain("default to zero children")
-  expect(instructions).toContain("Explore, Execute, or Review")
+  expect(instructions).toContain("Explore or Execute")
+  expect(instructions).not.toContain("Explore, Execute, or Review")
   expect(instructions).toContain("large or binary scientific data")
   expect(instructions).toContain("output_path")
   expect(instructions).toContain("Group related file edits in one `apply_patch` call")
@@ -128,7 +129,7 @@ test("the primary, domain, and specialist prompts stay adaptive instead of proce
 
 test("delegation is rare, bounded, and observable", async () => {
   const [prompt, source] = await Promise.all([read("tool/task.txt"), read("tool/task.ts")])
-  expect(DELEGATION_PROFILES).toEqual(["explore", "execute", "review"])
+  expect(DELEGATION_PROFILES).toEqual(["explore", "execute"])
   expect(NORMAL_CHILD_AGENTS).toBe(2)
   expect(MAX_CHILD_AGENTS).toBe(4)
   expect(TASK_WALL_CLOCK_MS).toEqual({ normal: 600_000, ultra: 1_200_000 })
@@ -172,14 +173,11 @@ test("durable child prompts resolve referenced context into prompt parts", async
   })
 })
 
-test("Plan and Review use the observable record without mandatory delegation", async () => {
-  const [plan, reviewer] = await Promise.all([read("session/prompt/plan.txt"), read("agent/prompt/reviewer.txt")])
+test("Plan uses the observable record without mandatory delegation", async () => {
+  const plan = await read("session/prompt/plan.txt")
   expect(plan).toContain("Default to no child")
   expect(plan).not.toContain("Launch up to 3")
   expect(plan).not.toContain("mandatory")
-  expect(reviewer).toContain("INCOMPLETE RECORD")
-  expect(reviewer).toContain("METHOD/CONCLUSION MISMATCH")
-  expect(reviewer).toContain("Environment or dependency gaps")
 })
 
 test("data-analysis skills keep reports and figures opt-in", async () => {

@@ -13,7 +13,7 @@ describe("Research delegation controls", () => {
     expect(SessionPrompt.delegationTarget("biology")).toEqual({ profile: "execute", specialist: "biology" })
     expect(SessionPrompt.delegationTarget("physics")).toEqual({ profile: "execute", specialist: "physics" })
     expect(SessionPrompt.delegationTarget("ml")).toEqual({ profile: "execute", specialist: "ml" })
-    expect(SessionPrompt.delegationTarget("review")).toEqual({ profile: "review" })
+    expect(SessionPrompt.delegationTarget("review")).toEqual({ profile: "execute" })
     expect(SessionPrompt.delegationTarget("legacy-specialist")).toEqual({ profile: "execute" })
   })
 

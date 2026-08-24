@@ -56,7 +56,7 @@ type Option = {
   value: string
 }
 
-type DefaultField = "model" | "small_model"
+type DefaultField = "model"
 
 type Scope = "all" | "reasoning" | "latest" | "long"
 type OptionGroup<T> = { id: string; label: string; models: T[] }
@@ -87,10 +87,10 @@ export default function Models() {
   const [scope, setScope] = createSignal<Scope>("all")
   const [error, setError] = createSignal<string>()
   const [defaultsBusy, setDefaultsBusy] = createSignal(false)
-  const [optimisticDefaults, setOptimisticDefaults] = createSignal<{ model?: string; small_model?: string }>({})
+  const [optimisticDefaults, setOptimisticDefaults] = createSignal<{ model?: string }>({})
   const [pendingDefaults, setPendingDefaults] = createSignal<Partial<Record<DefaultField, string>>>({})
 
-  const updateDefault = async (patch: { model?: string; small_model?: string }) => {
+  const updateDefault = async (patch: { model?: string }) => {
     if (defaultsBusy()) return
     const previous = optimisticDefaults()
     setOptimisticDefaults((current) => ({ ...current, ...patch }))
@@ -263,7 +263,9 @@ export default function Models() {
     })
     onCleanup(() => cancelAnimationFrame(frame))
   })
-  const [notice, setNotice] = createSignal("New installations start unpinned. Choose up to three quick models.")
+  const [notice, setNotice] = createSignal("Pinned models appear first. Hidden models stay out of the picker.")
+  const pinnedCount = createMemo(() => options().filter((model) => model.pinned).length)
+  const visibleCount = createMemo(() => options().filter((model) => model.visible).length)
 
   const togglePin = (model: Option) => {
     if (model.pinned) {
@@ -276,17 +278,24 @@ export default function Models() {
       setNotice("Three models are already pinned. Unpin one before adding another.")
       return
     }
-    if (result.pinned) model.routes.forEach((route) => models.setVisibility(route.key, true))
+    if (result.pinned) models.setVisibility(model.key, true)
     setNotice(`${model.label} pinned.`)
+  }
+
+  const setComposerVisibility = (model: Option, checked: boolean) => {
+    if (!checked && model.pinned) models.pinned.toggle(model.key)
+    models.setVisibility(model.key, checked)
+    setNotice(
+      checked
+        ? `${model.label} shown in the composer.`
+        : `${model.label} hidden${model.pinned ? " and unpinned" : ""}.`,
+    )
   }
 
   return (
     <div class="settings-models-panel h-full min-h-0">
       <PanelScroll>
-        <PanelHeader
-          title="Models"
-          description="Manage model access, defaults, and the choices shown in the composer."
-        />
+        <PanelHeader title="Models" description="Manage model access and the choices shown in the composer." />
         <PanelBody>
           <Show when={error()}>
             <div role="alert" class="settings-alert text-12-regular" data-tone="critical">
@@ -296,23 +305,14 @@ export default function Models() {
           <Section
             id="model-access"
             title="Access and routing"
-            description="Choose how model requests are paid for and connect the exact access routes you use."
+            description="Choose how model calls use credits, keys, or subscriptions."
           >
             <div class="settings-card models-access-card">
               <ManagedInference onError={setError} />
               <CodexConnection onError={setError} />
-            </div>
-          </Section>
-
-          <Section
-            id="model-defaults"
-            title="Defaults"
-            description="Choose the starting model for research and lightweight background work."
-          >
-            <div class="settings-card settings-defaults-card">
-              <Row title="Research model" detail="Used when a new session starts.">
+              <Row title="Starting model" detail="Used when a new session starts.">
                 <DefaultModelControl
-                  label="Research model"
+                  label="Starting model"
                   options={options()}
                   current={choiceFor("model")}
                   routes={routesFor("model")}
@@ -320,18 +320,6 @@ export default function Models() {
                   disabled={defaultsBusy()}
                   onModel={(choice) => selectDefaultModel("model", choice)}
                   onRoute={(route) => selectDefaultRoute("model", route)}
-                />
-              </Row>
-              <Row title="Background model" detail="Used for titles and compact background work.">
-                <DefaultModelControl
-                  label="Background model"
-                  options={options()}
-                  current={choiceFor("small_model")}
-                  routes={routesFor("small_model")}
-                  currentRoute={currentRoute("small_model")}
-                  disabled={defaultsBusy()}
-                  onModel={(choice) => selectDefaultModel("small_model", choice)}
-                  onRoute={(route) => selectDefaultRoute("small_model", route)}
                 />
               </Row>
             </div>
@@ -354,7 +342,9 @@ export default function Models() {
               <p class="min-w-0 flex-1 break-words text-11-regular text-text-weak" aria-live="polite">
                 {notice()}
               </p>
-              <span class="models-pin-count">{models.pinned.list().length}/3 pinned</span>
+              <span class="models-pin-count">
+                {visibleCount()} shown · {pinnedCount()}/3 pinned
+              </span>
             </div>
             <div class="models-catalog-toolbar">
               <label class="settings-control settings-control--search text-text-weak">
@@ -434,11 +424,9 @@ export default function Models() {
                             <Switch
                               hideLabel
                               checked={model.visible}
-                              onChange={(checked) =>
-                                model.routes.forEach((route) => models.setVisibility(route.key, checked))
-                              }
+                              onChange={(checked) => setComposerVisibility(model, checked)}
                             >
-                              {`${model.visible ? "Hide" : "Show"} ${model.label}`}
+                              {`Show ${model.label} in composer`}
                             </Switch>
                           </div>
                         </div>

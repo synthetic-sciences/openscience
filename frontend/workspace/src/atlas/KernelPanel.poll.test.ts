@@ -7,11 +7,11 @@ import solid from "vite-plugin-solid"
 // to solid's server build and throws a client-only API error at module load.
 // Vite with browser conditions is the same loader HostStrip.test.ts uses.
 //
-// The panel itself is still not mountable — useExecutionAuthority calls
-// useSDK() unconditionally and useParams() needs a Router, and no test in this
-// repo stands up that provider chain. The fetcher's degraded behaviour is
-// therefore asserted at `inventory`, the seam the panel's load() calls; the
-// wiring from load() to it is pinned in KernelPanel.test.ts.
+// The panel itself is still not mountable in this focused harness: useSDK(),
+// useSync(), and useParams() need the application providers, and no test here
+// stands up that chain. The fetcher's degraded behaviour is therefore asserted
+// at `inventory`, the seam the panel's load() calls; KernelPanel.test.ts pins
+// the wiring from load() to it.
 const vite = await createServer({
   root: fileURLToPath(new URL("../..", import.meta.url)),
   mode: "production",
@@ -33,6 +33,28 @@ afterAll(() => vite.close())
 const unreachable = "http://127.0.0.1:65535"
 
 describe("kernel panel poll", () => {
+  test("only reports no active compute after both inventories succeed", () => {
+    expect(subject.freshness({ runtime: "", remote: "", runtimeSeen: false, remoteSeen: false }).empty).toBe(
+      "Reading compute…",
+    )
+    expect(subject.freshness({ runtime: "", remote: "", runtimeSeen: true, remoteSeen: true }).empty).toBe(
+      "No active compute",
+    )
+  })
+
+  test("distinguishes unavailable inventory from a stale successful inventory", () => {
+    const unavailable = subject.freshness({
+      runtime: "offline",
+      remote: "",
+      runtimeSeen: false,
+      remoteSeen: true,
+    })
+    const stale = subject.freshness({ runtime: "offline", remote: "", runtimeSeen: true, remoteSeen: true })
+
+    expect(unavailable).toMatchObject({ stale: false, empty: "Compute unavailable" })
+    expect(stale).toMatchObject({ stale: true, empty: "Compute activity may be out of date" })
+  })
+
   test("resolves to no inventory when the server cannot be reached", async () => {
     const reported: string[] = []
 
@@ -64,6 +86,20 @@ describe("kernel panel poll", () => {
     await expect(settled).resolves.toBeUndefined()
   })
 
+  test("returns the last successful inventory when a refresh fails", async () => {
+    const previous = { kernels: [{ id: "kernel-python" }] }
+    const reported: string[] = []
+
+    const value = await subject.inventory(
+      Promise.reject(new Error("temporary disconnect")),
+      (error) => reported.push(error),
+      previous,
+    )
+
+    expect(value).toBe(previous)
+    expect(reported).toEqual(["temporary disconnect"])
+  })
+
   test("passes a successful body through and clears the error it reported", async () => {
     const kernels = { kernels: [] }
     const reported: string[] = []
@@ -74,5 +110,16 @@ describe("kernel panel poll", () => {
     expect(first).toBeUndefined()
     expect(second).toBe(kernels)
     expect(reported).toEqual(["boom", ""])
+  })
+
+  test("runs the completion callback only for successful inventories", async () => {
+    const previous = { kernels: [] }
+    const completed: string[] = []
+    const complete = () => completed.push("sample")
+
+    await subject.inventory(Promise.resolve(previous), () => {}, undefined, complete)
+    await subject.inventory(Promise.reject(new Error("boom")), () => {}, previous, complete)
+
+    expect(completed).toEqual(["sample"])
   })
 })

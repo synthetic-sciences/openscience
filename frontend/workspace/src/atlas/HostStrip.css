@@ -1,57 +1,67 @@
 .host-strip {
-  display: grid;
+  position: relative;
   min-width: 0;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(112px, 0.8fr);
-  gap: 4px;
-  margin: 12px 12px 0;
-  border-radius: var(--atlas-radius-sm);
-  background: color-mix(in srgb, var(--color-bg-subtle) 72%, var(--color-bg));
-  padding: 4px;
+  min-height: 98px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(78px, 0.72fr);
+  flex: 0 0 auto;
+  gap: 0;
+  padding: 15px 12px 13px;
+  border-bottom: 1px solid var(--color-border-strong);
+  background: var(--color-bg-subtle);
 }
 
 .host-strip__metric {
-  display: flex;
   min-width: 0;
-  min-height: 60px;
-  box-sizing: border-box;
-  justify-content: center;
+  display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 6px;
-  padding: 8px 10px;
-  border-radius: var(--atlas-radius-xs);
+  padding: 0 10px;
+  border-right: 1px solid var(--color-border);
+}
+
+.host-strip__metric:first-child {
+  padding-left: 0;
+}
+
+.host-strip__metric:last-of-type {
+  padding-right: 0;
+  border-right: 0;
 }
 
 .host-strip__label {
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: var(--font-weight-regular);
+  color: var(--color-text-faint);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
 }
 
 .host-strip__metric p {
-  display: flex;
   min-width: 0;
+  display: flex;
   align-items: baseline;
   gap: 4px;
   margin: 0;
   overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: 12px;
+  color: var(--color-text-faint);
+  font-size: 10px;
   white-space: nowrap;
 }
 
-.host-strip__metric--kernels {
-  align-items: flex-start;
-}
-
 .host-strip__metric strong {
+  flex: 0 0 auto;
   color: var(--color-text);
-  font-size: 15px;
+  font-size: 20px;
   font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
 }
 
-.host-strip__metric p > span {
+.host-strip__total {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -62,53 +72,87 @@
   height: 2px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--border-weak-base);
+  background: var(--color-border);
 }
 
 .host-strip__meter i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--color-text-muted) 72%, var(--color-bg));
+  background: var(--color-text-muted);
   transition: width 180ms ease;
 }
 
+.host-strip__metric--kernels {
+  align-items: flex-end;
+  text-align: right;
+}
+
 .host-strip__metric--kernels p {
-  align-items: center;
+  justify-content: flex-end;
 }
 
-@container compute (max-width: 500px) {
+.host-strip__kernel-state {
+  color: var(--color-text-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.host-strip__health {
+  position: absolute;
+  right: 12px;
+  bottom: 3px;
+  color: var(--color-text-faint);
+  font-size: 9px;
+}
+
+.host-strip__health:empty {
+  display: none;
+}
+
+.host-strip[data-health="unavailable"] .host-strip__metric {
+  opacity: 0.68;
+}
+
+@container compute (max-width: 470px) {
   .host-strip {
-    grid-template-columns: minmax(0, 1.16fr) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(68px, 0.65fr);
+    padding-inline: 10px;
   }
 
   .host-strip__metric {
-    min-height: 58px;
-    padding: 8px;
+    padding-inline: 8px;
   }
 
-  .host-strip__metric--kernels {
-    min-width: 58px;
+  .host-strip__metric strong {
+    font-size: 18px;
   }
 
-  .host-strip__metric--kernels .host-strip__label {
-    overflow: hidden;
-    max-width: 58px;
-    text-overflow: ellipsis;
-  }
-}
-
-@container compute (max-width: 360px) {
-  .host-strip {
-    margin-inline: 8px;
+  .host-strip__metric[data-host-tile="memory"] p {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
   }
 
-  .host-strip__metric {
-    padding-inline: 7px;
-  }
-
-  .host-strip__metric p > span {
+  .host-strip__metric[data-host-tile="cpu"] .host-strip__total {
     display: none;
+  }
+}
+
+@container compute (max-width: 350px) {
+  .host-strip {
+    min-height: 88px;
+    padding-inline: 8px;
+  }
+
+  .host-strip__metric {
+    padding-inline: 6px;
+  }
+
+  .host-strip__label,
+  .host-strip__kernel-state {
+    font-size: 9px;
   }
 }
 

@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { createArtifactContext } from "./context"
 import {
-  filterReviewerFindings,
+  filterHistoricalReviews,
   inspectorTabs,
   normalizeInspectorData,
   normalizePublicationReview,
-  normalizeReviewerFindings,
+  normalizeHistoricalReviews,
 } from "./inspector"
 
 const source = () => readFileSync(fileURLToPath(new URL("./ArtifactInspector.tsx", import.meta.url)), "utf8")
@@ -178,7 +178,7 @@ describe("artifact inspector model", () => {
           location: { path: "report.md", line: 4 },
         },
       ],
-      events: [{ version: 1, type: "generated", actor: "Reviewer", at: 1 }],
+      events: [{ version: 1, type: "generated", actor: "Ada", at: 1 }],
       createdAt: 1,
       updatedAt: 2,
     }
@@ -209,7 +209,7 @@ describe("artifact inspector model", () => {
   })
 })
 
-describe("reviewer findings model", () => {
+describe("historical review records", () => {
   const entry = (over: Record<string, unknown> = {}, meta: Record<string, unknown> = {}) => ({
     finding: {
       id: "node_1",
@@ -222,7 +222,7 @@ describe("reviewer findings model", () => {
         issue: "The evaluation notebook reports 0.87",
         severity: "major",
         evidence: "results/eval.ipynb cell 12",
-        reviewer: "reviewer",
+        reviewer: "legacy review service",
         sessionID: "ses_1",
         ...meta,
       },
@@ -233,8 +233,8 @@ describe("reviewer findings model", () => {
     ...over,
   })
 
-  test("normalizes reviewer entries with lifecycle status and resolution", () => {
-    const rows = normalizeReviewerFindings([
+  test("normalizes read-only entries with lifecycle status and resolution", () => {
+    const rows = normalizeHistoricalReviews([
       entry(),
       entry({
         status: "addressed",
@@ -260,9 +260,9 @@ describe("reviewer findings model", () => {
   })
 
   test("drops malformed entries instead of inventing findings", () => {
-    expect(normalizeReviewerFindings(undefined)).toEqual([])
+    expect(normalizeHistoricalReviews(undefined)).toEqual([])
     expect(
-      normalizeReviewerFindings([
+      normalizeHistoricalReviews([
         "nope",
         { finding: { id: "x" }, target: "t", verdict: "refutes" },
         entry({ verdict: "maybe" }),
@@ -272,10 +272,10 @@ describe("reviewer findings model", () => {
   })
 
   test("scopes honestly to the open session when one exists", () => {
-    const rows = normalizeReviewerFindings([entry(), entry({}, { sessionID: "ses_2" })])
-    expect(filterReviewerFindings(rows, "ses_2")).toHaveLength(1)
-    expect(filterReviewerFindings(rows, "ses_2")[0]?.sessionID).toBe("ses_2")
-    expect(filterReviewerFindings(rows)).toHaveLength(2)
+    const rows = normalizeHistoricalReviews([entry(), entry({}, { sessionID: "ses_2" })])
+    expect(filterHistoricalReviews(rows, "ses_2")).toHaveLength(1)
+    expect(filterHistoricalReviews(rows, "ses_2")[0]?.sessionID).toBe("ses_2")
+    expect(filterHistoricalReviews(rows)).toHaveLength(2)
   })
 })
 

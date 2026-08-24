@@ -500,13 +500,6 @@ form.workspace-composer .workspace-composer__actions {
   gap: 4px;
 }
 
-form.workspace-composer .workspace-composer__model-actions {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
 form.workspace-composer .workspace-composer__attach {
   width: 32px;
   height: 32px;
@@ -590,8 +583,8 @@ form.workspace-composer .workspace-composer__research-tools {
 }
 
 form.workspace-composer .workspace-composer__research-tools > summary {
-  height: 32px;
-  min-height: 32px;
+  height: 34px;
+  min-height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -600,7 +593,7 @@ form.workspace-composer .workspace-composer__research-tools > summary {
   border-radius: var(--radius-sm);
   color: var(--text-weak);
   font-family: var(--font-family-sans);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--font-weight-regular);
   line-height: 1;
   list-style: none;
@@ -680,7 +673,7 @@ form.workspace-composer .workspace-composer__research-choice > summary {
 form.workspace-composer .workspace-composer__research-control strong,
 form.workspace-composer .workspace-composer__research-choice > summary > span {
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--font-weight-medium);
   line-height: 16px;
 }
@@ -720,7 +713,7 @@ form.workspace-composer .workspace-composer__research-choice > summary:active {
 form.workspace-composer .workspace-composer__research-choice > summary > strong {
   overflow: hidden;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--font-weight-regular);
   line-height: 16px;
   text-align: right;
@@ -769,10 +762,9 @@ form.workspace-composer .workspace-composer__research-choice-menu {
   z-index: 50;
 }
 
-form.workspace-composer .workspace-composer__research-choice-menu > button,
-form.workspace-composer .workspace-composer__reviewer-options > button {
+form.workspace-composer .workspace-composer__research-choice-menu > button {
   width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 16px;
   align-items: center;
@@ -793,26 +785,20 @@ form.workspace-composer .workspace-composer__reviewer-options > button {
 
 form.workspace-composer .workspace-composer__research-choice-menu > button:hover:not(:disabled),
 form.workspace-composer .workspace-composer__research-choice-menu > button:focus-visible,
-form.workspace-composer .workspace-composer__research-choice-menu > button[aria-checked="true"],
-form.workspace-composer .workspace-composer__reviewer-options > button:hover:not(:disabled),
-form.workspace-composer .workspace-composer__reviewer-options > button:focus-visible,
-form.workspace-composer .workspace-composer__reviewer-options > button[aria-checked="true"] {
+form.workspace-composer .workspace-composer__research-choice-menu > button[aria-checked="true"] {
   background: var(--color-bg-subtle, var(--surface-raised-base-hover));
 }
 
-form.workspace-composer .workspace-composer__research-choice-menu > button:focus-visible,
-form.workspace-composer .workspace-composer__reviewer-options > button:focus-visible {
+form.workspace-composer .workspace-composer__research-choice-menu > button:focus-visible {
   outline: 2px solid var(--focus-lit-ring);
   outline-offset: -2px;
 }
 
-form.workspace-composer .workspace-composer__research-choice-menu > button:active:not(:disabled),
-form.workspace-composer .workspace-composer__reviewer-options > button:active:not(:disabled) {
+form.workspace-composer .workspace-composer__research-choice-menu > button:active:not(:disabled) {
   transform: scale(0.985);
 }
 
-form.workspace-composer .workspace-composer__research-choice-menu > button:disabled,
-form.workspace-composer .workspace-composer__reviewer-options > button:disabled {
+form.workspace-composer .workspace-composer__research-choice-menu > button:disabled {
   cursor: wait;
   opacity: 0.58;
 }
@@ -821,139 +807,30 @@ form.workspace-composer .workspace-composer__research-choice-menu > button[data-
   color: var(--color-warning, var(--text-warning-base));
 }
 
-form.workspace-composer .workspace-composer__research-choice-menu > button > span,
-form.workspace-composer .workspace-composer__reviewer-options > button > span {
+form.workspace-composer .workspace-composer__research-choice-menu > button > span {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
-form.workspace-composer .workspace-composer__research-choice-menu > button strong,
-form.workspace-composer .workspace-composer__reviewer-options > button strong {
+form.workspace-composer .workspace-composer__research-choice-menu > button strong {
   overflow: hidden;
   color: currentColor;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--font-weight-medium);
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-form.workspace-composer .workspace-composer__research-choice-menu > button small,
-form.workspace-composer .workspace-composer__reviewer-options > button small {
+form.workspace-composer .workspace-composer__research-choice-menu > button small {
   overflow: hidden;
   color: var(--text-weak);
-  font-size: 11px;
-  line-height: 15px;
+  font-size: 12px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-form.workspace-composer .workspace-composer__reviewer-menu {
-  width: min(288px, calc(100vw - 24px));
-  overflow: hidden;
-}
-
-form.workspace-composer .workspace-composer__research-choice-menu > button.workspace-composer__reviewer-back {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  margin-bottom: 3px;
-}
-
-form.workspace-composer
-  .workspace-composer__research-choice-menu
-  > button.workspace-composer__reviewer-back
-  > [data-component="icon"] {
-  flex: 0 0 auto;
-}
-
-form.workspace-composer .workspace-composer__research-choice-menu > button.workspace-composer__reviewer-back > span {
-  min-width: 0;
-  flex: 1;
-  align-items: flex-start;
-  text-align: left;
-}
-
-form.workspace-composer .workspace-composer__reviewer-search {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 2px 3px 5px;
-  padding: 0 9px;
-  border: 1px solid var(--border-weak-base);
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised-strong);
-  color: var(--text-weaker);
-}
-
-form.workspace-composer .workspace-composer__reviewer-search:focus-within {
-  border-color: var(--border-base);
-  color: var(--text-weak);
-}
-
-form.workspace-composer .workspace-composer__reviewer-search input {
-  all: unset;
-  min-width: 0;
-  flex: 1;
-  color: var(--text-strong);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-form.workspace-composer .workspace-composer__reviewer-search input::placeholder {
-  color: var(--text-weaker);
-}
-
-form.workspace-composer .workspace-composer__reviewer-options {
-  max-height: 252px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-}
-
-form.workspace-composer .workspace-composer__reviewer-empty {
-  margin: 0;
-  padding: 22px 12px;
-  color: var(--text-weaker);
-  font-size: 11px;
-  text-align: center;
-}
-
-form.workspace-composer .workspace-composer__fast-mode {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--composer-radius-pill);
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-weaker);
-  transition:
-    background-color 150ms var(--ease-standard),
-    color 150ms var(--ease-standard),
-    transform 120ms var(--ease-standard);
-}
-
-form.workspace-composer .workspace-composer__fast-mode:hover,
-form.workspace-composer .workspace-composer__fast-mode:focus-visible {
-  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
-  color: var(--text-strong);
-}
-
-form.workspace-composer .workspace-composer__fast-mode[data-active="true"] {
-  background: var(--surface-interactive-weak);
-  color: var(--text-interactive-base);
-}
-
-form.workspace-composer .workspace-composer__fast-mode:active {
-  transform: scale(0.94);
 }
 
 form.workspace-composer .workspace-composer__research-access-retry {

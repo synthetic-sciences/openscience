@@ -36,14 +36,13 @@ const button = (host: HTMLElement, label: string) =>
   host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
 
 describe("SessionSidebarActions", () => {
-  test("keeps Files, Terminal, and Compute reachable in the compact menu and gates Gateway", async () => {
+  test("keeps Files, Terminal, and Compute reachable in the compact menu", async () => {
     const subject = await import("./session-sidebar-action")
     const state = createContextState()
     const compact = mount(() => (
       <subject.CompactContextActions
         context={state.context()}
         contextOpen={state.open()}
-        atlas={false}
         onContext={state.openContext}
       />
     ))
@@ -70,40 +69,28 @@ describe("SessionSidebarActions", () => {
     expect(menu("Trace")).toBeUndefined()
 
     const connected = mount(() => (
-      <subject.CompactContextActions context="kernels" contextOpen={true} atlas={true} onContext={() => {}} />
+      <subject.CompactContextActions context="kernels" contextOpen={true} onContext={() => {}} />
     ))
     expect(
       Array.from(connected.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]'))
         .find((item) => item.textContent?.trim() === "Compute")
         ?.getAttribute("aria-pressed"),
     ).toBe("true")
-    expect(connected.textContent).toContain("Gateway")
+    expect(connected.textContent).not.toContain("Gateway")
+    expect(connected.textContent).not.toContain("Trace")
   })
 
-  test("keeps Trace hidden until the General preference is enabled", async () => {
+  test("never exposes Gateway or Trace in public project navigation", async () => {
     const subject = await import("./session-sidebar-action")
     const hidden = mount(() => (
-      <subject.SessionSidebarActions
-        context="trace"
-        contextOpen={true}
-        artifact={false}
-        atlas={false}
-        onContext={() => {}}
-      />
+      <subject.SessionSidebarActions context="trace" contextOpen={true} artifact={false} onContext={() => {}} />
     ))
-    const visible = mount(() => (
-      <subject.SessionSidebarActions
-        context="trace"
-        contextOpen={true}
-        artifact={false}
-        atlas={false}
-        trace={true}
-        onContext={() => {}}
-      />
+    const canvas = mount(() => (
+      <subject.SessionSidebarActions context="canvas" contextOpen={true} artifact={false} onContext={() => {}} />
     ))
 
     expect(button(hidden, "Open session trace")).toBeNull()
-    expect(button(visible, "Open session trace")?.getAttribute("aria-pressed")).toBe("true")
+    expect(button(canvas, "Open Gateway")).toBeNull()
   })
 
   test("keeps rail labels semantic while visual density stays in the shell CSS", async () => {
@@ -120,13 +107,7 @@ describe("SessionSidebarActions", () => {
       </subject.SidebarAction>
     ))
     const actions = mount(() => (
-      <subject.SessionSidebarActions
-        context="canvas"
-        contextOpen={false}
-        artifact={false}
-        atlas={false}
-        onContext={() => {}}
-      />
+      <subject.SessionSidebarActions context="canvas" contextOpen={false} artifact={false} onContext={() => {}} />
     ))
 
     expect(action.querySelector(".session-sidebar__action-copy strong")?.textContent).toBe("New research")
@@ -143,7 +124,6 @@ describe("SessionSidebarActions", () => {
         context: "files" | "terminal" | "canvas" | "kernels" | "artifact"
         contextOpen: boolean
         artifact: boolean
-        atlas: boolean
         onContext: (context: "files" | "terminal" | "canvas" | "kernels" | "artifact") => void
       }) => JSX.Element
     }
@@ -156,7 +136,6 @@ describe("SessionSidebarActions", () => {
         context={state.context()}
         contextOpen={state.open()}
         artifact={false}
-        atlas={true}
         onContext={state.openContext}
       />
     ))
@@ -171,41 +150,19 @@ describe("SessionSidebarActions", () => {
     expect(state.context()).toBe("terminal")
     expect(state.open()).toBe(true)
 
-    button(host, "Open Gateway")?.click()
-    await Promise.resolve()
-    expect(state.context()).toBe("canvas")
-    expect(state.open()).toBe(true)
-
-    button(host, "Open Gateway")?.click()
-    await Promise.resolve()
-    expect(state.context()).toBe("canvas")
-    expect(state.open()).toBe(true)
-
     button(host, "Open project compute")?.click()
     await Promise.resolve()
     expect(state.context()).toBe("kernels")
 
     const selected = mount(() => (
-      <subject.SessionSidebarActions
-        context="canvas"
-        contextOpen={true}
-        artifact={false}
-        atlas={true}
-        onContext={() => {}}
-      />
+      <subject.SessionSidebarActions context="canvas" contextOpen={true} artifact={false} onContext={() => {}} />
     ))
-    expect(button(selected, "Open Gateway")?.getAttribute("aria-pressed")).toBe("true")
+    expect(button(selected, "Open Gateway")).toBeNull()
     expect(button(selected, "Open project terminal")).not.toBeNull()
     expect(button(selected, "Open Evidence")).toBeNull()
 
     const files = mount(() => (
-      <subject.SessionSidebarActions
-        context="files"
-        contextOpen={true}
-        artifact={false}
-        atlas={false}
-        onContext={() => {}}
-      />
+      <subject.SessionSidebarActions context="files" contextOpen={true} artifact={false} onContext={() => {}} />
     ))
     expect(button(files, "Open project files")?.getAttribute("aria-pressed")).toBe("true")
     expect(button(files, "Open Gateway")).toBeNull()
@@ -217,7 +174,6 @@ describe("SessionSidebarActions", () => {
         context: "files" | "terminal" | "canvas" | "kernels" | "artifact"
         contextOpen: boolean
         artifact: boolean
-        atlas: boolean
         onContext: (context: "files" | "terminal" | "canvas" | "kernels" | "artifact") => void
       }) => JSX.Element
     }
@@ -225,22 +181,10 @@ describe("SessionSidebarActions", () => {
     if (!subject.SessionSidebarActions) return
 
     const empty = mount(() => (
-      <subject.SessionSidebarActions
-        context="artifact"
-        contextOpen={true}
-        artifact={false}
-        atlas={false}
-        onContext={() => {}}
-      />
+      <subject.SessionSidebarActions context="artifact" contextOpen={true} artifact={false} onContext={() => {}} />
     ))
     const active = mount(() => (
-      <subject.SessionSidebarActions
-        context="artifact"
-        contextOpen={true}
-        artifact={true}
-        atlas={false}
-        onContext={() => {}}
-      />
+      <subject.SessionSidebarActions context="artifact" contextOpen={true} artifact={true} onContext={() => {}} />
     ))
 
     expect(button(empty, "Open file details")).toBeNull()

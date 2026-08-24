@@ -131,38 +131,36 @@ export interface PublicationReviewState {
   report?: PublicationReviewReport
 }
 
-// ── Reviewer findings (provenance graph) ────────────────────────────────────
+// ── Historical review records (provenance graph) ────────────────────────────
 //
-// Findings recorded by the independent reviewer agent live in the project
-// provenance graph (GET /provenance/reviews), not in the deterministic
-// publication preflight above. A refuting finding carries a derived lifecycle:
-// open → addressed (a fix was recorded) → confirmed (a LATER reviewer pass
-// verified the same target — never closed by assertion alone).
+// Earlier OpenScience versions wrote review records into the project provenance
+// graph. The current API exposes them through GET /provenance/reviews only; the
+// deterministic publication preflight above remains the active workflow.
 
-export type ReviewerVerdict = "refutes" | "supports"
-export type ReviewerFindingStatus = "open" | "addressed" | "confirmed"
+export type HistoricalReviewVerdict = "refutes" | "supports"
+export type HistoricalReviewStatus = "open" | "addressed" | "confirmed"
 
-export interface ReviewerFinding {
+export interface HistoricalReviewFinding {
   id: string
   target: string
-  verdict: ReviewerVerdict
-  status?: ReviewerFindingStatus
+  verdict: HistoricalReviewVerdict
+  status?: HistoricalReviewStatus
   severity: PublicationReviewSeverity
   claim: string
   issue: string
   evidence: string
-  reviewer: string
+  recordedBy: string
   sessionID?: string
   recordedAt: string
   resolution?: { actor: string; reason: string; recordedAt: string }
 }
 
-export function normalizeReviewerFindings(value: unknown): ReviewerFinding[] {
+export function normalizeHistoricalReviews(value: unknown): HistoricalReviewFinding[] {
   if (!Array.isArray(value)) return []
   const severities = new Set(["blocking", "major", "minor", "info"])
   const statuses = new Set(["open", "addressed", "confirmed"])
   return value
-    .flatMap((item): ReviewerFinding[] => {
+    .flatMap((item): HistoricalReviewFinding[] => {
       const row = record(item)
       const finding = record(row?.finding)
       const meta = record(finding?.meta)
@@ -195,12 +193,12 @@ export function normalizeReviewerFindings(value: unknown): ReviewerFinding[] {
           id: finding.id,
           target: row.target,
           verdict: row.verdict,
-          ...(status ? { status: status as ReviewerFindingStatus } : {}),
+          ...(status ? { status: status as HistoricalReviewStatus } : {}),
           severity: meta.severity as PublicationReviewSeverity,
           claim: meta.claim,
           issue: meta.issue,
           evidence: meta.evidence,
-          reviewer: typeof meta.reviewer === "string" ? meta.reviewer : "reviewer",
+          recordedBy: typeof meta.reviewer === "string" ? meta.reviewer : "Earlier OpenScience version",
           ...(typeof meta.sessionID === "string" ? { sessionID: meta.sessionID } : {}),
           recordedAt: finding.recordedAt,
           ...(parsed ? { resolution: parsed } : {}),
@@ -215,7 +213,10 @@ export function normalizeReviewerFindings(value: unknown): ReviewerFinding[] {
  * provenance node id, not a path), so the surface scopes honestly: the current
  * session's findings when a session is open, the whole project otherwise.
  */
-export function filterReviewerFindings(rows: ReviewerFinding[], sessionID?: string): ReviewerFinding[] {
+export function filterHistoricalReviews(
+  rows: HistoricalReviewFinding[],
+  sessionID?: string,
+): HistoricalReviewFinding[] {
   if (!sessionID) return rows
   return rows.filter((row) => row.sessionID === sessionID)
 }

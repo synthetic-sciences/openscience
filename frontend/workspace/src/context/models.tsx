@@ -33,6 +33,14 @@ type Store = {
   tier?: Record<string, string | undefined>
 }
 
+export const composerModelPreferenceKey = (model: ModelKey) => logicalModelKey(model.providerID, model.modelID)
+
+export function connectedPinnedModels(current: readonly ModelKey[], connected: ReadonlySet<string>) {
+  return uniqueBy(current, composerModelPreferenceKey)
+    .filter((model) => connected.has(composerModelPreferenceKey(model)))
+    .slice(0, 3)
+}
+
 export const togglePinned = (current: ModelKey[], model: ModelKey) => {
   const models = uniqueBy(current, (item) => logicalModelKey(item.providerID, item.modelID)).slice(0, 3)
   const key = logicalModelKey(model.providerID, model.modelID)
@@ -79,7 +87,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
 
     const visibility = createMemo(() => {
       const map = new Map<string, Visibility>()
-      for (const item of store.user) map.set(`${item.providerID}:${item.modelID}`, item.visibility)
+      for (const item of store.user) map.set(composerModelPreferenceKey(item), item.visibility)
       return map
     })
 
@@ -113,12 +121,12 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     const find = (key: ModelKey) => preferredModel(list(), key)
 
     function update(model: ModelKey, state: Visibility) {
-      const index = store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)
-      if (index >= 0) {
-        setStore("user", index, { visibility: state })
-        return
-      }
-      setStore("user", store.user.length, { ...model, visibility: state })
+      const key = composerModelPreferenceKey(model)
+      const previous = store.user.find((item) => composerModelPreferenceKey(item) === key)
+      setStore("user", [
+        ...store.user.filter((item) => composerModelPreferenceKey(item) !== key),
+        { ...previous, ...model, visibility: state },
+      ])
     }
 
     // Are any of the connected providers exposing a frontier model at all? If
@@ -129,10 +137,10 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     )
 
     const visible = (model: ModelKey) => {
-      const key = `${model.providerID}:${model.modelID}`
+      const key = composerModelPreferenceKey(model)
       const state = visibility().get(key)
-      // Explicit user choice always wins (set via Manage Models, or implicitly
-      // when a model is selected — see local.set()).
+      // Explicit logical-model choice always wins across managed, subscription,
+      // and direct-key routes (set here or implicitly via local.set()).
       if (state === "hide") return false
       if (state === "show") return true
       // Default: only the curated frontier set surfaces in the picker. The full
@@ -154,9 +162,8 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
 
     // New installations start unpinned. The composer derives its suggested set
     // from available models, so pinning is always an explicit user choice.
-    const pinned = createMemo(() =>
-      uniqueBy(store.pinned ?? [], (item) => logicalModelKey(item.providerID, item.modelID)).slice(0, 3),
-    )
+    const connected = createMemo(() => new Set(list().map((model) => logicalModelKey(model.provider.id, model.id))))
+    const pinned = createMemo(() => connectedPinnedModels(store.pinned ?? [], connected()))
     const isPinned = (model: ModelKey) => {
       const key = logicalModelKey(model.providerID, model.modelID)
       return pinned().some((item) => logicalModelKey(item.providerID, item.modelID) === key)

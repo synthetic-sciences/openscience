@@ -33,7 +33,7 @@ const mount = (view: () => JSX.Element) => {
   return host
 }
 
-test("live shell commands share the compact activity ledger", () => {
+test("live shell commands use the same passive tracker grammar", () => {
   const host = mount(() =>
     subject.CommandCard({
       command: {
@@ -48,19 +48,15 @@ test("live shell commands share the compact activity ledger", () => {
         started_at: Date.now() - 5_000,
         resources: { memory_bytes: 12_000_000, cpu_percent: 75 },
       },
-      stopping: false,
-      onStop: () => undefined,
     }),
   )
 
-  expect(host.querySelector(".kernel-card__copy")?.textContent).toContain("Preparing Titanic dataset")
-  expect(host.querySelector(".activity-card__kind")?.textContent).toBe("Shell")
-  expect(host.querySelector(".activity-card__status")?.textContent).toBe("Running")
-  expect(host.querySelectorAll<HTMLDetailsElement>("details").length).toBe(2)
-  expect(Array.from(host.querySelectorAll<HTMLDetailsElement>("details")).every((item) => !item.open)).toBe(true)
-  expect(host.querySelector("code")?.textContent).toBe("python prepare.py")
-  expect(host.textContent).toContain("12 MB")
-  expect(host.textContent).toContain("0.8 cores")
-  expect(host.textContent).toContain("42")
-  expect(host.querySelector('button[aria-label="Stop Preparing Titanic dataset"]')).not.toBeNull()
+  expect(host.querySelector(".compute-row__copy")?.textContent).toContain("Preparing Titanic dataset")
+  expect(host.querySelector('.compute-row__kind [data-icon="console"]')).not.toBeNull()
+  expect(host.querySelector(".compute-row__copy")?.textContent).toContain("Running · 5s")
+  expect(host.querySelector('[data-metric="memory"]')?.textContent).toContain("12 MB RSS")
+  expect(host.querySelector('[data-metric="cpu"]')?.textContent).toContain("0.8 cores")
+  expect(host.textContent).not.toContain("python prepare.py")
+  expect(host.textContent).not.toContain("42")
+  expect(host.querySelector("button, details, summary, pre, code")).toBeNull()
 })

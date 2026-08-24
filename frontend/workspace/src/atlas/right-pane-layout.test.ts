@@ -39,6 +39,24 @@ describe("context pane layout", () => {
     expect(paneWidthForWorkspace(900, 1200)).toBe(MAX_PANE_WIDTH)
   })
 
+  test("reserves the actual persistent sidebar at expanded and collapsed widths", () => {
+    const workspace = 1200
+    const expandedSidebar = 232
+    const collapsedSidebar = 56
+
+    expect(maxPaneWidthForWorkspace(workspace, expandedSidebar)).toBe(548)
+    expect(paneWidthForWorkspace(900, workspace, expandedSidebar)).toBe(548)
+    expect(workspace - expandedSidebar - paneWidthForWorkspace(900, workspace, expandedSidebar)).toBe(
+      MIN_CONVERSATION_WIDTH,
+    )
+    expect(equalPaneWidth(workspace, expandedSidebar)).toBe(484)
+
+    expect(maxPaneWidthForWorkspace(workspace, collapsedSidebar)).toBe(MAX_PANE_WIDTH)
+    expect(
+      workspace - collapsedSidebar - paneWidthForWorkspace(900, workspace, collapsedSidebar),
+    ).toBeGreaterThanOrEqual(MIN_CONVERSATION_WIDTH)
+  })
+
   test("keeps a true side pane at the reference desktop viewport without crushing the conversation", () => {
     expect(INLINE_PANE_BREAKPOINT).toBe(1100)
     expect(paneWidthForViewport(DEFAULT_PANE_WIDTH, 1100)).toBe(DEFAULT_PANE_WIDTH)

@@ -9,7 +9,7 @@ Use this skill when the task is scientific work rather than a single factual exp
 
 ## Start
 
-1. Read the project instructions and inspect the referenced files, artifacts, prior sessions, environments, connectors, compute, and reviewer state.
+1. Read the project instructions and inspect the referenced files, artifacts, prior sessions, environments, connectors, compute, and verification state.
 2. Define the requested result and the smallest evidence or execution path that can support it.
 3. Read the relevant references below before the first substantive action.
 4. Identify the validation gate, whether any durable artifact is actually needed, and any new permission or external-action boundary.

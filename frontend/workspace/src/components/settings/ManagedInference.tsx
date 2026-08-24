@@ -17,28 +17,30 @@ type Wallet = {
 
 const MODES: { value: Mode; title: string; body: string }[] = [
   {
+    value: null,
+    title: "Automatic",
+    body: "Use the credential connected to the selected model route.",
+  },
+  {
     value: "managed",
-    title: "Managed",
-    body: "Use your Synthetic Sciences credits. No provider key is required.",
+    title: "Credits",
+    body: "Use Synthetic Sciences credits for supported models.",
   },
   {
     value: "byok",
-    title: "BYOK",
-    body: "Use only the provider keys and subscriptions connected below.",
-  },
-  {
-    value: null,
-    title: "Automatic",
-    body: "Use the selected model's available access route.",
+    title: "Accounts",
+    body: "Use only connected provider keys and subscriptions.",
   },
 ]
 
-const money = (value: number) => `$${value.toFixed(value >= 100 ? 0 : 2)}`
+export const formatCreditBalance = (value: number) => `$${value.toFixed(2)}`
 
 export function walletBalanceLabel(wallet: Pick<Wallet, "signedIn" | "balanceUsd">) {
   if (!wallet.signedIn) return "Not signed in"
   if (wallet.balanceUsd === null) return "Balance unavailable"
-  return wallet.balanceUsd >= 0 ? `${money(wallet.balanceUsd)} available` : `${money(wallet.balanceUsd)} balance`
+  return wallet.balanceUsd >= 0
+    ? `${formatCreditBalance(wallet.balanceUsd)} available`
+    : `${formatCreditBalance(wallet.balanceUsd)} balance`
 }
 
 /**
@@ -62,7 +64,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   const [mode, setMode] = createSignal<Mode>(globalSync.data.config.billing?.llm ?? null)
   const [busy, setBusy] = createSignal(false)
   const [refreshing, setRefreshing] = createSignal(false)
-  const selected = createMemo(() => MODES.find((item) => item.value === mode()) ?? MODES[2])
+  const selected = createMemo(() => MODES.find((item) => item.value === mode()) ?? MODES[0])
 
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const fail = (error: unknown) => {
@@ -132,7 +134,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   // The mode can change without this panel touching it: saving an own provider
   // key in Provider keys below makes the server flip billing.llm managed →
   // byok (Auth.set). That happens in the same window, so no `focus` event ever
-  // fires and the toggle would keep showing Managed — highlighted, and
+  // fires and the toggle would keep showing Credits — highlighted, and
   // contradicting the row underneath — until a reload. Every credential change
   // already funnels through refreshProviders, so re-read the mode there.
   const unsubscribe = globalSync.onProvidersRefreshed(() => void loadBilling())
@@ -151,13 +153,52 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
 
   return (
     <div class="models-inference">
+      <div class="models-routing" aria-label="Inference routing">
+        <div
+          class="models-routing__options"
+          role="group"
+          aria-label="Inference routing mode"
+          aria-describedby="managed-inference-description"
+        >
+          <For each={MODES}>
+            {(option) => (
+              <button
+                type="button"
+                aria-pressed={mode() === option.value}
+                aria-busy={busy()}
+                disabled={busy() || unsupported(option.value)}
+                class="models-routing__option"
+                title={
+                  unsupported(option.value)
+                    ? "Credits require a signed-in account with managed billing enabled"
+                    : undefined
+                }
+                onClick={() => update(option.value)}
+              >
+                <span class="models-routing__option-label">
+                  <span>{option.title}</span>
+                </span>
+              </button>
+            )}
+          </For>
+        </div>
+        <p id="managed-inference-description" class="models-routing__description" aria-live="polite">
+          {busy() ? `Saving ${selected().title.toLowerCase()}…` : selected().body}
+          <Show when={!busy() && refreshing()}>
+            <span class="models-routing__sync"> Updating model availability…</span>
+          </Show>
+        </p>
+      </div>
+
       <div class="settings-row models-compact-row models-account-summary">
         <div class="models-account-summary__identity">
           <div class="flex min-w-0 flex-col gap-0.5">
-            <span class="text-12-regular text-text-weak">Synthetic Sciences credits</span>
+            <span class="text-12-regular text-text-weak">Credits balance</span>
             <span aria-live="polite">
               <Show when={wallet()} fallback={<span class="text-13-medium text-text-weak">Checking account…</span>}>
-                <span class="text-13-medium text-text-strong">{walletBalanceLabel(wallet()!)}</span>
+                <span class="models-account-summary__balance text-13-medium text-text-strong">
+                  {walletBalanceLabel(wallet()!)}
+                </span>
               </Show>
             </span>
           </div>
@@ -174,45 +215,9 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
         </span>
       </div>
 
-      <div class="models-routing" aria-label="Inference routing">
-        <div class="models-routing__options" role="group" aria-label="Inference routing mode">
-          <For each={MODES}>
-            {(option) => (
-              <button
-                type="button"
-                aria-pressed={mode() === option.value}
-                aria-describedby={`managed-inference-${option.value ?? "automatic"}-description`}
-                aria-busy={busy()}
-                disabled={busy() || unsupported(option.value)}
-                class="models-routing__option"
-                title={
-                  unsupported(option.value)
-                    ? "Managed inference requires a signed-in account with managed billing enabled"
-                    : undefined
-                }
-                onClick={() => update(option.value)}
-              >
-                <span class="models-routing__option-label">
-                  <span>{option.title}</span>
-                </span>
-                <span id={`managed-inference-${option.value ?? "automatic"}-description`} class="sr-only">
-                  {option.body}
-                </span>
-              </button>
-            )}
-          </For>
-        </div>
-        <p class="models-routing__description" aria-live="polite">
-          {busy() ? `Saving ${selected().title.toLowerCase()}…` : selected().body}
-          <Show when={!busy() && refreshing()}>
-            <span class="models-routing__sync"> Updating model availability…</span>
-          </Show>
-        </p>
-      </div>
-
       <Show when={wallet() && !wallet()!.signedIn}>
         <p class="settings-inline-note text-12-regular text-text-weak">
-          Sign in from General to enable managed credits. Own-key and automatic routing remain available.
+          Sign in from General to use Credits. Automatic routing and connected accounts remain available.
         </p>
       </Show>
     </div>

@@ -508,8 +508,8 @@ export namespace SessionFilesystem {
    * Give a direct delegated child read-only access to its parent's scratch
    * workspace. Both sessions must be isolated siblings in this project's
    * managed workspace root; arbitrary session or external paths cannot be
-   * supplied. The directional grant lets reviewers inspect finalized parent
-   * artifacts without allowing mutation or exposing unrelated sessions.
+   * supplied. The directional grant lets delegated children inspect finalized
+   * parent artifacts without allowing mutation or exposing unrelated sessions.
    */
   export async function grantTaskHandoff(input: { parentSessionID: string; childSessionID: string }) {
     const [parent, child] = await Promise.all([ensure(input.parentSessionID), ensure(input.childSessionID)])

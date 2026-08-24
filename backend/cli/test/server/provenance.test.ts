@@ -48,7 +48,7 @@ describe("/provenance routes", () => {
     })
   })
 
-  test("records, reviews, scopes, traces, and exports a project audit graph", async () => {
+  test("records, reads historical reviews, traces, and exports a project audit graph", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
@@ -78,7 +78,27 @@ describe("/provenance routes", () => {
         expect(claim.status).toBe(200)
         const claimNode = (await claim.json()) as { id: string }
 
-        const review = await app.request("/reviews", {
+        const scope = { projectID: Instance.project.id, directory: Instance.directory }
+        const historical = await Provenance.recordOwned(scope, {
+          kind: "claim",
+          label: "historical review: verified",
+          meta: {
+            review: true,
+            target: claimNode.id,
+            verdict: "supports",
+            claim: "Treatment improves response",
+            issue: "verified",
+            severity: "info",
+            evidence: sourceNode.id,
+          },
+        })
+        await Provenance.linkOwned(scope, { from: historical.id, to: claimNode.id, relation: "supports" })
+
+        const reviews = await app.request("/reviews")
+        expect(reviews.status).toBe(200)
+        expect(await reviews.json()).toMatchObject([{ finding: { id: historical.id }, target: claimNode.id }])
+
+        const reviewWrite = await app.request("/reviews", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -90,7 +110,13 @@ describe("/provenance routes", () => {
             verdict: "supports",
           }),
         })
-        expect(review.status).toBe(200)
+        expect(reviewWrite.status).toBe(404)
+        const resolutionWrite = await app.request(`/reviews/${historical.id}/resolve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actor: "user", reason: "not writable" }),
+        })
+        expect(resolutionWrite.status).toBe(404)
 
         const graph = await app.request("/")
         const result = (await graph.json()) as {
@@ -146,6 +172,39 @@ describe("/provenance routes", () => {
           }),
         })
         expect(response.status).toBe(400)
+      },
+    })
+  })
+
+  test("generic writes reject reserved metadata and review-only relations", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const app = ProvenanceRoutes()
+        for (const key of ["review", "resolution"] as const) {
+          const response = await app.request("/nodes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "claim", label: `Forged ${key}`, meta: { [key]: true } }),
+          })
+          expect(response.status).toBe(400)
+        }
+
+        const source = await app.request("/nodes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "source", label: "Source" }),
+        })
+        const id = ((await source.json()) as { id: string }).id
+        for (const relation of ["supports", "refutes"]) {
+          const response = await app.request("/nodes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "claim", label: "Forged edge", derived_from: id, relation }),
+          })
+          expect(response.status).toBe(400)
+        }
       },
     })
   })

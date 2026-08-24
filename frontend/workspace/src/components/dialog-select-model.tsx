@@ -338,7 +338,7 @@ export const DialogSelectModel: Component<{
       <Button variant="ghost" icon="sliders" class="model-picker-sheet__manage" onClick={manage}>
         <span class="model-picker-sheet__manage-copy">
           <strong>{language.t("dialog.model.manage")}</strong>
-          <span>Open Customize for access, defaults, and composer models</span>
+          <span>Open Customize for access and composer models</span>
         </span>
         <span class="model-picker-sheet__manage-arrow" aria-hidden="true">
           ›

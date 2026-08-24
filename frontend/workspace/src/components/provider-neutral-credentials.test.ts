@@ -5,9 +5,9 @@ const keys = await Bun.file(new URL("./settings/ProviderKeys.tsx", import.meta.u
 const setup = await Bun.file(new URL("../atlas/SetupDialog.tsx", import.meta.url)).text()
 const providers = await Bun.file(new URL("./settings/model-providers.ts", import.meta.url)).text()
 
-test("keeps account setup separate from explicit provider integrations", () => {
-  expect(managed).toContain('title: "Managed"')
-  expect(managed).toContain('title: "BYOK"')
+test("shares the complete provider-key catalog across setup and settings", () => {
+  expect(managed).toContain('title: "Credits"')
+  expect(managed).toContain('title: "Accounts"')
   expect(keys).toContain('from "./model-providers"')
   expect(keys).not.toContain("const PROVIDERS")
   expect(setup).not.toContain("const BYOK_PROVIDERS")

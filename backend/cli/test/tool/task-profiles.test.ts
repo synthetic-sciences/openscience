@@ -29,7 +29,7 @@ test("Task advertises generic phases and accepts an explicit domain specialist l
 
       expect(task.description).toContain("- explore:")
       expect(task.description).toContain("- execute:")
-      expect(task.description).toContain("- review:")
+      expect(task.description).not.toContain("- review:")
       expect(task.description).not.toContain("- biology:")
       expect(task.description).not.toContain("- physics:")
       expect(task.description).not.toContain("- literature-review:")
@@ -51,7 +51,7 @@ test("Task advertises generic phases and accepts an explicit domain specialist l
       ).toBe(false)
 
       expect(await Agent.get("biology")).toBeDefined()
-      expect(await Agent.get("reviewer")).toBeDefined()
+      expect(await Agent.get("reviewer")).toBeUndefined()
       expect(await Agent.get("plan")).toBeDefined()
     },
   })

@@ -14,7 +14,6 @@ import PROMPT_CRITIQUE from "./prompt/critique.txt"
 import PROMPT_LITERATURE_REVIEW from "./prompt/literature-review.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_PHYSICS_CRITIQUE from "./prompt/physics-critique.txt"
-import PROMPT_REVIEWER from "./prompt/reviewer.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -282,30 +281,6 @@ export namespace Agent {
         native: true,
         hidden: true,
       },
-      review: {
-        name: "review",
-        steps: 12,
-        description:
-          "Proportionate, read-only review of observable files, results, citations, and provenance when the risk justifies it.",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            "*": "deny",
-            read: "allow",
-            glob: "allow",
-            grep: "allow",
-            artifact_snapshot: "allow",
-            provenance_query: "allow",
-            provenance_review: "allow",
-          }),
-          user,
-        ),
-        prompt: PROMPT_REVIEWER,
-        options: {},
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
       // --- Compatibility aliases (retrievable, never advertised) ---
       task: {
         name: "task",
@@ -426,52 +401,6 @@ export namespace Agent {
         native: true,
         hidden: true,
       },
-      reviewer: {
-        name: "reviewer",
-        steps: 60,
-        description:
-          "Blind, adversarial reviewer of research outputs. Traces every claim, number, and figure back to the provenance DAG and evidence — flags citation mismatches, untraceable numbers, and figure/stat mismatches. Read-only.",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            "*": "deny",
-            read: "allow",
-            glob: "allow",
-            grep: "allow",
-            artifact_snapshot: "allow",
-            provenance_query: "allow",
-            provenance_review: "allow",
-          }),
-          user,
-        ),
-        prompt: PROMPT_REVIEWER,
-        options: {},
-        color: "#f59e0b",
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
-      "artifact-reviewer": {
-        name: "artifact-reviewer",
-        steps: 60,
-        description:
-          "Read-only reviewer for one immutable artifact-store version. It can inspect only the bound snapshot and its provenance, then append review findings.",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            "*": "deny",
-            artifact_snapshot: "allow",
-            provenance_query: "allow",
-            provenance_review: "allow",
-          }),
-        ),
-        prompt: PROMPT_REVIEWER,
-        options: {},
-        color: "#f59e0b",
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
       // --- Hidden system agents ---
       compaction: {
         name: "compaction",
@@ -506,7 +435,9 @@ export namespace Agent {
       },
     }
 
+    const removed = new Set(["review", "reviewer", "artifact-reviewer"])
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
+      if (removed.has(key)) continue
       if (value.disable) {
         delete result[key]
         continue

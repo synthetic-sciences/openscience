@@ -6,20 +6,17 @@ const [css, strip, shell] = await Promise.all([
   Bun.file(new URL("../styles/atlas.css", import.meta.url)).text(),
 ])
 
-describe("activity surface styling", () => {
-  test("uses a quiet result ledger with progressive disclosure", () => {
-    expect(css).toContain(".compute-surface .activity-card")
-    expect(css).toContain(".compute-surface .activity-disclosure")
-    expect(css).toContain(".compute-surface .activity-card__facts")
-    expect(css).toContain("border-radius: 11px")
-    expect(css).toContain("border: 0")
-    expect(css).not.toContain(".compute-surface__atlas")
-    expect(css).toContain("gap: 4px")
-    expect(css).toContain("background-color 140ms ease")
-    expect(css).toContain(".activity-disclosure > summary:focus-visible")
-    expect(css).toContain("font-weight: var(--font-weight-medium)")
-    expect(strip).toContain("height: 2px")
-    expect(css).not.toContain(".compute-surface__tabs")
+describe("compute tracker styling", () => {
+  test("uses flat rows and dividers instead of nested cards", () => {
+    expect(css).toContain(".compute-row")
+    expect(css).toContain("border-bottom: 1px solid var(--color-border)")
+    expect(css).toContain(".kernel-session__header")
+    expect(css).toContain(".kernel-panel__other")
+    expect(css).toContain(".compute-row__metric")
+    expect(css).not.toContain(".activity-card")
+    expect(css).not.toContain(".activity-disclosure")
+    expect(css).not.toContain(".compute-guide")
+    expect(css).not.toContain("box-shadow")
   })
 
   test("keeps the live inventory as the only scrolling content area", () => {
@@ -30,16 +27,15 @@ describe("activity surface styling", () => {
     expect(strip).not.toMatch(/#[0-9a-fA-F]{3,8}/)
   })
 
-  test("keeps activity styling component-owned instead of layering legacy shell overrides", () => {
+  test("keeps tracker styles component-owned", () => {
     expect(shell).not.toMatch(/\.(?:compute-surface|kernel-panel|kernel-card)(?:[\s_:{.[#]|$)/)
   })
 
-  test("keeps capacity telemetry legible at the narrowest supported pane width", () => {
-    expect(css).toContain(".activity-surface__capacity-title-prefix")
-    expect(css).toContain(".activity-surface__capacity-reading small")
-    expect(css).toContain("font-size: 11px")
-    expect(css).not.toMatch(
-      /\.activity-surface__capacity-reading small,\s*\.activity-surface__capacity-reading strong\s*\{\s*font-size:\s*10px/,
-    )
+  test("keeps all three host readings permanently visible", () => {
+    expect(strip).toContain("grid-template-columns:")
+    expect(strip).toContain(".host-strip__metric")
+    expect(strip).toContain("height: 2px")
+    expect(strip).not.toContain("details")
+    expect(strip).not.toContain("summary")
   })
 })

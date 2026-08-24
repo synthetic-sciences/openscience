@@ -21,7 +21,7 @@ import path from "path"
 import { TaskAttempt, TaskCapacity } from "./task-attempt"
 import { Storage } from "@/storage/storage"
 
-export const DELEGATION_PROFILES = ["explore", "execute", "review"] as const
+export const DELEGATION_PROFILES = ["explore", "execute"] as const
 export const DELEGATION_SPECIALISTS = ["biology", "physics", "ml"] as const
 export function isComputeDelegationProfile(name: string) {
   return name === "execute"
@@ -41,7 +41,7 @@ const MAX_COMPUTE_SUBAGENTS =
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
-  subagent_type: z.enum(DELEGATION_PROFILES).describe("The internal explore, execute, or review profile"),
+  subagent_type: z.enum(DELEGATION_PROFILES).describe("The internal explore or execute profile"),
   specialist: z
     .enum(DELEGATION_SPECIALISTS)
     .optional()

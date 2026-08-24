@@ -56,12 +56,6 @@
       "evidence": ["artifact exists", "artifact opens", "artifact contents"]
     },
     {
-      "id": "reviewer_precision",
-      "label": "Reviewer precision",
-      "weight": 2,
-      "evidence": ["review findings", "supported correction"]
-    },
-    {
       "id": "ui_continuity",
       "label": "UI continuity",
       "weight": 1,

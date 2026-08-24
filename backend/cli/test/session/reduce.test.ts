@@ -160,8 +160,8 @@ describe("session.message-v2.toModelMessages — compacted tool rendering (P2.2)
             "a1",
             "t1",
             "task",
-            completedTool("task", { subagent_type: "review" }, "full child transcript", {
-              title: "Review output",
+            completedTool("task", { subagent_type: "execute" }, "full child transcript", {
+              title: "Execution output",
               compacted: true,
               metadata: { handoff: "## Outcome\npartial\n## Limitations\nmissing seed 3" },
             }),

@@ -36,7 +36,6 @@ import { NotebookTool, PythonTool } from "./notebook"
 import { RKernelTool, RTool } from "./rkernel"
 import { AtlasTool } from "./atlas"
 import { AtlasRecordTool } from "./atlas-record"
-import { ArtifactSnapshotTool } from "./artifact-snapshot"
 import { ModalTool } from "./modal"
 import { ComputeJobTool } from "./compute-job"
 import { ResearchContractTool } from "./research-contract"
@@ -169,7 +168,6 @@ export namespace ToolRegistry {
       ...BiologyTools,
       ...ScienceTools,
       ...ProvenanceTools,
-      ArtifactSnapshotTool,
       AtlasTool,
       AtlasRecordTool,
       PythonTool,

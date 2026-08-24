@@ -119,23 +119,42 @@ test("Research is the only built-in user-facing primary", async () => {
   })
 })
 
-test("built-in delegation uses only Explore, Execute, and Review profiles", async () => {
+test("built-in delegation uses only Explore and Execute profiles", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const profiles = (await Promise.all([Agent.get("execute"), Agent.get("explore"), Agent.get("review")])).map(
-        (agent) => agent?.name,
-      )
-      expect(profiles).toEqual(["execute", "explore", "review"])
+      const profiles = (await Promise.all([Agent.get("execute"), Agent.get("explore")])).map((agent) => agent?.name)
+      expect(profiles).toEqual(["execute", "explore"])
       expect((await Agent.get("execute"))?.hidden).toBe(true)
       expect((await Agent.get("explore"))?.hidden).toBe(true)
-      expect((await Agent.get("review"))?.hidden).toBe(true)
       expect(evalPerm(await Agent.get("execute"), "edit")).toBe("allow")
-      expect(evalPerm(await Agent.get("review"), "edit")).toBe("deny")
       expect((await Agent.get("explore"))?.steps).toBe(12)
       expect((await Agent.get("execute"))?.steps).toBe(16)
-      expect((await Agent.get("review"))?.steps).toBe(12)
+      expect(await Agent.get("review")).toBeUndefined()
+      expect(await Agent.get("reviewer")).toBeUndefined()
+      expect(await Agent.get("artifact-reviewer")).toBeUndefined()
+    },
+  })
+})
+
+test("removed reviewer aliases cannot be restored by persisted agent config", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        review: { description: "legacy review alias" },
+        reviewer: { description: "legacy reviewer" },
+        "artifact-reviewer": { description: "legacy artifact reviewer" },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trustProject()
+      expect(await Agent.get("review")).toBeUndefined()
+      expect(await Agent.get("reviewer")).toBeUndefined()
+      expect(await Agent.get("artifact-reviewer")).toBeUndefined()
     },
   })
 })
