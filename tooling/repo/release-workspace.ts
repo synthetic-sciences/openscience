@@ -1,6 +1,11 @@
 import { $ } from "bun"
+import path from "path"
 
 export const releaseRoot = new URL("../..", import.meta.url).pathname
+
+export function resolveReleasePath(value: string) {
+  return path.isAbsolute(value) ? value : path.resolve(releaseRoot, value)
+}
 
 export async function assertReleaseSource(expected = process.env.OPENSCIENCE_RELEASE_SOURCE) {
   if (!expected || !/^[0-9a-f]{40}$/i.test(expected)) {

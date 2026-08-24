@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test"
 import path from "path"
+import { releaseRoot, resolveReleasePath } from "../../../../tooling/repo/release-workspace"
+
+test("npm artifact output remains rooted at the release checkout after nested builds change cwd", async () => {
+  const relative = ".release/npm-test/2.0.32-test.example"
+  const absolute = path.join(releaseRoot, relative)
+  const prepare = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/prepare-npm.ts")).text()
+
+  expect(resolveReleasePath(relative)).toBe(absolute)
+  expect(resolveReleasePath(absolute)).toBe(absolute)
+  expect(prepare).toContain("const output = resolveReleasePath(outputInput)")
+})
 
 test("production publish verifies every package before the one guarded release-tag move", async () => {
   const script = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/publish.ts")).text()

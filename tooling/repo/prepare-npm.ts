@@ -6,7 +6,7 @@ import { $ } from "bun"
 import { Script } from "@synsci/script"
 import { assertPublicPackageSurface, createWrapperPackageManifest } from "../../backend/cli/script/publish-manifest"
 import { createCompiledPackageManifest, packPackage, saveReleaseArtifacts, type PackedPackage } from "./npm-release"
-import { assertReleaseSource, releaseRoot, setWorkspaceVersion } from "./release-workspace"
+import { assertReleaseSource, releaseRoot, resolveReleasePath, setWorkspaceVersion } from "./release-workspace"
 
 const source = await assertReleaseSource()
 const artifactSource = process.env.OPENSCIENCE_ARTIFACT_SOURCE
@@ -14,8 +14,9 @@ if (!artifactSource || !/^[0-9a-f]{40}$/i.test(artifactSource)) {
   throw new Error("OPENSCIENCE_ARTIFACT_SOURCE must be an immutable commit SHA")
 }
 const version = Script.version
-const output = process.env.OPENSCIENCE_NPM_ARTIFACT_DIR
-if (!output) throw new Error("OPENSCIENCE_NPM_ARTIFACT_DIR is required")
+const outputInput = process.env.OPENSCIENCE_NPM_ARTIFACT_DIR
+if (!outputInput) throw new Error("OPENSCIENCE_NPM_ARTIFACT_DIR is required")
+const output = resolveReleasePath(outputInput)
 
 await setWorkspaceVersion(version)
 await import("../sdk/js/script/build.ts")
