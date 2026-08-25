@@ -31,18 +31,43 @@ const lifecycle = (id: string, type: "step-start" | "step-finish", message: stri
   }) as ResearchTraceEntry
 
 describe("research trace presentation", () => {
-  test("keeps concrete tool operations chronological without semantic summaries", () => {
+  test("keeps provider-visible reasoning and tool operations chronological", () => {
     const trace = groupResearchTrace([
       lifecycle("start", "step-start", "msg"),
-      narrative("reason", "reasoning", "private provider reasoning", "msg"),
+      narrative("reason", "reasoning", "provider-visible reasoning bytes", "msg"),
       entry("read", "read", "Read paper.tex"),
       narrative("progress", "text", "intermediate assistant text", "msg"),
       entry("search", "websearch", "Find source"),
       lifecycle("finish", "step-finish", "msg"),
     ])
 
-    expect(trace.map((item) => item.kind)).toEqual(["part", "part"])
-    expect(trace.map((item) => (item.kind === "part" ? item.entry.part.id : "group"))).toEqual(["read", "search"])
+    expect(trace.map((item) => item.kind)).toEqual(["part", "part", "part", "part"])
+    expect(trace.map((item) => (item.kind === "part" ? item.entry.part.id : "group"))).toEqual([
+      "reason",
+      "read",
+      "progress",
+      "search",
+    ])
+    expect(trace[0]?.kind === "part" && trace[0].entry.part.type === "reasoning" && trace[0].entry.part.text).toBe(
+      "provider-visible reasoning bytes",
+    )
+  })
+
+  test("compacts repeated tool families without dropping interleaved reasoning", () => {
+    const trace = groupResearchTrace([
+      narrative("reason-1", "reasoning", "First thought", "msg-1"),
+      entry("read", "read", "Read paper.tex", "completed", "msg-1"),
+      lifecycle("finish", "step-finish", "msg-1"),
+      lifecycle("start", "step-start", "msg-2"),
+      narrative("reason-2", "reasoning", "Second thought", "msg-2"),
+      entry("grep", "grep", "Find citations", "completed", "msg-2"),
+    ])
+
+    expect(trace).toHaveLength(1)
+    expect(trace[0]?.kind).toBe("group")
+    if (trace[0]?.kind !== "group") throw new Error("expected grouped context phase")
+    expect(trace[0].entries.map((item) => item.part.id)).toEqual(["reason-1", "read", "reason-2", "grep"])
+    expect(trace[0].label).toBe("Reviewed 2 files and code searches")
   })
 
   test("omits hidden promoted tools from the inline activity list", () => {

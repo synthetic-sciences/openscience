@@ -260,6 +260,7 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
   <div data-model-effort-panel>
     <Show when={props.options.length > 0}>
       <section class="model-settings-option-section" aria-label="Reasoning effort">
+        <div class="model-settings-heading">Reasoning effort</div>
         <ModelOptionList
           id="model-effort-options"
           kind="effort"
@@ -272,11 +273,17 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
     </Show>
     <Show when={props.fast}>
       {(fast) => (
-        <div data-model-fast-toggle>
-          <Switch checked={fast().active} onChange={(checked) => props.onTierSelect(checked ? "fast" : "standard")}>
-            <span class="model-settings-fast-label">Fast mode</span>
-          </Switch>
-        </div>
+        <section class="model-settings-option-section model-settings-speed-section" aria-label="Response speed">
+          <div class="model-settings-heading">Response speed</div>
+          <div data-model-fast-toggle>
+            <Switch checked={fast().active} onChange={(checked) => props.onTierSelect(checked ? "fast" : "standard")}>
+              <span class="model-settings-setting">
+                <span class="model-settings-fast-label">Fast mode</span>
+                <small>Prefer faster responses when this route supports them</small>
+              </span>
+            </Switch>
+          </div>
+        </section>
       )}
     </Show>
   </div>
@@ -328,7 +335,7 @@ export const ModelEffortPopover: Component<ModelEffortPopoverProps> = (props) =>
       <ModelPopoverSurface
         kind="effort"
         view="effort"
-        title={props.options.length > 0 ? "Reasoning" : "Fast mode"}
+        title="Model options"
         close={() => setOpen(false)}
         initialFocus={
           props.options.length > 0

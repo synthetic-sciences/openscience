@@ -268,7 +268,8 @@ describe("reasoning effort and Fast mode", () => {
     expect(supported.querySelectorAll('[data-component="switch"]')).toHaveLength(1)
     expect(supported.querySelector("[data-model-fast-toggle]")).not.toBeNull()
     expect(supported.textContent).toContain("Fast mode")
-    expect(supported.textContent).not.toContain("Response speed")
+    expect(supported.textContent).toContain("Response speed")
+    expect(supported.textContent).toContain("Prefer faster responses")
 
     const fastOnly = mount(() =>
       web.createComponent(subject.ModelEffortPanel, {

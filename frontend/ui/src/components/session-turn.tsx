@@ -19,7 +19,14 @@ import { Binary } from "@synsci/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part } from "./message-part"
-import { artifactTypeLabel, artifactActions, generatedArtifacts, sessionErrorText, writtenFiles } from "./tool-display"
+import {
+  artifactTypeLabel,
+  artifactActions,
+  generatedArtifacts,
+  sessionErrorText,
+  stripRedactedReasoning,
+  writtenFiles,
+} from "./tool-display"
 import { Markdown } from "./markdown"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -326,6 +333,8 @@ export function SessionTurn(
       if (!msgParts) continue
       for (const p of msgParts) {
         if (p?.type === "tool") return true
+        // Encrypted placeholders are continuation state, not readable UI.
+        if (p?.type === "reasoning" && stripRedactedReasoning(p.text ?? "").length > 0) return true
       }
     }
     return false
@@ -735,7 +744,7 @@ export function SessionTurn(
                           messages={assistantMessages()}
                           responsePartId={responsePartId()}
                           hideResponsePart={hideResponsePart()}
-                          hideReasoning
+                          hideReasoning={false}
                           hidePromotedTools
                         />
                         <Show when={error()}>

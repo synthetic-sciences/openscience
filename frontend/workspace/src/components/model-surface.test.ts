@@ -104,6 +104,12 @@ describe("model control surface", () => {
     expect(styles).toContain("[data-model-settings-layout] {\n    display: block")
     expect(styles).not.toContain("grid-template-columns: minmax(0, 272px) minmax(0, 304px)")
     expect(styles).toContain("overflow-y: auto")
+    expect(styles).toMatch(
+      /\[data-model-popover-kind="effort"\] \.model-settings-popover__body\s*\{[^}]*overflow-y: auto;[^}]*overscroll-behavior: contain;/s,
+    )
+    expect(styles).not.toMatch(
+      /\[data-model-popover-kind="effort"\] \.model-settings-popover__body\s*\{[^}]*overflow: visible;/s,
+    )
     expect(styles).toContain("[data-model-effort-chip] strong")
     expect(styles).toContain("line-height: 20px")
     expect(styles).toContain(

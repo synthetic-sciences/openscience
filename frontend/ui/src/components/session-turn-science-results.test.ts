@@ -69,13 +69,14 @@ test("expanded steps render literal tool activity and first-class delegation res
   expect(css).toContain('[data-component="delegation-card"]')
 })
 
-test("activity hides provider reasoning and removes the execution-trace legend", () => {
+test("activity shows raw provider reasoning without the repetitive execution-trace legend", () => {
   const parts = readFileSync(fileURLToPath(new URL("./message-part.tsx", import.meta.url)), "utf8")
   const english = readFileSync(fileURLToPath(new URL("../i18n/en.ts", import.meta.url)), "utf8")
 
   expect(source).not.toContain('data-slot="session-turn-trace-legend"')
-  expect(source).toContain("hideReasoning")
+  expect(source).toContain("hideReasoning={false}")
+  expect(source).toContain("stripRedactedReasoning")
   expect(parts).toContain('data-origin="provider-reasoning"')
-  expect(english).toContain('"ui.sessionTurn.steps.show": "Show activity"')
+  expect(english).toContain('"ui.sessionTurn.steps.show": "Show reasoning and activity"')
   expect(english).not.toContain("model summaries are provider-generated")
 })

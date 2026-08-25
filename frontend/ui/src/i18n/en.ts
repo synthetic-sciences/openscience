@@ -14,10 +14,10 @@ export const dict = {
   "ui.lineComment.placeholder": "Add comment",
   "ui.lineComment.submit": "Comment",
 
-  "ui.sessionTurn.steps.show": "Show activity",
-  "ui.sessionTurn.steps.hide": "Hide activity",
-  "ui.sessionTurn.trace.title": "Activity",
-  "ui.sessionTurn.trace.detail": "Tool activity from this response.",
+  "ui.sessionTurn.steps.show": "Show reasoning and activity",
+  "ui.sessionTurn.steps.hide": "Hide reasoning and activity",
+  "ui.sessionTurn.trace.title": "Reasoning and activity",
+  "ui.sessionTurn.trace.detail": "Provider-visible reasoning and recorded tool activity.",
   "ui.sessionTurn.summary.response": "Response",
   "ui.sessionTurn.diff.showMore": "Show more changes ({{count}})",
 

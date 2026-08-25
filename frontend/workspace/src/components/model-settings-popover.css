@@ -539,16 +539,17 @@
 }
 
 [data-model-effort-panel] {
-  padding: 0;
+  padding: 2px;
 }
 
 [data-model-popover-kind="effort"] {
-  width: min(272px, calc(100vw - 24px));
-  max-height: min(72dvh, 320px);
+  width: min(344px, calc(100vw - 24px));
+  max-height: min(72dvh, 440px);
 }
 
 [data-model-popover-kind="effort"] .model-settings-popover__body {
-  overflow: visible;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 5px;
 }
 
@@ -559,8 +560,8 @@
 }
 
 [data-model-settings-popover][data-model-popover-kind="effort"] [data-model-option="effort"].model-settings-row {
-  min-height: 36px;
-  padding: 0 9px;
+  min-height: 44px;
+  padding: 5px 9px;
   border: 1px solid transparent;
   background: transparent;
 }
@@ -577,21 +578,38 @@
 [data-model-popover-kind="effort"] [data-model-menu-label] {
   display: block;
   overflow: visible;
-  padding-block: 1px;
-  line-height: 20px;
+  line-height: 18px;
+}
+
+.model-settings-speed-section {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--model-control-border);
 }
 
 [data-model-fast-toggle] {
-  margin-top: 5px;
-  padding: 7px 8px 1px;
-  border-top: 1px solid var(--model-control-border);
+  border-radius: var(--radius-sm);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+[data-model-fast-toggle]:hover,
+[data-model-fast-toggle]:focus-within {
+  background: var(--model-control-hover);
 }
 
 [data-model-fast-toggle] [data-component="switch"] {
   width: 100%;
-  min-height: 36px;
+  min-height: 48px;
   justify-content: space-between;
+  padding: 5px 9px;
   cursor: pointer;
+}
+
+[data-model-fast-toggle]:active {
+  transform: scale(0.99);
 }
 
 .model-settings-fast-label {
@@ -609,7 +627,7 @@
   }
 
   [data-model-settings-popover][data-model-popover-kind="effort"] {
-    width: min(272px, calc(100vw - 24px));
+    width: min(344px, calc(100vw - 24px));
   }
 
   [data-model-settings-popover]:not([data-model-settings-view="root"]) [data-model-settings-layout] {
@@ -747,10 +765,6 @@
     font-size: 14px;
   }
 
-  [data-model-popover-kind="effort"] {
-    max-height: min(336px, calc(100dvh - 16px)) !important;
-  }
-
   [data-model-popover-kind="effort"] .model-settings-popover__body {
     padding: 8px 14px calc(10px + env(safe-area-inset-bottom));
   }
@@ -767,13 +781,8 @@
     line-height: 18px;
   }
 
-  [data-model-fast-toggle] {
-    margin-top: 8px;
-    padding-inline: 4px;
-  }
-
   [data-model-fast-toggle] [data-component="switch"] {
-    min-height: 44px;
+    min-height: 52px;
   }
 
   [data-model-settings-popover] [data-model-menu-label],
