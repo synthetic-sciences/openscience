@@ -11,7 +11,7 @@ import {
   Switch,
   type JSX,
 } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createMediaQuery } from "@solid-primitives/media"
 import { SessionTurn } from "@synsci/ui/session-turn"
 import { createAutoScroll } from "@synsci/ui/hooks"
@@ -67,6 +67,7 @@ import { SessionTabStrip, sessionTabID, type SessionTabItem } from "@/pages/sess
 import { sessionUnavailable } from "@/pages/session-availability"
 import { publicContextAvailable, sanitizePublicContexts } from "@/pages/public-contexts"
 import { useExecutionAuthority } from "@/atlas/use-execution-authority"
+import { sessionEntryTarget } from "@/pages/session-entry"
 import "./session-header.css"
 import "../components/chat-surface.css"
 
@@ -135,6 +136,7 @@ function writeTraceExpansion(value: Record<string, boolean>) {
 
 export default function Page(): JSX.Element {
   const params = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const sync = useSync()
   const sdk = useSDK()
@@ -149,6 +151,7 @@ export default function Page(): JSX.Element {
   const [mobileSessionsOpen, setMobileSessionsOpen] = createSignal(false)
   const [sessionsCollapsed, setSessionsCollapsed] = createSignal(readSessionSidebar())
   const [sessionsWidth, setSessionsWidth] = createSignal(readSessionSidebarWidth())
+  const [sessionListReady, setSessionListReady] = createSignal<string>()
   const sessionTabs = createSessionTabs()
   const hydration = new Map<string, Promise<void>>()
   const prewarmed = new Set<string>()
@@ -190,7 +193,7 @@ export default function Page(): JSX.Element {
   createEffect(on(uiStore.scope, () => sanitizePublicContexts(uiStore)))
 
   function newSession() {
-    if (!params.id || params.id === "new") {
+    if (params.id === "new") {
       prompt.reset()
       return
     }
@@ -198,7 +201,8 @@ export default function Page(): JSX.Element {
   }
 
   async function ensureSession() {
-    if (params.id && params.id !== "new") return params.id
+    if (!params.id) return
+    if (params.id !== "new") return params.id
     const context = uiStore.context()
     if (context === "terminal") {
       pending.context = context as SessionContext
@@ -295,14 +299,28 @@ export default function Page(): JSX.Element {
     on(
       () => params.dir,
       () => {
+        const scope = sdk.scope
+        setSessionListReady(undefined)
         ;(async () => {
           try {
             await sync.session.fetch(50)
+            if (sdk.scope === scope) setSessionListReady(scope)
           } catch {}
         })()
       },
     ),
   )
+
+  // A bare /<project>/session route means "resume this project", not "start
+  // new research". Wait for the project session list before resolving so a
+  // cold load cannot briefly manufacture and activate a blank session.
+  createEffect(() => {
+    if (params.id !== undefined) return
+    const scope = sdk.scope
+    if (sessionListReady() !== scope) return
+    const target = sessionEntryTarget(sync.data.session, sessionTabs.active())
+    navigate(`/${params.dir}/session/${target}${location.search}${location.hash}`, { replace: true })
+  })
 
   // When the active session id changes, hydrate that session's messages
   // (and parts) into the store. Without this the chat panel shows blank
@@ -398,7 +416,7 @@ export default function Page(): JSX.Element {
         reorderable: true,
       }
     })
-    if (params.id && params.id !== "new") return tabs
+    if (params.id === undefined || params.id !== "new") return tabs
     return [
       ...tabs,
       {
@@ -973,6 +991,25 @@ export default function Page(): JSX.Element {
               }}
             >
               <Switch>
+                <Match when={params.id === undefined}>
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      "align-items": "center",
+                      "justify-content": "center",
+                      gap: "8px",
+                      color: "var(--color-text-muted)",
+                      "font-family": FONT_SANS,
+                      "font-size": "12px",
+                    }}
+                  >
+                    <AsciiSpinner size={10} />
+                    <span>Opening your last session…</span>
+                  </div>
+                </Match>
                 <Match when={params.id && messages().length > 0}>
                   {/* Scoped to just the scroll area (not the revert banner / Composer
                       below) so the jump-to-latest pill's position:absolute resolves
@@ -1168,7 +1205,11 @@ export default function Page(): JSX.Element {
                 </Match>
               </Switch>
 
-              <div ref={(element) => (promptDockElement = element)} class="session-prompt-dock">
+              <div
+                ref={(element) => (promptDockElement = element)}
+                class="session-prompt-dock"
+                hidden={params.id === undefined}
+              >
                 <div class="session-prompt-dock__inner">
                   <Show when={revertInfo()}>
                     <div

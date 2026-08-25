@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures"
-import { createSdk } from "./utils"
+import { createSdk, promptSelector } from "./utils"
 
 test("home project search filters the recent list and clears back to it", async ({ page, directory }) => {
   const current = await createSdk(directory)
@@ -19,6 +19,32 @@ test("home project search filters the recent list and clears back to it", async 
   // Clearing from either the search field or the no-results recovery restores the list.
   await page.getByRole("button", { name: "Clear search", exact: true }).first().click()
   await expect(card).toBeVisible()
+})
+
+test("opening a project resumes its last active session", async ({ page, directory }) => {
+  const project = await createSdk(directory)
+    .project.current()
+    .then((result) => result.data)
+  if (!project?.id) throw new Error("Failed to resolve the current project id")
+  const projectSdk = createSdk(project.worktree)
+
+  const remembered = await projectSdk.session.create({ title: `resume me ${Date.now()}` }).then((result) => result.data)
+  const newer = await projectSdk.session.create({ title: `newer session ${Date.now()}` }).then((result) => result.data)
+  if (!remembered?.id || !newer?.id) throw new Error("Session create did not return an id")
+
+  try {
+    await page.goto(`/${project.id}/session/${newer.id}`)
+    await expect(page.locator(promptSelector)).toBeVisible()
+    await page.goto(`/${project.id}/session/${remembered.id}`)
+    await expect(page.locator(promptSelector)).toBeVisible()
+    await page.goto("/")
+    await page.locator(`[data-project="${project.id}"]`).click()
+
+    await expect(page).toHaveURL(new RegExp(`/${project.id}/session/${remembered.id}(?:\\?|#|$)`))
+  } finally {
+    await projectSdk.session.delete({ sessionID: newer.id }).catch(() => undefined)
+    await projectSdk.session.delete({ sessionID: remembered.id }).catch(() => undefined)
+  }
 })
 
 test("new projects expose existing source folders in the create flow", async ({ page }) => {
