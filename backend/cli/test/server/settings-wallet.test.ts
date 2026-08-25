@@ -11,6 +11,7 @@ const session = path.join(Global.Path.data, "openscience-session.json")
 const original = globalThis.fetch
 
 beforeEach(async () => {
+  await OpenScience.waitForBillingModeMirror()
   await fs.mkdir(Global.Path.data, { recursive: true })
   await fs.writeFile(session, JSON.stringify({ api_key: "thk_wallet-test", user_id: "user-wallet" }))
   OpenScience.invalidateBalance()
@@ -18,6 +19,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  await OpenScience.waitForBillingModeMirror()
   globalThis.fetch = original
   OpenScience.invalidateBalance()
   await Config.updateGlobal({ billing: { llm: null } })
@@ -98,9 +100,7 @@ test("mirrors an explicit mode to old Atlas even when the shared access endpoint
   })
   expect(update.status).toBe(200)
   expect(await update.json()).toMatchObject({ llm: "managed", wallet: { signedIn: true, balanceUsd: null } })
-  for (let index = 0; index < 100 && !calls.some((call) => call.path === "/api/cli/sync"); index++) {
-    await Bun.sleep(5)
-  }
+  await OpenScience.waitForBillingModeMirror()
   expect(calls.filter((call) => call.path === "/api/cli/billing-mode" && call.method === "POST")).toHaveLength(1)
   expect(calls.some((call) => call.path === "/api/cli/sync")).toBe(true)
 })
