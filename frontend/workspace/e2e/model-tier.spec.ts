@@ -13,8 +13,8 @@ test("model speed toggles through Research tools and reaches the prompt request"
 }) => {
   await gotoSession()
 
-  // Speed and thinking effort are independent. Both defaults remain visible in
-  // Research tools without opening the full model catalog.
+  // Speed and thinking effort are independent. Both stay available in the
+  // compact model-options popover without opening the full model catalog.
   await expect(modelRowValue(page, "speed")).resolves.toBe("Standard")
   await expect(modelRowValue(page, "effort")).resolves.toBe("Standard")
 

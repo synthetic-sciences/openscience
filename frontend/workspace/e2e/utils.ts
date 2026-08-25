@@ -151,36 +151,40 @@ export async function openResearchTools(page: Page) {
   return tools
 }
 
-async function closeResearchTools(page: Page) {
-  const tools = page.locator(researchToolsSelector)
-  if ((await tools.getAttribute("open")) !== null) await tools.locator(":scope > summary").click()
-  await expect(tools.getByRole("group", { name: "Research tools", exact: true })).toBeHidden()
+async function openModelOptions(page: Page) {
+  const trigger = page.locator("[data-model-effort-chip]")
+  const popover = page.locator('[data-model-settings-popover][data-model-popover-kind="effort"]')
+  if (!(await popover.isVisible().catch(() => false))) await trigger.click()
+  await expect(popover).toBeVisible()
+  return popover
 }
 
-async function pickModelOption(page: Page, kind: "effort" | "speed", id: string) {
-  const tools = await openResearchTools(page)
-  const control = tools.locator(`[data-research-control="${kind}"]`)
-  if ((await control.getAttribute("open")) === null) await control.locator(":scope > summary").click()
-  await control.locator(`[data-research-${kind}="${id}"]`).click()
-  await closeResearchTools(page)
-}
-
-/** Sets reasoning effort (variant) through Research tools. */
+/** Sets reasoning effort through the dedicated model-options popover. */
 export async function setModelEffort(page: Page, id: string) {
-  await pickModelOption(page, "effort", id)
+  const popover = await openModelOptions(page)
+  await popover.locator(`[data-model-option="effort"][data-model-option-id="${id}"]`).click()
+  await page.keyboard.press("Escape")
+  await expect(popover).toBeHidden()
 }
 
-/** Sets inference speed (tier) through Research tools. */
+/** Sets inference speed through the same model-options popover. */
 export async function setModelSpeed(page: Page, id: string) {
-  await pickModelOption(page, "speed", id)
+  const popover = await openModelOptions(page)
+  const input = popover.getByRole("switch", { name: /Fast mode/ })
+  const target = id === "fast"
+  if ((await input.isChecked()) !== target) {
+    await popover.locator('[data-model-fast-toggle] [data-slot="switch-control"]').click()
+    await expect(input).toBeChecked({ checked: target })
+  }
+  await page.keyboard.press("Escape")
+  await expect(popover).toBeHidden()
 }
 
-/** Reads a Research control's current value ("High", "Standard", "Fast", …). */
+/** Reads the current effort or speed from the compact model-options trigger. */
 export async function modelRowValue(page: Page, kind: "effort" | "speed") {
-  const tools = await openResearchTools(page)
-  const value = (await tools.locator(`[data-research-control="${kind}"] > summary > strong`).innerText()).trim()
-  await closeResearchTools(page)
-  return value
+  const trigger = page.locator("[data-model-effort-chip]")
+  if (kind === "effort") return (await trigger.locator("strong").innerText()).trim()
+  return (await trigger.getAttribute("aria-label"))?.includes("Fast mode on") ? "Fast" : "Standard"
 }
 
 /** Connects an outside folder through the Files pane UI form. */

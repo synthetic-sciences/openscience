@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
+import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
 import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
@@ -85,6 +86,7 @@ export default function Models() {
   const models = useModels()
   const [query, setQuery] = createSignal("")
   const [scope, setScope] = createSignal<Scope>("all")
+  const [catalogOpen, setCatalogOpen] = createSignal(false)
   const [error, setError] = createSignal<string>()
   const [defaultsBusy, setDefaultsBusy] = createSignal(false)
   const [optimisticDefaults, setOptimisticDefaults] = createSignal<{ model?: string }>({})
@@ -338,119 +340,136 @@ export default function Models() {
           <Section
             id="model-visibility"
             title="Composer models"
-            description="Pin quick choices and hide models you do not want in the composer."
+            description="Keep the composer focused. Open the full catalog only when you want to change its model list."
           >
             <div class="models-catalog-summary">
-              <p class="min-w-0 flex-1 break-words text-11-regular text-text-weak" aria-live="polite">
-                {notice()}
-              </p>
-              <span class="models-pin-count">
-                {visibleCount()} shown · {pinnedCount()}/3 pinned
-              </span>
-            </div>
-            <div class="models-catalog-toolbar">
-              <label class="settings-control settings-control--search text-text-weak">
-                <Icon name="magnifying-glass" size="small" />
-                <input
-                  type="search"
-                  aria-label="Filter models"
-                  value={query()}
-                  onInput={(event) => setQuery(event.currentTarget.value)}
-                  placeholder="Search name, provider, or try is:reasoning"
-                  class="min-w-0 flex-1 bg-transparent text-13-regular text-text-strong outline-none placeholder:text-text-weaker"
-                />
-              </label>
-              <div class="models-filter-group" aria-label="Model filters">
-                <For each={scopes}>
-                  {(item) => (
-                    <button
-                      type="button"
-                      aria-pressed={scope() === item.id}
-                      onClick={() => setScope(item.id)}
-                      class="settings-filter-pill"
-                    >
-                      {item.label}
-                    </button>
-                  )}
-                </For>
+              <div class="models-catalog-summary__copy">
+                <strong class="text-13-medium text-text-strong">Model picker</strong>
+                <span class="text-11-regular text-text-weak">
+                  {visibleCount()} shown · {pinnedCount()}/3 pinned
+                </span>
               </div>
+              <Button
+                class="settings-panel-action models-secondary-action"
+                size="small"
+                variant="secondary"
+                aria-expanded={catalogOpen()}
+                aria-controls="composer-model-catalog"
+                onClick={() => setCatalogOpen((open) => !open)}
+              >
+                {catalogOpen() ? "Done" : "Customize models"}
+              </Button>
             </div>
-            <div class="settings-card settings-model-catalog">
-              <For each={visibleGroups()}>
-                {(group) => (
-                  <section aria-labelledby={`composer-models-${group.id.replace(/[^a-z0-9-]/gi, "-")}`}>
-                    <div class="settings-list-header">
-                      <h4
-                        id={`composer-models-${group.id.replace(/[^a-z0-9-]/gi, "-")}`}
-                        class="text-11-medium text-text-weak"
-                      >
-                        {group.label}
-                      </h4>
-                    </div>
-                    <For each={group.models}>
-                      {(model) => (
-                        <div class="settings-row settings-model-row models-compact-row">
-                          <div class="models-model-identity">
-                            <ProviderLogo id={model.providerLogo} label={model.provider} size="small" />
-                            <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                              <span class="flex min-w-0 items-center gap-2">
-                                <strong class="truncate text-13-medium text-text-strong">{model.label}</strong>
-                                <Show when={model.latest}>
-                                  <span class="shrink-0 text-10-medium text-text-weaker">Latest</span>
-                                </Show>
-                              </span>
-                              <span class="truncate text-11-regular text-text-weak">
-                                {modelSummary({
-                                  reasoning: model.reasoning,
-                                  context: model.context,
-                                  provider:
-                                    model.routes.length > 1
-                                      ? `${model.provider} · ${model.access}`
-                                      : `${model.provider} · ${model.routes[0]?.access ?? model.access}`,
-                                })}
-                              </span>
-                            </div>
-                          </div>
-                          <div class="ml-auto flex max-w-full shrink-0 items-center gap-2">
-                            <button
-                              type="button"
-                              class="settings-icon-action"
-                              data-pinned={model.pinned ? "true" : undefined}
-                              aria-pressed={model.pinned}
-                              aria-label={`${model.pinned ? "Unpin" : "Pin"} ${model.label}`}
-                              title={model.pinned ? "Remove from quick models" : "Pin to quick models"}
-                              onClick={() => togglePin(model)}
-                            >
-                              <Icon name={model.pinned ? "pin-filled" : "pin"} size="small" />
-                            </button>
-                            <Switch
-                              hideLabel
-                              checked={model.visible}
-                              onChange={(checked) => setComposerVisibility(model, checked)}
-                            >
-                              {`Show ${model.label} in composer`}
-                            </Switch>
-                          </div>
-                        </div>
+            <Show when={catalogOpen()}>
+              <div id="composer-model-catalog" class="models-catalog-disclosure">
+                <p class="models-catalog-notice text-11-regular text-text-weak" aria-live="polite">
+                  {notice()}
+                </p>
+                <div class="models-catalog-toolbar">
+                  <label class="settings-control settings-control--search text-text-weak">
+                    <Icon name="magnifying-glass" size="small" />
+                    <input
+                      type="search"
+                      aria-label="Filter models"
+                      value={query()}
+                      onInput={(event) => setQuery(event.currentTarget.value)}
+                      placeholder="Search name, provider, or try is:reasoning"
+                      class="min-w-0 flex-1 bg-transparent text-13-regular text-text-strong outline-none placeholder:text-text-weaker"
+                    />
+                  </label>
+                  <div class="models-filter-group" aria-label="Model filters">
+                    <For each={scopes}>
+                      {(item) => (
+                        <button
+                          type="button"
+                          aria-pressed={scope() === item.id}
+                          onClick={() => setScope(item.id)}
+                          class="settings-filter-pill"
+                        >
+                          {item.label}
+                        </button>
                       )}
                     </For>
-                  </section>
-                )}
-              </For>
-              <Show when={options().length === 0}>
-                <p class="models-catalog-empty" role="status">
-                  No models are available yet. Connect an access route or refresh your providers.
-                </p>
-              </Show>
-              <Show when={options().length > 0 && filtered().length === 0}>
-                <p class="px-4 py-6 text-center text-12-regular text-text-weak">No models match this filter.</p>
-              </Show>
-              <Show when={renderLimit() < filtered().length}>
-                <p class="models-catalog-progress" role="status">
-                  Loading more models…
-                </p>
-              </Show>
-            </div>
+                  </div>
+                </div>
+                <div class="settings-card settings-model-catalog">
+                  <For each={visibleGroups()}>
+                    {(group) => (
+                      <section aria-labelledby={`composer-models-${group.id.replace(/[^a-z0-9-]/gi, "-")}`}>
+                        <div class="settings-list-header">
+                          <h4
+                            id={`composer-models-${group.id.replace(/[^a-z0-9-]/gi, "-")}`}
+                            class="text-11-medium text-text-weak"
+                          >
+                            {group.label}
+                          </h4>
+                        </div>
+                        <For each={group.models}>
+                          {(model) => (
+                            <div class="settings-row settings-model-row models-compact-row">
+                              <div class="models-model-identity">
+                                <ProviderLogo id={model.providerLogo} label={model.provider} size="small" />
+                                <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                                  <span class="flex min-w-0 items-center gap-2">
+                                    <strong class="truncate text-13-medium text-text-strong">{model.label}</strong>
+                                    <Show when={model.latest}>
+                                      <span class="shrink-0 text-10-medium text-text-weaker">Latest</span>
+                                    </Show>
+                                  </span>
+                                  <span class="truncate text-11-regular text-text-weak">
+                                    {modelSummary({
+                                      reasoning: model.reasoning,
+                                      context: model.context,
+                                      provider:
+                                        model.routes.length > 1
+                                          ? `${model.provider} · ${model.access}`
+                                          : `${model.provider} · ${model.routes[0]?.access ?? model.access}`,
+                                    })}
+                                  </span>
+                                </div>
+                              </div>
+                              <div class="ml-auto flex max-w-full shrink-0 items-center gap-2">
+                                <button
+                                  type="button"
+                                  class="settings-icon-action"
+                                  data-pinned={model.pinned ? "true" : undefined}
+                                  aria-pressed={model.pinned}
+                                  aria-label={`${model.pinned ? "Unpin" : "Pin"} ${model.label}`}
+                                  title={model.pinned ? "Remove from quick models" : "Pin to quick models"}
+                                  onClick={() => togglePin(model)}
+                                >
+                                  <Icon name={model.pinned ? "pin-filled" : "pin"} size="small" />
+                                </button>
+                                <Switch
+                                  hideLabel
+                                  checked={model.visible}
+                                  onChange={(checked) => setComposerVisibility(model, checked)}
+                                >
+                                  {`Show ${model.label} in composer`}
+                                </Switch>
+                              </div>
+                            </div>
+                          )}
+                        </For>
+                      </section>
+                    )}
+                  </For>
+                  <Show when={options().length === 0}>
+                    <p class="models-catalog-empty" role="status">
+                      No models are available yet. Connect an access route or refresh your providers.
+                    </p>
+                  </Show>
+                  <Show when={options().length > 0 && filtered().length === 0}>
+                    <p class="px-4 py-6 text-center text-12-regular text-text-weak">No models match this filter.</p>
+                  </Show>
+                  <Show when={renderLimit() < filtered().length}>
+                    <p class="models-catalog-progress" role="status">
+                      Loading more models…
+                    </p>
+                  </Show>
+                </div>
+              </div>
+            </Show>
           </Section>
         </PanelBody>
       </PanelScroll>

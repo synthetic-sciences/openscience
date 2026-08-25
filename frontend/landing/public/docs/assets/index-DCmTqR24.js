@@ -180,7 +180,7 @@ OpenScience requires a free **Synthetic Sciences account** for installation iden
 
 **20 credits add $20 to your wallet.** One credit is $1 of wallet value shared by managed model calls and enhanced research search. Usage is debited at the underlying provider cost plus a 2% service margin. The payment-processing fee is shown separately before checkout.
 
-Auto-reload is one on/off setting. When enabled, it adds 20 credits whenever your purchased balance falls below 2. Turning it off stops future automatic payments and leaves the remaining balance available. There is no subscription and no scheduled monthly top-up.
+Ace is one on/off authorization, not a scheduled monthly plan. Turning it on funds only the gap needed to bring the purchased wallet to 20 credits. While Ace is on, a balance below 2 is restored only to 20; it never stacks another 20 on top. Turning Ace off stops future charges and leaves the remaining balance available. There is no separate auto-reload control.
 
 ## Routing and billing
 

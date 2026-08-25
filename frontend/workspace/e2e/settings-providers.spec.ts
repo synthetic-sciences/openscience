@@ -8,7 +8,7 @@ test("models settings exposes provider connection controls", async ({ page, goto
 
   await expect(dialog.getByRole("heading", { name: "Models", exact: true })).toBeVisible()
   await expect(dialog.getByRole("heading", { name: "Provider keys" })).toBeVisible()
-  await expect(dialog.getByText("Sign in with ChatGPT", { exact: true }).first()).toBeVisible()
+  await expect(dialog.getByText("ChatGPT / Codex", { exact: true }).first()).toBeVisible()
   await expect(dialog.getByLabel("API key", { exact: true })).toBeVisible()
   await expect(dialog.getByRole("button", { name: "Save key" })).toBeDisabled()
 
@@ -23,7 +23,7 @@ test("Models keeps ChatGPT Codex access first-class", async ({ page, gotoSession
 
   await expect(dialog.getByRole("heading", { name: "Models", exact: true })).toBeVisible()
   await expect(dialog.getByRole("heading", { name: "Access and routing", exact: true })).toBeVisible()
-  await expect(dialog.getByText("Sign in with ChatGPT", { exact: true }).first()).toBeVisible()
+  await expect(dialog.getByText("ChatGPT / Codex", { exact: true }).first()).toBeVisible()
 })
 
 test("models settings saves and removes a local provider key", async ({ page, gotoSession, sdk }) => {

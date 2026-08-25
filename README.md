@@ -72,10 +72,10 @@ OpenScience uses a free [Synthetic Sciences account](https://app.syntheticscienc
 
 ```bash
 openscience login          # connect this device once
-openscience wallet         # check the Ace wallet and auto-reload
+openscience wallet         # check Ace and the purchased wallet balance
 ```
 
-Ace has no subscription. Add **20 credits** for $20 plus the processing fee shown before payment. One credit is $1 of purchased wallet value shared by credit-backed model calls and enhanced search. Usage is debited at the underlying provider cost plus a 2% service margin. Auto-reload is one on/off setting: when enabled, Ace adds 20 credits whenever the purchased balance falls below 2. Turning it off stops future automatic payments and leaves the remaining balance available. BYOK, local-model, and eligible ChatGPT/Codex usage remain separate and never debit the wallet.
+Ace is one optional on/off authorization, not a scheduled monthly plan. Turning it on funds only the gap needed to bring the purchased wallet to **20 credits** for $20 total wallet value plus the processing fee shown before payment. One credit is $1 shared by credit-backed model calls and enhanced search. Usage is debited at the underlying OpenRouter provider price plus a 2% service margin. While Ace is on, a purchased balance below 2 is restored only to 20; it never stacks another 20 on top. Turning Ace off stops future charges and leaves the remaining balance available. There is no separate auto-reload control. BYOK, local-model, and eligible ChatGPT/Codex usage remain separate and never debit the wallet.
 
 ## How it works
 

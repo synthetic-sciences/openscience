@@ -115,11 +115,7 @@ export default function General() {
                   <span class="settings-account-value">{org()}</span>
                 </Row>
               </Show>
-              <Row
-                icon="bolt"
-                title="Wallet and billing"
-                description="Add credits, manage auto-reload, payment methods, and receipts."
-              >
+              <Row icon="bolt" title="Wallet and billing" description="Manage Ace, payment methods, and receipts.">
                 <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
                   Open billing
                 </Button>
