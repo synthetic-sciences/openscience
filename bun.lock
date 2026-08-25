@@ -19,7 +19,7 @@
     },
     "backend/cli": {
       "name": "@synsci/openscience",
-      "version": "2.0.37",
+      "version": "2.0.39",
       "bin": {
         "openscience": "./bin/openscience",
       },
@@ -122,7 +122,7 @@
     },
     "frontend/docs": {
       "name": "@synsci/docs",
-      "version": "2.0.37",
+      "version": "2.0.39",
       "dependencies": {
         "lucide-react": "^0.453.0",
         "react": "^19.0.0",
@@ -140,7 +140,7 @@
     },
     "frontend/ui": {
       "name": "@synsci/ui",
-      "version": "2.0.37",
+      "version": "2.0.39",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@pierre/diffs": "catalog:",
@@ -186,7 +186,7 @@
     },
     "frontend/workspace": {
       "name": "@synsci/workspace",
-      "version": "2.0.37",
+      "version": "2.0.39",
       "dependencies": {
         "@fontsource-variable/inter": "5.3.0",
         "@kobalte/core": "catalog:",
@@ -240,14 +240,14 @@
     },
     "tooling/launcher": {
       "name": "synsci",
-      "version": "2.0.37",
+      "version": "2.0.39",
       "bin": {
         "synsci": "bin/synsci.mjs",
       },
     },
     "tooling/plugin": {
       "name": "@synsci/plugin",
-      "version": "2.0.37",
+      "version": "2.0.39",
       "dependencies": {
         "@synsci/sdk": "workspace:*",
         "zod": "catalog:",
@@ -267,7 +267,7 @@
     },
     "tooling/sdk/js": {
       "name": "@synsci/sdk",
-      "version": "2.0.37",
+      "version": "2.0.39",
       "devDependencies": {
         "@hey-api/openapi-ts": "0.97.3",
         "@tsconfig/node22": "catalog:",
@@ -278,7 +278,7 @@
     },
     "tooling/util": {
       "name": "@synsci/util",
-      "version": "2.0.37",
+      "version": "2.0.39",
       "dependencies": {
         "zod": "catalog:",
       },
