@@ -30,7 +30,7 @@ import {
   Switch,
 } from "solid-js"
 import { DiffChanges } from "./diff-changes"
-import { Message, Part } from "./message-part"
+import { Message, Part, QuestionPrompt } from "./message-part"
 import {
   artifactTypeLabel,
   artifactActions,
@@ -154,6 +154,7 @@ function AssistantTrace(props: {
   hideResponsePart: boolean
   hideReasoning: boolean
   hidePromotedTools?: boolean
+  pendingRequestCallID?: string
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -164,6 +165,7 @@ function AssistantTrace(props: {
         return parts.flatMap((part) => {
           if (props.hideReasoning && part?.type === "reasoning") return []
           if (props.hideResponsePart && props.responsePartId === part?.id) return []
+          if (part?.type === "tool" && part.callID === props.pendingRequestCallID) return []
           if (props.hidePromotedTools && isHiddenTool(part)) return [{ message, part, hidden: true }]
           if (part?.type === "tool" && part.tool === "todoread") return [{ message, part, hidden: true }]
           return [{ message, part }]
@@ -369,13 +371,18 @@ export function SessionTurn(
   const nextPermission = createMemo(() => permissions()[0])
   const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
   const nextQuestion = createMemo(() => questions()[0])
+  const requestTool = createMemo(() => nextPermission()?.tool ?? nextQuestion()?.tool)
+  const requestMessage = createMemo(() => {
+    const tool = requestTool()
+    if (!tool) return
+    return findLast(assistantMessages(), (message) => message.id === tool.messageID)
+  })
+  const pendingRequestCallID = createMemo(() => (requestMessage() ? requestTool()?.callID : undefined))
   const requestParts = createMemo(() => {
-    if (props.stepsExpanded) return emptyRequestParts
-
-    const tool = nextPermission()?.tool ?? nextQuestion()?.tool
+    const tool = requestTool()
     if (!tool) return emptyRequestParts
 
-    const message = findLast(assistantMessages(), (m) => m.id === tool.messageID)
+    const message = requestMessage()
     if (!message) return emptyRequestParts
 
     const parts = data.store.part[message.id] ?? emptyParts
@@ -753,13 +760,14 @@ export function SessionTurn(
                     </div>
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
+                      <div data-slot="session-turn-collapsible-content-inner">
                         <AssistantTrace
                           messages={assistantMessages()}
                           responsePartId={responsePartId()}
                           hideResponsePart={hideResponsePart()}
                           hideReasoning={false}
                           hidePromotedTools
+                          pendingRequestCallID={pendingRequestCallID()}
                         />
                         <Show when={error()}>
                           <Card variant="error" class="error-card">
@@ -781,9 +789,16 @@ export function SessionTurn(
                         </section>
                       </details>
                     </Show>
-                    <Show when={!props.stepsExpanded && requestParts().length > 0}>
+                    <Show when={requestParts().length > 0 || (requestMessage() && nextQuestion())}>
                       <div data-slot="session-turn-permission-parts">
                         <For each={requestParts()}>{({ part, message }) => <Part part={part} message={message} />}</For>
+                        <Show when={requestParts().length === 0 && requestMessage() && nextQuestion()}>
+                          {(question) => (
+                            <div data-component="tool-part-wrapper" data-question="true">
+                              <QuestionPrompt request={question()} />
+                            </div>
+                          )}
+                        </Show>
                       </div>
                     </Show>
                     <Show when={response() || hasDiffs()}>

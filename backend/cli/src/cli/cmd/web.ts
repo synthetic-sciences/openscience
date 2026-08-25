@@ -5,6 +5,7 @@ import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { openUrl } from "../../util/open-url"
 import { probeProtectedFolderAccess } from "../../file/protected-folder-access"
+import { DEFAULT_LOCAL_PORT, localServerBase, localWorkspaceUrl, probeLocalServer } from "../local-server"
 
 async function announceFdaIfNeeded() {
   const result = await probeProtectedFolderAccess()
@@ -46,9 +47,21 @@ export const WebCommand = cmd({
       }
     }
     const opts = await resolveNetworkOptions(args)
+    const directory = args.project ? process.cwd() : undefined
+    const preferred = localServerBase(opts.port || DEFAULT_LOCAL_PORT)
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
+
+    if (await probeLocalServer(preferred)) {
+      const target = localWorkspaceUrl(preferred, directory)
+      UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
+      UI.empty()
+      UI.println(UI.Style.TEXT_DIM, "  Using the OpenScience server that is already running.")
+      openUrl(target)
+      await announceFdaIfNeeded()
+      return
+    }
 
     // Run the dashboard sync BEFORE starting the server — and without
     // the 5s race timeout the global middleware uses. The model picker
@@ -95,11 +108,23 @@ export const WebCommand = cmd({
     const server = Server.listen(opts)
 
     const base = `http://localhost:${server.port}`
-    UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, base)
+    if (opts.port === 0 && server.port !== DEFAULT_LOCAL_PORT && (await probeLocalServer(localServerBase()))) {
+      await server.stop(true)
+      const target = localWorkspaceUrl(localServerBase(), directory)
+      UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
+      UI.empty()
+      UI.println(UI.Style.TEXT_DIM, "  Using the OpenScience server started by the other launch.")
+      openUrl(target)
+      await announceFdaIfNeeded()
+      return
+    }
+
+    const target = localWorkspaceUrl(base, directory)
+    UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
     UI.empty()
     UI.println(UI.Style.TEXT_DIM, "  Opening your browser… if it doesn't open, visit the URL above.")
 
-    openUrl(base)
+    openUrl(target)
 
     // macOS-only: warn when the host explicitly denies protected-folder
     // access. System Settings opens only after a deliberate UI action.

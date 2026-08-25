@@ -151,6 +151,17 @@ export function serverDisplayName(url: string) {
   return trimSlashes(withoutProtocol(url))
 }
 
+export const SERVER_FAILURE_THRESHOLD = 3
+
+export function nextServerHealth(healthy: boolean | undefined, failures: number, succeeded: boolean) {
+  if (succeeded) return { healthy: true, failures: 0 }
+  const count = Math.min(failures + 1, SERVER_FAILURE_THRESHOLD)
+  return {
+    healthy: count >= SERVER_FAILURE_THRESHOLD ? false : healthy,
+    failures: count,
+  }
+}
+
 function withoutProtocol(value: string) {
   if (value.startsWith("http://")) return value.slice("http://".length)
   if (value.startsWith("https://")) return value.slice("https://".length)
@@ -309,10 +320,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       setState("checking", true)
       const next = await check(target)
       if (state.active !== target) return next
+      const result = nextServerHealth(state.healthy, state.failures, next)
       batch(() => {
-        setState("healthy", next)
+        setState("healthy", result.healthy)
         setState("checking", false)
-        setState("failures", next ? 0 : state.failures + 1)
+        setState("failures", result.failures)
       })
       if (next) void loadProjects(target).catch(() => undefined)
       return next

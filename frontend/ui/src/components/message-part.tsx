@@ -2181,7 +2181,7 @@ ToolRegistry.register({
 
 // --- End Colab Plugin Tool Renderers ---
 
-function QuestionPrompt(props: { request: QuestionRequest }) {
+export function QuestionPrompt(props: { request: QuestionRequest }) {
   const data = useData()
   const i18n = useI18n()
   const questions = createMemo(() => props.request.questions)

@@ -754,6 +754,12 @@ function createGlobalSync() {
 
     if (directory === "global") {
       switch (event?.type) {
+        case "server.connected": {
+          if (!globalStore.ready) return
+          refresh()
+          for (const directory of Object.keys(children)) push(directory)
+          return
+        }
         case "global.disposed": {
           // Nobody is waiting on this one, so it has no error UI to surface
           // into — unlike the settings panels, which await their own call and

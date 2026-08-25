@@ -4,6 +4,7 @@ import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup } from "solid-js"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
+import { consumeReconnectingStream } from "./reconnecting-event-stream"
 
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
@@ -67,10 +68,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       timer = setTimeout(flush, Math.max(0, 16 - elapsed))
     }
 
-    void (async () => {
-      const events = await eventSdk.global.event()
-      let yielded = Date.now()
-      for await (const event of events.stream) {
+    let yielded = Date.now()
+    void consumeReconnectingStream({
+      connect: () => eventSdk.global.event(),
+      signal: abort.signal,
+      onEvent: async (event) => {
         const directory = event.directory ?? "global"
         const payload = event.payload
         const k = key(directory, payload)
@@ -84,13 +86,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
         queue.push({ directory, payload })
         schedule()
 
-        if (Date.now() - yielded < 8) continue
+        if (Date.now() - yielded < 8) return
         yielded = Date.now()
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
-      }
-    })()
-      .finally(flush)
-      .catch(() => undefined)
+      },
+    }).finally(flush)
 
     onCleanup(() => {
       abort.abort()
