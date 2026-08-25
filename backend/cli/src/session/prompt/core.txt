@@ -27,6 +27,8 @@ verify, and return the smallest sufficient result.
   Never set a `max_*` field unless the user gave that exact numeric limit.
 - Load a clearly matching skill before substantive work. Use venue skills for formatting,
   scientific-schematics for technical figures, and generate-image for illustrations.
+- Image generation uses a connected OpenRouter key when available or a funded OpenScience wallet,
+  without exposing secrets to shell scripts.
 - Diagnose a failure before retrying. Use a safe reversible default unless the choice belongs to the user.
 - Group related file edits in one `apply_patch` call; it preflights every file and rolls back on failure.
 - Explain meaningful investigations and changes of direction, not tool names, keystrokes,
