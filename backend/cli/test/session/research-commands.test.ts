@@ -219,8 +219,8 @@ describe("research slash commands", () => {
         })
         const contextText = context.parts.find((part) => part.type === "text")
         expect(context.info.role === "assistant" ? context.info.cost : -1).toBe(0)
-        expect(contextText?.type === "text" ? contextText.text : "").toContain("Conversation estimate")
-        expect(contextText?.type === "text" ? contextText.text : "").toContain("deterministic conversation estimate")
+        expect(contextText?.type === "text" ? contextText.text : "").toContain("Current conversation")
+        expect(contextText?.type === "text" ? contextText.text : "").toContain("complete assembled-input budget")
         expect(MessageV2.composition(await Session.messages({ sessionID: session.id })).total).toBe(before.total)
       },
     })
