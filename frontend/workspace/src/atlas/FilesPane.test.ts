@@ -662,11 +662,51 @@ describe("files pane", () => {
     await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(host.querySelector("[data-boundary]")).toBeNull()
-    expect(host.textContent).toContain("could not be read")
+    expect(host.textContent).toContain("local OpenScience server is busy")
+    expect(host.textContent).toContain("unchanged")
     expect(host.querySelector(".files-table")).not.toBeNull()
     expect(host.querySelector('[role="alert"][data-files-error]')).not.toBeNull()
     expect(host.querySelector<HTMLButtonElement>(".files-notice__retry")?.textContent).toBe("Retry")
     expect(host.textContent).not.toContain("This folder is empty.")
+  })
+
+  test("does not let a previous project's late listing failure replace the current files", async () => {
+    startOn("project")
+    const [directory, setDirectory] = solidjs.createSignal("/projects/old")
+    let finishOld!: (response: Response) => void
+    const old = new Promise<Response>((resolve) => (finishOld = resolve))
+    const host = mount(() =>
+      subject.FilesPane({
+        get directory() {
+          return directory()
+        },
+        request: async (path, _init, query) => {
+          if (path.startsWith("/file/artifact-store")) return listing([])
+          if (path !== "/file") return listing([])
+          if (query?.path === "/projects/old") return old
+          return listing([{ name: "current.csv", type: "file", size: 12 }])
+        },
+      }),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    setDirectory("/projects/current")
+    await settle()
+    expect(host.querySelector('[data-file-row="current.csv"]')).not.toBeNull()
+
+    finishOld(new Response("old project unavailable", { status: 503 }))
+    await settle()
+    expect(host.querySelector("[data-files-error]")).toBeNull()
+    expect(host.querySelector('[data-file-row="current.csv"]')).not.toBeNull()
+  })
+
+  test("omits a route session until the active project owns it", () => {
+    expect(
+      subject.filesSessionForProject({ candidate: "ses_previous", explicit: false, belongsToProject: false }),
+    ).toBeUndefined()
+    expect(subject.filesSessionForProject({ candidate: "ses_current", explicit: false, belongsToProject: true })).toBe(
+      "ses_current",
+    )
   })
 
   test("retries a recoverable listing error and replaces it with the new rows", async () => {
@@ -1145,7 +1185,7 @@ describe("files pane", () => {
   test("drops the stale listing error when the source changes to one it does not describe", async () => {
     startOn("project")
     // The folder listing fails; the artifact store answers normally. Switching
-    // to Trash must not leave "this folder could not be read" over a good list.
+    // to Trash must not leave the project-folder failure over a good list.
     const host = mount(() =>
       subject.FilesPane({
         request: async (path) => {
@@ -1157,7 +1197,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector(".files-notice")?.textContent).toContain("could not be read")
+    expect(host.querySelector(".files-notice")?.textContent).toContain("local OpenScience server is busy")
 
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
     host.querySelector<HTMLButtonElement>('[data-source-item="trash"]')?.click()

@@ -14,8 +14,11 @@ import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "bun"
 import { Flag } from "@/flag/flag"
 import { readdir } from "fs/promises"
+import { Global } from "@/global"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
+const EVENT_FLUSH_MS = 100
+const MAX_PRECISE_EVENTS = 64
 
 declare const OPENSCIENCE_LIBC: string | undefined
 
@@ -33,6 +36,11 @@ type WatcherState = {
   ignores: string[]
   roots: Map<string, RootSubscription>
   owners: Map<string, Set<string>>
+  pending: Map<string, { file: string; event: "add" | "change" | "unlink" }>
+  dirtyRoots: Set<string>
+  overflow: boolean
+  flush?: ReturnType<typeof setTimeout>
+  lastErrorAt: number
 }
 
 /**
@@ -40,10 +48,19 @@ type WatcherState = {
  * a recursive subscription. The latter can happen through a malformed legacy
  * grant and would be both noisy and expensive.
  */
-export function normalizeWatchRoots(roots: string[]) {
-  return [...new Set(roots.filter(Boolean).map((root) => path.resolve(root)))].filter(
-    (root) => path.parse(root).root !== root,
-  )
+export function normalizeWatchRoots(roots: string[], options: { home?: string; data?: string } = {}) {
+  const home = path.resolve(options.home ?? Global.Path.home)
+  const data = path.resolve(options.data ?? Global.Path.data)
+  const unsafe = new Set([home, data, path.join(home, "Library")])
+  return [...new Set(roots.filter(Boolean).map((root) => path.resolve(root)))].filter((root) => {
+    if (path.parse(root).root === root) return false
+    // The server's unscoped landing request runs in $HOME. It is a launcher
+    // instance, not a project, and recursively watching it consumes Library,
+    // browser, cache, and package-manager churn. The data root is similarly an
+    // implementation directory. Narrow descendants (a real managed project or
+    // session workspace) remain valid explicit roots.
+    return !unsafe.has(root)
+  })
 }
 
 /** A normal project is a live file source whether or not it has Git metadata. */
@@ -76,15 +93,60 @@ export namespace FileWatcher {
     }
   })
 
-  const callback: ParcelWatcher.SubscribeCallback = (error, events) => {
-    if (error) {
-      log.warn("watcher callback failed", { error })
-      return
-    }
-    for (const event of events) {
-      if (event.type === "create") Bus.publish(Event.Updated, { file: event.path, event: "add" })
-      if (event.type === "update") Bus.publish(Event.Updated, { file: event.path, event: "change" })
-      if (event.type === "delete") Bus.publish(Event.Updated, { file: event.path, event: "unlink" })
+  function mergeEvent(current: "add" | "change" | "unlink" | undefined, next: "add" | "change" | "unlink") {
+    if (!current || current === next) return next
+    if (current === "add" && next === "change") return "add"
+    // A create/delete or delete/create pair still means the containing source
+    // changed, but neither transient edge should be replayed as final truth.
+    if ((current === "add" && next === "unlink") || (current === "unlink" && next === "add")) return "change"
+    return next
+  }
+
+  async function flush(state: WatcherState) {
+    state.flush = undefined
+    const updates = state.overflow
+      ? [...state.dirtyRoots].map((file) => ({ file, event: "add" as const }))
+      : [...state.pending.values()]
+    state.pending.clear()
+    state.dirtyRoots.clear()
+    state.overflow = false
+    for (const update of updates) await Bus.publish(Event.Updated, update)
+  }
+
+  function schedule(state: WatcherState) {
+    if (state.flush) return
+    state.flush = setTimeout(() => void flush(state), EVENT_FLUSH_MS)
+  }
+
+  function callback(state: WatcherState, root: string): ParcelWatcher.SubscribeCallback {
+    return (error, events) => {
+      if (error) {
+        const now = Date.now()
+        if (now - state.lastErrorAt >= 30_000) {
+          state.lastErrorAt = now
+          log.warn("watcher callback failed; scheduling a source refresh", { root, error })
+        }
+        state.overflow = true
+        state.pending.clear()
+        state.dirtyRoots.add(root)
+        schedule(state)
+        return
+      }
+
+      state.dirtyRoots.add(root)
+      for (const item of events) {
+        if (state.overflow) break
+        const event = item.type === "create" ? "add" : item.type === "delete" ? "unlink" : "change"
+        state.pending.set(item.path, {
+          file: item.path,
+          event: mergeEvent(state.pending.get(item.path)?.event, event),
+        })
+        if (state.pending.size > MAX_PRECISE_EVENTS) {
+          state.pending.clear()
+          state.overflow = true
+        }
+      }
+      schedule(state)
     }
   }
 
@@ -101,7 +163,7 @@ export namespace FileWatcher {
       owners: new Set([owner]),
       ready: Promise.resolve(undefined),
     }
-    const pending = state.watcher.subscribe(root, callback, {
+    const pending = state.watcher.subscribe(root, callback(state, root), {
       ignore: [...FileIgnore.PATTERNS, ...ignores],
       backend: state.backend,
     })
@@ -154,6 +216,10 @@ export namespace FileWatcher {
         ignores: cfg.watcher?.ignore ?? [],
         roots: new Map(),
         owners: new Map(),
+        pending: new Map(),
+        dirtyRoots: new Set(),
+        overflow: false,
+        lastErrorAt: 0,
       }
       if (!backend) {
         log.error("watcher backend not supported", { platform: process.platform })
@@ -193,6 +259,10 @@ export namespace FileWatcher {
       return result
     },
     async (current) => {
+      if (current.flush) clearTimeout(current.flush)
+      current.flush = undefined
+      current.pending.clear()
+      current.dirtyRoots.clear()
       const subscriptions = [...current.roots.values()]
       current.roots.clear()
       current.owners.clear()

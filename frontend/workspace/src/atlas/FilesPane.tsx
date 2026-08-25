@@ -45,6 +45,7 @@ import {
 import "@/atlas/files/FilesPane.css"
 import { NativeDirectoryPickerUnavailable } from "@/utils/native-picker"
 import { confirmDialog, promptDialog } from "@/atlas/dialogs"
+import { createFileRequestOwner, isFileRequestCancellation } from "@/atlas/file-viewer"
 
 export type Transport = (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
 
@@ -94,6 +95,43 @@ const concise = (value: unknown) => {
     .replace(/^Error:\s*/, "")
     .trim()
   return line.length > 160 ? `${line.slice(0, 159)}…` : line
+}
+
+class ListingResponseError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message)
+    this.name = "ListingResponseError"
+  }
+}
+
+async function listingJson(response: Response) {
+  if (response.ok) return response.json()
+  const body = await response.text()
+  throw new ListingResponseError(response.status, concise(body || `Request failed (${response.status})`))
+}
+
+export function fileListingFailure(value: unknown, source = "This folder") {
+  if (value instanceof ListingResponseError) {
+    if (value.status === 401 || value.status === 403)
+      return `${source} is no longer connected. Reconnect it from the source menu.`
+    if (value.status === 404) return `${source} was not found. It may have moved or been deleted.`
+    if (value.status === 409)
+      return "The project changed while files were loading. Open the folder again from the current project."
+    if ([429, 502, 503, 504].includes(value.status))
+      return "The local OpenScience server is busy. Your files are unchanged; retry in a moment."
+  }
+  const detail = concise(value)
+  if (/failed to fetch|networkerror|load failed|connection refused/i.test(detail))
+    return "Can't reach the local OpenScience server. Your files are unchanged; retry when the connection recovers."
+  return `${source} could not be read. ${detail}`
+}
+
+export function filesSessionForProject(input: { candidate?: string; explicit: boolean; belongsToProject: boolean }) {
+  if (!input.candidate) return
+  if (input.explicit || input.belongsToProject) return input.candidate
 }
 
 const normalizeTrash = (value: unknown): TrashedFile[] => {
@@ -259,7 +297,19 @@ export function FilesPane(
       return "Project files"
     return folder || "Project files"
   }
-  const sessionID = () => props.session ?? (params.id && params.id !== "new" ? params.id : undefined)
+  const routeSessionID = () => props.session ?? (params.id && params.id !== "new" ? params.id : undefined)
+  const sessionID = () => {
+    const candidate = routeSessionID()
+    // A URL can retain the previous project's session during navigation. A
+    // project listing needs no session capability, so omit it until the active
+    // project's sync store proves ownership instead of asking the backend to
+    // reject a stale cross-project id.
+    return filesSessionForProject({
+      candidate,
+      explicit: standalone || Boolean(props.session),
+      belongsToProject: Boolean(candidate && sync?.session.get(candidate)),
+    })
+  }
   const identity = (): FilesystemIdentity | undefined => {
     const session = sessionID()
     if (!session || !projectRoot()) return
@@ -401,83 +451,119 @@ export function FilesPane(
   const key = createMemo(() => [where(), sessionID(), current().kind, current().id] as const, undefined, {
     equals: (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3],
   })
-  const [entries, { refetch: refetchEntries }] = createResource(key, ([target, session, kind, id]) => {
-    // The artifacts and trash pseudo-sources always have root "" — they are
-    // backed by the artifact store, not the filesystem, and the server
-    // falls back an empty path to the project root (File.list(dir || root)),
-    // which would silently list the project's files mislabeled as
-    // artifacts. Every other kind always carries a real root once a live
-    // project context exists, so gate on the source kind rather than on
-    // target emptiness.
-    if (kind === "artifacts" || kind === "trash") {
-      // No listing is attempted, so the previous listing's failure no longer
-      // describes anything on screen — leaving it up puts "this folder could
-      // not be read" over a perfectly good trash list.
-      setError("")
-      setListingError("")
-      return Promise.resolve([] as FileRow[])
-    }
-    // A Volume is not on this machine: it lists over Modal's API, and its
-    // entries carry a path relative to the volume root rather than to any
-    // directory on disk.
-    if (kind === "modal") {
-      // The first level inside Modal is the Volume list; everything below it is
-      // a path inside whichever Volume was entered.
-      const [volume, ...rest] = target.split("/").filter(Boolean)
-      if (!volume) {
-        return transport("/settings/compute/modal/volumes")
-          .then(json)
-          .then((value) => {
-            setListingError("")
-            if (!Array.isArray(value)) return [] as FileRow[]
-            // Volumes are folders here: entering one lists it.
-            return (value as Array<{ name: string }>).map((item) => ({
-              name: item.name,
-              type: "directory" as const,
-            }))
-          })
-          .catch((value) => {
-            setListingError(`Modal Volumes could not be listed. ${concise(value)}`)
-            return [] as FileRow[]
-          })
+  const listingRequest = createFileRequestOwner()
+  const listingRetry = { key: "", count: 0 }
+  onCleanup(() => listingRequest.dispose())
+  const [entries, { refetch: refetchEntries }] = createResource<FileRow[], ReturnType<typeof key>>(
+    key,
+    async ([target, session, kind, id], info) => {
+      const ownerKey = [sdk?.projectID ?? "", projectRoot(), session ?? "", kind, id, target].join("\n")
+      if (listingRetry.key !== ownerKey) {
+        listingRetry.key = ownerKey
+        listingRetry.count = 0
       }
-      return transport(`/settings/compute/modal/volumes/${encodeURIComponent(volume)}/files`, undefined, {
-        path: `/${rest.join("/")}`,
-      })
-        .then(json)
-        .then((value) => {
+      const ticket = listingRequest.begin(ownerKey)
+      const previous = (info.value ?? []) as FileRow[]
+      const owns = () => listingRequest.owns(ticket, ownerKey)
+      const success = (rows: FileRow[]) => {
+        if (owns()) {
+          listingRetry.count = 0
           setListingError("")
-          if (!Array.isArray(value)) return [] as FileRow[]
-          return (value as Array<{ path: string; type: string; size: number }>).map((entry) => ({
-            name: entry.path.split("/").filter(Boolean).at(-1) ?? entry.path,
-            type: entry.type === "directory" ? ("directory" as const) : ("file" as const),
-            size: entry.size,
-            path: entry.path,
-          }))
+        }
+        return rows
+      }
+      const failure = (value: unknown, source = current().name) => {
+        if (!owns()) return previous
+        if (isFileRequestCancellation(value)) {
+          if (listingRetry.count === 0) {
+            listingRetry.count++
+            queueMicrotask(() => {
+              if (owns()) void refetchEntries()
+            })
+          } else {
+            setListingError("Refresh was interrupted. Showing the last known files.")
+          }
+          return previous
+        }
+        setListingError(fileListingFailure(value, source))
+        return previous
+      }
+
+      // The artifacts and trash pseudo-sources always have root "" — they are
+      // backed by the artifact store, not the filesystem, and the server
+      // falls back an empty path to the project root (File.list(dir || root)),
+      // which would silently list the project's files mislabeled as
+      // artifacts. Every other kind always carries a real root once a live
+      // project context exists, so gate on the source kind rather than on
+      // target emptiness.
+      if (kind === "artifacts" || kind === "trash") {
+        // No listing is attempted, so the previous listing's failure no longer
+        // describes anything on screen — leaving it up puts "this folder could
+        // not be read" over a perfectly good trash list.
+        if (owns()) {
+          setError("")
+          setListingError("")
+        }
+        return Promise.resolve([] as FileRow[])
+      }
+      // A Volume is not on this machine: it lists over Modal's API, and its
+      // entries carry a path relative to the volume root rather than to any
+      // directory on disk.
+      if (kind === "modal") {
+        // The first level inside Modal is the Volume list; everything below it is
+        // a path inside whichever Volume was entered.
+        const [volume, ...rest] = target.split("/").filter(Boolean)
+        if (!volume) {
+          return transport("/settings/compute/modal/volumes", { signal: ticket.controller.signal })
+            .then(listingJson)
+            .then((value) => {
+              if (!Array.isArray(value)) return success([])
+              // Volumes are folders here: entering one lists it.
+              return success(
+                (value as Array<{ name: string }>).map((item) => ({
+                  name: item.name,
+                  type: "directory" as const,
+                })),
+              )
+            })
+            .catch((value) => failure(value, "Modal Volumes"))
+        }
+        return transport(
+          `/settings/compute/modal/volumes/${encodeURIComponent(volume)}/files`,
+          { signal: ticket.controller.signal },
+          {
+            path: `/${rest.join("/")}`,
+          },
+        )
+          .then(listingJson)
+          .then((value) => {
+            if (!Array.isArray(value)) return success([])
+            return success(
+              (value as Array<{ path: string; type: string; size: number }>).map((entry) => ({
+                name: entry.path.split("/").filter(Boolean).at(-1) ?? entry.path,
+                type: entry.type === "directory" ? ("directory" as const) : ("file" as const),
+                size: entry.size,
+                path: entry.path,
+              })),
+            )
+          })
+          .catch((value) => failure(value, volume))
+      }
+      const query: Record<string, string> = { path: target }
+      if (session) query.sessionID = session
+      return transport("/file", { signal: ticket.controller.signal }, query)
+        .then(listingJson)
+        .then((value) => {
+          // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
+          // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
+          // wrapper only exists on the generated client's RequestResult, never on the body.
+          if (Array.isArray(value)) return success(value as FileRow[])
+          const data = (value as { data?: unknown }).data
+          return success(Array.isArray(data) ? (data as FileRow[]) : [])
         })
-        .catch((value) => {
-          setListingError(`${volume} could not be read. ${concise(value)}`)
-          return [] as FileRow[]
-        })
-    }
-    const query: Record<string, string> = { path: target }
-    if (session) query.sessionID = session
-    return transport("/file", undefined, query)
-      .then(json)
-      .then((value) => {
-        setListingError("")
-        // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
-        // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
-        // wrapper only exists on the generated client's RequestResult, never on the body.
-        if (Array.isArray(value)) return value as FileRow[]
-        const data = (value as { data?: unknown }).data
-        return Array.isArray(data) ? (data as FileRow[]) : []
-      })
-      .catch(() => {
-        setListingError("This folder could not be read. The last listing may be out of date.")
-        return [] as FileRow[]
-      })
-  })
+        .catch((value) => failure(value))
+    },
+  )
 
   const sourceLoading = createMemo(() => {
     const kind = current().kind
