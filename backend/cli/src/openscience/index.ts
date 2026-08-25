@@ -2180,12 +2180,14 @@ export namespace OpenScience {
     balance_usd: number
     managed_supported: boolean
     managed_unlocked: boolean
+    ace_enabled?: boolean
   }
 
   interface CliAccess {
     cli_balance_cents?: number
     managed_supported?: boolean
     managed_unlocked?: boolean
+    ace_enabled?: boolean
   }
 
   interface BillingCompatibility {
@@ -2296,6 +2298,7 @@ export namespace OpenScience {
       // unlocked managed calls whenever the purchased Wallet had value.
       managed_unlocked:
         access.access?.managed_unlocked ?? fallback?.managed_unlocked ?? (managedSupported && balanceCents > 0),
+      ace_enabled: access.access?.ace_enabled ?? fallback?.ace_enabled ?? false,
     }
   }
 

@@ -1394,46 +1394,41 @@ export namespace Provider {
 
   function modelModes(provider: ModelsDev.Provider, model: ModelsDev.Model): Model["modes"] | undefined {
     const direct = directModes(provider.id, model.id, model.experimental) ?? {}
-    // OpenRouter exposes OpenAI's priority service tier for select models.
-    // Sol is the managed flagship currently surfaced in the composer, so its
-    // Fast toggle should request that real upstream tier instead of vanishing
-    // merely because the selected route is managed rather than Codex OAuth.
-    const priority: NonNullable<Model["modes"]> =
-      provider.id === "openrouter" && /^openai\/gpt-5[.-]6-sol(?:-\d+)?$/.test(model.id.toLowerCase())
-        ? {
-            fast: {
-              provider: {
-                body: { service_tier: "priority" },
-                headers: {},
-              },
-            },
-          }
-        : {}
-    const sibling =
+    // Fast is a routing preference, not a second catalog. OpenRouter's
+    // throughput sort works across its model surface (managed Ace and a
+    // user-owned OpenRouter key alike). Models with a dedicated fast sibling
+    // keep that exact SKU, while supported OpenAI flagships additionally ask
+    // for the native priority tier.
+    const openrouter =
       provider.id === "openrouter" && !/-fast$/.test(model.id)
-        ? Object.fromEntries(
-            ["fast"]
-              .map((key) => [key, provider.models[`${model.id}-${key}`]] as const)
-              .filter((entry) => !!entry[1])
-              .map(([key, route]) => [
-                key,
-                {
-                  model: route!.id,
-                  cost: route!.cost
-                    ? {
-                        input: route!.cost.input,
-                        output: route!.cost.output,
-                        cache: {
-                          read: route!.cost.cache_read ?? 0,
-                          write: route!.cost.cache_write ?? 0,
-                        },
-                      }
-                    : undefined,
+        ? (() => {
+            const route = provider.models[`${model.id}-fast`]
+            const priority = /^openai\/gpt-5[.-]6-sol(?:-\d+)?$/.test(model.id.toLowerCase())
+            return {
+              fast: {
+                model: route?.id,
+                cost: route?.cost
+                  ? {
+                      input: route.cost.input,
+                      output: route.cost.output,
+                      cache: {
+                        read: route.cost.cache_read ?? 0,
+                        write: route.cost.cache_write ?? 0,
+                      },
+                    }
+                  : undefined,
+                provider: {
+                  body: {
+                    provider: { sort: "throughput" },
+                    ...(priority ? { service_tier: "priority" } : {}),
+                  },
+                  headers: {},
                 },
-              ]),
-          )
+              },
+            } satisfies NonNullable<Model["modes"]>
+          })()
         : {}
-    const result = { ...priority, ...direct, ...sibling }
+    const result = { ...direct, ...openrouter }
     if (Object.keys(result).length === 0) return undefined
     return result
   }

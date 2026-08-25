@@ -18324,6 +18324,9 @@
                     "managedSupported": {
                       "type": "boolean"
                     },
+                    "aceEnabled": {
+                      "type": "boolean"
+                    },
                     "lifetimeSpentUsd": {
                       "anyOf": [
                         {
@@ -18370,6 +18373,7 @@
                     "balanceUsd",
                     "billingMode",
                     "managedSupported",
+                    "aceEnabled",
                     "lifetimeSpentUsd",
                     "transactions"
                   ]

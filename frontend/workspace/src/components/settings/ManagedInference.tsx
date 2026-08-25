@@ -16,6 +16,7 @@ type Wallet = {
   balanceUsd: number | null
   billingMode: "managed" | "byok" | null
   managedSupported: boolean
+  aceEnabled: boolean
 }
 
 const MODES: { value: Mode; title: string; body: string }[] = [
@@ -82,7 +83,11 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   }
   const update = (value: Mode) => {
     if (busy()) return
-    if (value === "managed" && wallet() && (!wallet()!.signedIn || !wallet()!.managedSupported)) {
+    if (
+      value === "managed" &&
+      wallet() &&
+      (!wallet()!.signedIn || !wallet()!.managedSupported || !wallet()!.aceEnabled)
+    ) {
       platform.openLink(URLS.dashboardBilling)
       return
     }
@@ -143,66 +148,71 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     unsubscribe()
   })
 
-  const needsAce = () => wallet() !== undefined && (!wallet()!.signedIn || !wallet()!.managedSupported)
+  const needsAce = () => wallet() !== undefined && (!wallet()!.signedIn || !wallet()!.aceEnabled)
+  const aceLabel = () => {
+    if (!wallet()) return "Checking account"
+    if (!wallet()!.signedIn) return "Account required"
+    if (wallet()!.aceEnabled) return "Ace on"
+    return "Ace off"
+  }
 
   return (
     <div class="models-inference">
       <div class="models-routing" aria-label="Inference routing">
-        <div
-          class="models-routing__options"
-          role="group"
-          aria-label="Inference routing mode"
-          aria-describedby="managed-inference-description"
-        >
-          <For each={MODES}>
-            {(option) => (
-              <button
-                type="button"
-                aria-pressed={mode() === option.value}
-                aria-busy={busy()}
-                disabled={busy() || wallet() === undefined}
-                class="models-routing__option"
-                title={option.value === "managed" && needsAce() ? "Enable Ace to use Managed models" : undefined}
-                onClick={() => update(option.value)}
-              >
-                <span class="models-routing__option-label">
-                  <span>{option.title}</span>
-                </span>
-              </button>
-            )}
-          </For>
-        </div>
-        <p id="managed-inference-description" class="models-routing__description" aria-live="polite">
-          {busy() ? `Saving ${selected().title.toLowerCase()}…` : selected().body}
-          <Show when={!busy() && refreshing()}>
-            <span class="models-routing__sync"> Updating model availability…</span>
-          </Show>
-        </p>
-      </div>
-
-      <div class="settings-row models-compact-row models-account-summary">
-        <div class="models-account-summary__identity">
-          <div class="flex min-w-0 flex-col gap-0.5">
-            <span class="text-12-regular text-text-weak">Wallet balance</span>
-            <span aria-live="polite">
-              <Show when={wallet()} fallback={<span class="text-13-medium text-text-weak">Checking account…</span>}>
-                <span class="models-account-summary__balance text-13-medium text-text-strong">
-                  {walletBalanceLabel(wallet()!)}
-                </span>
-              </Show>
-            </span>
+        <div class="models-routing__header">
+          <div class="models-routing__title">
+            <span class="text-13-medium text-text-strong">Model access</span>
+            <span class="text-11-regular text-text-weak">Choose who bills each model call.</span>
+          </div>
+          <div
+            class="models-routing__options"
+            role="group"
+            aria-label="Inference routing mode"
+            aria-describedby="managed-inference-description"
+          >
+            <For each={MODES}>
+              {(option) => (
+                <button
+                  type="button"
+                  aria-pressed={mode() === option.value}
+                  aria-busy={busy()}
+                  disabled={busy() || wallet() === undefined}
+                  class="models-routing__option"
+                  title={option.value === "managed" && needsAce() ? "Enable Ace to use Managed models" : undefined}
+                  onClick={() => update(option.value)}
+                >
+                  <span class="models-routing__option-label">
+                    <span>{option.title}</span>
+                  </span>
+                </button>
+              )}
+            </For>
           </div>
         </div>
-        <span class="models-row-action">
-          <Button
-            class="settings-panel-action models-secondary-action"
-            size="small"
-            variant="secondary"
-            onClick={() => platform.openLink(URLS.dashboardBilling)}
-          >
-            {needsAce() ? "Enable Ace" : "Manage Ace"}
-          </Button>
-        </span>
+        <div class="models-routing__details">
+          <p id="managed-inference-description" class="models-routing__description" aria-live="polite">
+            {busy() ? `Saving ${selected().title.toLowerCase()}…` : selected().body}
+            <Show when={!busy() && refreshing()}>
+              <span class="models-routing__sync"> Updating model availability…</span>
+            </Show>
+          </p>
+          <div class="models-routing__account">
+            <span class="models-routing__account-state">{aceLabel()}</span>
+            <span aria-live="polite" class="models-account-summary__balance">
+              <Show when={wallet()} fallback="Checking balance…">
+                {walletBalanceLabel(wallet()!)}
+              </Show>
+            </span>
+            <Button
+              class="settings-panel-action models-secondary-action"
+              size="small"
+              variant="secondary"
+              onClick={() => platform.openLink(URLS.dashboardBilling)}
+            >
+              {!wallet()?.signedIn ? "Sign in" : needsAce() ? "Turn on Ace" : "Manage Ace"}
+            </Button>
+          </div>
+        </div>
       </div>
 
       <Show when={wallet() && !wallet()!.signedIn}>

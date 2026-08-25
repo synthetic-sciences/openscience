@@ -107,22 +107,45 @@
   outline-color: var(--border-focus);
 }
 
-/* Routing sits inside the access surface instead of becoming a second card.
-   On wide panels its explanation remains beside the instant segmented choice. */
+/* One compact access card: identity and decision first, explanation and
+   account truth second. This keeps billing status attached to the control
+   instead of scattering it across unrelated rows. */
 .models-routing {
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(330px, 0.9fr) minmax(220px, 1.1fr);
-  align-items: center;
-  gap: var(--models-gap-3);
-  padding: 6px var(--models-gap-3) 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: var(--models-gap-2);
   border: 0;
   border-radius: var(--settings-radius-control);
   background: transparent;
   box-shadow: none;
 }
 
+.models-routing__header,
+.models-routing__details,
+.models-routing__account {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.models-routing__header {
+  justify-content: space-between;
+  gap: var(--models-gap-4);
+  padding: var(--models-gap-1);
+}
+
+.models-routing__title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .models-routing__options {
+  width: min(100%, 330px);
+  flex: 0 1 330px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2px;
@@ -183,6 +206,32 @@
   font-size: 11px;
   line-height: 16px;
   text-wrap: pretty;
+}
+
+.models-routing__details {
+  justify-content: space-between;
+  gap: var(--models-gap-4);
+  margin-top: var(--models-gap-1);
+  padding: var(--models-gap-2) var(--models-gap-1) var(--models-gap-1);
+  border-top: 1px solid var(--border-weak-base);
+}
+
+.models-routing__description {
+  flex: 1 1 260px;
+}
+
+.models-routing__account {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  gap: var(--models-gap-2);
+  color: var(--text-weak);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.models-routing__account-state {
+  color: var(--text-strong);
+  font-weight: var(--font-weight-medium);
 }
 
 .models-routing__sync {
@@ -532,9 +581,20 @@
 }
 
 @container settings-main (max-width: 700px) {
-  .models-routing {
-    grid-template-columns: 1fr;
-    gap: 6px;
+  .models-routing__header,
+  .models-routing__details {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .models-routing__options {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  .models-routing__account {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .models-provider-key-form {

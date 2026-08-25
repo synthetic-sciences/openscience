@@ -138,7 +138,11 @@ describe("reasoning options serialize onto provider request bodies", () => {
       id: "openai/gpt-5.6-sol",
       providerID: "openrouter",
       api: { id: "openai/gpt-5.6-sol", url: "https://openrouter.ai/api/v1", npm: "@openrouter/ai-sdk-provider" },
-      modes: { fast: { provider: { body: { service_tier: "priority" } } } },
+      modes: {
+        fast: {
+          provider: { body: { provider: { sort: "throughput" }, service_tier: "priority" } },
+        },
+      },
     })
     const wire = recorder()
     const sdk = createOpenRouter({ apiKey: "test", baseURL: "https://openrouter.test/v1", fetch: wire.fetch })
@@ -150,6 +154,7 @@ describe("reasoning options serialize onto provider request bodies", () => {
     await send(sdk.chat(target.api.id), ProviderTransform.providerOptions(target, options))
 
     expect(wire.bodies[0].service_tier).toBe("priority")
+    expect(wire.bodies[0].provider).toEqual({ sort: "throughput" })
   })
 
   test("Anthropic fast mode reaches the speed field", async () => {

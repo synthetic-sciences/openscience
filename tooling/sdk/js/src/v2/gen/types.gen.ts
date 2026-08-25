@@ -7998,6 +7998,7 @@ export type SettingsWalletGetResponses = {
     balanceUsd: number | null
     billingMode: "managed" | "byok" | null
     managedSupported: boolean
+    aceEnabled: boolean
     lifetimeSpentUsd: number | null
     transactions: Array<{
       id: string

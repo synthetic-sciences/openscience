@@ -14,6 +14,7 @@ export const WalletState = z.object({
   balanceUsd: z.number().nullable().describe("Wallet balance in USD; null when signed out or unavailable"),
   billingMode: z.enum(["managed", "byok"]).nullable(),
   managedSupported: z.boolean(),
+  aceEnabled: z.boolean(),
   lifetimeSpentUsd: z.number().nullable(),
   transactions: z.array(
     z.object({
@@ -32,6 +33,7 @@ const SIGNED_OUT: WalletState = {
   balanceUsd: null,
   billingMode: null,
   managedSupported: false,
+  aceEnabled: false,
   lifetimeSpentUsd: null,
   transactions: [],
 }
@@ -54,6 +56,7 @@ async function readWallet(): Promise<WalletState> {
     // The control is account-aware: infrastructure support alone must not
     // make Managed selectable before Ace is enabled or funded.
     managedSupported: mode?.managed_unlocked ?? false,
+    aceEnabled: mode?.ace_enabled ?? false,
     lifetimeSpentUsd:
       credits?.lifetimeSpentCents === null || credits?.lifetimeSpentCents === undefined
         ? null
