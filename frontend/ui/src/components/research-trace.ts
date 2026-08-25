@@ -6,21 +6,10 @@ export type ResearchTraceEntry = {
   hidden?: boolean
 }
 
-export type ResearchTraceGroup = {
-  kind: "group"
-  id: string
-  family: TraceFamily
-  label: string
-  detail: string
-  entries: ResearchTraceEntry[]
+export type ResearchTraceItem = {
+  kind: "part"
+  entry: ResearchTraceEntry
 }
-
-export type ResearchTraceItem =
-  | {
-      kind: "part"
-      entry: ResearchTraceEntry
-    }
-  | ResearchTraceGroup
 
 export type TaskActivity = {
   id: string
@@ -69,15 +58,6 @@ export function traceLabel(family: TraceFamily, count: number) {
   return `Completed ${count} research ${count === 1 ? "operation" : "operations"}`
 }
 
-function toolTitle(part: ToolPart) {
-  const state = part.state
-  if ("title" in state && typeof state.title === "string" && state.title.trim()) return state.title.trim()
-  const input = state.input ?? {}
-  const value = input.filePath ?? input.path ?? input.pattern ?? input.query ?? input.url ?? input.description
-  if (typeof value === "string" && value.trim()) return value.trim()
-  return part.tool
-}
-
 function compact(values: string[], limit = 3) {
   const unique = [...new Set(values)]
   const visible = unique.slice(0, limit)
@@ -85,125 +65,18 @@ function compact(values: string[], limit = 3) {
   return [visible.join(" · "), hidden > 0 ? `+${hidden} more` : undefined].filter(Boolean).join(" · ")
 }
 
-function grouped(part: Part): part is ToolPart {
-  if (part.type !== "tool") return false
-  if (part.state.status !== "completed") return false
-  if (part.tool === "task" || part.tool === "todowrite" || part.tool === "todoread" || part.tool === "planwrite") {
-    return false
-  }
-  return traceFamily(part.tool) !== "other"
-}
-
-function narrative(part: Part) {
-  return part.type === "reasoning" || part.type === "text"
-}
-
 function lifecycle(part: Part) {
   return part.type === "step-start" || part.type === "step-finish" || part.type === "snapshot" || part.type === "patch"
 }
 
 /**
- * Keep provider-visible reasoning and intermediate text byte-for-byte in their
- * chronological position. Only repeated completed tools are compacted; opening
- * a group always reveals the literal operations and surrounding reasoning.
+ * Keep provider-visible reasoning, intermediate text, and every tool operation
+ * byte-for-byte in chronological order. Do not replace live activity with
+ * semantic summaries: those groups changed identity as each tool completed,
+ * remounted the trace, and made both the transcript and scroll position jump.
  */
 export function groupResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceItem[] {
-  const output: ResearchTraceItem[] = []
-  const state = {
-    phase: undefined as
-      | {
-          family: TraceFamily
-          entries: ResearchTraceEntry[]
-          tools: ResearchTraceEntry[]
-        }
-      | undefined,
-    bridge: [] as ResearchTraceEntry[],
-  }
-
-  const parts = (items: ResearchTraceEntry[]) => {
-    for (const entry of items) output.push({ kind: "part", entry })
-  }
-
-  const flush = () => {
-    const phase = state.phase
-    if (!phase) return
-    if (phase.tools.length === 1) {
-      parts(phase.entries)
-      state.phase = undefined
-      return
-    }
-
-    output.push({
-      kind: "group",
-      id: `trace-${phase.tools[0].part.id}-${phase.tools.at(-1)!.part.id}`,
-      family: phase.family,
-      label: traceLabel(phase.family, phase.tools.length),
-      detail: compact(phase.tools.map((entry) => toolTitle(entry.part as ToolPart))),
-      entries: phase.entries,
-    })
-    state.phase = undefined
-  }
-
-  for (const entry of entries) {
-    if (lifecycle(entry.part)) continue
-
-    if (entry.hidden) {
-      if (state.phase) {
-        state.phase.entries.push(...state.bridge)
-        state.bridge = []
-        flush()
-      } else {
-        parts(state.bridge)
-        state.bridge = []
-      }
-      continue
-    }
-
-    if (narrative(entry.part)) {
-      state.bridge.push(entry)
-      continue
-    }
-
-    if (!grouped(entry.part)) {
-      if (state.phase) {
-        state.phase.entries.push(...state.bridge)
-        state.bridge = []
-        flush()
-      } else {
-        parts(state.bridge)
-        state.bridge = []
-      }
-      output.push({ kind: "part", entry })
-      continue
-    }
-
-    const family = traceFamily(entry.part.tool)
-    if (!state.phase) {
-      state.phase = { family, entries: [...state.bridge, entry], tools: [entry] }
-      state.bridge = []
-      continue
-    }
-
-    if (state.phase.family === family) {
-      state.phase.entries.push(...state.bridge, entry)
-      state.phase.tools.push(entry)
-      state.bridge = []
-      continue
-    }
-
-    flush()
-    state.phase = { family, entries: [...state.bridge, entry], tools: [entry] }
-    state.bridge = []
-  }
-
-  if (state.phase) {
-    state.phase.entries.push(...state.bridge)
-    state.bridge = []
-    flush()
-  } else {
-    parts(state.bridge)
-  }
-  return output
+  return entries.flatMap((entry) => (entry.hidden || lifecycle(entry.part) ? [] : [{ kind: "part", entry }]))
 }
 
 export function summarizeTaskActivity(items: TaskActivity[]): TaskActivityGroup[] {

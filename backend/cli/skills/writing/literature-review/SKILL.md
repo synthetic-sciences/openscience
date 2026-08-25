@@ -1,6 +1,6 @@
 ---
 name: literature-review
-description: Conduct comprehensive, systematic literature reviews using multiple academic databases (PubMed, arXiv, bioRxiv, Semantic Scholar, etc.). This skill should be used when conducting systematic literature reviews, meta-analyses, research synthesis, or comprehensive literature searches across biomedical, scientific, and technical domains. Creates professionally formatted markdown documents and PDFs with verified citations in multiple citation styles (APA, Nature, Vancouver, etc.).
+description: Answer literature-review requests with a concise, source-grounded narrative by default. Escalate to PRISMA screening, evidence tables, figures, files, or PDFs only when the user explicitly asks for a systematic, scoping, or publication-formatted review.
 category: writing
 allowed-tools: [Read, Write, Edit, Bash]
 ---
@@ -9,13 +9,14 @@ allowed-tools: [Read, Write, Edit, Bash]
 
 ## Overview
 
-Conduct systematic, comprehensive literature reviews following rigorous academic methodology. Search multiple literature databases, synthesize findings thematically, verify all citations for accuracy, and generate professional output documents in markdown and PDF formats.
+Give the user a clear, conversational synthesis of the relevant literature. Verify citations, explain the field's consensus and disagreements, and scale the method and deliverables to the request.
 
 This skill integrates with multiple scientific skills for database access (gget, bioservices, datacommons-client) and provides specialized tools for citation verification, result aggregation, and document generation.
 
 ## When to Use This Skill
 
 Use this skill when:
+- Asking for an ordinary narrative literature review or research synthesis
 - Conducting a systematic literature review for research or publication
 - Synthesizing current knowledge on a specific topic across multiple sources
 - Performing meta-analysis or scoping reviews
@@ -24,46 +25,27 @@ Use this skill when:
 - Identifying research gaps and future directions
 - Requiring verified citations and professional formatting
 
-## Visual Enhancement with Scientific Schematics
+## Default: narrative review
 
-**⚠️ MANDATORY: Every literature review MUST include at least 1-2 AI-generated figures using the scientific-schematics skill.**
+Unless the user explicitly asks for a systematic/scoping review, meta-analysis, paper, report, PDF, or figure:
 
-This is not optional. Literature reviews without visual elements are incomplete. Before finalizing any document:
-1. Generate at minimum ONE schematic or diagram (e.g., PRISMA flow diagram for systematic reviews)
-2. Prefer 2-3 figures for comprehensive reviews (search strategy flowchart, thematic synthesis diagram, conceptual framework)
+- Answer in the conversation; do not create files.
+- Use a focused search that is broad enough to support the answer, not a fixed database or paper quota.
+- Synthesize by idea and evidence, not by narrating the workflow.
+- Include links or citations for the sources that materially support the answer.
+- Do not create PRISMA diagrams, screening logs, evidence matrices, schematics, or BibTeX appendices.
+- Do not generate images. A figure is an optional deliverable, never a completion requirement.
+- Stop when the question is answered. Do not turn a normal review into a publication pipeline.
 
-**How to generate figures:**
-- Use the **scientific-schematics** skill to generate AI-powered publication-quality diagrams
-- Simply describe your desired diagram in natural language
-- Nano Banana Pro will automatically generate, review, and refine the schematic
+## Explicit systematic-review mode
 
-**How to generate schematics:**
-```bash
-python scripts/generate_schematic.py "your diagram description" -o figures/output.png
-```
-
-The AI will automatically:
-- Create publication-quality images with proper formatting
-- Review and refine through multiple iterations
-- Ensure accessibility (colorblind-friendly, high contrast)
-- Save outputs in the figures/ directory
-
-**When to add schematics:**
-- PRISMA flow diagrams for systematic reviews
-- Literature search strategy flowcharts
-- Thematic synthesis diagrams
-- Research gap visualization maps
-- Citation network diagrams
-- Conceptual framework illustrations
-- Any complex concept that benefits from visualization
-
-For detailed guidance on creating schematics, refer to the scientific-schematics skill documentation.
+Use the structured workflow below only when the user clearly requests systematic, scoping, meta-analytic, comprehensive publication-grade, or PRISMA-style work. Confirm material scope or spend only when it is genuinely ambiguous.
 
 ---
 
 ## Core Workflow
 
-Literature reviews follow a structured, multi-phase workflow:
+Explicit systematic reviews follow a structured, multi-phase workflow:
 
 ### Phase 1: Planning and Scoping
 

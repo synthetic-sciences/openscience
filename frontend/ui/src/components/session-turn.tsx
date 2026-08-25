@@ -43,7 +43,7 @@ import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { lastResponseTextPart } from "./session-turn-response"
-import { groupResearchTrace, type ResearchTraceGroup } from "./research-trace"
+import { groupResearchTrace } from "./research-trace"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
@@ -160,49 +160,7 @@ function AssistantTrace(props: {
     ),
   )
 
-  return (
-    <For each={trace()}>
-      {(item) => (
-        <Show
-          when={item.kind === "group" ? (item as ResearchTraceGroup) : undefined}
-          fallback={
-            <Part
-              part={(item as { kind: "part"; entry: { part: PartType } }).entry.part}
-              message={(item as { kind: "part"; entry: { message: AssistantMessage } }).entry.message}
-            />
-          }
-        >
-          {(group) => <ResearchTraceGroupDisplay group={group()} />}
-        </Show>
-      )}
-    </For>
-  )
-}
-
-function ResearchTraceGroupDisplay(props: { group: ResearchTraceGroup }) {
-  const icon = () => {
-    if (props.group.family === "context") return "glasses" as const
-    if (props.group.family === "sources") return "window-cursor" as const
-    if (props.group.family === "commands") return "console" as const
-    if (props.group.family === "changes") return "code-lines" as const
-    if (props.group.family === "images") return "photo" as const
-    if (props.group.family === "skills") return "sparkles" as const
-    return "activity" as const
-  }
-
-  return (
-    <details data-component="research-trace-group" data-family={props.group.family}>
-      <summary>
-        <Icon name={icon()} size="small" />
-        <span data-slot="research-trace-group-label">{props.group.label}</span>
-        <span data-slot="research-trace-group-detail">{props.group.detail}</span>
-        <Icon name="chevron-down" size="small" />
-      </summary>
-      <div data-slot="research-trace-group-operations">
-        <For each={props.group.entries}>{(entry) => <Part part={entry.part} message={entry.message} />}</For>
-      </div>
-    </details>
-  )
+  return <For each={trace()}>{(item) => <Part part={item.entry.part} message={item.entry.message} />}</For>
 }
 
 export function SessionTurn(
@@ -469,7 +427,7 @@ export function SessionTurn(
   const responsePartId = createMemo(() => lastTextPart()?.id)
   const messageDiffs = createMemo(() => message()?.summary?.diffs ?? emptyDiffs)
   const hasDiffs = createMemo(() => messageDiffs().length > 0)
-  const hideResponsePart = createMemo(() => !working() && !!responsePartId())
+  const hideResponsePart = createMemo(() => !!responsePartId())
 
   const [copied, setCopied] = createSignal(false)
 
@@ -772,7 +730,7 @@ export function SessionTurn(
                         <For each={requestParts()}>{({ part, message }) => <Part part={part} message={message} />}</For>
                       </div>
                     </Show>
-                    <Show when={!working() && (response() || hasDiffs())}>
+                    <Show when={response() || hasDiffs()}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
                           <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>

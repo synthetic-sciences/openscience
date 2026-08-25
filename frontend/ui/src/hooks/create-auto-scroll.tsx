@@ -16,6 +16,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let autoTimer: ReturnType<typeof setTimeout> | undefined
   let cleanup: (() => void) | undefined
   let auto: { top: number; time: number } | undefined
+  let height = 0
 
   const threshold = () => options.bottomThreshold ?? 10
 
@@ -96,7 +97,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = scroll
     if (!el) return
     if (!canScroll(el)) {
-      if (store.userScrolled) setStore("userScrolled", false)
       return
     }
     if (store.userScrolled) return
@@ -122,7 +122,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (!el) return
 
     if (!canScroll(el)) {
-      if (store.userScrolled) setStore("userScrolled", false)
       return
     }
 
@@ -163,14 +162,17 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   createResizeObserver(
     () => store.contentRef,
-    () => {
+    ({ height: next }) => {
       const el = scroll
-      if (el && !canScroll(el)) {
-        if (store.userScrolled) setStore("userScrolled", false)
-        return
-      }
+      const grew = next > height
+      height = next
+      if (el && !canScroll(el)) return
       if (!active()) return
       if (store.userScrolled) return
+      // A live trace can contract when a spinner or transient row disappears.
+      // Never interpret that contraction as new content worth following: doing
+      // so recaptures readers who are inspecting earlier activity.
+      if (!grew) return
       // ResizeObserver fires after layout, before paint.
       // Keep the bottom locked in the same frame to avoid visible
       // "jump up then catch up" artifacts while streaming content.
@@ -221,6 +223,8 @@ export function createAutoScroll(options: AutoScrollOptions) {
       scroll = el
 
       if (!el) return
+
+      height = store.contentRef?.getBoundingClientRect().height ?? 0
 
       updateOverflowAnchor(el)
       el.addEventListener("wheel", handleWheel, { passive: true })

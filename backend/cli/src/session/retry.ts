@@ -160,19 +160,22 @@ export namespace SessionRetry {
   // should compact + resume rather than retry.
   export function isContextOverflow(error: ReturnType<NamedError["toObject"]>): boolean {
     const { statusCode, code, type, message } = normalizeProviderError(error)
-    // A context-window rejection is always a client error (400/413). A 5xx is a
-    // genuine server fault, and 429 is a rate limit — both retryable, not overflow.
-    if (statusCode && statusCode >= 500) return false
     if (statusCode === 429) return false
     if (OVERFLOW_CODES.has(code) || OVERFLOW_CODES.has(type)) return true
     const lower = message.toLowerCase()
     // Catches transient failures with no statusCode (streamed error chunks) whose
     // text would otherwise match an overflow pattern — keep them retryable.
     if (RATELIMIT_PATTERNS.some((pattern) => lower.includes(pattern))) return false
-    return OVERFLOW_PATTERNS.some((pattern) => lower.includes(pattern))
+    // OpenRouter can wrap an upstream context rejection in a 502 with
+    // metadata.error_type=provider_unavailable. The explicit rejection remains
+    // deterministic; retrying the identical request cannot recover.
+    if (OVERFLOW_PATTERNS.some((pattern) => lower.includes(pattern))) return true
+    if (statusCode && statusCode >= 500) return false
+    return false
   }
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
+    if (isContextOverflow(error)) return undefined
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message

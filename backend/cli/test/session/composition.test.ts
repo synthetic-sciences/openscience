@@ -114,6 +114,27 @@ describe("session.message-v2.composition", () => {
     expect(c.total).toBe(IMG)
   })
 
+  test("counts duplicate inline images once and reports the omitted copy", () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [imageFilePart("u1", "i1", "a.png"), imageFilePart("u1", "i2", "copy.png")],
+      },
+    ]
+    const c = MessageV2.composition(input)
+    expect(c.image).toBe(IMG)
+    expect(c.images).toBe(1)
+    expect(c.text).toBeGreaterThan(0)
+  })
+
+  test("conservatively accounts for large inline image payloads", () => {
+    const part = imageFilePart("u1", "i1", "large.png") as MessageV2.FilePart
+    part.url = `data:image/png;base64,${"A".repeat(400_000)}`
+    const c = MessageV2.composition([{ info: userInfo("u1"), parts: [part] }])
+    expect(c.image).toBe(300_000)
+    expect(c.total).toBe(300_000)
+  })
+
   test("counts tool args + output under `tool`, attachment images under `image`", () => {
     const input: MessageV2.WithParts[] = [
       {

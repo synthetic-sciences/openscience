@@ -307,7 +307,7 @@ describe("SessionRetry.isContextOverflow", () => {
     expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })
 
-  test("retries OpenRouter streamed provider-unavailable 502 instead of compacting it", () => {
+  test("compacts an explicit OpenRouter context overflow wrapped in provider-unavailable 502", () => {
     const err = wrap(
       JSON.stringify({
         error: {
@@ -317,8 +317,8 @@ describe("SessionRetry.isContextOverflow", () => {
         },
       }),
     )
-    expect(SessionRetry.isContextOverflow(err)).toBe(false)
-    expect(SessionRetry.retryable(err)).toBe("Provider is overloaded")
+    expect(SessionRetry.isContextOverflow(err)).toBe(true)
+    expect(SessionRetry.retryable(err)).toBeUndefined()
   })
 
   test("false for a plain rate limit", () => {

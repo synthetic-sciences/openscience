@@ -568,22 +568,28 @@ export namespace MessageV2 {
     // P2.1: older tool outputs identical to a more recent call collapse to a back-ref.
     const superseded = supersededOutputs(input)
 
-    // Media budgeting. `stripMedia` (used for the compaction summary) drops ALL images;
-    // otherwise `keepRecentImages` keeps only the last N images in full and replaces
-    // older ones with a text placeholder — so re-shipping many figures every turn can't
-    // bloat the window. The image stays on disk and can be re-read on demand. Count up
-    // front so "last N" is well-defined; both passes visit images in input→part order.
+    // Media budgeting. `stripMedia` drops all images; otherwise keep only the last N
+    // unique images. A generated image followed by `read` commonly attaches the same
+    // bytes twice, so dedupe by payload rather than MIME or filename.
     const isImage = (mime: string) => mime.startsWith("image/")
-    let totalImages = 0
-    if (!options?.stripMedia && options?.keepRecentImages !== undefined) {
-      for (const msg of input)
-        for (const part of msg.parts) {
-          if (part.type === "file" && isImage(part.mime)) totalImages++
-          if (part.type === "tool" && part.state.status === "completed" && !part.state.time.compacted)
-            for (const a of part.state.attachments ?? []) if (isImage(a.mime)) totalImages++
-        }
+    const order: string[] = []
+    const add = (mime: string, url: string) => {
+      if (!isImage(mime)) return
+      const id = mediaIdentity(url)
+      const found = order.indexOf(id)
+      if (found >= 0) order.splice(found, 1)
+      order.push(id)
     }
-    let imagesSeen = 0
+    for (const msg of input)
+      for (const part of msg.parts) {
+        if (part.type === "file") add(part.mime, part.url)
+        if (part.type === "tool" && part.state.status === "completed" && !part.state.time.compacted)
+          for (const attachment of part.state.attachments ?? []) add(attachment.mime, attachment.url)
+      }
+    const retained = new Set(
+      options?.keepRecentImages === undefined ? order : order.slice(-Math.max(0, options.keepRecentImages)),
+    )
+    const emitted = new Set<string>()
     // Returns a placeholder string when this image occurrence should be dropped, else undefined.
     const dropImage = (mime: string, url: string, filename?: string): string | undefined => {
       if (!isImage(mime)) return undefined
@@ -592,11 +598,11 @@ export namespace MessageV2 {
       // nudge even when it is a recent image we would otherwise keep — shipping it would
       // 400 the request. Independent of the recency budget below.
       const oversized = oversizedImageNudge(url, filename)
-      if (options?.keepRecentImages === undefined) return oversized
-      const drop = imagesSeen < totalImages - options.keepRecentImages
-      imagesSeen++
       if (oversized) return oversized
-      return drop
+      const id = mediaIdentity(url)
+      if (emitted.has(id)) return DUPLICATE_IMAGE
+      emitted.add(id)
+      return !retained.has(id)
         ? `[older image omitted to save context${filename ? `: ${filename}` : ""} — read it again if you need it]`
         : undefined
     }
@@ -609,7 +615,7 @@ export namespace MessageV2 {
       if (typeof output === "object") {
         const outputObject = output as {
           text: string
-          attachments?: Array<{ mime: string; url: string }>
+          attachments?: Array<{ mime: string; url: string; filename?: string }>
         }
         const attachments = (outputObject.attachments ?? []).filter((attachment) => {
           return attachment.url.startsWith("data:") && attachment.url.includes(",")
@@ -627,7 +633,7 @@ export namespace MessageV2 {
               const mime = attachment.mime.startsWith("image/")
                 ? correctImageMimeFromBase64(attachment.mime, base64)
                 : attachment.mime
-              return { type: "media", mediaType: mime, data: base64 }
+              return { type: "media" as const, mediaType: mime, data: base64 }
             }),
           ],
         }
@@ -858,11 +864,23 @@ export namespace MessageV2 {
     )
   }
 
-  // Flat per-image token cost. An image's model cost bears no relation to its base64
-  // byte length, so a fixed estimate is what the reference tools use (claude-code /
-  // opencode 2000, hermes 1500). Single source of truth — SessionCompaction re-exports
-  // it as IMAGE_TOKEN_ESTIMATE (it can't import here without a cycle).
+  // Native multimodal endpoints usually charge a small pixel-based image budget, while
+  // OpenAI-compatible relays can tokenize inline base64 much more heavily. Use a flat
+  // floor for small images and a conservative inline estimate for preflight safety.
   export const IMAGE_TOKENS = 1600
+  export const INLINE_IMAGE_TOKEN_RATIO = 0.75
+  export const DUPLICATE_IMAGE =
+    "[Duplicate image omitted — byte-for-byte identical image content was already provided in this request.]"
+
+  export function mediaIdentity(url: string) {
+    const comma = url.indexOf(",")
+    return comma === -1 ? url : url.slice(comma + 1)
+  }
+
+  export function imageTokens(url: string) {
+    if (!url.startsWith("data:")) return IMAGE_TOKENS
+    return Math.max(IMAGE_TOKENS, Math.ceil(mediaIdentity(url).length * INLINE_IMAGE_TOKEN_RATIO))
+  }
 
   // Anthropic (and most providers) reject a single image over 5 MB with an HTTP 400.
   // P1's flat token estimate neither counts an oversized image accurately nor prevents
@@ -1008,9 +1026,14 @@ export namespace MessageV2 {
     for (const s of options?.system ?? []) out.system += Token.estimate(s)
     const superseded = supersededOutputs(input)
 
-    const addImages = (count: number) => {
-      out.image += count * IMAGE_TOKENS
-      out.images += count
+    const images = new Set<string>()
+    const addImage = (url: string) => {
+      const id = mediaIdentity(url)
+      if (images.has(id)) return false
+      images.add(id)
+      out.image += imageTokens(url)
+      out.images++
+      return true
     }
 
     for (const msg of input)
@@ -1028,7 +1051,7 @@ export namespace MessageV2 {
           if (part.mime.startsWith("image/")) {
             const nudge = oversizedImageNudge(part.url, part.filename)
             if (nudge) out.text += Token.estimate(nudge)
-            else addImages(1)
+            else if (!addImage(part.url)) out.text += Token.estimate(DUPLICATE_IMAGE)
           }
           continue
         }
@@ -1053,7 +1076,7 @@ export namespace MessageV2 {
                 if (a.mime.startsWith("image/")) {
                   const nudge = oversizedImageNudge(a.url, a.filename)
                   if (nudge) out[bucket] += Token.estimate(nudge)
-                  else addImages(1)
+                  else if (!addImage(a.url)) out[bucket] += Token.estimate(DUPLICATE_IMAGE)
                 }
           }
           if (part.state.status === "error") out[bucket] += Token.estimate(part.state.error)

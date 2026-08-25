@@ -127,6 +127,20 @@ test("the primary, domain, and specialist prompts stay adaptive instead of proce
   expect(explore).not.toContain("copying, moving")
 })
 
+test("ordinary literature reviews stay conversational instead of becoming report pipelines", async () => {
+  const [skill, specialist] = await Promise.all([
+    Bun.file(new URL("../../skills/writing/literature-review/SKILL.md", import.meta.url)).text(),
+    read("agent/prompt/literature-review.txt"),
+  ])
+  expect(skill).toContain("Default: narrative review")
+  expect(skill).toContain("do not create files")
+  expect(skill).toContain("Do not generate images")
+  expect(skill).not.toContain("Every literature review MUST")
+  expect(specialist).toContain("Default to the narrative path")
+  expect(specialist).toContain("do not enter this workflow")
+  expect(specialist).not.toContain("Before ANY literature search")
+})
+
 test("delegation is rare, bounded, and observable", async () => {
   const [prompt, source] = await Promise.all([read("tool/task.txt"), read("tool/task.ts")])
   expect(DELEGATION_PROFILES).toEqual(["explore", "execute"])

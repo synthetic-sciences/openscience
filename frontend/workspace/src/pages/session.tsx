@@ -1115,7 +1115,9 @@ export default function Page(): JSX.Element {
                                   sessionID={params.id!}
                                   messageID={message.id}
                                   lastUserMessageID={lastUserMessage()?.id}
-                                  stepsExpanded={stepsExpanded()[message.id] ?? false}
+                                  stepsExpanded={
+                                    stepsExpanded()[message.id] ?? (working() && message.id === lastUserMessage()?.id)
+                                  }
                                   onStepsExpandedToggle={() => toggleSteps(message.id)}
                                   classes={{
                                     root: "min-w-0 w-full relative",

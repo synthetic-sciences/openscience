@@ -126,7 +126,7 @@ describe("session.message-v2.toModelMessage — media budgeting", () => {
     type: "file" as const,
     mime: "image/png",
     filename: name,
-    url: "data:image/png;base64,Zm9v",
+    url: `data:image/png;base64,${Buffer.from(name).toString("base64")}`,
   })
   const imagesInput = (): MessageV2.WithParts[] => [
     {
@@ -154,6 +154,20 @@ describe("session.message-v2.toModelMessage — media budgeting", () => {
     const s = JSON.stringify(MessageV2.toModelMessages(imagesInput(), model))
     expect((s.match(/"type":"file"/g) ?? []).length).toBe(3)
     expect(s).not.toContain("image omitted")
+  })
+
+  test("ships byte-identical image content once even when it is attached twice", () => {
+    const duplicate = imagePart("i2", "a.png")
+    duplicate.url = imagePart("i1", "a.png").url
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("m-imgs"),
+        parts: [imagePart("i1", "a.png"), duplicate] as MessageV2.Part[],
+      },
+    ]
+    const serialized = JSON.stringify(MessageV2.toModelMessages(input, model, { keepRecentImages: 1 }))
+    expect((serialized.match(/"type":"file"/g) ?? []).length).toBe(1)
+    expect(serialized).toContain(MessageV2.DUPLICATE_IMAGE)
   })
 })
 

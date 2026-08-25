@@ -53,7 +53,7 @@ describe("research trace presentation", () => {
     )
   })
 
-  test("compacts repeated tool families without dropping interleaved reasoning", () => {
+  test("keeps repeated tool families literal without dropping interleaved reasoning", () => {
     const trace = groupResearchTrace([
       narrative("reason-1", "reasoning", "First thought", "msg-1"),
       entry("read", "read", "Read paper.tex", "completed", "msg-1"),
@@ -63,11 +63,7 @@ describe("research trace presentation", () => {
       entry("grep", "grep", "Find citations", "completed", "msg-2"),
     ])
 
-    expect(trace).toHaveLength(1)
-    expect(trace[0]?.kind).toBe("group")
-    if (trace[0]?.kind !== "group") throw new Error("expected grouped context phase")
-    expect(trace[0].entries.map((item) => item.part.id)).toEqual(["reason-1", "read", "reason-2", "grep"])
-    expect(trace[0].label).toBe("Reviewed 2 files and code searches")
+    expect(trace.map((item) => item.entry.part.id)).toEqual(["reason-1", "read", "reason-2", "grep"])
   })
 
   test("omits hidden promoted tools from the inline activity list", () => {
