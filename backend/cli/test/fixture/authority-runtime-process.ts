@@ -359,3 +359,8 @@ await Instance.provide({
     throw new Error(`Unknown authority runtime fixture mode: ${mode}`)
   },
 })
+
+// Revocation modes bootstrap the same native watcher lifecycle as the server.
+// One-shot CLI commands dispose this through cli/bootstrap; this direct
+// fixture must do the equivalent after its revocation work completes.
+await Instance.disposeAll()
