@@ -80,10 +80,9 @@ const CAMPAIGN_IDS = [
   "provider_failures.model-missing",
 ] as const
 
-const TRANSIENT_IDS = new Set([
+const RETRY_IDS = new Set([
   "retries.rate-limit",
   "retries.server-overload",
-  "retries.openrouter-502",
   "retries.stream-disconnect",
 ])
 
@@ -337,13 +336,12 @@ describe("provider-driven harness stress campaign", () => {
             }
           }
 
-          expect(Object.fromEntries([...TRANSIENT_IDS].map((id) => [id, provider.count(id)]))).toEqual({
+          expect(Object.fromEntries([...RETRY_IDS].map((id) => [id, provider.count(id)]))).toEqual({
             "retries.rate-limit": 2,
             "retries.server-overload": 2,
-            "retries.openrouter-502": 2,
             "retries.stream-disconnect": 2,
           })
-          for (const id of TRANSIENT_IDS) {
+          for (const id of RETRY_IDS) {
             const outcome = outcomes.find((item) => item.scenario.id === id)!
             expect(outcome.result.info.role).toBe("assistant")
             if (outcome.result.info.role !== "assistant") throw new Error("Expected assistant result")
@@ -481,7 +479,12 @@ describe("provider-driven harness stress campaign", () => {
             expect.objectContaining({ permission: "task", action: "deny" }),
           )
 
-          for (const id of ["compaction.proactive", "compaction.reactive-overflow", "compaction.handoff-objective"]) {
+          for (const id of [
+            "retries.openrouter-502",
+            "compaction.proactive",
+            "compaction.reactive-overflow",
+            "compaction.handoff-objective",
+          ]) {
             const outcome = outcomes.find((item) => item.scenario.id === id)!
             const carriers = outcome.messages.filter(
               (message) => message.info.role === "user" && message.info.internal?.type === "compaction",

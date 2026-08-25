@@ -406,11 +406,11 @@ export const STRESS_MATRIX: readonly StressScenario[] = [
   }),
   clean({
     id: "retries.openrouter-502",
-    category: "retries",
-    title: "Provider unavailable is not compaction",
+    category: "compaction",
+    title: "OpenRouter-wrapped context overflow compacts",
     prompt: "Exercise the provider-unavailable context wording fixture.",
     stimulus: { kind: "error", status: 502, body: "provider_unavailable: exceeds the context window" },
-    expect: { terminal: "completed", tools: 0, retries: 1, artifacts: "none", excludes: ["handoff"] },
+    expect: { terminal: "completed", tools: 0, retries: 0, artifacts: "none" },
   }),
   clean({
     id: "retries.stream-disconnect",
