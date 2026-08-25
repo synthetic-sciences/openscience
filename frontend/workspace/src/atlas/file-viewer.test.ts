@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
   artifactControl,
+  createFileRequestOwner,
   describeFile,
+  fileRequestKey,
   PDF_PREVIEW_LIMIT,
   pdfPreviewMode,
   readFile,
@@ -145,6 +147,33 @@ describe("file viewer reads", () => {
     expect(result.data).toBeUndefined()
     expect(result.error).toBeInstanceOf(Error)
     expect(result.error?.message).toBe("file access denied")
+  })
+
+  test("classifies aborted primary reads as cancellation instead of a visible error", async () => {
+    const named = await readFile(async () => {
+      throw new DOMException("The operation was aborted", "AbortError")
+    })
+    const browser = await readFile(async () => {
+      throw new Error("signal is aborted without reason")
+    })
+
+    expect(named).toEqual({ cancelled: true })
+    expect(browser).toEqual({ cancelled: true })
+  })
+
+  test("invalidates an in-flight read when project or session identity changes", () => {
+    const owner = createFileRequestOwner()
+    const first = owner.begin(
+      fileRequestKey({ projectID: "prj_one", directory: "/projects/one", sessionID: "ses_one", path: "a.py" }),
+    )
+    const second = owner.begin(
+      fileRequestKey({ projectID: "prj_two", directory: "/projects/two", sessionID: "ses_two", path: "a.py" }),
+    )
+
+    expect(first.controller.signal.aborted).toBe(true)
+    expect(owner.owns(first)).toBe(false)
+    expect(owner.owns(second)).toBe(true)
+    owner.dispose()
   })
 })
 

@@ -177,6 +177,10 @@ import type {
   PostSettingsLocalResponses,
   PostSettingsLocalSshResponses,
   PostSettingsLocalStartResponses,
+  ProjectAccessGetErrors,
+  ProjectAccessGetResponses,
+  ProjectAccessUpdateErrors,
+  ProjectAccessUpdateResponses,
   ProjectCurrentResponses,
   ProjectExecutionErrors,
   ProjectExecutionResponses,
@@ -277,6 +281,7 @@ import type {
   SessionUpdateResponses,
   SettingsBillingGetResponses,
   SettingsBillingUpdateResponses,
+  SettingsComputeEnvironmentsRepairResponses,
   SettingsComputeGetResponses,
   SettingsComputeJobsCancelErrors,
   SettingsComputeJobsCancelResponses,
@@ -865,6 +870,18 @@ export class Storage extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+}
+
+export class Environments extends HeyApiClient {
+  /**
+   * Install or repair managed Python and R starter environments
+   */
+  public repair<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<SettingsComputeEnvironmentsRepairResponses, unknown, ThrowOnError>({
+      url: "/settings/compute/environments/repair",
+      ...options,
     })
   }
 }
@@ -1610,6 +1627,11 @@ export class Compute extends HeyApiClient {
     })
   }
 
+  private _environments?: Environments
+  get environments(): Environments {
+    return (this._environments ??= new Environments({ client: this.client }))
+  }
+
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
@@ -2121,6 +2143,77 @@ export class Trust extends HeyApiClient {
   }
 }
 
+export class Access extends HeyApiClient {
+  /**
+   * Inspect project action access
+   *
+   * Return the atomic project-scoped Ask, Approve, or Full access mode and its effective sandbox policy.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProjectAccessGetResponses, ProjectAccessGetErrors, ThrowOnError>({
+      url: "/project/{projectID}/access",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update project action access
+   *
+   * Atomically update this project's action approval and containment mode without changing any other project.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      mode: "ask" | "approve" | "full"
+      root?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "mode" },
+            { in: "body", key: "root" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<ProjectAccessUpdateResponses, ProjectAccessUpdateErrors, ThrowOnError>({
+      url: "/project/{projectID}/access",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Project2 extends HeyApiClient {
   /**
    * List all projects
@@ -2259,6 +2352,11 @@ export class Project2 extends HeyApiClient {
   private _trust?: Trust
   get trust(): Trust {
     return (this._trust ??= new Trust({ client: this.client }))
+  }
+
+  private _access?: Access
+  get access(): Access {
+    return (this._access ??= new Access({ client: this.client }))
   }
 }
 

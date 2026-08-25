@@ -148,6 +148,35 @@ export type EventSessionFilesystemChanged = {
   }
 }
 
+export type EventProjectAccessChanged = {
+  type: "project.access.changed"
+  properties: {
+    status: {
+      projectID: string
+      root: string
+      revision: number
+      trustRevision: number
+      mode: "ask" | "approve" | "full"
+      requestedMode: "ask" | "approve" | "full"
+      source: "default" | "legacy" | "persisted"
+      trusted: boolean
+      managed: boolean
+      sandbox: {
+        enabled: boolean
+        network: "allow" | "deny"
+        allowWrite: Array<string>
+        onUnavailable: "warn" | "error" | "allow"
+        requireProjectTrust: boolean
+      }
+      sandboxStatus: {
+        available: boolean
+        backend: "seatbelt" | "bubblewrap" | "none"
+        reason?: string
+      }
+    }
+  }
+}
+
 export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
@@ -755,6 +784,14 @@ export type EventSessionContext = {
     }
     images: number
     total: number
+    budget?: {
+      total: number
+      newest: number
+      history: number
+      usable: number
+      soft: number
+      hard: number
+    }
   }
 }
 
@@ -945,6 +982,8 @@ export type Pty = {
     projectID: string
     sessionID: string
     trustRevision: number
+    accessRevision?: number
+    accessMode?: "ask" | "approve" | "full"
     grantRevision: number
     generation: string
     directory?: string
@@ -1032,6 +1071,7 @@ export type Event =
   | EventLspUpdated
   | EventFileWatcherUpdated
   | EventSessionFilesystemChanged
+  | EventProjectAccessChanged
   | EventVcsBranchUpdated
   | EventFileEdited
   | EventMessageUpdated
@@ -2873,6 +2913,7 @@ export type SettingsCredentialsListResponses = {
       connected: boolean
       set_fields: Array<string>
       updated_at: string | null
+      source: "local" | "account" | null
     }>
   }
 }
@@ -2909,6 +2950,7 @@ export type SettingsCredentialsRemoveResponses = {
       connected: boolean
       set_fields: Array<string>
       updated_at: string | null
+      source: "local" | "account" | null
     }>
   }
 }
@@ -2951,6 +2993,7 @@ export type SettingsCredentialsSetResponses = {
       connected: boolean
       set_fields: Array<string>
       updated_at: string | null
+      source: "local" | "account" | null
     }>
   }
 }
@@ -3072,7 +3115,7 @@ export type SettingsComputeGetResponses = {
       hint: string
       connected: boolean
       enabled: boolean
-      source: "stored" | "modal_toml" | null
+      source: "stored" | "account" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3109,10 +3152,95 @@ export type SettingsComputeGetResponses = {
       found: boolean
       ready: boolean
     }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
+    }
   }
 }
 
 export type SettingsComputeGetResponse = SettingsComputeGetResponses[keyof SettingsComputeGetResponses]
+
+export type SettingsComputeEnvironmentsRepairData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/environments/repair"
+}
+
+export type SettingsComputeEnvironmentsRepairResponses = {
+  /**
+   * Updated
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "account" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+      /**
+       * Operator notes about modules, partitions, scratch paths, and installation rules.
+       */
+      notes?: string
+      fingerprint?: string
+      host_key?: string
+      concurrency?: number
+    }>
+    ssh_config_hosts?: Array<{
+      alias: string
+      hostname?: string
+      user?: string
+      port?: number
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
+    }
+  }
+}
+
+export type SettingsComputeEnvironmentsRepairResponse =
+  SettingsComputeEnvironmentsRepairResponses[keyof SettingsComputeEnvironmentsRepairResponses]
 
 export type SettingsComputeProviderDisconnectData = {
   body?: never
@@ -3136,7 +3264,7 @@ export type SettingsComputeProviderDisconnectResponses = {
       hint: string
       connected: boolean
       enabled: boolean
-      source: "stored" | "modal_toml" | null
+      source: "stored" | "account" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3172,6 +3300,17 @@ export type SettingsComputeProviderDisconnectResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+    }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
     }
   }
 }
@@ -3213,7 +3352,7 @@ export type SettingsComputeProviderConnectResponses = {
       hint: string
       connected: boolean
       enabled: boolean
-      source: "stored" | "modal_toml" | null
+      source: "stored" | "account" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3249,6 +3388,17 @@ export type SettingsComputeProviderConnectResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+    }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
     }
   }
 }
@@ -3290,7 +3440,7 @@ export type SettingsComputeProviderEnabledResponses = {
       hint: string
       connected: boolean
       enabled: boolean
-      source: "stored" | "modal_toml" | null
+      source: "stored" | "account" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3326,6 +3476,17 @@ export type SettingsComputeProviderEnabledResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+    }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
     }
   }
 }
@@ -3368,7 +3529,7 @@ export type SettingsComputeModalUpdateResponses = {
       hint: string
       connected: boolean
       enabled: boolean
-      source: "stored" | "modal_toml" | null
+      source: "stored" | "account" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3404,6 +3565,17 @@ export type SettingsComputeModalUpdateResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+    }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
     }
   }
 }
@@ -3538,7 +3710,7 @@ export type SettingsComputeModalConfigureResponses = {
       hint: string
       connected: boolean
       enabled: boolean
-      source: "stored" | "modal_toml" | null
+      source: "stored" | "account" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3574,6 +3746,17 @@ export type SettingsComputeModalConfigureResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+    }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
     }
   }
 }
@@ -3651,7 +3834,7 @@ export type SettingsComputeSshAddResponses = {
       hint: string
       connected: boolean
       enabled: boolean
-      source: "stored" | "modal_toml" | null
+      source: "stored" | "account" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3687,6 +3870,17 @@ export type SettingsComputeSshAddResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+    }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
     }
   }
 }
@@ -3754,7 +3948,7 @@ export type SettingsComputeSshRemoveResponses = {
       hint: string
       connected: boolean
       enabled: boolean
-      source: "stored" | "modal_toml" | null
+      source: "stored" | "account" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3790,6 +3984,17 @@ export type SettingsComputeSshRemoveResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+    }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
     }
   }
 }
@@ -3834,7 +4039,7 @@ export type SettingsComputeSshUpdateResponses = {
       hint: string
       connected: boolean
       enabled: boolean
-      source: "stored" | "modal_toml" | null
+      source: "stored" | "account" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3870,6 +4075,17 @@ export type SettingsComputeSshUpdateResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+    }
+    environments: {
+      status: "absent" | "installing" | "ready" | "failed"
+      phase: string
+      error?: string
+      environments: Array<{
+        language: "python" | "r"
+        ready: boolean
+        path: string
+        packages: Array<string>
+      }>
     }
   }
 }
@@ -4464,6 +4680,8 @@ export type SettingsComputeJobsListResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -5218,6 +5436,8 @@ export type SettingsComputeJobsStartResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -6171,6 +6391,8 @@ export type SettingsComputeJobsRetryResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -6896,6 +7118,8 @@ export type SettingsComputeJobsReleaseResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -7617,6 +7841,8 @@ export type SettingsComputeJobsCancelResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -8383,6 +8609,115 @@ export type ProjectTrustUpdateResponses = {
 
 export type ProjectTrustUpdateResponse = ProjectTrustUpdateResponses[keyof ProjectTrustUpdateResponses]
 
+export type ProjectAccessGetData = {
+  body?: never
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/project/{projectID}/access"
+}
+
+export type ProjectAccessGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ProjectAccessGetError = ProjectAccessGetErrors[keyof ProjectAccessGetErrors]
+
+export type ProjectAccessGetResponses = {
+  /**
+   * Project action access
+   */
+  200: {
+    projectID: string
+    root: string
+    revision: number
+    trustRevision: number
+    mode: "ask" | "approve" | "full"
+    requestedMode: "ask" | "approve" | "full"
+    source: "default" | "legacy" | "persisted"
+    trusted: boolean
+    managed: boolean
+    sandbox: {
+      enabled: boolean
+      network: "allow" | "deny"
+      allowWrite: Array<string>
+      onUnavailable: "warn" | "error" | "allow"
+      requireProjectTrust: boolean
+    }
+    sandboxStatus: {
+      available: boolean
+      backend: "seatbelt" | "bubblewrap" | "none"
+      reason?: string
+    }
+  }
+}
+
+export type ProjectAccessGetResponse = ProjectAccessGetResponses[keyof ProjectAccessGetResponses]
+
+export type ProjectAccessUpdateData = {
+  body?: {
+    mode: "ask" | "approve" | "full"
+    root?: string
+  }
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/project/{projectID}/access"
+}
+
+export type ProjectAccessUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ProjectAccessUpdateError = ProjectAccessUpdateErrors[keyof ProjectAccessUpdateErrors]
+
+export type ProjectAccessUpdateResponses = {
+  /**
+   * Updated project action access
+   */
+  200: {
+    projectID: string
+    root: string
+    revision: number
+    trustRevision: number
+    mode: "ask" | "approve" | "full"
+    requestedMode: "ask" | "approve" | "full"
+    source: "default" | "legacy" | "persisted"
+    trusted: boolean
+    managed: boolean
+    sandbox: {
+      enabled: boolean
+      network: "allow" | "deny"
+      allowWrite: Array<string>
+      onUnavailable: "warn" | "error" | "allow"
+      requireProjectTrust: boolean
+    }
+    sandboxStatus: {
+      available: boolean
+      backend: "seatbelt" | "bubblewrap" | "none"
+      reason?: string
+    }
+  }
+}
+
+export type ProjectAccessUpdateResponse = ProjectAccessUpdateResponses[keyof ProjectAccessUpdateResponses]
+
 export type ProjectExecutionData = {
   body?: never
   path: {
@@ -8442,6 +8777,8 @@ export type ProjectExecutionResponses = {
     projectID: string
     sessionID: string
     trustRevision: number
+    accessRevision?: number
+    accessMode?: "ask" | "approve" | "full"
     grantRevision: number
     generation: string
     directory?: string
@@ -13080,6 +13417,8 @@ export type KernelsListResponses = {
         projectID: string
         sessionID: string
         trustRevision: number
+        accessRevision?: number
+        accessMode?: "ask" | "approve" | "full"
         grantRevision: number
         generation: string
         directory?: string
@@ -13210,6 +13549,8 @@ export type KernelsRestartByIdResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -13339,6 +13680,8 @@ export type KernelsStopByIdResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -13468,6 +13811,8 @@ export type KernelsInterruptByIdResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -13641,6 +13986,8 @@ export type KernelsStatusResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -13770,6 +14117,8 @@ export type KernelsRestartResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -13899,6 +14248,8 @@ export type KernelsStopResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -14028,6 +14379,8 @@ export type KernelsInterruptResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -14235,6 +14588,8 @@ export type NotebookKernelsResponses = {
         projectID: string
         sessionID: string
         trustRevision: number
+        accessRevision?: number
+        accessMode?: "ask" | "approve" | "full"
         grantRevision: number
         generation: string
         directory?: string
@@ -14365,6 +14720,8 @@ export type NotebookKernelRestartResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -14494,6 +14851,8 @@ export type NotebookKernelStopResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -14623,6 +14982,8 @@ export type NotebookKernelInterruptResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -14797,6 +15158,8 @@ export type NotebookStatusResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -14927,6 +15290,8 @@ export type NotebookRestartResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -15057,6 +15422,8 @@ export type NotebookStopResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string
@@ -15187,6 +15554,8 @@ export type NotebookInterruptResponses = {
       projectID: string
       sessionID: string
       trustRevision: number
+      accessRevision?: number
+      accessMode?: "ask" | "approve" | "full"
       grantRevision: number
       generation: string
       directory?: string

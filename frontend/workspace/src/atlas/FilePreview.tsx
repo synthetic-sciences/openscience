@@ -27,6 +27,8 @@ import { FileToolbar } from "@/atlas/FileToolbar"
 import { uiStore } from "@/atlas/store/ui"
 import {
   describeFile,
+  createFileRequestOwner,
+  fileRequestKey,
   PDF_PREVIEW_LIMIT,
   pdfPreviewMode,
   readFile,
@@ -73,7 +75,7 @@ interface ViewState {
   saved: string
   saving: boolean
   refresh: number
-  status: "loading" | "ready" | "error"
+  status: "loading" | "ready" | "interrupted" | "error"
   data?: FileData
   error?: Error
   saveError?: string
@@ -125,7 +127,8 @@ export function FileView(props: {
   })
   const [pdf, setPdf] = createStore<PdfState>({ status: "idle" })
   const [htmlView, setHtmlView] = createStore<HtmlState>({ status: "idle", value: "" })
-  const request = { current: 0 }
+  const request = createFileRequestOwner()
+  const readRetry = { key: "", count: 0 }
   const pdfRequest = { current: 0 }
   const pdfAbort = { current: undefined as AbortController | undefined }
   const htmlRequest = { current: 0 }
@@ -136,7 +139,12 @@ export function FileView(props: {
     const path = requestPath()
     const activeSession = sessionID()
     view.refresh
-    const id = ++request.current
+    const key = fileRequestKey({ projectID: sdk.projectID, directory: dir, sessionID: activeSession, path })
+    if (readRetry.key !== key) {
+      readRetry.key = key
+      readRetry.count = 0
+    }
+    const ticket = request.begin(key)
     setView({
       status: "loading",
       data: undefined,
@@ -155,16 +163,34 @@ export function FileView(props: {
     // Keep the project directory as the backend instance boundary. External
     // absolute paths remain absolute and require a session filesystem grant.
     void readFile(async () => {
-      const response = await sdk.client.file.read({ path, sessionID: activeSession })
+      const response = await sdk.client.file.read(
+        { path, sessionID: activeSession },
+        { signal: ticket.controller.signal },
+      )
       const envelope = response as unknown as { data?: FileData }
       return envelope.data ?? (response as unknown as FileData)
     }).then((result) => {
-      if (request.current !== id) return
+      if (!request.owns(ticket, key)) return
+      if (result.cancelled) {
+        // A transport reconnect can abort the active request even though the
+        // person did not leave the file. Retry once without ever rendering the
+        // browser's raw "signal is aborted" implementation detail.
+        if (readRetry.count === 0) {
+          readRetry.count++
+          queueMicrotask(() => {
+            if (request.owns(ticket, key)) setView("refresh", (value) => value + 1)
+          })
+        } else {
+          setView({ status: "interrupted", error: undefined, data: undefined })
+        }
+        return
+      }
       if (result.error) {
         setView({ status: "error", error: result.error, data: undefined })
         return
       }
       const data = result.data ?? {}
+      readRetry.count = 0
       const text = data.encoding === "base64" ? "" : (data.content ?? "")
       setView({
         status: "ready",
@@ -177,7 +203,7 @@ export function FileView(props: {
   })
 
   onCleanup(() => {
-    request.current += 1
+    request.dispose()
   })
 
   const data = () => view.data
@@ -391,7 +417,12 @@ export function FileView(props: {
       toast.error("save unavailable", "Start a research session before changing workspace files.")
       return
     }
-    const id = request.current
+    const identity = fileRequestKey({
+      projectID: sdk.projectID,
+      directory: directory(),
+      sessionID: session,
+      path: requestPath(),
+    })
     const path = requestPath()
     const content = view.draft
     const title = name()
@@ -408,7 +439,16 @@ export function FileView(props: {
         payload && typeof payload === "object" && "content" in payload
           ? (payload as { content?: unknown }).content
           : undefined
-      if (request.current !== id) return
+      if (
+        identity !==
+        fileRequestKey({
+          projectID: sdk.projectID,
+          directory: directory(),
+          sessionID: sessionID(),
+          path: requestPath(),
+        })
+      )
+        return
       const next = typeof saved === "string" ? saved : content
       setView({
         ...reconcileSavedDraft(view.draft, content, next),
@@ -417,7 +457,16 @@ export function FileView(props: {
       })
       toast.success("saved", title)
     } catch (error) {
-      if (request.current !== id) return
+      if (
+        identity !==
+        fileRequestKey({
+          projectID: sdk.projectID,
+          directory: directory(),
+          sessionID: sessionID(),
+          path: requestPath(),
+        })
+      )
+        return
       const message = error instanceof Error ? error.message : String(error)
       setView({ saving: false, saveError: message })
       toast.error("save failed", message)
@@ -544,14 +593,39 @@ export function FileView(props: {
           <Show
             when={view.status === "ready"}
             fallback={
-              <section class="atlas-file-error" role="alert" aria-live="polite">
-                <IconFile size={20} strokeWidth={1.4} />
-                <h2>Couldn’t open this file</h2>
-                <p>{view.error?.message ?? "The file could not be read."}</p>
-                <button type="button" class="atlas-file-button" onClick={() => setView("refresh", (key) => key + 1)}>
-                  Retry
-                </button>
-              </section>
+              <Show
+                when={view.status === "interrupted"}
+                fallback={
+                  <section class="atlas-file-error" role="alert" aria-live="polite">
+                    <IconFile size={20} strokeWidth={1.4} />
+                    <h2>Couldn’t open this file</h2>
+                    <p>{view.error?.message ?? "The file could not be read."}</p>
+                    <button
+                      type="button"
+                      class="atlas-file-button"
+                      onClick={() => setView("refresh", (key) => key + 1)}
+                    >
+                      Retry
+                    </button>
+                  </section>
+                }
+              >
+                <section class="atlas-file-error" role="status" aria-live="polite">
+                  <IconFile size={20} strokeWidth={1.4} />
+                  <h2>File preview interrupted</h2>
+                  <p>The read ended before it finished. Your file was not changed.</p>
+                  <button
+                    type="button"
+                    class="atlas-file-button"
+                    onClick={() => {
+                      readRetry.count = 0
+                      setView("refresh", (key) => key + 1)
+                    }}
+                  >
+                    Retry
+                  </button>
+                </section>
+              </Show>
             }
           >
             <div

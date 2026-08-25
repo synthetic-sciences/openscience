@@ -33,12 +33,15 @@ describe("session environment prompt", () => {
         )
 
         expect(prompt).toContain(`- ${source.path} (read and write, project scope)`)
-        expect(prompt).toContain("may aggregate multiple connected folders and individual files")
-        expect(prompt).toContain('not a claim that any one directory is "the user\'s project folder."')
+        expect(prompt).toContain("Project files (durable and shared across this project)")
+        expect(prompt).toContain("Session scratch (temporary and isolated to this conversation)")
+        expect(prompt).toContain("Results: immutable project-wide deliverables")
+        expect(prompt).toContain("may aggregate multiple connected folders and files")
+        expect(prompt).toContain("a normal workspace file is not a Result")
+        expect(prompt).toContain("Use the human project name in conversation, not UUID directory components")
         expect(prompt).toContain(
           "Do not expose scratch, managed-project, or connected-folder paths in a generic greeting",
         )
-        expect(prompt).toContain("Do not ask the user to copy or clone an already-connected folder")
         expect(prompt).toContain("Access mode: Full access")
         await Session.remove(session.id)
       },

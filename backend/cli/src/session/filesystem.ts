@@ -14,6 +14,7 @@ import z from "zod"
 import { SessionWorkspace } from "./workspace"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { ToolOutputPath } from "@/tool/tool-output-path"
+import { FileWatcher } from "@/file/watcher"
 
 /**
  * Durable, directional filesystem authority for a session and its project.
@@ -922,6 +923,22 @@ export namespace SessionFilesystem {
   export async function snapshot(sessionID: string): Promise<Snapshot> {
     const filesystem = await state(sessionID)
     const workspace = await SessionWorkspace.touch(sessionID)
+    // The Files pane has now materialized these exact sources. Keep their
+    // watcher inventory in sync with durable grant state; revoked and consumed
+    // roots disappear on the next snapshot while project roots remain owned by
+    // the instance watcher.
+    void FileWatcher.watchSession(sessionID, [
+      workspace.scratchRoot,
+      ...filesystem.grants
+        .filter(
+          (grant) =>
+            !grant.time.consumed &&
+            !grant.time.revoked &&
+            grant.scope !== "once" &&
+            (grant.source === "permission" || grant.source === "api"),
+        )
+        .map((grant) => grant.path),
+    ]).catch(() => {})
     return {
       ...filesystem,
       workspace,
@@ -1013,6 +1030,7 @@ export namespace SessionFilesystem {
         await SessionWorkspace.trash(sessionID)
       }
       await Storage.remove(key(sessionID))
+      await FileWatcher.unwatchSession(sessionID).catch(() => {})
       return AuthoritySignal.publish({
         kind: "filesystem",
         projectID: Instance.project.id,

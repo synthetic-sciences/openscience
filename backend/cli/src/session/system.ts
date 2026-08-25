@@ -11,6 +11,7 @@ import { Config } from "../config/config"
 import { Skill } from "../skill"
 import { PermissionNext } from "../permission/next"
 import { ComputePrompt } from "../compute/prompt"
+import { ProjectAccess } from "../project/access"
 
 export namespace SystemPrompt {
   const skillPrompts = new WeakMap<Skill.Info[], Map<string, string>>()
@@ -195,25 +196,33 @@ Keep only one item in_progress at a time.
     const context = await Promise.all([
       SessionFilesystem.workspace(sessionID),
       SessionFilesystem.state(sessionID),
-      Config.trustedSandbox(),
+      ProjectAccess.status(project),
     ])
     const workspace = context[0]
     const filesystem = context[1]
-    const sandbox = context[2]
+    const projectAccess = context[2]
     const sources = filesystem.grants.filter(
       (grant) =>
         !grant.time.consumed && !grant.time.revoked && (grant.source === "api" || grant.source === "permission"),
     )
-    const access = sandbox.enabled
-      ? "Sandboxed access. Connected folders listed below are already authorized; other host locations may require approval."
-      : "Full access. Local file tools and shell commands may read and write host paths without approval prompts."
+    const access =
+      projectAccess.mode === "ask"
+        ? "Ask for approval. Project actions require explicit approval."
+        : projectAccess.mode === "approve"
+          ? "Approve for me. Routine work in the project is automatically approved inside the sandbox; boundary actions still require approval."
+          : "Full access. Project actions may run with unrestricted host file and network access without approval prompts."
+    const projectName = project.name?.trim() || "Untitled project"
     return [
       [
         `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
         `Here is some useful information about the environment you are running in:`,
         `<env>`,
-        `  Session scratch directory: ${workspace}`,
-        `  OpenScience project directory: ${Instance.directory}`,
+        `  Project: ${projectName}`,
+        `  Project ID: ${project.id}`,
+        `  Session ID: ${sessionID}`,
+        `  Project files (durable and shared across this project): ${Instance.directory}`,
+        `  Session scratch (temporary and isolated to this conversation): ${workspace}`,
+        `  Results: immutable project-wide deliverables saved with the artifact tool`,
         `  Access mode: ${access}`,
         `  Connected project folders:`,
         ...(sources.length
@@ -226,8 +235,9 @@ Keep only one item in_progress at a time.
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
-        `An OpenScience project is a research context that may aggregate multiple connected folders and individual files. The paths above are routing information, not a claim that any one directory is "the user's project folder." Do not expose scratch, managed-project, or connected-folder paths in a generic greeting. Mention a path only when the user asks about location or when it is needed to complete their request.`,
-        `Work directly in a connected project folder when the user refers to its files. Do not ask the user to copy or clone an already-connected folder into the session scratch directory. Use the scratch directory only for temporary work or outputs that do not belong in a connected folder.`,
+        `An OpenScience project is a durable research context that may aggregate multiple connected folders and files. Session scratch belongs only to this conversation. Results are immutable deliverables shared project-wide; a normal workspace file is not a Result until artifact save_file returns its Result ID and version.`,
+        `Work directly in Project files when the user refers to durable project material. Use Session scratch only for temporary work. Promote a scratch or project file to Results explicitly with artifact save_file before citing it as a durable Result or passing it to a Result-only contract.`,
+        `The physical paths above are routing information. Use the human project name in conversation, not UUID directory components. Do not expose scratch, managed-project, or connected-folder paths in a generic greeting. Mention a path only when the user asks about location or when it is needed to complete their request.`,
         `<files>`,
         `  ${
           project.vcs === "git" && false

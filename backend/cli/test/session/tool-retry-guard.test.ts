@@ -543,3 +543,47 @@ test("current and legacy text oversize history require a body strategy change", 
     await expect(ToolRetryGuard.assertWebFetch(ctx, { url: `${url}?page=2` })).resolves.toBeUndefined()
   }
 })
+
+test("an identical failed patch requires a reread before another write", async () => {
+  const patchText = [
+    "*** Begin Patch",
+    "*** Update File: analysis.py",
+    "@@",
+    "-missing old line",
+    "+replacement",
+    "*** End Patch",
+  ].join("\n")
+  const sessionID = "session_patch_retry"
+  const messages = [
+    {
+      info: { id: "message_patch", sessionID, role: "assistant" },
+      parts: [
+        {
+          id: "part_patch",
+          sessionID,
+          messageID: "message_patch",
+          type: "tool",
+          tool: "apply_patch",
+          callID: "call_patch",
+          state: {
+            status: "error",
+            input: { patchText },
+            error: "apply_patch verification failed: Could not find the expected context",
+            time: { start: 1, end: 2 },
+          },
+        },
+      ],
+    },
+  ] as unknown as Tool.Context["messages"]
+  const ctx = { ...context(messages), sessionID }
+
+  await expect(ToolRetryGuard.assertApplyPatch(ctx, patchText)).rejects.toThrow(
+    "This exact patch already failed verification",
+  )
+  await expect(
+    ToolRetryGuard.assertApplyPatch(ctx, patchText.replace("missing old line", "observed current line")),
+  ).resolves.toBeUndefined()
+  await expect(
+    ToolRetryGuard.assertApplyPatch({ ...ctx, messages: [...messages, userMessage(sessionID, 3)] }, patchText),
+  ).resolves.toBeUndefined()
+})

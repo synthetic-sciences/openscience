@@ -981,6 +981,20 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "local",
+                                  "account"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -992,7 +1006,8 @@
                           "fields",
                           "connected",
                           "set_fields",
-                          "updated_at"
+                          "updated_at",
+                          "source"
                         ]
                       }
                     }
@@ -1102,6 +1117,20 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "local",
+                                  "account"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -1113,7 +1142,8 @@
                           "fields",
                           "connected",
                           "set_fields",
-                          "updated_at"
+                          "updated_at",
+                          "source"
                         ]
                       }
                     }
@@ -1259,6 +1289,20 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "local",
+                                  "account"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -1270,7 +1314,8 @@
                           "fields",
                           "connected",
                           "set_fields",
-                          "updated_at"
+                          "updated_at",
+                          "source"
                         ]
                       }
                     }
@@ -1583,6 +1628,7 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
+                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -1788,10 +1834,69 @@
                         "found",
                         "ready"
                       ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
                     }
                   },
                   "required": [
-                    "modal_file"
+                    "modal_file",
+                    "environments"
                   ]
                 }
               }
@@ -1802,6 +1907,334 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.compute.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/compute/environments/repair": {
+      "post": {
+        "operationId": "settings.compute.environments.repair",
+        "summary": "Install or repair managed Python and R starter environments",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "providers": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "verified": {
+                            "type": "boolean"
+                          },
+                          "placeholder": {
+                            "type": "string"
+                          },
+                          "hint": {
+                            "type": "string"
+                          },
+                          "connected": {
+                            "type": "boolean"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "stored",
+                                  "account",
+                                  "modal_toml"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "connected_at": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "last_used": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "verified",
+                          "placeholder",
+                          "hint",
+                          "connected",
+                          "enabled",
+                          "source",
+                          "connected_at",
+                          "last_used"
+                        ]
+                      }
+                    },
+                    "ssh_hosts": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "host": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 253,
+                            "pattern": "^\\S+$"
+                          },
+                          "user": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "^\\S+$"
+                          },
+                          "port": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                          },
+                          "scheduler": {
+                            "default": "none",
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "slurm",
+                              "pbs"
+                            ]
+                          },
+                          "workdir": {
+                            "type": "string"
+                          },
+                          "notes": {
+                            "description": "Operator notes about modules, partitions, scratch paths, and installation rules.",
+                            "type": "string",
+                            "maxLength": 4000
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^SHA256:.*"
+                          },
+                          "host_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000
+                          },
+                          "concurrency": {
+                            "default": 4,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "host"
+                        ]
+                      }
+                    },
+                    "ssh_config_hosts": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "alias": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 253,
+                            "pattern": "^\\S+$"
+                          },
+                          "hostname": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 253,
+                            "pattern": "^\\S+$"
+                          },
+                          "user": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "^\\S+$"
+                          },
+                          "port": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                          }
+                        },
+                        "required": [
+                          "alias"
+                        ]
+                      }
+                    },
+                    "modal": {
+                      "default": {
+                        "app": "openscience",
+                        "image": "python:3.12-slim",
+                        "network": "none",
+                        "timeout_minutes": 60,
+                        "concurrency": 10
+                      },
+                      "type": "object",
+                      "properties": {
+                        "app": {
+                          "default": "openscience",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "image": {
+                          "default": "python:3.12-slim",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "network": {
+                          "default": "none",
+                          "type": "string",
+                          "enum": [
+                            "unrestricted",
+                            "none"
+                          ]
+                        },
+                        "timeout_minutes": {
+                          "default": 60,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1440
+                        },
+                        "concurrency": {
+                          "default": 10,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        }
+                      }
+                    },
+                    "modal_file": {
+                      "type": "object",
+                      "properties": {
+                        "found": {
+                          "type": "boolean"
+                        },
+                        "ready": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "found",
+                        "ready"
+                      ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "modal_file",
+                    "environments"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.compute.environments.repair({\n  ...\n})"
           }
         ]
       }
@@ -1851,6 +2284,7 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
+                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -2056,10 +2490,69 @@
                         "found",
                         "ready"
                       ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
                     }
                   },
                   "required": [
-                    "modal_file"
+                    "modal_file",
+                    "environments"
                   ]
                 }
               }
@@ -2155,6 +2648,7 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
+                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -2360,10 +2854,69 @@
                         "found",
                         "ready"
                       ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
                     }
                   },
                   "required": [
-                    "modal_file"
+                    "modal_file",
+                    "environments"
                   ]
                 }
               }
@@ -2433,6 +2986,7 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
+                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -2638,10 +3192,69 @@
                         "found",
                         "ready"
                       ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
                     }
                   },
                   "required": [
-                    "modal_file"
+                    "modal_file",
+                    "environments"
                   ]
                 }
               }
@@ -2738,6 +3351,7 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
+                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -2943,10 +3557,69 @@
                         "found",
                         "ready"
                       ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
                     }
                   },
                   "required": [
-                    "modal_file"
+                    "modal_file",
+                    "environments"
                   ]
                 }
               }
@@ -3236,6 +3909,7 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
+                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -3441,10 +4115,69 @@
                         "found",
                         "ready"
                       ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
                     }
                   },
                   "required": [
-                    "modal_file"
+                    "modal_file",
+                    "environments"
                   ]
                 }
               }
@@ -3561,6 +4294,7 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
+                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -3766,10 +4500,69 @@
                         "found",
                         "ready"
                       ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
                     }
                   },
                   "required": [
-                    "modal_file"
+                    "modal_file",
+                    "environments"
                   ]
                 }
               }
@@ -3989,6 +4782,7 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
+                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -4194,10 +4988,69 @@
                         "found",
                         "ready"
                       ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
                     }
                   },
                   "required": [
-                    "modal_file"
+                    "modal_file",
+                    "environments"
                   ]
                 }
               }
@@ -4303,6 +5156,7 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
+                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -4508,10 +5362,69 @@
                         "found",
                         "ready"
                       ]
+                    },
+                    "environments": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "installing",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "language": {
+                                "type": "string",
+                                "enum": [
+                                  "python",
+                                  "r"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "packages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "language",
+                              "ready",
+                              "path",
+                              "packages"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "phase",
+                        "environments"
+                      ]
                     }
                   },
                   "required": [
-                    "modal_file"
+                    "modal_file",
+                    "environments"
                   ]
                 }
               }
@@ -6430,6 +7343,21 @@
                             "type": "integer",
                             "exclusiveMinimum": 0,
                             "maximum": 9007199254740991
+                          },
+                          "accessRevision": {
+                            "default": 1,
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "accessMode": {
+                            "default": "approve",
+                            "type": "string",
+                            "enum": [
+                              "ask",
+                              "approve",
+                              "full"
+                            ]
                           },
                           "grantRevision": {
                             "type": "integer",
@@ -8839,6 +9767,21 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
+                        },
+                        "accessRevision": {
+                          "default": 1,
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "accessMode": {
+                          "default": "approve",
+                          "type": "string",
+                          "enum": [
+                            "ask",
+                            "approve",
+                            "full"
+                          ]
                         },
                         "grantRevision": {
                           "type": "integer",
@@ -12182,6 +13125,21 @@
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
                         },
+                        "accessRevision": {
+                          "default": 1,
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "accessMode": {
+                          "default": "approve",
+                          "type": "string",
+                          "enum": [
+                            "ask",
+                            "approve",
+                            "full"
+                          ]
+                        },
                         "grantRevision": {
                           "type": "integer",
                           "exclusiveMinimum": 0,
@@ -14619,6 +15577,21 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
+                        },
+                        "accessRevision": {
+                          "default": 1,
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "accessMode": {
+                          "default": "approve",
+                          "type": "string",
+                          "enum": [
+                            "ask",
+                            "approve",
+                            "full"
+                          ]
                         },
                         "grantRevision": {
                           "type": "integer",
@@ -17058,6 +18031,21 @@
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
                         },
+                        "accessRevision": {
+                          "default": 1,
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "accessMode": {
+                          "default": "approve",
+                          "type": "string",
+                          "enum": [
+                            "ask",
+                            "approve",
+                            "full"
+                          ]
+                        },
                         "grantRevision": {
                           "type": "integer",
                           "exclusiveMinimum": 0,
@@ -19426,6 +20414,389 @@
         ]
       }
     },
+    "/project/{projectID}/access": {
+      "get": {
+        "operationId": "project.access.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "projectID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Inspect project action access",
+        "description": "Return the atomic project-scoped Ask, Approve, or Full access mode and its effective sandbox policy.",
+        "responses": {
+          "200": {
+            "description": "Project action access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "root": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "trustRevision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "ask",
+                        "approve",
+                        "full"
+                      ]
+                    },
+                    "requestedMode": {
+                      "type": "string",
+                      "enum": [
+                        "ask",
+                        "approve",
+                        "full"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "default",
+                        "legacy",
+                        "persisted"
+                      ]
+                    },
+                    "trusted": {
+                      "type": "boolean"
+                    },
+                    "managed": {
+                      "type": "boolean"
+                    },
+                    "sandbox": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "network": {
+                          "type": "string",
+                          "enum": [
+                            "allow",
+                            "deny"
+                          ]
+                        },
+                        "allowWrite": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "onUnavailable": {
+                          "type": "string",
+                          "enum": [
+                            "warn",
+                            "error",
+                            "allow"
+                          ]
+                        },
+                        "requireProjectTrust": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "network",
+                        "allowWrite",
+                        "onUnavailable",
+                        "requireProjectTrust"
+                      ]
+                    },
+                    "sandboxStatus": {
+                      "type": "object",
+                      "properties": {
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "backend": {
+                          "type": "string",
+                          "enum": [
+                            "seatbelt",
+                            "bubblewrap",
+                            "none"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "available",
+                        "backend"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "projectID",
+                    "root",
+                    "revision",
+                    "trustRevision",
+                    "mode",
+                    "requestedMode",
+                    "source",
+                    "trusted",
+                    "managed",
+                    "sandbox",
+                    "sandboxStatus"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.project.access.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "project.access.update",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "projectID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Update project action access",
+        "description": "Atomically update this project's action approval and containment mode without changing any other project.",
+        "responses": {
+          "200": {
+            "description": "Updated project action access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "root": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "trustRevision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "ask",
+                        "approve",
+                        "full"
+                      ]
+                    },
+                    "requestedMode": {
+                      "type": "string",
+                      "enum": [
+                        "ask",
+                        "approve",
+                        "full"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "default",
+                        "legacy",
+                        "persisted"
+                      ]
+                    },
+                    "trusted": {
+                      "type": "boolean"
+                    },
+                    "managed": {
+                      "type": "boolean"
+                    },
+                    "sandbox": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "network": {
+                          "type": "string",
+                          "enum": [
+                            "allow",
+                            "deny"
+                          ]
+                        },
+                        "allowWrite": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "onUnavailable": {
+                          "type": "string",
+                          "enum": [
+                            "warn",
+                            "error",
+                            "allow"
+                          ]
+                        },
+                        "requireProjectTrust": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "network",
+                        "allowWrite",
+                        "onUnavailable",
+                        "requireProjectTrust"
+                      ]
+                    },
+                    "sandboxStatus": {
+                      "type": "object",
+                      "properties": {
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "backend": {
+                          "type": "string",
+                          "enum": [
+                            "seatbelt",
+                            "bubblewrap",
+                            "none"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "available",
+                        "backend"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "projectID",
+                    "root",
+                    "revision",
+                    "trustRevision",
+                    "mode",
+                    "requestedMode",
+                    "source",
+                    "trusted",
+                    "managed",
+                    "sandbox",
+                    "sandboxStatus"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "ask",
+                      "approve",
+                      "full"
+                    ]
+                  },
+                  "root": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.project.access.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project/{projectID}/execution": {
       "get": {
         "operationId": "project.execution",
@@ -19536,6 +20907,21 @@
                       "type": "integer",
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "accessRevision": {
+                      "default": 1,
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "accessMode": {
+                      "default": "approve",
+                      "type": "string",
+                      "enum": [
+                        "ask",
+                        "approve",
+                        "full"
+                      ]
                     },
                     "grantRevision": {
                       "type": "integer",
@@ -33967,6 +35353,21 @@
                                     "exclusiveMinimum": 0,
                                     "maximum": 9007199254740991
                                   },
+                                  "accessRevision": {
+                                    "default": 1,
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "accessMode": {
+                                    "default": "approve",
+                                    "type": "string",
+                                    "enum": [
+                                      "ask",
+                                      "approve",
+                                      "full"
+                                    ]
+                                  },
                                   "grantRevision": {
                                     "type": "integer",
                                     "exclusiveMinimum": 0,
@@ -34572,6 +35973,21 @@
                               "type": "integer",
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
+                            },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
                             },
                             "grantRevision": {
                               "type": "integer",
@@ -35191,6 +36607,21 @@
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
                             },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
+                            },
                             "grantRevision": {
                               "type": "integer",
                               "exclusiveMinimum": 0,
@@ -35808,6 +37239,21 @@
                               "type": "integer",
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
+                            },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
                             },
                             "grantRevision": {
                               "type": "integer",
@@ -36571,6 +38017,21 @@
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
                             },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
+                            },
                             "grantRevision": {
                               "type": "integer",
                               "exclusiveMinimum": 0,
@@ -37161,6 +38622,21 @@
                               "type": "integer",
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
+                            },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
                             },
                             "grantRevision": {
                               "type": "integer",
@@ -37786,6 +39262,21 @@
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
                             },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
+                            },
                             "grantRevision": {
                               "type": "integer",
                               "exclusiveMinimum": 0,
@@ -38410,6 +39901,21 @@
                               "type": "integer",
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
+                            },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
                             },
                             "grantRevision": {
                               "type": "integer",
@@ -39246,6 +40752,21 @@
                                     "exclusiveMinimum": 0,
                                     "maximum": 9007199254740991
                                   },
+                                  "accessRevision": {
+                                    "default": 1,
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "accessMode": {
+                                    "default": "approve",
+                                    "type": "string",
+                                    "enum": [
+                                      "ask",
+                                      "approve",
+                                      "full"
+                                    ]
+                                  },
                                   "grantRevision": {
                                     "type": "integer",
                                     "exclusiveMinimum": 0,
@@ -39851,6 +41372,21 @@
                               "type": "integer",
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
+                            },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
                             },
                             "grantRevision": {
                               "type": "integer",
@@ -40470,6 +42006,21 @@
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
                             },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
+                            },
                             "grantRevision": {
                               "type": "integer",
                               "exclusiveMinimum": 0,
@@ -41087,6 +42638,21 @@
                               "type": "integer",
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
+                            },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
                             },
                             "grantRevision": {
                               "type": "integer",
@@ -41861,6 +43427,21 @@
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
                             },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
+                            },
                             "grantRevision": {
                               "type": "integer",
                               "exclusiveMinimum": 0,
@@ -42451,6 +44032,21 @@
                               "type": "integer",
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
+                            },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
                             },
                             "grantRevision": {
                               "type": "integer",
@@ -43082,6 +44678,21 @@
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
                             },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
+                            },
                             "grantRevision": {
                               "type": "integer",
                               "exclusiveMinimum": 0,
@@ -43712,6 +45323,21 @@
                               "type": "integer",
                               "exclusiveMinimum": 0,
                               "maximum": 9007199254740991
+                            },
+                            "accessRevision": {
+                              "default": 1,
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accessMode": {
+                              "default": "approve",
+                              "type": "string",
+                              "enum": [
+                                "ask",
+                                "approve",
+                                "full"
+                              ]
                             },
                             "grantRevision": {
                               "type": "integer",
@@ -46608,6 +48234,153 @@
           "properties"
         ]
       },
+      "Event.project.access.changed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "project.access.changed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "object",
+                "properties": {
+                  "projectID": {
+                    "type": "string"
+                  },
+                  "root": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "trustRevision": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "ask",
+                      "approve",
+                      "full"
+                    ]
+                  },
+                  "requestedMode": {
+                    "type": "string",
+                    "enum": [
+                      "ask",
+                      "approve",
+                      "full"
+                    ]
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "default",
+                      "legacy",
+                      "persisted"
+                    ]
+                  },
+                  "trusted": {
+                    "type": "boolean"
+                  },
+                  "managed": {
+                    "type": "boolean"
+                  },
+                  "sandbox": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "network": {
+                        "type": "string",
+                        "enum": [
+                          "allow",
+                          "deny"
+                        ]
+                      },
+                      "allowWrite": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "onUnavailable": {
+                        "type": "string",
+                        "enum": [
+                          "warn",
+                          "error",
+                          "allow"
+                        ]
+                      },
+                      "requireProjectTrust": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "network",
+                      "allowWrite",
+                      "onUnavailable",
+                      "requireProjectTrust"
+                    ]
+                  },
+                  "sandboxStatus": {
+                    "type": "object",
+                    "properties": {
+                      "available": {
+                        "type": "boolean"
+                      },
+                      "backend": {
+                        "type": "string",
+                        "enum": [
+                          "seatbelt",
+                          "bubblewrap",
+                          "none"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "available",
+                      "backend"
+                    ]
+                  }
+                },
+                "required": [
+                  "projectID",
+                  "root",
+                  "revision",
+                  "trustRevision",
+                  "mode",
+                  "requestedMode",
+                  "source",
+                  "trusted",
+                  "managed",
+                  "sandbox",
+                  "sandboxStatus"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.vcs.branch.updated": {
         "type": "object",
         "properties": {
@@ -48717,6 +50490,37 @@
               },
               "total": {
                 "type": "number"
+              },
+              "budget": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "type": "number"
+                  },
+                  "newest": {
+                    "type": "number"
+                  },
+                  "history": {
+                    "type": "number"
+                  },
+                  "usable": {
+                    "type": "number"
+                  },
+                  "soft": {
+                    "type": "number"
+                  },
+                  "hard": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "total",
+                  "newest",
+                  "history",
+                  "usable",
+                  "soft",
+                  "hard"
+                ]
               }
             },
             "required": [
@@ -49349,6 +51153,21 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "accessRevision": {
+                "default": 1,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "accessMode": {
+                "default": "approve",
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "approve",
+                  "full"
+                ]
+              },
               "grantRevision": {
                 "type": "integer",
                 "exclusiveMinimum": 0,
@@ -49702,6 +51521,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.filesystem.changed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.project.access.changed"
           },
           {
             "$ref": "#/components/schemas/Event.vcs.branch.updated"

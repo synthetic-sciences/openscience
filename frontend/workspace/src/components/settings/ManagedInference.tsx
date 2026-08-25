@@ -142,6 +142,17 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   onMount(() => {
     refresh()
     window.addEventListener("focus", refresh)
+    const visibility = () => {
+      if (document.visibilityState === "visible") void loadWallet()
+    }
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadWallet()
+    }, 15_000)
+    document.addEventListener("visibilitychange", visibility)
+    onCleanup(() => {
+      window.clearInterval(interval)
+      document.removeEventListener("visibilitychange", visibility)
+    })
   })
   onCleanup(() => {
     window.removeEventListener("focus", refresh)

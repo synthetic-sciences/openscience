@@ -25,6 +25,61 @@ export interface FileDescription {
   download: boolean
 }
 
+export interface FileRequestIdentity {
+  projectID?: string
+  directory: string
+  sessionID?: string
+  path: string
+}
+
+export interface FileRequestTicket {
+  id: number
+  key: string
+  controller: AbortController
+}
+
+/**
+ * File reads are owned by the exact project, session, and path that started
+ * them. A sequential id alone protects one mounted component, but it cannot
+ * explain whether a late response belongs to the project/session now shown in
+ * that component after navigation.
+ */
+export function fileRequestKey(input: FileRequestIdentity) {
+  return [input.projectID ?? "", input.directory, input.sessionID ?? "", input.path].join("\n")
+}
+
+/** Browser and transport implementations use several spellings for the same
+ * expected cancellation. Keep this narrow enough that genuine I/O failures
+ * still reach the file error surface. */
+export function isFileRequestCancellation(error: unknown) {
+  const value = error as { name?: unknown; message?: unknown } | undefined
+  const name = typeof value?.name === "string" ? value.name : ""
+  if (name === "AbortError" || name === "TimeoutError") return true
+  const message = String(value?.message ?? error ?? "")
+  return /\bab(?:ort|orted)\b|cancell?ed|the user aborted|signal is aborted/i.test(message)
+}
+
+/** Single-view request owner. Starting a new identity actively cancels the
+ * previous transport and makes its eventual resolution ineligible to render. */
+export function createFileRequestOwner() {
+  let next = 0
+  let current: FileRequestTicket | undefined
+  return {
+    begin(key: string): FileRequestTicket {
+      current?.controller.abort(new DOMException("File request was superseded", "AbortError"))
+      current = { id: ++next, key, controller: new AbortController() }
+      return current
+    },
+    owns(ticket: FileRequestTicket, key = ticket.key) {
+      return current === ticket && current.key === key && !ticket.controller.signal.aborted
+    },
+    dispose() {
+      current?.controller.abort(new DOMException("File view closed", "AbortError"))
+      current = undefined
+    },
+  }
+}
+
 const sources = new Set<FileKind>(["markdown", "html", "table", "scientific-data", "science", "code"])
 
 /** Raw PDF previews remain bounded even though the download endpoint itself supports larger files. */
@@ -132,9 +187,14 @@ export function reconcileSavedDraft(current: string, submitted: string, saved: s
   return { draft: current === submitted ? saved : current, saved }
 }
 
-export async function readFile(reader: () => Promise<FileData>): Promise<{ data?: FileData; error?: Error }> {
+export async function readFile(
+  reader: () => Promise<FileData>,
+): Promise<{ data?: FileData; error?: Error; cancelled?: true }> {
   return reader().then(
     (data) => ({ data }),
-    (error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)) }),
+    (error: unknown) =>
+      isFileRequestCancellation(error)
+        ? { cancelled: true as const }
+        : { error: error instanceof Error ? error : new Error(String(error)) },
   )
 }

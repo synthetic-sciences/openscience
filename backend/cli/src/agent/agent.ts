@@ -22,6 +22,7 @@ import { Plugin } from "@/plugin"
 import { State } from "@/project/state"
 import { OutboundTelemetry } from "@/telemetry/outbound"
 import { ProjectTrust } from "@/project/trust"
+import { ProjectAccess } from "@/project/access"
 import { resolveCredentialSource, type CredentialSource } from "@/session/billing-gate"
 import { randomUUID } from "node:crypto"
 
@@ -53,12 +54,13 @@ export namespace Agent {
   export type Info = z.infer<typeof Info>
 
   const compute = async () => {
-    const [cfg, sandbox, trust] = await Promise.all([
+    const [cfg, projectAccess, trust] = await Promise.all([
       Config.getExecution(),
-      Config.trustedSandbox(),
+      ProjectAccess.status(Instance.project),
       ProjectTrust.status(Instance.project),
     ])
-    const accessMode = !trust.canExecuteProjectCode ? "ask" : sandbox.enabled ? "approve" : "full"
+    const sandbox = projectAccess.sandbox
+    const accessMode = !trust.canExecuteProjectCode ? "ask" : projectAccess.mode
     const boundaryAction = sandbox.enabled ? "ask" : "allow"
 
     let defaults = PermissionNext.fromConfig({

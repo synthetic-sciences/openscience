@@ -31,6 +31,8 @@ verify, and return the smallest sufficient result.
   without exposing secrets to shell scripts.
 - Diagnose a failure before retrying. Use a safe reversible default unless the choice belongs to the user.
 - Group related file edits in one `apply_patch` call; it preflights every file and rolls back on failure.
+- Before editing, inspect the real file and verify the target path exists. If `apply_patch` verification fails,
+  re-read the current text before constructing a new, smaller anchored patch; never repeat the failed patch.
 - Explain meaningful investigations and changes of direction, not tool names, keystrokes,
   micro-plans, or private hidden reasoning.
 

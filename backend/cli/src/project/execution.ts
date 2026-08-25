@@ -1,12 +1,12 @@
 import crypto from "crypto"
 import z from "zod"
 import { NamedError } from "@synsci/util/error"
-import { Config } from "@/config/config"
 import { Sandbox } from "@/sandbox/sandbox"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Instance } from "./instance"
 import { Project } from "./project"
 import { ProjectTrust } from "./trust"
+import { ProjectAccess } from "./access"
 import { Vcs } from "./vcs"
 
 /**
@@ -43,6 +43,8 @@ export namespace ExecutionAuthority {
     projectID: z.string(),
     sessionID: z.string(),
     trustRevision: z.number().int().positive(),
+    accessRevision: z.number().int().positive().default(1),
+    accessMode: ProjectAccess.Mode.default("approve"),
     grantRevision: z.number().int().positive(),
     generation: z.string(),
     /** Canonical project instance directory. Older persisted job decisions
@@ -117,22 +119,22 @@ export namespace ExecutionAuthority {
       })
     }
 
-    const [trust, filesystem, policy, metadata] = await Promise.all([
+    const [trust, access, filesystem, metadata] = await Promise.all([
       ProjectTrust.status(Instance.project),
+      ProjectAccess.status(Instance.project),
       SessionFilesystem.snapshot(input.sessionID),
-      Config.trustedSandbox(),
       Vcs.metadataRoot(),
     ])
     const backend = Sandbox.describe()
     const sandbox = {
-      enabled: policy.enabled ?? true,
-      network: policy.network ?? "deny",
-      allowWrite: policy.allowWrite ?? [],
-      onUnavailable: policy.onUnavailable ?? "error",
-      requireProjectTrust: policy.requireProjectTrust ?? false,
+      enabled: access.sandbox.enabled,
+      network: access.sandbox.network,
+      allowWrite: access.sandbox.allowWrite,
+      onUnavailable: access.sandbox.onUnavailable,
+      requireProjectTrust: access.sandbox.requireProjectTrust,
       backend: backend.backend,
       available: backend.available,
-      enforced: (policy.enabled ?? true) && backend.available,
+      enforced: access.sandbox.enabled && backend.available,
     }
     const unavailable = sandbox.enabled && !sandbox.available && sandbox.onUnavailable === "error"
     const untrusted = !trust.canExecuteProjectCode
@@ -163,6 +165,8 @@ export namespace ExecutionAuthority {
           projectID: Instance.project.id,
           sessionID: input.sessionID,
           trustRevision: trust.revision,
+          accessRevision: access.revision,
+          accessMode: access.mode,
           grantRevision: filesystem.revision,
           sandbox,
         }),
@@ -178,6 +182,8 @@ export namespace ExecutionAuthority {
       projectID: Instance.project.id,
       sessionID: input.sessionID,
       trustRevision: trust.revision,
+      accessRevision: access.revision,
+      accessMode: access.mode,
       grantRevision: filesystem.revision,
       generation,
       directory: Instance.directory,

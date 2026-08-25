@@ -17,7 +17,6 @@ import {
   RESEARCH_ACCESS_OPTIONS,
   researchAccessContract,
   researchAccessMode,
-  researchAccessMutations,
   type ResearchAccessMode,
 } from "../research-access"
 import { Card, PanelBody, PanelHeader, PanelScroll, Row, RowCopy, Section } from "./_shared"
@@ -38,10 +37,10 @@ export default function ResearchTools() {
   const [saving, setSaving] = createSignal(false)
   const [access, setAccess] = createSignal<{
     root: string
-    trusted: boolean
-    sandboxEnabled: boolean
-    sandboxAvailable: boolean
-    sandboxUnavailableReason?: string
+    mode: ResearchAccessMode
+    requestedMode: ResearchAccessMode
+    managed: boolean
+    sandboxStatus: { available: boolean; reason?: string }
   }>()
   const [accessSaving, setAccessSaving] = createSignal(false)
   const fetchFn = () => platform.fetch ?? fetch
@@ -62,23 +61,9 @@ export default function ResearchTools() {
   }
 
   const loadAccess = async (project: NonNullable<ReturnType<typeof route>>) => {
-    const [trust, sandboxResponse] = await Promise.all([
-      sdk.client.project.trust.get({ projectID: project.projectID, directory: project.directory }),
-      projectRequest("/settings/sandbox"),
-    ])
-    if (!trust.data) throw new Error("Project trust status was empty.")
-    if (!sandboxResponse.ok) throw new Error(await sandboxResponse.text())
-    const sandbox = (await sandboxResponse.json()) as {
-      config: { enabled?: boolean }
-      status?: { available?: boolean; reason?: string }
-    }
-    setAccess({
-      root: trust.data.root,
-      trusted: trust.data.canExecuteProjectCode,
-      sandboxEnabled: sandbox.config.enabled !== false,
-      sandboxAvailable: sandbox.status?.available === true,
-      sandboxUnavailableReason: sandbox.status?.reason,
-    })
+    const response = await projectRequest(`/project/${encodeURIComponent(project.projectID)}/access`)
+    if (!response.ok) throw new Error(await response.text())
+    setAccess(await response.json())
   }
 
   onMount(() => {
@@ -125,7 +110,7 @@ export default function ResearchTools() {
     const project = route()
     const current = access()
     if (!project || !current || accessSaving() || researchAccessMode(current) === mode) return
-    if (mode !== "full" && !current.sandboxAvailable) return
+    if (mode !== "full" && !current.sandboxStatus.available) return
     if (mode === "full") {
       const confirmed = await confirmDialog(dialog, {
         title: "Enable Full access?",
@@ -138,30 +123,13 @@ export default function ResearchTools() {
     }
     setAccessSaving(true)
     try {
-      let next = { ...current }
-      for (const mutation of researchAccessMutations(mode)) {
-        if (mutation.kind === "sandbox") {
-          if (next.sandboxEnabled === mutation.enabled) continue
-          const response = await projectRequest("/settings/sandbox", {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ enabled: mutation.enabled }),
-          })
-          if (!response.ok) throw new Error(await response.text())
-          const payload = (await response.json()) as { config: { enabled?: boolean } }
-          next.sandboxEnabled = payload.config.enabled !== false
-          continue
-        }
-        if (next.trusted === mutation.trusted) continue
-        const result = await sdk.client.project.trust.update({
-          projectID: project.projectID,
-          directory: project.directory,
-          body: mutation.trusted ? { trusted: true, root: next.root } : { trusted: false },
-        })
-        if (!result.data) throw new Error("Project trust update was empty.")
-        next = { ...next, root: result.data.root, trusted: result.data.canExecuteProjectCode }
-      }
-      setAccess(next)
+      const response = await projectRequest(`/project/${encodeURIComponent(project.projectID)}/access`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode, ...(mode === "ask" ? {} : { root: current.root }) }),
+      })
+      if (!response.ok) throw new Error(await response.text())
+      setAccess(await response.json())
       showToast({
         variant: "success",
         title: `${RESEARCH_ACCESS_OPTIONS.find((item) => item.value === mode)?.label} enabled`,
@@ -243,7 +211,7 @@ export default function ResearchTools() {
                 <For each={RESEARCH_ACCESS_OPTIONS}>
                   {(option) => {
                     const contract = () => researchAccessContract(option.value)
-                    const unavailable = () => option.value !== "full" && access()?.sandboxAvailable === false
+                    const unavailable = () => option.value !== "full" && access()?.sandboxStatus.available === false
                     return (
                       <button
                         type="button"
@@ -258,7 +226,7 @@ export default function ResearchTools() {
                           <strong>{option.label}</strong>
                           <small>
                             {unavailable()
-                              ? `Unavailable: ${access()?.sandboxUnavailableReason ?? "sandbox backend not installed"}`
+                              ? `Unavailable: ${access()?.sandboxStatus.reason ?? "sandbox backend not installed"}`
                               : option.description}
                           </small>
                           <code>

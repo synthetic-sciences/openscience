@@ -4,15 +4,13 @@ import {
   researchAccessContract,
   researchAccessLabel,
   researchAccessMode,
-  researchAccessMutations,
 } from "./research-access"
 
 describe("research access modes", () => {
-  test("derives the visible mode from effective trust and sandbox state", () => {
-    expect(researchAccessMode({ trusted: false, sandboxEnabled: true })).toBe("ask")
-    expect(researchAccessMode({ trusted: false, sandboxEnabled: false })).toBe("ask")
-    expect(researchAccessMode({ trusted: true, sandboxEnabled: true })).toBe("approve")
-    expect(researchAccessMode({ trusted: true, sandboxEnabled: false })).toBe("full")
+  test("uses the backend's atomic project-scoped mode", () => {
+    expect(researchAccessMode({ mode: "ask" })).toBe("ask")
+    expect(researchAccessMode({ mode: "approve" })).toBe("approve")
+    expect(researchAccessMode({ mode: "full" })).toBe("full")
   })
 
   test("reports the confirmed mode instead of the stale previous label", () => {
@@ -22,10 +20,9 @@ describe("research access modes", () => {
     expect(researchAccessLabel("full")).toBe("Full access")
   })
 
-  test("a fresh trusted and contained project resolves to Approve while explicit sandbox false stays Full", () => {
+  test("a fresh project defaults to Approve", () => {
     expect(DEFAULT_RESEARCH_ACCESS_MODE).toBe("approve")
-    expect(researchAccessMode({ trusted: true, sandboxEnabled: true })).toBe("approve")
-    expect(researchAccessMode({ trusted: true, sandboxEnabled: false })).toBe("full")
+    expect(researchAccessMode({ mode: DEFAULT_RESEARCH_ACCESS_MODE })).toBe("approve")
   })
 
   test("maps each label to the requested sandbox and approval contract", () => {
@@ -44,20 +41,5 @@ describe("research access modes", () => {
       approval: "never",
       review: "none",
     })
-  })
-
-  test("orders mutations so a transition never opens an unintended gap", () => {
-    expect(researchAccessMutations("ask")).toEqual([
-      { kind: "sandbox", enabled: true },
-      { kind: "trust", trusted: false },
-    ])
-    expect(researchAccessMutations("approve")).toEqual([
-      { kind: "sandbox", enabled: true },
-      { kind: "trust", trusted: true },
-    ])
-    expect(researchAccessMutations("full")).toEqual([
-      { kind: "trust", trusted: true },
-      { kind: "sandbox", enabled: false },
-    ])
   })
 })

@@ -207,7 +207,7 @@ test("global policy can require project trust even for enforced sandbox executio
   }
 })
 
-test("unsandboxed host execution requires trust, then runs only after trust is granted", async () => {
+test("Ask stays contained while a trusted legacy Full project may use the host", async () => {
   const previous = await Config.trustedSandbox()
   try {
     await Config.setSandbox({ enabled: false, requireProjectTrust: false })
@@ -217,22 +217,13 @@ test("unsandboxed host execution requires trust, then runs only after trust is g
       fn: async () => {
         await ProjectTrust.update(Instance.project, { trusted: false })
         const session = await Session.create({})
-        const denied = await ExecutionAuthority.decide({ sessionID: session.id, capability: "shell" })
-        expect(denied).toMatchObject({
-          allowed: false,
-          reason: "project_untrusted",
-          mode: "read_only",
-          sandbox: { enabled: false, enforced: false },
-        })
-        expect(denied.message).toContain("without an enforced OS sandbox")
-        const error = await ExecutionAuthority.require({ sessionID: session.id, capability: "shell" }).catch(
-          (cause) => cause,
-        )
-        expect(error).toBeInstanceOf(ExecutionAuthority.DeniedError)
-        expect(error.message).toBe(denied.message)
-        expect(error.toObject()).toMatchObject({
-          name: "ExecutionAuthorityDeniedError",
-          data: { message: denied.message },
+        const contained = await ExecutionAuthority.decide({ sessionID: session.id, capability: "shell" })
+        expect(contained).toMatchObject({
+          allowed: Sandbox.available(),
+          reason: Sandbox.available() ? "allowed" : "sandbox_unavailable",
+          mode: Sandbox.available() ? "sandboxed" : "read_only",
+          accessMode: "ask",
+          sandbox: { enabled: true, enforced: Sandbox.available() },
         })
 
         const status = await ProjectTrust.status(Instance.project)
@@ -241,6 +232,7 @@ test("unsandboxed host execution requires trust, then runs only after trust is g
           allowed: true,
           reason: "allowed",
           mode: "host",
+          accessMode: "full",
         })
       },
     })

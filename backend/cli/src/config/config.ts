@@ -1776,7 +1776,10 @@ export namespace Config {
    * boundary, so an untrusted repo's `openscience.json` must not be able to weaken
    * or disable it. Managed (enterprise) config wins over the user's global config.
    */
-  export async function trustedSandbox(): Promise<Sandbox> {
+  export async function trustedSandboxPolicy(): Promise<{
+    config: Sandbox
+    managed: Sandbox
+  }> {
     const base = (await global()).sandbox
     let managed: Sandbox | undefined
     if (existsSync(managedConfigDir)) {
@@ -1786,14 +1789,21 @@ export namespace Config {
     }
     const policy = { ...(base ?? {}), ...(managed ?? {}) }
     return {
-      // New installations start in the low-friction contained mode. `false`
-      // remains an explicit, durable Full access choice for existing users.
-      enabled: policy.enabled ?? true,
-      network: policy.network ?? "deny",
-      allowWrite: policy.allowWrite ?? [],
-      onUnavailable: policy.onUnavailable ?? "error",
-      requireProjectTrust: policy.requireProjectTrust ?? false,
+      managed: managed ?? {},
+      config: {
+        // New installations start in the low-friction contained mode. `false`
+        // remains an explicit, durable Full access choice for existing users.
+        enabled: policy.enabled ?? true,
+        network: policy.network ?? "deny",
+        allowWrite: policy.allowWrite ?? [],
+        onUnavailable: policy.onUnavailable ?? "error",
+        requireProjectTrust: policy.requireProjectTrust ?? false,
+      },
     }
+  }
+
+  export async function trustedSandbox(): Promise<Sandbox> {
+    return trustedSandboxPolicy().then((value) => value.config)
   }
 
   /** Merge a patch into the GLOBAL `sandbox` config block, JSONC-preserving. The

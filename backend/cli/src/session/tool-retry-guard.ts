@@ -1,4 +1,5 @@
 import path from "node:path"
+import crypto from "node:crypto"
 import type { Tool } from "@/tool/tool"
 import { MessageV2 } from "./message-v2"
 
@@ -143,7 +144,7 @@ function messageEvents(messages: MessageV2.WithParts[]): HistoryEvent[] {
   const result = messages.flatMap((message) =>
     message.parts.flatMap((part): HistoryEvent[] => {
       if (part.type !== "tool" || part.state.status === "pending" || part.state.status === "running") return []
-      if (!["webfetch", "python", "notebook", "r", "rkernel"].includes(part.tool)) return []
+      if (!["webfetch", "python", "notebook", "r", "rkernel", "apply_patch"].includes(part.tool)) return []
       if (part.state.status !== "error") return []
       return [
         {
@@ -186,6 +187,34 @@ async function events(ctx: Tool.Context): Promise<HistoryEvent[]> {
 }
 
 export namespace ToolRetryGuard {
+  function patchHash(value: string) {
+    return crypto.createHash("sha256").update(value.replace(/\r\n?/g, "\n")).digest("hex")
+  }
+
+  export async function assertApplyPatch(ctx: Tool.Context, patchText: string) {
+    const expected = patchHash(patchText)
+    const previous = (await events(ctx))
+      .filter((event): event is Extract<HistoryEvent, { kind: "error" }> => event.kind === "error")
+      .filter((event) => event.tool === "apply_patch")
+      .filter((event) => /apply_patch verification failed/i.test(event.error))
+      .findLast(
+        (event) =>
+          typeof event.input.patchText === "string" &&
+          patchHash(event.input.patchText) === expected &&
+          !userTurnAfter(ctx, event.at),
+      )
+    if (!previous) return
+    throw blocked(
+      {
+        code: "apply_patch_reread_required",
+        tool: "apply_patch",
+        prior_call_id: previous.callID,
+        patch_sha256: expected,
+      },
+      "This exact patch already failed verification in the current user turn. It was stopped before another file write or approval. Re-read the current file around the intended edit and construct a new patch from the observed text; use a smaller anchored hunk if the file changed.",
+    )
+  }
+
   /** WHATWG canonicalization lower-cases the host/scheme, removes default
    * ports, and normalizes escapes. Fragments are client-only and therefore do
    * not distinguish network resources; query text and path remain intact. */

@@ -21,7 +21,8 @@ describe("session-scoped file requests", () => {
     expect(pane).toContain('transport("/file", undefined, query)')
     expect(preview).toContain('const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)')
     expect(preview).toContain("const activeSession = sessionID()")
-    expect(preview).toContain("sdk.client.file.read({ path, sessionID: activeSession })")
+    expect(preview).toMatch(/sdk\.client\.file\.read\([\s\S]*?\{ path, sessionID: activeSession \}/)
+    expect(preview).toContain("{ signal: ticket.controller.signal }")
     expect(preview).toContain("body: JSON.stringify({ path, content, sessionID: session })")
     expect(preview).toContain("sessionID: session,")
   })
@@ -51,5 +52,16 @@ describe("session-scoped file requests", () => {
     expect(preview).toContain("rememberFileDraft(directory(), props.path, view.draft, view.saved)")
     expect(preview).toContain("reconcileSavedDraft(view.draft, content, next)")
     expect(preview).toMatch(/const artifact = async \(\) => \{[\s\S]*if \(dirty\(\)\)[\s\S]*save file first/)
+  })
+
+  test("keeps shared file-cache aborts neutral and rejects stale project/session responses", () => {
+    const context = read("../context/file.tsx")
+    const cancel = context.indexOf("if (isFileRequestCancellation(e))")
+    const visibleError = context.indexOf("draft.error = e.message", cancel)
+
+    expect(context).toContain("fileRequestKey({ projectID: sdk.projectID, directory, sessionID: session, path })")
+    expect(context).toContain("requestGeneration !== generation || requestScope() !== owner")
+    expect(cancel).toBeGreaterThan(-1)
+    expect(visibleError).toBeGreaterThan(cancel)
   })
 })

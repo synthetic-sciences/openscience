@@ -8,6 +8,7 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { ProjectTrust } from "../../project/trust"
 import { ExecutionAuthority } from "../../project/execution"
+import { ProjectAccess } from "../../project/access"
 
 async function current(projectID: string) {
   const selected = await Project.resolve(projectID)
@@ -114,6 +115,61 @@ export const ProjectRoutes = lazy(() =>
         const projectID = c.req.valid("param").projectID
         await current(projectID)
         const status = await ProjectTrust.update(Instance.project, c.req.valid("json"))
+        await Instance.dispose()
+        return c.json(status)
+      },
+    )
+    .get(
+      "/:projectID/access",
+      describeRoute({
+        summary: "Inspect project action access",
+        description:
+          "Return the atomic project-scoped Ask, Approve, or Full access mode and its effective sandbox policy.",
+        operationId: "project.access.get",
+        responses: {
+          200: {
+            description: "Project action access",
+            content: {
+              "application/json": {
+                schema: resolver(ProjectAccess.Status),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ projectID: z.string() })),
+      async (c) => {
+        const projectID = c.req.valid("param").projectID
+        await current(projectID)
+        return c.json(await ProjectAccess.status(Instance.project))
+      },
+    )
+    .put(
+      "/:projectID/access",
+      describeRoute({
+        summary: "Update project action access",
+        description:
+          "Atomically update this project's action approval and containment mode without changing any other project.",
+        operationId: "project.access.update",
+        responses: {
+          200: {
+            description: "Updated project action access",
+            content: {
+              "application/json": {
+                schema: resolver(ProjectAccess.Status),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ projectID: z.string() })),
+      validator("json", ProjectAccess.Update),
+      async (c) => {
+        const projectID = c.req.valid("param").projectID
+        await current(projectID)
+        const status = await ProjectAccess.update(Instance.project, c.req.valid("json"))
         await Instance.dispose()
         return c.json(status)
       },

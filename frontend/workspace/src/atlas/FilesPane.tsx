@@ -30,9 +30,11 @@ import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/reso
 import type { StoredArtifact } from "@/artifacts/store"
 import { uiStore } from "@/atlas/store/ui"
 import { FolderPicker } from "@/atlas/FolderPicker"
-import { IconChevronRight, IconFolder, IconSearch, IconX } from "@/atlas/shared/Icon"
+import { IconChevronRight, IconFolder, IconRefresh, IconSearch, IconX } from "@/atlas/shared/Icon"
 import {
   connectedFilesystemGrants,
+  containsFilePath,
+  normalizeFilePath,
   parseFilesystemSnapshot,
   sessionFilesystemRoot,
   type FilesystemAccess,
@@ -121,6 +123,13 @@ const normalizeTrash = (value: unknown): TrashedFile[] => {
   })
 }
 
+export function fileChangeTouchesSource(input: { kind: PaneSource["kind"]; target: string; file: string }) {
+  if (input.kind !== "project" && input.kind !== "session" && input.kind !== "connected") return false
+  const target = normalizeFilePath(input.target)
+  const changed = normalizeFilePath(input.file)
+  return containsFilePath(target, changed) || containsFilePath(changed, target)
+}
+
 // FileExplorer.tsx:57-77 keeps equivalent readAccess/grantAccess/revokeAccess
 // helpers, but they are private, unexported, and typed against ProjectRequest
 // (which carries a .url this pane's injected transport does not). They are
@@ -205,6 +214,8 @@ export function FilesPane(
     request?: Transport
     session?: string
     directory?: string
+    /** Human project label for standalone embeds/tests. Production uses Project.name. */
+    projectName?: string
     /** Test/integration seam. Production delegates to uiStore.openFile. */
     onOpenFile?: (file: PaneFile) => void
     /** Builds an absolute URL for the legacy remote-volume download surface. */
@@ -237,7 +248,17 @@ export function FilesPane(
 
   const projectRoot = () =>
     props.directory ?? (sdk?.directory || sync?.data.path.directory || sync?.project?.worktree || "")
-  const projectName = () => projectRoot().split("/").filter(Boolean).at(-1) ?? "Project"
+  const projectName = () => {
+    const named = props.projectName?.trim() || sync?.project?.name?.trim()
+    if (named) return named
+    const folder = projectRoot().split(/[\\/]/).filter(Boolean).at(-1) ?? ""
+    // Managed project directories are storage implementation details, not
+    // names. If metadata has not arrived yet, keep the label human rather than
+    // flashing an opaque UUID in the source menu.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(folder))
+      return "Project files"
+    return folder || "Project files"
+  }
   const sessionID = () => props.session ?? (params.id && params.id !== "new" ? params.id : undefined)
   const identity = (): FilesystemIdentity | undefined => {
     const session = sessionID()
@@ -488,6 +509,26 @@ export function FilesPane(
     setListingError("")
     void refetchEntries()
   }
+
+  // Coalesce watcher bursts from saves (temp file + rename + metadata update)
+  // into one source-scoped listing refresh. Events are already project-scoped
+  // by the SDK; checking the selected root prevents a connected folder from
+  // needlessly refreshing the project listing and vice versa.
+  let watcherRefresh: ReturnType<typeof setTimeout> | undefined
+  const fileChanged = sdk?.event.on("file.watcher.updated", (event) => {
+    const source = current()
+    if (!fileChangeTouchesSource({ kind: source.kind, target: where(), file: event.properties.file })) return
+    if (watcherRefresh) clearTimeout(watcherRefresh)
+    watcherRefresh = setTimeout(() => {
+      watcherRefresh = undefined
+      setListingError("")
+      void refetchEntries()
+    }, 80)
+  })
+  if (fileChanged) onCleanup(fileChanged)
+  onCleanup(() => {
+    if (watcherRefresh) clearTimeout(watcherRefresh)
+  })
 
   const rows = createMemo(() => {
     const query = filter().trim().toLowerCase()
@@ -936,6 +977,17 @@ export function FilesPane(
               </button>
             </Show>
           </div>
+          <button
+            type="button"
+            class="files-refresh"
+            data-refresh-source
+            aria-label={`Refresh ${current().name}`}
+            title={`Refresh ${current().name}`}
+            disabled={sourceLoading()}
+            onClick={retrySource}
+          >
+            <IconRefresh size={14} strokeWidth={1.5} />
+          </button>
         </div>
 
         <Show

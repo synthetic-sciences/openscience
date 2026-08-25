@@ -20,6 +20,11 @@ export namespace AuthoritySignal {
       denied: z.boolean(),
     }),
     z.object({
+      kind: z.literal("access"),
+      projectID: z.string(),
+      mode: z.enum(["ask", "approve", "full"]),
+    }),
+    z.object({
       kind: z.literal("filesystem"),
       projectID: z.string(),
       sessionID: z.string(),

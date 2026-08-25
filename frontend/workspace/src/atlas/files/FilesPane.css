@@ -726,6 +726,36 @@
   outline: none;
   box-shadow: inset 0 0 0 1px var(--color-text);
 }
+.files-refresh {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+.files-refresh:hover:not(:disabled) {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+.files-refresh:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--color-text);
+}
+.files-refresh:disabled {
+  cursor: progress;
+  opacity: 0.45;
+}
 .files-connect {
   display: flex;
   flex-direction: column;
@@ -1518,6 +1548,7 @@
   .files-path__crumb,
   .files-search,
   .files-search__clear,
+  .files-refresh,
   .files-connect__dismiss,
   .files-connect__browse,
   .files-connect__cancel,
@@ -1587,6 +1618,7 @@
   .files-path__crumb,
   .files-search,
   .files-search__clear,
+  .files-refresh,
   .files-connect__dismiss,
   .files-connect__browse,
   .files-connect__cancel,
@@ -1604,6 +1636,7 @@
   }
 
   .files-search__clear,
+  .files-refresh,
   .files-connect__dismiss,
   .files-path__root,
   .artifact-toolbar__prefs,

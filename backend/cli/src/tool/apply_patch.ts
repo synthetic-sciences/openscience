@@ -14,6 +14,7 @@ import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
+import { ToolRetryGuard } from "@/session/tool-retry-guard"
 import { File } from "../file"
 import { FileTrash } from "../file/trash"
 import { Lock } from "@/util/lock"
@@ -278,6 +279,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     if (!params.patchText) {
       throw new Error("patchText is required")
     }
+    await ToolRetryGuard.assertApplyPatch(ctx, params.patchText)
 
     // Parse the patch to get hunks
     let hunks: Patch.Hunk[]

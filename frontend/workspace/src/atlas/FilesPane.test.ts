@@ -167,10 +167,72 @@ describe("files pane", () => {
     expect(toolbar).not.toBeNull()
     expect(toolbar?.querySelector("[data-source-button]")).not.toBeNull()
     expect(toolbar?.querySelector('input[type="search"]')).not.toBeNull()
+    expect(toolbar?.querySelector("[data-refresh-source]")).not.toBeNull()
     expect(host.querySelector(".files-location")).toBeNull()
     // The artifact catalog owns its own count + retention summary; the shell
     // does not repeat the same context line above it.
     expect(host.querySelector("[data-source-context]")).toBeNull()
+  })
+
+  test("uses the human project name instead of a managed storage UUID", async () => {
+    const managed = "/Users/researcher/.openscience/projects/58e4a6d9-f9cb-4de0-83aa-a236cb718206"
+    startOn("project")
+    const host = mount(() =>
+      subject.FilesPane({
+        directory: managed,
+        projectName: "Spatial Biology",
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store")) return listing([])
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Spatial Biology")
+    expect(host.textContent).not.toContain("58e4a6d9-f9cb-4de0-83aa-a236cb718206")
+  })
+
+  test("manually refreshes only the selected source", async () => {
+    startOn("project")
+    let listings = 0
+    const host = mount(() =>
+      subject.FilesPane({
+        directory: DIRECTORY,
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store")) return listing([])
+          if (path === "/file") listings++
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+    const before = listings
+
+    host.querySelector<HTMLButtonElement>("[data-refresh-source]")?.click()
+    await settle()
+
+    expect(listings).toBe(before + 1)
+  })
+
+  test("scopes watcher refreshes to the active local source", () => {
+    expect(
+      subject.fileChangeTouchesSource({
+        kind: "session",
+        target: "/workspaces/prj_1/ses_1",
+        file: "/workspaces/prj_1/ses_1/analysis/result.csv",
+      }),
+    ).toBe(true)
+    expect(
+      subject.fileChangeTouchesSource({
+        kind: "connected",
+        target: "/datasets/spatial",
+        file: "/datasets/other/result.csv",
+      }),
+    ).toBe(false)
+    expect(subject.fileChangeTouchesSource({ kind: "artifacts", target: "", file: "/projects/p/report.md" })).toBe(
+      false,
+    )
   })
 
   test("remembers the source it was left on", async () => {

@@ -91,7 +91,6 @@ import {
   RESEARCH_ACCESS_OPTIONS,
   researchAccessLabel as accessLabel,
   researchAccessMode,
-  researchAccessMutations,
   type ResearchAccessMode,
 } from "./research-access"
 
@@ -112,15 +111,10 @@ interface PromptInputProps {
 
 interface ResearchAccessSnapshot {
   root: string
-  trusted: boolean
-  sandboxEnabled: boolean
-  sandboxAvailable: boolean
-  sandboxUnavailableReason?: string
-}
-
-interface SandboxSettingsPayload {
-  config: { enabled?: boolean }
-  status?: { available?: boolean; reason?: string }
+  mode: ResearchAccessMode
+  requestedMode: ResearchAccessMode
+  managed: boolean
+  sandboxStatus: { available: boolean; reason?: string }
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -179,27 +173,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const selected = capabilities()?.delegation_specialist
     return selected ? specialistLabel(selected) : "Automatic"
   })
-  const readSandboxSettings = async (init?: RequestInit) => {
-    const response = await sdk.request("/settings/sandbox", init)
+  const projectAccess = async (projectID: string, init?: RequestInit) => {
+    const response = await sdk.request(`/project/${encodeURIComponent(projectID)}/access`, init)
     if (!response.ok) {
       const detail = await response.text().catch(() => "")
       throw new Error(detail || `${response.status} ${response.statusText}`)
     }
-    return (await response.json()) as SandboxSettingsPayload
+    return (await response.json()) as ResearchAccessSnapshot
   }
   const loadResearchAccess = async (projectID: string): Promise<ResearchAccessSnapshot> => {
-    const [trust, sandbox] = await Promise.all([
-      sdk.client.project.trust.get({ projectID, directory: sdk.directory }),
-      readSandboxSettings(),
-    ])
-    if (!trust.data) throw new Error("Project trust status was empty.")
-    return {
-      root: trust.data.root,
-      trusted: trust.data.canExecuteProjectCode,
-      sandboxEnabled: sandbox.config.enabled !== false,
-      sandboxAvailable: sandbox.status?.available === true,
-      sandboxUnavailableReason: sandbox.status?.reason,
-    }
+    return projectAccess(projectID)
   }
   const [researchAccess, researchAccessControls] = createResource(() => sdk.projectID || false, loadResearchAccess)
   const [researchAccessSaving, setResearchAccessSaving] = createSignal(false)
@@ -228,34 +211,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     setResearchAccessSaving(true)
     try {
-      let current = { ...initial }
-      for (const mutation of researchAccessMutations(mode)) {
-        if (mutation.kind === "sandbox") {
-          if (current.sandboxEnabled === mutation.enabled) continue
-          const sandbox = await readSandboxSettings({
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ enabled: mutation.enabled }),
-          })
-          current.sandboxEnabled = sandbox.config.enabled !== false
-          continue
-        }
-
-        if (current.trusted === mutation.trusted) continue
-        const trust = await sdk.client.project.trust.update({
-          projectID,
-          directory: sdk.directory,
-          body: mutation.trusted ? { trusted: true, root: current.root } : { trusted: false },
-        })
-        if (!trust.data) throw new Error("Project trust update was empty.")
-        current = {
-          ...current,
-          root: trust.data.root,
-          trusted: trust.data.canExecuteProjectCode,
-        }
-      }
-
-      const confirmed = await loadResearchAccess(projectID)
+      const confirmed = await projectAccess(projectID, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode, ...(mode === "ask" ? {} : { root: initial.root }) }),
+      })
       researchAccessControls.mutate(confirmed)
       const effective = researchAccessMode(confirmed)
       if (effective !== mode) {
@@ -2625,7 +2585,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                   disabled={
                                     researchAccess.loading ||
                                     researchAccessSaving() ||
-                                    (option.value !== "full" && researchAccess()?.sandboxAvailable === false)
+                                    (option.value !== "full" && researchAccess()?.sandboxStatus.available === false)
                                   }
                                   onClick={(event) => {
                                     void applyResearchAccess(option.value, event.currentTarget)
@@ -2635,8 +2595,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                   <span>
                                     <strong>{option.label}</strong>
                                     <small>
-                                      {option.value !== "full" && researchAccess()?.sandboxAvailable === false
-                                        ? `Unavailable: ${researchAccess()?.sandboxUnavailableReason ?? "sandbox backend not installed"}`
+                                      {option.value !== "full" && researchAccess()?.sandboxStatus.available === false
+                                        ? `Unavailable: ${researchAccess()?.sandboxStatus.reason ?? "sandbox backend not installed"}`
                                         : option.description}
                                     </small>
                                   </span>

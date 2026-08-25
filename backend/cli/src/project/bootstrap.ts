@@ -16,6 +16,7 @@ import { Session } from "../session"
 import { SessionCompaction } from "../session/compaction"
 import { SessionFilesystem } from "../session/filesystem"
 import { ProjectTrust } from "./trust"
+import { ProjectAccess } from "./access"
 import { Pty } from "../pty"
 import { KernelRuntime } from "@/science/kernel/registry"
 import { AuthoritySignal } from "./authority-signal"
@@ -162,6 +163,28 @@ const authoritySync = Instance.state(
             ])
             return true
           }
+          if (event.kind === "access") {
+            if (event.projectID !== projectID) return false
+            const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(projectID))
+            const biology = BiologyKernelLifecycle.releaseProject(projectID)
+            await Promise.all([
+              Pty.releaseAll(),
+              KernelRuntime.releaseProject(projectID),
+              CommandRuntime.stopProject(projectID),
+              LSP.dispose(),
+              MCP.disposeLocal(),
+              invalidateProjectExecutionCaches(),
+              biology,
+              jobs,
+            ])
+            await Promise.all([
+              AuthorityProcessLedger.revoke({ projectID }),
+              CredentialProcessLedger.revoke({ kind: "mcp", projectID }),
+              CredentialProcessLedger.revoke({ kind: "provider", projectID }),
+              invalidateProjectTokenCache(projectID),
+            ])
+            return true
+          }
           if (event.scope !== "installation" && event.projectID !== projectID) return false
           await stopFilesystem(event.sessionID, event.scope)
           return true
@@ -222,9 +245,9 @@ export async function InstanceBootstrap() {
     }
   })
 
-  // Hot-reload the skill registry when a SKILL.md changes on disk (external
-  // edits surface via the watcher when OPENSCIENCE_EXPERIMENTAL_FILEWATCHER=1;
-  // in-app authoring self-invalidates through Skill.writeUser).
+  // Hot-reload the skill registry when a SKILL.md changes on disk. Project
+  // roots are watched by default; in-app authoring also self-invalidates
+  // through Skill.writeUser.
   Bus.subscribe(FileWatcher.Event.Updated, async (payload) => {
     if (payload.properties.file.endsWith("SKILL.md")) {
       await Skill.invalidate().catch(() => {})
@@ -260,6 +283,27 @@ export async function InstanceBootstrap() {
       await invalidateProjectExecutionCaches()
       return
     }
+    const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(Instance.project.id))
+    const biology = BiologyKernelLifecycle.releaseProject(Instance.project.id)
+    await Promise.all([
+      Pty.releaseAll(),
+      KernelRuntime.releaseProject(Instance.project.id),
+      CommandRuntime.stopProject(Instance.project.id),
+      LSP.dispose(),
+      MCP.disposeLocal(),
+      invalidateProjectExecutionCaches(),
+      biology,
+      jobs,
+    ])
+    await Promise.all([
+      AuthorityProcessLedger.revoke({ projectID: Instance.project.id }),
+      CredentialProcessLedger.revoke({ kind: "mcp", projectID: Instance.project.id }),
+      CredentialProcessLedger.revoke({ kind: "provider", projectID: Instance.project.id }),
+      invalidateProjectTokenCache(Instance.project.id),
+    ])
+  })
+
+  Bus.subscribe(ProjectAccess.Event.Changed, async () => {
     const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(Instance.project.id))
     const biology = BiologyKernelLifecycle.releaseProject(Instance.project.id)
     await Promise.all([
