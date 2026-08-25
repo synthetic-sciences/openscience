@@ -33,8 +33,8 @@ describe("session environment prompt", () => {
         )
 
         expect(prompt).toContain(`- ${source.path} (read and write, project scope)`)
-        expect(prompt).toContain("Project files (durable and shared across this project)")
-        expect(prompt).toContain("Session scratch (temporary and isolated to this conversation)")
+        expect(prompt).toContain(`Project files: ${project.path} (durable and shared across this project)`)
+        expect(prompt).toContain(`Session scratch: ${await SessionFilesystem.workspace(session.id)}`)
         expect(prompt).toContain("Results: immutable project-wide deliverables")
         expect(prompt).toContain("may aggregate multiple connected folders and files")
         expect(prompt).toContain("a normal workspace file is not a Result")

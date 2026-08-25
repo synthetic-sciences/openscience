@@ -923,22 +923,6 @@ export namespace SessionFilesystem {
   export async function snapshot(sessionID: string): Promise<Snapshot> {
     const filesystem = await state(sessionID)
     const workspace = await SessionWorkspace.touch(sessionID)
-    // The Files pane has now materialized these exact sources. Keep their
-    // watcher inventory in sync with durable grant state; revoked and consumed
-    // roots disappear on the next snapshot while project roots remain owned by
-    // the instance watcher.
-    void FileWatcher.watchSession(sessionID, [
-      workspace.scratchRoot,
-      ...filesystem.grants
-        .filter(
-          (grant) =>
-            !grant.time.consumed &&
-            !grant.time.revoked &&
-            grant.scope !== "once" &&
-            (grant.source === "permission" || grant.source === "api"),
-        )
-        .map((grant) => grant.path),
-    ]).catch(() => {})
     return {
       ...filesystem,
       workspace,
@@ -948,6 +932,25 @@ export namespace SessionFilesystem {
         processRead: Sandbox.describe().readIsolation === "grant_only" ? "grant_only" : "policy_only",
       },
     }
+  }
+
+  /** Start native watchers only when a Files-pane client materializes this
+   * snapshot. Harness and process-authority callers also need the policy
+   * packet, but must not allocate one long-lived watcher per agent session. */
+  export async function watch(sessionID: string, current?: Snapshot) {
+    const value = current ?? (await snapshot(sessionID))
+    return FileWatcher.watchSession(sessionID, [
+      value.workspace.scratchRoot,
+      ...value.grants
+        .filter(
+          (grant) =>
+            !grant.time.consumed &&
+            !grant.time.revoked &&
+            grant.scope !== "once" &&
+            (grant.source === "permission" || grant.source === "api"),
+        )
+        .map((grant) => grant.path),
+    ])
   }
 
   /** Persistent explicit read roots for newly launched processes. One-shot

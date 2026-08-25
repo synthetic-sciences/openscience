@@ -164,7 +164,9 @@ function toolInput(
 ) {
   if (typeof stimulus.input !== "object" || !stimulus.input) return stimulus.input
   if (scenario.id === "permissions.full-project") {
-    const project = text.match(/OpenScience project directory:\s*([^\n]+)/)?.[1]?.trim()
+    const project =
+      text.match(/Project files:\s*(.+?)\s+\(durable and shared across this project\)/)?.[1]?.trim() ??
+      text.match(/OpenScience project directory:\s*([^\n]+)/)?.[1]?.trim()
     if (!project) return stimulus.input
     return { ...stimulus.input, filePath: `${project}/scratch.txt` }
   }
@@ -174,7 +176,9 @@ function toolInput(
     return { ...stimulus.input, filePath: file }
   }
   if (scenario.id === "indexing.local-private") {
-    const workspace = text.match(/Session scratch directory:\s*([^\n]+)/)?.[1]?.trim()
+    const workspace =
+      text.match(/Session scratch:\s*(.+?)\s+\(temporary and isolated to this conversation\)/)?.[1]?.trim() ??
+      text.match(/Session scratch directory:\s*([^\n]+)/)?.[1]?.trim()
     if (!workspace) return stimulus.input
     return { ...stimulus.input, folder: `${workspace}/fixture-repository` }
   }

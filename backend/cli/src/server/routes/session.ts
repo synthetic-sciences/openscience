@@ -203,7 +203,11 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         await Session.assertDirectory(sessionID)
-        return c.json(await SessionFilesystem.snapshot(sessionID))
+        const snapshot = await SessionFilesystem.snapshot(sessionID)
+        // Only a Files-pane/API listing owns native source watchers. Internal
+        // policy snapshots are intentionally side-effect free.
+        void SessionFilesystem.watch(sessionID, snapshot).catch(() => {})
+        return c.json(snapshot)
       },
     )
     .post(

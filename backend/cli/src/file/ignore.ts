@@ -24,6 +24,10 @@ export namespace FileIgnore {
     "desktop",
     ".sst",
     ".cache",
+    // Internal session/message state can be extremely write-heavy. Project
+    // source watchers must not recursively consume their own runtime traffic;
+    // an open Files pane watches its selected scratch root explicitly.
+    ".openscience",
     ".openscience-trash",
     ".webkit-cache",
     "__pycache__",
