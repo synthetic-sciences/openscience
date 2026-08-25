@@ -857,8 +857,8 @@ export default function Landing({
             </Reveal>
             <Reveal delay={150}>
               <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
-                Add a purchased balance only when you want credit-backed models or enhanced search. There is no
-                subscription or fixed monthly charge.
+                Turn Ace on when you want credit-backed models or enhanced search. Ace is usage based, with no fixed
+                monthly charge.
               </p>
             </Reveal>
           </div>
@@ -872,7 +872,7 @@ export default function Landing({
                     </span>
                     <span className={CAPTION}>to start</span>
                   </div>
-                  <p className={`mt-3 ${P}`}>20 credits added to your purchased Wallet balance.</p>
+                  <p className={`mt-3 ${P}`}>Your purchased Wallet starts at 20 credits.</p>
                 </div>
                 <span className="w-fit border border-border/70 px-3 py-1.5 font-terminal text-[11px] tracking-[0.08em] text-foreground/60">
                   PAY AS YOU GO
@@ -884,10 +884,10 @@ export default function Landing({
               </p>
               <div className="mt-7 grid gap-px border border-border/50 bg-border/50 sm:grid-cols-2">
                 {[
-                  ["Credit-backed models through OpenRouter", "A curated route without provider setup."],
+                  ["Models through OpenRouter", "Underlying model prices plus the 2% service margin."],
                   ["One balance for models and enhanced search", "Free basic search still works without Ace."],
-                  ["Reloads 20 credits below 2", "One on/off setting. Your remaining balance stays available."],
-                  ["Stay in control", "Turn auto-reload off any time and review every charge in Billing."],
+                  ["Restores only the gap to 20", "When the balance falls below 2, Ace never stacks another 20."],
+                  ["One Ace switch", "Turn Ace off any time. Your remaining balance stays available."],
                 ].map(([title, copy]) => (
                   <div key={title} className="bg-background/90 p-5">
                     <h3 className="text-[15px] leading-6 text-foreground/90">{title}</h3>
@@ -900,7 +900,7 @@ export default function Landing({
                   Processing fee shown before payment and never added to your credit balance.
                 </p>
                 <Cta href={`${APP}/billing`} className="shrink-0">
-                  Add credits
+                  Manage Ace
                 </Cta>
               </div>
             </div>
@@ -1029,7 +1029,7 @@ export default function Landing({
                 },
                 {
                   q: "How do I manage my account?",
-                  a: "Open Settings for connected accounts and model access, or use the Synthetic Sciences dashboard for wallet credits, auto-reload, receipts, and devices.",
+                  a: "Open Settings for connected accounts and model access, or use the Synthetic Sciences dashboard to manage Ace, receipts, and devices.",
                 },
               ]}
             />

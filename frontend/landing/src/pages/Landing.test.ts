@@ -30,7 +30,7 @@ describe("OpenScience landing contract", () => {
     expect(landing).toContain("20 credits")
     expect(landing).toContain("to start")
     expect(landing).toContain("OpenScience is free. Ace is pay as you go.")
-    expect(landing).toContain("Credit-backed models through OpenRouter")
+    expect(landing).toContain("Models through OpenRouter")
     expect(landing).toContain("One balance for models and enhanced search")
     expect(landing).not.toContain("Ace+")
     expect(landing).not.toContain("per month")
@@ -39,11 +39,13 @@ describe("OpenScience landing contract", () => {
     expect(landing).not.toContain("research quota")
   })
 
-  test("explains Zen-style reload and separates the processing fee from credits", () => {
-    expect(landing).toContain("Reloads 20 credits below 2")
-    expect(landing).toContain("Turn auto-reload off any time")
+  test("explains Ace gap funding and separates the processing fee from credits", () => {
+    expect(landing).toContain("Restores only the gap to 20")
+    expect(landing).toContain("One Ace switch")
+    expect(landing).toContain("Turn Ace off any time")
+    expect(landing).not.toContain("auto-reload")
     expect(landing).not.toContain("Set a monthly cap")
-    expect(landing).toContain("One on/off setting. Your remaining balance stays available.")
+    expect(landing).toContain("Your remaining balance stays available.")
     expect(landing).toContain("Processing fee shown before payment")
     expect(landing).toContain("never added to your credit balance")
     expect(landing).not.toContain("Synthetic Scientists")
