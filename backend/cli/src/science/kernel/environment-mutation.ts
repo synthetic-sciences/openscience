@@ -215,13 +215,27 @@ export namespace KernelEnvironmentMutation {
    * are reusable across projects on this machine. */
   export async function pythonRuntime(environment: string, allowMutation = false): Promise<KernelStartOptions> {
     if (environment !== "python" && allowMutation) await ManagedEnvironments.ensureTask(environment)
-    const managed = await ManagedEnvironments.runtime("python", environment).catch(async (error) => {
-      if (environment === "python") throw error
-      // Existing project-scoped environments remain readable for backward
-      // compatibility. New approved environments are created in the shared
-      // app-owned store above.
-      return pythonEnvironment(Instance.directory, environment)
-    })
+    // Preserve the project's conventional .venv as the explicit local
+    // runtime. The app-managed starter is the clean-install fallback, not an
+    // override for a project that already owns its Python environment.
+    let project: KernelStartOptions | undefined
+    let projectError: unknown
+    try {
+      project = await pythonEnvironment(Instance.directory, environment)
+    } catch (error) {
+      projectError = error
+    }
+    const managed =
+      environment === "python" && project?.binary
+        ? project
+        : await ManagedEnvironments.runtime("python", environment).catch(async (error) => {
+            // Existing project-scoped named environments remain readable for
+            // backward compatibility. New approved environments are created
+            // in the shared app-owned store above.
+            if (project) return project
+            if (projectError) throw projectError
+            throw error
+          })
     const binary = managed.binary ?? (await hostPython())
 
     if (environment !== "python") {
