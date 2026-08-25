@@ -16,7 +16,19 @@ import { findLast } from "@synsci/util/array"
 import { getDirectory, getFilename } from "@synsci/util/path"
 
 import { Binary } from "@synsci/util/binary"
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Index,
+  Match,
+  on,
+  onCleanup,
+  ParentProps,
+  Show,
+  Switch,
+} from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part } from "./message-part"
 import {
@@ -44,7 +56,7 @@ import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { lastResponseTextPart } from "./session-turn-response"
-import { groupResearchTrace } from "./research-trace"
+import { groupResearchTrace, type ResearchTraceGroup } from "./research-trace"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
@@ -160,7 +172,51 @@ function AssistantTrace(props: {
     ),
   )
 
-  return <For each={trace()}>{(item) => <Part part={item.entry.part} message={item.entry.message} />}</For>
+  return (
+    <Index each={trace()}>
+      {(item) => (
+        <Show
+          when={item().kind === "group" ? (item() as ResearchTraceGroup) : undefined}
+          fallback={
+            <Part
+              part={(item() as { kind: "part"; entry: ResearchTraceEntry }).entry.part}
+              message={(item() as { kind: "part"; entry: ResearchTraceEntry }).entry.message}
+            />
+          }
+        >
+          {(group) => <ResearchTraceGroupDisplay group={group()} />}
+        </Show>
+      )}
+    </Index>
+  )
+}
+
+type ResearchTraceEntry = { part: PartType; message: AssistantMessage }
+
+function ResearchTraceGroupDisplay(props: { group: ResearchTraceGroup }) {
+  const icon = () => {
+    if (props.group.family === "context") return "glasses" as const
+    if (props.group.family === "sources") return "window-cursor" as const
+    if (props.group.family === "commands") return "console" as const
+    if (props.group.family === "changes") return "code-lines" as const
+    if (props.group.family === "images") return "photo" as const
+    if (props.group.family === "skills") return "sparkles" as const
+    return "activity" as const
+  }
+
+  return (
+    <details data-component="research-trace-group" data-family={props.group.family}>
+      <summary>
+        <Icon name={icon()} size="small" />
+        <span data-slot="research-trace-group-label">{props.group.label}</span>
+        <span data-slot="research-trace-group-detail">{props.group.detail}</span>
+        <Icon name="chevron-down" size="small" />
+      </summary>
+      <div data-slot="research-trace-group-operations">
+        <Index each={props.group.entries}>{(entry) => <Part part={entry().part} message={entry().message} />}</Index>
+      </div>
+    </details>
+  )
 }
 
 export function SessionTurn(

@@ -172,6 +172,7 @@ const StoreEntry = z.object({
   label: z.string().optional(),
   fields: z.record(z.string(), z.string()),
   updated_at: z.string(),
+  source: z.enum(["local", "account"]).default("local"),
 })
 type StoreEntry = z.infer<typeof StoreEntry>
 const Store = z.record(z.string(), StoreEntry)
@@ -452,6 +453,43 @@ export async function applyCredentialEnv(options: { strict?: boolean } = {}): Pr
   }
 }
 
+const PORTABLE_CREDENTIAL_IDS = new Set(["aws", "gcp", "azure", "nvidia"])
+
+export async function reconcileAccountCredentialFields(
+  portable: Record<string, { fields: Record<string, string>; updated_at?: string | null }>,
+): Promise<void> {
+  const incoming = Object.fromEntries(Object.entries(portable).filter(([id]) => PORTABLE_CREDENTIAL_IDS.has(id)))
+  await updateStore(async (current) => {
+    for (const [id, entry] of Object.entries(current)) {
+      if (!PORTABLE_CREDENTIAL_IDS.has(id) || entry.source !== "account" || id in incoming) continue
+      delete current[id]
+    }
+    for (const [id, payload] of Object.entries(incoming)) {
+      const existing = current[id]
+      // A device-local override remains authoritative until its next save
+      // successfully reaches the account. Account-owned entries follow the
+      // dashboard across devices.
+      if (existing?.source === "local") continue
+      const spec = specFor(id)
+      if (!spec) continue
+      const allowed = new Set(spec.fields.map((field) => field.name))
+      const fields: Record<string, string> = {}
+      for (const [name, value] of Object.entries(payload.fields)) {
+        if (!allowed.has(name) || !value.trim() || !validField(id, name, value)) continue
+        fields[name] = await encrypt(value)
+      }
+      if (!Object.keys(fields).length) continue
+      current[id] = {
+        label: spec.label,
+        fields,
+        updated_at: payload.updated_at ?? new Date().toISOString(),
+        source: "account",
+      }
+    }
+  })
+  await applyCredentialEnv({ strict: true })
+}
+
 const ServiceView = z.object({
   id: z.string(),
   label: z.string(),
@@ -470,6 +508,7 @@ const ServiceView = z.object({
   connected: z.boolean(),
   set_fields: z.array(z.string()),
   updated_at: z.string().nullable(),
+  source: z.enum(["local", "account"]).nullable(),
 })
 
 async function view(store: Store) {
@@ -496,6 +535,7 @@ async function view(store: Store) {
         connected: required.length ? required.every((field) => set.includes(field)) : set.length > 0,
         set_fields: set,
         updated_at: entry?.updated_at ?? null,
+        source: entry?.source ?? null,
       }
     }),
   )
@@ -514,6 +554,7 @@ async function view(store: Store) {
           connected: names.length > 0,
           set_fields: names,
           updated_at: entry.updated_at,
+          source: entry.source,
         }
       }),
   )
@@ -598,9 +639,24 @@ export const CredentialsRoutes = lazy(() =>
               label: body.label ?? entry.label,
               fields,
               updated_at: new Date().toISOString(),
+              source: "local",
             }
           }),
         )
+        if (spec?.category === "compute") {
+          const entry = store[id]
+          const fields = entry ? await validDecryptedFields(id, entry) : {}
+          const authenticated = await OpenScience.isAuthenticated()
+          if (authenticated && !(await OpenScience.savePortableCredential(id, fields, spec.label))) {
+            throw new Error(`${spec.label} was saved on this device but could not be synced to your account`)
+          }
+          if (authenticated && entry) {
+            entry.source = "account"
+            await updateStore((current) => {
+              if (current[id]) current[id]!.source = "account"
+            })
+          }
+        }
         return c.json({ services: await view(store) })
       },
     )
@@ -620,6 +676,12 @@ export const CredentialsRoutes = lazy(() =>
       validator("param", z.object({ id: z.string() })),
       async (c) => {
         const id = c.req.valid("param").id
+        const spec = specFor(id)
+        if (spec?.category === "compute" && (await OpenScience.isAuthenticated())) {
+          if (!(await OpenScience.deletePortableCredential(id))) {
+            return c.json({ error: `${spec.label} could not be removed from your account` }, 502)
+          }
+        }
         const store = await CredentialLifecycle.mutate(`settings-credential.remove:${id}`, () =>
           updateStore((current) => {
             delete current[id]

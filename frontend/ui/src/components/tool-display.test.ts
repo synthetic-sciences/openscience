@@ -180,6 +180,20 @@ describe("provider reasoning presentation", () => {
     )
     expect(reasoningTopic("Checking the source, then comparing the results.")).toBeUndefined()
   })
+
+  test("uses plain provider phase labels as status instead of transcript rows", () => {
+    expect(reasoningDisplayText("Planning comprehensive research workflow")).toBe("")
+    expect(reasoningTopic("Planning comprehensive research workflow")).toBe("Planning comprehensive research workflow")
+    expect(reasoningDisplayText("Analyzing the source revealed three incompatible assay formats.")).toBe(
+      "Analyzing the source revealed three incompatible assay formats.",
+    )
+  })
+
+  test("strips provider headings even when the bridge omits the blank line", () => {
+    expect(reasoningDisplayText("**Inspecting assay quality**\nThe substantive analysis remains visible.")).toBe(
+      "The substantive analysis remains visible.",
+    )
+  })
 })
 
 describe("toolErrorDisplay", () => {

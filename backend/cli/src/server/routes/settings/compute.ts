@@ -22,6 +22,7 @@ import { ModalAdapter } from "../../../compute/modal/adapter"
 import { ModalVolume } from "../../../compute/modal/volume"
 import { Env } from "../../../env"
 import { SessionFilesystem } from "../../../session/filesystem"
+import { ManagedEnvironments } from "../../../science/kernel/environment-manager"
 
 const Directory = z.object({
   directory: z.string().trim().min(1).optional(),
@@ -139,7 +140,7 @@ export namespace ComputeSettings {
     { id: "tensorpool", name: "TensorPool", verified: true, placeholder: "tp-…", hint: "On-demand GPU clusters." },
     { id: "lambda", name: "Lambda Labs", verified: true, placeholder: "secret_…", hint: "Cloud GPU instances." },
     {
-      id: "prime",
+      id: "prime_intellect",
       name: "Prime Intellect",
       verified: false,
       placeholder: "pi-…",
@@ -170,7 +171,7 @@ export namespace ComputeSettings {
     hint: z.string(),
     connected: z.boolean(),
     enabled: z.boolean(),
-    source: z.enum(["stored", "modal_toml"]).nullable(),
+    source: z.enum(["stored", "account", "modal_toml"]).nullable(),
     connected_at: z.string().nullable(),
     last_used: z.string().nullable(),
   })
@@ -211,13 +212,26 @@ export namespace ComputeSettings {
     ssh_config_hosts: SshConfigHost.array().default([]),
     modal: Modal.default(() => Modal.parse({})),
     modal_file: ModalFile,
+    environments: z.object({
+      status: z.enum(["absent", "installing", "ready", "failed"]),
+      phase: z.string(),
+      error: z.string().optional(),
+      environments: z
+        .object({
+          language: z.enum(["python", "r"]),
+          ready: z.boolean(),
+          path: z.string(),
+          packages: z.string().array(),
+        })
+        .array(),
+    }),
   })
   export type Info = z.infer<typeof Info>
 
   // ── On-disk shape (secrets live here only) ──
   const StoredProvider = z.object({
     key: z.string().optional(),
-    source: z.enum(["stored", "modal_toml"]).default("stored"),
+    source: z.enum(["stored", "account", "modal_toml"]).default("stored"),
     path: z.string().optional(),
     enabled: z.boolean().default(false),
     connected_at: z.string(),
@@ -265,6 +279,13 @@ export namespace ComputeSettings {
   )
 
   function parseStored(value: unknown): Stored {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const providers = (value as { providers?: Record<string, unknown> }).providers
+      if (providers?.prime && !providers.prime_intellect) {
+        providers.prime_intellect = providers.prime
+        delete providers.prime
+      }
+    }
     const result = Stored.safeParse(value)
     return result.success ? result.data : structuredClone(EMPTY)
   }
@@ -298,16 +319,18 @@ export namespace ComputeSettings {
   const PROVIDER_ENV: Record<string, string[]> = {
     tensorpool: ["TENSORPOOL_KEY", "TENSORPOOL_API_KEY"],
     lambda: ["LAMBDA_API_KEY", "LAMBDA_LABS_API_KEY"],
-    prime: ["PRIME_API_KEY", "PRIME_INTELLECT_API_KEY"],
+    prime_intellect: ["PRIME_API_KEY", "PRIME_INTELLECT_API_KEY"],
     vast: ["VAST_API_KEY"],
     runpod: ["RUNPOD_API_KEY"],
   }
   const owned = new Map<string, string>()
+  const canonicalProvider = (target: string) => (target === "prime" ? "prime_intellect" : target)
 
   /** Map one provider's decrypted key to the canonical env var names its real
    *  consumers read. Modal's combined "token_id : token_secret" key is split;
    *  a half-pasted modal key maps to nothing (both vars are required). */
   function mapProviderEnv(target: string, key: string): Record<string, string> {
+    target = canonicalProvider(target)
     if (target === "modal") {
       const [token, secret] = key.split(":").map((part) => part.trim())
       if (!token || !secret) return {}
@@ -344,6 +367,7 @@ export namespace ComputeSettings {
   }
 
   export async function providerEnv(target: string): Promise<Record<string, string>> {
+    target = canonicalProvider(target)
     const entry = (await read()).providers[target]
     if (!entry?.enabled) throw new Error(`Compute provider ${target} is disabled`)
     const env = await (async () => {
@@ -501,6 +525,7 @@ export namespace ComputeSettings {
       ssh_config_hosts: await configHosts,
       modal: stored.modal,
       modal_file: await file,
+      environments: await ManagedEnvironments.status(),
     }
   }
 
@@ -509,15 +534,30 @@ export namespace ComputeSettings {
   }
 
   export function isProvider(target: string): boolean {
-    return CATALOG.some((s) => s.id === target)
+    return CATALOG.some((s) => s.id === canonicalProvider(target))
   }
 
   export async function connectProvider(target: string, key: string): Promise<Info> {
+    target = canonicalProvider(target)
+    const authenticated = await OpenScience.isAuthenticated()
+    const accountFields =
+      target === "modal"
+        ? (() => {
+            const [token_id, token_secret] = key.split(":").map((part) => part.trim())
+            return token_id && token_secret ? { token_id, token_secret } : undefined
+          })()
+        : { api_key: key }
+    if (
+      authenticated &&
+      (!accountFields || !(await OpenScience.savePortableCredential(target, accountFields, target)))
+    ) {
+      throw new Error(`Could not sync ${target} to your Synthetic Sciences account`)
+    }
     const stored = await update(async (current) => {
       const existing = current.providers[target]
       current.providers[target] = {
         key: await encrypt(key),
-        source: "stored",
+        source: authenticated ? "account" : "stored",
         enabled: existing?.enabled ?? false,
         connected_at: existing?.connected_at ?? new Date().toISOString(),
         last_used: existing?.last_used ?? null,
@@ -544,6 +584,11 @@ export namespace ComputeSettings {
   }
 
   export async function disconnectProvider(target: string): Promise<Info> {
+    target = canonicalProvider(target)
+    const entry = (await read()).providers[target]
+    if (entry?.source === "account" && !(await OpenScience.deletePortableCredential(target))) {
+      throw new Error(`Could not remove ${target} from your Synthetic Sciences account`)
+    }
     const stored = await update((current) => {
       delete current.providers[target]
     })
@@ -552,6 +597,7 @@ export namespace ComputeSettings {
   }
 
   export async function setProviderEnabled(target: string, enabled: boolean): Promise<Info> {
+    target = canonicalProvider(target)
     const stored = await update((current) => {
       const entry = current.providers[target]
       if (!entry) throw new Error(`Compute provider ${target} is not connected`)
@@ -559,6 +605,37 @@ export namespace ComputeSettings {
     })
     await applyComputeEnv()
     return view(stored)
+  }
+
+  export async function reconcileAccountProviders(
+    portable: Record<string, { fields: Record<string, string>; updated_at?: string | null }>,
+  ): Promise<void> {
+    const incoming = Object.fromEntries(Object.entries(portable).filter(([id]) => isProvider(id)))
+    await update(async (current) => {
+      for (const [id, entry] of Object.entries(current.providers)) {
+        if (entry.source !== "account" || id in incoming) continue
+        delete current.providers[id]
+      }
+      for (const [id, payload] of Object.entries(incoming)) {
+        const existing = current.providers[id]
+        if (existing?.source === "stored" || existing?.source === "modal_toml") continue
+        const key =
+          id === "modal"
+            ? payload.fields.token_id && payload.fields.token_secret
+              ? `${payload.fields.token_id}:${payload.fields.token_secret}`
+              : undefined
+            : payload.fields.api_key
+        if (!key) continue
+        current.providers[id] = {
+          key: await encrypt(key),
+          source: "account",
+          enabled: existing?.enabled ?? true,
+          connected_at: payload.updated_at ?? existing?.connected_at ?? new Date().toISOString(),
+          last_used: existing?.last_used ?? null,
+        }
+      }
+    })
+    await applyComputeEnv()
   }
 
   export async function updateModal(input: ModalPatch): Promise<Info> {
@@ -657,6 +734,20 @@ export const ComputeSettingsRoutes = lazy(() =>
         },
       }),
       async (c) => c.json(await ComputeSettings.get()),
+    )
+    .post(
+      "/environments/repair",
+      describeRoute({
+        summary: "Install or repair managed Python and R starter environments",
+        operationId: "settings.compute.environments.repair",
+        responses: {
+          200: { description: "Updated", content: { "application/json": { schema: resolver(ComputeSettings.Info) } } },
+        },
+      }),
+      async (c) => {
+        await ManagedEnvironments.bootstrap()
+        return c.json(await ComputeSettings.get())
+      },
     )
     .post(
       "/provider/:id",

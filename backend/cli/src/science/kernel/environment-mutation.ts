@@ -1,5 +1,6 @@
 import { Global } from "@/global"
 import { Instance } from "@/project/instance"
+import { ManagedEnvironments } from "@/science/kernel/environment-manager"
 import { pythonEnvironment } from "@/science/kernel/interpreter"
 import type { KernelStartOptions } from "@/science/kernel/types"
 import { createHash } from "node:crypto"
@@ -209,16 +210,26 @@ export namespace KernelEnvironmentMutation {
   }
 
   /** Resolve the complete Python start contract for both the canonical tool
-   * and HTTP runtime surface. A host interpreter is paired with an app-owned
-   * package root; a selected virtual environment owns its package directory. */
+   * and HTTP runtime surface. The starter is read-only with a project package
+   * overlay; approved named task environments own their packages directly and
+   * are reusable across projects on this machine. */
   export async function pythonRuntime(environment: string, allowMutation = false): Promise<KernelStartOptions> {
-    const runtime = await pythonEnvironment(Instance.directory, environment)
-    const binary = runtime.binary ?? (await hostPython())
-    const virtualEnvironment = runtime.env?.VIRTUAL_ENV
-    if (virtualEnvironment) {
+    if (environment !== "python" && allowMutation) await ManagedEnvironments.ensureTask(environment)
+    const managed = await ManagedEnvironments.runtime("python", environment).catch(async (error) => {
+      if (environment === "python") throw error
+      // Existing project-scoped environments remain readable for backward
+      // compatibility. New approved environments are created in the shared
+      // app-owned store above.
+      return pythonEnvironment(Instance.directory, environment)
+    })
+    const binary = managed.binary ?? (await hostPython())
+
+    if (environment !== "python") {
+      const prefix = managed.env?.CONDA_PREFIX
       return {
-        ...runtime,
-        ...(allowMutation ? { extraWritable: [virtualEnvironment], sandboxNetwork: "allow" as const } : {}),
+        ...managed,
+        binary,
+        ...(allowMutation && prefix ? { extraWritable: [prefix], sandboxNetwork: "allow" as const } : {}),
       }
     }
 
@@ -229,27 +240,29 @@ export namespace KernelEnvironmentMutation {
     // fail to start. Package writes remain gated separately below.
     mkdirSync(packages, { recursive: true })
     return {
-      ...runtime,
+      ...managed,
       binary,
       env: {
-        ...(runtime.env ?? {}),
+        ...(managed.env ?? {}),
         PIP_TARGET: packages,
-        PYTHONPATH: [packages, runtime.env?.PYTHONPATH, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
+        PYTHONPATH: [packages, managed.env?.PYTHONPATH, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
       },
       ...(allowMutation ? { extraWritable: [packages], sandboxNetwork: "allow" as const } : {}),
     }
   }
 
   /** Complete R start contract shared by all canonical entry points. */
-  export function rRuntime(allowMutation = false): KernelStartOptions {
+  export async function rRuntime(allowMutation = false): Promise<KernelStartOptions> {
+    const managed = await ManagedEnvironments.runtime("r")
     const packages = path.join(managedRoot("r", "r"), "library")
     // R warns or fails when R_LIBS_USER names a missing directory. Provision
     // the empty app-managed library for every default start and recover it
     // after cache cleanup; mutation authority is still required to write it.
     mkdirSync(packages, { recursive: true })
     return {
+      ...managed,
       environmentName: "r",
-      env: { R_LIBS_USER: packages },
+      env: { ...(managed.env ?? {}), R_LIBS_USER: packages },
       ...(allowMutation ? { extraWritable: [packages], sandboxNetwork: "allow" as const } : {}),
     }
   }

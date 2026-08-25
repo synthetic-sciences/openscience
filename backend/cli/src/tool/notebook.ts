@@ -227,7 +227,7 @@ async function findPython(override?: string): Promise<{ binary: string; version?
   const candidates = override ? [override] : ["python3", "python"]
   for (const bin of candidates) {
     try {
-      // Resolution is metadata-only. A project `.venv/.../python` must never
+      // Resolution is metadata-only. The managed interpreter must never
       // receive a preflight `--version` execution before KernelRuntime has
       // acquired trust, authority, sandbox and durable process ownership. The
       // governed kernel reports its version in the READY frame instead.
@@ -724,8 +724,8 @@ const PythonFields = {
     .optional()
     .describe("Script path associated with this execution, when applicable"),
   environment: KernelEnvironmentName.optional().describe(
-    "Optional project Python environment. Omit it or use 'default' for the host/conventional .venv runtime. " +
-      "Named venv or Conda-prefix interpreters live at .venv/<name>.",
+    "Optional OpenScience-managed Python environment shared across projects on this machine. " +
+      "Omit it or use 'default' for the Python starter; named task environments must be created through an approved package change.",
   ),
   timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
 }
@@ -922,7 +922,7 @@ const PythonDefinition: Awaited<ReturnType<Tool.Info<typeof PythonParameters>["i
   description: [
     "Run Python code in one long-lived managed process per conversation and selected environment. Variables, imports, and state persist across calls in that environment; child conversations and other environments are isolated.",
     "State is working memory, not reproducibility; save source, inputs, parameters, and outputs for material results and clean-rerun when practical.",
-    "Omit `environment`/use `default` for the host or conventional .venv; named venv/Conda interpreters live under .venv/<name>.",
+    "Omit `environment`/use `default` for the shared Python starter. An approved package change can create a named, machine-wide task environment that later sessions and projects reuse.",
     "Set a concise scientific `title` and `source` for script-backed work. Use `action: stop` with the same environment to clear state.",
     "Prefer this to `bash python` for analysis. Submit pip changes separately with sys.executable + subprocess; they require approval and automatically restart this environment after success.",
     "np, pd, scipy, and plt load on first use; final expressions return automatically and matplotlib figures become inline PNGs.",

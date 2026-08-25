@@ -31,7 +31,7 @@ const lifecycle = (id: string, type: "step-start" | "step-finish", message: stri
   }) as ResearchTraceEntry
 
 describe("research trace presentation", () => {
-  test("keeps provider-visible reasoning and tool operations chronological", () => {
+  test("keeps substantive reasoning chronological and tools readable", () => {
     const trace = groupResearchTrace([
       lifecycle("start", "step-start", "msg"),
       narrative("reason", "reasoning", "provider-visible reasoning bytes", "msg"),
@@ -42,7 +42,7 @@ describe("research trace presentation", () => {
     ])
 
     expect(trace.map((item) => item.kind)).toEqual(["part", "part", "part", "part"])
-    expect(trace.map((item) => (item.kind === "part" ? item.entry.part.id : "group"))).toEqual([
+    expect(trace.map((item) => (item.kind === "part" ? item.entry.part.id : item.id))).toEqual([
       "reason",
       "read",
       "progress",
@@ -53,7 +53,7 @@ describe("research trace presentation", () => {
     )
   })
 
-  test("keeps repeated tool families literal without dropping interleaved reasoning", () => {
+  test("does not hide reasoning between otherwise related tool families", () => {
     const trace = groupResearchTrace([
       narrative("reason-1", "reasoning", "First thought", "msg-1"),
       entry("read", "read", "Read paper.tex", "completed", "msg-1"),
@@ -63,7 +63,40 @@ describe("research trace presentation", () => {
       entry("grep", "grep", "Find citations", "completed", "msg-2"),
     ])
 
-    expect(trace.map((item) => item.entry.part.id)).toEqual(["reason-1", "read", "reason-2", "grep"])
+    expect(trace.map((item) => (item.kind === "part" ? item.entry.part.id : item.id))).toEqual([
+      "reason-1",
+      "read",
+      "reason-2",
+      "grep",
+    ])
+  })
+
+  test("compacts adjacent repeated tools under an identity anchored to the first operation", () => {
+    const trace = groupResearchTrace([
+      entry("read", "read", "Read paper.tex"),
+      entry("grep", "grep", "Find citations"),
+      entry("list", "list", "List references"),
+    ])
+
+    expect(trace).toHaveLength(1)
+    expect(trace[0]).toMatchObject({
+      kind: "group",
+      id: "trace-read-context",
+      family: "context",
+      label: "Reviewed 3 files and code searches",
+    })
+  })
+
+  test("uses provider status-only reasoning in the live header without fragmenting tool groups", () => {
+    const trace = groupResearchTrace([
+      narrative("status-1", "reasoning", "Planning source retrieval", "msg-1"),
+      entry("search", "websearch", "Find assay data", "completed", "msg-1"),
+      narrative("status-2", "reasoning", "Inspecting assay metadata", "msg-2"),
+      entry("fetch", "webfetch", "Fetch assay data", "completed", "msg-2"),
+    ])
+
+    expect(trace).toHaveLength(1)
+    expect(trace[0]).toMatchObject({ kind: "group", id: "trace-search-sources" })
   })
 
   test("omits hidden promoted tools from the inline activity list", () => {

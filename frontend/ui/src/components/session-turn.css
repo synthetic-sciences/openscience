@@ -634,20 +634,23 @@
   [data-component="research-trace-group"] {
     width: 100%;
     min-width: 0;
-    border: 1px solid var(--border-weak-base);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface-base) 72%, transparent);
-    overflow: hidden;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
 
     > summary {
-      min-height: 38px;
-      padding: 7px 10px;
+      min-height: 32px;
+      padding: 4px 6px;
       display: flex;
       align-items: center;
       gap: 8px;
       cursor: pointer;
       list-style: none;
       color: var(--text-weak);
+      border-radius: var(--radius-sm);
+      transition:
+        color 120ms ease,
+        background-color 120ms ease;
 
       &::-webkit-details-marker {
         display: none;
@@ -662,6 +665,11 @@
         flex-shrink: 0;
         margin-left: auto;
         transition: transform 0.15s ease;
+      }
+
+      &:hover {
+        color: var(--text-base);
+        background: var(--surface-raised-base);
       }
     }
 
@@ -686,11 +694,12 @@
     }
 
     [data-slot="research-trace-group-operations"] {
-      padding: 2px 8px 8px 24px;
+      margin-left: 13px;
+      padding: 3px 4px 6px 17px;
       display: flex;
       flex-direction: column;
       gap: 2px;
-      border-top: 1px solid var(--border-weaker-base);
+      border-left: 1px solid var(--border-weaker-base);
     }
   }
 

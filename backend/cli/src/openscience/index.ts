@@ -191,6 +191,13 @@ interface SyncResponse {
     subscription_plan?: string | null
   }
   services: Record<string, SyncedService>
+  portable_credentials?: Record<
+    string,
+    {
+      fields: Record<string, string>
+      updated_at?: string | null
+    }
+  >
   config?: {
     enabled_providers?: string[]
     provider?: Record<string, { whitelist?: string[] }>
@@ -470,6 +477,43 @@ export namespace OpenScience {
         log.warn("account profile read failed", { error: error instanceof Error ? error.message : String(error) })
         return null
       })
+  }
+
+  /** Save a compute credential to the authenticated account so the same
+   * provider appears on the dashboard and the user's other OpenScience
+   * devices. The provider is still contacted directly; Atlas only holds the
+   * encrypted portability copy. Local settings remain usable while offline. */
+  export async function savePortableCredential(
+    provider: string,
+    fields: Record<string, string>,
+    label?: string,
+  ): Promise<boolean> {
+    const session = await getSession()
+    if (!session) return false
+    const response = await authenticatedAtlasFetch(session, `${API_BASE}/api/keys/${encodeURIComponent(provider)}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.api_key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: label, credentials: fields }),
+    }).catch(() => undefined)
+    if (!response?.ok) return false
+    await updateSession({ last_check_ts: 0 }).catch(() => undefined)
+    return true
+  }
+
+  export async function deletePortableCredential(provider: string): Promise<boolean> {
+    const session = await getSession()
+    if (!session) return false
+    const response = await authenticatedAtlasFetch(
+      session,
+      `${API_BASE}/api/keys/provider/${encodeURIComponent(provider)}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.api_key}` },
+      },
+    ).catch(() => undefined)
+    if (!response?.ok) return false
+    await updateSession({ last_check_ts: 0 }).catch(() => undefined)
+    return true
   }
 
   async function writeSession(session: OpenScienceSession) {
@@ -1072,6 +1116,21 @@ export namespace OpenScience {
           const credentials = new Set(
             [...fresh.entries()].filter(([key]) => !key.endsWith("_BASE_URL")).map(([, value]) => value),
           ).size
+
+          // Portable compute connections are structured account data, not
+          // ambient subprocess variables. Reconcile them into the same local
+          // encrypted stores used by Settings so dashboard and Customize stay
+          // truthful without ever exposing Modal control-plane tokens to an
+          // agent shell.
+          const portable = data.portable_credentials ?? {}
+          await Promise.all([
+            import("../server/routes/settings/credentials").then((module) =>
+              module.reconcileAccountCredentialFields(portable),
+            ),
+            import("../server/routes/settings/compute").then((module) =>
+              module.ComputeSettings.reconcileAccountProviders(portable),
+            ),
+          ])
 
           // Unset previously-synced vars that are absent from the new response —
           // mirrors the ownedKeys cleanup in server/routes/settings/credentials.ts.

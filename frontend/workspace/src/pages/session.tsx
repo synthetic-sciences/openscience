@@ -731,6 +731,7 @@ export default function Page(): JSX.Element {
   const sessionKey = createMemo(() => `${sdk.scope}/${params.id ?? "new"}`)
   const chatView = layout.view(sessionKey)
   const restoration: {
+    initialized?: string
     target?: {
       scope: string
       x: number
@@ -752,6 +753,10 @@ export default function Page(): JSX.Element {
     const target = restoration.target
     const element = chatElement
     if (!target || !element || target.scope !== sessionKey()) return
+    if (working()) {
+      restoration.target = undefined
+      return
+    }
     element.scrollLeft = target.x
     const max = Math.max(0, element.scrollHeight - element.clientHeight)
     if (max + 1 < target.y) {
@@ -763,29 +768,34 @@ export default function Page(): JSX.Element {
     chatScroll.handleScroll()
   }
 
-  // Restore one exact position per scoped conversation. Resize observation
-  // handles progressively rendered markdown without repeated timers; the first
-  // wheel/pointer interaction cancels restoration immediately.
-  createEffect(
-    on(
-      () => [sessionKey(), messages().length > 0] as const,
-      ([scope, hasMessages]) => {
-        restoration.target = undefined
-        if (!hasMessages) return
-        const frame = requestAnimationFrame(() => {
-          if (scope !== sessionKey()) return
-          const saved = chatView.scroll("conversation")
-          if (!saved) {
-            chatScroll.forceScrollToBottom()
-            return
-          }
-          restoration.target = { scope, x: saved.x, y: saved.y }
-          applyRestoration()
-        })
-        onCleanup(() => cancelAnimationFrame(frame))
-      },
-    ),
-  )
+  // Restore once per scoped conversation. The previous array-valued effect ran
+  // again as assistant messages were appended, replaying a stale saved offset
+  // in the middle of a live response and visibly pulling the reader upward.
+  createEffect(() => {
+    const scope = sessionKey()
+    const hasMessages = messages().length > 0
+    if (restoration.initialized !== scope) {
+      restoration.initialized = undefined
+      restoration.target = undefined
+    }
+    if (!hasMessages || restoration.initialized === scope) return
+    restoration.initialized = scope
+    const frame = requestAnimationFrame(() => {
+      if (scope !== sessionKey()) return
+      if (working()) {
+        chatScroll.forceScrollToBottom()
+        return
+      }
+      const saved = chatView.scroll("conversation")
+      if (!saved) {
+        chatScroll.forceScrollToBottom()
+        return
+      }
+      restoration.target = { scope, x: saved.x, y: saved.y }
+      applyRestoration()
+    })
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
 
   createEffect(() => {
     if (project()) layout.projects.open(project()!.worktree)

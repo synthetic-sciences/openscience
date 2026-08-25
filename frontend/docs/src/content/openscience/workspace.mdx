@@ -31,6 +31,17 @@ The server always binds localhost — the deprecated `server.hostname` / `server
 - **Model selector and credentials panel.** Pick any configured model per session and add provider keys without leaving the browser. See [Models](/openscience/models).
 - **Settings panels.** Manage credentials, skills, and storage, and — when connected to Synthetic Sciences — a **Wallet** panel showing your balance, billing mode, and recent usage, without leaving the browser.
 
+## Scientific environments
+
+The first authenticated launch prepares two app-owned starter environments under `~/.openscience/conda` without changing your system Python, R, Conda configuration, or shell:
+
+- **Python 3.11:** NumPy, pandas, SciPy, Matplotlib, Seaborn, Pillow, and pip.
+- **R:** tidyverse, ggplot2, and jsonlite.
+
+Python and R run in persistent per-conversation kernels, so variables and imports remain available between steps. Idle kernels stop after about 30 minutes. When a task needs additional Python packages, an approved package change can create a named environment that is reused across projects on the same machine. Starter setup and repair status appears in **Settings → Customize → Compute**.
+
+Remote credentials for Modal, GPU providers, and major clouds can be connected either in that Compute panel or in the dashboard Integrations page. Account-connected credentials follow the signed-in user across devices, but execution still goes directly to the user's provider account; Synthetic Sciences does not resell remote compute.
+
 ## Headless server
 
 `openscience serve` starts the same server without opening a browser — useful for keeping a long-lived agent running that other terminals attach to. It takes the same `--port` and `--cors` flags and is loopback-only (`127.0.0.1`).

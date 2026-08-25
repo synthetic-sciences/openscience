@@ -32,7 +32,7 @@ type Provider = {
   id: string
   connected: boolean
   enabled: boolean
-  source: "stored" | "modal_toml" | null
+  source: "stored" | "account" | "modal_toml" | null
 }
 type ConfigHost = {
   alias: string
@@ -53,6 +53,12 @@ type Info = {
   ssh_config_hosts: ConfigHost[]
   modal: Modal
   modal_file: { found: boolean; ready: boolean }
+  environments: {
+    status: "absent" | "installing" | "ready" | "failed"
+    phase: string
+    error?: string
+    environments: { language: "python" | "r"; ready: boolean; path: string; packages: string[] }[]
+  }
 }
 type Probe = {
   ok: boolean
@@ -172,6 +178,8 @@ const Compute: Component = () => {
     return value
   }
   const modal = () => data()?.providers.find((item) => item.id === "modal")
+  const environment = (language: "python" | "r") =>
+    data()?.environments.environments.find((item) => item.language === language)
   const configHosts = () => {
     const saved = new Set(data()?.ssh_hosts.flatMap((item) => [item.label, item.host]) ?? [])
     return (
@@ -366,6 +374,18 @@ const Compute: Component = () => {
     showToast({ variant: "success", title: "Modal defaults saved" })
   }
 
+  const repairEnvironments = async () => {
+    setBusy("environments:repair", true)
+    const next = await call<Info>("/environments/repair", { method: "POST" }).catch((error) => {
+      showToast({ title: "Environment setup failed", description: message(error) })
+      return undefined
+    })
+    setBusy("environments:repair", false)
+    if (!next) return
+    control.mutate(next)
+    showToast({ variant: "success", title: "Scientific environments are ready" })
+  }
+
   const reset = () => {
     setLabel("")
     setHost("")
@@ -512,23 +532,50 @@ const Compute: Component = () => {
         <PanelBody>
           <Section
             title="Local runtimes"
-            subtitle="Persistent scientific runtimes start automatically when your work needs them."
+            subtitle="OpenScience owns shared, reproducible starter environments and keeps your system Python, R, and shell untouched."
           >
             <Panel>
               <Row
                 icon="braces"
-                title="Python and R kernels"
-                subtitle="Session-owned kernels preserve in-memory state and appear in the workspace Compute panel."
+                title="Python starter"
+                subtitle="Python 3.11 with NumPy, pandas, SciPy, Matplotlib, Seaborn, and Pillow. Variables persist for the session."
               >
-                <Badge tone="ready">Automatic</Badge>
+                <Badge tone={environment("python")?.ready ? "ready" : "muted"}>
+                  {environment("python")?.ready ? "Ready" : "Setup needed"}
+                </Badge>
               </Row>
               <Row
-                icon="console"
-                title="Shell and local jobs"
-                subtitle="Commands run inside the active session sandbox and remain controllable while live."
+                icon="braces"
+                title="R starter"
+                subtitle="R with tidyverse, ggplot2, and jsonlite. It is isolated from your system R libraries."
               >
-                <Badge tone="ready">Ready</Badge>
+                <Badge tone={environment("r")?.ready ? "ready" : "muted"}>
+                  {environment("r")?.ready ? "Ready" : "Setup needed"}
+                </Badge>
               </Row>
+              <Show when={data()?.environments.status !== "ready"}>
+                <div class="settings-row items-center gap-3">
+                  <div class="settings-list-copy min-w-0 flex-1">
+                    <strong>
+                      {data()?.environments.status === "failed"
+                        ? "Starter setup needs attention"
+                        : "Preparing environments"}
+                    </strong>
+                    <span>
+                      {data()?.environments.error ??
+                        "First setup downloads micromamba and creates the Python and R starters under ~/.openscience/conda."}
+                    </span>
+                  </div>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    disabled={isBusy("environments:repair")}
+                    onClick={() => void repairEnvironments()}
+                  >
+                    {isBusy("environments:repair") ? "Preparing…" : "Set up or repair"}
+                  </Button>
+                </div>
+              </Show>
             </Panel>
           </Section>
 
@@ -550,7 +597,9 @@ const Compute: Component = () => {
                         {modal()?.connected
                           ? modal()?.source === "modal_toml"
                             ? "Active profile from ~/.modal.toml"
-                            : "Token stored locally and encrypted."
+                            : modal()?.source === "account"
+                              ? "Synced from your Synthetic Sciences account."
+                              : "Token stored locally and encrypted."
                           : data()?.modal_file.ready
                             ? "Modal CLI configuration found at ~/.modal.toml."
                             : data()?.modal_file.found

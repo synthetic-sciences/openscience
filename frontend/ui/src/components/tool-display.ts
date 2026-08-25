@@ -27,7 +27,15 @@ export function stripRedactedReasoning(text: string): string {
   return visible.trim() ? visible : ""
 }
 
-const providerReasoningPhase = /\*\*([^*\n]+)\*\*\r?\n\r?\n/g
+const providerReasoningPhase = /\*\*([^*\n]+)\*\*(?:\r?\n[ \t]*)*/g
+const providerStatusOnly =
+  /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing)\b[^.!?]*$/i
+
+function statusOnlyReasoning(text: string) {
+  const value = text.trim()
+  if (!value || value.includes("\n") || value.length > 140) return false
+  return providerStatusOnly.test(value)
+}
 
 /**
  * OpenRouter's Responses bridge streams provider summaries as a single signed
@@ -38,10 +46,15 @@ const providerReasoningPhase = /\*\*([^*\n]+)\*\*\r?\n\r?\n/g
 export function reasoningDisplayText(text: string): string {
   const visible = stripRedactedReasoning(text)
   if (!visible) return ""
-  return visible
+  const readable = visible
     .replace(providerReasoningPhase, "\n\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
+  // Some Responses-compatible providers emit the phase label as its own
+  // reasoning part instead of a bold heading. It is useful as the single live
+  // status above the turn, but rendering every one-line label in the transcript
+  // produces the wall of "Planning…" rows that obscures the actual trajectory.
+  return statusOnlyReasoning(readable) ? "" : readable
 }
 
 /** The most recent provider phase is useful as one compact live status. */
@@ -49,7 +62,8 @@ export function reasoningTopic(text: string): string | undefined {
   const visible = stripRedactedReasoning(text)
   let topic: string | undefined
   for (const match of visible.matchAll(providerReasoningPhase)) topic = match[1]?.trim() || topic
-  return topic
+  if (topic) return topic
+  return statusOnlyReasoning(visible) ? visible.trim() : undefined
 }
 
 export function toolErrorDisplay(tool: string, value: string) {

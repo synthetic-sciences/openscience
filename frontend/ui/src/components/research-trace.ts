@@ -1,4 +1,5 @@
 import type { AssistantMessage, Part, ToolPart } from "@synsci/sdk/v2/client"
+import { reasoningDisplayText } from "./tool-display"
 
 export type ResearchTraceEntry = {
   message: AssistantMessage
@@ -6,10 +7,16 @@ export type ResearchTraceEntry = {
   hidden?: boolean
 }
 
-export type ResearchTraceItem = {
-  kind: "part"
-  entry: ResearchTraceEntry
+export type ResearchTraceGroup = {
+  kind: "group"
+  id: string
+  family: TraceFamily
+  label: string
+  detail: string
+  entries: ResearchTraceEntry[]
 }
+
+export type ResearchTraceItem = { kind: "part"; entry: ResearchTraceEntry } | ResearchTraceGroup
 
 export type TaskActivity = {
   id: string
@@ -69,15 +76,68 @@ function lifecycle(part: Part) {
   return part.type === "step-start" || part.type === "step-finish" || part.type === "snapshot" || part.type === "patch"
 }
 
+function toolTitle(part: ToolPart) {
+  const state = part.state
+  if ("title" in state && typeof state.title === "string" && state.title.trim()) return state.title.trim()
+  const input = state.input ?? {}
+  const value = input.filePath ?? input.path ?? input.pattern ?? input.query ?? input.url ?? input.description
+  if (typeof value === "string" && value.trim()) return value.trim()
+  return part.tool
+}
+
+function grouped(part: Part): part is ToolPart {
+  if (part.type !== "tool" || part.state.status !== "completed") return false
+  if (part.tool === "task" || part.tool === "todowrite" || part.tool === "todoread" || part.tool === "planwrite") {
+    return false
+  }
+  return traceFamily(part.tool) !== "other"
+}
+
 /**
- * Keep every provider-visible reasoning part, intermediate text, and tool
- * operation in chronological order. Display-only reasoning cleanup happens in
- * the part renderer; the stored bytes and stable part identity remain intact.
- * Do not replace live activity with semantic groups: those changed identity as
- * each tool completed, remounted the trace, and moved the scroll position.
+ * Keep the actual reasoning narrative chronological while compacting only
+ * adjacent, completed tools from the same family. Reasoning is never replaced
+ * by a generated model summary. Group identity is anchored to the first tool,
+ * so appending another operation cannot rename/remount an existing phase.
  */
 export function groupResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceItem[] {
-  return entries.flatMap((entry) => (entry.hidden || lifecycle(entry.part) ? [] : [{ kind: "part", entry }]))
+  const output: ResearchTraceItem[] = []
+  let tools: ResearchTraceEntry[] = []
+  let family: TraceFamily | undefined
+
+  const flush = () => {
+    if (tools.length === 0 || !family) return
+    if (tools.length === 1) {
+      output.push({ kind: "part", entry: tools[0] })
+    } else {
+      const first = tools[0].part as ToolPart
+      output.push({
+        kind: "group",
+        id: `trace-${first.id}-${family}`,
+        family,
+        label: traceLabel(family, tools.length),
+        detail: compact(tools.map((entry) => toolTitle(entry.part as ToolPart))),
+        entries: tools,
+      })
+    }
+    tools = []
+    family = undefined
+  }
+
+  for (const entry of entries) {
+    if (entry.hidden || lifecycle(entry.part)) continue
+    if (entry.part.type === "reasoning" && !reasoningDisplayText(entry.part.text ?? "")) continue
+    if (!grouped(entry.part)) {
+      flush()
+      output.push({ kind: "part", entry })
+      continue
+    }
+    const next = traceFamily(entry.part.tool)
+    if (family && family !== next) flush()
+    family = next
+    tools.push(entry)
+  }
+  flush()
+  return output
 }
 
 export function summarizeTaskActivity(items: TaskActivity[]): TaskActivityGroup[] {

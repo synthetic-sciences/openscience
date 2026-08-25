@@ -27,6 +27,7 @@ type Service = {
   connected: boolean
   set_fields: string[]
   updated_at: string | null
+  source: "local" | "account" | null
 }
 
 export const CredentialServices: Component<{
@@ -213,7 +214,13 @@ export const CredentialServices: Component<{
                           <span class="settings-chip">Saved</span>
                         </Show>
                       </div>
-                      <span>{service.connected ? "Encrypted on this machine" : service.description}</span>
+                      <span>
+                        {service.connected
+                          ? service.source === "account"
+                            ? "Synced from your Synthetic Sciences account"
+                            : "Encrypted on this machine"
+                          : service.description}
+                      </span>
                     </div>
                     <div class="settings-list-actions ml-auto max-w-full flex-wrap justify-end">
                       <Show when={service.connected}>

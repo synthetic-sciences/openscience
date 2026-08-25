@@ -39,9 +39,8 @@ import { ToolRetryGuard } from "@/session/tool-retry-guard"
  * base-graphics or ggplot2 plots left on the device are captured as `image/png`
  * where the platform's png device is available.
  *
- * Host requirement: `Rscript` on PATH (base R only — grDevices/utils are default
- * packages; no CRAN packages required). If Rscript is missing the tool degrades
- * gracefully with an install hint instead of throwing.
+ * OpenScience supplies Rscript from its app-owned starter environment. The
+ * user's system R installation and libraries are never modified.
  */
 
 // The driver runs a REPL over blocking stdin. Real newlines here are real
@@ -685,18 +684,6 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
   })
 
   // Discovery is metadata-only, so avoid asking for a change that cannot run.
-  const bin = await findRscript()
-  if (!bin) {
-    const msg =
-      "Rscript not found. Install R from https://www.r-project.org (or `brew install r`) so `Rscript` is on PATH."
-    ctx.metadata({ metadata: { output: msg, ok: false } })
-    return {
-      title: "R runtime unavailable",
-      output: msg,
-      metadata: { kernel: name, language: "r", stopped: false, ok: false, available: false, output: msg },
-    }
-  }
-
   if (mutation) {
     await ctx.ask(KernelEnvironmentMutation.permission(mutation))
     await ExecutionAuthority.require({
@@ -724,7 +711,7 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
         signal: ctx.abort,
         origin: { messageID: ctx.messageID, callID: ctx.callID, title, source: params.source },
       },
-      KernelEnvironmentMutation.rRuntime(!!mutation),
+      await KernelEnvironmentMutation.rRuntime(!!mutation),
     )
   } catch (error) {
     if (mutation) await KernelRuntime.release(identity).catch(() => undefined)
@@ -734,7 +721,7 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
   let restarted = false
   if (mutation) {
     if (result.ok) {
-      await KernelRuntime.restart(identity, KernelEnvironmentMutation.rRuntime())
+      await KernelRuntime.restart(identity, await KernelEnvironmentMutation.rRuntime())
       restarted = true
     } else {
       await KernelRuntime.release(identity)
@@ -794,7 +781,7 @@ const RDefinition: Awaited<ReturnType<Tool.Info<typeof RParameters>["init"]>> = 
     "Treat state as working memory, not reproducibility. For material results, save source, inputs, parameters, and outputs, then clean-rerun when practical.",
     "Omit `environment` or use `default`/`r` for the canonical runtime. Add a concise `title` and `source` for scripts; `action: stop` clears state.",
     "Prefer this over `bash Rscript`. Submit package changes separately; they require approval and automatically restart R after success.",
-    "Captures output and inline base/ggplot2 PNGs. Requires Rscript on PATH; otherwise returns install guidance.",
+    "Captures output and inline base/ggplot2 PNGs from the app-owned R starter.",
   ].join("\n"),
   parameters: RParameters,
   execute: (params, ctx) => executeR(params, ctx, false),

@@ -107,7 +107,7 @@ const identity = (
 const canonicalIdentity = (input: KernelIdentity) => input.name === input.language
 
 const runtime = async (input: KernelIdentity): Promise<KernelStartOptions> => {
-  if (input.language !== "python") return KernelEnvironmentMutation.rRuntime()
+  if (input.language !== "python") return await KernelEnvironmentMutation.rRuntime()
   try {
     return await KernelEnvironmentMutation.pythonRuntime(input.environmentName ?? "python")
   } catch (error) {

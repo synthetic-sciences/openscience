@@ -1,7 +1,6 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
-import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useModels, type ModelKey } from "@/context/models"
@@ -11,18 +10,14 @@ import {
   groupModelRoutes,
   inferenceSource,
   inferenceSourceLabel,
-  logicalModelKey,
   modelDisplayName,
   modelRouteValue,
   modelSummary,
-  parseModelRoute,
-  preservedModelRoute,
 } from "@/context/model-catalog"
 import { CodexConnection } from "./CodexConnection"
 import { ManagedInference } from "./ManagedInference"
 import { ProviderKeys } from "./ProviderKeys"
 import { ProviderLogo } from "./ProviderLogo"
-import { commitPreference } from "./preference-write"
 import { modelGroup, modelGroupLabel, modelGroupRank } from "../model-groups"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import "./models.css"
@@ -57,8 +52,6 @@ type Option = {
   value: string
 }
 
-type DefaultField = "model"
-
 type Scope = "all" | "reasoning" | "latest" | "long"
 type OptionGroup<T> = { id: string; label: string; models: T[] }
 
@@ -88,31 +81,6 @@ export default function Models() {
   const [scope, setScope] = createSignal<Scope>("all")
   const [catalogOpen, setCatalogOpen] = createSignal(false)
   const [error, setError] = createSignal<string>()
-  const [defaultsBusy, setDefaultsBusy] = createSignal(false)
-  const [optimisticDefaults, setOptimisticDefaults] = createSignal<{ model?: string }>({})
-  const [pendingDefaults, setPendingDefaults] = createSignal<Partial<Record<DefaultField, string>>>({})
-
-  const updateDefault = async (patch: { model?: string }) => {
-    if (defaultsBusy()) return
-    const previous = optimisticDefaults()
-    setOptimisticDefaults((current) => ({ ...current, ...patch }))
-    setDefaultsBusy(true)
-    setError(undefined)
-    const result = await commitPreference(
-      async () => {
-        await sync.updateConfig(patch)
-        return undefined
-      },
-      () => undefined,
-    )
-    if (!result.ok) {
-      setOptimisticDefaults(previous)
-      setError(result.error)
-    }
-    setDefaultsBusy(false)
-  }
-
-  const defaultValue = (field: DefaultField) => optimisticDefaults()[field] ?? sync.data.config[field]
   const routeAccess = (item: AvailableModel) =>
     inferenceSourceLabel(
       inferenceSource({
@@ -137,10 +105,8 @@ export default function Models() {
 
   const options = createMemo<Option[]>(() => {
     models.pinned.list()
-    const current = parseModelRoute(defaultValue("model"))
     return groupModelRoutes({
       models: models.list(),
-      current,
       recent: models.recent.list(),
     })
       .map((choice) => {
@@ -194,52 +160,6 @@ export default function Models() {
       })
     })
   })
-  const choiceFor = (field: DefaultField) => {
-    const pending = pendingDefaults()[field]
-    if (pending) return options().find((option) => option.logicalKey === pending)
-    const route = parseModelRoute(defaultValue(field))
-    return route
-      ? options().find((option) => option.logicalKey === logicalModelKey(route.providerID, route.modelID))
-      : undefined
-  }
-  const routesFor = (field: DefaultField) => {
-    const choice = choiceFor(field)
-    if (!choice) return []
-    const configured = parseModelRoute(defaultValue(field))
-    if (!configured || logicalModelKey(configured.providerID, configured.modelID) !== choice.logicalKey) {
-      return choice.routes
-    }
-    const exact = models
-      .list()
-      .find((model) => model.provider.id === configured.providerID && model.id === configured.modelID)
-    if (!exact) return choice.routes
-    const current = routeOption(exact)
-    return choice.routes.map((route) => (route.key.providerID === current.key.providerID ? current : route))
-  }
-  const currentRoute = (field: DefaultField) => {
-    if (pendingDefaults()[field]) return undefined
-    const value = defaultValue(field)
-    return routesFor(field).find((route) => route.value === value)
-  }
-  const clearPending = (field: DefaultField) => setPendingDefaults((current) => ({ ...current, [field]: undefined }))
-  const selectDefaultModel = (field: DefaultField, choice: Option) => {
-    const current = parseModelRoute(defaultValue(field))
-    if (current && logicalModelKey(current.providerID, current.modelID) === choice.logicalKey) {
-      clearPending(field)
-      return
-    }
-    const route = preservedModelRoute(choice.sourceRoutes, current)
-    if (!route) {
-      setPendingDefaults((value) => ({ ...value, [field]: choice.logicalKey }))
-      return
-    }
-    clearPending(field)
-    void updateDefault({ [field]: modelRouteValue({ providerID: route.provider.id, modelID: route.id }) })
-  }
-  const selectDefaultRoute = (field: DefaultField, route: RouteOption) => {
-    clearPending(field)
-    void updateDefault({ [field]: route.value })
-  }
   const groups = createMemo(() => {
     const map = new Map<ReturnType<typeof modelGroup>, Option[]>()
     for (const model of filtered()) map.set(model.group, [...(map.get(model.group) ?? []), model])
@@ -311,18 +231,6 @@ export default function Models() {
           >
             <div class="settings-card models-access-card">
               <ManagedInference onError={setError} />
-              <Row title="Starting model" detail="Used when a new session starts.">
-                <DefaultModelControl
-                  label="Starting model"
-                  options={options()}
-                  current={choiceFor("model")}
-                  routes={routesFor("model")}
-                  currentRoute={currentRoute("model")}
-                  disabled={defaultsBusy()}
-                  onModel={(choice) => selectDefaultModel("model", choice)}
-                  onRoute={(route) => selectDefaultRoute("model", route)}
-                />
-              </Row>
             </div>
           </Section>
 
@@ -473,91 +381,6 @@ export default function Models() {
           </Section>
         </PanelBody>
       </PanelScroll>
-    </div>
-  )
-}
-
-function DefaultModelControl(props: {
-  label: string
-  options: Option[]
-  current?: Option
-  routes: RouteOption[]
-  currentRoute?: RouteOption
-  disabled: boolean
-  onModel: (option: Option) => void
-  onRoute: (route: RouteOption) => void
-}) {
-  return (
-    <div class="models-default-controls">
-      <Select
-        aria-label={props.label}
-        options={props.options}
-        current={props.current}
-        value={(option) => option.value}
-        label={(option) => option.label}
-        disabled={props.disabled || props.options.length === 0}
-        onSelect={(option) => option && props.onModel(option)}
-        variant="secondary"
-        size="small"
-        triggerVariant="settings"
-        placeholder={props.options.length === 0 ? "No models available" : "Auto"}
-      >
-        {(option) => (
-          <Show when={option}>
-            {(item) => (
-              <span class="models-default-option">
-                <ProviderLogo id={item().providerLogo} label={item().provider} size="small" />
-                <span class="truncate">{item().label}</span>
-                <span class="models-default-option__provider">
-                  {item().routes.length > 1 ? `${item().routes.length} access routes` : item().provider}
-                </span>
-              </span>
-            )}
-          </Show>
-        )}
-      </Select>
-      <Show when={props.routes.length > 1}>
-        <Select
-          aria-label={`${props.label} access`}
-          class="models-default-route-select"
-          options={props.routes}
-          current={props.currentRoute}
-          value={(route) => route.value}
-          label={(route) => route.access}
-          disabled={props.disabled}
-          onSelect={(route) => route && props.onRoute(route)}
-          variant="secondary"
-          size="small"
-          triggerVariant="settings"
-          placeholder="Choose access"
-        >
-          {(route) => (
-            <Show when={route}>
-              {(item) => (
-                <span class="models-default-option">
-                  <ProviderLogo id={item().providerLogo} label={item().provider} size="small" />
-                  <span class="truncate">{item().access}</span>
-                  <span class="models-default-option__provider">{item().provider}</span>
-                </span>
-              )}
-            </Show>
-          )}
-        </Select>
-      </Show>
-    </div>
-  )
-}
-
-function Row(props: { title: string; detail: string; children: JSX.Element }) {
-  return (
-    <div class="settings-row justify-between">
-      <div class="flex min-w-0 flex-1 basis-[220px] items-center">
-        <div class="flex min-w-0 flex-col gap-0.5">
-          <span class="text-13-medium text-text-strong">{props.title}</span>
-          <span class="text-12-regular text-text-weak">{props.detail}</span>
-        </div>
-      </div>
-      <div class="ml-auto max-w-full flex-shrink-0">{props.children}</div>
     </div>
   )
 }

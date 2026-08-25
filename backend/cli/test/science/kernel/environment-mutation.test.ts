@@ -101,7 +101,7 @@ test("re-provisions missing default Python and R managed roots on ordinary start
       const r = KernelEnvironmentMutation.managedRoot("r", "r")
       await Promise.all([fs.rm(python, { recursive: true, force: true }), fs.rm(r, { recursive: true, force: true })])
       const pythonRuntime = await KernelEnvironmentMutation.pythonRuntime("python")
-      const rRuntime = KernelEnvironmentMutation.rRuntime()
+      const rRuntime = await KernelEnvironmentMutation.rRuntime()
       expect((await fs.stat(`${python}/site-packages`)).isDirectory()).toBe(true)
       expect((await fs.stat(`${r}/library`)).isDirectory()).toBe(true)
       expect(pythonRuntime.extraWritable).toBeUndefined()
@@ -310,7 +310,7 @@ test.skipIf(!Bun.which("Rscript"))(
         })
 
         try {
-          expect(KernelEnvironmentMutation.rRuntime(true)).toMatchObject({
+          expect(await KernelEnvironmentMutation.rRuntime(true)).toMatchObject({
             sandboxNetwork: "allow",
             extraWritable: [expect.any(String)],
           })

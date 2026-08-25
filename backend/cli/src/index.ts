@@ -167,6 +167,14 @@ const cli = yargs(hideBin(process.argv))
       // from subprocess environments. Modal remains adapter-only.
       await import("./server/routes/settings/compute").then((m) => m.ComputeSettings.applyComputeEnv()).catch(() => {})
 
+      // First authenticated startup quietly provisions the app-owned Python
+      // and R starters. The command does not wait for package resolution; the
+      // first kernel request joins the same lease-backed setup if it is still
+      // running. OpenScience never modifies the user's Python, R, or Conda.
+      await import("./science/kernel/environment-manager")
+        .then((m) => m.ManagedEnvironments.startInBackground())
+        .catch(() => {})
+
       // Retry any failed usage reports from previous sessions
       OpenScience.flushPendingUsage().catch(() => {})
     }
