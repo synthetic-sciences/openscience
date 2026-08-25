@@ -1412,7 +1412,15 @@ export namespace SessionPrompt {
       // never adds latency to the model call.
       SessionTelemetry.recordContext({
         sessionID,
-        composition: MessageV2.composition(sessionMessages, { system: providerSystem }),
+        composition: preflight.composition,
+        budget: {
+          total: preflight.total,
+          newest: preflight.newest,
+          history: preflight.history,
+          usable: preflight.usable,
+          soft: preflight.soft,
+          hard: preflight.hard,
+        },
       })
 
       const result = await processor.process({
@@ -2848,17 +2856,29 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
   async function context(input: CommandInput) {
     const messages = await Session.messages({ sessionID: input.sessionID })
     const composition = MessageV2.composition(messages)
+    const assembled = SessionTelemetry.context(input.sessionID)
     const selected = await commandModel(input)
     const model = await Provider.getModel(selected.providerID, selected.modelID).catch(() => undefined)
     const capacity = model?.limit.context
-    const percent = capacity ? Math.min(999, Math.round((composition.total / capacity) * 100)) : undefined
+    const budget = assembled?.hard ?? capacity
+    const used = assembled?.total ?? composition.total
+    const percent = budget ? Math.min(999, Math.round((used / budget) * 100)) : undefined
     const summaries = messages.filter((message) => message.info.role === "assistant" && message.info.summary).length
     return notice(
       input,
       [
         "### Context",
         "",
-        `- Conversation estimate: **${composition.total.toLocaleString()} tokens**${capacity ? ` / ${capacity.toLocaleString()} (${percent}%)` : ""}`,
+        `- Current conversation: **${composition.total.toLocaleString()} estimated tokens**`,
+        ...(assembled
+          ? [
+              `- Last assembled provider input: **${assembled.total.toLocaleString()} / ${assembled.hard.toLocaleString()} safe tokens (${percent}%)**`,
+              `- Protected newest request: ${assembled.newest.toLocaleString()}`,
+              `- Reducible history: ${assembled.history.toLocaleString()}`,
+            ]
+          : capacity
+            ? [`- Model context: ${capacity.toLocaleString()} tokens`]
+            : []),
         `- Text: ${composition.text.toLocaleString()}`,
         `- Reasoning: ${composition.reasoning.toLocaleString()}`,
         `- Tool results: ${composition.tool.toLocaleString()}`,
@@ -2866,7 +2886,9 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         `- Images: ${composition.images} (${composition.image.toLocaleString()} estimated tokens)`,
         `- Compaction summaries: ${summaries}`,
         "",
-        "This is a deterministic conversation estimate. Provider system prompts and final request transforms can add tokens.",
+        assembled
+          ? "The assembled figure is the exact local preflight from the last provider call, including instructions, tool schemas, file payloads, and media allowances."
+          : "Start a model turn to record the complete assembled-input budget, including instructions and tool schemas.",
         ...(percent && percent >= 75 ? ["Use `/compact [focus]` before the next long research phase."] : []),
       ].join("\n"),
     )

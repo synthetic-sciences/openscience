@@ -31,7 +31,9 @@ describe("artifact thumbnails", () => {
     expect(thumbKind(version({ filename: "fit.png", mimeType: "image/png" }))).toBe("image")
     expect(thumbKind(version({ filename: "notes.md", mimeType: "text/markdown" }))).toBe("text")
     expect(thumbKind(version({ filename: "jobs.json", mimeType: "application/json;charset=utf-8" }))).toBe("text")
-    expect(thumbKind(version({ filename: "paper.pdf", mimeType: "application/pdf" }))).toBe("binary")
+    expect(thumbKind(version({ filename: "paper.pdf", mimeType: "application/pdf" }))).toBe("pdf")
+    expect(thumbKind(version({ filename: "results.csv", mimeType: "text/csv" }))).toBe("table")
+    expect(thumbKind(version({ filename: "analysis.ipynb", mimeType: "application/json" }))).toBe("notebook")
   })
 
   test("bounds both text and in-memory image previews", () => {

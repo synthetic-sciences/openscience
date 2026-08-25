@@ -20,6 +20,52 @@ interface Preview {
   text?: string
   html?: string
   image?: string
+  table?: string[][]
+  label?: string
+}
+
+const cells = (body: string, filename: string) => {
+  const delimiter = extension(filename) === "tsv" ? "\t" : ","
+  return body
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .slice(0, 5)
+    .map((row) =>
+      row
+        .split(delimiter)
+        .slice(0, 4)
+        .map((cell) => cell.trim().replace(/^['"]|['"]$/g, "")),
+    )
+}
+
+const notebookText = (body: string) => {
+  const value = JSON.parse(body) as { cells?: Array<{ cell_type?: string; source?: string | string[] }> }
+  const cell = value.cells?.find((item) => item.cell_type === "markdown" || item.cell_type === "code")
+  const source = Array.isArray(cell?.source) ? cell.source.join("") : (cell?.source ?? "")
+  return { text: source.split("\n").slice(0, PREVIEW_LINES).join("\n"), label: cell?.cell_type ?? "notebook" }
+}
+
+const pdfImage = async (blob: Blob) => {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+    pdfjs.GlobalWorkerOptions.workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url")).default
+  }
+  const task = pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) })
+  const pdf = await task.promise
+  try {
+    const page = await pdf.getPage(1)
+    const base = page.getViewport({ scale: 1 })
+    const viewport = page.getViewport({ scale: Math.min(1.4, 320 / Math.max(1, base.width)) })
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.ceil(viewport.width)
+    canvas.height = Math.ceil(viewport.height)
+    const context = canvas.getContext("2d")
+    if (!context) throw new Error("Canvas unavailable")
+    await page.render({ canvas, canvasContext: context, viewport }).promise
+    return canvas.toDataURL("image/png")
+  } finally {
+    await task.destroy()
+  }
 }
 
 /**
@@ -85,7 +131,25 @@ export function ArtifactThumb(props: ThumbProps): JSX.Element {
           if (live) setPreview(preview)
           return
         }
+        if (kind() === "pdf") {
+          const preview = { image: await pdfImage(blob), label: "PDF preview" }
+          remember(artifact.current.id, preview)
+          if (live) setPreview(preview)
+          return
+        }
         const body = await blob.text()
+        if (kind() === "table") {
+          const preview = { table: cells(body, artifact.current.filename) }
+          remember(artifact.current.id, preview)
+          if (live) setPreview(preview)
+          return
+        }
+        if (kind() === "notebook") {
+          const preview = notebookText(body)
+          remember(artifact.current.id, preview)
+          if (live) setPreview(preview)
+          return
+        }
         const lines = body.split("\n").slice(0, PREVIEW_LINES).join("\n")
         const html = await (props.highlight ?? shared)(lines, thumbLanguage(artifact.current.filename)).catch(
           () => undefined,
@@ -109,6 +173,26 @@ export function ArtifactThumb(props: ThumbProps): JSX.Element {
     <Switch fallback={chip()}>
       <Match when={kind() === "image" && !failed() && preview()?.image}>
         {(image) => <img class="artifact-thumb artifact-thumb--image" src={image()} alt="" />}
+      </Match>
+      <Match when={kind() === "pdf" && !failed() && preview()?.image}>
+        {(image) => (
+          <img class="artifact-thumb artifact-thumb--image artifact-thumb--pdf" src={image()} alt="PDF first page" />
+        )}
+      </Match>
+      <Match when={kind() === "table" && !failed() && preview()?.table}>
+        {(rows) => (
+          <span class="artifact-thumb artifact-thumb--table" aria-label="Table preview">
+            {rows().map((row) => row.map((cell) => <span title={cell}>{cell}</span>))}
+          </span>
+        )}
+      </Match>
+      <Match when={kind() === "notebook" && !failed() && preview()}>
+        {(value) => (
+          <span class="artifact-thumb artifact-thumb--notebook">
+            <small>{value().label}</small>
+            <pre>{value().text}</pre>
+          </span>
+        )}
       </Match>
       <Match when={kind() === "text" && !failed() && preview()}>
         {(value) => (

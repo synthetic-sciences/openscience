@@ -127,12 +127,12 @@ describe("session.message-v2.composition", () => {
     expect(c.text).toBeGreaterThan(0)
   })
 
-  test("conservatively accounts for large inline image payloads", () => {
+  test("accounts for inline images as media rather than base64 text", () => {
     const part = imageFilePart("u1", "i1", "large.png") as MessageV2.FilePart
     part.url = `data:image/png;base64,${"A".repeat(400_000)}`
     const c = MessageV2.composition([{ info: userInfo("u1"), parts: [part] }])
-    expect(c.image).toBe(300_000)
-    expect(c.total).toBe(300_000)
+    expect(c.image).toBe(MessageV2.IMAGE_TOKENS)
+    expect(c.total).toBe(MessageV2.IMAGE_TOKENS)
   })
 
   test("counts tool args + output under `tool`, attachment images under `image`", () => {

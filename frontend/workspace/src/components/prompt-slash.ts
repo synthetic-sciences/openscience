@@ -8,6 +8,8 @@ export interface SlashCommand {
   category: "session" | "research" | "evidence" | "output" | "project" | "skill"
   keybind?: string
   type: "action" | "command" | "mode" | "skill"
+  /** Local command-palette action. It executes in the client instead of being sent as a chat command. */
+  actionID?: string
 }
 
 export type SlashGroup = "Commands" | "Skills"
@@ -104,6 +106,7 @@ export function slashIcon(command: SlashCommand) {
   if (command.trigger === "verify") return "circle-check" as const
   if (command.trigger === "status") return "activity" as const
   if (command.trigger === "context") return "book-open" as const
+  if (command.trigger === "undo" || command.trigger === "redo") return "refresh" as const
   if (command.trigger === "stop") return "stop" as const
   if (command.trigger === "checkpoint") return "archive" as const
   if (command.trigger === "reproduce") return "refresh" as const

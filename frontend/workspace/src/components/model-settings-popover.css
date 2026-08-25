@@ -543,8 +543,8 @@
 }
 
 [data-model-popover-kind="effort"] {
-  width: min(344px, calc(100vw - 24px));
-  max-height: min(72dvh, 440px);
+  width: min(268px, calc(100vw - 24px));
+  max-height: min(72dvh, 390px);
 }
 
 [data-model-popover-kind="effort"] .model-settings-popover__body {
@@ -560,8 +560,8 @@
 }
 
 [data-model-settings-popover][data-model-popover-kind="effort"] [data-model-option="effort"].model-settings-row {
-  min-height: 44px;
-  padding: 5px 9px;
+  min-height: 36px;
+  padding: 3px 8px;
   border: 1px solid transparent;
   background: transparent;
 }
@@ -608,9 +608,9 @@
 
 [data-model-fast-toggle] [data-component="switch"] {
   width: 100%;
-  min-height: 48px;
+  min-height: 40px;
   justify-content: space-between;
-  padding: 5px 9px;
+  padding: 4px 8px;
   cursor: pointer;
 }
 
@@ -633,7 +633,7 @@
   }
 
   [data-model-settings-popover][data-model-popover-kind="effort"] {
-    width: min(344px, calc(100vw - 24px));
+    width: min(268px, calc(100vw - 24px));
   }
 
   [data-model-settings-popover]:not([data-model-settings-view="root"]) [data-model-settings-layout] {

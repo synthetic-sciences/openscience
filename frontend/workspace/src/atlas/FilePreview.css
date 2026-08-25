@@ -564,6 +564,20 @@
   background: color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 
+.atlas-code-editor {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: var(--color-surface-solid);
+}
+
+.atlas-code-editor .cm-editor,
+.atlas-code-editor .cm-scroller {
+  height: 100%;
+}
+
 .atlas-file-truncated pre {
   margin: 0;
   overflow-wrap: anywhere;

@@ -11,6 +11,20 @@ import z from "zod"
 // quiet by default and appears only when debug logging is enabled.
 export namespace SessionTelemetry {
   const log = Log.create({ service: "session.telemetry" })
+  export interface ContextBudget {
+    total: number
+    newest: number
+    history: number
+    usable: number
+    soft: number
+    hard: number
+  }
+  export interface ContextSnapshot extends ContextBudget {
+    composition: MessageV2.Composition
+    recordedAt: number
+  }
+  const latest = new Map<string, ContextSnapshot>()
+  const LATEST_LIMIT = 256
 
   export const Event = {
     // Per-turn breakdown of the working context by content type, emitted right before the
@@ -30,6 +44,16 @@ export namespace SessionTelemetry {
         }),
         images: z.number(),
         total: z.number(),
+        budget: z
+          .object({
+            total: z.number(),
+            newest: z.number(),
+            history: z.number(),
+            usable: z.number(),
+            soft: z.number(),
+            hard: z.number(),
+          })
+          .optional(),
       }),
     ),
     // One event per reclaim mechanism (prune vs LLM summary), tagged with what triggered
@@ -48,8 +72,19 @@ export namespace SessionTelemetry {
     ),
   }
 
-  export function recordContext(input: { sessionID: string; composition: MessageV2.Composition }) {
+  export function recordContext(input: {
+    sessionID: string
+    composition: MessageV2.Composition
+    budget?: ContextBudget
+  }) {
     const c = input.composition
+    if (input.budget) {
+      if (!latest.has(input.sessionID) && latest.size >= LATEST_LIMIT) {
+        const oldest = latest.keys().next()
+        if (!oldest.done) latest.delete(oldest.value)
+      }
+      latest.set(input.sessionID, { ...input.budget, composition: c, recordedAt: Date.now() })
+    }
     log.debug("context", {
       sessionID: input.sessionID,
       total: c.total,
@@ -75,7 +110,13 @@ export namespace SessionTelemetry {
       },
       images: c.images,
       total: c.total,
+      budget: input.budget,
     }).catch((error) => log.debug("context telemetry publish failed", { error: `${error}` }))
+  }
+
+  /** Last exact safe-input preflight recorded immediately before a provider call. */
+  export function context(sessionID: string) {
+    return latest.get(sessionID)
   }
 
   export function recordCompaction(input: {

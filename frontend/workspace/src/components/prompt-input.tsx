@@ -757,6 +757,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     const catalog = new Map(sync.data.command.map((item) => [item.name, item]))
     const enabled = enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission)
+    const local = command.options
+      .filter((item) => item.slash && !item.disabled)
+      .map((item) => ({
+        id: item.id,
+        actionID: item.id,
+        trigger: item.slash!,
+        title: item.title,
+        description: item.description,
+        usage: `/${item.slash}`,
+        keybind: item.keybind,
+        source: "builtin" as const,
+        category: "session" as const,
+        type: "action" as const,
+      }))
     const builtin = SLASH_NATIVE.filter((name) => skillAction(sync.data.config.permission, name) !== "deny").map(
       (name) => {
         const item = catalog.get(name)
@@ -775,7 +789,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
     )
 
-    const reserved = new Set<string>(SLASH_NATIVE)
+    const reserved = new Set<string>([...SLASH_NATIVE, ...local.map((item) => item.trigger)])
 
     // Surface installed skills as slash entries. Selecting one prefills a
     // "Use the <name> skill: " prompt that the agent matches against its
@@ -795,7 +809,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: slashActionSkill(s.name) ? ("action" as const) : ("skill" as const),
       }))
 
-    return [...builtin, ...skills].toSorted(sortSlash)
+    return [...builtin, ...local, ...skills].toSorted(sortSlash)
   })
 
   const slashItems = (query: string) => {
@@ -899,6 +913,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (cmd.type === "skill") {
       replaceSlash(`/${cmd.trigger} `)
+      return
+    }
+
+    if (cmd.actionID) {
+      if (!replaceSlash("")) return
+      command.trigger(cmd.actionID, "slash")
       return
     }
 

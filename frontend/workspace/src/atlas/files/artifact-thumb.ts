@@ -1,7 +1,7 @@
 import type { StoredArtifactVersion } from "@/artifacts/store"
 import { STORED_ARTIFACT_PREVIEW_LIMIT } from "@/artifacts/bytes"
 
-export type ThumbKind = "image" | "text" | "binary"
+export type ThumbKind = "image" | "pdf" | "table" | "notebook" | "text" | "binary"
 
 /** Largest artifact worth reading for a ten-line preview. */
 export const PREVIEW_LIMIT = 64 * 1_024
@@ -80,7 +80,12 @@ const textual = (mime: string) =>
 
 export function thumbKind(version: StoredArtifactVersion): ThumbKind {
   if (version.mimeType.startsWith("image/")) return version.size <= STORED_ARTIFACT_PREVIEW_LIMIT ? "image" : "binary"
+  const ext = extension(version.filename)
+  if ((version.mimeType === "application/pdf" || ext === "pdf") && version.size <= STORED_ARTIFACT_PREVIEW_LIMIT)
+    return "pdf"
   if (version.size > PREVIEW_LIMIT) return "binary"
-  if (generic(version.mimeType)) return LANG[extension(version.filename)] ? "text" : "binary"
+  if (["csv", "tsv", "jsonl"].includes(ext)) return "table"
+  if (ext === "ipynb") return "notebook"
+  if (generic(version.mimeType)) return LANG[ext] ? "text" : "binary"
   return textual(version.mimeType) ? "text" : "binary"
 }

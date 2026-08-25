@@ -39,6 +39,7 @@ import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { recoverFileDraft, rememberFileDraft } from "@/atlas/file-drafts"
 import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
 import { rawFileQuery } from "@/utils/project-file"
+import { CodeEditor } from "@/atlas/CodeEditor"
 import { HTML_STYLESHEET_BYTES, htmlStylesheets, loadHtmlStylesheets, rewriteHtmlAssets } from "@/utils/html-assets"
 import "./FilePreview.css"
 
@@ -744,20 +745,14 @@ export function FileView(props: {
                     view.source
                   }
                 >
-                  <textarea
-                    aria-label="File source"
+                  <CodeEditor
+                    label={`${name()} source`}
                     value={view.draft}
+                    language={LANG[e()] ?? "text"}
                     readOnly={props.writable === false}
-                    spellcheck={false}
-                    wrap={kind() === "markdown" ? "soft" : "off"}
-                    onInput={(event) => setView({ draft: event.currentTarget.value, saveError: undefined })}
-                    class="atlas-scroll atlas-file-source-editor"
-                    classList={{ "is-prose-editor": kind() === "markdown" }}
-                    onKeyDown={(event) => {
-                      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") return
-                      event.preventDefault()
-                      void save()
-                    }}
+                    wrap={kind() === "markdown"}
+                    onChange={(draft) => setView({ draft, saveError: undefined })}
+                    onSave={() => void save()}
                   />
                 </Match>
                 <Match when={kind() === "code"}>

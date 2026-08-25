@@ -1161,6 +1161,48 @@
 .artifact-card[data-layout="list"] .artifact-thumb--image {
   object-fit: cover;
 }
+.artifact-thumb--pdf {
+  object-position: top center;
+}
+.artifact-thumb--table {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
+  gap: 1px;
+  padding: 8px;
+  background: var(--color-border);
+}
+.artifact-thumb--table > span {
+  overflow: hidden;
+  min-height: 15px;
+  padding: 2px 4px;
+  background: var(--color-surface-solid);
+  color: var(--color-text-weak);
+  font-family: var(--font-code);
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifact-thumb--notebook {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 9px;
+}
+.artifact-thumb--notebook small {
+  color: var(--color-text-faint);
+  font: 600 8px/1 var(--font-sans);
+  text-transform: uppercase;
+}
+.artifact-thumb--notebook pre {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-weak);
+  font: 8px/1.45 var(--font-code);
+  white-space: pre-wrap;
+}
 /* A preview is a bounded sample, not a floating fade. Keeping the edge solid
    prevents a gradient from being visibly clipped by the card boundary. */
 .artifact-thumb--text {

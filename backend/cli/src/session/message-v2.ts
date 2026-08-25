@@ -864,11 +864,12 @@ export namespace MessageV2 {
     )
   }
 
-  // Native multimodal endpoints usually charge a small pixel-based image budget, while
-  // OpenAI-compatible relays can tokenize inline base64 much more heavily. Use a flat
-  // floor for small images and a conservative inline estimate for preflight safety.
+  // Images are media inputs, not text. Charging their base64 transport bytes as text
+  // made a perfectly valid 4–5 MB figure look like millions of prompt tokens and could
+  // reject the request before the provider saw it. Keep a conservative visual-token
+  // allowance here; the independent byte-size guard below still blocks media that a
+  // provider cannot accept.
   export const IMAGE_TOKENS = 1600
-  export const INLINE_IMAGE_TOKEN_RATIO = 0.75
   export const DUPLICATE_IMAGE =
     "[Duplicate image omitted — byte-for-byte identical image content was already provided in this request.]"
 
@@ -877,9 +878,8 @@ export namespace MessageV2 {
     return comma === -1 ? url : url.slice(comma + 1)
   }
 
-  export function imageTokens(url: string) {
-    if (!url.startsWith("data:")) return IMAGE_TOKENS
-    return Math.max(IMAGE_TOKENS, Math.ceil(mediaIdentity(url).length * INLINE_IMAGE_TOKEN_RATIO))
+  export function imageTokens(_url: string) {
+    return IMAGE_TOKENS
   }
 
   // Anthropic (and most providers) reject a single image over 5 MB with an HTTP 400.

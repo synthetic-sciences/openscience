@@ -33,9 +33,10 @@ describe("file preview markdown images", () => {
     const css = await read("./FilePreview.css")
 
     expect(preview).toContain('sourceLabel={description().source && props.writable !== false ? "Edit" : undefined}')
-    expect(preview).toContain('classList={{ "is-prose-editor": kind() === "markdown" }}')
+    expect(preview).toContain('import { CodeEditor } from "@/atlas/CodeEditor"')
+    expect(preview).toContain('wrap={kind() === "markdown"}')
     expect(preview).toContain("void save()")
-    expect(css).toContain(".atlas-file-source-editor.is-prose-editor")
+    expect(css).toContain(".atlas-code-editor .cm-editor")
     expect(css).toContain("text-wrap: pretty")
     expect(css).toContain("text-wrap: balance")
   })
