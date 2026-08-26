@@ -204,8 +204,7 @@ test("competing reclaimers cannot remove a newly acquired storage lock", async (
       ),
     ).toEqual(["written", "written", "written"])
     expect(await Bun.file(lockfile).exists()).toBe(false)
-    expect(await fs.readdir(LockCoordination.directory(lockfile, "claim"))).toEqual([])
-    expect(await fs.readdir(LockCoordination.directory(lockfile, "intent"))).toEqual([])
+    await expect(fs.stat(`${lockfile}.coord`)).rejects.toMatchObject({ code: "ENOENT" })
   } finally {
     for (const proc of processes) {
       try {
