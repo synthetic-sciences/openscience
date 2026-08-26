@@ -1907,7 +1907,7 @@ export namespace SessionPrompt {
       `Research effort: ${effort.toUpperCase()}. ${posture}`,
       limit
         ? `Delegation is optional and shallow (${settings.level}): at most ${limit} Task calls total this user turn, including continuations.`
-        : "Automatic delegation is off for this turn. Work in the lead conversation unless the user explicitly attached an agent.",
+        : `Automatic delegation is off for this turn. Work in the lead conversation unless the user explicitly attached an agent; even then, at most ${MessageV2.childAgentLimit(effort)} Task calls total this user turn, including continuations.`,
       `Interaction: ${settings.autonomy}. Branch diversity: ${settings.diversity}. These guide collaboration and never override the permission mode.`,
     ].join("\n")
   }

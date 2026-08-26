@@ -69,9 +69,7 @@ const ComputeWorkload = z
       .min(1)
       .max(2_000)
       .optional()
-      .describe(
-        "Optional existing directory inside the session workspace used for local input staging. Omit for Modal; this is not a remote /tmp working directory.",
-      ),
+      .describe("Existing relative staging directory. Omit for Modal."),
     target: ComputeTarget,
     resources: JobBroker.Resources.optional(),
     modules: z.array(z.string().trim().min(1).max(240)).max(64).optional(),
@@ -80,28 +78,20 @@ const ComputeWorkload = z
       .array(z.string().trim().min(1).max(2_000))
       .max(100)
       .optional()
-      .describe("Relative output paths or globs under the job workspace; never absolute /tmp paths."),
-    checkpoint: z
-      .string()
-      .trim()
-      .min(1)
-      .max(2_000)
-      .optional()
-      .describe("Relative checkpoint path under the job workspace; never an absolute directory."),
+      .describe("Relative output paths or globs."),
+    checkpoint: z.string().trim().min(1).max(2_000).optional().describe("Relative checkpoint path."),
     uploads: z
       .array(z.string().trim().min(1).max(2_000))
       .max(100)
       .optional()
-      .describe("Relative session-workspace files to stage into the remote job."),
+      .describe("Relative session files to stage."),
     packages: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
     image: z.string().trim().min(1).max(2_000).optional(),
     gpu: z.string().trim().min(1).max(120).optional(),
     secret_refs: JobBroker.SecretRef.array()
       .max(8)
       .optional()
-      .describe(
-        "Reviewed symbolic credentials resolved only by the trusted Modal adapter; never include secret values.",
-      ),
+      .describe("Reviewed symbolic Modal credentials; never values."),
   })
   .strict()
 

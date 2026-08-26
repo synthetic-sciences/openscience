@@ -651,9 +651,6 @@ describe("/runtime routes", () => {
   test("publishes the prompt, replay, and SSE schemas without changing legacy routes", async () => {
     const specs = await Server.openapi()
     expect(specs.paths?.["/runtime/prompt"]?.post).toBeDefined()
-    expect(await Bun.file(new URL("../../src/server/routes/runtime.ts", import.meta.url)).text()).toContain(
-      'agent: "research"',
-    )
     expect(specs.paths?.["/runtime/events"]?.get).toBeDefined()
     expect(specs.paths?.["/runtime/events/replay"]?.get).toBeDefined()
     expect(specs.paths?.["/session/{sessionID}/prompt_async"]?.post).toBeDefined()
@@ -682,6 +679,7 @@ describe("/runtime routes", () => {
           const accepted = (await response.json()) as { runID: string; acceptedAt: number }
           expect(accepted.runID).toStartWith("run_")
           expect(accepted.acceptedAt).toBeGreaterThan(0)
+          expect(promptCall.mock.calls[0]?.[0].agent).toBe("research")
 
           const replay = await RuntimeRoutes().request(`/events/replay?sessionID=${session.id}&afterSequence=0`)
           expect(replay.status).toBe(200)
