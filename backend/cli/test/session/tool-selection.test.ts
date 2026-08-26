@@ -278,7 +278,7 @@ describe("tool selection", () => {
     const relevant = available.filter((tool) =>
       ToolSelection.relevant(tool, { agent: ToolSelection.THIN_RESEARCH_AGENT, message }),
     )
-    expect(relevant.length).toBeLessThanOrEqual(13)
+    expect(relevant.length).toBeLessThanOrEqual(14)
     expect(relevant).toEqual(
       expect.arrayContaining([
         "question",
@@ -286,6 +286,7 @@ describe("tool selection", () => {
         "read",
         "glob",
         "grep",
+        "apply_patch",
         "task",
         "compute_job",
         "research_search",
