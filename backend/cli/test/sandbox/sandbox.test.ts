@@ -26,6 +26,19 @@ async function executeWithoutCleanup(plan: Sandbox.Plan | Sandbox.Wrapped, cwd: 
   return { exit, stdout, stderr }
 }
 
+async function publishedPID(file: string, attempts = 300) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const value = Number(fs.readFileSync(file, "utf8").trim())
+      if (Number.isSafeInteger(value) && value > 0) return value
+    } catch {
+      // The writer may not have created the marker yet.
+    }
+    if (attempt + 1 < attempts) await Bun.sleep(10)
+  }
+  return undefined
+}
+
 describe("Sandbox.cacheEnvironment", () => {
   test("keeps scientific caches inside the writable session workspace", () => {
     const workspace = path.join(path.parse(process.cwd()).root, "work", "session")
@@ -148,6 +161,15 @@ describe("Sandbox.seatbeltProfile", () => {
 })
 
 describe("Sandbox.bubblewrapArgs", () => {
+  test("waits for a complete PID marker instead of treating file creation as readiness", async () => {
+    await using tmp = await tmpdir()
+    const marker = path.join(tmp.path, "pid")
+    await Bun.write(marker, "")
+    const write = Bun.sleep(20).then(() => Bun.write(marker, `${process.pid}\n`))
+    expect(await publishedPID(marker, 30)).toBe(process.pid)
+    await write
+  })
+
   test("starts from an empty root and mounts only runtimes plus explicit grants", () => {
     const args = Sandbox.bubblewrapArgs({
       writable: ["/work/project"],
@@ -460,14 +482,13 @@ describe("Sandbox.bubblewrapArgs", () => {
       }
       const escaped: { pid: number; identity?: string } = { pid: 0 }
       try {
-        for (let attempt = 0; attempt < 300 && !fs.existsSync(marker); attempt++) await Bun.sleep(10)
-        if (!fs.existsSync(marker)) {
+        const namespacePID = await publishedPID(marker)
+        if (!namespacePID) {
           if (proc.exitCode === null) proc.kill("SIGKILL")
           await proc.exited
           const stderr = await new Response(proc.stderr).text()
-          throw new Error(`double-fork sandbox marker was not created: ${stderr.trim() || "no stderr"}`)
+          throw new Error(`double-fork sandbox marker did not publish a PID: ${stderr.trim() || "no stderr"}`)
         }
-        const namespacePID = Number(fs.readFileSync(marker, "utf8"))
         // The daemon can publish its marker while the intermediate fork is
         // concurrently exiting and reparenting it to the namespace init. A
         // single host /proc snapshot can therefore see a temporarily broken
