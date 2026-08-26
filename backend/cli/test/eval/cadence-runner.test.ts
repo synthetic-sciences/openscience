@@ -3,7 +3,9 @@ import path from "node:path"
 import { mkdir, rm } from "node:fs/promises"
 import { buildPromptCorpus, extractPrompts } from "../../../../evals/cadence-harness/prepare"
 import {
+  assertServerIdentity,
   collectRuntimeRun,
+  createRunGuard,
   captureSessions,
   campaignOutcome,
   isUserCancellation,
@@ -20,6 +22,8 @@ import {
   updateCampaignProgress,
 } from "../../../../evals/cadence-harness/run"
 import { aggregateCapturedSessionTree } from "../../../../evals/cadence-harness/tree-metrics"
+import { devPrompt } from "../../../../evals/cadence-harness/dev-prompts"
+import { devLabLayout, labEnvironment } from "../../../../evals/cadence-harness/dev-lab"
 
 const root = path.join(import.meta.dir, `.cadence-runner-${process.pid}`)
 
@@ -343,6 +347,24 @@ describe("cadence runner contracts", () => {
     })
     expect(
       permissionDecision({
+        permission: "compute_job",
+        metadata: { compute_job: { job: { target_label: "ssh-gpu" } } },
+      }),
+    ).toMatchObject({ reply: "reject" })
+    expect(
+      permissionDecision(
+        { permission: "modal", metadata: { compute_job: { plan: { provider: "modal" } } } },
+        { managedCompute: true },
+      ),
+    ).toMatchObject({ reply: "once" })
+    expect(
+      permissionDecision(
+        { permission: "modal", metadata: { compute_job: { plan: { provider: "modal" } } } },
+        { managedCompute: false },
+      ),
+    ).toMatchObject({ reply: "reject" })
+    expect(
+      permissionDecision({
         permission: "mcp",
         metadata: { server: "paid-connected-service", tool: "records.create", mutating: true, paid: true },
       }),
@@ -355,6 +377,60 @@ describe("cadence runner contracts", () => {
       reason: "environment mutation requires explicit campaign opt-in; none is configured",
     })
     expect(permissionDecision({ permission: "unknown" })).toMatchObject({ reply: "reject" })
+  })
+
+  test("binds a single dev prompt to exact source identity without implicit hard caps", () => {
+    const p21 = devPrompt("p21")
+    const p24 = devPrompt("P24")
+    expect(p21).toMatchObject({ id: "P21", ordinal: 21 })
+    expect(p21.sha256).toHaveLength(64)
+    expect(p24.text).toContain("at most 4× H100 GPUs")
+    expect(() => devPrompt("P22")).toThrow("Use P21, P23, or P24")
+
+    const health = { sourceSha: "abc", sourceWorktreeHash: "def", runId: "run-one" }
+    expect(() => assertServerIdentity(health, { sourceSha: "abc", sourceWorktreeHash: "def" })).not.toThrow()
+    expect(() => assertServerIdentity(health, { sourceSha: "abc", sourceWorktreeHash: "other" })).toThrow(
+      "worktree hash",
+    )
+  })
+
+  test("keeps run ceilings diagnostic and opt-in", () => {
+    const guard = createRunGuard({ maxEvents: 2, maxToolCalls: 1, maxChildAgents: 1 })
+    expect(guard.observe(runtimeEvent(1, "message.part.updated"))).toBeUndefined()
+    expect(
+      guard.observe(
+        runtimeEvent(2, "message.part.updated", {
+          part: { type: "tool", callID: "tool-1", tool: "read" },
+        }),
+      ),
+    ).toBeUndefined()
+    expect(guard.observe(runtimeEvent(3, "message.part.updated"))).toBe("max_events:2")
+  })
+
+  test("isolates dev credentials from ambient provider and compute secrets", () => {
+    const layout = devLabLayout("/tmp/dev-home", "/tmp/dev-lab")
+    const env = labEnvironment(
+      layout,
+      { sourceSha: "abc", sourceWorktreeHash: "def", runId: "run-one" },
+      {
+        PATH: "/usr/bin",
+        HOME: "/tmp/dev-home",
+        OPENROUTER_API_KEY: "must-not-leak",
+        FIRECRAWL_API_KEY: "must-not-leak",
+        MODAL_TOKEN_SECRET: "must-not-leak",
+      },
+    )
+    expect(env).toMatchObject({
+      PATH: "/usr/bin",
+      OPENSCIENCE_DATA_DIR: "/tmp/dev-lab/data",
+      OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST: "1",
+      OPENSCIENCE_SOURCE_SHA: "abc",
+      OPENSCIENCE_SOURCE_WORKTREE_HASH: "def",
+      OPENSCIENCE_RUN_ID: "run-one",
+    })
+    expect(env).not.toHaveProperty("OPENROUTER_API_KEY")
+    expect(env).not.toHaveProperty("FIRECRAWL_API_KEY")
+    expect(env).not.toHaveProperty("MODAL_TOKEN_SECRET")
   })
 
   test("redacts secrets and hidden reasoning without erasing observable reasoning metadata", () => {

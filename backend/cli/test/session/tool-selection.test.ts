@@ -229,4 +229,81 @@ describe("tool selection", () => {
       }),
     ).toBe(false)
   })
+
+  test("keeps the experimental research profile request-local and below twelve active tools", () => {
+    const message =
+      "Use Modal and BioNeMo to execute a protein benchmark, search the literature, and deliver a LaTeX paper with artifacts."
+    const available = [
+      "invalid",
+      "question",
+      "bash",
+      "read",
+      "glob",
+      "grep",
+      "apply_patch",
+      "task",
+      "compute_job",
+      "research_search",
+      "webfetch",
+      "skill",
+      "artifact",
+      "generate_image",
+      "python",
+      "r",
+      "research_contract",
+      "atlas",
+      "context7_query-docs",
+    ]
+    const relevant = available.filter((tool) =>
+      ToolSelection.relevant(tool, { agent: ToolSelection.THIN_RESEARCH_AGENT, message }),
+    )
+    const selected = ToolSelection.thinLimit(relevant)
+    const active = [...selected].filter((tool) => tool !== "invalid")
+
+    expect(active.length).toBeLessThanOrEqual(12)
+    expect(active).toEqual(
+      expect.arrayContaining([
+        "question",
+        "bash",
+        "read",
+        "glob",
+        "grep",
+        "apply_patch",
+        "task",
+        "compute_job",
+        "research_search",
+        "webfetch",
+        "skill",
+        "artifact",
+      ]),
+    )
+    expect(selected.has("invalid")).toBe(true)
+    expect(selected.has("research_contract")).toBe(false)
+    expect(selected.has("atlas")).toBe(false)
+    expect(selected.has("context7_query-docs")).toBe(false)
+  })
+
+  test("does not crowd explicit thin capabilities out with optional runtimes", () => {
+    const ids = [
+      "invalid",
+      "question",
+      "bash",
+      "read",
+      "glob",
+      "grep",
+      "apply_patch",
+      "task",
+      "compute_job",
+      "research_search",
+      "webfetch",
+      "skill",
+      "artifact",
+      "generate_image",
+      "python",
+      "r",
+    ]
+    const selected = ToolSelection.thinLimit(ids, { generate_image: true })
+    expect(selected.has("generate_image")).toBe(true)
+    expect([...selected].filter((tool) => tool !== "invalid")).toHaveLength(12)
+  })
 })

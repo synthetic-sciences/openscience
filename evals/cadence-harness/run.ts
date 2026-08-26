@@ -1,7 +1,9 @@
 import path from "node:path"
+import os from "node:os"
 import { appendFile, chmod, mkdir, readFile, rename } from "node:fs/promises"
 import { createOpenScienceClient, createOpenScienceRuntime } from "@synsci/sdk/v2"
 import { aggregateCapturedSessionTree, type CapturedSessionSource } from "./tree-metrics"
+import { devPrompt } from "./dev-prompts"
 
 type Json = Record<string, any>
 export type CampaignPrompt = {
@@ -17,6 +19,7 @@ export type CampaignPrompt = {
 const DEFAULT_CAMPAIGN = path.join(import.meta.dir, "campaigns", "cadence-cloud-20")
 const DEFAULT_BASE_URL = "http://127.0.0.1:4096"
 const DEFAULT_MODEL = "openai-codex/gpt-5.6-sol"
+const DEFAULT_DEV_MODEL = "openrouter/openai/gpt-5.6-sol"
 const DEFAULT_MODEL_EFFORT = "high"
 const DEFAULT_RESEARCH_EFFORT = "normal"
 const DEFAULT_TIMEOUT_MINUTES = 120
@@ -52,6 +55,47 @@ export function parseModelKey(model: string) {
 }
 
 export type CampaignOutcome = "completed" | "partial" | "blocked" | "failed" | "cancelled"
+
+export type RunLimits = {
+  maxEvents: number
+  maxToolCalls: number
+  maxChildAgents: number
+}
+
+export function createRunGuard(limits: RunLimits, existing: Json[] = []) {
+  const sequences = new Set<number>()
+  const tools = new Set<string>()
+  const children = new Set<string>()
+
+  const observe = (event: Json) => {
+    const sequence = Number(event.sequence)
+    if (Number.isFinite(sequence)) {
+      if (sequences.has(sequence)) return
+      sequences.add(sequence)
+    }
+    const part = event.properties?.part as Json | undefined
+    if (part?.type === "tool") {
+      const id = String(part.callID ?? part.id ?? `${event.sessionID ?? "session"}:${sequence}`)
+      tools.add(id)
+      if (part.tool === "task") children.add(id)
+    }
+    const child = event.properties?.session as Json | undefined
+    if (child?.parentID && child.id) children.add(String(child.id))
+  }
+  for (const event of existing) observe(event)
+
+  return {
+    observe(event: Json) {
+      observe(event)
+      if (sequences.size > limits.maxEvents) return `max_events:${limits.maxEvents}`
+      if (tools.size > limits.maxToolCalls) return `max_tool_calls:${limits.maxToolCalls}`
+      if (children.size > limits.maxChildAgents) return `max_child_agents:${limits.maxChildAgents}`
+    },
+    usage() {
+      return { events: sequences.size, toolCalls: tools.size, childAgents: children.size }
+    },
+  }
+}
 
 export function isUserCancellation(value: unknown, marker?: unknown) {
   if (value && typeof value === "object") {
@@ -95,6 +139,7 @@ export function campaignOutcome(input: {
   assistantError?: unknown
   finalText?: string
   artifactCount?: number
+  safetyLimit?: string
 }): { status: CampaignOutcome; reason?: string } {
   const usable = Boolean(input.finalText?.trim()) || Number(input.artifactCount ?? 0) > 0
   const errors = [input.terminalError, input.assistantError].filter(
@@ -105,6 +150,8 @@ export function campaignOutcome(input: {
     .join(" ")
     .toLowerCase()
   const failed = input.terminalType === "runtime.failed" || errors.length > 0
+  if (input.safetyLimit)
+    return { status: usable ? "partial" : "failed", reason: `runner_safety_limit:${input.safetyLimit}` }
   if (input.timedOut) return { status: usable ? "partial" : "failed", reason: "runner_timeout" }
   if (input.userAborted) return { status: "cancelled", reason: "user_cancelled" }
   if (failed) {
@@ -174,22 +221,31 @@ async function command(args: string[], cwd = process.cwd()) {
   return { stdout, stderr, exitCode }
 }
 
-async function gitFingerprint(root: string) {
-  const [head, tracked, staged, status] = await Promise.all([
+export async function gitFingerprint(root: string) {
+  const [head, tracked, staged, status, untracked] = await Promise.all([
     command(["git", "rev-parse", "HEAD"], root),
     command(["git", "diff", "--binary"], root),
     command(["git", "diff", "--cached", "--binary"], root),
     command(["git", "status", "--porcelain=v1", "-z"], root),
+    command(["git", "ls-files", "--others", "--exclude-standard", "-z"], root),
   ])
+  const untrackedFiles = untracked.stdout.split("\0").filter(Boolean).sort()
+  const untrackedHasher = new Bun.CryptoHasher("sha256")
+  for (const relative of untrackedFiles) {
+    untrackedHasher.update(relative).update("\0")
+    untrackedHasher.update(await readFile(path.join(root, relative))).update("\0")
+  }
   const combined = `${tracked.stdout}\0${staged.stdout}\0${status.stdout}`
-  return {
+  const result = {
     head: head.stdout.trim(),
     dirty: status.stdout.length > 0,
     trackedDiffHash: sha256(tracked.stdout),
     stagedDiffHash: sha256(staged.stdout),
     worktreeHash: sha256(combined),
     statusHash: sha256(status.stdout),
+    untrackedHash: untrackedHasher.digest("hex"),
   }
+  return { ...result, sourceHash: sha256(JSON.stringify(result)) }
 }
 
 async function unwrap<T>(value: Promise<{ data?: T; error?: unknown }> | { data?: T; error?: unknown }): Promise<T> {
@@ -199,7 +255,27 @@ async function unwrap<T>(value: Promise<{ data?: T; error?: unknown }> | { data?
   return result.data
 }
 
-async function preflight(baseUrl: string, model: string) {
+export function assertServerIdentity(
+  health: Json,
+  expected: { sourceSha: string; sourceWorktreeHash: string; runId?: string },
+) {
+  if (!health.runId || !health.sourceSha || !health.sourceWorktreeHash) {
+    throw new Error("The server does not expose a complete dev source identity; restart it with the dev-lab launcher")
+  }
+  if (health.sourceSha !== expected.sourceSha)
+    throw new Error(`Server source SHA ${health.sourceSha} does not match this checkout ${expected.sourceSha}`)
+  if (health.sourceWorktreeHash !== expected.sourceWorktreeHash)
+    throw new Error("Server source worktree hash does not match this checkout; restart the dev server")
+  if (expected.runId && health.runId !== expected.runId)
+    throw new Error(`Server run ${health.runId} does not match expected run ${expected.runId}`)
+  return health
+}
+
+async function preflight(
+  baseUrl: string,
+  model: string,
+  expected?: { sourceSha: string; sourceWorktreeHash: string; runId?: string },
+) {
   const root = createOpenScienceClient({ baseUrl })
   const [healthResponse, accountResponse, providers] = await Promise.all([
     fetch(new URL("/global/health", baseUrl)),
@@ -212,8 +288,10 @@ async function preflight(baseUrl: string, model: string) {
   if (!providers.connected?.includes(providerID)) throw new Error(`Provider ${providerID} is not connected`)
   const provider = providers.all?.find((item: Json) => item.id === providerID)
   if (!provider?.models?.[modelID]) throw new Error(`Model ${model} is not in the live provider catalog`)
+  const health = (await healthResponse.json()) as Json
+  if (expected) assertServerIdentity(health, expected)
   return {
-    health: await healthResponse.json(),
+    health,
     account: await accountResponse.json(),
     providerID,
     modelID,
@@ -231,9 +309,26 @@ export function isUnsafeHost(host: string) {
   return false
 }
 
-export function permissionDecision(request: Json) {
+export function permissionDecision(request: Json, policy: { managedCompute?: boolean } = {}) {
   const permission = String(request.permission ?? "")
   const metadata = request.metadata && typeof request.metadata === "object" ? request.metadata : {}
+  const compute = (metadata as Json).compute_job as Json | undefined
+  const computePlan = compute?.plan as Json | undefined
+  const computeJob = compute?.job as Json | undefined
+  const computeTarget = String(
+    computePlan?.provider ??
+      computeJob?.provider ??
+      computeJob?.target?.kind ??
+      computeJob?.target_label ??
+      (metadata as Json).provider ??
+      (metadata as Json).target ??
+      "local",
+  ).toLowerCase()
+  const computeProvider = computeTarget.includes("modal")
+    ? "modal"
+    : computeTarget === "local" || computeTarget === "this computer"
+      ? "local"
+      : "remote"
   if (permission === "network") {
     const host = String((metadata as Json).network?.host ?? request.patterns?.[0] ?? "")
     return isUnsafeHost(host)
@@ -256,24 +351,33 @@ export function permissionDecision(request: Json) {
     }
   }
   if (permission === "compute_job") {
-    const provider = String((metadata as Json).provider ?? (metadata as Json).target ?? "local")
-    return provider === "local"
-      ? { reply: "once" as const, reason: "one bounded local compute plan" }
-      : { reply: "reject" as const, reason: `remote compute is outside this campaign: ${provider}` }
+    return computeProvider === "local" || (computeProvider === "modal" && policy.managedCompute === true)
+      ? { reply: "once" as const, reason: `one prompt-scoped ${computeProvider} compute action` }
+      : { reply: "reject" as const, reason: `remote compute is outside this campaign: ${computeProvider}` }
   }
-  if (["external_directory", "modal", "remote_compute", "doom_loop"].includes(permission)) {
+  if (permission === "modal") {
+    return policy.managedCompute === true && computeProvider === "modal"
+      ? { reply: "once" as const, reason: "one prompt-scoped Modal compute dispatch" }
+      : { reply: "reject" as const, reason: "Modal dispatch is outside this campaign" }
+  }
+  if (["external_directory", "remote_compute", "doom_loop"].includes(permission)) {
     return { reply: "reject" as const, reason: `${permission} is outside the evaluation boundary` }
   }
   return { reply: "reject" as const, reason: `unrecognized permission ${permission || "(missing)"}` }
 }
 
-async function permissionPump(client: ReturnType<typeof createOpenScienceClient>, file: string, signal: AbortSignal) {
+async function permissionPump(
+  client: ReturnType<typeof createOpenScienceClient>,
+  file: string,
+  signal: AbortSignal,
+  policy: { managedCompute?: boolean } = {},
+) {
   const decided = new Set<string>()
   while (!signal.aborted) {
     const pending = await unwrap<any[]>(client.permission.list()).catch(() => [])
     for (const request of pending) {
       if (decided.has(request.id)) continue
-      const decision = permissionDecision(request)
+      const decision = permissionDecision(request, policy)
       const record = {
         requestID: request.id,
         sessionID: request.sessionID,
@@ -624,6 +728,9 @@ async function runOne(input: {
   modelEffort: string
   researchEffort: "normal" | "ultra"
   timeoutMinutes: number
+  agent: string
+  limits?: RunLimits
+  managedCompute?: boolean
   harness: Json
   server: Json
 }) {
@@ -659,6 +766,8 @@ async function runOne(input: {
         provider: input.model.split("/")[0],
         effort: input.researchEffort,
         modelEffort: input.modelEffort,
+        agent: input.agent,
+        limits: input.limits,
         harness: input.harness,
         server: input.server,
         promptHash: input.prompt.sha256,
@@ -671,7 +780,9 @@ async function runOne(input: {
   let accepted: Json | undefined
   let terminal: Json | undefined
   let timedOut = false
+  let safetyLimit: string | undefined
   const events: Json[] = resume ? await capturedEvents(path.join(runRoot, "events.ndjson")) : []
+  const guard = input.limits ? createRunGuard(input.limits, events) : undefined
   let firstObservableAt = events.find((event) => event.type !== "runtime.accepted")?.time as number | undefined
   let firstVisibleTextAt = events.find((event) => {
     const part = event.properties?.part as Json | undefined
@@ -711,7 +822,7 @@ async function runOne(input: {
       )
       const currentConfig = await unwrap<any>(client.config.get())
       const agent = Object.fromEntries(
-        ["research", "explore", "execute", "review"].map((name) => [
+        [...new Set([input.agent, "explore", "execute"])].map((name) => [
           name,
           {
             ...(currentConfig.agent?.[name] ?? {}),
@@ -728,10 +839,13 @@ async function runOne(input: {
         client.config.update({
           config: {
             ...currentConfig,
-            default_agent: "research",
+            default_agent: input.agent,
             model: input.model,
             agent: { ...(currentConfig.agent ?? {}), ...agent },
-            sandbox: { ...(currentConfig.sandbox ?? {}), enabled: true, network: "deny", onUnavailable: "error" },
+            // Keep local shell execution contained, but do not overwrite the
+            // saved network policy. Modal networking is reviewed separately
+            // in the immutable compute_job plan and its dedicated approval.
+            sandbox: { ...(currentConfig.sandbox ?? {}), enabled: true, onUnavailable: "error" },
             permission: {
               ...(currentConfig.permission ?? {}),
               question: "deny",
@@ -742,7 +856,10 @@ async function runOne(input: {
               mcp: "ask",
               environment_mutation: "ask",
               compute_job: "ask",
-              modal: "deny",
+              // The thin profile does not expose the raw Modal tool. Keep the
+              // permission request alive so the pump can approve only a
+              // digest-bound compute_job plan whose provider is Modal.
+              modal: "ask",
               remote_compute: "deny",
             },
           },
@@ -756,11 +873,16 @@ async function runOne(input: {
       )
       session = createdSession
       const baseline = await runtime.replay({ sessionID: createdSession.id })
-      const createdAccepted = await runtime.prompt({
-        sessionID: createdSession.id,
-        message: input.prompt.text,
-        effort: input.researchEffort,
-      })
+      const createdAccepted = await unwrap<any>(
+        client.runtime.prompt(
+          {
+            sessionID: createdSession.id,
+            message: input.prompt.text,
+            effort: input.researchEffort,
+          },
+          { headers: { "x-openscience-dev-agent": input.agent } },
+        ),
+      )
       accepted = createdAccepted
       afterSequence = baseline.latestSequence
       Object.assign(initial, {
@@ -776,25 +898,29 @@ async function runOne(input: {
     if (!client || !project || !session || !accepted) throw new Error("Runtime checkpoint initialization failed")
     const sessionID = session.id
     const permissionsFile = path.join(runRoot, "permissions.ndjson")
-    const pump = permissionPump(client, permissionsFile, permissionAbort.signal)
+    const pump = permissionPump(client, permissionsFile, permissionAbort.signal, {
+      managedCompute: input.managedCompute,
+    })
     const eventAbort = new AbortController()
     let abortRequest: Promise<unknown> | undefined
     let resolveAbortRequest: (() => void) | undefined
     const abortRequested = new Promise<void>((resolve) => {
       resolveAbortRequest = resolve
     })
-    const timeoutMs = Math.max(1, input.timeoutMinutes * 60_000 - Math.max(0, Date.now() - Date.parse(startedAt)))
-    const timeout = setTimeout(() => {
-      timedOut = true
+    const requestAbort = (source: "runner_timeout" | "runner_safety_limit", reason?: string) => {
+      if (abortRequest) return
+      if (source === "runner_timeout") timedOut = true
+      if (reason) safetyLimit = reason
       permissionAbort.abort()
       eventAbort.abort()
       abortRequest = unwrap(
-        client!.session.abort(
-          { sessionID: session!.id },
-          { headers: { "x-openscience-abort-source": "runner_timeout" } },
-        ),
+        client!.session.abort({ sessionID: session!.id }, { headers: { "x-openscience-abort-source": source } }),
       ).catch(() => undefined)
       resolveAbortRequest?.()
+    }
+    const timeoutMs = Math.max(1, input.timeoutMinutes * 60_000 - Math.max(0, Date.now() - Date.parse(startedAt)))
+    const timeout = setTimeout(() => {
+      requestAbort("runner_timeout")
     }, timeoutMs)
     try {
       const collected = await collectRuntimeRun({
@@ -810,6 +936,8 @@ async function runOne(input: {
             events.push(observable)
             if (Number.isFinite(sequence)) capturedSequences.add(sequence)
             await appendFile(path.join(runRoot, "events.ndjson"), JSON.stringify(observable) + "\n", { mode: 0o600 })
+            const violation = guard?.observe(event)
+            if (violation) requestAbort("runner_safety_limit", violation)
           }
           if (event.type !== "runtime.accepted" && firstObservableAt === undefined) firstObservableAt = event.time
           if (event.type === "message.part.updated") {
@@ -833,12 +961,13 @@ async function runOne(input: {
       clearTimeout(timeout)
       eventAbort.abort()
       permissionAbort.abort()
-      if (!timedOut) resolveAbortRequest?.()
+      if (!timedOut && !safetyLimit) resolveAbortRequest?.()
       await abortRequested
       await settleCleanup([pump, abortRequest])
     }
 
     if (timedOut) failures.push({ kind: "runner", message: `Run exceeded ${input.timeoutMinutes} minutes` })
+    if (safetyLimit) failures.push({ kind: "runner", message: `Run stopped at safety limit ${safetyLimit}` })
     const messageID = typeof terminal?.properties?.messageID === "string" ? terminal.properties.messageID : undefined
     if (terminal?.type === "runtime.failed") {
       failures.push({
@@ -886,6 +1015,7 @@ async function runOne(input: {
       assistantError: message?.info?.error,
       finalText: final,
       artifactCount: artifacts.length,
+      safetyLimit,
     })
     let mergedFailures = mergeFailures(failures, rootTrace.failures ?? [])
     const result: Json = {
@@ -952,6 +1082,8 @@ async function runOne(input: {
         bytes: item.bytes ?? item.current?.size,
       })),
       capture: { eventCount: events.length, capturedSessions: sessionIDs.length, trust: trustAfter },
+      limits: input.limits,
+      limitUsage: guard?.usage(),
     }
     const trustRevoked = await unwrap(
       client.project.trust.update({ projectID: project.id, body: { trusted: false } }),
@@ -1068,8 +1200,110 @@ export async function updateCampaignProgress(campaignRoot: string, prompts: Camp
   return next
 }
 
+function positive(input: Map<string, string | true>, key: string, fallback: number) {
+  const raw = input.get(key)
+  if (raw === undefined) return fallback
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value <= 0) throw new Error(`--${key} must be a positive integer`)
+  return value
+}
+
+function optionalLimits(input: Map<string, string | true>): RunLimits | undefined {
+  const keys = ["max-events", "max-tool-calls", "max-child-agents"]
+  if (!keys.some((key) => input.has(key))) return
+  return {
+    maxEvents: positive(input, "max-events", Number.MAX_SAFE_INTEGER),
+    maxToolCalls: positive(input, "max-tool-calls", Number.MAX_SAFE_INTEGER),
+    maxChildAgents: positive(input, "max-child-agents", Number.MAX_SAFE_INTEGER),
+  }
+}
+
+async function runSingle(input: Map<string, string | true>, promptID: string) {
+  if (input.has("batch")) throw new Error("Use either --prompt or --batch, never both")
+  const prompt = devPrompt(promptID)
+  const devRoot = path.resolve(
+    process.env.OPENSCIENCE_DEV_ROOT?.trim() || path.join(os.homedir(), ".openscience-dev", "researchagent-test"),
+  )
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+  const campaignID = `run-${stamp}-${prompt.id.toLowerCase()}-${crypto.randomUUID().slice(0, 8)}`
+  const campaignRoot = path.resolve(String(input.get("campaign") ?? path.join(devRoot, "campaigns", campaignID)))
+  await mkdir(campaignRoot, { recursive: true, mode: 0o700 })
+  await chmod(campaignRoot, 0o700)
+
+  const baseUrl = String(input.get("base-url") ?? DEFAULT_BASE_URL)
+  const model = String(input.get("model") ?? DEFAULT_DEV_MODEL)
+  const modelEffort = String(input.get("model-effort") ?? DEFAULT_MODEL_EFFORT)
+  const researchEffort = String(input.get("research-effort") ?? DEFAULT_RESEARCH_EFFORT)
+  if (researchEffort !== "normal" && researchEffort !== "ultra")
+    throw new Error("Research effort must be normal or ultra")
+  const timeoutMinutes = positive(input, "timeout-minutes", DEFAULT_TIMEOUT_MINUTES)
+  const limits = optionalLimits(input)
+  const repoRoot = path.resolve(import.meta.dir, "../..")
+  const harness = await gitFingerprint(repoRoot)
+  const [preflightResult, server] = await Promise.all([
+    preflight(baseUrl, model, {
+      sourceSha: harness.head,
+      sourceWorktreeHash: harness.sourceHash,
+      ...(typeof input.get("server-run-id") === "string" ? { runId: String(input.get("server-run-id")) } : {}),
+    }),
+    serverSnapshot(Number(new URL(baseUrl).port || 80)),
+  ])
+  const now = new Date().toISOString()
+  await writeAtomic(path.join(campaignRoot, "prompts.json"), {
+    schemaVersion: 1,
+    campaignID,
+    count: 1,
+    prompts: [prompt],
+  })
+  await writeAtomic(path.join(campaignRoot, "campaign.json"), {
+    schemaVersion: 1,
+    id: campaignID,
+    title: `Thin Research trajectory · ${prompt.id}`,
+    status: "running",
+    plannedPrompts: 1,
+    startedAt: now,
+    updatedAt: now,
+    model,
+    provider: parseModelKey(model).providerID,
+    agent: "researchagent-test",
+    harnessRevision: harness.head,
+    harnessSourceHash: harness.sourceHash,
+    serverRunId: preflightResult.health.runId,
+    limits,
+  })
+  const result = await runOne({
+    campaignRoot,
+    batchID: `single-${prompt.id.toLowerCase()}`,
+    prompt,
+    baseUrl,
+    model,
+    modelEffort,
+    researchEffort,
+    timeoutMinutes,
+    agent: "researchagent-test",
+    limits,
+    managedCompute: true,
+    harness,
+    server: { ...server, identity: preflightResult.health },
+  })
+  await updateCampaignProgress(campaignRoot, [prompt], {
+    model,
+    provider: parseModelKey(model).providerID,
+    agent: "researchagent-test",
+    preflight: safeValue(preflightResult),
+    server,
+  })
+  console.log(`trajectory: ${path.join(campaignRoot, "runs", promptRunID(prompt))}`)
+  return result
+}
+
 async function main() {
   const input = flags(Bun.argv.slice(2))
+  const promptID = input.get("prompt")
+  if (typeof promptID === "string") {
+    await runSingle(input, promptID)
+    return
+  }
   const batchIndex = Number(input.get("batch"))
   if (!Number.isInteger(batchIndex) || batchIndex < 1 || batchIndex > 7) {
     throw new Error("Usage: bun evals/cadence-harness/run.ts --batch <1-7> [--campaign path]")
@@ -1137,6 +1371,7 @@ async function main() {
         modelEffort,
         researchEffort,
         timeoutMinutes,
+        agent: "research",
         harness,
         server,
       }),

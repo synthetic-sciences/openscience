@@ -1,5 +1,7 @@
 import z from "zod"
+import path from "node:path"
 import { JobBroker } from "@/compute/job-broker"
+import type { ComputeCapabilities } from "@/compute/capabilities"
 import { Instance } from "@/project/instance"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Tool } from "./tool"
@@ -61,17 +63,45 @@ const ComputeWorkload = z
     name: z.string().trim().min(1).max(120),
     purpose: z.string().trim().min(1).max(500),
     command: z.string().trim().min(1).max(100_000),
-    cwd: z.string().trim().min(1).max(2_000).optional(),
+    cwd: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2_000)
+      .optional()
+      .describe(
+        "Optional existing directory inside the session workspace used for local input staging. Omit for Modal; this is not a remote /tmp working directory.",
+      ),
     target: ComputeTarget,
     resources: JobBroker.Resources.optional(),
     modules: z.array(z.string().trim().min(1).max(240)).max(64).optional(),
     container: z.string().trim().min(1).max(2_000).optional(),
-    artifacts: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
-    checkpoint: z.string().trim().min(1).max(2_000).optional(),
-    uploads: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
+    artifacts: z
+      .array(z.string().trim().min(1).max(2_000))
+      .max(100)
+      .optional()
+      .describe("Relative output paths or globs under the job workspace; never absolute /tmp paths."),
+    checkpoint: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2_000)
+      .optional()
+      .describe("Relative checkpoint path under the job workspace; never an absolute directory."),
+    uploads: z
+      .array(z.string().trim().min(1).max(2_000))
+      .max(100)
+      .optional()
+      .describe("Relative session-workspace files to stage into the remote job."),
     packages: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
     image: z.string().trim().min(1).max(2_000).optional(),
     gpu: z.string().trim().min(1).max(120).optional(),
+    secret_refs: JobBroker.SecretRef.array()
+      .max(8)
+      .optional()
+      .describe(
+        "Reviewed symbolic credentials resolved only by the trusted Modal adapter; never include secret values.",
+      ),
   })
   .strict()
 
@@ -145,6 +175,7 @@ export const ComputeJobParameters = z
     packages: ComputeWorkload.shape.packages,
     image: ComputeWorkload.shape.image,
     gpu: ComputeWorkload.shape.gpu,
+    secret_refs: ComputeWorkload.shape.secret_refs,
     status: JobBroker.Status.optional(),
     limit: z.number().int().min(1).max(100).optional(),
     job_id: z.string().trim().min(1).optional(),
@@ -189,6 +220,66 @@ function normalizeInput(input: unknown): unknown {
   }
 
   const effective = changed ? output.action : selected
+  const conflictingAction = knownAction(operation) && knownAction(selected) && operation !== selected
+  if (knownAction(effective) && !conflictingAction) {
+    const workload = [
+      "action",
+      "name",
+      "purpose",
+      "command",
+      "cwd",
+      "target",
+      "resources",
+      "modules",
+      "container",
+      "artifacts",
+      "checkpoint",
+      "uploads",
+      "packages",
+      "image",
+      "gpu",
+      "secret_refs",
+    ]
+    const allowed: Record<ComputeAction, Set<string>> = {
+      targets: new Set(["action"]),
+      plan: new Set(workload),
+      start: new Set(workload),
+      list: new Set(["action", "status", "limit"]),
+      status: new Set(["action", "job_id"]),
+      logs: new Set(["action", "job_id", "bytes"]),
+      artifacts: new Set(["action", "job_id"]),
+      cancel: new Set(["action", "job_id"]),
+      retry_delivery: new Set(["action", "job_id"]),
+      release: new Set(["action", "job_id"]),
+    }
+    const normalized = copy()
+    for (const key of Object.keys(normalized)) {
+      if (!allowed[effective].has(key)) delete normalized[key]
+    }
+  }
+  const target = record(output.target) ? output.target : undefined
+  if (
+    (effective === "plan" || effective === "start") &&
+    target?.kind === "modal" &&
+    typeof output.cwd === "string" &&
+    path.isAbsolute(output.cwd)
+  ) {
+    delete copy().cwd
+  }
+  if ((effective === "plan" || effective === "start") && target?.kind === "modal") {
+    const normalized = copy()
+    // These are scheduler/container fields for local and SSH targets. Modal's
+    // reviewed adapter is configured exclusively through image/packages/gpu;
+    // models commonly fill every optional field, so discard inapplicable
+    // placeholders rather than rejecting an otherwise valid Modal plan.
+    delete normalized.modules
+    delete normalized.container
+    if (record(normalized.resources)) {
+      const resources = { ...normalized.resources }
+      delete resources.partition
+      normalized.resources = resources
+    }
+  }
   if ((effective === "plan" || effective === "start") && typeof output.target === "string") {
     try {
       const target = ComputeTarget.safeParse(JSON.parse(output.target))
@@ -255,20 +346,26 @@ const summary = (job: JobBroker.Job) => ({
 
 const json = (value: unknown) => JSON.stringify(value, null, 2)
 
-async function options(sessionID: string, base?: JobBroker.Options): Promise<JobBroker.Options> {
+type ResolvedOptions = JobBroker.Options & { capabilities?: ComputeCapabilities.Target[] }
+
+async function options(sessionID: string, base?: JobBroker.Options): Promise<ResolvedOptions> {
   const workspace = await SessionFilesystem.workspace(sessionID)
   if (base) return { ...base, projectDirectory: base.projectDirectory ?? Instance.directory, workspace }
   const module = await import("@/server/routes/settings/compute")
   const settings = await module.ComputeSettings.get()
   const modal = settings.providers.find((item) => item.id === "modal")
   const resolveCredentials = modal?.enabled ? module.ComputeSettings.modalResolver() : undefined
+  const resolveSecrets = module.ComputeSettings.secretResolver()
   const config = modal?.enabled ? await module.ComputeSettings.modalConfig() : undefined
+  const capabilities = await module.ComputeSettings.capabilities()
   return {
     projectDirectory: Instance.directory,
     workspace,
     hosts: settings.ssh_hosts,
     modal: config,
     resolveCredentials,
+    resolveSecrets,
+    capabilities,
   }
 }
 
@@ -289,6 +386,7 @@ function request(input: Extract<Input, { action: "plan" | "start" }>, sessionID:
     packages: input.packages,
     image: input.image,
     gpu: input.target.kind === "modal" ? (input.gpu ?? "none") : input.gpu,
+    secret_refs: input.secret_refs,
   }
 }
 
@@ -319,7 +417,7 @@ export function createComputeJobTool(base?: JobBroker.Options) {
     description: [
       "Project JobBroker for detached local, SSH/scheduler, and Modal work; prefer Python/R for interactive analysis.",
       "Actions: targets discovers providers; plan previews without dispatch; start dispatches; list filters project jobs; status, logs, artifacts, cancel, retry_delivery, and release require job_id. logs optionally accepts bytes.",
-      "plan/start require name, purpose, command, and target; remote start presents an immutable scoped approval. Optional workload fields are cwd, resources, modules, container, artifacts, checkpoint, uploads, packages, image, and gpu.",
+      "plan/start require name, purpose, command, and target; remote start presents an immutable scoped approval. Optional workload fields are cwd, resources, modules, container, artifacts, checkpoint, uploads, packages, image, gpu, and reviewed secret_refs.",
       'Example: {"action":"start","name":"Run analysis","purpose":"Produce the result","command":"python analysis.py","target":{"kind":"local"}}.',
       "list/status/logs/artifacts are read-only. cancel stops a live job; retry_delivery harvests retained Modal output without rerunning; release discards retained resources.",
       "Never redispatch Modal to inspect a job or invoke Modal SDK/CLI directly.",
@@ -343,7 +441,18 @@ export function createComputeJobTool(base?: JobBroker.Options) {
             notes: host.notes,
             verified: Boolean(host.fingerprint && host.host_key),
           })),
-          modal: { kind: "modal", configured: Boolean(resolved.modal && resolved.resolveCredentials) },
+          modal: {
+            kind: "modal",
+            configured: Boolean(resolved.modal && resolved.resolveCredentials),
+            usage: {
+              target: { kind: "modal" },
+              staging: "Omit cwd unless it names an existing relative directory in this session workspace.",
+              environment: "Use image and packages; omit container, modules, and scheduler partition.",
+              outputs: "Write and declare relative artifact/checkpoint paths under the job workspace, not /tmp.",
+              gpu: "Set gpu to the exact Modal GPU request, or none for CPU-only discovery.",
+            },
+          },
+          capabilities: resolved.capabilities,
         }
         return {
           title: "Compute targets",

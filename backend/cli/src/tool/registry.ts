@@ -181,7 +181,7 @@ export namespace ToolRegistry {
   }
 
   const ARTIFACT_TOOL_ID = "artifact"
-  const ARTIFACT_AGENTS = ["research", "biology", "ml"]
+  const ARTIFACT_AGENTS = ["research", "biology", "ml", "researchagent-test"]
 
   const COMPUTE_AGENTS = ["research", "biology", "physics", "ml"]
 
@@ -222,6 +222,7 @@ export namespace ToolRegistry {
     },
     agent?: Agent.Info,
     enabled: (id: string) => boolean = () => true,
+    request?: string,
   ) {
     const tools = await all()
     const result = await Promise.all(
@@ -243,7 +244,7 @@ export namespace ToolRegistry {
           }
 
           if (t.id === "compute_job") {
-            return !!agent?.name && COMPUTE_AGENTS.includes(agent.name)
+            return !!agent?.name && (COMPUTE_AGENTS.includes(agent.name) || agent.name === "researchagent-test")
           }
 
           if (t.id === "research_contract") {
@@ -260,8 +261,9 @@ export namespace ToolRegistry {
           // use apply tool in same format as codex
           const usePatch =
             model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
-          if (t.id === "apply_patch") return usePatch
-          if (t.id === "edit" || t.id === "write") return !usePatch
+          const thin = agent?.name === "researchagent-test"
+          if (t.id === "apply_patch") return thin || usePatch
+          if (t.id === "edit" || t.id === "write") return !thin && !usePatch
 
           return true
         })
@@ -269,7 +271,7 @@ export namespace ToolRegistry {
           using _ = log.time(t.id)
           return {
             id: t.id,
-            ...(await t.init({ agent, model })),
+            ...(await t.init({ agent, model, request })),
           }
         }),
     )

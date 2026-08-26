@@ -35,6 +35,7 @@ test("composer preferences persist through the settings route", async () => {
     atlas_enabled: false,
     extra_budget_usd: 75,
     delegation_enabled: false,
+    delegation_level: "off",
     delegation_specialist: "biology",
   })
 
@@ -45,6 +46,17 @@ test("composer preferences persist through the settings route", async () => {
     atlas_enabled: false,
     extra_budget_usd: 75,
     delegation_enabled: false,
+    delegation_level: "off",
     delegation_specialist: "biology",
+  })
+
+  const modern = await app.request("/", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ delegation_level: "high" }),
+  })
+  expect((await modern.json()) as Preferences).toMatchObject({
+    delegation_enabled: true,
+    delegation_level: "high",
   })
 })

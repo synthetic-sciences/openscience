@@ -44,6 +44,9 @@ export namespace ModalAdapter {
     cpus?: number
     memoryGb?: number
     timeoutMinutes?: number
+    /** Ephemeral values resolved from reviewed symbolic references only after
+     * approval. They are never persisted in Job or Plan records. */
+    secrets?: Record<string, string>
     uploads: File[]
     outputs: string[]
     staging: string
@@ -289,6 +292,8 @@ export namespace ModalAdapter {
         })
         await hooks.log(`Image ready: ${ready.imageId}`)
         await hooks.log(`Creating ${gpu === "none" ? "CPU" : gpu} sandbox`)
+        const secrets =
+          spec.secrets && Object.keys(spec.secrets).length ? [await modal.secrets.fromObject(spec.secrets)] : undefined
         const sandbox = await modal.sandboxes.create(app, ready, {
           command: ["bash", "-lc", script(spec.command)],
           workdir: ROOT,
@@ -296,6 +301,7 @@ export namespace ModalAdapter {
           cpu: spec.cpus,
           memoryMiB: spec.memoryGb ? Math.ceil(spec.memoryGb * 1024) : undefined,
           timeoutMs: (spec.timeoutMinutes ?? context.timeoutMinutes) * 60_000,
+          secrets,
           blockNetwork: context.network === "none",
           volumes: { [ROOT]: volume },
           name: `os-${spec.id}`,

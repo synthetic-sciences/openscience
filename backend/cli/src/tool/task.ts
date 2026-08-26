@@ -238,8 +238,10 @@ export function taskDispatchBudget(
   parentID: string,
   callID: string | undefined,
   effort: MessageV2.ResearchEffort,
+  settings?: MessageV2.DelegationSettings,
 ) {
-  const limit = MessageV2.childAgentLimit(effort)
+  const delegation = MessageV2.resolveDelegationSettings(settings, { effort })
+  const limit = MessageV2.delegationLimit(delegation)
   const roots = new Map<string, string>()
   const ordered = messages.toSorted(
     (a, b) => a.info.time.created - b.info.time.created || a.info.id.localeCompare(b.info.id),
@@ -270,9 +272,9 @@ export function taskDispatchBudget(
   const found = calls.findIndex((call) => call.part.callID === callID)
   const dispatch = found === -1 ? calls.length + 1 : found + 1
   if (dispatch <= limit) return { dispatch, limit }
-  const label = effort === "normal" ? "Normal" : "Ultra"
+  const label = delegation.level[0].toUpperCase() + delegation.level.slice(1)
   throw new Error(
-    `Research ${label} permits ${limit} Task calls total per user turn; continuations count. Task call ${dispatch} must be completed by the lead agent or deferred to a new user turn.`,
+    `Delegation ${label} permits ${limit} Task calls total per user turn; continuations count. Task call ${dispatch} must be completed by the lead agent or deferred to a new user turn.`,
   )
 }
 
@@ -325,11 +327,23 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
       const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
-      const maxConcurrentChildren = MessageV2.childAgentLimit(effort)
+      const configured = MessageV2.resolveDelegationSettings(ctx.extra?.delegationSettings, { effort })
+      const settings =
+        configured.level === "off" && ctx.extra?.bypassAgentCheck
+          ? { ...configured, level: "light" as const }
+          : configured
+      const maxConcurrentChildren = MessageV2.delegationLimit(settings)
       const budgetMs = TASK_WALL_CLOCK_MS[effort]
-      const continuation = params.session_id
+      // Some models eagerly fill every optional schema field with the current
+      // session or a `ses_new` placeholder. Those values unambiguously mean a
+      // new child; only a different, real direct-child id is a continuation.
+      const continuationID =
+        params.session_id === ctx.sessionID || /^ses_(?:new|none)$/i.test(params.session_id ?? "")
+          ? undefined
+          : params.session_id
+      const continuation = continuationID
         ? assertTaskContinuation({
-            session: await Session.get(params.session_id),
+            session: await Session.get(continuationID),
             parentSessionID: ctx.sessionID,
             projectID: Instance.project.id,
           })
@@ -349,9 +363,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         })
       }
 
+      const thinCaller = ctx.agent === "researchagent-test"
       const profile = await Agent.get(params.subagent_type)
       if (!profile) throw new Error(`Internal delegation profile ${params.subagent_type} is unavailable`)
-      const agent = params.specialist ? await Agent.get(params.specialist) : profile
+      // The experimental thin parent must delegate to the same thin runtime.
+      // Reusing the legacy specialist here silently restores the large system
+      // prompt and eager tool catalog that this profile is intended to test.
+      // Specialist intent remains explicit in childGuidance and skill routing.
+      const agent = thinCaller
+        ? await Agent.get("researchagent-test")
+        : params.specialist
+          ? await Agent.get(params.specialist)
+          : profile
       if (!agent) throw new Error(`Delegation specialist ${params.specialist} is unavailable`)
 
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
@@ -361,7 +384,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const dispatch = await (async () => {
         using _ = await Lock.write(`task-dispatch:${ctx.sessionID}:${assistant.parentID}`)
         const messages = await Session.messages({ sessionID: ctx.sessionID })
-        return taskDispatchBudget(messages, assistant.parentID, ctx.callID, effort)
+        return taskDispatchBudget(messages, assistant.parentID, ctx.callID, effort, settings)
       })()
       const identity = {
         projectID: Instance.project.id,
@@ -372,9 +395,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       const reserved = await TaskAttempt.reserve({
         ...identity,
-        fingerprint: TaskAttempt.fingerprint(params),
-        legacyFingerprint: TaskAttempt.legacyFingerprint(params),
-        childSessionID: params.session_id,
+        fingerprint: TaskAttempt.fingerprint({ ...params, session_id: continuationID }),
+        legacyFingerprint: TaskAttempt.legacyFingerprint({ ...params, session_id: continuationID }),
+        childSessionID: continuationID,
       })
       const started = reserved.createdAt
 
@@ -412,7 +435,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           childSessionID: session.id,
         })
 
-        const model = agent.model ?? { modelID: assistant.modelID, providerID: assistant.providerID }
+        const model = settings.workerModel ??
+          agent.model ?? { modelID: assistant.modelID, providerID: assistant.providerID }
         const initial = await Session.messages({ sessionID: session.id })
         const bound = await TaskAttempt.bind({
           ...identity,
@@ -435,6 +459,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             model,
             startedAt: started,
             effort,
+            delegation: settings,
             maxConcurrentChildren,
             maxGlobalChildren: MAX_CHILD_AGENTS,
             taskDispatch: dispatch.dispatch,
@@ -493,6 +518,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     model,
                     startedAt: started,
                     effort,
+                    delegation: settings,
                     maxConcurrentChildren,
                     maxGlobalChildren: MAX_CHILD_AGENTS,
                     taskDispatch: dispatch.dispatch,
@@ -531,6 +557,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                       elapsedMs: Date.now() - started,
                       activeMs: Math.min(budgetMs, timing.activeMs + Math.max(0, Date.now() - timing.activeStartedAt)),
                       effort,
+                      delegation: settings,
                       maxConcurrentChildren,
                       maxGlobalChildren: MAX_CHILD_AGENTS,
                       taskDispatch: dispatch.dispatch,
@@ -558,6 +585,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                   "Keep the final response under 1,200 words. Use only the Markdown sections that carry substance: Outcome; Findings; Evidence; Changes / outputs; Limitations; Next action.",
                   "Preserve exact paths, identifiers, numeric results, commands, and error strings when they matter. Distinguish observed evidence from inference. If blocked or partial, say exactly what remains.",
                   "Do not wrap the response in XML or JSON and do not restate these instructions.",
+                  settings.autonomy === "interactive"
+                    ? "If the assignment contains a genuinely consequential ambiguity, return one precise question to the lead instead of guessing."
+                    : settings.autonomy === "autonomous"
+                      ? "Resolve ordinary ambiguities independently within the current permission boundary; surface only decisions that materially affect the result."
+                      : "Resolve routine ambiguities independently and flag consequential assumptions in the handoff.",
+                  settings.diversity === "exploratory"
+                    ? "Prefer a genuinely distinct approach from the lead when one is available."
+                    : settings.diversity === "focused"
+                      ? "Stay on the lead's strongest stated approach unless evidence falsifies it."
+                      : "Balance confirmation with one materially different approach when useful.",
                 ].join("\n")
                 const run = async () => {
                   if (exists) return SessionPrompt.loop(session.id)
@@ -652,6 +689,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             failedToolCalls,
             usage,
             effort,
+            delegation: settings,
             profile: params.subagent_type,
             ...(params.specialist && { specialist: params.specialist }),
             maxConcurrentChildren,

@@ -25,11 +25,37 @@
                     },
                     "version": {
                       "type": "string"
+                    },
+                    "sourceSha": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sourceWorktreeHash": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "runId": {
+                      "type": "string"
                     }
                   },
                   "required": [
                     "healthy",
-                    "version"
+                    "version",
+                    "sourceSha",
+                    "sourceWorktreeHash",
+                    "runId"
                   ]
                 }
               }
@@ -7644,6 +7670,17 @@
                               "type": "string"
                             }
                           },
+                          "secret_refs": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "nvidia_nim",
+                                "nvidia_ngc"
+                              ]
+                            }
+                          },
                           "gpu": {
                             "type": "string"
                           },
@@ -10068,6 +10105,17 @@
                             "type": "string"
                           }
                         },
+                        "secret_refs": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "nvidia_nim",
+                              "nvidia_ngc"
+                            ]
+                          }
+                        },
                         "gpu": {
                           "type": "string"
                         },
@@ -10457,6 +10505,17 @@
                     "minLength": 1,
                     "maxLength": 120
                   },
+                  "secret_refs": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "nvidia_nim",
+                        "nvidia_ngc"
+                      ]
+                    }
+                  },
                   "approval": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
@@ -10603,6 +10662,16 @@
                             "type": "string"
                           }
                         },
+                        "secret_refs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "nvidia_nim",
+                              "nvidia_ngc"
+                            ]
+                          }
+                        },
                         "gpu": {
                           "type": "string"
                         },
@@ -10688,6 +10757,7 @@
                         "app",
                         "image",
                         "packages",
+                        "secret_refs",
                         "gpu",
                         "timeout_minutes",
                         "network",
@@ -11040,6 +11110,17 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 120
+                  },
+                  "secret_refs": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "nvidia_nim",
+                        "nvidia_ngc"
+                      ]
+                    }
                   },
                   "approval": {
                     "type": "string",
@@ -13423,6 +13504,17 @@
                           "type": "array",
                           "items": {
                             "type": "string"
+                          }
+                        },
+                        "secret_refs": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "nvidia_nim",
+                              "nvidia_ngc"
+                            ]
                           }
                         },
                         "gpu": {
@@ -15878,6 +15970,17 @@
                             "type": "string"
                           }
                         },
+                        "secret_refs": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "nvidia_nim",
+                              "nvidia_ngc"
+                            ]
+                          }
+                        },
                         "gpu": {
                           "type": "string"
                         },
@@ -18331,6 +18434,17 @@
                             "type": "string"
                           }
                         },
+                        "secret_refs": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "nvidia_nim",
+                              "nvidia_ngc"
+                            ]
+                          }
+                        },
                         "gpu": {
                           "type": "string"
                         },
@@ -18643,6 +18757,57 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "delegation_level": {
+                      "default": "standard",
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "light",
+                        "standard",
+                        "high"
+                      ]
+                    },
+                    "delegation_worker_model": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "providerID": {
+                              "type": "string"
+                            },
+                            "modelID": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "providerID",
+                            "modelID"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "delegation_autonomy": {
+                      "default": "balanced",
+                      "type": "string",
+                      "enum": [
+                        "interactive",
+                        "balanced",
+                        "autonomous"
+                      ]
+                    },
+                    "delegation_diversity": {
+                      "default": "balanced",
+                      "type": "string",
+                      "enum": [
+                        "focused",
+                        "balanced",
+                        "exploratory"
+                      ]
                     }
                   }
                 }
@@ -18718,6 +18883,57 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "delegation_level": {
+                      "default": "standard",
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "light",
+                        "standard",
+                        "high"
+                      ]
+                    },
+                    "delegation_worker_model": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "providerID": {
+                              "type": "string"
+                            },
+                            "modelID": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "providerID",
+                            "modelID"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "delegation_autonomy": {
+                      "default": "balanced",
+                      "type": "string",
+                      "enum": [
+                        "interactive",
+                        "balanced",
+                        "autonomous"
+                      ]
+                    },
+                    "delegation_diversity": {
+                      "default": "balanced",
+                      "type": "string",
+                      "enum": [
+                        "focused",
+                        "balanced",
+                        "exploratory"
+                      ]
                     }
                   }
                 }
@@ -18780,6 +18996,57 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "delegation_level": {
+                    "default": "standard",
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "light",
+                      "standard",
+                      "high"
+                    ]
+                  },
+                  "delegation_worker_model": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "providerID",
+                          "modelID"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "delegation_autonomy": {
+                    "default": "balanced",
+                    "type": "string",
+                    "enum": [
+                      "interactive",
+                      "balanced",
+                      "autonomous"
+                    ]
+                  },
+                  "delegation_diversity": {
+                    "default": "balanced",
+                    "type": "string",
+                    "enum": [
+                      "focused",
+                      "balanced",
+                      "exploratory"
                     ]
                   }
                 }
@@ -25951,6 +26218,54 @@
                   "delegation": {
                     "type": "boolean"
                   },
+                  "delegationSettings": {
+                    "type": "object",
+                    "properties": {
+                      "level": {
+                        "default": "standard",
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "light",
+                          "standard",
+                          "high"
+                        ]
+                      },
+                      "workerModel": {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "providerID",
+                          "modelID"
+                        ]
+                      },
+                      "autonomy": {
+                        "default": "balanced",
+                        "type": "string",
+                        "enum": [
+                          "interactive",
+                          "balanced",
+                          "autonomous"
+                        ]
+                      },
+                      "diversity": {
+                        "default": "balanced",
+                        "type": "string",
+                        "enum": [
+                          "focused",
+                          "balanced",
+                          "exploratory"
+                        ]
+                      }
+                    }
+                  },
                   "system": {
                     "type": "string"
                   },
@@ -25972,6 +26287,9 @@
                         },
                         {
                           "$ref": "#/components/schemas/AgentPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/ConversationPartInput"
                         },
                         {
                           "$ref": "#/components/schemas/SubtaskPartInput"
@@ -26344,6 +26662,54 @@
                   "delegation": {
                     "type": "boolean"
                   },
+                  "delegationSettings": {
+                    "type": "object",
+                    "properties": {
+                      "level": {
+                        "default": "standard",
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "light",
+                          "standard",
+                          "high"
+                        ]
+                      },
+                      "workerModel": {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "providerID",
+                          "modelID"
+                        ]
+                      },
+                      "autonomy": {
+                        "default": "balanced",
+                        "type": "string",
+                        "enum": [
+                          "interactive",
+                          "balanced",
+                          "autonomous"
+                        ]
+                      },
+                      "diversity": {
+                        "default": "balanced",
+                        "type": "string",
+                        "enum": [
+                          "focused",
+                          "balanced",
+                          "exploratory"
+                        ]
+                      }
+                    }
+                  },
                   "system": {
                     "type": "string"
                   },
@@ -26365,6 +26731,9 @@
                         },
                         {
                           "$ref": "#/components/schemas/AgentPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/ConversationPartInput"
                         },
                         {
                           "$ref": "#/components/schemas/SubtaskPartInput"
@@ -26485,6 +26854,54 @@
                   },
                   "delegation": {
                     "type": "boolean"
+                  },
+                  "delegationSettings": {
+                    "type": "object",
+                    "properties": {
+                      "level": {
+                        "default": "standard",
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "light",
+                          "standard",
+                          "high"
+                        ]
+                      },
+                      "workerModel": {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "providerID",
+                          "modelID"
+                        ]
+                      },
+                      "autonomy": {
+                        "default": "balanced",
+                        "type": "string",
+                        "enum": [
+                          "interactive",
+                          "balanced",
+                          "autonomous"
+                        ]
+                      },
+                      "diversity": {
+                        "default": "balanced",
+                        "type": "string",
+                        "enum": [
+                          "focused",
+                          "balanced",
+                          "exploratory"
+                        ]
+                      }
+                    }
                   },
                   "variant": {
                     "type": "string"
@@ -47435,6 +47852,71 @@
                           "type": "string"
                         }
                       },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "workflow",
+                          "support"
+                        ]
+                      },
+                      "capability": {
+                        "type": "string"
+                      },
+                      "requirements": {
+                        "type": "object",
+                        "properties": {
+                          "all": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "any": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "catalog_status": {
+                        "type": "string",
+                        "enum": [
+                          "verified",
+                          "experimental",
+                          "review_required",
+                          "blocked"
+                        ]
+                      },
+                      "upstream": {
+                        "type": "object",
+                        "properties": {
+                          "repository": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "ref": {
+                            "type": "string"
+                          },
+                          "sha": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{40}$"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "license": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "repository",
+                          "ref",
+                          "sha",
+                          "path",
+                          "license"
+                        ]
+                      },
                       "origin": {
                         "type": "string",
                         "enum": [
@@ -47515,6 +47997,71 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "workflow",
+                        "support"
+                      ]
+                    },
+                    "capability": {
+                      "type": "string"
+                    },
+                    "requirements": {
+                      "type": "object",
+                      "properties": {
+                        "all": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "any": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "catalog_status": {
+                      "type": "string",
+                      "enum": [
+                        "verified",
+                        "experimental",
+                        "review_required",
+                        "blocked"
+                      ]
+                    },
+                    "upstream": {
+                      "type": "object",
+                      "properties": {
+                        "repository": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "ref": {
+                          "type": "string"
+                        },
+                        "sha": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{40}$"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "license": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "repository",
+                        "ref",
+                        "sha",
+                        "path",
+                        "license"
+                      ]
                     },
                     "origin": {
                       "type": "string",
@@ -48646,6 +49193,54 @@
           },
           "delegation": {
             "type": "boolean"
+          },
+          "delegationSettings": {
+            "type": "object",
+            "properties": {
+              "level": {
+                "default": "standard",
+                "type": "string",
+                "enum": [
+                  "off",
+                  "light",
+                  "standard",
+                  "high"
+                ]
+              },
+              "workerModel": {
+                "type": "object",
+                "properties": {
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "modelID": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "providerID",
+                  "modelID"
+                ]
+              },
+              "autonomy": {
+                "default": "balanced",
+                "type": "string",
+                "enum": [
+                  "interactive",
+                  "balanced",
+                  "autonomous"
+                ]
+              },
+              "diversity": {
+                "default": "balanced",
+                "type": "string",
+                "enum": [
+                  "focused",
+                  "balanced",
+                  "exploratory"
+                ]
+              }
+            }
           },
           "variant": {
             "type": "string"
@@ -49852,6 +50447,55 @@
           "name"
         ]
       },
+      "ConversationPart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "conversation"
+          },
+          "sourceSessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "throughMessageID": {
+            "type": "string",
+            "pattern": "^msg.*"
+          },
+          "snapshotID": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sessionID",
+          "messageID",
+          "type",
+          "sourceSessionID",
+          "throughMessageID",
+          "snapshotID",
+          "label",
+          "text"
+        ]
+      },
       "RetryPart": {
         "type": "object",
         "properties": {
@@ -49969,6 +50613,9 @@
           },
           {
             "$ref": "#/components/schemas/AgentPart"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationPart"
           },
           {
             "$ref": "#/components/schemas/RetryPart"
@@ -54138,6 +54785,37 @@
           "type",
           "name"
         ]
+      },
+      "ConversationPartInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^prt.*"
+          },
+          "type": {
+            "type": "string",
+            "const": "conversation"
+          },
+          "sourceSessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "throughMessageID": {
+            "type": "string",
+            "pattern": "^msg.*"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "type",
+          "sourceSessionID"
+        ],
+        "additionalProperties": false
       },
       "SubtaskPartInput": {
         "type": "object",

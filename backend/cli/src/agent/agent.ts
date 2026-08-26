@@ -14,6 +14,7 @@ import PROMPT_CRITIQUE from "./prompt/critique.txt"
 import PROMPT_LITERATURE_REVIEW from "./prompt/literature-review.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_PHYSICS_CRITIQUE from "./prompt/physics-critique.txt"
+import PROMPT_RESEARCH_AGENT_TEST from "./prompt/researchagent-test.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -25,6 +26,7 @@ import { ProjectTrust } from "@/project/trust"
 import { ProjectAccess } from "@/project/access"
 import { resolveCredentialSource, type CredentialSource } from "@/session/billing-gate"
 import { randomUUID } from "node:crypto"
+import { Flag } from "@/flag/flag"
 
 export namespace Agent {
   export const Info = z
@@ -166,6 +168,27 @@ export namespace Agent {
         mode: "primary",
         native: true,
       },
+      ...(Flag.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST
+        ? {
+            "researchagent-test": {
+              name: "researchagent-test",
+              description: "Feature-gated thin Research profile for source-level trajectory evaluation.",
+              options: {},
+              color: "#7c8cff",
+              permission: PermissionNext.merge(
+                defaults,
+                PermissionNext.fromConfig({
+                  question: "allow",
+                  research_contract: "deny",
+                }),
+                user,
+              ),
+              mode: "primary" as const,
+              native: true,
+              prompt: PROMPT_RESEARCH_AGENT_TEST,
+            },
+          }
+        : {}),
       // --- Domain agents ---
       biology: {
         name: "biology",
@@ -440,6 +463,7 @@ export namespace Agent {
     const removed = new Set(["review", "reviewer", "artifact-reviewer"])
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
       if (removed.has(key)) continue
+      if (key === "researchagent-test" && !Flag.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST) continue
       if (value.disable) {
         delete result[key]
         continue

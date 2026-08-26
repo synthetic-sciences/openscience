@@ -1,11 +1,21 @@
 import { randomUUID } from "crypto"
 import z from "zod"
 import { OpenScience, type ResearchSearchInput } from "@/openscience"
+import { FirecrawlSearch } from "@/research/firecrawl"
+import { ResearchRouting } from "@/research/routing"
+import { resolveCredentialFields } from "@/server/routes/settings/credentials"
 import { SearchDedupe } from "@/session/search-dedupe"
 import { Tool } from "./tool"
 
 const COMMUNITY_URL = "https://mcp.exa.ai/mcp"
 const ALTERNATIVES = ["science_search", "science_fetch", "WebFetch"] as const
+const MANAGED_SEARCH_COOLDOWN_MS = 60_000
+let managedSearchUnavailableUntil = 0
+
+/** Clear the short-lived managed-search circuit after account/runtime changes. */
+export function resetResearchSearchCircuitBreaker() {
+  managedSearchUnavailableUntil = 0
+}
 
 const Domain = z
   .string()
@@ -193,6 +203,32 @@ async function community(input: Params, ctx: Tool.Context, inheritedWarnings: st
   }
 }
 
+async function firecrawl(input: Params, ctx: Tool.Context, key: string, inheritedWarnings: string[] = []) {
+  try {
+    const result = await FirecrawlSearch.search(input as ResearchSearchInput, { key, signal: ctx.abort })
+    return {
+      output: completed({
+        ...result,
+        warnings: [...new Set([...inheritedWarnings, ...(result.warnings ?? [])])],
+      }),
+      title: `Research search: ${input.query}`,
+      metadata: metadata(input, "byok", result.results.length),
+    }
+  } catch (error) {
+    if (ctx.abort.aborted) throw error
+    return community(
+      input,
+      ctx,
+      fallbackWarnings(undefined, "Firecrawl BYOK search was unavailable. Basic community search was used."),
+    )
+  }
+}
+
+async function fallback(input: Params, ctx: Tool.Context, key: string | undefined, warning: string) {
+  if (key) return firecrawl(input, ctx, key, [warning])
+  return community(input, ctx, [warning])
+}
+
 export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, Record<string, unknown>>(
   "research_search",
   async () => {
@@ -218,26 +254,48 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
           },
         })
 
-        // Always let Synthetic Sciences choose the route. A zero balance receives its
-        // basic free fallback; funded requests may use and atomically settle
-        // enhanced search usage from the same wallet as credit-backed models.
+        const [billing, credential] = await Promise.all([
+          OpenScience.getBillingMode().catch(() => null),
+          resolveCredentialFields("firecrawl").catch(() => undefined),
+        ])
+        const key = credential?.api_key
+        const route = ResearchRouting.select({
+          aceEnabled: billing?.ace_enabled === true,
+          managedUnlocked: billing?.managed_unlocked === true,
+          firecrawl: !!key,
+        })
+        if (route === "firecrawl_byok" && key) return firecrawl(input, ctx, key)
+        if (route === "community") return community(input, ctx)
+        if (Date.now() < managedSearchUnavailableUntil) {
+          return fallback(
+            input,
+            ctx,
+            key,
+            "Ace managed search is recovering from a recent service failure. A non-managed fallback was used.",
+          )
+        }
+
+        // The managed service is the pricing and settlement authority for Ace
+        // search. It can choose Firecrawl without exposing that provider key to
+        // this process. Replays use one durable operation key.
         const operationID = ctx.callID || randomUUID()
         const response = await OpenScience.dispatchResearchSearch(input as ResearchSearchInput, operationID, ctx.abort)
         if (!response) {
-          return community(
-            input,
-            ctx,
-            fallbackWarnings(undefined, "Enhanced search was unavailable. Basic community search was used."),
-          )
+          managedSearchUnavailableUntil = Date.now() + MANAGED_SEARCH_COOLDOWN_MS
+          return fallback(input, ctx, key, "Ace managed search was unavailable. A non-managed fallback was used.")
         }
         const failure = detail(response.body)
         const code = typeof failure?.code === "string" ? failure.code : undefined
         if (response.status === 402 || code === "insufficient_credits" || code === "search_allowance_exhausted") {
           OpenScience.invalidateBalance()
-          return community(
+          return fallback(
             input,
             ctx,
-            fallbackWarnings(response.body, "Enhanced search was unavailable. Basic community search was used."),
+            key,
+            fallbackWarnings(
+              response.body,
+              "Ace managed search was unavailable. A non-managed fallback was used.",
+            ).join(" "),
           )
         }
         // A mixed-version service may still report the retired paid-search
@@ -245,18 +303,25 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
         // the basic route while that server finishes rolling forward. Other
         // authorization failures require the user to reconnect their account.
         if (response.status === 403 && code === "search_not_entitled") {
-          return community(
+          return fallback(
             input,
             ctx,
-            fallbackWarnings(response.body, "Enhanced search was unavailable. Basic community search was used."),
+            key,
+            fallbackWarnings(
+              response.body,
+              "Ace managed search was unavailable. A non-managed fallback was used.",
+            ).join(" "),
           )
         }
-        if (response.status === 429 || response.status >= 500) {
+        if (response.status === 429 || response.status >= 500 || code === "operation_in_progress") {
+          managedSearchUnavailableUntil = Date.now() + MANAGED_SEARCH_COOLDOWN_MS
           const reason =
             typeof failure?.message === "string"
               ? failure.message
               : `Enhanced search is temporarily unavailable (HTTP ${response.status}).`
-          return community(input, ctx, fallbackWarnings(response.body, `${reason} Basic community search was used.`))
+          const inherited = fallbackWarnings(response.body, `${reason} A non-managed fallback was used.`)
+          if (key) return firecrawl(input, ctx, key, inherited)
+          return community(input, ctx, inherited)
         }
         if (response.status >= 400) {
           return {
@@ -274,6 +339,7 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
         }
 
         const body = record(response.body)
+        managedSearchUnavailableUntil = 0
         const results = Array.isArray(body?.results) ? body.results : []
         const funding = typeof body?.funding === "string" ? body.funding : undefined
         // Search cost is settled by Synthetic Sciences and may vary by provider and

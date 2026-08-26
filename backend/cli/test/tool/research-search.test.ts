@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { Global } from "../../src/global"
 import { OpenScience } from "../../src/openscience"
-import { ResearchSearchTool } from "../../src/tool/research-search"
+import { ResearchSearchTool, resetResearchSearchCircuitBreaker } from "../../src/tool/research-search"
 
 const context = {
   sessionID: "ses_search",
@@ -19,13 +19,27 @@ const context = {
 const restores: Array<{ mockRestore(): void }> = []
 const sessionPath = path.join(Global.Path.data, "openscience-session.json")
 
+function managedAce() {
+  const billing = spyOn(OpenScience, "getBillingMode").mockResolvedValue({
+    mode: "managed",
+    balance_cents: 2_000,
+    ace_enabled: true,
+    managed_supported: true,
+    managed_unlocked: true,
+    balance_usd: 20,
+  })
+  restores.push(billing)
+}
+
 afterEach(async () => {
+  resetResearchSearchCircuitBreaker()
   for (const spy of restores.splice(0)) spy.mockRestore()
   await fs.rm(sessionPath, { force: true })
 })
 
 describe("research_search", () => {
   test("falls back to community search for every model when Gateway is unavailable", async () => {
+    managedAce()
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue(null)
     restores.push(dispatch)
     const fetcher = spyOn(globalThis, "fetch").mockImplementation(
@@ -61,7 +75,7 @@ describe("research_search", () => {
     const tool = await ResearchSearchTool.init({ model: { providerID: "openrouter", modelID: "free-model" } })
     const result = await tool.execute(tool.parameters.parse({ query: "current protein folding benchmarks" }), context)
     expect(fetcher).toHaveBeenCalledTimes(1)
-    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(dispatch).not.toHaveBeenCalled()
     expect(JSON.parse(result.output)).toMatchObject({
       status: "completed",
       provider: "community",
@@ -72,6 +86,7 @@ describe("research_search", () => {
   })
 
   test("lets the Gateway return basic fallback results with an empty Wallet", async () => {
+    managedAce()
     const invalidate = spyOn(OpenScience, "invalidateBalance").mockImplementation(() => undefined)
     restores.push(invalidate)
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
@@ -97,6 +112,7 @@ describe("research_search", () => {
   })
 
   test("falls back to community search when a mixed-version Gateway returns credit exhaustion", async () => {
+    managedAce()
     const invalidate = spyOn(OpenScience, "invalidateBalance").mockImplementation(() => undefined)
     restores.push(invalidate)
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
@@ -132,6 +148,7 @@ describe("research_search", () => {
   })
 
   test("keeps the basic route for a mixed-version paid-search entitlement rejection", async () => {
+    managedAce()
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
       status: 403,
       body: { detail: { code: "search_not_entitled", message: "Managed search is not enabled." } },
@@ -157,7 +174,7 @@ describe("research_search", () => {
     {
       status: 429,
       body: { detail: { code: "rate_limited", message: "Gateway search is busy." } },
-      warning: "Gateway search is busy. Basic community search was used.",
+      warning: "Gateway search is busy. A non-managed fallback was used.",
     },
     {
       status: 503,
@@ -165,9 +182,10 @@ describe("research_search", () => {
         detail: { code: "search_unavailable", message: "Enhanced search is temporarily unavailable." },
         warnings: ["Upstream search provider did not respond."],
       },
-      warning: "Enhanced search is temporarily unavailable. Basic community search was used.",
+      warning: "Enhanced search is temporarily unavailable. A non-managed fallback was used.",
     },
   ])("falls back transparently on transient Gateway HTTP $status responses", async ({ status, body, warning }) => {
+    managedAce()
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({ status, body })
     restores.push(dispatch)
     const invalidate = spyOn(OpenScience, "invalidateBalance").mockImplementation(() => undefined)
@@ -194,11 +212,37 @@ describe("research_search", () => {
     expect(invalidate).not.toHaveBeenCalled()
   })
 
+  test("opens a short circuit after a managed service failure", async () => {
+    managedAce()
+    const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
+      status: 503,
+      body: { detail: { code: "search_unavailable", message: "Managed search is recovering." } },
+    })
+    restores.push(dispatch)
+    const fetcher = spyOn(globalThis, "fetch").mockImplementation(
+      (async () =>
+        new Response(
+          'data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"community fallback"}]}}\n\n',
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        )) as unknown as typeof fetch,
+    )
+    restores.push(fetcher)
+
+    const tool = await ResearchSearchTool.init({ model: { providerID: "openrouter", modelID: "test-model" } })
+    await tool.execute(tool.parameters.parse({ query: "first managed search" }), context)
+    const second = await tool.execute(tool.parameters.parse({ query: "second managed search" }), context)
+
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(second.output)).toMatchObject({ provider: "community", content: "community fallback" })
+  })
+
   test.each([
     { status: 401, code: "invalid_api_key" },
     { status: 403, code: "account_disabled" },
     { status: 422, code: "invalid_search_request" },
   ])("surfaces Gateway HTTP $status errors that require user action", async ({ status, code }) => {
+    managedAce()
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
       status,
       body: { detail: { code, message: "Reconnect or correct the request." } },
@@ -221,6 +265,7 @@ describe("research_search", () => {
   })
 
   test("passes a stable operation id and invalidates the displayed balance after funded settlement", async () => {
+    managedAce()
     const invalidate = spyOn(OpenScience, "invalidateBalance").mockImplementation(() => undefined)
     restores.push(invalidate)
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({

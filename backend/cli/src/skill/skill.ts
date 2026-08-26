@@ -21,6 +21,7 @@ import { lazy } from "@/util/lazy"
 import { Install } from "./install/install"
 import { isRetiredProductSkillName, isRetiredProductSkillPath, RETIRED_PRODUCT_SKILL_NAMES } from "./retired"
 import { purgeRetiredAtlasAgentInstall } from "./retired-install"
+import { SkillCatalog } from "./catalog"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -30,6 +31,11 @@ export namespace Skill {
     location: z.string(),
     category: z.string().optional(),
     tags: z.array(z.string()).optional(),
+    role: SkillCatalog.Role.optional(),
+    capability: z.string().optional(),
+    requirements: z.object({ all: z.array(z.string()).optional(), any: z.array(z.string()).optional() }).optional(),
+    catalog_status: SkillCatalog.Status.optional(),
+    upstream: SkillCatalog.Upstream.optional(),
     origin: z.enum(["default", "installed", "user", "project"]),
     /** Whether the skill is user-facing (shows in / autocomplete) or an
      *  internal helper used transitively by other skills. Defaults to true.
@@ -38,9 +44,16 @@ export namespace Skill {
     entry: z.boolean().optional(),
   })
   export type Info = z.infer<typeof Info>
-  const Frontmatter = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).extend({
-    disabled: z.boolean().optional(),
-  })
+  const Frontmatter = Info.pick({
+    name: true,
+    description: true,
+    category: true,
+    tags: true,
+    role: true,
+    capability: true,
+    requirements: true,
+    entry: true,
+  }).extend({ disabled: z.boolean().optional() })
 
   export const Event = {
     Updated: BusEvent.define("skill.updated", z.object({})),
@@ -104,12 +117,18 @@ export namespace Skill {
       return
     }
 
+    const catalog = SkillCatalog.get(parsed.data.name)
     return {
       name: parsed.data.name,
       description: parsed.data.description,
       location: match,
       category: parsed.data.category,
       tags: parsed.data.tags,
+      role: parsed.data.role ?? catalog?.role,
+      capability: parsed.data.capability ?? catalog?.capability,
+      requirements: parsed.data.requirements ?? catalog?.requirements,
+      catalog_status: catalog?.status,
+      upstream: catalog?.upstream,
       entry: parsed.data.entry,
       origin,
     }
@@ -452,6 +471,11 @@ export namespace Skill {
         description: parsed.data.description,
         category: parsed.data.category,
         tags: parsed.data.tags,
+        role: parsed.data.role ?? SkillCatalog.get(parsed.data.name)?.role,
+        capability: parsed.data.capability ?? SkillCatalog.get(parsed.data.name)?.capability,
+        requirements: parsed.data.requirements ?? SkillCatalog.get(parsed.data.name)?.requirements,
+        catalog_status: SkillCatalog.get(parsed.data.name)?.status,
+        upstream: SkillCatalog.get(parsed.data.name)?.upstream,
         entry: parsed.data.entry,
         location: file,
         origin: "user",
@@ -471,15 +495,35 @@ export namespace Skill {
 
   export async function get(name: string) {
     if (isRetiredProductSkillName(name)) return undefined
-    return state().then((x) => x[name])
+    return state().then((x) => {
+      const skill = x[name]
+      return skill?.catalog_status === "blocked" ? undefined : skill
+    })
   }
 
   export async function all() {
     const current = await state()
     const cached = lists.get(current)
     if (cached) return cached
-    const value = Object.values(current).filter((skill) => !isRetiredProductSkillName(skill.name))
+    const value = Object.values(current).filter(
+      (skill) => !isRetiredProductSkillName(skill.name) && skill.catalog_status !== "blocked",
+    )
     lists.set(current, value)
     return value
+  }
+
+  /** Apply the shared thin-agent skill budget to a ranked shortlist. This does
+   * not remove or mutate installed skills; callers retain the full catalog. */
+  export async function select(
+    candidates: Array<{ name: string; score?: number; explicit?: boolean }>,
+    available: Iterable<string>,
+  ) {
+    const catalog = await state()
+    return SkillCatalog.select(
+      candidates
+        .filter((candidate) => !!catalog[candidate.name])
+        .map((candidate) => ({ ...catalog[candidate.name]!, ...candidate })),
+      available,
+    )
   }
 }

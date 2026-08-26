@@ -1,0 +1,21 @@
+import { expect, test } from "bun:test"
+
+const input = await Bun.file(new URL("./prompt-input.tsx", import.meta.url)).text()
+const prompt = await Bun.file(new URL("../context/prompt.tsx", import.meta.url)).text()
+const capabilities = await Bun.file(new URL("./prompt-capabilities.ts", import.meta.url)).text()
+
+test("keeps conversation references typed from chip through request", () => {
+  expect(prompt).toContain('type: "conversation"')
+  expect(prompt).toContain("sourceSessionID: string")
+  expect(input).toContain('setStore("popover", "conversation")')
+  expect(input).toContain('type: "conversation" as const')
+  expect(input).toContain("throughMessageID: attachment.throughMessageID")
+})
+
+test("offers bounded delegation controls and sends the normalized contract", () => {
+  expect(capabilities).toContain('export type DelegationLevel = "off" | "light" | "standard" | "high"')
+  expect(capabilities).toContain('export type DelegationAutonomy = "interactive" | "balanced" | "autonomous"')
+  expect(capabilities).toContain('export type DelegationDiversity = "focused" | "balanced" | "exploratory"')
+  expect(input).toContain("delegationSettings: delegationConfig")
+  expect(input).toContain("delegation_worker_model")
+})

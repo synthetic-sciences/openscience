@@ -30,6 +30,7 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  ConversationPartInput,
   EventSubscribeResponse,
   EventSubscribeResponses,
   ExperimentalResourceListResponses,
@@ -1308,6 +1309,7 @@ export class Jobs extends HeyApiClient {
       packages?: Array<string>
       image?: string
       gpu?: string
+      secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       approval?: string
       sessionID: string
     },
@@ -1333,6 +1335,7 @@ export class Jobs extends HeyApiClient {
             { in: "body", key: "packages" },
             { in: "body", key: "image" },
             { in: "body", key: "gpu" },
+            { in: "body", key: "secret_refs" },
             { in: "body", key: "approval" },
             { in: "body", key: "sessionID" },
           ],
@@ -1391,6 +1394,7 @@ export class Jobs extends HeyApiClient {
       packages?: Array<string>
       image?: string
       gpu?: string
+      secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       approval?: string
       sessionID: string
     },
@@ -1416,6 +1420,7 @@ export class Jobs extends HeyApiClient {
             { in: "body", key: "packages" },
             { in: "body", key: "image" },
             { in: "body", key: "gpu" },
+            { in: "body", key: "secret_refs" },
             { in: "body", key: "approval" },
             { in: "body", key: "sessionID" },
           ],
@@ -1677,6 +1682,13 @@ export class Preferences extends HeyApiClient {
       atlas_enabled?: boolean
       delegation_enabled?: boolean
       delegation_specialist?: string | null
+      delegation_level?: "off" | "light" | "standard" | "high"
+      delegation_worker_model?: {
+        providerID: string
+        modelID: string
+      } | null
+      delegation_autonomy?: "interactive" | "balanced" | "autonomous"
+      delegation_diversity?: "focused" | "balanced" | "exploratory"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1693,6 +1705,10 @@ export class Preferences extends HeyApiClient {
             { in: "body", key: "atlas_enabled" },
             { in: "body", key: "delegation_enabled" },
             { in: "body", key: "delegation_specialist" },
+            { in: "body", key: "delegation_level" },
+            { in: "body", key: "delegation_worker_model" },
+            { in: "body", key: "delegation_autonomy" },
+            { in: "body", key: "delegation_diversity" },
           ],
         },
       ],
@@ -3472,10 +3488,19 @@ export class Session extends HeyApiClient {
       }
       effort?: ResearchEffort
       delegation?: boolean
+      delegationSettings?: {
+        level?: "off" | "light" | "standard" | "high"
+        workerModel?: {
+          providerID: string
+          modelID: string
+        }
+        autonomy?: "interactive" | "balanced" | "autonomous"
+        diversity?: "focused" | "balanced" | "exploratory"
+      }
       system?: string
       variant?: string
       tier?: string
-      parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+      parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3493,6 +3518,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "tools" },
             { in: "body", key: "effort" },
             { in: "body", key: "delegation" },
+            { in: "body", key: "delegationSettings" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
@@ -3566,10 +3592,19 @@ export class Session extends HeyApiClient {
       }
       effort?: ResearchEffort
       delegation?: boolean
+      delegationSettings?: {
+        level?: "off" | "light" | "standard" | "high"
+        workerModel?: {
+          providerID: string
+          modelID: string
+        }
+        autonomy?: "interactive" | "balanced" | "autonomous"
+        diversity?: "focused" | "balanced" | "exploratory"
+      }
       system?: string
       variant?: string
       tier?: string
-      parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+      parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3587,6 +3622,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "tools" },
             { in: "body", key: "effort" },
             { in: "body", key: "delegation" },
+            { in: "body", key: "delegationSettings" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
@@ -3623,6 +3659,15 @@ export class Session extends HeyApiClient {
       command: string
       effort?: ResearchEffort
       delegation?: boolean
+      delegationSettings?: {
+        level?: "off" | "light" | "standard" | "high"
+        workerModel?: {
+          providerID: string
+          modelID: string
+        }
+        autonomy?: "interactive" | "balanced" | "autonomous"
+        diversity?: "focused" | "balanced" | "exploratory"
+      }
       variant?: string
       tier?: string
       parts?: Array<{
@@ -3650,6 +3695,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "command" },
             { in: "body", key: "effort" },
             { in: "body", key: "delegation" },
+            { in: "body", key: "delegationSettings" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
             { in: "body", key: "parts" },

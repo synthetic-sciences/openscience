@@ -8,6 +8,7 @@ import { Session } from "../../session"
 import { SessionPrompt } from "../../session/prompt"
 import { lazy } from "../../util/lazy"
 import { Log } from "../../util/log"
+import { Flag } from "../../flag/flag"
 
 const log = Log.create({ service: "runtime-route" })
 
@@ -92,6 +93,20 @@ export const RuntimeRoutes = lazy(() =>
       validator("json", PromptInput),
       async (c) => {
         const input = c.req.valid("json")
+        // The public runtime remains Research-only. The isolated source lab
+        // may opt into the feature-gated thin agent without widening the
+        // generated API or making a hidden agent selectable in production.
+        const requestedAgent = c.req.header("x-openscience-dev-agent")
+        if (
+          requestedAgent &&
+          !(requestedAgent === "researchagent-test" && Flag.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST)
+        ) {
+          return c.json(
+            { error: "dev_agent_unavailable", message: "The requested development agent is unavailable." },
+            400,
+          )
+        }
+        const agent = requestedAgent ?? "research"
         await Session.get(input.sessionID)
         SessionPrompt.assertNotBusy(input.sessionID)
 
@@ -113,10 +128,9 @@ export const RuntimeRoutes = lazy(() =>
 
         void SessionPrompt.prompt({
           sessionID: input.sessionID,
-          // The stable runtime contract is deliberately smaller than legacy
-          // session configuration: every public run enters through Research,
-          // even if a migrated install still names hidden Plan as its default.
-          agent: "research",
+          // Every public run still enters through Research. Only the isolated,
+          // explicitly feature-gated source lab can reach researchagent-test.
+          agent,
           effort: input.effort,
           parts: [{ type: "text", text: input.message }],
         })

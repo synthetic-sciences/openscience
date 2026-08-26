@@ -134,6 +134,50 @@ test("credential catalog is categorized and injects integration and compute envi
   }
 })
 
+test("trusted Firecrawl and NVIDIA credentials resolve in-process without entering agent shells", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-trusted-credentials-"))
+  const runner = path.join(root, "trusted.ts")
+  const routes = new URL("../../src/server/routes/settings/credentials.ts", import.meta.url).href
+  await Bun.write(
+    runner,
+    [
+      `import { CredentialsRoutes, applyCredentialEnv, resolveCredentialFields } from ${JSON.stringify(routes)}`,
+      `for (const key of ["FIRECRAWL_API_KEY", "NVIDIA_API_KEY", "NGC_API_KEY"]) delete process.env[key]`,
+      `const app = CredentialsRoutes()`,
+      `for (const [id, secret] of [["firecrawl", "fc-trusted"], ["nvidia", "nvapi-trusted"], ["nvidia_ngc", "ngc-trusted"]]) {`,
+      `  const response = await app.request("/" + id, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ fields: { api_key: secret } }) })`,
+      `  if (!response.ok || (await response.text()).includes(secret)) throw new Error("trusted credential leaked or failed")`,
+      `}`,
+      `await applyCredentialEnv()`,
+      `if (process.env.FIRECRAWL_API_KEY || process.env.NVIDIA_API_KEY || process.env.NGC_API_KEY) throw new Error("trusted credential entered process env")`,
+      `if ((await resolveCredentialFields("firecrawl"))?.api_key !== "fc-trusted") throw new Error("Firecrawl resolver failed")`,
+      `if ((await resolveCredentialFields("nvidia"))?.api_key !== "nvapi-trusted") throw new Error("NVIDIA resolver failed")`,
+      `if ((await resolveCredentialFields("nvidia_ngc"))?.api_key !== "ngc-trusted") throw new Error("NGC resolver failed")`,
+      `if (await resolveCredentialFields("github")) throw new Error("untrusted service resolved through trusted API")`,
+    ].join("\n"),
+  )
+
+  try {
+    const proc = Bun.spawn([process.execPath, runner], {
+      env: {
+        ...process.env,
+        OPENSCIENCE_DATA_DIR: root,
+        OPENSCIENCE_CONFIG_DIR: path.join(root, "config"),
+        OPENSCIENCE_TEST_HOME: path.join(root, "home"),
+        XDG_STATE_HOME: path.join(root, "state"),
+        XDG_CACHE_HOME: path.join(root, "cache"),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [exit, error] = await Promise.all([proc.exited, new Response(proc.stderr).text()])
+    if (exit !== 0) throw new Error(error)
+    expect(exit).toBe(0)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("GCP plaintext is atomic, sandbox-masked, and removed for corrupt or deleted ciphertext", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-gcp-credential-"))
   const runner = path.join(root, "gcp.ts")

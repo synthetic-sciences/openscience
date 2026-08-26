@@ -28,6 +28,13 @@ export interface AgentPart extends PartBase {
   name: string
 }
 
+export interface ConversationAttachmentPart extends PartBase {
+  type: "conversation"
+  sourceSessionID: string
+  label: string
+  throughMessageID?: string
+}
+
 export interface ImageAttachmentPart {
   type: "image"
   id: string
@@ -37,7 +44,7 @@ export interface ImageAttachmentPart {
   size?: number
 }
 
-export type ContentPart = TextPart | FileAttachmentPart | AgentPart | ImageAttachmentPart
+export type ContentPart = TextPart | FileAttachmentPart | AgentPart | ConversationAttachmentPart | ImageAttachmentPart
 export type Prompt = ContentPart[]
 
 export type FileContextItem = {
@@ -80,6 +87,11 @@ export function isPromptEqual(promptA: Prompt, promptB: Prompt): boolean {
     if (partA.type === "agent" && partA.name !== (partB as AgentPart).name) {
       return false
     }
+    if (partA.type === "conversation") {
+      const conversation = partB as ConversationAttachmentPart
+      if (partA.sourceSessionID !== conversation.sourceSessionID) return false
+      if (partA.throughMessageID !== conversation.throughMessageID) return false
+    }
     if (partA.type === "image" && partA.id !== (partB as ImageAttachmentPart).id) {
       return false
     }
@@ -96,6 +108,7 @@ function clonePart(part: ContentPart): ContentPart {
   if (part.type === "text") return { ...part }
   if (part.type === "image") return { ...part }
   if (part.type === "agent") return { ...part }
+  if (part.type === "conversation") return { ...part }
   return {
     ...part,
     selection: cloneSelection(part.selection),

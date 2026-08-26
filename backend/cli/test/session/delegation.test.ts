@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { SessionPrompt } from "../../src/session/prompt"
+import { MessageV2 } from "../../src/session/message-v2"
 
 describe("Research delegation controls", () => {
   test("disables automatic Task calls while preserving explicit @agent requests", () => {
@@ -23,5 +24,20 @@ describe("Research delegation controls", () => {
     expect(SessionPrompt.researchEffortReminder("normal")).toContain("including continuations")
     expect(SessionPrompt.researchEffortReminder("ultra")).toContain("Research effort: ULTRA")
     expect(SessionPrompt.researchEffortReminder("ultra")).toContain("at most 4 Task calls total")
+  })
+
+  test("keeps delegation independent from reasoning effort and permissions", () => {
+    const settings = MessageV2.resolveDelegationSettings({
+      level: "light",
+      workerModel: { providerID: "openrouter", modelID: "worker" },
+      autonomy: "autonomous",
+      diversity: "exploratory",
+    })
+    expect(MessageV2.delegationLimit(settings)).toBe(1)
+    expect(settings.workerModel?.modelID).toBe("worker")
+    expect(SessionPrompt.researchEffortReminder("ultra", settings)).toContain("at most 1 Task calls total")
+    expect(SessionPrompt.researchEffortReminder("normal", { ...settings, level: "off" })).toContain(
+      "Automatic delegation is off",
+    )
   })
 })

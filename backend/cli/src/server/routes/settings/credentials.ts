@@ -56,6 +56,11 @@ interface ServiceSpec {
   description: string
   category: "compute" | "integration"
   fields: FieldSpec[]
+  /** Trusted-only credentials are resolved by an in-process adapter and are
+   * never copied into process.env or agent-controlled subprocesses. */
+  trusted?: boolean
+  /** Compute credentials sync to the account unless explicitly device-only. */
+  portable?: boolean
 }
 
 // Known services and the shape of the secret each one needs. "Custom" entries
@@ -98,6 +103,14 @@ const CATALOG: ServiceSpec[] = [
     fields: [{ name: "api_key", label: "API key", type: "password" }],
   },
   {
+    id: "firecrawl",
+    label: "Firecrawl",
+    description: "Optional own API key for enhanced web search when Ace managed search is unavailable.",
+    category: "integration",
+    fields: [{ name: "api_key", label: "API key", type: "password", placeholder: "fc-…" }],
+    trusted: true,
+  },
+  {
     id: "azure",
     label: "Microsoft Azure",
     description: "Service principal or API credentials for Azure workloads.",
@@ -117,6 +130,16 @@ const CATALOG: ServiceSpec[] = [
     description: "API key for NVIDIA NIM / build.nvidia.com models.",
     category: "compute",
     fields: [{ name: "api_key", label: "API key", type: "password", placeholder: "nvapi-…" }],
+    trusted: true,
+  },
+  {
+    id: "nvidia_ngc",
+    label: "NVIDIA NGC Registry",
+    description: "Device-local NGC key for approved NVIDIA container pulls on trusted compute adapters.",
+    category: "compute",
+    fields: [{ name: "api_key", label: "NGC API key", type: "password" }],
+    trusted: true,
+    portable: false,
   },
   {
     id: "openalex",
@@ -267,7 +290,11 @@ function mapServiceEnv(id: string, f: Record<string, string>): Record<string, st
       put("AZURE_OPENAI_ENDPOINT", f.endpoint)
       return out
     case "nvidia":
-      put("NVIDIA_API_KEY", f.api_key)
+    case "nvidia_ngc":
+    case "firecrawl":
+      // These credentials cross a paid/provider boundary. Their trusted
+      // adapters resolve the encrypted fields just in time; keeping them out
+      // of process.env also keeps them out of bash, skills, and child shells.
       return out
     case "openalex":
       put("OPENALEX_MAILTO", f.email)
@@ -346,6 +373,24 @@ async function validDecryptedFields(id: string, entry: StoreEntry): Promise<Reco
   return Object.fromEntries(Object.entries(fields).filter(([name, value]) => validField(id, name, value)))
 }
 
+/** Resolve one encrypted service credential for a trusted in-process adapter.
+ * Values are never returned by HTTP routes and never copied into process.env. */
+export async function resolveCredentialFields(id: string): Promise<Record<string, string> | undefined> {
+  const spec = specFor(id)
+  if (!spec?.trusted) return
+  const entry = (await readStore())[id]
+  if (!entry) return
+  const fields = await validDecryptedFields(id, entry)
+  if (!Object.keys(fields).length) return
+  OpenScience.registerSecretValues(Object.values(fields))
+  return fields
+}
+
+export async function hasCredentialFields(id: string, names: string[]): Promise<boolean> {
+  const fields = await resolveCredentialFields(id)
+  return !!fields && names.every((name) => !!fields[name])
+}
+
 async function atomicSecretWrite(filepath: string, content: string): Promise<void> {
   await using operation = await DataRootBarrier.enter(filepath)
   const temp = `${filepath}.${process.pid}.${crypto.randomUUID()}.tmp`
@@ -379,6 +424,7 @@ async function readDecryptedEnv(): Promise<CredentialEnv> {
   let materializationError: unknown
   for (const [id, entry] of Object.entries(store)) {
     const fields = await validDecryptedFields(id, entry)
+    if (specFor(id)?.trusted) secrets.push(...Object.values(fields))
     if (id === "gcp") gcp = fields.service_account_json
     const mapped = mapServiceEnv(id, fields)
     for (const [key, value] of Object.entries(mapped)) {
@@ -643,7 +689,7 @@ export const CredentialsRoutes = lazy(() =>
             }
           }),
         )
-        if (spec?.category === "compute") {
+        if (spec?.category === "compute" && spec.portable !== false) {
           const entry = store[id]
           const fields = entry ? await validDecryptedFields(id, entry) : {}
           const authenticated = await OpenScience.isAuthenticated()
@@ -677,7 +723,7 @@ export const CredentialsRoutes = lazy(() =>
       async (c) => {
         const id = c.req.valid("param").id
         const spec = specFor(id)
-        if (spec?.category === "compute" && (await OpenScience.isAuthenticated())) {
+        if (spec?.category === "compute" && spec.portable !== false && (await OpenScience.isAuthenticated())) {
           if (!(await OpenScience.deletePortableCredential(id))) {
             return c.json({ error: `${spec.label} could not be removed from your account` }, 502)
           }

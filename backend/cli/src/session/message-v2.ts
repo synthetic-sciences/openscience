@@ -27,6 +27,29 @@ export namespace MessageV2 {
     ultra: 4,
   } as const satisfies Record<ResearchEffort, number>
 
+  export const DelegationLevel = z.enum(["off", "light", "standard", "high"])
+  export type DelegationLevel = z.infer<typeof DelegationLevel>
+  export const DelegationAutonomy = z.enum(["interactive", "balanced", "autonomous"])
+  export const DelegationDiversity = z.enum(["focused", "balanced", "exploratory"])
+  export const DelegationSettings = z.object({
+    level: DelegationLevel.default("standard"),
+    workerModel: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
+    autonomy: DelegationAutonomy.default("balanced"),
+    diversity: DelegationDiversity.default("balanced"),
+  })
+  export type DelegationSettings = z.infer<typeof DelegationSettings>
+  export const DelegationLimits = {
+    off: 0,
+    light: 1,
+    standard: 2,
+    high: 4,
+  } as const satisfies Record<DelegationLevel, number>
+
   /** Historical messages predate Research effort and therefore resolve to Normal. */
   export function resolveResearchEffort(value: unknown): ResearchEffort {
     return ResearchEffort.safeParse(value).data ?? "normal"
@@ -34,6 +57,21 @@ export namespace MessageV2 {
 
   export function childAgentLimit(value: unknown) {
     return ResearchEffortLimits[resolveResearchEffort(value)]
+  }
+
+  export function resolveDelegationSettings(
+    value: unknown,
+    fallback?: { effort?: unknown; enabled?: boolean },
+  ): DelegationSettings {
+    const parsed = DelegationSettings.safeParse(value)
+    if (parsed.success) return parsed.data
+    const level =
+      fallback?.enabled === false ? "off" : resolveResearchEffort(fallback?.effort) === "ultra" ? "high" : "standard"
+    return DelegationSettings.parse({ level })
+  }
+
+  export function delegationLimit(value: unknown, fallback?: { effort?: unknown; enabled?: boolean }) {
+    return DelegationLimits[resolveDelegationSettings(value, fallback).level]
   }
 
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -177,6 +215,19 @@ export namespace MessageV2 {
     ref: "AgentPart",
   })
   export type AgentPart = z.infer<typeof AgentPart>
+
+  export const ConversationPart = PartBase.extend({
+    type: z.literal("conversation"),
+    sourceSessionID: Identifier.schema("session"),
+    throughMessageID: Identifier.schema("message"),
+    snapshotID: z.string().min(1),
+    label: z.string().min(1).max(160),
+    /** Immutable, bounded transcript materialized when the reference is attached. */
+    text: z.string(),
+  }).meta({
+    ref: "ConversationPart",
+  })
+  export type ConversationPart = z.infer<typeof ConversationPart>
 
   export const CompactionPart = PartBase.extend({
     type: z.literal("compaction"),
@@ -389,6 +440,7 @@ export namespace MessageV2 {
     effort: ResearchEffort.default("normal"),
     /** @deprecated Research effort now controls bounded delegation. */
     delegation: z.boolean().optional(),
+    delegationSettings: DelegationSettings.optional(),
     variant: z.string().optional(),
     tier: z.string().optional(),
     inference: Inference.Info.optional(),
@@ -409,6 +461,7 @@ export namespace MessageV2 {
       SnapshotPart,
       PatchPart,
       AgentPart,
+      ConversationPart,
       RetryPart,
       CompactionPart,
     ])
@@ -654,6 +707,11 @@ export namespace MessageV2 {
         result.push(userMessage)
         for (const part of msg.parts) {
           if (part.type === "text" && !part.ignored)
+            userMessage.parts.push({
+              type: "text",
+              text: part.text,
+            })
+          if (part.type === "conversation")
             userMessage.parts.push({
               type: "text",
               text: part.text,
@@ -1040,6 +1098,10 @@ export namespace MessageV2 {
       for (const part of msg.parts) {
         if (part.type === "text") {
           if (part.ignored) continue
+          out.text += Token.estimate(part.text)
+          continue
+        }
+        if (part.type === "conversation") {
           out.text += Token.estimate(part.text)
           continue
         }

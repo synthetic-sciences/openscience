@@ -119,6 +119,33 @@ test("Research is the only built-in user-facing primary", async () => {
   })
 })
 
+test("thin research profile is absent unless the explicit dev flag is enabled", async () => {
+  const previous = process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST
+  try {
+    delete process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST
+    await using production = await tmpdir()
+    await Instance.provide({
+      directory: production.path,
+      fn: async () => expect(await Agent.get("researchagent-test")).toBeUndefined(),
+    })
+
+    process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST = "1"
+    await using laboratory = await tmpdir()
+    await Instance.provide({
+      directory: laboratory.path,
+      fn: async () => {
+        const thin = await Agent.get("researchagent-test")
+        expect(thin).toMatchObject({ name: "researchagent-test", mode: "primary", native: true })
+        expect(thin?.prompt).toContain("collaborative research agent")
+        expect(evalPerm(thin, "research_contract")).toBe("deny")
+      },
+    })
+  } finally {
+    if (previous === undefined) delete process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST
+    else process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST = previous
+  }
+})
+
 test("built-in delegation uses only Explore and Execute profiles", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

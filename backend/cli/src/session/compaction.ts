@@ -713,6 +713,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       }),
       effort: MessageV2.ResearchEffort.optional(),
       delegation: z.boolean().optional(),
+      delegationSettings: MessageV2.DelegationSettings.optional(),
       auto: z.boolean(),
       focus: z.string().optional(),
       handoffFile: z.string().optional(),
@@ -735,6 +736,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
         effort: input.effort ?? "normal",
         ...(previous ? SessionLoopState.controls(previous.info) : {}),
         delegation: input.delegation ?? previous?.info.delegation,
+        delegationSettings: input.delegationSettings ?? previous?.info.delegationSettings,
         internal: {
           type: "compaction",
           auto: input.auto,

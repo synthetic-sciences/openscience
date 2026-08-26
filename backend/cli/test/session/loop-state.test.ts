@@ -423,12 +423,22 @@ describe("session loop restart state", () => {
     if (source.info.role !== "user") throw new Error("bad fixture")
     source.info.tools = { task: false, bash: false }
     source.info.delegation = false
+    source.info.delegationSettings = {
+      level: "off",
+      autonomy: "balanced",
+      diversity: "balanced",
+    }
     source.info.system = "stay local"
     source.info.variant = "careful"
     source.info.tier = "priority"
     expect(SessionLoopState.controls(source.info)).toEqual({
       tools: { task: false, bash: false },
       delegation: false,
+      delegationSettings: {
+        level: "off",
+        autonomy: "balanced",
+        diversity: "balanced",
+      },
       system: "stay local",
       variant: "careful",
       tier: "priority",

@@ -40,13 +40,50 @@ export const Preferences = z.object({
   // the next normal prompt explicitly delegate to that subagent.
   delegation_enabled: z.boolean().default(true),
   delegation_specialist: z.string().nullable().default(null),
+  delegation_level: z.enum(["off", "light", "standard", "high"]).default("standard"),
+  delegation_worker_model: z
+    .object({
+      providerID: z.string(),
+      modelID: z.string(),
+    })
+    .nullable()
+    .default(null),
+  delegation_autonomy: z.enum(["interactive", "balanced", "autonomous"]).default("balanced"),
+  delegation_diversity: z.enum(["focused", "balanced", "exploratory"]).default("balanced"),
 })
 export type Preferences = z.infer<typeof Preferences>
+
+const PreferencesPatch = z.object({
+  reasoning_effort: Preferences.shape.reasoning_effort.removeDefault().optional(),
+  intent: Preferences.shape.intent.removeDefault().optional(),
+  extra_budget_usd: Preferences.shape.extra_budget_usd.removeDefault().optional(),
+  show_trace: Preferences.shape.show_trace.removeDefault().optional(),
+  show_local_models: Preferences.shape.show_local_models.removeDefault().optional(),
+  atlas_enabled: Preferences.shape.atlas_enabled.removeDefault().optional(),
+  delegation_enabled: Preferences.shape.delegation_enabled.removeDefault().optional(),
+  delegation_specialist: Preferences.shape.delegation_specialist.removeDefault().optional(),
+  delegation_level: Preferences.shape.delegation_level.removeDefault().optional(),
+  delegation_worker_model: Preferences.shape.delegation_worker_model.removeDefault().optional(),
+  delegation_autonomy: Preferences.shape.delegation_autonomy.removeDefault().optional(),
+  delegation_diversity: Preferences.shape.delegation_diversity.removeDefault().optional(),
+})
+
+function normalizeDelegation(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value
+  const next = { ...(value as Record<string, unknown>) }
+  const level = next.delegation_level
+  if (level === "off" || level === "light" || level === "standard" || level === "high") {
+    next.delegation_enabled = level !== "off"
+  } else if (typeof next.delegation_enabled === "boolean") {
+    next.delegation_level = next.delegation_enabled ? "standard" : "off"
+  }
+  return next
+}
 
 async function read(): Promise<Preferences> {
   try {
     const raw = await Bun.file(filepath).json()
-    return Preferences.parse(raw)
+    return Preferences.parse(normalizeDelegation(raw))
   } catch {
     // Missing / malformed file → schema defaults.
     return Preferences.parse({})
@@ -86,9 +123,9 @@ export const SettingsPreferencesRoutes = lazy(() =>
           },
         },
       }),
-      validator("json", Preferences.partial()),
+      validator("json", PreferencesPatch),
       async (c) => {
-        const patch = c.req.valid("json")
+        const patch = normalizeDelegation(c.req.valid("json")) as Partial<Preferences>
         const merged = Preferences.parse({ ...(await read()), ...patch })
         log.info("update", { keys: Object.keys(patch) })
         return c.json(await write(merged))

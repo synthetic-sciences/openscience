@@ -15,6 +15,7 @@ import { Provider } from "@/provider/provider"
 import { Project } from "@/project/project"
 import { ManagedProject } from "@/project/managed"
 import { SessionFilesystem } from "@/session/filesystem"
+import { ServerIdentity } from "../identity"
 
 const log = Log.create({ service: "server" })
 
@@ -51,14 +52,22 @@ export const GlobalRoutes = lazy(() =>
             description: "Health information",
             content: {
               "application/json": {
-                schema: resolver(z.object({ healthy: z.literal(true), version: z.string() })),
+                schema: resolver(
+                  z.object({
+                    healthy: z.literal(true),
+                    version: z.string(),
+                    sourceSha: z.string().nullable(),
+                    sourceWorktreeHash: z.string().nullable(),
+                    runId: z.string(),
+                  }),
+                ),
               },
             },
           },
         },
       }),
       async (c) => {
-        return c.json({ healthy: true, version: Installation.VERSION })
+        return c.json({ healthy: true, version: Installation.VERSION, ...ServerIdentity.current })
       },
     )
     .post(

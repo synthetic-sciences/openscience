@@ -66,6 +66,7 @@ export namespace SessionLoopState {
       system: message.system,
       tools: message.tools,
       delegation: message.delegation,
+      delegationSettings: message.delegationSettings,
       variant: message.variant,
       tier: message.tier,
       inference: message.inference,
@@ -161,7 +162,7 @@ export namespace SessionLoopState {
     return message.parts.some((part) => {
       if (part.type === "text") return !part.synthetic && !part.ignored
       if (part.type === "compaction") return !part.auto
-      return part.type === "file" || part.type === "agent" || part.type === "subtask"
+      return part.type === "file" || part.type === "agent" || part.type === "conversation" || part.type === "subtask"
     })
   }
 

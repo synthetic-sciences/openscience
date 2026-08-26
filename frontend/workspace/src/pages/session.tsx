@@ -51,7 +51,9 @@ import {
   IconMoreH,
   IconPin,
   IconPinFilled,
+  IconArchive,
   IconShield,
+  IconSplit,
   IconX,
 } from "@/atlas/shared/Icon"
 import { StatusDot } from "@/atlas/shared/StatusDot"
@@ -285,6 +287,50 @@ export default function Page(): JSX.Element {
     })
   }
 
+  async function archiveSession(sessionID: string) {
+    const active = params.id === sessionID
+    const next = sessions().find((session) => session.id !== sessionID)?.id
+    try {
+      await sync.session.archive(sessionID)
+      await sync.session.fetch(50)
+      const open = sessionTabs.close(sessionID)
+      toast.success("Session archived", "Archived sessions remain available from project search.")
+      if (!active) return
+      const target = open ?? next
+      navigate(target ? `/${params.dir}/session/${target}` : `/${params.dir}/session/new`)
+    } catch (error: unknown) {
+      console.error("session.archive failed", error)
+      toast.error("Could not archive session", error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function restoreSession(sessionID: string) {
+    try {
+      await sdk.client.session.update({ sessionID, time: { archived: 0 } })
+      await sync.session.fetch(50)
+      toast.success("Session restored")
+    } catch (error: unknown) {
+      console.error("session.restore failed", error)
+      toast.error("Could not restore session", error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function forkSession(messageID?: string) {
+    const sessionID = params.id
+    if (!sessionID || sessionID === "new") return
+    try {
+      const forked = await sdk.client.session.fork({ sessionID, messageID }).then((response) => response.data)
+      if (!forked?.id) throw new Error("The new session was not returned by the server.")
+      await sync.session.fetch(1)
+      sessionTabs.open(forked.id)
+      navigate(`/${params.dir}/session/${forked.id}`)
+      toast.success("Session forked", "Continue independently from the selected turn.")
+    } catch (error: unknown) {
+      console.error("session.fork failed", error)
+      toast.error("Could not fork session", error instanceof Error ? error.message : String(error))
+    }
+  }
+
   function toggleSessions() {
     const next = !sessionsCollapsed()
     setSessionsCollapsed(next)
@@ -367,13 +413,18 @@ export default function Page(): JSX.Element {
   const projectPath = () => sdk.directory
   const sessions = createMemo<SyncSession[]>(() =>
     [...sync.data.session]
-      .filter((s) => !s.parentID)
+      .filter((s) => !s.parentID && !s.time?.archived)
       .sort(
         (a, b) =>
           Number(Boolean(b.time?.pinned)) - Number(Boolean(a.time?.pinned)) ||
           (b.time?.pinned ?? 0) - (a.time?.pinned ?? 0) ||
           (b.time?.updated ?? 0) - (a.time?.updated ?? 0),
       ),
+  )
+  const archivedSessions = createMemo<SyncSession[]>(() =>
+    [...sync.data.session]
+      .filter((session) => !session.parentID && Boolean(session.time?.archived))
+      .toSorted((a, b) => (b.time?.archived ?? 0) - (a.time?.archived ?? 0)),
   )
 
   createEffect(
@@ -506,7 +557,13 @@ export default function Page(): JSX.Element {
     params.id ? (sync.data.session_status?.[params.id] as { type?: string } | undefined)?.type : undefined,
   )
   // A message is a compaction boundary when it carries a `compaction` part.
-  const hasCompactionPart = (id: string) => (sync.data.part[id] ?? []).some((p) => p.type === "compaction")
+  const compactionPart = (id: string) => (sync.data.part[id] ?? []).find((part) => part.type === "compaction")
+  const hasCompactionPart = (id: string) => Boolean(compactionPart(id))
+  const compactionSummary = (id: string) => {
+    const assistant = messages().find((message) => message.role === "assistant" && message.parentID === id)
+    if (!assistant) return undefined
+    return (sync.data.part[assistant.id] ?? []).find((part) => part.type === "text")?.text
+  }
   // While compacting, an inline loader replaces the divider on the compaction
   // message currently being summarized (the most recent one). Once compaction
   // finishes the status leaves "compacting" and it becomes the "context
@@ -524,6 +581,12 @@ export default function Page(): JSX.Element {
     if (!revertID) return 0
     return messages().filter((m) => m.role === "user" && m.id >= revertID).length
   })
+
+  const nextTurnID = (messageID: string) => {
+    const turns = turnMessages()
+    const index = turns.findIndex((message) => message.id === messageID)
+    return index >= 0 ? turns[index + 1]?.id : undefined
+  }
 
   const revertTo = async (messageID: string) => {
     const id = params.id
@@ -758,6 +821,41 @@ export default function Page(): JSX.Element {
   } = {}
   let chatElement: HTMLDivElement | undefined
   let contentElement: HTMLDivElement | undefined
+  const [historyLoading, setHistoryLoading] = createSignal(false)
+
+  const loadOlderMessages = async () => {
+    const sessionID = params.id
+    const scroller = chatElement
+    if (!sessionID || !scroller || historyLoading()) return
+
+    const top = scroller.getBoundingClientRect().top
+    const rows = Array.from(scroller.querySelectorAll<HTMLElement>("[data-message-id]"))
+    const anchor = rows.find((row) => row.getBoundingClientRect().bottom > top)
+    const anchorID = anchor?.dataset.messageId
+    const offset = anchor ? anchor.getBoundingClientRect().top - top : 0
+    const height = scroller.scrollHeight
+    cancelRestoration()
+    setHistoryLoading(true)
+    try {
+      await sync.session.history.loadMore(sessionID)
+      const restore = () => {
+        const row = anchorID
+          ? scroller.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchorID)}"]`)
+          : undefined
+        if (row) scroller.scrollTop += row.getBoundingClientRect().top - top - offset
+        if (!row) scroller.scrollTop += scroller.scrollHeight - height
+        chatScroll.handleScroll()
+      }
+      requestAnimationFrame(() => {
+        restore()
+        requestAnimationFrame(restore)
+      })
+    } catch (error: unknown) {
+      toast.error("Could not load earlier messages", error instanceof Error ? error.message : String(error))
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
   let observer: ResizeObserver | undefined
   let conversationPanelElement: HTMLElement | undefined
   let promptDockElement: HTMLDivElement | undefined
@@ -881,6 +979,7 @@ export default function Page(): JSX.Element {
         <SessionsSidebar
           projectName={projectName()}
           sessions={sessions()}
+          archivedSessions={archivedSessions()}
           activeId={params.id}
           dirParam={params.dir ?? ""}
           creating={creating()}
@@ -927,6 +1026,8 @@ export default function Page(): JSX.Element {
             })
           }}
           onDelete={(id) => void deleteSession(id)}
+          onArchive={(id) => void archiveSession(id)}
+          onRestore={(id) => void restoreSession(id)}
           onRename={(id, title) => void renameSession(id, title)}
           onPin={(id, pinned) => void pinSession(id, pinned)}
         />
@@ -1048,6 +1149,21 @@ export default function Page(): JSX.Element {
                         "overflow-x": "hidden",
                       }}
                     >
+                      <Show when={params.id && sync.session.history.more(params.id)}>
+                        <div class="session-history-loader">
+                          <button
+                            type="button"
+                            class="session-history-loader__button"
+                            disabled={historyLoading() || sync.session.history.loading(params.id!)}
+                            onClick={() => void loadOlderMessages()}
+                          >
+                            <Show when={historyLoading()} fallback={<IconChevronDown size={12} strokeWidth={1.5} />}>
+                              <AsciiSpinner size={10} />
+                            </Show>
+                            {historyLoading() ? "Loading earlier messages…" : "Load earlier messages"}
+                          </button>
+                        </div>
+                      </Show>
                       {/* Delegated work keeps its own identity and sibling navigation.
                           This remains outside contentRef so the ResizeObserver measures
                           only the growing message list. */}
@@ -1121,22 +1237,11 @@ export default function Page(): JSX.Element {
                                   <Show
                                     when={message.id === compactingMessageId()}
                                     fallback={
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          "align-items": "center",
-                                          gap: "10px",
-                                          padding: "2px 16px",
-                                          "font-family": FONT_SANS,
-                                          "font-size": "12px",
-                                          "font-weight": "var(--font-weight-regular)",
-                                          color: "var(--color-text-muted)",
-                                        }}
-                                      >
-                                        <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
-                                        <span>Context compacted</span>
-                                        <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
-                                      </div>
+                                      <CompactionBoundary
+                                        part={compactionPart(message.id)}
+                                        summary={compactionSummary(message.id)}
+                                        onOpenFile={(path) => uiStore.openFile(projectPath(), path)}
+                                      />
                                     }
                                   >
                                     <div
@@ -1172,6 +1277,18 @@ export default function Page(): JSX.Element {
                                     container: "w-full px-4 md:px-5",
                                   }}
                                 />
+                                <div class="session-turn-actions" role="group" aria-label="Turn actions">
+                                  <button
+                                    type="button"
+                                    class="session-turn-action"
+                                    onClick={() => void forkSession(nextTurnID(message.id))}
+                                    aria-label="Fork session from this turn"
+                                    title="Fork from here"
+                                  >
+                                    <IconSplit size={12} strokeWidth={1.5} />
+                                    Fork
+                                  </button>
+                                </div>
                               </Show>
                               {/* The v1.1.116 between-turns rule — skipped for a
                                   compaction row, which already draws its own "context
@@ -1261,6 +1378,62 @@ export default function Page(): JSX.Element {
   )
 }
 
+function CompactionBoundary(props: {
+  part?: {
+    auto: boolean
+    focus?: string
+    handoffFile?: string
+    trigger?: "proactive" | "overflow" | "manual"
+  }
+  summary?: string
+  onOpenFile: (path: string) => void
+}): JSX.Element {
+  const detail = () => {
+    if (props.part?.trigger === "overflow") return "Recovered from a full context window"
+    if (props.part?.auto || props.part?.trigger === "proactive") return "Automatic context handoff"
+    return "Manual context handoff"
+  }
+
+  return (
+    <details class="session-compaction">
+      <summary>
+        <span class="session-compaction__rule" aria-hidden="true" />
+        <span class="session-compaction__label">
+          Context compacted
+          <span>{detail()}</span>
+        </span>
+        <IconChevronDown size={12} strokeWidth={1.5} />
+        <span class="session-compaction__rule" aria-hidden="true" />
+      </summary>
+      <div class="session-compaction__body">
+        <Show when={props.part?.focus}>
+          {(focus) => (
+            <div>
+              <strong>Focus</strong>
+              <p>{focus()}</p>
+            </div>
+          )}
+        </Show>
+        <Show when={props.summary} fallback={<p>The next turn continues from a compact context handoff.</p>}>
+          {(summary) => (
+            <div>
+              <strong>Handoff</strong>
+              <pre>{summary()}</pre>
+            </div>
+          )}
+        </Show>
+        <Show when={props.part?.handoffFile}>
+          {(path) => (
+            <button type="button" class="session-compaction__file" onClick={() => props.onOpenFile(path())}>
+              Open {path()}
+            </button>
+          )}
+        </Show>
+      </div>
+    </details>
+  )
+}
+
 function Header(props: {
   title: string
   tabs: SessionTabItem[]
@@ -1309,6 +1482,7 @@ function Header(props: {
 function SessionsSidebar(props: {
   projectName: string
   sessions: SyncSession[]
+  archivedSessions: SyncSession[]
   activeId: string | undefined
   dirParam: string
   creating: boolean
@@ -1329,6 +1503,8 @@ function SessionsSidebar(props: {
   onSelect: (id: string) => void
   onWarm: (id: string) => void
   onDelete: (id: string) => void
+  onArchive: (id: string) => void
+  onRestore: (id: string) => void
   onRename: (id: string, title: string) => void
   onPin: (id: string, pinned: boolean) => void
 }): JSX.Element {
@@ -1513,6 +1689,7 @@ function SessionsSidebar(props: {
               onSelect={() => props.onSelect(s.id)}
               onWarm={() => props.onWarm(s.id)}
               onDelete={() => props.onDelete(s.id)}
+              onArchive={() => props.onArchive(s.id)}
               onRename={(title) => props.onRename(s.id, title)}
               onPin={(pinned) => props.onPin(s.id, pinned)}
             />
@@ -1522,6 +1699,28 @@ function SessionsSidebar(props: {
           <div class="session-sidebar__empty">No sessions yet.</div>
         </Show>
       </nav>
+      <Show when={props.archivedSessions.length > 0}>
+        <details class="session-sidebar__archived">
+          <summary>
+            <IconArchive size={12} strokeWidth={1.5} />
+            Archived
+            <span>{props.archivedSessions.length}</span>
+            <IconChevronDown size={12} strokeWidth={1.5} />
+          </summary>
+          <div class="session-sidebar__archived-list">
+            <For each={props.archivedSessions}>
+              {(session) => (
+                <div class="session-sidebar__archived-row">
+                  <span title={session.title || "Session"}>{session.title || "Session"}</span>
+                  <button type="button" onClick={() => props.onRestore(session.id)}>
+                    Restore
+                  </button>
+                </div>
+              )}
+            </For>
+          </div>
+        </details>
+      </Show>
     </aside>
   )
 }
@@ -1569,6 +1768,7 @@ function SessionRow(props: {
   onSelect: () => void
   onWarm: () => void
   onDelete: () => void
+  onArchive: () => void
   onRename: (title: string) => void
   onPin: (pinned: boolean) => void
 }): JSX.Element {
@@ -1693,6 +1893,10 @@ function SessionRow(props: {
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={startEdit}>
                 <DropdownMenu.ItemLabel>Rename</DropdownMenu.ItemLabel>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={props.onArchive}>
+                <IconArchive size={12} strokeWidth={1.5} />
+                <DropdownMenu.ItemLabel>Archive</DropdownMenu.ItemLabel>
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
               <DropdownMenu.Item class="session-sidebar__session-menu-danger" onSelect={props.onDelete}>

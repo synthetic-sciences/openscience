@@ -1,4 +1,5 @@
 import type { StoredArtifactVersion } from "@/artifacts/store"
+import { resolveViewer, viewerUsesText } from "@/atlas/files/viewer-registry"
 
 export type ArtifactTransport = (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
 
@@ -12,14 +13,10 @@ export const STORED_ARTIFACT_PREVIEW_LIMIT = 8 * 1024 * 1024
 export const STORED_PDF_PREVIEW_LIMIT = 64 * 1024 * 1024
 
 export function storedArtifactPreviewKind(version: StoredArtifactVersion): StoredArtifactPreview["kind"] | undefined {
-  if (version.mimeType.startsWith("image/")) return "image"
-  if (version.mimeType === "application/pdf" || version.filename.toLowerCase().endsWith(".pdf")) return "pdf"
-  if (
-    version.mimeType.startsWith("text/") ||
-    version.mimeType.includes("json") ||
-    /\.(md|markdown|txt|csv|tsv|json|jsonl|yaml|yml|toml|py|r|jl|tex)$/i.test(version.filename)
-  )
-    return "text"
+  const viewer = resolveViewer({ name: version.filename, mimeType: version.mimeType })
+  if (viewer.kind === "image") return "image"
+  if (viewer.kind === "pdf") return "pdf"
+  if (viewerUsesText(viewer)) return "text"
 }
 
 export async function requestStoredArtifact(

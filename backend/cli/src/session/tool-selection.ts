@@ -2,6 +2,22 @@ import type { Agent } from "@/agent/agent"
 import { PermissionNext } from "@/permission/next"
 
 export namespace ToolSelection {
+  export const THIN_RESEARCH_AGENT = "researchagent-test"
+  export const THIN_TOOL_TARGET = 12
+
+  const thinCore = new Set(["invalid", "question", "bash", "read", "glob", "grep", "apply_patch"])
+  const thinForbidden = new Set(["research_contract", "atlas", "atlas_record", "provenance_query", "provenance_record"])
+  const thinComplex =
+    /\b(?:autonomously|benchmark|build|candidate|compare|dataset|deliver|design|develop|execute|experiment|implement|literature|paper|pipeline|rank|report|research|study|validate|workflow)\b/i
+  const thinWeb =
+    /https?:\/\/|\b(?:browse|citation|current|database|dataset|docs|documentation|download|find online|latest|literature|look up|online|paper|search|source|web)\b/i
+  const thinSkill =
+    /(?:^|[\s([{'"])\/[a-z0-9][a-z0-9_-]*(?=$|[^a-z0-9_/-])|\b(?:bionemo|citation|latex|manuscript|paper|pdf|skill|venue)\b/i
+  const thinCompute = /\b(?:batch|cluster|compute|gpu|h100|job|modal|remote|slurm)\b/i
+  const thinArtifact =
+    /\b(?:artifact|deliver|docx|figure|file|html|latex|output|paper|pdf|plot|pptx|report|result|xlsx)\b/i
+  const thinImage = /\b(?:generate|create|draw|render)\b.{0,40}\b(?:art|graphic|illustration|image|schematic)\b/i
+
   const domain = new Set([
     "artifact",
     "atlas",
@@ -76,6 +92,65 @@ export namespace ToolSelection {
     return !PermissionNext.disabled([tool], input.permission).has(tool)
   }
 
+  /** The experimental thin profile keeps one small local work surface and
+   * adds expensive/specialized capabilities only when the current request
+   * names or strongly implies them. Production Research never enters here. */
+  export function thinRelevant(
+    tool: string,
+    input: {
+      message?: string
+      tools?: Record<string, boolean>
+    },
+  ) {
+    if (thinForbidden.has(tool)) return false
+    if (input.tools?.[tool] === true) return true
+    if (thinCore.has(tool)) return true
+
+    const message = input.message?.trim() ?? ""
+    if (tool === "task") return thinComplex.test(message)
+    if (tool === "webfetch" || tool === "research_search") return thinWeb.test(message)
+    if (tool === "skill") return thinSkill.test(message)
+    if (tool === "compute_job") return thinCompute.test(message)
+    if (tool === "artifact") return thinArtifact.test(message)
+    if (tool === "generate_image") return thinImage.test(message)
+    if (tool === "python") return /\b(?:python|notebook|pandas|scipy|sklearn|pytorch)\b/i.test(message)
+    if (tool === "r") return /\b(?:r language|r kernel|rstudio|tidyverse|ggplot2)\b/i.test(message)
+    return false
+  }
+
+  /** Cap the provider-facing thin surface after model-specific edit-tool
+   * selection. `invalid` remains available for repair but does not consume one
+   * of the advertised capability slots. Explicit per-turn enables win before
+   * inferred capabilities. */
+  export function thinLimit(ids: string[], tools?: Record<string, boolean>, maximum = THIN_TOOL_TARGET) {
+    const available = new Set(ids)
+    const selected = new Set<string>()
+    if (available.has("invalid")) selected.add("invalid")
+
+    const add = (id: string) => {
+      if (!available.has(id) || selected.has(id)) return
+      const active = [...selected].filter((item) => item !== "invalid").length
+      if (active < maximum) selected.add(id)
+    }
+    for (const id of ["question", "bash", "read", "glob", "grep", "apply_patch"]) add(id)
+    for (const [id, enabled] of Object.entries(tools ?? {})) {
+      if (enabled && !thinForbidden.has(id)) add(id)
+    }
+    for (const id of [
+      "task",
+      "compute_job",
+      "research_search",
+      "webfetch",
+      "skill",
+      "artifact",
+      "generate_image",
+      "python",
+      "r",
+    ])
+      add(id)
+    return selected
+  }
+
   export function direct(input: {
     agent?: string
     message?: string
@@ -84,7 +159,7 @@ export namespace ToolSelection {
     tools?: Record<string, boolean>
   }) {
     if (
-      input.agent !== "research" ||
+      (input.agent !== "research" && input.agent !== THIN_RESEARCH_AGENT) ||
       !input.fresh ||
       input.attachments ||
       slashInvocation(input.message) ||
@@ -106,7 +181,7 @@ export namespace ToolSelection {
     tools?: Record<string, boolean>
   }) {
     if (
-      input.agent !== "research" ||
+      (input.agent !== "research" && input.agent !== THIN_RESEARCH_AGENT) ||
       !input.fresh ||
       input.attachments ||
       slashInvocation(input.message) ||
@@ -132,6 +207,7 @@ export namespace ToolSelection {
       direct?: boolean
     },
   ) {
+    if (input.agent === THIN_RESEARCH_AGENT) return thinRelevant(tool, input)
     if (input.tools?.[tool] === true) return true
     if (input.direct) return false
     if (input.agent !== "research") return true

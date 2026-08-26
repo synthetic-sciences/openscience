@@ -37,6 +37,7 @@ import {
   type FileKind,
 } from "@/atlas/file-viewer"
 import { LANG, extension as ext } from "@/atlas/files/artifact-thumb"
+import { resolveViewer } from "@/atlas/files/viewer-registry"
 import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { recoverFileDraft, rememberFileDraft } from "@/atlas/file-drafts"
 import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
@@ -221,26 +222,26 @@ export function FileView(props: {
   const scientific = createMemo(() => (isBinary() ? undefined : detectScientificFile(e(), view.draft)))
   const biological = createMemo(() => (isBinary() ? undefined : detectBiologicalFormat(e())))
   const binaryScience = createMemo(() => detectBinaryScienceFormat(e()))
-  const tabular = createMemo<TableFormat | undefined>(() => {
-    if (isBinary()) return
-    if (e() === "csv" || e() === "tsv" || e() === "jsonl") return e() as TableFormat
-    if (e() === "json" && view.draft.trimStart().startsWith("[")) return "json"
-  })
+  const common = createMemo(() =>
+    resolveViewer({ name: name(), mimeType: mime(), encoding: data()?.encoding, content: view.draft }),
+  )
+  const tabular = createMemo<TableFormat | undefined>(() => common().table)
 
   const kind = createMemo<Kind>(() => {
-    const x = e()
     if (isBinary()) {
-      if (mime().startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(x)) return "image"
-      if (mime() === "application/pdf" || x === "pdf") return "pdf"
+      if (common().kind === "image") return "image"
+      if (common().kind === "pdf") return "pdf"
       if (binaryScience()) return "scientific-binary"
       return "binary"
     }
-    if (x === "md" || x === "markdown" || x === "mdx") return "markdown"
-    if (x === "html" || x === "htm") return "html"
-    if (tabular()) return "table"
     if (biological()) return "scientific-data"
-    if (x === "pdf") return "pdf"
     if (scientific()) return "science"
+    if (common().kind === "markdown") return "markdown"
+    if (common().kind === "html") return "html"
+    if (common().kind === "table") return "table"
+    if (common().kind === "pdf") return "pdf"
+    if (common().kind === "image") return "image"
+    if (common().kind === "binary") return "binary"
     // .tex / .latex / .sty / .cls are source files → highlighted "code" view
     // (LANG maps them to the shiki `latex` grammar). They are NEVER routed to
     // KaTeX, which blanks on a full \documentclass document.

@@ -27,6 +27,7 @@ import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../process/darwin-respo
 import { DataRootBarrier } from "../global/data-root-barrier"
 import { SecretFile } from "../util/secret-file"
 import { ProcessOutput } from "../util/process-output"
+import { ComputeSecrets } from "./secrets"
 
 export class ComputeJobsCorruptError extends Error {
   constructor(
@@ -124,6 +125,9 @@ export namespace ComputeJobs {
   })
   export type Resources = z.infer<typeof Resources>
 
+  export const SecretRef = ComputeSecrets.Ref
+  export type SecretRef = ComputeSecrets.Ref
+
   export const Artifact = z.object({
     path: z.string(),
     size: z.number().int().nonnegative(),
@@ -192,6 +196,7 @@ export namespace ComputeJobs {
     packages: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
     image: z.string().trim().min(1).max(2_000).optional(),
     gpu: z.string().trim().min(1).max(120).optional(),
+    secret_refs: SecretRef.array().max(8).optional(),
     approval: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
@@ -263,6 +268,7 @@ export namespace ComputeJobs {
         environment: z.string().optional(),
         image: z.string(),
         packages: z.array(z.string()).default([]),
+        secret_refs: SecretRef.array().default([]),
         gpu: z.string(),
         network: z.enum(["unrestricted", "none"]),
         timeout_minutes: z.number().int().positive(),
@@ -304,6 +310,7 @@ export namespace ComputeJobs {
     modal?: ModalAdapter.Config
     credentials?: ModalAdapter.Context
     resolveCredentials?: () => Promise<ModalAdapter.Context>
+    resolveSecrets?: (refs: SecretRef[]) => Promise<Record<string, string>>
     provider?: ModalProvider
   }
 
@@ -1610,6 +1617,7 @@ export namespace ComputeJobs {
       workspaceCwd: input.cwd,
       image: input.image ?? context.image,
       packages: input.packages ?? [],
+      secretRefs: input.secret_refs ?? [],
       gpu: input.gpu,
       resources: input.resources
         ? {
@@ -1625,7 +1633,12 @@ export namespace ComputeJobs {
     })
   }
 
-  function modalSpec(job: Job, files: ModalAdapter.File[], scope: Scope): ModalAdapter.Spec {
+  function modalSpec(
+    job: Job,
+    files: ModalAdapter.File[],
+    scope: Scope,
+    secrets?: Record<string, string>,
+  ): ModalAdapter.Spec {
     if (!job.modal || !job.cwd) throw new Error(`Modal job ${job.id} is missing its dispatch specification`)
     return {
       id: job.id,
@@ -1638,6 +1651,7 @@ export namespace ComputeJobs {
       cpus: job.resources?.cpus,
       memoryGb: job.resources?.memory_gb,
       timeoutMinutes: job.modal.timeout_minutes,
+      secrets,
       uploads: files,
       outputs: [...(job.artifact_patterns ?? []), ...(job.checkpoint_path ? [job.checkpoint_path] : [])],
       staging: path.join(logsOf(scope.root), `${job.id}.modal`),
@@ -2673,6 +2687,7 @@ export namespace ComputeJobs {
     scope: Scope,
     context: ModalAdapter.Context,
     provider: ModalProvider,
+    secrets?: Record<string, string>,
   ): Promise<void> {
     const log = path.join(logsOf(scope.root), `${job.id}.log`)
     await fs.mkdir(logsOf(scope.root), { recursive: true })
@@ -2683,7 +2698,7 @@ export namespace ComputeJobs {
       const draft = move(jobs[index]!, { type: "start" }, { started_at: new Date().toISOString() })
       jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
     })
-    const result = await provider.run(context, modalSpec(job, files, scope), {
+    const result = await provider.run(context, modalSpec(job, files, scope, secrets), {
       created: async (id) => {
         const started = await change(scope.root, (jobs) => {
           const index = jobs.findIndex((item) => item.id === job.id)
@@ -2991,6 +3006,9 @@ export namespace ComputeJobs {
 
   export async function plan(input: Request, options: Options = {}): Promise<Plan> {
     const parsed = Request.parse(input)
+    if (parsed.secret_refs?.length && parsed.target.kind !== "modal") {
+      throw new Error("Trusted compute secret references are currently supported only by Modal")
+    }
     let scope = await scoped(options)
     const authority = await ExecutionAuthority.require({
       projectID: Instance.project.id,
@@ -3058,6 +3076,9 @@ export namespace ComputeJobs {
 
   export async function start(input: Request, options: Options = {}): Promise<Job> {
     const parsed = Request.parse(input)
+    if (parsed.secret_refs?.length && parsed.target.kind !== "modal") {
+      throw new Error("Trusted compute secret references are currently supported only by Modal")
+    }
     let scope = await scoped(options)
     const hostId = parsed.target.kind === "ssh" ? parsed.target.host_id : undefined
     const host = hostId ? options.hosts?.find((item) => item.id === hostId) : undefined
@@ -3125,6 +3146,7 @@ export namespace ComputeJobs {
             environment: prepared.plan.environment,
             image: prepared.plan.image,
             packages: prepared.plan.packages,
+            secret_refs: prepared.plan.secret_refs,
             gpu: prepared.plan.gpu,
             network: prepared.plan.network,
             timeout_minutes: prepared.plan.timeout_minutes,
@@ -3162,6 +3184,10 @@ export namespace ComputeJobs {
     })
     if (prepared) {
       const context = await modalContext(options, "Modal credentials were not resolved for dispatch")
+      const secrets = parsed.secret_refs?.length ? await options.resolveSecrets?.(parsed.secret_refs) : undefined
+      if (parsed.secret_refs?.length && !secrets) {
+        throw new Error("Trusted compute secrets were not resolved for dispatch")
+      }
       const key = keyOf(scope.root, draft.id)
       const reproducibility = await reproduce(draft, authority)
       await currentAuthority(authority)
@@ -3199,7 +3225,7 @@ export namespace ComputeJobs {
               })
               activated = true
               setup.resolve()
-              await executeModal(job, prepared.files, scope, context, provider).catch((error) =>
+              await executeModal(job, prepared.files, scope, context, provider, secrets).catch((error) =>
                 error instanceof ModalAdapter.HarvestError
                   ? deferModal(job, scope, error)
                   : failModal(job, scope, context, error, provider),

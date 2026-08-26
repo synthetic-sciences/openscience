@@ -25,6 +25,7 @@ import {
   usePrompt,
   ImageAttachmentPart,
   AgentPart,
+  ConversationAttachmentPart,
   FileAttachmentPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
@@ -35,7 +36,6 @@ import { useComments } from "@/context/comments"
 import { FileIcon } from "@synsci/ui/file-icon"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
-import { Switch as Toggle } from "@synsci/ui/switch"
 import { Tooltip } from "@synsci/ui/tooltip"
 import { IconButton } from "@synsci/ui/icon-button"
 import { getDirectory, getFilename, getFilenameTruncated } from "@synsci/util/path"
@@ -67,9 +67,17 @@ import {
 } from "./prompt-attachment"
 import {
   delegatedSpecialist,
-  isCoreSpecialist,
-  specialistLabel,
+  delegationLabel,
+  delegationSettings,
+  DELEGATION_AUTONOMY,
+  DELEGATION_DIVERSITY,
+  DELEGATION_LEVELS,
   type CapabilityPreferences,
+  type DelegationAutonomy,
+  type DelegationDiversity,
+  type DelegationLevel,
+  type DelegationModel,
+  type DelegationSettings,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
 import { requestFailure, requestStatus } from "@/utils/request-error"
@@ -166,13 +174,43 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         })
       })
   }
-  const specialists = createMemo(() =>
-    sync.data.agent.filter((agent) => agent.mode === "subagent" && isCoreSpecialist(agent.name)),
+  const delegation = createMemo(() => delegationSettings(capabilities()))
+  const delegationSelection = createMemo(() => delegationLabel(delegation()))
+  const workerModels = createMemo(() =>
+    local.model
+      .list()
+      .filter((model) => local.model.visible({ providerID: model.provider.id, modelID: model.id }))
+      .toSorted((a, b) => a.name.localeCompare(b.name) || a.provider.name.localeCompare(b.provider.name)),
   )
-  const specialistSelection = createMemo(() => {
-    const selected = capabilities()?.delegation_specialist
-    return selected ? specialistLabel(selected) : "Automatic"
+  const workerSelection = createMemo(() => {
+    const selected = delegation().workerModel
+    if (!selected) return "Inherit"
+    const model = workerModels().find(
+      (item) => item.id === selected.modelID && item.provider.id === selected.providerID,
+    )
+    return model?.name ?? selected.modelID
   })
+  const saveDelegation = (patch: {
+    level?: DelegationLevel
+    workerModel?: DelegationModel | null
+    autonomy?: DelegationAutonomy
+    diversity?: DelegationDiversity
+  }) => {
+    const current = delegation()
+    const next = {
+      level: patch.level ?? current.level,
+      workerModel: patch.workerModel === null ? undefined : (patch.workerModel ?? current.workerModel),
+      autonomy: patch.autonomy ?? current.autonomy,
+      diversity: patch.diversity ?? current.diversity,
+    }
+    saveCapabilities({
+      delegation_enabled: next.level !== "off",
+      delegation_level: next.level,
+      delegation_worker_model: next.workerModel ?? null,
+      delegation_autonomy: next.autonomy,
+      delegation_diversity: next.diversity,
+    })
+  }
   const projectAccess = async (projectID: string, init?: RequestInit) => {
     const response = await sdk.request(`/project/${encodeURIComponent(projectID)}/access`, init)
     if (!response.ok) {
@@ -402,7 +440,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const [store, setStore] = createStore<{
-    popover: "at" | "slash" | null
+    popover: "at" | "conversation" | "slash" | null
     historyIndex: number
     savedPrompt: Prompt | null
     dragging: boolean
@@ -460,6 +498,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (part.type === "text") return { ...part }
       if (part.type === "image") return { ...part }
       if (part.type === "agent") return { ...part }
+      if (part.type === "conversation") return { ...part }
       return {
         ...part,
         selection: part.selection ? { ...part.selection } : undefined,
@@ -707,6 +746,52 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleAtSelect,
   })
 
+  type ConversationOption = {
+    sourceSessionID: string
+    label: string
+    throughMessageID?: string
+    updated: number
+  }
+
+  const conversationOptions = createMemo<ConversationOption[]>(() =>
+    sync.data.session
+      .filter((session) => !session.parentID && session.id !== params.id && !session.time?.archived)
+      .map((session) => ({
+        sourceSessionID: session.id,
+        label: session.title?.trim() || "Untitled conversation",
+        throughMessageID: sync.data.message[session.id]?.at(-1)?.id,
+        updated: session.time?.updated ?? session.time?.created ?? 0,
+      }))
+      .toSorted((a, b) => b.updated - a.updated || a.label.localeCompare(b.label)),
+  )
+
+  const handleConversationSelect = (option: ConversationOption | undefined) => {
+    if (!option) return
+    addPart({
+      type: "conversation",
+      sourceSessionID: option.sourceSessionID,
+      throughMessageID: option.throughMessageID,
+      label: option.label,
+      content: `#${option.label}`,
+      start: 0,
+      end: 0,
+    })
+  }
+
+  const {
+    flat: conversationFlat,
+    active: conversationActive,
+    setActive: setConversationActive,
+    onInput: conversationOnInput,
+    onKeyDown: conversationOnKeyDown,
+  } = useFilteredList<ConversationOption>({
+    items: async () => conversationOptions(),
+    key: (option) => option?.sourceSessionID,
+    filterKeys: ["label"],
+    sortBy: (a, b) => b.updated - a.updated || a.label.localeCompare(b.label),
+    onSelect: handleConversationSelect,
+  })
+
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const usage: Record<string, string> = {
       compact: "/compact [focus]",
@@ -905,12 +990,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleSlashSelect,
   })
 
-  const createPill = (part: FileAttachmentPart | AgentPart) => {
+  const createPill = (part: FileAttachmentPart | AgentPart | ConversationAttachmentPart) => {
     const pill = document.createElement("span")
     pill.textContent = part.content
     pill.setAttribute("data-type", part.type)
     if (part.type === "file") pill.setAttribute("data-path", part.path)
     if (part.type === "agent") pill.setAttribute("data-name", part.name)
+    if (part.type === "conversation") {
+      pill.textContent = `#${part.label}`
+      pill.setAttribute("data-session-id", part.sourceSessionID)
+      pill.setAttribute("data-label", part.label)
+      if (part.throughMessageID) pill.setAttribute("data-through-message-id", part.throughMessageID)
+    }
     pill.setAttribute("contenteditable", "false")
     pill.style.userSelect = "text"
     pill.style.cursor = "default"
@@ -936,6 +1027,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const el = node as HTMLElement
       if (el.dataset.type === "file") return true
       if (el.dataset.type === "agent") return true
+      if (el.dataset.type === "conversation") return true
       return el.tagName === "BR"
     })
 
@@ -946,7 +1038,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         editorRef.appendChild(createTextFragment(part.content))
         continue
       }
-      if (part.type === "file" || part.type === "agent") {
+      if (part.type === "file" || part.type === "agent" || part.type === "conversation") {
         editorRef.appendChild(createPill(part))
       }
     }
@@ -972,6 +1064,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const active = atActive()
       const item = items.find((entry) => atKey(entry) === active) ?? items[0]
       handleAtSelect(item)
+      return
+    }
+
+    if (store.popover === "conversation") {
+      const items = conversationFlat()
+      if (items.length === 0) return
+      const active = conversationActive()
+      const item = items.find((entry) => entry.sourceSessionID === active) ?? items[0]
+      handleConversationSelect(item)
       return
     }
 
@@ -1063,6 +1164,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       position += content.length
     }
 
+    const pushConversation = (conversation: HTMLElement) => {
+      const content = conversation.textContent ?? ""
+      parts.push({
+        type: "conversation",
+        sourceSessionID: conversation.dataset.sessionId!,
+        throughMessageID: conversation.dataset.throughMessageId,
+        label: conversation.dataset.label || content.replace(/^#/, "") || "Conversation",
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
     const visit = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         buffer += node.textContent ?? ""
@@ -1079,6 +1194,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (el.dataset.type === "agent") {
         flushText()
         pushAgent(el)
+        return
+      }
+      if (el.dataset.type === "conversation") {
+        flushText()
+        pushConversation(el)
         return
       }
       if (el.tagName === "BR") {
@@ -1135,10 +1255,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
+      const conversationMatch = rawText.substring(0, cursorPosition).match(/#([^\s#]*)$/)
 
       if (atMatch) {
         atOnInput(atMatch[1])
         setStore("popover", "at")
+      } else if (conversationMatch) {
+        conversationOnInput(conversationMatch[1])
+        setStore("popover", "conversation")
       } else if (slashMatch) {
         setStore("slashInline", slashMatch.inline)
         slashOnInput(slashMatch.query)
@@ -1182,7 +1306,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const isText = node.nodeType === Node.TEXT_NODE
       const isPill =
         node.nodeType === Node.ELEMENT_NODE &&
-        ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+        ["file", "agent", "conversation"].includes((node as HTMLElement).dataset.type ?? "")
       const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
       if (isText && remaining <= length) {
@@ -1212,14 +1336,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const rawText = currentPrompt.map((p) => ("content" in p ? p.content : "")).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
+    const conversationMatch = textBeforeCursor.match(/#([^\s#]*)$/)
 
-    if (part.type === "file" || part.type === "agent") {
+    if (part.type === "file" || part.type === "agent" || part.type === "conversation") {
       const pill = createPill(part)
       const gap = document.createTextNode(" ")
       const range = selection.getRangeAt(0)
 
-      if (atMatch) {
-        const start = atMatch.index ?? cursorPosition - atMatch[0].length
+      const match = part.type === "conversation" ? conversationMatch : atMatch
+      if (match) {
+        const start = match.index ?? cursorPosition - match[0].length
         setRangeEdge(range, "start", start)
         setRangeEdge(range, "end", cursorPosition)
       }
@@ -1407,6 +1533,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           event.preventDefault()
           return
         }
+        if (store.popover === "conversation") {
+          conversationOnKeyDown(event)
+          event.preventDefault()
+          return
+        }
         if (store.popover === "slash") {
           slashOnKeyDown(event)
           requestAnimationFrame(scrollSlashActive)
@@ -1532,7 +1663,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const researchEffort = "normal" as const
-    const delegation = capabilities()?.delegation_enabled ?? true
+    const delegationConfig = delegation()
+    const delegationEnabled = delegationConfig.level !== "off"
     const [head, ...tail] = text.split(" ")
     const name = text.startsWith("/") ? head.slice(1) : undefined
     const command = name ? sync.data.command.find((item) => item.name === name) : undefined
@@ -1550,10 +1682,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         command: command.name,
         arguments: tail.join(" "),
         effort: researchEffort,
-        delegation,
+        delegation: delegationEnabled,
+        delegationSettings: delegationConfig,
       } satisfies Parameters<typeof sdk.client.session.command>[0] & {
         effort: "normal"
         delegation: boolean
+        delegationSettings: DelegationSettings
       }
       sdk.client.session.command(request).catch((err) => {
         showToast({
@@ -1718,7 +1852,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         agent,
         model: `${model.providerID}/${model.modelID}`,
         effort: researchEffort,
-        delegation,
+        delegation: delegationEnabled,
+        delegationSettings: delegationConfig,
         variant,
         tier,
         parts: images.map((attachment) => ({
@@ -1731,6 +1866,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       } satisfies Parameters<typeof client.session.command>[0] & {
         effort: "normal"
         delegation: boolean
+        delegationSettings: DelegationSettings
       }
       client.session.command(request).catch((err) => {
         const failure = requestFailure(err, `Start ${intent} mode`)
@@ -1756,7 +1892,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           agent,
           model: `${model.providerID}/${model.modelID}`,
           effort: researchEffort,
-          delegation,
+          delegation: delegationEnabled,
+          delegationSettings: delegationConfig,
           variant,
           tier,
           parts: images.map((attachment) => ({
@@ -1769,6 +1906,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         } satisfies Parameters<typeof client.session.command>[0] & {
           effort: "normal"
           delegation: boolean
+          delegationSettings: DelegationSettings
         }
         client.session.command(request).catch((err) => {
           const failure = requestFailure(err, "Send command")
@@ -1788,6 +1926,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const fileAttachments = currentPrompt.filter((part) => part.type === "file") as FileAttachmentPart[]
     const agentAttachments = currentPrompt.filter((part) => part.type === "agent") as AgentPart[]
+    const conversationAttachments = currentPrompt.filter(
+      (part) => part.type === "conversation",
+    ) as ConversationAttachmentPart[]
 
     const fileAttachmentParts = fileAttachments.map((attachment) => {
       const absolute = toAbsolutePath(attachment.path)
@@ -1821,6 +1962,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         start: attachment.start,
         end: attachment.end,
       },
+    }))
+    const conversationAttachmentParts = conversationAttachments.map((attachment) => ({
+      id: Identifier.ascending("part"),
+      type: "conversation" as const,
+      sourceSessionID: attachment.sourceSessionID,
+      throughMessageID: attachment.throughMessageID,
+      label: attachment.label,
     }))
     const specialist = delegatedSpecialist(
       capabilities()?.delegation_enabled ?? true,
@@ -1922,11 +2070,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const requestParts = [
       textPart,
       ...fileAttachmentParts,
+      ...conversationAttachmentParts,
       ...contextParts,
       ...delegationParts,
       ...agentAttachmentParts,
       ...imageAttachmentParts,
     ]
+    const sendParts = requestParts as unknown as Parameters<typeof client.session.prompt>[0]["parts"]
 
     const optimisticParts = requestParts.map((part) => ({
       ...part,
@@ -2080,14 +2230,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const send = async () => {
       const ok = await waitForWorktree()
       if (!ok) return
-      const request: Parameters<typeof client.session.prompt>[0] & { effort: "normal" } = {
+      const request: Parameters<typeof client.session.prompt>[0] & {
+        effort: "normal"
+        delegationSettings: DelegationSettings
+      } = {
         sessionID: session.id,
         agent,
         model,
         messageID,
-        parts: requestParts,
+        parts: sendParts,
         effort: researchEffort,
-        delegation: capabilities()?.delegation_enabled ?? true,
+        delegation: delegationEnabled,
+        delegationSettings: delegationConfig,
         variant,
         tier,
       }
@@ -2189,6 +2343,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           @{(item as { type: "agent"; name: string }).name}
                         </span>
                       </Show>
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </Match>
+            <Match when={store.popover === "conversation"}>
+              <Show
+                when={conversationFlat().length > 0}
+                fallback={
+                  <div class="workspace-composer__suggestion-empty">No other conversations in this project</div>
+                }
+              >
+                <div class="workspace-composer__suggestion-heading">Conversations</div>
+                <For each={conversationFlat().slice(0, 12)}>
+                  {(item) => (
+                    <button
+                      type="button"
+                      classList={{
+                        "workspace-composer__suggestion workspace-composer__conversation-row": true,
+                        "bg-surface-raised-base-hover": conversationActive() === item.sourceSessionID,
+                      }}
+                      onClick={() => handleConversationSelect(item)}
+                      onMouseEnter={() => setConversationActive(item.sourceSessionID)}
+                    >
+                      <span class="workspace-composer__conversation-mark" aria-hidden="true">
+                        #
+                      </span>
+                      <span>
+                        <strong>{item.label}</strong>
+                        <small>Reference a snapshot of this conversation</small>
+                      </span>
                     </button>
                   )}
                 </For>
@@ -2412,6 +2597,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
+              "[&_[data-type=conversation]]:text-syntax-keyword": true,
             }}
           />
           <Show when={!prompt.dirty()}>
@@ -2479,66 +2665,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </summary>
                   <div class="workspace-composer__research-tools-menu" role="group" aria-label="Research tools">
                     <section class="workspace-composer__research-controls" aria-label="Research roles">
-                      <div class="workspace-composer__research-control">
-                        <strong>Delegation</strong>
-                        <Toggle
-                          hideLabel
-                          disabled={!capabilities()}
-                          checked={capabilities()?.delegation_enabled ?? true}
-                          onChange={(checked) => saveCapabilities({ delegation_enabled: checked })}
-                        >
-                          Delegation
-                        </Toggle>
-                      </div>
-                      <div class="workspace-composer__research-divider" />
                       <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
-                        <summary aria-label={`Specialist, ${specialistSelection()}`}>
-                          <span>Specialist</span>
-                          <strong>{specialistSelection()}</strong>
+                        <summary aria-label={`Delegation, ${delegationSelection()}`}>
+                          <span>Delegation</span>
+                          <strong>{delegationSelection()}</strong>
                           <Icon name="chevron-right" size="small" />
                         </summary>
                         <div
                           class="workspace-composer__research-choice-menu"
                           role="radiogroup"
-                          aria-label="Delegation specialist"
+                          aria-label="Delegation level"
                           onKeyDown={navigateResearchChoices}
                         >
-                          <button
-                            type="button"
-                            role="radio"
-                            aria-checked={!capabilities()?.delegation_specialist}
-                            tabindex={!capabilities()?.delegation_specialist ? 0 : -1}
-                            disabled={!capabilities()}
-                            onClick={(event) => {
-                              saveCapabilities({ delegation_specialist: null })
-                              event.currentTarget.closest("details")?.removeAttribute("open")
-                            }}
-                          >
-                            <span>
-                              <strong>Automatic</strong>
-                              <small>Route to the best match</small>
-                            </span>
-                            <Show when={!capabilities()?.delegation_specialist}>
-                              <Icon name="check" size="small" />
-                            </Show>
-                          </button>
-                          <For each={specialists()}>
-                            {(specialist) => (
+                          <For each={DELEGATION_LEVELS}>
+                            {(option) => (
                               <button
                                 type="button"
                                 role="radio"
-                                aria-checked={capabilities()?.delegation_specialist === specialist.name}
-                                tabindex={capabilities()?.delegation_specialist === specialist.name ? 0 : -1}
+                                aria-checked={delegation().level === option.value}
+                                tabindex={delegation().level === option.value ? 0 : -1}
                                 disabled={!capabilities()}
                                 onClick={(event) => {
-                                  saveCapabilities({ delegation_specialist: specialist.name })
+                                  saveDelegation({ level: option.value })
                                   event.currentTarget.closest("details")?.removeAttribute("open")
                                 }}
                               >
                                 <span>
-                                  <strong>{specialistLabel(specialist.name)}</strong>
+                                  <strong>{option.label}</strong>
+                                  <small>{option.description}</small>
                                 </span>
-                                <Show when={capabilities()?.delegation_specialist === specialist.name}>
+                                <Show when={delegation().level === option.value}>
                                   <Icon name="check" size="small" />
                                 </Show>
                               </button>
@@ -2546,6 +2702,146 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </For>
                         </div>
                       </details>
+                      <Show when={delegation().level !== "off"}>
+                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
+                          <summary aria-label={`Worker model, ${workerSelection()}`}>
+                            <span>Worker model</span>
+                            <strong>{workerSelection()}</strong>
+                            <Icon name="chevron-right" size="small" />
+                          </summary>
+                          <div
+                            class="workspace-composer__research-choice-menu"
+                            role="radiogroup"
+                            aria-label="Worker model"
+                            onKeyDown={navigateResearchChoices}
+                          >
+                            <button
+                              type="button"
+                              role="radio"
+                              aria-checked={!delegation().workerModel}
+                              tabindex={!delegation().workerModel ? 0 : -1}
+                              onClick={(event) => {
+                                saveDelegation({ workerModel: null })
+                                event.currentTarget.closest("details")?.removeAttribute("open")
+                              }}
+                            >
+                              <span>
+                                <strong>Inherit</strong>
+                                <small>Use the model selected for this conversation</small>
+                              </span>
+                              <Show when={!delegation().workerModel}>
+                                <Icon name="check" size="small" />
+                              </Show>
+                            </button>
+                            <For each={workerModels()}>
+                              {(model) => {
+                                const selected = () =>
+                                  delegation().workerModel?.providerID === model.provider.id &&
+                                  delegation().workerModel?.modelID === model.id
+                                return (
+                                  <button
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected()}
+                                    tabindex={selected() ? 0 : -1}
+                                    onClick={(event) => {
+                                      saveDelegation({
+                                        workerModel: { providerID: model.provider.id, modelID: model.id },
+                                      })
+                                      event.currentTarget.closest("details")?.removeAttribute("open")
+                                    }}
+                                  >
+                                    <span>
+                                      <strong>{model.name}</strong>
+                                      <small>{model.provider.name}</small>
+                                    </span>
+                                    <Show when={selected()}>
+                                      <Icon name="check" size="small" />
+                                    </Show>
+                                  </button>
+                                )
+                              }}
+                            </For>
+                          </div>
+                        </details>
+                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
+                          <summary aria-label={`Worker independence, ${delegation().autonomy}`}>
+                            <span>Independence</span>
+                            <strong>
+                              {DELEGATION_AUTONOMY.find((option) => option.value === delegation().autonomy)?.label}
+                            </strong>
+                            <Icon name="chevron-right" size="small" />
+                          </summary>
+                          <div
+                            class="workspace-composer__research-choice-menu"
+                            role="radiogroup"
+                            aria-label="Worker independence"
+                            onKeyDown={navigateResearchChoices}
+                          >
+                            <For each={DELEGATION_AUTONOMY}>
+                              {(option) => (
+                                <button
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={delegation().autonomy === option.value}
+                                  tabindex={delegation().autonomy === option.value ? 0 : -1}
+                                  onClick={(event) => {
+                                    saveDelegation({ autonomy: option.value })
+                                    event.currentTarget.closest("details")?.removeAttribute("open")
+                                  }}
+                                >
+                                  <span>
+                                    <strong>{option.label}</strong>
+                                    <small>{option.description}</small>
+                                  </span>
+                                  <Show when={delegation().autonomy === option.value}>
+                                    <Icon name="check" size="small" />
+                                  </Show>
+                                </button>
+                              )}
+                            </For>
+                          </div>
+                        </details>
+                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
+                          <summary aria-label={`Approach diversity, ${delegation().diversity}`}>
+                            <span>Approaches</span>
+                            <strong>
+                              {DELEGATION_DIVERSITY.find((option) => option.value === delegation().diversity)?.label}
+                            </strong>
+                            <Icon name="chevron-right" size="small" />
+                          </summary>
+                          <div
+                            class="workspace-composer__research-choice-menu"
+                            role="radiogroup"
+                            aria-label="Approach diversity"
+                            onKeyDown={navigateResearchChoices}
+                          >
+                            <For each={DELEGATION_DIVERSITY}>
+                              {(option) => (
+                                <button
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={delegation().diversity === option.value}
+                                  tabindex={delegation().diversity === option.value ? 0 : -1}
+                                  onClick={(event) => {
+                                    saveDelegation({ diversity: option.value })
+                                    event.currentTarget.closest("details")?.removeAttribute("open")
+                                  }}
+                                >
+                                  <span>
+                                    <strong>{option.label}</strong>
+                                    <small>{option.description}</small>
+                                  </span>
+                                  <Show when={delegation().diversity === option.value}>
+                                    <Icon name="check" size="small" />
+                                  </Show>
+                                </button>
+                              )}
+                            </For>
+                          </div>
+                        </details>
+                      </Show>
+                      <div class="workspace-composer__research-divider" />
                       <Show
                         when={!researchAccess.error}
                         fallback={

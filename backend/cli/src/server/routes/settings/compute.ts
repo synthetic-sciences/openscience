@@ -23,6 +23,9 @@ import { ModalVolume } from "../../../compute/modal/volume"
 import { Env } from "../../../env"
 import { SessionFilesystem } from "../../../session/filesystem"
 import { ManagedEnvironments } from "../../../science/kernel/environment-manager"
+import { ComputeSecrets } from "../../../compute/secrets"
+import { ComputeCapabilities } from "../../../compute/capabilities"
+import { resolveCredentialFields } from "./credentials"
 
 const Directory = z.object({
   directory: z.string().trim().min(1).optional(),
@@ -673,6 +676,22 @@ export namespace ComputeSettings {
     }
   }
 
+  /** Resolve only reviewed symbolic references after a job approval. Values
+   * stay inside the trusted compute adapter and are never returned by routes. */
+  export function secretResolver() {
+    return (refs: ComputeSecrets.Ref[]) => ComputeSecrets.resolve(refs, resolveCredentialFields)
+  }
+
+  export async function capabilities(): Promise<ComputeCapabilities.Target[]> {
+    const stored = await read()
+    const secrets = await ComputeSecrets.available(resolveCredentialFields)
+    return ComputeCapabilities.describe({
+      modal: stored.providers.modal?.enabled === true,
+      hosts: stored.ssh_hosts,
+      secrets,
+    })
+  }
+
   export async function addSshHost(input: Omit<SshHost, "id">): Promise<Info> {
     const stored = await update((current) => {
       current.ssh_hosts.push({ id: id(), ...input, notes: input.notes?.trim() || undefined })
@@ -1050,7 +1069,7 @@ export const ComputeSettingsRoutes = lazy(() =>
           const settings = await ComputeSettings.get()
           const provider = settings.providers.find((item) => item.id === "modal")
           const resolveCredentials = provider?.enabled ? ComputeSettings.modalResolver() : undefined
-          return c.json(await JobBroker.list({ resolveCredentials }))
+          return c.json(await JobBroker.list({ resolveCredentials, resolveSecrets: ComputeSettings.secretResolver() }))
         }),
     )
     .post(
@@ -1078,6 +1097,7 @@ export const ComputeSettingsRoutes = lazy(() =>
               workspace: await SessionFilesystem.workspace(input.sessionID),
               hosts: settings.ssh_hosts,
               modal: input.target.kind === "modal" ? await ComputeSettings.modalConfig() : undefined,
+              resolveSecrets: ComputeSettings.secretResolver(),
             }),
           )
         })
@@ -1112,6 +1132,7 @@ export const ComputeSettingsRoutes = lazy(() =>
               hosts: settings?.ssh_hosts,
               modal,
               resolveCredentials,
+              resolveSecrets: ComputeSettings.secretResolver(),
             }),
           )
         })
@@ -1202,7 +1223,12 @@ export const ComputeSettingsRoutes = lazy(() =>
         return project(c, async () => {
           const job = await JobBroker.get(c.req.valid("param").id)
           if (!job) return c.json({ error: "Compute job not found" }, 404)
-          return c.json(await JobBroker.retry(job.id, { resolveCredentials: ComputeSettings.modalResolver() }))
+          return c.json(
+            await JobBroker.retry(job.id, {
+              resolveCredentials: ComputeSettings.modalResolver(),
+              resolveSecrets: ComputeSettings.secretResolver(),
+            }),
+          )
         })
       },
     )
@@ -1229,7 +1255,13 @@ export const ComputeSettingsRoutes = lazy(() =>
           const provider = settings.providers.find((item) => item.id === "modal")
           const resolveCredentials =
             job.target.kind === "modal" && provider?.enabled ? ComputeSettings.modalResolver() : undefined
-          return c.json(await JobBroker.release(job.id, { hosts: settings.ssh_hosts, resolveCredentials }))
+          return c.json(
+            await JobBroker.release(job.id, {
+              hosts: settings.ssh_hosts,
+              resolveCredentials,
+              resolveSecrets: ComputeSettings.secretResolver(),
+            }),
+          )
         })
       },
     )
@@ -1253,7 +1285,13 @@ export const ComputeSettingsRoutes = lazy(() =>
           const provider = settings.providers.find((item) => item.id === "modal")
           const resolveCredentials =
             job.target.kind === "modal" && provider?.enabled ? ComputeSettings.modalResolver() : undefined
-          return c.json(await JobBroker.cancel(job.id, { hosts: settings.ssh_hosts, resolveCredentials }))
+          return c.json(
+            await JobBroker.cancel(job.id, {
+              hosts: settings.ssh_hosts,
+              resolveCredentials,
+              resolveSecrets: ComputeSettings.secretResolver(),
+            }),
+          )
         })
       },
     ),

@@ -5,6 +5,7 @@ import ignore from "ignore"
 import { Filesystem } from "../../util/filesystem"
 import type { ModalAdapter } from "./adapter"
 import { ModalUpload } from "./upload"
+import { ComputeSecrets } from "../secrets"
 
 export namespace ModalPlan {
   const DENY = new Set([".git", "node_modules", ".openscience", ".modal.toml", ".ssh"])
@@ -18,6 +19,7 @@ export namespace ModalPlan {
     environment: z.string().optional(),
     image: z.string(),
     packages: z.array(z.string()),
+    secret_refs: ComputeSecrets.Ref.array(),
     gpu: z.string(),
     resources: z
       .object({
@@ -51,6 +53,7 @@ export namespace ModalPlan {
     workspaceCwd?: string
     image: string
     packages: string[]
+    secretRefs?: ComputeSecrets.Ref[]
     gpu: string
     resources?: { cpus?: number; gpus?: number; memory_gb?: number }
     timeoutMinutes: number
@@ -165,6 +168,7 @@ export namespace ModalPlan {
       environment: input.context.environment,
       image: input.image,
       packages: input.packages.toSorted(),
+      secret_refs: [...new Set(input.secretRefs ?? [])].toSorted(),
       gpu: input.gpu,
       resources: input.resources,
       timeout_minutes: input.timeoutMinutes,

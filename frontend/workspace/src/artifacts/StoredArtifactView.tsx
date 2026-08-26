@@ -11,7 +11,6 @@ import {
   type JSX,
 } from "solid-js"
 import { Button } from "@synsci/ui/button"
-import { Markdown } from "@synsci/ui/markdown"
 import { TextField } from "@synsci/ui/text-field"
 import { useSDK } from "@/context/sdk"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
@@ -20,6 +19,8 @@ import { toast } from "@/atlas/Toast"
 import { uiStore } from "@/atlas/store/ui"
 import { PdfViewer } from "@/science/renderers/documents/PdfViewer"
 import { moveStoredArtifactMenuFocus } from "@/artifacts/stored-artifact-menu"
+import { TextContentView } from "@/atlas/files/TextContentView"
+import { resolveViewer } from "@/atlas/files/viewer-registry"
 import {
   downloadBlob,
   loadStoredArtifactPreview,
@@ -44,10 +45,6 @@ function size(bytes: number) {
   const tier = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length)
   const value = bytes / 1024 ** tier
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[tier - 1]}`
-}
-
-function markdown(version: StoredArtifactVersion) {
-  return /\.(md|markdown)$/i.test(version.filename)
 }
 
 function label(version: StoredArtifactVersion | undefined, fallback: string) {
@@ -374,6 +371,12 @@ function Preview(props: {
   error?: unknown
 }): JSX.Element {
   const kind = () => storedArtifactPreviewKind(props.version)
+  const viewer = () =>
+    resolveViewer({
+      name: props.version.filename,
+      mimeType: props.version.mimeType,
+      content: props.data?.kind === "text" ? props.data.data : undefined,
+    })
   const limit = () => (kind() === "pdf" ? STORED_PDF_PREVIEW_LIMIT : STORED_ARTIFACT_PREVIEW_LIMIT)
   const error = () =>
     props.error instanceof Error ? props.error.message : String(props.error || "Preview unavailable.")
@@ -412,11 +415,9 @@ function Preview(props: {
       </Match>
       <Match when={props.data?.kind === "text" ? props.data : undefined}>
         {(data) => (
-          <Show when={markdown(props.version)} fallback={<pre style={pre()}>{data().data}</pre>}>
-            <article class="markdown-body" style={document()}>
-              <Markdown text={data().data} />
-            </article>
-          </Show>
+          <div style={viewer().kind === "markdown" ? document() : pre()}>
+            <TextContentView name={props.version.filename} text={data().data} viewer={viewer()} />
+          </div>
         )}
       </Match>
     </Switch>

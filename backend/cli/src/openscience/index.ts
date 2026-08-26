@@ -1739,6 +1739,9 @@ export namespace OpenScience {
 
   /** One top-level Synthetic Sciences search dispatch. The service atomically
    * prices and debits the same Ace wallet used by credit-backed model calls. */
+  const RESEARCH_SEARCH_REQUEST_TIMEOUT_MS = 60_000
+  const RESEARCH_SEARCH_TOTAL_TIMEOUT_MS = 90_000
+
   export async function dispatchResearchSearch(
     input: ResearchSearchInput,
     operationID: string,
@@ -1751,7 +1754,17 @@ export namespace OpenScience {
     // usage but before the response reaches this process. Replay once with the
     // exact durable operation key so Atlas returns the authoritative result
     // instead of silently charging for an abandoned enhanced-search response.
-    for (let attempt = 0; attempt < 2; attempt++) {
+    //
+    // Atlas can also acknowledge that exact replay with operation_in_progress
+    // while the original request is still finishing. Poll that same durable
+    // operation briefly instead of treating the acknowledgement as a failed
+    // search and making the agent fall back to a second provider.
+    const deadline = Date.now() + RESEARCH_SEARCH_TOTAL_TIMEOUT_MS
+    let replayAttempts = 0
+    let inProgressPolls = 0
+    while (true) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) return null
       try {
         const res = await authenticatedAtlasFetch(
           session,
@@ -1767,7 +1780,7 @@ export namespace OpenScience {
             body: bodyText,
             signal,
           },
-          35_000,
+          Math.min(RESEARCH_SEARCH_REQUEST_TIMEOUT_MS, remaining),
         )
         const text = await res.text()
         const body = text
@@ -1784,7 +1797,23 @@ export namespace OpenScience {
               }
             })()
           : {}
-        if (attempt === 0 && res.status >= 500) {
+        const detail =
+          body && typeof body === "object" && "detail" in body && body.detail && typeof body.detail === "object"
+            ? body.detail
+            : undefined
+        const code = detail && "code" in detail && typeof detail.code === "string" ? detail.code : undefined
+        if (
+          res.status === 409 &&
+          code === "operation_in_progress" &&
+          inProgressPolls < 60 &&
+          Date.now() + 1_500 < deadline
+        ) {
+          inProgressPolls++
+          await Bun.sleep(1_500)
+          continue
+        }
+        if (res.status >= 500 && replayAttempts < 1) {
+          replayAttempts++
           log.warn("Synthetic Sciences research search returned a retryable server response", {
             status: res.status,
             operationID,
@@ -1794,15 +1823,17 @@ export namespace OpenScience {
         return { status: res.status, body }
       } catch (error) {
         if (signal.aborted) throw error
+        const retrying = replayAttempts < 1
         log.warn("Synthetic Sciences research search transport failed", {
-          attempt: attempt + 1,
-          retrying: attempt === 0,
+          attempt: replayAttempts + 1,
+          retrying,
           operationID,
           error: error instanceof Error ? error.message : String(error),
         })
+        if (!retrying) return null
+        replayAttempts++
       }
     }
-    return null
   }
 
   /** Invalidate balance cache (call after usage report) */

@@ -301,6 +301,73 @@
   background: var(--color-bg-subtle, var(--surface-raised-base-hover));
 }
 
+.workspace-composer__suggestion-heading,
+.workspace-composer__suggestion-empty {
+  padding: 5px 8px;
+  color: var(--text-weak);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workspace-composer__suggestion-heading {
+  font-weight: var(--font-weight-medium);
+}
+
+.workspace-composer__conversation-row {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-composer__conversation-mark {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--surface-base-hover);
+  color: var(--text-weak);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+}
+
+.workspace-composer__conversation-row > span:last-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.workspace-composer__conversation-row strong,
+.workspace-composer__conversation-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-composer__conversation-row strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  line-height: 17px;
+}
+
+.workspace-composer__conversation-row small {
+  color: var(--text-weak);
+  font-size: 11.5px;
+  line-height: 15px;
+}
+
+form.workspace-composer [data-component="prompt-input"] [data-type="conversation"] {
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-interactive-weak);
+  color: var(--text-link-base);
+}
+
 .workspace-composer__slash-group {
   display: grid;
   gap: 2px;

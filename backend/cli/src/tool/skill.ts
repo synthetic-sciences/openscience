@@ -5,6 +5,70 @@ import { Skill } from "../skill"
 import { ConfigMarkdown } from "../config/markdown"
 import { PermissionNext } from "../permission/next"
 import { ComputePrompt } from "@/compute/prompt"
+import { SkillCatalog } from "@/skill/catalog"
+import { ComputeSecrets } from "@/compute/secrets"
+import { resolveCredentialFields } from "@/server/routes/settings/credentials"
+
+const THIN_AGENT = "researchagent-test"
+const workflowName = /(?:^|[-_])(?:analysis|design|review|workflow|pipeline)(?:$|[-_])/i
+const stopWords = new Set([
+  "about",
+  "after",
+  "against",
+  "available",
+  "deliver",
+  "from",
+  "including",
+  "into",
+  "only",
+  "should",
+  "that",
+  "their",
+  "then",
+  "this",
+  "using",
+  "with",
+])
+
+function terms(value: string) {
+  return new Set(
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((term) => term.length >= 3 && !stopWords.has(term)),
+  )
+}
+
+function requestScore(request: string, skill: Skill.Info) {
+  const wanted = terms(request)
+  const name = terms(skill.name)
+  const description = terms(`${skill.description} ${skill.category ?? ""}`)
+  let score = 0
+  for (const term of wanted) {
+    if (name.has(term)) score += 4
+    if (description.has(term)) score += 1
+  }
+  if (request.toLowerCase().includes(skill.name.toLowerCase())) score += 20
+  return score
+}
+
+function thinShortlist(request: string, skills: Skill.Info[], available: Iterable<string>) {
+  const candidates = skills.map((skill) => {
+    const catalog = SkillCatalog.get(skill.name)
+    return {
+      name: skill.name,
+      capability: catalog?.capability,
+      role: catalog?.role ?? (workflowName.test(skill.name) ? ("workflow" as const) : ("support" as const)),
+      status: catalog?.status,
+      requirements: catalog?.requirements,
+      score: requestScore(request, skill),
+    }
+  })
+  const relevant = candidates.filter((candidate) => (candidate.score ?? 0) > 0)
+  const selected = SkillCatalog.select(relevant, available).selected
+  const names = new Set(selected.map((candidate) => candidate.name))
+  return skills.filter((skill) => names.has(skill.name))
+}
 
 // Lightweight fuzzy score: rewards substring containment + shared bigrams.
 // Returns 0..1. No external deps needed for a "did you mean?" hint.
@@ -31,12 +95,16 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
 
   // Filter skills by agent permissions if agent provided
   const agent = ctx?.agent
-  const accessibleSkills = agent
+  const permittedSkills = agent
     ? skills.filter((skill) => {
         const rule = PermissionNext.evaluate("skill", skill.name, agent.permission)
         return rule.action !== "deny"
       })
     : skills
+  const available =
+    agent?.name === THIN_AGENT ? await ComputeSecrets.available(resolveCredentialFields).catch(() => []) : []
+  const accessibleSkills =
+    agent?.name === THIN_AGENT ? thinShortlist(ctx?.request?.trim() ?? "", permittedSkills, available) : permittedSkills
 
   // Group skills by category for the description
   const categories: Record<string, Skill.Info[]> = {}
@@ -60,8 +128,14 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     .join(", ")
   const description =
     accessibleSkills.length === 0
-      ? "Load a skill to get detailed instructions for a specific task. No skills are currently available."
-      : `Load specialized instructions before work when their procedure applies. Use name for a known skill or category to browse. Available categories: ${catalog}. Call this tool silently and apply its guidance; a user /skill invocation requests immediate use, not narration.`
+      ? agent?.name === THIN_AGENT
+        ? "No reviewed local skill is relevant and available for this request. Work directly; do not guess skill names."
+        : "Load a skill to get detailed instructions for a specific task. No skills are currently available."
+      : agent?.name === THIN_AGENT
+        ? `Load at most the request-local skills selected below, and only when their procedure materially helps. Do not guess other names: ${accessibleSkills
+            .map((skill) => `${skill.name} (${skill.description.slice(0, 100)})`)
+            .join("; ")}`
+        : `Load specialized instructions before work when their procedure applies. Use name for a known skill or category to browse. Available categories: ${catalog}. Call this tool silently and apply its guidance; a user /skill invocation requests immediate use, not narration.`
 
   const examples = accessibleSkills
     .slice(0, 3)
@@ -69,12 +143,21 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     .join(", ")
   const hint = examples.length > 0 ? ` (e.g., ${examples}, ...)` : ""
 
+  const names = accessibleSkills.map((skill) => skill.name)
+  const SkillName = names.length > 0 ? z.enum(names as [string, ...string[]]) : z.never()
   const parameters = z.object({
-    name: z.string().optional().describe(`The skill name to load directly${hint}`),
+    name:
+      agent?.name === THIN_AGENT
+        ? SkillName.optional().describe("One request-local skill selected above")
+        : z.string().optional().describe(`The skill name to load directly${hint}`),
     category: z
       .string()
       .optional()
-      .describe("Browse skills in a category (e.g., 'physics', 'chemistry', 'ml-training')"),
+      .describe(
+        agent?.name === THIN_AGENT
+          ? "Unavailable in the thin profile; choose one selected skill name"
+          : "Browse skills in a category (e.g., 'physics', 'chemistry', 'ml-training')",
+      ),
   })
 
   return {
@@ -83,6 +166,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     async execute(params: z.infer<typeof parameters>, ctx) {
       // Category browse mode: return list of skills in the category
       if (params.category && !params.name) {
+        if (agent?.name === THIN_AGENT) throw new Error("Browse mode is unavailable; use one selected skill name.")
         const cat = params.category.toLowerCase()
         const matched = accessibleSkills.filter((s) => (s.category ?? "other") === cat)
 

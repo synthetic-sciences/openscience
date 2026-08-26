@@ -118,7 +118,7 @@ export namespace LLM {
         // any custom prompt from last user message
         ...(input.user.system ? [input.user.system] : []),
         // plan mode instructions (if enabled)
-        ...(await SystemPrompt.planModeInstructions()),
+        ...(input.agent.name === ToolSelection.THIN_RESEARCH_AGENT ? [] : await SystemPrompt.planModeInstructions()),
       ]
         .filter((x) => x)
         .join("\n"),
@@ -158,7 +158,10 @@ export namespace LLM {
       base as Record<string, any>,
     )
     if (isCodex) {
-      options.instructions = SystemPrompt.instructions(input.direct, input.inspection)
+      options.instructions =
+        input.agent.name === ToolSelection.THIN_RESEARCH_AGENT && input.agent.prompt
+          ? input.agent.prompt
+          : SystemPrompt.instructions(input.direct, input.inspection)
     }
 
     const params = await Plugin.trigger(

@@ -38,6 +38,7 @@ export namespace Flag {
   export const OPENSCIENCE_FAKE_VCS = process.env["OPENSCIENCE_FAKE_VCS"]
   export const OPENSCIENCE_CLIENT = process.env["OPENSCIENCE_CLIENT"] ?? "cli"
   export const OPENSCIENCE_TRUST_PROXY = truthy("OPENSCIENCE_TRUST_PROXY")
+  export declare const OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST: boolean
 
   // Experimental
   export const OPENSCIENCE_EXPERIMENTAL = truthy("OPENSCIENCE_EXPERIMENTAL")
@@ -89,6 +90,17 @@ Object.defineProperty(Flag, "OPENSCIENCE_DISABLE_PROJECT_CONFIG", {
 Object.defineProperty(Flag, "OPENSCIENCE_CONFIG_DIR", {
   get() {
     return process.env["OPENSCIENCE_CONFIG_DIR"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Keep the lab profile opt-in at access time. Tests and the dev-lab launcher
+// intentionally set this after modules have loaded, while release processes
+// leave it absent so the production agent catalog is unchanged.
+Object.defineProperty(Flag, "OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST", {
+  get() {
+    return truthy("OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST")
   },
   enumerable: true,
   configurable: false,

@@ -1,4 +1,5 @@
 import { extension } from "./artifact-thumb"
+import { resolveViewer, viewerUsesText } from "./viewer-registry"
 
 export type RemotePreview = "text" | "image" | "pdf"
 
@@ -10,58 +11,6 @@ export type RemotePreview = "text" | "image" | "pdf"
  * The artifact viewer uses the same 8 MB (StoredArtifactView.tsx).
  */
 export const REMOTE_PREVIEW_LIMIT = 8 * 1024 * 1024
-
-// An allowlist, not a heuristic. Anything absent downloads, which is both the
-// safe default for a format we cannot render and the honest one for a 40 GB
-// checkpoint that no viewer should try to open.
-const TEXT = new Set([
-  "md",
-  "markdown",
-  "mdx",
-  "txt",
-  "log",
-  "json",
-  "jsonl",
-  "ndjson",
-  "csv",
-  "tsv",
-  "yaml",
-  "yml",
-  "toml",
-  "ini",
-  "cfg",
-  "conf",
-  "xml",
-  "html",
-  "css",
-  "py",
-  "r",
-  "jl",
-  "sh",
-  "bash",
-  "zsh",
-  "sql",
-  "ts",
-  "tsx",
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "go",
-  "rs",
-  "c",
-  "h",
-  "cpp",
-  "hpp",
-  "java",
-  "kt",
-  "rb",
-  "swift",
-  "tex",
-  "ipynb",
-])
-
-const IMAGE = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"])
 
 const MIME: Record<string, string> = {
   png: "image/png",
@@ -95,9 +44,10 @@ export function remoteMime(filename: string): string | undefined {
  */
 export function remotePreview(filename: string, size?: number): RemotePreview | undefined {
   if (size !== undefined && size > REMOTE_PREVIEW_LIMIT) return undefined
-  const ext = extension(filename)
-  if (TEXT.has(ext)) return "text"
-  if (IMAGE.has(ext)) return "image"
-  if (ext === "pdf") return "pdf"
+  if (!extension(filename)) return undefined
+  const viewer = resolveViewer({ name: filename })
+  if (viewerUsesText(viewer)) return "text"
+  if (viewer.kind === "image") return "image"
+  if (viewer.kind === "pdf") return "pdf"
   return undefined
 }

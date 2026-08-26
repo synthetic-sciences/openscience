@@ -17,6 +17,10 @@ export namespace Tool {
       providerID: string
       modelID: string
     }
+    /** Current user request, available only to tools whose advertised
+     * contract is intentionally request-local (for example the thin skill
+     * shortlist). Never treat it as authorization. */
+    request?: string
   }
 
   export type Context<M extends Metadata = Metadata> = {

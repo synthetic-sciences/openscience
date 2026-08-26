@@ -248,6 +248,15 @@ export type UserMessage = {
       }
   effort?: ResearchEffort
   delegation?: boolean
+  delegationSettings?: {
+    level?: "off" | "light" | "standard" | "high"
+    workerModel?: {
+      providerID: string
+      modelID: string
+    }
+    autonomy?: "interactive" | "balanced" | "autonomous"
+    diversity?: "focused" | "balanced" | "exploratory"
+  }
   variant?: string
   tier?: string
   inference?: {
@@ -584,6 +593,18 @@ export type AgentPart = {
   }
 }
 
+export type ConversationPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "conversation"
+  sourceSessionID: string
+  throughMessageID: string
+  snapshotID: string
+  label: string
+  text: string
+}
+
 export type RetryPart = {
   id: string
   sessionID: string
@@ -618,6 +639,7 @@ export type Part =
   | SnapshotPart
   | PatchPart
   | AgentPart
+  | ConversationPart
   | RetryPart
   | CompactionPart
 
@@ -2261,6 +2283,14 @@ export type AgentPartInput = {
   }
 }
 
+export type ConversationPartInput = {
+  id?: string
+  type: "conversation"
+  sourceSessionID: string
+  throughMessageID?: string
+  label?: string
+}
+
 export type SubtaskPartInput = {
   id?: string
   type: "subtask"
@@ -2496,6 +2526,9 @@ export type GlobalHealthResponses = {
   200: {
     healthy: true
     version: string
+    sourceSha: string | null
+    sourceWorktreeHash: string | null
+    runId: string
   }
 }
 
@@ -4757,6 +4790,7 @@ export type SettingsComputeJobsListResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
       timeout_minutes: number
@@ -4839,6 +4873,7 @@ export type SettingsComputeJobsStartData = {
     packages?: Array<string>
     image?: string
     gpu?: string
+    secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
     approval?: string
     sessionID: string
   }
@@ -5513,6 +5548,7 @@ export type SettingsComputeJobsStartResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
       timeout_minutes: number
@@ -5596,6 +5632,7 @@ export type SettingsComputeJobsPlanData = {
     packages?: Array<string>
     image?: string
     gpu?: string
+    secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
     approval?: string
     sessionID: string
   }
@@ -5646,6 +5683,7 @@ export type SettingsComputeJobsPlanResponses = {
         environment?: string
         image: string
         packages: Array<string>
+        secret_refs: Array<"nvidia_nim" | "nvidia_ngc">
         gpu: string
         resources?: {
           cpus?: number
@@ -6468,6 +6506,7 @@ export type SettingsComputeJobsRetryResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
       timeout_minutes: number
@@ -7195,6 +7234,7 @@ export type SettingsComputeJobsReleaseResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
       timeout_minutes: number
@@ -7918,6 +7958,7 @@ export type SettingsComputeJobsCancelResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
       timeout_minutes: number
@@ -7989,6 +8030,13 @@ export type SettingsPreferencesGetResponses = {
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
+    delegation_level?: "off" | "light" | "standard" | "high"
+    delegation_worker_model?: {
+      providerID: string
+      modelID: string
+    } | null
+    delegation_autonomy?: "interactive" | "balanced" | "autonomous"
+    delegation_diversity?: "focused" | "balanced" | "exploratory"
   }
 }
 
@@ -8007,6 +8055,13 @@ export type SettingsPreferencesUpdateData = {
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
+    delegation_level?: "off" | "light" | "standard" | "high"
+    delegation_worker_model?: {
+      providerID: string
+      modelID: string
+    } | null
+    delegation_autonomy?: "interactive" | "balanced" | "autonomous"
+    delegation_diversity?: "focused" | "balanced" | "exploratory"
   }
   path?: never
   query?: never
@@ -8029,6 +8084,13 @@ export type SettingsPreferencesUpdateResponses = {
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
+    delegation_level?: "off" | "light" | "standard" | "high"
+    delegation_worker_model?: {
+      providerID: string
+      modelID: string
+    } | null
+    delegation_autonomy?: "interactive" | "balanced" | "autonomous"
+    delegation_diversity?: "focused" | "balanced" | "exploratory"
   }
 }
 
@@ -10433,10 +10495,19 @@ export type SessionPromptData = {
     }
     effort?: ResearchEffort
     delegation?: boolean
+    delegationSettings?: {
+      level?: "off" | "light" | "standard" | "high"
+      workerModel?: {
+        providerID: string
+        modelID: string
+      }
+      autonomy?: "interactive" | "balanced" | "autonomous"
+      diversity?: "focused" | "balanced" | "exploratory"
+    }
     system?: string
     variant?: string
     tier?: string
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
   }
   path: {
     /**
@@ -10623,10 +10694,19 @@ export type SessionPromptAsyncData = {
     }
     effort?: ResearchEffort
     delegation?: boolean
+    delegationSettings?: {
+      level?: "off" | "light" | "standard" | "high"
+      workerModel?: {
+        providerID: string
+        modelID: string
+      }
+      autonomy?: "interactive" | "balanced" | "autonomous"
+      diversity?: "focused" | "balanced" | "exploratory"
+    }
     system?: string
     variant?: string
     tier?: string
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
   }
   path: {
     /**
@@ -10671,6 +10751,15 @@ export type SessionCommandData = {
     command: string
     effort?: ResearchEffort
     delegation?: boolean
+    delegationSettings?: {
+      level?: "off" | "light" | "standard" | "high"
+      workerModel?: {
+        providerID: string
+        modelID: string
+      }
+      autonomy?: "interactive" | "balanced" | "autonomous"
+      diversity?: "focused" | "balanced" | "exploratory"
+    }
     variant?: string
     tier?: string
     parts?: Array<{
@@ -16373,6 +16462,20 @@ export type AppSkillsResponses = {
     location: string
     category?: string
     tags?: Array<string>
+    role?: "workflow" | "support"
+    capability?: string
+    requirements?: {
+      all?: Array<string>
+      any?: Array<string>
+    }
+    catalog_status?: "verified" | "experimental" | "review_required" | "blocked"
+    upstream?: {
+      repository: string
+      ref: string
+      sha: string
+      path: string
+      license: string
+    }
     origin: "default" | "installed" | "user" | "project"
     entry?: boolean
   }>
@@ -16423,6 +16526,20 @@ export type AppSkillWriteResponses = {
     location: string
     category?: string
     tags?: Array<string>
+    role?: "workflow" | "support"
+    capability?: string
+    requirements?: {
+      all?: Array<string>
+      any?: Array<string>
+    }
+    catalog_status?: "verified" | "experimental" | "review_required" | "blocked"
+    upstream?: {
+      repository: string
+      ref: string
+      sha: string
+      path: string
+      license: string
+    }
     origin: "default" | "installed" | "user" | "project"
     entry?: boolean
   }
