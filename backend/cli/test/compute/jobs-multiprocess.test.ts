@@ -286,7 +286,10 @@ const provider = {
   run: async () => ({ code: 0, outputs: [] }),
   recover: async () => ({ code: 0, outputs: [] }),
   find: async () => undefined,
-  close: async () => undefined,
+  close: async () => {
+    await fs.appendFile(log, \`cancel\\n\`)
+    await Bun.sleep(150)
+  },
   release: async () => {
     await fs.appendFile(log, \`\${operation}\\n\`)
     await Bun.sleep(150)
@@ -321,11 +324,12 @@ console.log(JSON.stringify({ id: job.id, status: job.status, resource: job.lifec
       })),
     )
     expect(results.filter((item) => item.exit !== 0)).toEqual([])
-    expect((await Bun.file(operations).text()).trim().split("\n").toSorted()).toEqual(["cancel", "release"])
+    expect((await Bun.file(operations).text()).trim().split("\n").toSorted()).toEqual(["cancel", "cancel", "release"])
     const persisted = ComputeJobs.Job.array().parse(JSON.parse(await Bun.file(path.join(state, "jobs.json")).text()))
     expect(persisted.find((item) => item.id === cancelJob.id)).toMatchObject({
       status: "cancelled",
-      lifecycle: { resource: "closed" },
+      lifecycle: { resource: "unknown" },
+      modal: { retained_volume: true },
     })
     expect(persisted.find((item) => item.id === releaseJob.id)).toMatchObject({
       status: "succeeded",
