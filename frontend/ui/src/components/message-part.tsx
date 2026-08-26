@@ -1102,7 +1102,9 @@ ToolRegistry.register({
 
 function RemoteComputeTool(props: ToolProps) {
   const job = () => {
-    const value = props.metadata.job
+    const envelope = props.metadata.compute_job
+    const value =
+      props.metadata.job ?? (envelope && typeof envelope === "object" && "job" in envelope ? envelope.job : undefined)
     return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined
   }
   const gpu = () => {
@@ -1116,7 +1118,7 @@ function RemoteComputeTool(props: ToolProps) {
       {...props}
       icon="console"
       trigger={{
-        title: props.tool === "modal" ? "Modal compute" : "Remote compute result",
+        title: props.title || (props.tool === "modal" ? "Modal compute" : "Remote compute"),
         subtitle: [gpu(), status()].filter(Boolean).join(" · "),
       }}
     >

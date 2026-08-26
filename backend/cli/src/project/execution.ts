@@ -156,8 +156,15 @@ export namespace ExecutionAuthority {
       SessionFilesystem.processWriteRoots(input.sessionID),
       SessionFilesystem.workspace(input.sessionID),
     ])
-    const processReadable = [...new Set([...readable, ...(metadata ? [metadata] : [])])]
-    const processWritable = [...new Set([...writable, ...(metadata ? [metadata] : [])])]
+    // Project files are the durable, first-party workspace advertised to the
+    // model and already treated as internal by brokered file tools. Managed
+    // projects intentionally keep session scratch elsewhere, so their root is
+    // not represented by a persisted external-directory grant. Include only
+    // the exact project roots here; arbitrary host paths still require an
+    // explicit directional filesystem grant.
+    const projectRoots = [Instance.directory, Instance.worktree]
+    const processReadable = [...new Set([...readable, ...projectRoots, ...(metadata ? [metadata] : [])])]
+    const processWritable = [...new Set([...writable, ...projectRoots, ...(metadata ? [metadata] : [])])]
     const generation = crypto
       .createHash("sha256")
       .update(

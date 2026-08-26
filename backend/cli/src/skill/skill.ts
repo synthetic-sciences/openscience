@@ -511,19 +511,4 @@ export namespace Skill {
     lists.set(current, value)
     return value
   }
-
-  /** Apply the shared thin-agent skill budget to a ranked shortlist. This does
-   * not remove or mutate installed skills; callers retain the full catalog. */
-  export async function select(
-    candidates: Array<{ name: string; score?: number; explicit?: boolean }>,
-    available: Iterable<string>,
-  ) {
-    const catalog = await state()
-    return SkillCatalog.select(
-      candidates
-        .filter((candidate) => !!catalog[candidate.name])
-        .map((candidate) => ({ ...catalog[candidate.name]!, ...candidate })),
-      available,
-    )
-  }
 }

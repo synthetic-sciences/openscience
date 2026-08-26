@@ -4,6 +4,7 @@ import {
   artifactActions,
   generatedArtifacts,
   humanizeToolName,
+  liveReasoningDisplayText,
   reasoningDisplayText,
   reasoningTopic,
   sentenceCaseLabel,
@@ -174,6 +175,12 @@ describe("provider reasoning presentation", () => {
     expect(reasoningTopic(titanic)).toBe("Simplifying analysis steps")
   })
 
+  test("shows only a bounded current thought while reasoning is streaming", () => {
+    expect(liveReasoningDisplayText(titanic)).toBe("I can keep the work focused.")
+    expect(liveReasoningDisplayText(`**Working**\n${"long explanation ".repeat(80)}`)).toEndWith("…")
+    expect(liveReasoningDisplayText(`**Working**\n${"long explanation ".repeat(80)}`).length).toBeLessThanOrEqual(261)
+  })
+
   test("leaves ordinary readable reasoning unchanged", () => {
     expect(reasoningDisplayText("Checking the source, then comparing the results.")).toBe(
       "Checking the source, then comparing the results.",
@@ -211,6 +218,17 @@ describe("toolErrorDisplay", () => {
     expect(toolErrorDisplay("read", "Error: File not found: paper.pdf")).toEqual({
       title: "File not found",
       message: "paper.pdf",
+    })
+  })
+
+  test("keeps long policy and runtime failures attached to the originating tool", () => {
+    expect(toolErrorDisplay("compute_job", "Compute secret reference nvidia_nim is not configured")).toEqual({
+      title: "Compute Job failed",
+      message: "Compute secret reference nvidia_nim is not configured",
+    })
+    expect(toolErrorDisplay("glob", "The user has specified a rule which prevents this tool call")).toEqual({
+      title: "Glob failed",
+      message: "The user has specified a rule which prevents this tool call",
     })
   })
 })

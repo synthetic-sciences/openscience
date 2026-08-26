@@ -46,6 +46,8 @@ test("Modal and compute job results use a dedicated compact renderer", () => {
 
   expect(part).toContain('name: "modal"')
   expect(part).toContain('name: "compute_job"')
-  expect(part).toContain('title: props.tool === "modal" ? "Modal compute" : "Remote compute result"')
+  expect(part).toContain('title: props.title || (props.tool === "modal" ? "Modal compute" : "Remote compute")')
+  expect(part).toContain("props.metadata.job ??")
+  expect(part).toContain('"job" in envelope ? envelope.job : undefined')
   expect(remote).not.toContain("defaultOpen")
 })

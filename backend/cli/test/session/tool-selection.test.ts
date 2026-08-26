@@ -61,6 +61,13 @@ describe("tool selection", () => {
         message: "Update the Python harness and benchmark the model against a baseline metric.",
       }),
     ).toBe(true)
+    expect(ToolSelection.relevant("atlas", { agent: "research", message: "Analyze this protein dataset." })).toBe(false)
+    expect(
+      ToolSelection.relevant("atlas_record", {
+        agent: "research",
+        message: "Publish this provenance record to Atlas.",
+      }),
+    ).toBe(true)
   })
 
   test("keeps explicitly named or enabled domain capabilities", () => {
@@ -230,7 +237,7 @@ describe("tool selection", () => {
     ).toBe(false)
   })
 
-  test("keeps the experimental research profile request-local and below twelve active tools", () => {
+  test("gives the minimal research profile every relevant native capability without an arbitrary ceiling", () => {
     const message =
       "Use Modal and BioNeMo to execute a protein benchmark, search the literature, and deliver a LaTeX paper with artifacts."
     const available = [
@@ -251,17 +258,13 @@ describe("tool selection", () => {
       "python",
       "r",
       "research_contract",
-      "atlas",
       "context7_query-docs",
     ]
     const relevant = available.filter((tool) =>
       ToolSelection.relevant(tool, { agent: ToolSelection.THIN_RESEARCH_AGENT, message }),
     )
-    const selected = ToolSelection.thinLimit(relevant)
-    const active = [...selected].filter((tool) => tool !== "invalid")
-
-    expect(active.length).toBeLessThanOrEqual(12)
-    expect(active).toEqual(
+    expect(relevant.length).toBeGreaterThan(12)
+    expect(relevant).toEqual(
       expect.arrayContaining([
         "question",
         "bash",
@@ -275,35 +278,22 @@ describe("tool selection", () => {
         "webfetch",
         "skill",
         "artifact",
+        "generate_image",
+        "python",
+        "r",
+        "research_contract",
+        "context7_query-docs",
       ]),
     )
-    expect(selected.has("invalid")).toBe(true)
-    expect(selected.has("research_contract")).toBe(false)
-    expect(selected.has("atlas")).toBe(false)
-    expect(selected.has("context7_query-docs")).toBe(false)
   })
 
-  test("does not crowd explicit thin capabilities out with optional runtimes", () => {
-    const ids = [
-      "invalid",
-      "question",
-      "bash",
-      "read",
-      "glob",
-      "grep",
-      "apply_patch",
-      "task",
-      "compute_job",
-      "research_search",
-      "webfetch",
-      "skill",
-      "artifact",
-      "generate_image",
-      "python",
-      "r",
-    ]
-    const selected = ToolSelection.thinLimit(ids, { generate_image: true })
-    expect(selected.has("generate_image")).toBe(true)
-    expect([...selected].filter((tool) => tool !== "invalid")).toHaveLength(12)
+  test("keeps normal research relevance filtering for a code-only minimal-profile request", () => {
+    const input = {
+      agent: ToolSelection.THIN_RESEARCH_AGENT,
+      message: "Fix the TypeScript server bug and run its test suite.",
+    }
+    expect(ToolSelection.relevant("bash", input)).toBe(true)
+    expect(ToolSelection.relevant("research_contract", input)).toBe(false)
+    expect(ToolSelection.relevant("compute_job", input)).toBe(false)
   })
 })

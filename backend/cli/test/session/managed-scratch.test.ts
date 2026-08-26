@@ -331,6 +331,16 @@ describe("managed project session scratch", () => {
       )
       expect(shell.output).toContain(firstRoot)
       expect(await Bun.file(path.join(firstRoot, "shell.txt")).text()).toBe("shell")
+      const durable = await bash.execute(
+        {
+          command: "printf durable > project.txt",
+          workdir: root,
+          description: "Write durable project file",
+        },
+        context(first.id),
+      )
+      expect(durable.output).not.toContain("External write paths")
+      expect(await Bun.file(path.join(root, "project.txt")).text()).toBe("durable")
       await expect(
         bash.execute(
           {

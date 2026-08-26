@@ -142,6 +142,8 @@ test("trusted Firecrawl and NVIDIA credentials resolve in-process without enteri
     runner,
     [
       `import { CredentialsRoutes, applyCredentialEnv, resolveCredentialFields } from ${JSON.stringify(routes)}`,
+      `import { CredentialLifecycle } from ${JSON.stringify(new URL("../../src/credentials/lifecycle.ts", import.meta.url).href)}`,
+      `import fs from "node:fs/promises"`,
       `for (const key of ["FIRECRAWL_API_KEY", "NVIDIA_API_KEY", "NGC_API_KEY"]) delete process.env[key]`,
       `const app = CredentialsRoutes()`,
       `for (const [id, secret] of [["firecrawl", "fc-trusted"], ["nvidia", "nvapi-trusted"], ["nvidia_ngc", "ngc-trusted"]]) {`,
@@ -154,6 +156,7 @@ test("trusted Firecrawl and NVIDIA credentials resolve in-process without enteri
       `if ((await resolveCredentialFields("nvidia"))?.api_key !== "nvapi-trusted") throw new Error("NVIDIA resolver failed")`,
       `if ((await resolveCredentialFields("nvidia_ngc"))?.api_key !== "ngc-trusted") throw new Error("NGC resolver failed")`,
       `if (await resolveCredentialFields("github")) throw new Error("untrusted service resolved through trusted API")`,
+      `if (await fs.stat(CredentialLifecycle.revisionPath()).then(() => true, () => false)) throw new Error("trusted credential published a process revocation")`,
     ].join("\n"),
   )
 

@@ -57,6 +57,23 @@ export function reasoningDisplayText(text: string): string {
   return statusOnlyReasoning(readable) ? "" : readable
 }
 
+/** Keep the active turn conversational: show the current provider phase, not
+ * every paragraph accumulated in the still-streaming signed reasoning part.
+ * The stored bytes and completed-turn rendering remain untouched/full. */
+export function liveReasoningDisplayText(text: string, maximum = 260): string {
+  const visible = stripRedactedReasoning(text)
+  if (!visible) return ""
+  const matches = [...visible.matchAll(providerReasoningPhase)]
+  const latest = matches.at(-1)
+  const phase = latest ? visible.slice((latest.index ?? 0) + latest[0].length) : visible
+  const readable = reasoningDisplayText(phase)
+  if (readable.length <= maximum) return readable
+  const bounded = readable.slice(0, maximum + 1)
+  const sentence = Math.max(bounded.lastIndexOf(". "), bounded.lastIndexOf("? "), bounded.lastIndexOf("! "))
+  const end = sentence >= Math.floor(maximum * 0.55) ? sentence + 1 : readable.slice(0, maximum).lastIndexOf(" ")
+  return `${readable.slice(0, Math.max(end, maximum - 40)).trimEnd()}…`
+}
+
 /** The most recent provider phase is useful as one compact live status. */
 export function reasoningTopic(text: string): string | undefined {
   const visible = stripRedactedReasoning(text)
@@ -82,7 +99,7 @@ export function toolErrorDisplay(tool: string, value: string) {
   if (title && title.length < 30 && rest.length) {
     return { title, message: rest.join(": ") }
   }
-  return { message: cleaned }
+  return { title: `${humanizeToolName(tool)} failed`, message: cleaned }
 }
 
 export type SavedArtifact = {

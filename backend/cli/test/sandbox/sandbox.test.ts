@@ -8,7 +8,7 @@ import { tmpdir } from "../fixture/fixture"
 
 const shell = "/bin/sh"
 
-async function execute(plan: Sandbox.Plan, cwd: string) {
+async function execute(plan: Sandbox.Plan | Sandbox.Wrapped, cwd: string) {
   try {
     return await executeWithoutCleanup(plan, cwd)
   } finally {
@@ -16,7 +16,7 @@ async function execute(plan: Sandbox.Plan, cwd: string) {
   }
 }
 
-async function executeWithoutCleanup(plan: Sandbox.Plan, cwd: string) {
+async function executeWithoutCleanup(plan: Sandbox.Plan | Sandbox.Wrapped, cwd: string) {
   const proc = Bun.spawn([plan.file, ...(plan.args ?? [])], { cwd, stdout: "pipe", stderr: "pipe" })
   const [exit, stdout, stderr] = await Promise.all([
     proc.exited,
@@ -36,6 +36,56 @@ describe("Sandbox.cacheEnvironment", () => {
     expect(env.UV_CACHE_DIR).toBe(path.join(workspace, ".openscience", "cache", "uv"))
     expect(env.PIP_CACHE_DIR).toBe(path.join(workspace, ".openscience", "cache", "pip"))
   })
+})
+
+describe("Sandbox local runtime support", () => {
+  test.skipIf(process.platform === "win32" || !Sandbox.available())(
+    "keeps the selected OpenScience Conda environment readable without exposing its parent data root",
+    async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "openscience-managed-runtime-"))
+      const prefix = path.join(root, "conda", "envs", "python")
+      const bin = path.join(prefix, "bin")
+      const library = path.join(prefix, "lib")
+      const workspace = path.join(root, "workspace")
+      const probe = path.join(bin, "probe")
+      const marker = path.join(library, "stdlib-marker")
+      fs.mkdirSync(bin, { recursive: true })
+      fs.mkdirSync(library, { recursive: true })
+      fs.mkdirSync(workspace)
+      fs.writeFileSync(marker, "managed-runtime-readable\n")
+      fs.writeFileSync(probe, `#!/bin/sh\ncat ${JSON.stringify(marker)}\n`, { mode: 0o755 })
+      try {
+        const plan = Sandbox.wrapArgv({
+          file: probe,
+          args: [],
+          workspace: [workspace],
+          options: { enabled: true, network: "deny", onUnavailable: "error" },
+        })
+        const result = await execute(plan, workspace)
+        expect(result.exit, result.stderr).toBe(0)
+        expect(result.stdout.trim()).toBe("managed-runtime-readable")
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    },
+  )
+
+  test.skipIf(process.platform !== "darwin" || !Bun.which("zsh") || !Sandbox.available())(
+    "places zsh here-document files in the private sandbox temp root",
+    async () => {
+      await using tmp = await tmpdir()
+      const plan = Sandbox.plan({
+        command: "cat <<'EOF'\nheredoc-ok\nEOF",
+        shell: Bun.which("zsh")!,
+        cwd: tmp.path,
+        workspace: [tmp.path],
+        options: { enabled: true, network: "deny", onUnavailable: "error" },
+      })
+      const result = await execute(plan, tmp.path)
+      expect(result.exit, result.stderr).toBe(0)
+      expect(result.stdout.trim()).toBe("heredoc-ok")
+    },
+  )
 })
 
 describe("Sandbox.seatbeltProfile", () => {

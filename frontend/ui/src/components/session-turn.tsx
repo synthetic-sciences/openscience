@@ -35,6 +35,7 @@ import {
   artifactTypeLabel,
   artifactActions,
   generatedArtifacts,
+  liveReasoningDisplayText,
   reasoningTopic,
   sessionErrorText,
   stripRedactedReasoning,
@@ -95,6 +96,8 @@ function computeStatusFromPart(part: PartType | undefined, t: Translator): strin
       case "write":
         return t("ui.sessionTurn.status.makingEdits")
       case "bash":
+      case "compute_job":
+      case "modal":
         return t("ui.sessionTurn.status.runningCommands")
       default:
         return undefined
@@ -153,26 +156,36 @@ function AssistantTrace(props: {
   responsePartId: string | undefined
   hideResponsePart: boolean
   hideReasoning: boolean
+  latestReasoningOnly?: boolean
   hidePromotedTools?: boolean
   pendingRequestCallID?: string
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
-  const trace = createMemo(() =>
-    groupResearchTrace(
-      props.messages.flatMap((message) => {
-        const parts = data.store.part[message.id] ?? emptyParts
-        return parts.flatMap((part) => {
-          if (props.hideReasoning && part?.type === "reasoning") return []
-          if (props.hideResponsePart && props.responsePartId === part?.id) return []
-          if (part?.type === "tool" && part.callID === props.pendingRequestCallID) return []
-          if (props.hidePromotedTools && isHiddenTool(part)) return [{ message, part, hidden: true }]
-          if (part?.type === "tool" && part.tool === "todoread") return [{ message, part, hidden: true }]
-          return [{ message, part }]
-        })
-      }),
-    ),
-  )
+  const trace = createMemo(() => {
+    const entries = props.messages.flatMap((message) => {
+      const parts = data.store.part[message.id] ?? emptyParts
+      return parts.flatMap((part) => {
+        if (props.hideReasoning && part?.type === "reasoning") return []
+        if (props.hideResponsePart && props.responsePartId === part?.id) return []
+        if (part?.type === "tool" && part.callID === props.pendingRequestCallID) return []
+        if (props.hidePromotedTools && isHiddenTool(part)) return [{ message, part, hidden: true }]
+        if (part?.type === "tool" && part.tool === "todoread") return [{ message, part, hidden: true }]
+        if (props.latestReasoningOnly && part?.type === "reasoning") {
+          return [{ message, part: { ...part, text: liveReasoningDisplayText(part.text ?? "") } }]
+        }
+        return [{ message, part }]
+      })
+    })
+    const latestReasoning = props.latestReasoningOnly
+      ? entries.findLast((entry) => entry.part?.type === "reasoning")?.part.id
+      : undefined
+    return groupResearchTrace(
+      entries.filter(
+        (entry) => !latestReasoning || entry.part?.type !== "reasoning" || entry.part.id === latestReasoning,
+      ),
+    )
+  })
 
   return (
     <Index each={trace()}>
@@ -414,7 +427,7 @@ export function SessionTurn(
 
   const rawStatus = createMemo(() => {
     const msgs = assistantMessages()
-    let last: PartType | undefined
+    let lastStatus: string | undefined
     let currentTask: ToolPart | undefined
 
     for (let mi = msgs.length - 1; mi >= 0; mi--) {
@@ -422,7 +435,7 @@ export function SessionTurn(
       for (let pi = msgParts.length - 1; pi >= 0; pi--) {
         const part = msgParts[pi]
         if (!part) continue
-        if (!last) last = part
+        if (!lastStatus) lastStatus = computeStatusFromPart(part, i18n.t)
 
         if (
           part.type === "tool" &&
@@ -458,7 +471,7 @@ export function SessionTurn(
       }
     }
 
-    return computeStatusFromPart(last, i18n.t)
+    return lastStatus
   })
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
@@ -766,6 +779,7 @@ export function SessionTurn(
                           responsePartId={responsePartId()}
                           hideResponsePart={hideResponsePart()}
                           hideReasoning={false}
+                          latestReasoningOnly={working()}
                           hidePromotedTools
                           pendingRequestCallID={pendingRequestCallID()}
                         />

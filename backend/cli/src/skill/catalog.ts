@@ -56,7 +56,7 @@ export namespace SkillCatalog {
       capability: "protein-binder-design",
       role: "workflow",
       status: "experimental",
-      requirements: { any: ["nvidia_nim", "nvidia_ngc"] },
+      requirements: { all: [], any: [] },
       upstream: {
         ...BIONEMO,
         path: "workflows/generative-protein-binder-design/protein-binder-design",
@@ -100,78 +100,13 @@ export namespace SkillCatalog {
   ])
 
   const indexed = new Map(entries.map((entry) => [entry.name, entry]))
+  const aliases = new Map([["bionemo-agent-toolkit", "protein-binder-design"]])
+
+  export function resolve(name: string) {
+    return aliases.get(name) ?? name
+  }
+
   export function get(name: string): Entry | undefined {
-    return indexed.get(name)
-  }
-
-  export type Candidate = {
-    name: string
-    capability?: string
-    role?: Role
-    status?: Status
-    requirements?: { all?: string[]; any?: string[] }
-    score?: number
-    explicit?: boolean
-  }
-
-  export type Omission = {
-    name: string
-    reason: "blocked" | "unavailable" | "workflow_limit" | "support_limit" | "duplicate"
-  }
-
-  function prepared(candidate: Candidate) {
-    const entry = get(candidate.name)
-    return {
-      ...candidate,
-      capability: candidate.capability ?? entry?.capability ?? candidate.name,
-      role: candidate.role ?? entry?.role ?? ("support" as const),
-      status: candidate.status ?? entry?.status ?? ("verified" as const),
-      requirements: candidate.requirements ?? entry?.requirements ?? { all: [], any: [] },
-    }
-  }
-
-  /** Enforce the thin-agent loading budget while leaving the installed catalog
-   * untouched. Explicit requests lead the ordering but cannot bypass blocked
-   * or unavailable capabilities. */
-  export function select(candidates: Candidate[], available: Iterable<string>) {
-    const capabilities = new Set(available)
-    const ordered = candidates
-      .map(prepared)
-      .toSorted((a, b) => Number(b.explicit) - Number(a.explicit) || (b.score ?? 0) - (a.score ?? 0))
-    const selected: typeof ordered = []
-    const omitted: Omission[] = []
-    const seen = new Set<string>()
-    const counts = { workflow: 0, support: 0 }
-    for (const candidate of ordered) {
-      if (candidate.status === "blocked") {
-        omitted.push({ name: candidate.name, reason: "blocked" })
-        continue
-      }
-      const all = candidate.requirements.all ?? []
-      const any = candidate.requirements.any ?? []
-      if (
-        all.some((item) => !capabilities.has(item)) ||
-        (any.length > 0 && !any.some((item) => capabilities.has(item)))
-      ) {
-        omitted.push({ name: candidate.name, reason: "unavailable" })
-        continue
-      }
-      if (seen.has(candidate.capability)) {
-        omitted.push({ name: candidate.name, reason: "duplicate" })
-        continue
-      }
-      if (candidate.role === "workflow" && counts.workflow >= 1) {
-        omitted.push({ name: candidate.name, reason: "workflow_limit" })
-        continue
-      }
-      if (candidate.role === "support" && counts.support >= 2) {
-        omitted.push({ name: candidate.name, reason: "support_limit" })
-        continue
-      }
-      selected.push(candidate)
-      seen.add(candidate.capability)
-      counts[candidate.role]++
-    }
-    return { selected, omitted }
+    return indexed.get(resolve(name))
   }
 }

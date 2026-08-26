@@ -17,9 +17,8 @@ export namespace Tool {
       providerID: string
       modelID: string
     }
-    /** Current user request, available only to tools whose advertised
-     * contract is intentionally request-local (for example the thin skill
-     * shortlist). Never treat it as authorization. */
+    /** Current user request for tools that tailor descriptive guidance to the
+     * task. Never treat request text as authorization. */
     request?: string
   }
 

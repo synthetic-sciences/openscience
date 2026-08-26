@@ -12,6 +12,7 @@ import {
   TASK_HANDOFF_CHARS,
   TASK_WALL_CLOCK_MS,
   TaskTool,
+  taskContinuationID,
   withTaskDeadline,
 } from "../../src/tool/task"
 import { PermissionNext } from "../../src/permission/next"
@@ -70,6 +71,15 @@ test("child sessions deny recursive delegation even when a profile allows Task",
 
   expect(PermissionNext.evaluate("task", "explore", configuredProfile, child).action).toBe("deny")
   expect(PermissionNext.disabled(["task"], child)).toContain("task")
+})
+
+test("Task treats provider placeholder session IDs as a new child", () => {
+  const parent = "ses_parent_real"
+  expect(taskContinuationID(undefined, parent)).toBeUndefined()
+  expect(taskContinuationID(parent, parent)).toBeUndefined()
+  expect(taskContinuationID("ses_placeholder", parent)).toBeUndefined()
+  expect(taskContinuationID("ses_current", parent)).toBeUndefined()
+  expect(taskContinuationID("ses_child_real", parent)).toBe("ses_child_real")
 })
 
 test("Task continuation accepts only a direct child of the calling session", async () => {
@@ -412,6 +422,10 @@ test("Task outcomes distinguish bounded partial work from completion and failure
   })
   expect(classifyTaskOutcome({ timedOut: false, error: { name: "UnknownError" } })).toEqual({
     outcome: "error",
+    stopReason: "provider_error",
+  })
+  expect(classifyTaskOutcome({ timedOut: false, error: { name: "UnknownError" }, hasText: true })).toEqual({
+    outcome: "partial",
     stopReason: "provider_error",
   })
   expect(classifyTaskOutcome({ timedOut: false, finish: "stop", toolCalls: 5, failedToolCalls: 5 })).toEqual({

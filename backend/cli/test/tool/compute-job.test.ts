@@ -38,6 +38,7 @@ test("advertises an object-rooted compute schema for strict providers", () => {
     "start",
     "list",
     "status",
+    "wait",
     "logs",
     "artifacts",
     "cancel",
@@ -108,7 +109,7 @@ test("rejects ambiguous or invalid compute shapes with one copy-ready repair", a
     tool.execute({ action: "targets", operation: "plan" } as never, context("ses_validation", [])),
   ).rejects.toThrow('Use the field "action", not "operation"')
   await expect(tool.execute({ operation: "inspect" } as never, context("ses_validation", []))).rejects.toThrow(
-    "Valid action values: targets, plan, start, list, status, logs, artifacts, cancel, retry_delivery, release",
+    "Valid action values: targets, plan, start, list, status, wait, logs, artifacts, cancel, retry_delivery, release",
   )
   await expect(
     tool.execute(
@@ -158,6 +159,8 @@ test("plans and starts a detached local job through the model-facing broker", as
         always: [],
       })
       expect(dispatched.output).toContain(`Dispatched local job ${job.id}`)
+      expect(dispatched.output).toContain("compute_job wait")
+      expect(dispatched.output).toContain("do not poll with shell sleep")
       const finished = await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })
       expect(finished.status).toBe("succeeded")
       expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path })).toContain("local broker ready")
@@ -312,6 +315,9 @@ test("starts Modal through JobBroker only after a digest-bound scoped approval",
         provider,
       }).init()
       const asked: Asked[] = []
+      const targets = await tool.execute({ action: "targets" }, context(session.id, asked))
+      expect(targets.output).toContain("Outbound network access is blocked")
+      expect(targets.output).toContain("bare CUDA runtime images do not")
       const workload = {
         name: "Modal broker run",
         purpose: "Run a bounded paid evaluation.",
@@ -389,6 +395,29 @@ test("inspects project jobs, logs, and delivered artifacts without approval", as
       expect(logs.output).toContain("visible output")
       expect(artifacts.output).toContain("results/value.txt")
       expect(asked).toEqual([])
+    },
+  })
+})
+
+test("waits on a compute job without asking the model to run shell sleep", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const root = path.join(tmp.path, "compute")
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trustProject()
+      const session = await Session.create({})
+      const workspace = await SessionFilesystem.workspace(session.id)
+      const job = await start(tmp.path, root, session.id, {
+        name: "wait action",
+        command: "sleep 0.1 && printf ready",
+      })
+      const tool = await createComputeJobTool({ root, workspace }).init()
+      const result = await tool.execute({ action: "wait", job_id: job.id, seconds: 2 }, context(session.id, []))
+
+      expect(result.output).toContain('"status": "succeeded"')
+      expect(result.output).toContain('"timed_out": false')
+      expect(await ComputeJobs.log(job.id, { root, workspace })).toContain("ready")
     },
   })
 })

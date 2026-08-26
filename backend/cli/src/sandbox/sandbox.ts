@@ -247,6 +247,11 @@ export namespace Sandbox {
       `TMPDIR=${temporary}`,
       `TMP=${temporary}`,
       `TEMP=${temporary}`,
+      // zsh does not use TMPDIR for here-documents or process substitutions.
+      // Its independent TMPPREFIX defaults to /tmp/zsh, which is deliberately
+      // read-only inside the sandbox. Keep those files in the same private,
+      // owner-only temp root as every other runtime.
+      `TMPPREFIX=${path.join(temporary, "zsh")}`,
       ...(bin ? [`PATH=${[bin, inherited].filter(Boolean).join(path.delimiter)}`] : []),
       ...argv,
     ]
@@ -398,6 +403,11 @@ export namespace Sandbox {
         { marker: "/.pyenv/versions/", depth: 1 },
         { marker: "/.asdf/installs/", depth: 2 },
         { marker: "/.local/share/uv/python/", depth: 1 },
+        // OpenScience's managed starters and task environments live below
+        // <data>/conda/envs/<name>. Grant the selected environment, not the
+        // surrounding data root, so its stdlib and shared libraries remain
+        // readable after the interpreter itself starts.
+        { marker: "/conda/envs/", depth: 1 },
         { marker: "/miniconda3/envs/", depth: 1 },
         { marker: "/.nvm/versions/node/", depth: 1 },
       ].find((item) => value.includes(item.marker))

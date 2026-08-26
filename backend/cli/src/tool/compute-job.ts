@@ -12,6 +12,7 @@ const COMPUTE_ACTIONS = [
   "start",
   "list",
   "status",
+  "wait",
   "logs",
   "artifacts",
   "cancel",
@@ -26,6 +27,7 @@ const ACTION_DESCRIPTIONS = {
   start: "Create and dispatch a detached compute job after any required approval.",
   list: "List project-scoped compute jobs, optionally filtered by status.",
   status: "Inspect the latest state of one existing job.",
+  wait: "Wait briefly for one job to finish or return its latest state without using shell sleep.",
   logs: "Read lifecycle events and bounded command output for one existing job.",
   artifacts: "Inspect expected and delivered outputs for one existing job.",
   cancel: "Stop one live job after dedicated approval.",
@@ -40,6 +42,7 @@ const ACTION_EXAMPLES = {
     '{"action":"start","name":"Run analysis","purpose":"Produce the requested analysis output.","command":"python analysis.py","target":{"kind":"local"}}',
   list: '{"action":"list","limit":20}',
   status: '{"action":"status","job_id":"job_..."}',
+  wait: '{"action":"wait","job_id":"job_...","seconds":30}',
   logs: '{"action":"logs","job_id":"job_...","bytes":64000}',
   artifacts: '{"action":"artifacts","job_id":"job_..."}',
   cancel: '{"action":"cancel","job_id":"job_..."}',
@@ -69,7 +72,9 @@ const ComputeWorkload = z
       .min(1)
       .max(2_000)
       .optional()
-      .describe("Existing relative staging directory. Omit for Modal."),
+      .describe(
+        "Existing relative working directory inside the session workspace; create it before planning or starting. Omit to use the session workspace, which is recommended for Modal.",
+      ),
     target: ComputeTarget,
     resources: JobBroker.Resources.optional(),
     modules: z.array(z.string().trim().min(1).max(240)).max(64).optional(),
@@ -91,7 +96,9 @@ const ComputeWorkload = z
     secret_refs: JobBroker.SecretRef.array()
       .max(8)
       .optional()
-      .describe("Reviewed symbolic Modal credentials; never values."),
+      .describe(
+        "Reviewed symbolic Modal credentials shown as available by targets; never values and never request an unavailable reference.",
+      ),
   })
   .strict()
 
@@ -115,6 +122,14 @@ const ComputeJobActionParameters = z
       .object({ action: action("status"), job_id: z.string().trim().min(1) })
       .strict()
       .describe(ACTION_EXAMPLES.status),
+    z
+      .object({
+        action: action("wait"),
+        job_id: z.string().trim().min(1),
+        seconds: z.number().int().min(1).max(60).default(30),
+      })
+      .strict()
+      .describe(ACTION_EXAMPLES.wait),
     z
       .object({
         action: action("logs"),
@@ -169,6 +184,7 @@ export const ComputeJobParameters = z
     status: JobBroker.Status.optional(),
     limit: z.number().int().min(1).max(100).optional(),
     job_id: z.string().trim().min(1).optional(),
+    seconds: z.number().int().min(1).max(60).optional(),
     bytes: z.number().int().min(1).max(256_000).optional(),
   })
   .strict()
@@ -236,6 +252,7 @@ function normalizeInput(input: unknown): unknown {
       start: new Set(workload),
       list: new Set(["action", "status", "limit"]),
       status: new Set(["action", "job_id"]),
+      wait: new Set(["action", "job_id", "seconds"]),
       logs: new Set(["action", "job_id", "bytes"]),
       artifacts: new Set(["action", "job_id"]),
       cancel: new Set(["action", "job_id"]),
@@ -406,7 +423,7 @@ export function createComputeJobTool(base?: JobBroker.Options) {
   return Tool.define<typeof ComputeJobParameters, Metadata>("compute_job", {
     description: [
       "Project JobBroker for detached local, SSH/scheduler, and Modal work; prefer Python/R for interactive analysis.",
-      "Actions: targets discovers providers; plan previews without dispatch; start dispatches; list filters project jobs; status, logs, artifacts, cancel, retry_delivery, and release require job_id. logs optionally accepts bytes.",
+      "Actions: targets discovers providers; plan previews without dispatch; start dispatches; list filters project jobs; status, wait, logs, artifacts, cancel, retry_delivery, and release require job_id. wait replaces shell sleep and returns after at most 60 seconds; logs optionally accepts bytes.",
       "plan/start require name, purpose, command, and target; remote start presents an immutable scoped approval. Optional workload fields are cwd, resources, modules, container, artifacts, checkpoint, uploads, packages, image, gpu, and reviewed secret_refs.",
       'Example: {"action":"start","name":"Run analysis","purpose":"Produce the result","command":"python analysis.py","target":{"kind":"local"}}.',
       "list/status/logs/artifacts are read-only. cancel stops a live job; retry_delivery harvests retained Modal output without rerunning; release discards retained resources.",
@@ -437,7 +454,12 @@ export function createComputeJobTool(base?: JobBroker.Options) {
             usage: {
               target: { kind: "modal" },
               staging: "Omit cwd unless it names an existing relative directory in this session workspace.",
-              environment: "Use image and packages; omit container, modules, and scheduler partition.",
+              environment:
+                "Omit image to use the configured Python image. If packages are set, a custom image must already provide python and pip; bare CUDA runtime images do not.",
+              network:
+                resolved.modal?.network === "unrestricted"
+                  ? "Outbound network access is enabled for approved Modal jobs."
+                  : "Outbound network access is blocked. Do not submit jobs that download packages, models, or repositories; enable it in Compute settings first.",
               outputs: "Write and declare relative artifact/checkpoint paths under the job workspace, not /tmp.",
               gpu: "Set gpu to the exact Modal GPU request, or none for CPU-only discovery.",
             },
@@ -479,7 +501,7 @@ export function createComputeJobTool(base?: JobBroker.Options) {
         return {
           title: `Compute job: ${input.name}`,
           metadata: complete,
-          output: `Dispatched ${plan.provider} job ${job.id}. Status: ${job.status}. Use compute_job status, logs, artifacts, or cancel with this job id.`,
+          output: `Dispatched ${plan.provider} job ${job.id}. Status: ${job.status}. Use compute_job wait (up to 60 seconds), status, logs, artifacts, or cancel with this job id; do not poll with shell sleep.`,
         }
       }
 
@@ -500,6 +522,25 @@ export function createComputeJobTool(base?: JobBroker.Options) {
           title: `Compute job: ${state.job.name}`,
           metadata: { compute_job: { action: input.action, job: state.job } },
           output: json(summary(state.job)),
+        }
+      }
+      if (input.action === "wait") {
+        let job: JobBroker.Job
+        let timedOut = false
+        try {
+          job = await JobBroker.wait(state.job.id, {
+            ...state.resolved,
+            timeout: input.seconds * 1_000,
+          })
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.startsWith("Timed out waiting for compute job")) throw error
+          timedOut = true
+          job = (await selected(state.job.id, ctx.sessionID, base)).job
+        }
+        return {
+          title: `Compute job: ${job.name}`,
+          metadata: { compute_job: { action: input.action, job } },
+          output: json({ ...summary(job), waited_seconds: input.seconds, timed_out: timedOut }),
         }
       }
       if (input.action === "logs") {

@@ -58,6 +58,9 @@ describe("SessionProcessor tool outcome correlation", () => {
     })
     await coordinator.delta("call_raw", '{"command":')
     await coordinator.delta("call_raw", '"pwd"}')
+    expect(updates).toHaveLength(0)
+    await coordinator.flush("call_raw")
+    expect(updates).toHaveLength(1)
     const pending = coordinator.part("call_raw")
     if (!pending || pending.state.status !== "pending") throw new Error("raw tool call was not pending")
     await coordinator.running({

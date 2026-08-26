@@ -285,7 +285,16 @@ export namespace ModalAdapter {
             ? `Building image ${spec.image} with ${spec.packages.length} Python package${spec.packages.length === 1 ? "" : "s"}`
             : `Resolving image ${spec.image}`,
         )
-        const ready = await image.build(app)
+        const ready = await image.build(app).catch((error) => {
+          const detail = error instanceof Error ? error.message.trim() : String(error).trim()
+          const guidance = commands.length
+            ? "The selected image must provide python and pip for the requested packages; omit image to use the configured Python image."
+            : "Verify that the image name and registry are publicly accessible."
+          throw new Error(
+            `Modal could not build image ${spec.image}. ${guidance}${detail ? ` Provider detail: ${detail}` : ""}`,
+            { cause: error },
+          )
+        })
         const volume = await modal.volumes.fromName(spec.volume, {
           environment: context.environment,
           createIfMissing: true,

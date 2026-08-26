@@ -338,7 +338,17 @@ export namespace SessionProcessor {
           },
         }
         toolcalls[callID] = updated
-        await input.updatePart(updated)
+        // Keep streamed arguments in memory until the provider closes or
+        // materializes the call. Persisting the full, ever-growing `raw` value
+        // for every tiny delta creates quadratic disk/event traffic (a 95 KB
+        // malformed call previously generated ~75 MB of duplicate events and
+        // starved the local server). Pending input is not actionable in the UI;
+        // one durable write at the boundary preserves the complete audit bytes.
+      },
+      async flush(callID: string) {
+        const match = toolcalls[callID]
+        if (!match || match.state.status !== "pending") return
+        await input.updatePart(match)
       },
       async running(part: MessageV2.ToolPart) {
         toolcalls[part.callID] = part
@@ -657,6 +667,7 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-input-end":
+                  await toolOutcomes.flush(value.id)
                   break
 
                 case "tool-call": {

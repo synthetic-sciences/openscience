@@ -86,7 +86,7 @@ function toolTitle(part: ToolPart) {
 }
 
 function grouped(part: Part): part is ToolPart {
-  if (part.type !== "tool" || part.state.status !== "completed") return false
+  if (part.type !== "tool" || !["completed", "error"].includes(part.state.status)) return false
   if (part.tool === "task" || part.tool === "todowrite" || part.tool === "todoread" || part.tool === "planwrite") {
     return false
   }
@@ -110,12 +110,14 @@ export function groupResearchTrace(entries: ResearchTraceEntry[]): ResearchTrace
       output.push({ kind: "part", entry: tools[0] })
     } else {
       const first = tools[0].part as ToolPart
+      const failed = tools.filter((entry) => (entry.part as ToolPart).state.status === "error").length
+      const titles = compact(tools.map((entry) => toolTitle(entry.part as ToolPart)))
       output.push({
         kind: "group",
         id: `trace-${first.id}-${family}`,
         family,
         label: traceLabel(family, tools.length),
-        detail: compact(tools.map((entry) => toolTitle(entry.part as ToolPart))),
+        detail: [failed > 0 ? `${failed} failed` : undefined, titles].filter(Boolean).join(" · "),
         entries: tools,
       })
     }

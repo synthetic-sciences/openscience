@@ -20,11 +20,18 @@ import { constants as FS } from "fs"
 import path from "path"
 import { TaskAttempt, TaskCapacity } from "./task-attempt"
 import { Storage } from "@/storage/storage"
+import { ToolSelection } from "@/session/tool-selection"
 
 export const DELEGATION_PROFILES = ["explore", "execute"] as const
 export const DELEGATION_SPECIALISTS = ["biology", "physics", "ml"] as const
 export function isComputeDelegationProfile(name: string) {
   return name === "execute"
+}
+
+export function taskContinuationID(value: string | undefined, parentSessionID: string) {
+  if (!value || value === parentSessionID) return undefined
+  if (/^ses_(?:new|none|placeholder|current|parent)$/i.test(value)) return undefined
+  return value
 }
 export const NORMAL_CHILD_AGENTS = MessageV2.ResearchEffortLimits.normal
 export const MAX_CHILD_AGENTS = MessageV2.ResearchEffortLimits.ultra
@@ -221,11 +228,12 @@ export function classifyTaskOutcome(input: {
   timedOut: boolean
   finish?: string
   error?: unknown
+  hasText?: boolean
   toolCalls?: number
   failedToolCalls?: number
 }): TaskOutcome {
   if (input.timedOut) return { outcome: "timed_out", stopReason: "wall_clock" }
-  if (input.error) return { outcome: "error", stopReason: "provider_error" }
+  if (input.error) return { outcome: input.hasText ? "partial" : "error", stopReason: "provider_error" }
   if (input.finish === "max-steps") return { outcome: "partial", stopReason: "max_steps" }
   if (input.toolCalls && input.failedToolCalls === input.toolCalls) {
     return { outcome: "partial", stopReason: "tool_failures" }
@@ -337,10 +345,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // Some models eagerly fill every optional schema field with the current
       // session or a `ses_new` placeholder. Those values unambiguously mean a
       // new child; only a different, real direct-child id is a continuation.
-      const continuationID =
-        params.session_id === ctx.sessionID || /^ses_(?:new|none)$/i.test(params.session_id ?? "")
-          ? undefined
-          : params.session_id
+      const continuationID = taskContinuationID(params.session_id, ctx.sessionID)
       const continuation = continuationID
         ? assertTaskContinuation({
             session: await Session.get(continuationID),
@@ -363,12 +368,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         })
       }
 
-      const thinCaller = ctx.agent === "researchagent-test"
+      const thinCaller = ToolSelection.minimalResearchAgent(ctx.agent)
       const profile = await Agent.get(params.subagent_type)
       if (!profile) throw new Error(`Internal delegation profile ${params.subagent_type} is unavailable`)
-      // The experimental thin parent must delegate to the same thin runtime.
-      // Reusing the legacy specialist here silently restores the large system
-      // prompt and eager tool catalog that this profile is intended to test.
+      // Minimal Research parents delegate through the same minimal runtime.
+      // Specialist intent remains explicit in child guidance without silently
+      // restoring the legacy system prompt and eager tool catalog.
       // Specialist intent remains explicit in childGuidance and skill routing.
       const agent = thinCaller
         ? await Agent.get("researchagent-test")
@@ -646,6 +651,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           timedOut: deadline.timedOut,
           finish: child?.finish,
           error: deadline.error ?? child?.error,
+          hasText: text.trim().length > 0,
           toolCalls: summary.length,
           failedToolCalls,
         })
@@ -671,7 +677,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               : taskOutcome.stopReason === "tool_failures"
                 ? ["[Every child tool call failed; treat the following as a partial, blocked result.]"]
                 : taskOutcome.stopReason === "provider_error"
-                  ? ["[Child failed before completion; any partial result follows.]"]
+                  ? ["[Child stopped on a provider error; its usable partial result follows.]"]
                   : []),
           handoff.text,
         ]

@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Added
 
+- Added a pinned, inspectable protein-binder workflow skill that selects a
+  supported BioNeMo path from the credentials and compute capabilities actually
+  available, without pretending unavailable NVIDIA services are configured.
 - Added a visible local-model settings surface and real Ollama context-window
   controls that create tuned `num_ctx` aliases through Ollama's native API.
 - Added a conversation-first Research harness with bounded Normal and Ultra
@@ -18,6 +21,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Made the user-facing Research agent use the proven minimal collaborative
+  prompt, lazy skills and MCP capabilities, and the same thin runtime for
+  delegated specialists. Removed the mandatory research-contract and eager
+  capability prose from ordinary work while preserving explicit tools,
+  permissions, evidence, compute, and durable Results.
 - Stopped bundling or offering Atlas through the OpenScience npm distribution
   and `synsci` launcher, including both graph-initialization slash-command
   skills, while preserving automatic native-binary installation.
@@ -41,6 +49,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Prevented streamed tool arguments from generating quadratic event and disk
+  traffic, restored exact project-root authority to sandboxed commands, and
+  made loaded-skill references readable only within their authorized directory.
+- Made delegated work recover provider placeholder session IDs, retain useful
+  partial handoffs after provider rejection, and display only one concise live
+  thought while preserving the complete completed trajectory.
+- Added coherent compute waiting and Modal image diagnostics, preserved active
+  remote jobs during evaluator cleanup, and stopped trusted encrypted
+  credential updates from aborting unrelated live sessions.
 - Made every built-in research tool advertise an object-rooted JSON Schema so
   strict OpenAI-compatible providers such as DeepSeek and Kimi accept tool-enabled requests.
 - Selected the x86-64 baseline binary automatically on Linux and macOS hosts

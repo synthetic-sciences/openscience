@@ -859,8 +859,9 @@ export namespace SessionPrompt {
       }
       if (lastAssistant?.finish !== "length") outputContinuations = 0
       if (lastAssistant?.finish && (!continuing || bareMode) && owned) {
-        const contract =
-          lastUser.agent === ToolSelection.THIN_RESEARCH_AGENT ? undefined : await SessionResearch.read(sessionID)
+        const contract = ToolSelection.minimalResearchAgent(lastUser.agent)
+          ? undefined
+          : await SessionResearch.read(sessionID)
         if (contract) {
           const trace = await import("./trace").then((mod) => mod.SessionTrace.build(sessionID))
           const pending = trace.research.gates.filter((gate) => gate.id !== "runtime" && gate.status !== "passed")
@@ -1345,13 +1346,13 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
       const narrow = route.direct || route.inspection
-      const thin = agent.name === ToolSelection.THIN_RESEARCH_AGENT
-      const contract = narrow || thin ? undefined : await SessionResearch.prompt(sessionID, Instance.project.id)
+      const minimal = ToolSelection.minimalResearchAgent(agent.name)
+      const contract = narrow || minimal ? undefined : await SessionResearch.prompt(sessionID, Instance.project.id)
       const system = [
         ...(await SystemPrompt.environment(model, sessionID)),
-        ...(narrow || thin ? [] : await SystemPrompt.compute()),
+        ...(narrow || minimal ? [] : await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
-        ...(SKILL_ROUTING_AGENTS.has(agent.name) && !narrow
+        ...(SKILL_ROUTING_AGENTS.has(agent.name) && !narrow && !minimal
           ? [await SystemPrompt.availableSkills(agent.permission, route.text)]
           : []),
         ...(contract ? [contract] : []),
@@ -1375,8 +1376,8 @@ export namespace SessionPrompt {
         ...(agent.prompt ? [agent.prompt] : codex ? [] : SystemPrompt.provider(model, route.direct, route.inspection)),
         ...system,
         ...(lastUser.system ? [lastUser.system] : []),
-        ...(thin ? [] : await SystemPrompt.planModeInstructions()),
-        ...(codex && !thin ? [SystemPrompt.instructions(route.direct, route.inspection)] : []),
+        ...(minimal ? [] : await SystemPrompt.planModeInstructions()),
+        ...(codex && !minimal ? [SystemPrompt.instructions(route.direct, route.inspection)] : []),
       ]
       const tier = ProviderTransform.tier(model, lastUser.tier)
       const window = tier.model ? await Provider.getModel(model.providerID, tier.model) : model
@@ -1691,15 +1692,7 @@ export namespace SessionPrompt {
         }),
       input.request,
     )
-    const selected =
-      input.agent.name === ToolSelection.THIN_RESEARCH_AGENT
-        ? ToolSelection.thinLimit(
-            native.map((item) => item.id),
-            input.tools,
-          )
-        : undefined
     for (const item of native) {
-      if (selected && !selected.has(item.id)) continue
       tools[item.id] = tool({
         id: item.id as any,
         description: ToolSelection.description(item.id, item.description, input.inspection),
@@ -1743,19 +1736,16 @@ export namespace SessionPrompt {
     }
 
     const nativeIDs = new Set(native.map((item) => item.id))
-    const explicitMcp =
-      input.agent.name === ToolSelection.THIN_RESEARCH_AGENT
-        ? new Set(
-            Object.entries(input.tools ?? {}).flatMap(([key, enabled]) =>
-              enabled && key !== "*" && !nativeIDs.has(key) ? [key] : [],
-            ),
-          )
-        : undefined
+    const explicitMcp = ToolSelection.minimalResearchAgent(input.agent.name)
+      ? new Set(
+          Object.entries(input.tools ?? {}).flatMap(([key, enabled]) =>
+            enabled && key !== "*" && !nativeIDs.has(key) ? [key] : [],
+          ),
+        )
+      : undefined
     const mcp = explicitMcp?.size === 0 ? {} : await MCP.tools()
     for (const [key, item] of Object.entries(mcp)) {
       if (explicitMcp && !explicitMcp.has(key)) continue
-      if (explicitMcp && Object.keys(tools).filter((id) => id !== "invalid").length >= ToolSelection.THIN_TOOL_TARGET)
-        continue
       if (
         !ToolSelection.relevant(key, {
           agent: input.agent.name,
@@ -2484,18 +2474,13 @@ export namespace SessionPrompt {
     const userMessage = route.user
     if (!userMessage) return { messages, system: legacy }
     const effort = userMessage.info.role === "user" ? userMessage.info.effort : undefined
+    const delegationSettings = userMessage.info.role === "user" ? userMessage.info.delegationSettings : undefined
+    const delegationEnabled = userMessage.info.role === "user" ? userMessage.info.delegation : undefined
     const research = route.direct
       ? PROMPT_DIRECT
       : route.inspection
         ? PROMPT_INSPECTION
-        : [
-            PROMPT_RESEARCH,
-            researchEffortReminder(
-              effort,
-              userMessage.info.role === "user" ? userMessage.info.delegationSettings : undefined,
-              userMessage.info.role === "user" ? userMessage.info.delegation : undefined,
-            ),
-          ].join("\n\n")
+        : [PROMPT_RESEARCH, researchEffortReminder(effort, delegationSettings, delegationEnabled)].join("\n\n")
     const prompts = {
       plan: PROMPT_PLAN,
       write: PROMPT_WRITE,
@@ -2504,7 +2489,11 @@ export namespace SessionPrompt {
       biology: PROMPT_BIOLOGY,
       physics: PROMPT_PHYSICS,
     } as const
-    const selected = prompts[input.agent.name as keyof typeof prompts]
+    const selected = ToolSelection.minimalResearchAgent(input.agent.name)
+      ? route.direct || route.inspection
+        ? undefined
+        : researchEffortReminder(effort, delegationSettings, delegationEnabled)
+      : prompts[input.agent.name as keyof typeof prompts]
     const system = [...legacy, ...(selected ? [systemReminder(selected)] : [])]
 
     // Original logic when experimental plan mode is disabled

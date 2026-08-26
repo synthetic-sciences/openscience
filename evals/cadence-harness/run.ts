@@ -165,6 +165,20 @@ export function campaignOutcome(input: {
   return { status: "completed" }
 }
 
+export function unsettledComputeJobs(jobs: Json[]) {
+  const activeExecution = new Set(["planned", "awaiting_approval", "queued", "starting", "running"])
+  return jobs.filter((job) => {
+    const lifecycle = job.lifecycle as Json | undefined
+    if (!lifecycle) return ["queued", "running", "interrupted"].includes(String(job.status ?? ""))
+    return (
+      activeExecution.has(String(lifecycle.execution ?? "")) ||
+      lifecycle.delivery === "pending" ||
+      ["starting", "active", "unknown"].includes(String(lifecycle.resource ?? "")) ||
+      lifecycle.recoverable === true
+    )
+  })
+}
+
 function json(value: unknown) {
   return JSON.stringify(value, null, 2) + "\n"
 }
@@ -253,6 +267,46 @@ async function unwrap<T>(value: Promise<{ data?: T; error?: unknown }> | { data?
   if (result.data === undefined)
     throw new Error(`OpenScience API returned no data: ${scrub(JSON.stringify(result.error))}`)
   return result.data
+}
+
+async function cleanupCampaignProject(input: {
+  client: ReturnType<typeof createOpenScienceClient>
+  project: Json
+  failures: Json[]
+  warnings: Json[]
+  capture: Json
+}) {
+  let jobs: Json[]
+  try {
+    jobs = await unwrap<Json[]>(input.client.settings.compute.jobs.list())
+  } catch (error) {
+    input.warnings.push({
+      kind: "cleanup",
+      message: `Preserved project trust because compute inventory could not be verified: ${String(error)}`,
+    })
+    input.capture.cleanupDeferred = { reason: "compute_inventory_unavailable" }
+    return
+  }
+  const unsettled = unsettledComputeJobs(jobs)
+  if (unsettled.length) {
+    const ids = unsettled.map((job) => String(job.id)).filter(Boolean)
+    input.warnings.push({
+      kind: "cleanup",
+      message: `Preserved project trust because compute jobs remain recoverable or active: ${ids.join(", ")}`,
+    })
+    input.capture.cleanupDeferred = { reason: "active_compute", jobs: ids }
+    return
+  }
+  const trustRevoked = await unwrap(
+    input.client.project.trust.update({ projectID: input.project.id, body: { trusted: false } }),
+  ).catch((error) => {
+    input.failures.push({ kind: "cleanup", message: `Could not revoke project trust: ${String(error)}` })
+    return undefined
+  })
+  await unwrap(input.client.instance.dispose()).catch((error) => {
+    input.failures.push({ kind: "cleanup", message: `Could not dispose project instance: ${String(error)}` })
+  })
+  input.capture.cleanupTrust = trustRevoked
 }
 
 export function assertServerIdentity(
@@ -624,6 +678,7 @@ export async function collectRuntimeRun(input: {
   afterSequence: number
   signal: AbortSignal
   pollIntervalMs?: number
+  streamStallMs?: number
   onEvent: (event: Json) => void | Promise<void>
 }) {
   const seen = new Set<number>()
@@ -644,17 +699,30 @@ export async function collectRuntimeRun(input: {
     if (["runtime.completed", "runtime.failed", "runtime.cancelled"].includes(event.type)) terminal = event
   }
 
+  const streamAbort = new AbortController()
+  const streamSignal = AbortSignal.any([input.signal, streamAbort.signal])
+  const stallMs = Math.max(1, input.streamStallMs ?? Math.max(5_000, (input.pollIntervalMs ?? 1_000) * 5))
+  let stallTimer: ReturnType<typeof setTimeout> | undefined
+  const resetStall = () => {
+    if (stallTimer) clearTimeout(stallTimer)
+    stallTimer = setTimeout(() => streamAbort.abort(), stallMs)
+  }
+  resetStall()
   try {
     for await (const event of input.runtime.events({
       sessionID: input.sessionID,
       afterSequence: input.afterSequence,
-      signal: input.signal,
+      signal: streamSignal,
     })) {
+      resetStall()
       await accept(event)
       if (terminal) return { terminal, streamError, recovered }
     }
   } catch (error) {
-    if (!input.signal.aborted) streamError = scrub(error instanceof Error ? error.message : String(error))
+    if (!input.signal.aborted && !streamAbort.signal.aborted)
+      streamError = scrub(error instanceof Error ? error.message : String(error))
+  } finally {
+    if (stallTimer) clearTimeout(stallTimer)
   }
 
   // A public runtime stream can lose its cursor after enough events or a
@@ -850,12 +918,20 @@ async function runOne(input: {
               ...(currentConfig.permission ?? {}),
               question: "deny",
               external_directory: "deny",
-              websearch: "ask",
-              webfetch: "ask",
-              network: "ask",
+              // Exercise the same trusted local-work posture as Full Access.
+              // Paid and external execution boundaries remain separately
+              // reviewed below; ordinary file, shell, and public-web work
+              // should not flood the trajectory with approval cards.
+              bash: "allow",
+              edit: "allow",
+              codesearch: "allow",
+              websearch: "allow",
+              webfetch: "allow",
+              network: "allow",
               mcp: "ask",
               environment_mutation: "ask",
               compute_job: "ask",
+              generate_image: "ask",
               // The thin profile does not expose the raw Modal tool. Keep the
               // permission request alive so the pump can approve only a
               // digest-bound compute_job plan whose provider is Modal.
@@ -1085,20 +1161,11 @@ async function runOne(input: {
       limits: input.limits,
       limitUsage: guard?.usage(),
     }
-    const trustRevoked = await unwrap(
-      client.project.trust.update({ projectID: project.id, body: { trusted: false } }),
-    ).catch((error) => {
-      failures.push({ kind: "cleanup", message: `Could not revoke project trust: ${String(error)}` })
-      return undefined
-    })
-    await unwrap(client.instance.dispose()).catch((error) => {
-      failures.push({ kind: "cleanup", message: `Could not dispose project instance: ${String(error)}` })
-    })
+    await cleanupCampaignProject({ client, project, failures, warnings, capture: result.capture })
     mergedFailures = mergeFailures(failures, rootTrace.failures ?? [])
     result.failures = mergedFailures
     result.failureCount = Math.max(result.failures.length, Number(rootTrace.summary?.failureCount ?? 0))
     result.metrics.failures = result.failureCount
-    result.capture.cleanupTrust = trustRevoked
     await writeAtomic(path.join(runRoot, "run.json"), safeValue(result))
     console.log(`${input.prompt.id}: ${result.status} in ${Math.round(result.durationMs / 1000)}s · ${project.id}`)
     return result
@@ -1106,7 +1173,7 @@ async function runOne(input: {
     permissionAbort.abort()
     const completedAt = new Date().toISOString()
     const message = error instanceof Error ? (error.stack ?? error.message) : String(error)
-    const result = {
+    const result: Json = {
       ...initial,
       status: "failed",
       completedAt,
@@ -1118,14 +1185,16 @@ async function runOne(input: {
       failures: [{ kind: "runner", message: scrub(message) }],
     }
     if (client && project) {
-      await unwrap(client.project.trust.update({ projectID: project.id, body: { trusted: false } })).catch((error) => {
-        result.failures.push({ kind: "cleanup", message: `Could not revoke project trust: ${String(error)}` })
-        result.failureCount += 1
+      result.capture = {}
+      result.warnings = []
+      await cleanupCampaignProject({
+        client,
+        project,
+        failures: result.failures,
+        warnings: result.warnings,
+        capture: result.capture,
       })
-      await unwrap(client.instance.dispose()).catch((error) => {
-        result.failures.push({ kind: "cleanup", message: `Could not dispose project instance: ${String(error)}` })
-        result.failureCount += 1
-      })
+      result.failureCount = result.failures.length
     }
     await writeAtomic(path.join(runRoot, "run.json"), safeValue(result))
     console.error(`${input.prompt.id}: failed: ${message}`)

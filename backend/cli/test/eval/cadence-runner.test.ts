@@ -20,6 +20,7 @@ import {
   mergeFailures,
   trajectory,
   updateCampaignProgress,
+  unsettledComputeJobs,
 } from "../../../../evals/cadence-harness/run"
 import { aggregateCapturedSessionTree } from "../../../../evals/cadence-harness/tree-metrics"
 import { devPrompt } from "../../../../evals/cadence-harness/dev-prompts"
@@ -67,6 +68,35 @@ describe("cadence prompt segregation", () => {
 })
 
 describe("cadence runner contracts", () => {
+  test("preserves trust while remote compute is active, recoverable, or awaiting delivery", () => {
+    const jobs = [
+      { id: "queued", status: "queued" },
+      { id: "legacy-interrupted", status: "interrupted" },
+      {
+        id: "delivering",
+        status: "succeeded",
+        lifecycle: { execution: "succeeded", delivery: "pending", resource: "active", recoverable: false },
+      },
+      {
+        id: "recoverable",
+        status: "failed",
+        lifecycle: { execution: "failed", delivery: "failed", resource: "closed", recoverable: true },
+      },
+      {
+        id: "done",
+        status: "succeeded",
+        lifecycle: { execution: "succeeded", delivery: "complete", resource: "closed", recoverable: false },
+      },
+    ]
+
+    expect(unsettledComputeJobs(jobs).map((job) => job.id)).toEqual([
+      "queued",
+      "legacy-interrupted",
+      "delivering",
+      "recoverable",
+    ])
+  })
+
   test("aggregates explicit root and child metrics without hiding failure-count ambiguity", () => {
     const tree = aggregateCapturedSessionTree(
       [
@@ -531,6 +561,32 @@ describe("cadence runner contracts", () => {
       onEvent() {},
     })
     expect(result.terminal).toBeUndefined()
+  })
+
+  test("recovers a durable terminal when a disposed live stream stays open", async () => {
+    const runtime = {
+      async *events(input: { signal?: AbortSignal }) {
+        yield runtimeEvent(1, "runtime.accepted")
+        await new Promise<void>((resolve) => input.signal?.addEventListener("abort", () => resolve(), { once: true }))
+      },
+      async replay() {
+        return {
+          events: [runtimeEvent(1, "runtime.accepted"), runtimeEvent(2, "runtime.failed", { message: "aborted" })],
+          latestSequence: 2,
+        }
+      },
+    }
+    const result = await collectRuntimeRun({
+      runtime,
+      sessionID: "ses_test",
+      runID: "runtime_test",
+      afterSequence: 0,
+      signal: new AbortController().signal,
+      pollIntervalMs: 0,
+      streamStallMs: 5,
+      onEvent() {},
+    })
+    expect(result.terminal).toMatchObject({ type: "runtime.failed", properties: { message: "aborted" } })
   })
 
   test("treats a source-provenanced cancellation as a terminal runtime event", async () => {

@@ -87,6 +87,23 @@ describe("research trace presentation", () => {
     })
   })
 
+  test("compacts repeated failed source attempts without hiding their details", () => {
+    const trace = groupResearchTrace([
+      entry("fetch-1", "webfetch", "Download returned HTML", "error"),
+      entry("fetch-2", "webfetch", "Download returned HTML", "error"),
+      entry("fetch-3", "webfetch", "Endpoint returned 404", "error"),
+    ])
+
+    expect(trace).toHaveLength(1)
+    expect(trace[0]).toMatchObject({
+      kind: "group",
+      family: "sources",
+      label: "Checked 3 external sources",
+      detail: "3 failed · Download returned HTML · Endpoint returned 404",
+    })
+    expect(trace[0]?.kind === "group" && trace[0].entries).toHaveLength(3)
+  })
+
   test("uses provider status-only reasoning in the live header without fragmenting tool groups", () => {
     const trace = groupResearchTrace([
       narrative("status-1", "reasoning", "Planning source retrieval", "msg-1"),

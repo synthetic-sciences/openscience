@@ -118,7 +118,7 @@ export namespace LLM {
         // any custom prompt from last user message
         ...(input.user.system ? [input.user.system] : []),
         // plan mode instructions (if enabled)
-        ...(input.agent.name === ToolSelection.THIN_RESEARCH_AGENT ? [] : await SystemPrompt.planModeInstructions()),
+        ...(ToolSelection.minimalResearchAgent(input.agent.name) ? [] : await SystemPrompt.planModeInstructions()),
       ]
         .filter((x) => x)
         .join("\n"),
@@ -159,7 +159,7 @@ export namespace LLM {
     )
     if (isCodex) {
       options.instructions =
-        input.agent.name === ToolSelection.THIN_RESEARCH_AGENT && input.agent.prompt
+        ToolSelection.minimalResearchAgent(input.agent.name) && input.agent.prompt
           ? input.agent.prompt
           : SystemPrompt.instructions(input.direct, input.inspection)
     }

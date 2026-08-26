@@ -242,6 +242,17 @@ async function updateStore(fn: (store: Store) => void | Promise<void>): Promise<
   return result.value
 }
 
+/** Trusted adapters read their encrypted fields directly from the shared store
+ * at each paid/provider boundary. They never inherit those values through
+ * process.env or a child process, so publishing a process-credential revision
+ * would only tear down unrelated active sessions. The shared mutation lease is
+ * still required to serialize writers. Environment-backed credentials retain
+ * the full cross-process refresh and revocation contract. */
+async function mutateCredentialStore<T>(id: string, reason: string, action: () => T | Promise<T>): Promise<T> {
+  if (specFor(id)?.trusted) return CredentialLifecycle.serialized(action)
+  return CredentialLifecycle.mutate(reason, action)
+}
+
 function specFor(id: string): ServiceSpec | undefined {
   return CATALOG.find((s) => s.id === id)
 }
@@ -672,7 +683,7 @@ export const CredentialsRoutes = lazy(() =>
         if (id === "gcp" && gcp && !validField(id, "service_account_json", gcp)) {
           return c.json({ error: "Google Cloud service account credentials must be a JSON object" }, 400)
         }
-        const store = await CredentialLifecycle.mutate(`settings-credential.set:${id}`, () =>
+        const store = await mutateCredentialStore(id, `settings-credential.set:${id}`, () =>
           updateStore(async (current) => {
             const entry = current[id] ?? { fields: {}, updated_at: new Date().toISOString() }
             const fields = { ...entry.fields }
@@ -728,7 +739,7 @@ export const CredentialsRoutes = lazy(() =>
             return c.json({ error: `${spec.label} could not be removed from your account` }, 502)
           }
         }
-        const store = await CredentialLifecycle.mutate(`settings-credential.remove:${id}`, () =>
+        const store = await mutateCredentialStore(id, `settings-credential.remove:${id}`, () =>
           updateStore((current) => {
             delete current[id]
           }),

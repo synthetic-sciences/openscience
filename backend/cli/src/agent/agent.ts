@@ -157,11 +157,13 @@ export namespace Agent {
         description: "Primary research agent for focused questions, analysis, synthesis, and durable outputs.",
         options: {},
         color: "#d48765",
+        prompt: PROMPT_RESEARCH_AGENT_TEST,
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
             question: "allow",
             plan_enter: "allow",
+            research_contract: "deny",
           }),
           user,
         ),
