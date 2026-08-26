@@ -133,6 +133,10 @@ export namespace LockCoordination {
     return {
       async [Symbol.asyncDispose]() {
         await fs.unlink(target).catch(() => undefined)
+        // The owner may have attempted cleanup while this marker was still
+        // present. Let the final marker remove the now-empty scaffolding so a
+        // completed multiprocess operation cannot leave `*.lock.coord` behind.
+        await cleanup(filepath).catch(() => undefined)
       },
     }
   }

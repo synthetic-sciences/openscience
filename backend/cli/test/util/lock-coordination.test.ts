@@ -23,3 +23,16 @@ test("marker creation survives concurrent empty-sidecar cleanup", async () => {
   await LockCoordination.cleanup(lock)
   await expect(fs.stat(`${lock}.coord`)).rejects.toMatchObject({ code: "ENOENT" })
 })
+
+test("the final marker removes empty coordination scaffolding", async () => {
+  await using tmp = await tmpdir()
+  const lock = path.join(tmp.path, "shared.json.lock")
+  const first = await LockCoordination.intent(lock, 30_000)
+  const second = await LockCoordination.intent(lock, 30_000)
+
+  await first[Symbol.asyncDispose]()
+  expect(await fs.readdir(LockCoordination.directory(lock, "intent"))).toHaveLength(1)
+  await second[Symbol.asyncDispose]()
+
+  await expect(fs.stat(`${lock}.coord`)).rejects.toMatchObject({ code: "ENOENT" })
+})
