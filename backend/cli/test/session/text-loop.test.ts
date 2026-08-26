@@ -86,10 +86,12 @@ describe("MessageV2.isContinuingTurn", () => {
 })
 
 describe("MessageV2.outputRecovery", () => {
-  test("continues a truncated active task twice, then fails loudly", () => {
+  test("continues a truncated active task without an artificial attempt ceiling", () => {
     expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 0 })).toBe("continue")
     expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 1 })).toBe("continue")
-    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 2 })).toBe("fail")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 200 })).toBe(
+      "continue",
+    )
   })
 
   test("does not resume completed, answered, or bare turns", () => {

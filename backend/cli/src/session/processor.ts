@@ -757,22 +757,7 @@ export namespace SessionProcessor {
                 }
 
                 case "tool-error": {
-                  const part = toolOutcomes.part(value.toolCallId)
                   await result.toolError(value.toolCallId, value.input, value.error)
-                  if (!part) break
-                  const history = await Array.fromAsync(MessageV2.stream(input.sessionID))
-                  const parts = turnParts(history, input.assistantMessage.parentID)
-                  if (!isToolErrorLoop(parts, part.tool)) break
-                  blocked = true
-                  await Session.updatePart({
-                    id: Identifier.ascending("part"),
-                    messageID: input.assistantMessage.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: `OpenScience stopped after the same ${part.tool} failure occurred twice. No further retry was attempted; continue with another available step or correct the tool input.`,
-                    time: { start: Date.now(), end: Date.now() },
-                  } satisfies MessageV2.TextPart)
                   break
                 }
                 case "error":

@@ -171,6 +171,13 @@ describe("file viewer reads", () => {
     )
     expect(fileErrorMessage({ error: { message: "File not found" } })).toBe("File not found")
     expect(fileErrorMessage({ code: 403 })).toBe('{"code":403}')
+    expect(
+      fileErrorMessage({
+        data: { sessionID: "ses_1", path: "/private/tmp/scan_external.py", access: "read" },
+      }),
+    ).toBe(
+      "This file is outside the active workspace. Move it into Session scratch or Project files before opening it.",
+    )
 
     const result = await readFile(async () => {
       throw { data: { message: "Project file access denied" } }

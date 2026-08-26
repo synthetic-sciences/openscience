@@ -872,12 +872,6 @@ export namespace SessionPrompt {
         attempts: outputContinuations,
       })
       if (recovery !== "none") {
-        if (recovery === "fail") {
-          await failTooLarge(
-            "The model repeatedly reached its maximum output before completing the task. Continue in a new turn with smaller file edits or a narrower request.",
-          )
-          break
-        }
         outputContinuations++
         await enqueue({
           user: lastUser,

@@ -53,6 +53,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Removed the remaining child-agent wall-clock, dispatch, step, handoff, and
+  output-recovery ceilings; delegated agents may delegate further while shared
+  concurrency still protects machine capacity.
+- Made chat file references clickable only after resolution inside the active
+  workspace, so external temporary paths stay plain text and denied reads show
+  a clear workspace-boundary explanation instead of raw request JSON.
 - Kept live reasoning and tool activity mounted in chronological order, removed
   the streaming-only truncation and regrouping that made rows disappear until
   refresh, kept assistant text in that same literal timeline, and made semantic

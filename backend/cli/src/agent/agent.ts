@@ -382,7 +382,6 @@ export namespace Agent {
       },
       critique: {
         name: "critique",
-        steps: 60,
         description:
           "Scientific critique specialist. Finds blocking errors — data leakage, wrong statistics, unsupported claims — in research artifacts before expensive or irreversible actions. Read-only.",
         permission: PermissionNext.merge(
@@ -405,7 +404,6 @@ export namespace Agent {
       },
       "physics-critique": {
         name: "physics-critique",
-        steps: 60,
         description:
           "Physics critique specialist — validates computational physics results (PDE solutions, PINN outputs, fitted parameters) against rigorous physical and numerical criteria. Blind to generator reasoning (Aletheia pattern). Read-only.",
         permission: PermissionNext.merge(

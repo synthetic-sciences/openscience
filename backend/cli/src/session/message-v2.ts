@@ -573,15 +573,14 @@ export namespace MessageV2 {
     return isContinuing(finish) && (finish !== "unknown" || hasToolCall)
   }
 
-  export const MAX_OUTPUT_CONTINUATIONS = 2
   export function outputRecovery(input: {
     finish?: string
     unanswered: boolean
     bare: boolean
     attempts: number
-  }): "none" | "continue" | "fail" {
+  }): "none" | "continue" {
     if (input.finish !== "length" || !input.unanswered || input.bare) return "none"
-    return input.attempts >= MAX_OUTPUT_CONTINUATIONS ? "fail" : "continue"
+    return "continue"
   }
 
   function replayableOpenRouterMetadata(metadata: Record<string, unknown> | undefined) {

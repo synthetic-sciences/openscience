@@ -31,7 +31,7 @@ import { ProjectWorkspaceFrame } from "@/atlas/ProjectWorkspaceFrame"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
 import { decode64, setCurrentDirectory } from "@/utils/base64"
-import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
+import { assetUrl, workspaceAssetPath } from "@/utils/markdown-assets"
 import { rawFileQuery } from "@/utils/project-file"
 import { projectPrefs } from "@/atlas/store/projectPrefs"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
@@ -274,6 +274,7 @@ export default function Layout(props: ParentProps) {
                 // the SPA origin. Absolute http(s)/data: URLs pass through.
                 const image = (src: string) =>
                   assetUrl(src, {
+                    root: directory(),
                     url: (path) =>
                       sdk.request.url(
                         "/file/raw",
@@ -286,7 +287,7 @@ export default function Layout(props: ParentProps) {
                         }),
                       ),
                   })
-                const file = (href: string) => localAssetPath(href)
+                const file = (href: string) => workspaceAssetPath(href, directory())
 
                 return (
                   <DataProvider

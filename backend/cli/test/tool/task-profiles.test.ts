@@ -8,7 +8,6 @@ import {
   summarizeTurn,
   taskHandoff,
   taskText,
-  TASK_HANDOFF_CHARS,
   TaskTool,
   taskContinuationID,
 } from "../../src/tool/task"
@@ -62,12 +61,12 @@ test("Task advertises generic phases and accepts an explicit domain specialist l
   })
 })
 
-test("child sessions deny recursive delegation even when a profile allows Task", () => {
+test("child sessions preserve the active Task permission for nested independent work", () => {
   const configuredProfile = [{ permission: "task", pattern: "*", action: "allow" as const }]
   const child = childPermissionRules()
 
-  expect(PermissionNext.evaluate("task", "explore", configuredProfile, child).action).toBe("deny")
-  expect(PermissionNext.disabled(["task"], child)).toContain("task")
+  expect(PermissionNext.evaluate("task", "explore", configuredProfile, child).action).toBe("allow")
+  expect(PermissionNext.disabled(["task"], child)).not.toContain("task")
 })
 
 test("Task treats provider placeholder session IDs as a new child", () => {
@@ -243,17 +242,16 @@ test("Task handoffs join every nonempty child text part in chronological order",
   )
 })
 
-test("Task handoffs stay bounded while preserving findings and the final conclusion", () => {
+test("Task handoffs preserve the complete child result by default", () => {
   const opening = "## Findings\n- exact result: 0.913 at /tmp/result.json\n"
-  const middle = "x".repeat(TASK_HANDOFF_CHARS + 2_000)
+  const middle = "x".repeat(14_000)
   const closing = "\n## Next action\n- apply the verified patch"
   const result = taskHandoff(opening + middle + closing + '\n<task_metadata>{"private":true}</task_metadata>')
 
-  expect(result.truncated).toBe(true)
-  expect(result.text.length).toBeLessThanOrEqual(TASK_HANDOFF_CHARS)
+  expect(result.truncated).toBe(false)
   expect(result.text).toStartWith("## Findings")
   expect(result.text).toEndWith("- apply the verified patch")
-  expect(result.text).toContain("full result remains in the child session")
+  expect(result.text).toContain(middle)
   expect(result.text).not.toContain("private")
 })
 
@@ -268,6 +266,8 @@ test("Task runtime has no per-turn dispatch quota or default deadline", async ()
   expect(source).not.toContain("taskDispatchBudget")
   expect(source).not.toContain("TASK_WALL_CLOCK_MS")
   expect(source).not.toContain("withTaskDeadline")
+  expect(source).not.toContain("delegation: false")
+  expect(source).toContain("task: true")
   expect(source).toContain('TaskCapacity.acquire("child", MAX_CHILD_AGENTS')
 })
 

@@ -41,7 +41,7 @@ test("every provider receives one compact product operating contract", () => {
   expect(instructions.length).toBeLessThan(4_000)
   expect(instructions).toContain("Keep simple work simple")
   expect(instructions).toContain("Synthetic Sciences graph state is optional")
-  expect(instructions).toContain("default to zero children")
+  expect(instructions).toContain("Default to no children")
   expect(instructions).toContain("Explore or Execute")
   expect(instructions).not.toContain("Explore, Execute, or Review")
   expect(instructions).toContain("large or binary scientific data")
@@ -135,16 +135,25 @@ test("ordinary literature reviews stay conversational instead of becoming report
   expect(specialist).not.toContain("Before ANY literature search")
 })
 
-test("delegation is model-directed, capacity-bound, and observable", async () => {
-  const [prompt, source] = await Promise.all([read("tool/task.txt"), read("tool/task.ts")])
+test("delegation is model-directed, capacity-bound, nested, and observable", async () => {
+  const [prompt, source, core, research, processor] = await Promise.all([
+    read("tool/task.txt"),
+    read("tool/task.ts"),
+    read("session/prompt/core.txt"),
+    read("agent/prompt/research.txt"),
+    read("session/processor.ts"),
+  ])
   expect(DELEGATION_PROFILES).toEqual(["explore", "execute"])
   expect(MAX_CHILD_AGENTS).toBeGreaterThanOrEqual(2)
   expect(DELEGATION_PROFILES.filter(isComputeDelegationProfile)).toEqual(["execute"])
   expect(["biology", "ml", "physics"].some(isComputeDelegationProfile)).toBe(false)
   expect(prompt).toContain("Use as many independent workers as materially useful")
   expect(prompt).toContain("it is not a quota")
-  expect(prompt).toContain("optional failure must not block")
-  expect(prompt).toContain("concise handoff")
+  expect(prompt).toMatch(/optional failure must\s+not block/)
+  expect(prompt).toContain("Children may call Task")
+  expect(prompt).toContain("decision-ready handoff")
+  expect(core).not.toMatch(/Normal .*(?:two|2).*Task/i)
+  expect(research).not.toMatch(/Ultra .*(?:four|4).*Task/i)
   expect(prompt).not.toContain("trusted")
   expect(source).toContain("durationMs")
   expect(source).toContain("failedToolCalls")
@@ -152,8 +161,12 @@ test("delegation is model-directed, capacity-bound, and observable", async () =>
   expect(source).not.toContain("taskDispatchBudget")
   expect(source).not.toContain("TASK_WALL_CLOCK_MS")
   expect(source).toContain("system: childGuidance")
+  expect(source).toContain("task: true")
+  expect(source).not.toContain("Delegation is unavailable")
+  expect(source).not.toContain("under 1,200 words")
   expect(source).toContain("Your final response is a decision-ready handoff")
-  expect(source).toContain("handoff: memory.text")
+  expect(source).toContain("handoff: handoff.text")
+  expect(processor).not.toContain("stopped after the same")
   expect(source).not.toContain('"<system-reminder>",\n          `Research effort is')
   expect(source).not.toContain("<task_result>")
 })

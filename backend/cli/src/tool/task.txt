@@ -8,10 +8,12 @@ domain expertise; do not invent personas.
 
 - Use as many independent workers as materially useful. Delegation posture guides how readily to
   delegate; it is not a quota. Runtime capacity may queue work.
-- Children cannot call Task. The lead owns synthesis and verification.
+- Children may call Task for genuinely independent work within the same permission boundary. The
+  lead still owns synthesis and verification.
 - Do not delegate sequential work, small edits, ceremonial review, or duplicate retrieval.
-- Task blocks the lead. Issue independent calls together; optional failure must not block the result.
+- Task returns when that child hands off. Issue independent calls together; optional failure must
+  not block the result.
 - Continue a `session_id` only for missing work. Otherwise include objective, inputs, references,
   context, assumptions, exclusions, allowed actions, output, and validation.
-- A child returns a concise handoff; its transcript remains in `session_id`. Preserve decisive
+- A child returns a decision-ready handoff; its transcript remains in `session_id`. Preserve decisive
   evidence and do not redo its phase.

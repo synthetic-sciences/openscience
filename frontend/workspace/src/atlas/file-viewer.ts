@@ -86,6 +86,9 @@ export function fileErrorMessage(error: unknown): string {
   if (typeof error === "string") return error
   if (!error || typeof error !== "object" || Array.isArray(error)) return String(error ?? "File request failed")
   const value = error as Record<string, unknown>
+  if (typeof value.path === "string" && typeof value.sessionID === "string" && value.access === "read") {
+    return "This file is outside the active workspace. Move it into Session scratch or Project files before opening it."
+  }
   for (const candidate of [value.message, value.error, value.data]) {
     if (typeof candidate === "string" && candidate.trim()) return candidate
     if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {

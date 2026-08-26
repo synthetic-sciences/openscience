@@ -132,6 +132,32 @@ export function resolveFileLinks(root: ParentNode, resolve: ResolveFile) {
   })
 }
 
+const inlineFilePath =
+  /\.(md|mdx|json|jsonl|txt|py|ipynb|ts|tsx|js|jsx|csv|tsv|ya?ml|toml|tex|bib|pdf|png|jpe?g|gif|svg|sh|r|rmd|parquet|h5|hdf5|npy|npz|pkl|log|cfg|ini|xml|html?|css|sql|go|rs|java|db|sqlite)$/i
+
+/** Make an inline code path clickable only after the host resolves it into
+ * its current workspace authority. Unresolved absolute/temp paths remain
+ * plain text instead of opening a viewer that can only be denied. */
+export function resolveInlineFileLinks(root: ParentNode, resolve: ResolveFile, open: OpenFile) {
+  root.querySelectorAll("code").forEach((element) => {
+    if (element.closest("pre")) return
+    const target = element as HTMLElement
+    if (target.dataset.fileLink) return
+    const text = (element.textContent ?? "").trim()
+    const candidate =
+      text.length > 2 && text.length < 260 && !/\s/.test(text) && inlineFilePath.test(text) ? resolve(text) : undefined
+    if (!candidate) return
+    target.dataset.fileLink = "1"
+    target.setAttribute("data-file-link", "true")
+    target.setAttribute("data-file-path", candidate)
+    target.addEventListener("click", (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      open(candidate)
+    })
+  })
+}
+
 /** Open a marked local anchor and report whether this click was handled. */
 export function openFileLink(root: ParentNode, event: MouseEvent, open: OpenFile): boolean {
   const target = event.target
@@ -362,30 +388,7 @@ export function Markdown(
       },
     })
 
-    // Make inline file-path code spans clickable — dispatch an event the host
-    // (session page) turns into an openFile. Curated extensions only, so prose
-    // like `n/a` or an identifier `a/b` isn't hijacked.
-    container.querySelectorAll("code").forEach((el) => {
-      if (el.closest("pre")) return
-      const anchor = el as HTMLElement
-      if (anchor.dataset.fileLink) return
-      const text = (el.textContent ?? "").trim()
-      const isFile =
-        text.length > 2 &&
-        text.length < 260 &&
-        !/\s/.test(text) &&
-        /\.(md|mdx|json|jsonl|txt|py|ipynb|ts|tsx|js|jsx|csv|tsv|ya?ml|toml|tex|bib|pdf|png|jpe?g|gif|svg|sh|r|rmd|parquet|h5|hdf5|npy|npz|pkl|log|cfg|ini|xml|html?|css|sql|go|rs|java|db|sqlite)$/i.test(
-          text,
-        )
-      if (!isFile) return
-      anchor.dataset.fileLink = "1"
-      anchor.setAttribute("data-file-link", "true")
-      anchor.addEventListener("click", (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        document.dispatchEvent(new CustomEvent("openscience:open-file", { detail: { path: text } }))
-      })
-    })
+    if (resolveFile && openFile) resolveInlineFileLinks(container, resolveFile, openFile)
 
     if (fileCleanup) {
       fileCleanup()

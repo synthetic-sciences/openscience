@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { alignLoopbackAssetHost, assetUrl, localAssetPath, resolvePath } from "./markdown-assets"
+import { alignLoopbackAssetHost, assetUrl, localAssetPath, resolvePath, workspaceAssetPath } from "./markdown-assets"
 
 const raw = (path: string) => `http://127.0.0.1:4096/file/raw?path=${encodeURIComponent(path)}&project=prj_1`
 
@@ -34,6 +34,21 @@ describe("markdown asset resolution", () => {
     )
     expect(localAssetPath("https://example.com/paper.pdf")).toBeUndefined()
     expect(localAssetPath("mailto:author@example.com")).toBeUndefined()
+  })
+
+  test("keeps chat links inside the active workspace authority", () => {
+    expect(workspaceAssetPath("results/table.csv", "/work/project")).toBe("results/table.csv")
+    expect(workspaceAssetPath("/work/project/results/table.csv", "/work/project")).toBe(
+      "/work/project/results/table.csv",
+    )
+    expect(workspaceAssetPath("/work/project-old/results/table.csv", "/work/project")).toBeUndefined()
+    expect(workspaceAssetPath("/private/tmp/scan_external.py", "/work/project")).toBeUndefined()
+    expect(
+      assetUrl("/private/tmp/generated.png", {
+        root: "/work/project",
+        url: raw,
+      }),
+    ).toBe("/private/tmp/generated.png")
   })
 
   test("decodes markdown-encoded references before building the query", () => {

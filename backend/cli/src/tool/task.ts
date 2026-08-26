@@ -38,8 +38,6 @@ export const MAX_CHILD_AGENTS =
   Number.isFinite(configuredChildCap) && configuredChildCap >= 1
     ? Math.floor(configuredChildCap)
     : Math.max(2, availableParallelism())
-export const TASK_HANDOFF_CHARS = 12_000
-export const TASK_MEMORY_CHARS = 8_000
 const configuredComputeCap = Number(process.env.OPENSCIENCE_MAX_COMPUTE_SUBAGENTS)
 const MAX_COMPUTE_SUBAGENTS =
   Number.isFinite(configuredComputeCap) && configuredComputeCap >= 1
@@ -69,7 +67,6 @@ export function childPermissionRules(primaryTools: string[] = []): PermissionNex
     ...primaryTools.map((permission) => ({ permission, pattern: "*", action: "allow" as const })),
     { permission: "todowrite", pattern: "*", action: "deny" },
     { permission: "todoread", pattern: "*", action: "deny" },
-    { permission: "task", pattern: "*", action: "deny" },
   ]
 }
 
@@ -207,13 +204,13 @@ export type TaskOutcome = {
 
 /**
  * The child transcript remains available through its session id. The parent
- * should receive a compact handoff instead of importing another agent's whole
- * context. Preserve both the opening findings and the closing conclusion when
- * a child ignores the requested response bound.
+ * should receive the child's final handoff instead of importing its tool
+ * transcript. An explicit caller-supplied limit remains available for legacy
+ * defensive uses, but normal delegation does not truncate the result.
  */
-export function taskHandoff(text: string, limit = TASK_HANDOFF_CHARS) {
+export function taskHandoff(text: string, limit?: number) {
   const body = text.replace(/\s*<task_metadata>[\s\S]*?<\/task_metadata>\s*$/u, "").trim()
-  if (body.length <= limit) return { text: body, truncated: false }
+  if (limit === undefined || body.length <= limit) return { text: body, truncated: false }
   const marker = "\n\n[… middle omitted from the parent handoff; the full result remains in the child session …]\n\n"
   if (limit <= marker.length) return { text: body.slice(0, Math.max(0, limit)), truncated: true }
   const budget = Math.max(0, limit - marker.length)
@@ -386,7 +383,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             effort,
             delegation: settings,
             maxConcurrentChildren: MAX_CHILD_AGENTS,
-            maxGlobalChildren: MAX_CHILD_AGENTS,
             queuedMs: timing.queuedMs,
             activeStartedAt: timing.activeStartedAt,
           },
@@ -433,7 +429,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     effort,
                     delegation: settings,
                     maxConcurrentChildren: MAX_CHILD_AGENTS,
-                    maxGlobalChildren: MAX_CHILD_AGENTS,
                     queuedMs: timing.queuedMs,
                     activeStartedAt: timing.activeStartedAt,
                     activeMs: timing.activeMs,
@@ -469,7 +464,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                       effort,
                       delegation: settings,
                       maxConcurrentChildren: MAX_CHILD_AGENTS,
-                      maxGlobalChildren: MAX_CHILD_AGENTS,
                       queuedMs: timing.queuedMs,
                       activeStartedAt: timing.activeStartedAt,
                     },
@@ -487,9 +481,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 )
                 const childGuidance = [
                   `You own one ${params.subagent_type} phase${params.specialist ? ` with the ${params.specialist} specialist` : ""} for the lead Research agent. The assignment in the user message is authoritative.`,
-                  "Work independently on that phase. Delegation is unavailable; load a domain skill only when it materially improves the result.",
+                  "Work independently on that phase. Delegate genuinely independent work when it materially improves the result; runtime capacity may queue it. Load a domain skill only when useful.",
                   "Do not return a diary of searches, reads, or commands. Your final response is a decision-ready handoff to the lead, not a second user-facing report.",
-                  "Keep the final response under 1,200 words. Use only the Markdown sections that carry substance: Outcome; Findings; Evidence; Changes / outputs; Limitations; Next action.",
+                  "Use only the Markdown sections that carry substance: Outcome; Findings; Evidence; Changes / outputs; Limitations; Next action.",
                   "Preserve exact paths, identifiers, numeric results, commands, and error strings when they matter. Distinguish observed evidence from inference. If blocked or partial, say exactly what remains.",
                   "Do not wrap the response in XML or JSON and do not restate these instructions.",
                   settings.autonomy === "interactive"
@@ -511,12 +505,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     model,
                     agent: agent.name,
                     effort,
-                    delegation: false,
+                    delegation: true,
+                    delegationSettings: settings,
                     system: childGuidance,
                     tools: {
                       todowrite: false,
                       todoread: false,
-                      task: false,
+                      task: true,
                       ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((tool) => [tool, false])),
                     },
                     parts: await SessionPrompt.resolvePromptParts(transfer.prompt),
@@ -560,7 +555,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               ? "The child completed without emitting textual findings."
               : `The child stopped before emitting textual findings after ${summary.length} tool calls in this turn.`)
         const handoff = taskHandoff(raw)
-        const memory = taskHandoff(handoff.text, TASK_MEMORY_CHARS)
         const activeMs = timing.activeMs
         const output = [
           ...(taskOutcome.stopReason === "max_steps"
@@ -590,13 +584,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             profile: params.subagent_type,
             ...(params.specialist && { specialist: params.specialist }),
             maxConcurrentChildren: MAX_CHILD_AGENTS,
-            maxGlobalChildren: MAX_CHILD_AGENTS,
             queuedMs: timing.queuedMs,
             activeMs,
             outcome: taskOutcome.outcome,
             stopReason: taskOutcome.stopReason,
-            handoff: memory.text,
-            handoffTruncated: handoff.truncated || memory.truncated,
+            handoff: handoff.text,
+            handoffTruncated: handoff.truncated,
             resultChars: raw.length,
           },
           output,

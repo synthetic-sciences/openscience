@@ -89,6 +89,22 @@ export function localAssetPath(src: string, base = ""): string | undefined {
   return resolvePath(base, target)
 }
 
+/** Resolve a chat reference without turning arbitrary host paths into file
+ * capabilities. Relative paths stay eligible for session/project fallback;
+ * absolute paths must already live under the connected project root. */
+export function workspaceAssetPath(src: string, root: string, base = ""): string | undefined {
+  const resolved = localAssetPath(src, base)
+  if (!resolved) return
+  const absolute = resolved.startsWith("/") || windows.test(resolved)
+  if (!absolute) return resolved
+  const project = resolvePath("", root).replace(/\/+$/, "")
+  const target = resolvePath("", resolved)
+  const insensitive = windows.test(project) || windows.test(target)
+  const owner = insensitive ? project.toLowerCase() : project
+  const candidate = insensitive ? target.toLowerCase() : target
+  if (candidate === owner || candidate.startsWith(`${owner}/`)) return target
+}
+
 /**
  * Rewrite one image reference to a served file URL. Relative paths resolve
  * against the directory of `base` (the previewed file; omit `base` to resolve
@@ -121,9 +137,9 @@ export function alignLoopbackAssetHost(value: string, pageOrigin?: string): stri
 
 export function assetUrl(
   src: string,
-  input: { base?: string; url: (path: string) => string; pageOrigin?: string },
+  input: { base?: string; root?: string; url: (path: string) => string; pageOrigin?: string },
 ): string {
-  const path = localAssetPath(src, input.base)
+  const path = input.root ? workspaceAssetPath(src, input.root, input.base) : localAssetPath(src, input.base)
   if (!path) return src
   return alignLoopbackAssetHost(input.url(path), input.pageOrigin)
 }

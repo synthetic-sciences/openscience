@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test"
 import katex from "katex"
-import { openFileLink, resolveFileLinks, resolveImages, sanitize } from "./markdown"
+import { openFileLink, resolveFileLinks, resolveImages, resolveInlineFileLinks, sanitize } from "./markdown"
 
 const tex = "\\delta\\omega/\\omega < 10^{-6}"
 
@@ -77,6 +77,26 @@ describe("resolveImages (relative image rewriting)", () => {
 })
 
 describe("local Markdown file links", () => {
+  test("makes only host-authorized inline code paths clickable", () => {
+    const root = document.createElement("div")
+    root.innerHTML =
+      "<code>results/table.csv</code><code>/workspace/project/plot.py</code><code>/private/tmp/scan.py</code>"
+    const opened: string[] = []
+
+    resolveInlineFileLinks(
+      root,
+      (path) => (path.startsWith("/private/tmp/") ? undefined : path),
+      (path) => opened.push(path),
+    )
+
+    const paths = Array.from(root.querySelectorAll("code")).map((node) => node.getAttribute("data-file-path"))
+    expect(paths).toEqual(["results/table.csv", "/workspace/project/plot.py", null])
+    root
+      .querySelectorAll("code")
+      .forEach((node) => node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })))
+    expect(opened).toEqual(["results/table.csv", "/workspace/project/plot.py"])
+  })
+
   test("opens relative and absolute PDF/file anchors in-app", () => {
     const root = document.createElement("div")
     root.innerHTML = sanitize(`

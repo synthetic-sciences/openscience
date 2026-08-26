@@ -529,15 +529,7 @@ export default function Page(): JSX.Element {
     return childSessions()[index + 1]
   })
   const revertInfo = createMemo(() => activeSession()?.revert)
-  // A `path.md` mentioned in an assistant message dispatches this. Keep the
-  // transcript mounted and open the file in the contextual Files pane.
   onMount(() => {
-    const onOpenFile = (e: Event) => {
-      const path = (e as CustomEvent).detail?.path
-      if (typeof path !== "string" || !path) return
-      uiStore.openFile(projectPath(), path, { scope: "auto" })
-    }
-    document.addEventListener("openscience:open-file", onOpenFile)
     const onOpenContext = (event: Event) => {
       const context = (event as CustomEvent).detail?.context
       if (!(["files", "terminal", "canvas", "kernels", "trace"] as SessionContext[]).includes(context)) return
@@ -545,7 +537,6 @@ export default function Page(): JSX.Element {
     }
     document.addEventListener("openscience:open-context", onOpenContext)
     onCleanup(() => {
-      document.removeEventListener("openscience:open-file", onOpenFile)
       document.removeEventListener("openscience:open-context", onOpenContext)
     })
   })

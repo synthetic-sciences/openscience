@@ -58,7 +58,7 @@ test("preserves the center conversation for markdown links while opening Files o
   expect(session).not.toContain("<RightPane")
   expect(directory).toContain('<ProjectRightPane project={sdk.scope} session={params.id ?? "new"} />')
   expect(projectPane).toContain("<RightPane project={props.project} session={props.session} />")
-  expect(session).toContain('document.addEventListener("openscience:open-file", onOpenFile)')
+  expect(directory).toContain("workspaceAssetPath(href, directory())")
   expect(session).toContain('id="session-conversation-panel"')
   expect(session.match(/role="tabpanel"/g)).toHaveLength(1)
   expect(session).not.toContain("<CenterTabStrip")

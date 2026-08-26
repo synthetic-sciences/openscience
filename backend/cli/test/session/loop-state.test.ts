@@ -69,7 +69,7 @@ function assistant(id: string, parentID: string, finish: string, summary = false
 }
 
 describe("session loop restart state", () => {
-  test("two output recoveries remain exhausted after a transcript reload", () => {
+  test("output recovery remains resumable after a transcript reload", () => {
     const history = [
       user("u1", [text("u1", "build the project")]),
       assistant("a1", "u1", "length"),
@@ -88,7 +88,7 @@ describe("session loop restart state", () => {
         bare: false,
         attempts: state.outputContinuations,
       }),
-    ).toBe("fail")
+    ).toBe("continue")
   })
 
   test("a completed non-length response resets only output recovery", () => {
