@@ -726,6 +726,19 @@ export namespace SessionPrompt {
         }
       }
 
+      // A cross-process metadata update can replace the user record while the
+      // directory scan is in flight. The finished assistant still carries the
+      // exact durable parent id, so recover that one record directly instead of
+      // failing the session or re-running the provider turn.
+      if (!lastUser && lastAssistant) {
+        const parent = await MessageV2.get({ sessionID, messageID: lastAssistant.parentID })
+        if (parent.info.role === "user") {
+          const assistantIndex = msgs.findIndex((msg) => msg.info.id === lastAssistant.id)
+          msgs.splice(assistantIndex < 0 ? msgs.length : assistantIndex, 0, parent)
+          lastUser = parent.info
+        }
+      }
+
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
       const user = lastUser
       const current = SessionLoopState.messageEpoch(user)

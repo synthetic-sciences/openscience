@@ -58,6 +58,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   Session scratch unless the user asks to preserve them.
 - Removed empty interprocess compute-lock sidecars after the final coordinator
   exits, preventing successful concurrent jobs from leaving stale lock state.
+- Recovered an assistant turn's exact durable parent when a concurrent metadata
+  replacement makes a cross-process session scan momentarily omit that user message.
 - Prevented streamed tool arguments from generating quadratic event and disk
   traffic, restored exact project-root authority to sandboxed commands, and
   made loaded-skill references readable only within their authorized directory.
