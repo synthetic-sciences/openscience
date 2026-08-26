@@ -101,14 +101,14 @@ Custom agents can be added via config file (`openscience.json` → `agent` key).
 
 ### Common failure patterns:
 
-| Symptom                               | Likely cause                                        | Where to look                                              |
-| ------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
-| Agent over-processes a simple request | Workflow prompt is too procedural                   | `src/agent/prompt/{agent}.txt`, preserve adaptive behavior |
-| Wrong model used                      | Agent/model config incorrect                        | `src/agent/agent.ts` + `openscience.json` `agent` config   |
-| Agent delegates excessively           | Delegation posture or independent-work guidance regressed | `src/tool/task.txt` + `src/session/prompt.ts`          |
-| Delegation loops or stalls            | Task profile, capacity queue, or durable-attempt contract regressed | `src/tool/task.ts` + `src/session/loop-state.ts` |
-| Sub-agent returns empty               | Context exhaustion, provider failure, or a custom-agent step limit | `src/agent/agent.ts` + child session trace          |
-| Custom agent not appearing            | Config not in `openscience.json` or wrong `mode`    | Config file `agent` key → `src/agent/agent.ts`             |
+| Symptom                               | Likely cause                                                        | Where to look                                              |
+| ------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Agent over-processes a simple request | Workflow prompt is too procedural                                   | `src/agent/prompt/{agent}.txt`, preserve adaptive behavior |
+| Wrong model used                      | Agent/model config incorrect                                        | `src/agent/agent.ts` + `openscience.json` `agent` config   |
+| Agent delegates excessively           | Delegation posture or independent-work guidance regressed           | `src/tool/task.txt` + `src/session/prompt.ts`              |
+| Delegation loops or stalls            | Task profile, capacity queue, or durable-attempt contract regressed | `src/tool/task.ts` + `src/session/loop-state.ts`           |
+| Sub-agent returns empty               | Context exhaustion, provider failure, or a custom-agent step limit  | `src/agent/agent.ts` + child session trace                 |
+| Custom agent not appearing            | Config not in `openscience.json` or wrong `mode`                    | Config file `agent` key → `src/agent/agent.ts`             |
 
 ### Key files for prompt debugging (read these first):
 
