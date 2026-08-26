@@ -49,6 +49,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Kept live reasoning and tool activity mounted in chronological order, removed
+  the streaming-only truncation and regrouping that made rows disappear until
+  refresh, and made semantic status changes visible immediately.
 - Kept durable Project-file browsing and previews separate from session scratch
   authority, surfaced structured file errors, and labeled opened files by their
   real workspace instead of reporting valid project folders as disconnected.

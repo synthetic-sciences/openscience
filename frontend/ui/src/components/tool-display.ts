@@ -57,32 +57,6 @@ export function reasoningDisplayText(text: string): string {
   return statusOnlyReasoning(readable) ? "" : readable
 }
 
-/** Keep the active turn conversational: show the current provider phase, not
- * every paragraph accumulated in the still-streaming signed reasoning part.
- * The stored bytes and completed-turn rendering remain untouched/full. */
-export function liveReasoningDisplayText(text: string, maximum = 260): string {
-  const visible = stripRedactedReasoning(text)
-  if (!visible) return ""
-  const matches = [...visible.matchAll(providerReasoningPhase)]
-  const latest = matches.at(-1)
-  const phase = latest ? visible.slice((latest.index ?? 0) + latest[0].length) : visible
-  const readable = reasoningDisplayText(phase)
-  if (readable.length <= maximum) return readable
-  const bounded = readable.slice(0, maximum + 1)
-  const sentence = Math.max(bounded.lastIndexOf(". "), bounded.lastIndexOf("? "), bounded.lastIndexOf("! "))
-  const end = sentence >= Math.floor(maximum * 0.55) ? sentence + 1 : readable.slice(0, maximum).lastIndexOf(" ")
-  return `${readable.slice(0, Math.max(end, maximum - 40)).trimEnd()}…`
-}
-
-/** Select the newest reasoning part that still has something a person can
- * read after provider-only placeholders and phase labels are removed. A fully
- * encrypted `[REDACTED]` part must not displace the last useful live thought. */
-export function latestVisibleReasoningPartID(
-  parts: ReadonlyArray<{ id: string; type: string; text?: string }>,
-): string | undefined {
-  return parts.findLast((part) => part.type === "reasoning" && Boolean(part.text?.trim()))?.id
-}
-
 /** The most recent provider phase is useful as one compact live status. */
 export function reasoningTopic(text: string): string | undefined {
   const visible = stripRedactedReasoning(text)

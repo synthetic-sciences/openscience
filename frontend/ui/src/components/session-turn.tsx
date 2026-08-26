@@ -35,8 +35,6 @@ import {
   artifactTypeLabel,
   artifactActions,
   generatedArtifacts,
-  latestVisibleReasoningPartID,
-  liveReasoningDisplayText,
   reasoningTopic,
   sessionErrorText,
   stripRedactedReasoning,
@@ -58,7 +56,7 @@ import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { lastResponseTextPart } from "./session-turn-response"
-import { groupResearchTrace, type ResearchTraceGroup } from "./research-trace"
+import { visibleResearchTrace } from "./research-trace"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
@@ -134,22 +132,8 @@ function isAttachment(part: PartType | undefined) {
   )
 }
 
-const promotedTools = new Set(["python", "r", "notebook", "rkernel", "modal", "compute_job"])
-
-function isPromotedTool(part: PartType | undefined): part is ToolPart {
-  if (part?.type !== "tool" || !promotedTools.has(part.tool)) return false
-  if (part.state.status === "error") return false
-  if (part.state.status !== "running" && part.state.status !== "completed") return false
-  const metadata = "metadata" in part.state ? (part.state.metadata as Record<string, unknown> | undefined) : undefined
-  return metadata?.ok !== false
-}
-
 function isGeneratedTool(part: PartType | undefined): part is ToolPart {
   return part?.type === "tool" && part.tool === "artifact" && part.state.status === "completed"
-}
-
-function isHiddenTool(part: PartType | undefined): part is ToolPart {
-  return isPromotedTool(part) || isGeneratedTool(part)
 }
 
 function AssistantTrace(props: {
@@ -157,8 +141,7 @@ function AssistantTrace(props: {
   responsePartId: string | undefined
   hideResponsePart: boolean
   hideReasoning: boolean
-  latestReasoningOnly?: boolean
-  hidePromotedTools?: boolean
+  hideGeneratedTools?: boolean
   pendingRequestCallID?: string
 }) {
   const data = useData()
@@ -170,70 +153,18 @@ function AssistantTrace(props: {
         if (props.hideReasoning && part?.type === "reasoning") return []
         if (props.hideResponsePart && props.responsePartId === part?.id) return []
         if (part?.type === "tool" && part.callID === props.pendingRequestCallID) return []
-        if (props.hidePromotedTools && isHiddenTool(part)) return [{ message, part, hidden: true }]
+        if (props.hideGeneratedTools && isGeneratedTool(part)) return [{ message, part, hidden: true }]
         if (part?.type === "tool" && part.tool === "todoread") return [{ message, part, hidden: true }]
-        if (props.latestReasoningOnly && part?.type === "reasoning") {
-          return [{ message, part: { ...part, text: liveReasoningDisplayText(part.text ?? "") } }]
-        }
         return [{ message, part }]
       })
     })
-    const latestReasoning = props.latestReasoningOnly
-      ? latestVisibleReasoningPartID(entries.map((entry) => entry.part))
-      : undefined
-    return groupResearchTrace(
-      entries.filter(
-        (entry) => !props.latestReasoningOnly || entry.part?.type !== "reasoning" || entry.part.id === latestReasoning,
-      ),
-    )
+    return visibleResearchTrace(entries)
   })
 
-  return (
-    <Index each={trace()}>
-      {(item) => (
-        <Show
-          when={item().kind === "group" ? (item() as ResearchTraceGroup) : undefined}
-          fallback={
-            <Part
-              part={(item() as { kind: "part"; entry: ResearchTraceEntry }).entry.part}
-              message={(item() as { kind: "part"; entry: ResearchTraceEntry }).entry.message}
-            />
-          }
-        >
-          {(group) => <ResearchTraceGroupDisplay group={group()} />}
-        </Show>
-      )}
-    </Index>
-  )
+  return <Index each={trace()}>{(entry) => <Part part={entry().part} message={entry().message} />}</Index>
 }
 
 type ResearchTraceEntry = { part: PartType; message: AssistantMessage }
-
-function ResearchTraceGroupDisplay(props: { group: ResearchTraceGroup }) {
-  const icon = () => {
-    if (props.group.family === "context") return "glasses" as const
-    if (props.group.family === "sources") return "window-cursor" as const
-    if (props.group.family === "commands") return "console" as const
-    if (props.group.family === "changes") return "code-lines" as const
-    if (props.group.family === "images") return "photo" as const
-    if (props.group.family === "skills") return "sparkles" as const
-    return "activity" as const
-  }
-
-  return (
-    <details data-component="research-trace-group" data-family={props.group.family}>
-      <summary>
-        <Icon name={icon()} size="small" />
-        <span data-slot="research-trace-group-label">{props.group.label}</span>
-        <span data-slot="research-trace-group-detail">{props.group.detail}</span>
-        <Icon name="chevron-down" size="small" />
-      </summary>
-      <div data-slot="research-trace-group-operations">
-        <Index each={props.group.entries}>{(entry) => <Part part={entry().part} message={entry().message} />}</Index>
-      </div>
-    </details>
-  )
-}
 
 export function SessionTurn(
   props: ParentProps<{
@@ -369,13 +300,6 @@ export function SessionTurn(
     }
     return false
   })
-
-  const promoted = createMemo(() =>
-    assistantMessages().flatMap((message) => {
-      const parts = (data.store.part[message.id] ?? emptyParts).filter(isPromotedTool)
-      return parts.length ? [{ message, parts }] : []
-    }),
-  )
 
   const generated = createMemo(() =>
     generatedArtifacts(assistantMessages().flatMap((message) => data.store.part[message.id] ?? emptyParts)),
@@ -638,33 +562,10 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  let lastStatusChange = Date.now()
-  let statusTimeout: number | undefined
   createEffect(() => {
     const newStatus = rawStatus()
     if (newStatus === store.status || !newStatus) return
-
-    const timeSinceLastChange = Date.now() - lastStatusChange
-    if (timeSinceLastChange >= 2500) {
-      setStore("status", newStatus)
-      lastStatusChange = Date.now()
-      if (statusTimeout) {
-        clearTimeout(statusTimeout)
-        statusTimeout = undefined
-      }
-    } else {
-      if (statusTimeout) clearTimeout(statusTimeout)
-      statusTimeout = setTimeout(() => {
-        setStore("status", rawStatus())
-        lastStatusChange = Date.now()
-        statusTimeout = undefined
-      }, 2500 - timeSinceLastChange) as unknown as number
-    }
-  })
-
-  onCleanup(() => {
-    if (!statusTimeout) return
-    clearTimeout(statusTimeout)
+    setStore("status", newStatus)
   })
 
   return (
@@ -780,8 +681,7 @@ export function SessionTurn(
                           responsePartId={responsePartId()}
                           hideResponsePart={hideResponsePart()}
                           hideReasoning={false}
-                          latestReasoningOnly={working()}
-                          hidePromotedTools
+                          hideGeneratedTools
                           pendingRequestCallID={pendingRequestCallID()}
                         />
                         <Show when={error()}>
@@ -790,19 +690,6 @@ export function SessionTurn(
                           </Card>
                         </Show>
                       </div>
-                    </Show>
-                    <Show when={promoted().length > 0}>
-                      <details data-slot="session-turn-metadata">
-                        <summary>
-                          Analysis outputs
-                          <span>· {promoted().reduce((count, entry) => count + entry.parts.length, 0)}</span>
-                        </summary>
-                        <section data-slot="session-turn-promoted-results" aria-label="Analysis code and results">
-                          <For each={promoted()}>
-                            {(entry) => <Message message={entry.message} parts={entry.parts} />}
-                          </For>
-                        </section>
-                      </details>
                     </Show>
                     <Show when={requestParts().length > 0 || (requestMessage() && nextQuestion())}>
                       <div data-slot="session-turn-permission-parts">

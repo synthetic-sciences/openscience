@@ -1,4 +1,4 @@
-import type { AssistantMessage, Part, ToolPart } from "@synsci/sdk/v2/client"
+import type { AssistantMessage, Part } from "@synsci/sdk/v2/client"
 import { reasoningDisplayText } from "./tool-display"
 
 export type ResearchTraceEntry = {
@@ -6,17 +6,6 @@ export type ResearchTraceEntry = {
   part: Part
   hidden?: boolean
 }
-
-export type ResearchTraceGroup = {
-  kind: "group"
-  id: string
-  family: TraceFamily
-  label: string
-  detail: string
-  entries: ResearchTraceEntry[]
-}
-
-export type ResearchTraceItem = { kind: "part"; entry: ResearchTraceEntry } | ResearchTraceGroup
 
 export type TaskActivity = {
   id: string
@@ -76,70 +65,17 @@ function lifecycle(part: Part) {
   return part.type === "step-start" || part.type === "step-finish" || part.type === "snapshot" || part.type === "patch"
 }
 
-function toolTitle(part: ToolPart) {
-  const state = part.state
-  if ("title" in state && typeof state.title === "string" && state.title.trim()) return state.title.trim()
-  const input = state.input ?? {}
-  const value = input.filePath ?? input.path ?? input.pattern ?? input.query ?? input.url ?? input.description
-  if (typeof value === "string" && value.trim()) return value.trim()
-  return part.tool
-}
-
-function grouped(part: Part): part is ToolPart {
-  if (part.type !== "tool" || !["completed", "error"].includes(part.state.status)) return false
-  if (part.tool === "task" || part.tool === "todowrite" || part.tool === "todoread" || part.tool === "planwrite") {
-    return false
-  }
-  return traceFamily(part.tool) !== "other"
-}
-
 /**
- * Keep the actual reasoning narrative chronological while compacting only
- * adjacent, completed tools from the same family. Reasoning is never replaced
- * by a generated model summary. Group identity is anchored to the first tool,
- * so appending another operation cannot rename/remount an existing phase.
+ * Keep the primary activity transcript literal and chronological. Streaming
+ * state changes must not replace already-visible rows with aggregate summaries;
+ * compact grouping is reserved for secondary child-agent summaries below.
  */
-export function groupResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceItem[] {
-  const output: ResearchTraceItem[] = []
-  let tools: ResearchTraceEntry[] = []
-  let family: TraceFamily | undefined
-
-  const flush = () => {
-    if (tools.length === 0 || !family) return
-    if (tools.length === 1) {
-      output.push({ kind: "part", entry: tools[0] })
-    } else {
-      const first = tools[0].part as ToolPart
-      const failed = tools.filter((entry) => (entry.part as ToolPart).state.status === "error").length
-      const titles = compact(tools.map((entry) => toolTitle(entry.part as ToolPart)))
-      output.push({
-        kind: "group",
-        id: `trace-${first.id}-${family}`,
-        family,
-        label: traceLabel(family, tools.length),
-        detail: [failed > 0 ? `${failed} failed` : undefined, titles].filter(Boolean).join(" · "),
-        entries: tools,
-      })
-    }
-    tools = []
-    family = undefined
-  }
-
-  for (const entry of entries) {
-    if (entry.hidden || lifecycle(entry.part)) continue
-    if (entry.part.type === "reasoning" && !reasoningDisplayText(entry.part.text ?? "")) continue
-    if (!grouped(entry.part)) {
-      flush()
-      output.push({ kind: "part", entry })
-      continue
-    }
-    const next = traceFamily(entry.part.tool)
-    if (family && family !== next) flush()
-    family = next
-    tools.push(entry)
-  }
-  flush()
-  return output
+export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
+  return entries.filter((entry) => {
+    if (entry.hidden || lifecycle(entry.part)) return false
+    if (entry.part.type === "reasoning" && !reasoningDisplayText(entry.part.text ?? "")) return false
+    return true
+  })
 }
 
 export function summarizeTaskActivity(items: TaskActivity[]): TaskActivityGroup[] {
