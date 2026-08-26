@@ -59,7 +59,7 @@ function action<const Value extends ComputeAction>(value: Value) {
 }
 
 const ComputeTarget = JobBroker.Target.describe(
-  'Object: {"kind":"local"}, {"kind":"modal"}, or {"kind":"ssh","host_id":"saved-host-id"}; never a JSON string.',
+  'Object: {"kind":"local"}, {"kind":"modal"}, or {"kind":"ssh","host_id":"saved-host-id"}; never a quoted JSON string.',
 )
 const ComputeWorkload = z
   .object({
