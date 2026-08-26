@@ -236,7 +236,7 @@ Keep only one item in_progress at a time.
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `An OpenScience project is a durable research context that may aggregate multiple connected folders and files. Session scratch belongs only to this conversation. Results are immutable deliverables shared project-wide; a normal workspace file is not a Result until artifact save_file returns its Result ID and version.`,
-        `Work directly in Project files when the user refers to durable project material. Use Session scratch only for temporary work. Promote a scratch or project file to Results explicitly with artifact save_file before citing it as a durable Result or passing it to a Result-only contract.`,
+        `Use Session scratch by default for one-off downloads, analyses, scripts, tables, and plots. Work in Project files only when the user points to existing durable material or asks to keep reusable outputs. Do not create a new project subfolder for an ordinary answer. Promote a file to Results only when the user requests a durable deliverable or a Result-only contract requires it.`,
         `The physical paths above are routing information. Use the human project name in conversation, not UUID directory components. Do not expose scratch, managed-project, or connected-folder paths in a generic greeting. Mention a path only when the user asks about location or when it is needed to complete their request.`,
         `<files>`,
         `  ${

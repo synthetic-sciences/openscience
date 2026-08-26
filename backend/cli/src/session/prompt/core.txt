@@ -21,8 +21,9 @@ verify, and return the smallest sufficient result.
 
 ## Tools, skills, and access
 
-- Prefer dedicated file, science, Python/R, Result, and compute tools. Save material inputs and
-  outputs; clean-rerun consequential work when practical. Work in writable connected folders in place.
+- Use Session scratch for one-off inputs, scripts, tables, and plots. Use Project files only for
+  existing material or outputs the user asks to keep; do not create a project subfolder for a routine answer.
+- Create user-visible provenance records only when explicitly requested.
 - Before costly multi-stage work, define and maintain `research_contract`; save required Results.
   Never set a `max_*` field unless the user gave that exact numeric limit.
 - Load a clearly matching skill before substantive work. Use venue skills for formatting,

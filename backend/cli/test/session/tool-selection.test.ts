@@ -89,6 +89,21 @@ describe("tool selection", () => {
     ).toBe(true)
   })
 
+  test("keeps provenance recording out of ordinary analysis unless explicitly requested", () => {
+    expect(
+      ToolSelection.relevant("provenance_record", {
+        agent: "research",
+        message: "Run a quick exploratory analysis of the Titanic dataset and make three plots.",
+      }),
+    ).toBe(false)
+    expect(
+      ToolSelection.relevant("provenance_record", {
+        agent: "research",
+        message: "Record the provenance and lineage for these analysis outputs.",
+      }),
+    ).toBe(true)
+  })
+
   test("recognizes only fresh self-contained conceptual questions as direct answers", () => {
     expect(
       ToolSelection.direct({

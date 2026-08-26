@@ -38,6 +38,8 @@ describe("session environment prompt", () => {
         expect(prompt).toContain("Results: immutable project-wide deliverables")
         expect(prompt).toContain("may aggregate multiple connected folders and files")
         expect(prompt).toContain("a normal workspace file is not a Result")
+        expect(prompt).toContain("Use Session scratch by default for one-off downloads")
+        expect(prompt).toContain("Do not create a new project subfolder for an ordinary answer")
         expect(prompt).toContain("Use the human project name in conversation, not UUID directory components")
         expect(prompt).toContain(
           "Do not expose scratch, managed-project, or connected-folder paths in a generic greeting",
@@ -55,5 +57,6 @@ describe("session environment prompt", () => {
     expect(prompt).toContain("Before costly multi-stage work, define and maintain `research_contract`")
     expect(prompt).toContain("save required Results")
     expect(prompt).toContain("Never set a `max_*` field unless the user gave that exact numeric limit")
+    expect(prompt).toContain("Create user-visible provenance records only when explicitly requested")
   })
 })

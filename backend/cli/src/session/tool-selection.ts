@@ -149,6 +149,7 @@ export namespace ToolSelection {
     // capability. Keep it available for explicit Atlas work without letting
     // unrelated scientific prompts wander into a retired service path.
     if (tool === "atlas" || tool === "atlas_record") return Boolean(message && /\batlas\b/i.test(message))
+    if (tool.startsWith("provenance_")) return Boolean(message && /\b(?:lineage|provenance)\b/i.test(message))
     if (!domain.has(tool)) return true
     if (!message || !code.test(message) || science.test(message)) return true
 
@@ -163,7 +164,6 @@ export namespace ToolSelection {
         return /\b(?:diagram|figure|graphic|illustration|image|nano banana|poster|schematic|slide|visual)\b/i.test(
           message,
         )
-      if (tool.startsWith("provenance_")) return /\b(?:lineage|provenance)\b/i.test(message)
       if (tool.startsWith("science_")) return /\bscientific database\b|\bscience tool\b/i.test(message)
       return /\b(?:artifact|chart|figure|report|visualization)\b/i.test(message)
     })()
