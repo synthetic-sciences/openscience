@@ -798,6 +798,17 @@ export namespace SessionProcessor {
                     tokens: usage.tokens,
                     cost: usage.cost,
                   })
+                  await OutboundTelemetry.modelUsage({
+                    sessionID: input.sessionID,
+                    messageID: input.assistantMessage.id,
+                    operationID: stepPartID,
+                    attempt: attempt + 1,
+                    route: traceRoute,
+                    provider: input.model.providerID,
+                    model: input.model.id,
+                    tokens: usage.tokens,
+                    cost: usage.cost,
+                  }).catch(() => undefined)
                   await Session.updateMessage(input.assistantMessage)
                   // Report usage ONLY for managed-proxy credentials. BYOK keys
                   // and first-party OAuth subscriptions are billed to the user's

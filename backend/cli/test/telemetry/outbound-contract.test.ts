@@ -74,6 +74,48 @@ describe("outbound OpenScience trace contract", () => {
     )
   })
 
+  test("records normalized usage for Ace and user-owned credential routes", async () => {
+    await signIn("user_usage_routes")
+    restores.push(spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")))
+    await OutboundTelemetry.initializeAccount()
+    for (const route of ["managed", "byok", "chatgpt", "subscription", "local"] as const) {
+      expect(
+        await OutboundTelemetry.modelUsage({
+          sessionID: `ses_${route}`,
+          messageID: `msg_${route}`,
+          operationID: `step_${route}`,
+          attempt: 1,
+          route,
+          provider: route === "managed" ? "openrouter" : "anthropic",
+          model: "claude-sonnet-4-5",
+          tokens: {
+            input: 120,
+            output: 30,
+            reasoning: 8,
+            cache: { read: 40, write: 5 },
+          },
+          cost: 0.001234,
+        }),
+      ).toBe(true)
+    }
+    const rows = (await Bun.file(queue).text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { event: unknown })
+    const events = rows.map((row) => Event.parse(row.event)).filter((event) => event.event_type === "model.usage")
+    expect(events).toHaveLength(5)
+    expect(events.map((event) => event.model_route)).toEqual(["managed", "byok", "chatgpt", "subscription", "local"])
+    expect(events[0]?.payload).toEqual({
+      input_tokens: 120,
+      output_tokens: 30,
+      reasoning_tokens: 8,
+      cache_read_tokens: 40,
+      cache_write_tokens: 5,
+      estimated_cost_microusd: 1234,
+      cost_source: "model_catalog",
+    })
+  })
+
   test("normalizes platform names and extracts only the non-secret key id", () => {
     expect(coarsePlatform("darwin")).toBe("macos")
     expect(coarsePlatform("win32")).toBe("windows")
