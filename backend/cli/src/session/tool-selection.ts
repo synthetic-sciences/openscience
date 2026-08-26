@@ -176,8 +176,7 @@ export namespace ToolSelection {
     const writing =
       /\b(?:append|change|create|deliver|draft|edit|file|manuscript|modify|notes?|paper|report|save|update|write)\b/i.test(
         text,
-      ) ||
-      /scientific-writing|paper-writing/i.test(capability)
+      ) || /scientific-writing|paper-writing/i.test(capability)
 
     if (edits.has(tool)) return writing || analysis || code.test(text)
     if (codeTools.has(tool)) return code.test(text)
