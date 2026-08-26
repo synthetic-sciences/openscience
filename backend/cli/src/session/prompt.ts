@@ -699,11 +699,24 @@ export namespace SessionPrompt {
         .toLowerCase()
         .replace(/\s+/g, " ")
         .trim()
+    const readMessages = async () => {
+      let messages = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      // Atomic message writes can briefly overlap a directory scan on busy or
+      // shared filesystems. An empty scan is never a valid state once execute()
+      // has loaded the durable user turn above, so retry the read rather than
+      // dropping the transcript and failing a healthy provider continuation.
+      for (const delay of [5, 20]) {
+        if (messages.length) break
+        await Bun.sleep(delay)
+        messages = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      }
+      return messages
+    }
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
-      let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      let msgs = await readMessages()
 
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
@@ -1225,7 +1238,7 @@ export namespace SessionPrompt {
           // time.compacted on the cleared parts, but the `msgs` fetched at the loop top (and
           // the sessionMessages clone below) still hold the pre-prune bodies — without this
           // the "deferring compaction" turn would ship the full un-pruned context anyway.
-          msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+          msgs = await readMessages()
           // `before` is the last finished turn's real token usage (the reason we tripped
           // the threshold); prune's return value is the estimated reclaim.
           const before = lastFinished!.tokens.input + lastFinished!.tokens.cache.read + lastFinished!.tokens.output

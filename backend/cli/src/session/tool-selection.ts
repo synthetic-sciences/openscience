@@ -18,10 +18,10 @@ export namespace ToolSelection {
     "skill",
     "task",
   ])
-  const edits = new Set(["write", "edit"])
+  const edits = new Set(["write", "edit", "apply_patch"])
   const python = new Set(["python", "notebook"])
   const r = new Set(["r", "rkernel"])
-  const codeTools = new Set(["apply_patch", "codesearch", "lsp", "multiedit"])
+  const codeTools = new Set(["codesearch", "lsp", "multiedit"])
   const todo = new Set(["todowrite", "todoread", "planwrite"])
   const biology = new Set([
     "query_ensembl",
@@ -174,7 +174,9 @@ export namespace ToolSelection {
         text,
       ) || /protein-binder|mechanistic-interpretability/i.test(capability)
     const writing =
-      /\b(?:create|deliver|draft|edit|file|manuscript|paper|report|save|write)\b/i.test(text) ||
+      /\b(?:append|change|create|deliver|draft|edit|file|manuscript|modify|notes?|paper|report|save|update|write)\b/i.test(
+        text,
+      ) ||
       /scientific-writing|paper-writing/i.test(capability)
 
     if (edits.has(tool)) return writing || analysis || code.test(text)
