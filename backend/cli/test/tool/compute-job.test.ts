@@ -52,6 +52,7 @@ test("advertises an object-rooted compute schema for strict providers", () => {
   expect(schema.properties.target.description).toContain("never a quoted JSON string")
   expect(ComputeJobParameters.safeParse({ action: "plan" }).success).toBe(false)
   expect(ComputeJobParameters.safeParse({ action: "targets", job_id: "wrong-action" }).success).toBe(false)
+  expect(ComputeJobParameters.safeParse({ action: "wait", job_id: "job_long", seconds: 3_600 }).success).toBe(true)
 })
 
 test("normalizes only unambiguous action aliases and valid JSON-object targets", async () => {
@@ -410,13 +411,15 @@ test("waits on a compute job without asking the model to run shell sleep", async
       const workspace = await SessionFilesystem.workspace(session.id)
       const job = await start(tmp.path, root, session.id, {
         name: "wait action",
-        command: "sleep 0.1 && printf ready",
+        command: "sleep 0.5 && printf ready",
       })
       const tool = await createComputeJobTool({ root, workspace }).init()
       const result = await tool.execute({ action: "wait", job_id: job.id, seconds: 2 }, context(session.id, []))
 
       expect(result.output).toContain('"status": "succeeded"')
       expect(result.output).toContain('"timed_out": false')
+      expect(result.output).toContain('"changed": [')
+      expect(result.output).toContain('"state"')
       expect(await ComputeJobs.log(job.id, { root, workspace })).toContain("ready")
     },
   })

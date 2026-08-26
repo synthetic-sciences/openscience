@@ -15,9 +15,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   available, without pretending unavailable NVIDIA services are configured.
 - Added a visible local-model settings surface and real Ollama context-window
   controls that create tuned `num_ctx` aliases through Ollama's native API.
-- Added a conversation-first Research harness with bounded Normal and Ultra
-  delegation, persistent Python and R analysis, governed remote compute, and a
-  reproducible trajectory dashboard for harness evaluation.
+- Added a conversation-first Research harness with model-directed delegation,
+  persistent Python and R analysis, governed remote compute, and a reproducible
+  trajectory dashboard for harness evaluation.
 
 ### Changed
 
@@ -27,14 +27,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   capability prose from ordinary work while preserving explicit tools,
   permissions, evidence, compute, and durable Results.
 - Materialized a small request-local tool set on every Research turn, with
-  loaded skills activating only their bounded scientific capabilities, and
-  simplified delegation to level, worker model, and agent independence.
+  loaded skills activating only their relevant scientific capabilities, and
+  simplified delegation to Off/Low/Normal/High posture, worker model, and agent
+  independence without per-turn worker quotas or default child deadlines.
 - Stopped bundling or offering Atlas through the OpenScience npm distribution
   and `synsci` launcher, including both graph-initialization slash-command
   skills, while preserving automatic native-binary installation.
 - Replaced the retired Ace subscription copy with pay-as-you-go managed credits:
   one wallet for OpenRouter model usage and enhanced search, 20-credit reloads
-  below a 5-credit balance, and no scheduled monthly top-up.
+  below a 2-credit balance, and no scheduled monthly top-up.
 - Retired managed-compute billing and budget behavior while preserving local,
   SSH, scheduler, and other user-owned compute workflows. Deprecated 2.x config
   and SDK fields remain as inert compatibility shims for this patch release.
@@ -76,9 +77,21 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Made delegated work recover provider placeholder session IDs, retain useful
   partial handoffs after provider rejection, and display only one concise live
   thought while preserving the complete completed trajectory.
-- Added coherent compute waiting and Modal image diagnostics, preserved active
-  remote jobs during evaluator cleanup, and stopped trusted encrypted
-  credential updates from aborting unrelated live sessions.
+- Made compute waits suspend until meaningful state or output changes instead
+  of spending model turns on polling, preserved active remote jobs during
+  evaluator cleanup, and stopped trusted encrypted credential updates from
+  aborting unrelated live sessions.
+- Made Modal cancellation stop only the sandbox, collect declared partial
+  outputs, and retain the durable Volume until an explicit release, so recovery
+  never requires destroying useful work.
+- Replayed research-contract continuation from semantic evidence progress,
+  allowed one focused repair when progress stalls, and retained immutable
+  ArtifactStore versions in session traces even when their tool row is absent.
+- Preserved completed activity and durable work when Ace verification is
+  temporarily unavailable, presenting a calm retryable pause instead of ending
+  a long turn without a useful handoff.
+- Refined reasoning and tool activity into a quieter chronological trace with
+  consistent spacing, focus states, and compact status presentation.
 - Made every built-in research tool advertise an object-rooted JSON Schema so
   strict OpenAI-compatible providers such as DeepSeek and Kimi accept tool-enabled requests.
 - Selected the x86-64 baseline binary automatically on Linux and macOS hosts

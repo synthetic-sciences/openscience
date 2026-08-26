@@ -75,6 +75,7 @@ import { KernelRuntime } from "@/science/kernel/registry"
 import { SessionCheckpoint } from "./checkpoint"
 import { ToolSelection } from "./tool-selection"
 import { SessionLoopState } from "./loop-state"
+import { ContractProgress } from "./contract-progress"
 import { FileLease } from "@/util/file-lease"
 import { Global } from "@/global"
 import { TaskAttempt } from "@/tool/task-attempt"
@@ -513,6 +514,8 @@ export namespace SessionPrompt {
     epoch: string
     agent?: string
     model?: MessageV2.User["model"]
+    progress?: string
+    repair?: boolean
   }) {
     const id = await MessageV2.nextMessageID(input.user.sessionID)
     const message: MessageV2.User = {
@@ -529,6 +532,8 @@ export namespace SessionPrompt {
         text: input.text,
         epoch: input.epoch,
         transaction: id,
+        progress: input.progress,
+        repair: input.repair,
       }),
     }
     await Session.updateMessage(message)
@@ -538,7 +543,12 @@ export namespace SessionPrompt {
       sessionID: message.sessionID,
       type: "text",
       synthetic: true,
-      metadata: SessionLoopState.continuation(input.kind),
+      metadata: SessionLoopState.continuation(
+        input.kind,
+        input.kind === "contract" && input.progress
+          ? { progress: input.progress, repair: input.repair === true }
+          : undefined,
+      ),
       text: input.text,
     } satisfies MessageV2.TextPart)
     return message
@@ -684,7 +694,6 @@ export namespace SessionPrompt {
     // summary overhead alone already exceeds the 0.75 threshold.
     let compactionArmed = true
     let outputContinuations = recovered.outputContinuations
-    let contractContinuations = recovered.contractContinuations
     const workspace = await SessionFilesystem.workspace(sessionID)
     // Text doom-loop guard (#176): weak/local models sometimes emit a near-identical
     // "continuity summary" turn over and over instead of converging on an answer.
@@ -760,7 +769,6 @@ export namespace SessionPrompt {
         step = 0
         overflowCompactions = 0
         outputContinuations = 0
-        contractContinuations = 0
         compactionArmed = true
         SessionCompaction.resetBreaker(sessionID)
       }
@@ -891,28 +899,42 @@ export namespace SessionPrompt {
         if (contract) {
           const trace = await import("./trace").then((mod) => mod.SessionTrace.build(sessionID))
           const pending = trace.research.gates.filter((gate) => gate.id !== "runtime" && gate.status !== "passed")
-          if (pending.length && contractContinuations < 1 && !bareMode) {
-            contractContinuations++
+          const progress = ContractProgress.fingerprint(trace)
+          const prior = SessionLoopState.contractMarker(msgs)
+          const decision = ContractProgress.decide({
+            pending: pending.length,
+            progress,
+            prior,
+            terminal: ContractProgress.terminal(trace),
+          })
+          if ((decision === "continue" || decision === "repair") && !bareMode) {
+            const repair = decision === "repair"
             await enqueue({
               user: lastUser,
               kind: "contract",
               epoch: turn,
+              progress,
+              repair,
               text: [
-                "The durable research completion contract is not satisfied yet.",
+                repair
+                  ? "The research contract made no semantic progress since the previous inspection. Perform one focused repair or state the exact blocker in your normal response; do not repeat completed computation."
+                  : "The durable research completion contract is not satisfied yet. Continue from the existing evidence without repeating completed work.",
                 `Resolve these gates without repeating completed work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}.`,
-                "Save every required Result, record deterministic checks and failed candidates truthfully, then return the verified outcome.",
+                "For active compute, wait until its state changes instead of polling on a fixed cadence. Save required Results, record checks and failed candidates truthfully, then return the verified or explicitly partial outcome.",
               ].join(" "),
             })
             continue
           }
-          if (pending.length) {
+          if (pending.length && decision === "await_user") {
             await Session.updatePart({
-              id: Identifier.ascending("part"),
+              id: SessionLoopState.partID(lastAssistant.id, "contract-boundary"),
               messageID: lastAssistant.id,
               sessionID,
               type: "text",
               synthetic: true,
-              text: `OpenScience stopped with an incomplete research contract: ${pending.map((gate) => gate.detail).join("; ")}. Existing Results and checkpoints remain available for resume.`,
+              ignored: true,
+              metadata: SessionLoopState.boundary(ContractProgress.terminal(trace) ? "blocked" : "partial", progress),
+              text: "Research contract controller paused automatic continuation; the visible assistant response and durable evidence remain authoritative.",
               time: { start: Date.now(), end: Date.now() },
             } satisfies MessageV2.TextPart)
           }
@@ -1934,11 +1956,18 @@ export namespace SessionPrompt {
   export function researchEffortReminder(value: unknown, delegation?: unknown, enabled?: boolean) {
     const effort = MessageV2.resolveResearchEffort(value)
     const settings = MessageV2.resolveDelegationSettings(delegation, { effort, enabled })
-    const limit = MessageV2.delegationLimit(settings)
     const posture =
       effort === "ultra"
         ? "Investigate additional independent branches when they can materially change the result."
-        : "Stay focused; delegate only when one or two independent branches will materially help."
+        : "Stay focused and use additional branches only when they materially help."
+    const delegationPosture =
+      settings.level === "off"
+        ? "Automatic delegation is off. Work in the lead conversation unless the user explicitly attached an agent."
+        : settings.level === "light"
+          ? "Delegation is Low. Delegate when clearly useful, especially for one genuinely independent branch."
+          : settings.level === "high"
+            ? "Delegation is High. Aggressively parallelize independent research and verification when useful."
+            : "Delegation is Normal. Naturally parallelize genuinely independent work when it improves the result."
     const interaction =
       settings.autonomy === "interactive"
         ? "Ask one concise clarification when a meaningful ambiguity could change the scope or deliverable; do not ask about routine details."
@@ -1947,10 +1976,8 @@ export namespace SessionPrompt {
           : "Proceed with safe, reversible assumptions and ask only before consequential or materially scope-changing choices."
     return [
       `Research effort: ${effort.toUpperCase()}. ${posture}`,
-      limit
-        ? `Delegation is optional (${settings.level}): at most ${limit} Task calls total this user turn, including continuations. Use parallel workers only for genuinely independent work and integrate their findings in the lead response.`
-        : `Automatic delegation is off for this turn. Work in the lead conversation unless the user explicitly attached an agent; even then, at most ${MessageV2.childAgentLimit(effort)} Task calls total this user turn, including continuations.`,
-      `Independence: ${settings.autonomy}. ${interaction} This never overrides the permission mode.`,
+      `${delegationPosture} The model may use as many useful workers as available machine capacity permits, and must integrate their findings in the lead response.`,
+      `Independence: ${settings.autonomy}. ${interaction} Apply this posture to the lead and workers. It never overrides the permission mode.`,
     ].join("\n")
   }
 

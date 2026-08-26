@@ -26,7 +26,7 @@ It is model-agnostic, open source, and built to do real work in machine learning
 ## What it does
 
 - **Runs the whole loop.** Literature review, hypothesis, code, experiment, analysis, and write-up, in one continuous session.
-- **One adaptive Research agent.** A single user-facing collaborator handles the task end to end, loads domain skills when useful, and can delegate bounded Explore or Execute work. Normal and Ultra efforts control how widely it investigates; plan mode stays read-only.
+- **One adaptive Research agent.** A single user-facing collaborator handles the task end to end, loads domain skills when useful, and delegates independent Explore or Execute work when it helps. Off, Low, Normal, and High delegation guide how readily it parallelizes without imposing a per-turn worker quota; plan mode stays read-only.
 - **311 bundled skills.** Training (DeepSpeed, PEFT, TRL), evaluation, dataset work, molecular and clinical biology, cheminformatics, papers and LaTeX, figures, and user-configured scientific runtimes.
 - **Scientific databases as tools.** UniProt, PDB, Ensembl, ChEMBL, PubChem, arXiv, OpenAlex, Semantic Scholar, and around 30 more, queryable directly by the agent.
 - **A real workspace.** A browser UI with a file tree, an editor, a terminal, session history, and inline rendering for molecules, structures, genomes, and plots.

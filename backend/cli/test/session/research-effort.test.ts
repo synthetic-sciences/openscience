@@ -6,12 +6,10 @@ import { Identifier } from "../../src/id/id"
 import { tmpdir } from "../fixture/fixture"
 
 describe("Research effort", () => {
-  test("resolves legacy and invalid values to Normal with bounded limits", () => {
+  test("resolves legacy and invalid values to Normal without controlling delegation", () => {
     expect(MessageV2.resolveResearchEffort(undefined)).toBe("normal")
     expect(MessageV2.resolveResearchEffort("unexpected")).toBe("normal")
     expect(MessageV2.resolveResearchEffort("ultra")).toBe("ultra")
-    expect(MessageV2.childAgentLimit("normal")).toBe(2)
-    expect(MessageV2.childAgentLimit("ultra")).toBe(4)
   })
 
   test("persists Normal for a legacy user message that omitted effort", async () => {

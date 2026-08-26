@@ -1227,7 +1227,7 @@ describe("ComputeJobs Modal governance", () => {
         await gate.promise
         return { code: 0, outputs: [] }
       },
-      release: async () => gate.resolve(),
+      close: async () => gate.resolve(),
     })
     const request = {
       name: "held modal job",
@@ -1287,21 +1287,26 @@ describe("ComputeJobs Modal governance", () => {
     await ComputeJobs.cancel(first.id, { root, workspace: tmp.path, credentials, provider })
   })
 
-  test("warns when Modal does not confirm that cancellation stopped billing", async () => {
+  test("cancellation stops Modal execution but retains its durable volume until explicit release", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
     const gate = Promise.withResolvers<void>()
-    const releases = { count: 0 }
+    const entered = Promise.withResolvers<void>()
+    const calls = { close: 0, release: 0 }
     const provider = modalProvider({
       run: async (_context, spec, hooks) => {
         await hooks.created(`sandbox-${spec.id}`)
+        entered.resolve()
         await gate.promise
         return { code: 0, outputs: [] }
       },
-      release: async () => {
+      close: async () => {
         gate.resolve()
-        releases.count++
-        if (releases.count === 1) throw new Error("provider unavailable")
+        calls.close++
+        if (calls.close === 1) throw new Error("provider unavailable")
+      },
+      release: async () => {
+        calls.release++
       },
     })
     const request = {
@@ -1327,6 +1332,7 @@ describe("ComputeJobs Modal governance", () => {
           { root, workspace: tmp.path, modal, credentials, provider },
         ),
     })
+    await entered.promise
 
     const cancelled = await ComputeJobs.cancel(job.id, { root, workspace: tmp.path, credentials, provider })
 
@@ -1338,10 +1344,85 @@ describe("ComputeJobs Modal governance", () => {
     expect(await ComputeJobs.clear({ root, workspace: tmp.path })).toBe(0)
 
     const released = await ComputeJobs.cancel(job.id, { root, workspace: tmp.path, credentials, provider })
-    expect(released.lifecycle?.resource).toBe("closed")
+    expect(released.lifecycle?.resource).toBe("unknown")
+    expect(released.modal?.retained_volume).toBe(true)
     expect(released.cleanup_error).toBeUndefined()
     expect(released.error).toBeUndefined()
+    expect(calls).toEqual({ close: 2, release: 0 })
+    const discarded = await ComputeJobs.release(job.id, { root, workspace: tmp.path, credentials, provider })
+    expect(discarded.lifecycle?.resource).toBe("closed")
+    expect(discarded.modal?.retained_volume).toBe(false)
+    expect(calls).toEqual({ close: 2, release: 1 })
     expect(await ComputeJobs.clear({ root, workspace: tmp.path })).toBe(1)
+  })
+
+  test("cancellation harvests declared partial Modal outputs without deleting the volume", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const gate = Promise.withResolvers<void>()
+    const entered = Promise.withResolvers<void>()
+    const calls = { close: 0, collect: 0, release: 0 }
+    const provider = modalProvider({
+      run: async (_context, spec, hooks) => {
+        await hooks.created(`sandbox-${spec.id}`)
+        entered.resolve()
+        await gate.promise
+        return { code: 130, outputs: [] }
+      },
+      close: async () => {
+        calls.close++
+        gate.resolve()
+      },
+      collect: async (_context, spec) => {
+        calls.collect++
+        const staging = path.join(tmp.path, "partial", "results.csv")
+        await fs.mkdir(path.dirname(staging), { recursive: true })
+        await Bun.write(staging, "candidate,score\nA,0.8\n")
+        return {
+          code: 130,
+          outputs: [{ path: "results.csv", staging, size: 22 }],
+        }
+      },
+      release: async () => {
+        calls.release++
+      },
+    })
+    const request = {
+      name: "retain partial output",
+      command: "python analysis.py",
+      target: { kind: "modal" as const },
+      gpu: "none",
+      artifacts: ["results.csv"],
+    }
+    const prepared = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const plan = await ComputeJobs.plan({ ...request, sessionID: session.id }, { root, workspace: tmp.path, modal })
+        return { session, plan }
+      },
+    })
+    const job = await Instance.provide({
+      directory: tmp.path,
+      fn: () =>
+        ComputeJobs.start(
+          { ...request, sessionID: prepared.session.id, approval: prepared.plan.digest },
+          { root, workspace: tmp.path, modal, credentials, provider },
+        ),
+    })
+    await entered.promise
+
+    const cancelled = await ComputeJobs.cancel(job.id, { root, workspace: tmp.path, credentials, provider })
+
+    expect(cancelled).toMatchObject({
+      status: "cancelled",
+      lifecycle: { delivery: "complete", resource: "unknown", recoverable: false },
+      modal: { retained_volume: true },
+    })
+    expect(cancelled.artifacts?.map((item) => item.path)).toEqual(["results.csv"])
+    expect(await Bun.file(path.join(job.cwd!, "results.csv")).text()).toBe("candidate,score\nA,0.8\n")
+    expect(calls).toEqual({ close: 1, collect: 1, release: 0 })
   })
 
   test("keeps a completed job recoverable when final Modal cleanup fails", async () => {
@@ -1391,7 +1472,7 @@ describe("ComputeJobs Modal governance", () => {
     expect(finished?.error).toBeUndefined()
     expect(await ComputeJobs.clear({ root, workspace: tmp.path })).toBe(0)
 
-    const released = await ComputeJobs.cancel(job.id, { root, workspace: tmp.path, credentials, provider })
+    const released = await ComputeJobs.release(job.id, { root, workspace: tmp.path, credentials, provider })
     expect(released.status).toBe("succeeded")
     expect(released.lifecycle?.resource).toBe("closed")
     expect(released.cleanup_error).toBeUndefined()
@@ -2126,7 +2207,7 @@ describe("ComputeJobs Modal governance", () => {
     await fs.mkdir(root, { recursive: true })
     await Bun.write(path.join(root, "jobs.json"), JSON.stringify([job]))
 
-    const cleaned = await ComputeJobs.cancel(id, { root, workspace: tmp.path, credentials, provider })
+    const cleaned = await ComputeJobs.release(id, { root, workspace: tmp.path, credentials, provider })
 
     expect(cleaned.lifecycle?.resource).toBe("closed")
     expect(cleaned.cleanup_error).toBeUndefined()

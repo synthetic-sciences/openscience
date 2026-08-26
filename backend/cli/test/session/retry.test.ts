@@ -158,6 +158,23 @@ describe("SessionProcessor.providerFailureAction", () => {
 })
 
 describe("session.message-v2.fromError", () => {
+  test("preserves an APIError raised directly by the runtime", () => {
+    const error = new MessageV2.APIError({
+      message: "Managed inference is temporarily unavailable",
+      isRetryable: true,
+      metadata: { state: "paused" },
+    })
+
+    const result = MessageV2.fromError(error, { providerID: "synthetic-sciences" })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data).toMatchObject({
+      message: "Managed inference is temporarily unavailable",
+      isRetryable: true,
+      metadata: { state: "paused" },
+    })
+  })
+
   test.concurrent(
     "converts ECONNRESET socket errors to retryable APIError",
     async () => {

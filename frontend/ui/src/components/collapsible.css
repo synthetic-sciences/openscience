@@ -4,7 +4,7 @@
   flex-direction: column;
   background-color: var(--surface-base);
   border: none;
-  transition: background-color var(--duration-fast) var(--ease-standard);
+  transition: background-color 140ms var(--ease-standard);
   border-radius: var(--radius-sm);
   overflow: clip;
 
@@ -26,8 +26,8 @@
     line-height: 20px;
     letter-spacing: var(--letter-spacing-normal);
     transition:
-      background-color var(--duration-fast) var(--ease-standard),
-      box-shadow var(--duration-fast) var(--ease-standard);
+      background-color 140ms var(--ease-standard),
+      box-shadow 140ms var(--ease-standard);
 
     &:hover {
       background-color: var(--surface-base-hover);
@@ -35,6 +35,9 @@
     &:focus-visible {
       outline: none;
       box-shadow: inset 0 0 0 1px var(--border-selected);
+    }
+    &:active {
+      background-color: var(--surface-raised-base);
     }
     &[data-disabled] {
       cursor: not-allowed;
@@ -104,6 +107,13 @@
     > [data-slot="collapsible-trigger"] {
       height: 24px;
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="collapsible"],
+  [data-component="collapsible"] [data-slot="collapsible-trigger"] {
+    transition: none;
   }
 }
 

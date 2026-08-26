@@ -396,12 +396,13 @@ export namespace SessionTrace {
   }
 
   export async function build(sessionID: string): Promise<Info> {
-    const [session, messages, stored, allJobs, contract] = await Promise.all([
+    const [session, messages, stored, allJobs, contract, storedVersions] = await Promise.all([
       Session.get(sessionID),
       Session.messages({ sessionID }),
       SessionTraceStore.read(sessionID),
       ComputeJobs.list().catch(() => [] as ComputeJobs.Job[]),
       SessionResearch.read(sessionID),
+      ArtifactStore.listSessionVersions(Instance.project.id, sessionID),
     ])
     const now = Date.now()
     const users = new Map(
@@ -551,7 +552,8 @@ export namespace SessionTrace {
           artifactCount: job.artifacts?.length ?? 0,
         }
       })
-    const artifacts = parts
+    const storedByID = new Map(storedVersions.map((version) => [version.id, version]))
+    const toolArtifacts = parts
       .filter(
         (part) =>
           part.tool === "artifact" && part.state.status === "completed" && part.state.input.action === "save_file",
@@ -559,8 +561,10 @@ export namespace SessionTrace {
       .map((part) => {
         const meta = metadata(part)
         const saved = object(meta.savedArtifact)
-        const versionID = string(saved?.versionID)
-        const sha256 = string(saved?.sha256)
+        const reportedVersionID = string(saved?.versionID)
+        const immutable = reportedVersionID ? storedByID.get(reportedVersionID) : undefined
+        const versionID = immutable?.id ?? reportedVersionID
+        const sha256 = immutable?.sha256 ?? string(saved?.sha256)
         const target = versionID && sha256 ? ArtifactStore.reviewTargetID(versionID, sha256) : undefined
         const edge = target ? graph.edges.find((item) => item.to === target && item.relation === "produced") : undefined
         const producer = edge ? graph.nodes.find((item) => item.id === edge.from && item.kind === "run") : undefined
@@ -569,17 +573,44 @@ export namespace SessionTrace {
           toolID: part.id,
           messageID: part.messageID,
           action: "save_file" as const,
-          artifactID: string(saved?.id),
+          artifactID: immutable?.artifactID ?? string(saved?.id),
           versionID,
-          path: string(saved?.path) ?? string(part.state.input.path),
+          path: immutable?.sourcePath ?? string(saved?.path) ?? string(part.state.input.path),
           kind: string(saved?.kind),
           sha256,
           provenanceID: producer?.id,
           producedAt: Number.isFinite(producedAt) ? producedAt : undefined,
           durable: true,
-          completedAt: times(part, now).completedAt,
+          completedAt: immutable?.createdAt ?? times(part, now).completedAt,
         }
       })
+    const toolVersions = new Set(
+      toolArtifacts.map((artifact) => artifact.versionID).filter((id): id is string => id !== undefined),
+    )
+    const artifacts = [
+      ...toolArtifacts,
+      ...storedVersions
+        .filter((version) => !toolVersions.has(version.id))
+        .map((version) => {
+          const target = ArtifactStore.reviewTargetID(version.id, version.sha256)
+          const edge = graph.edges.find((item) => item.to === target && item.relation === "produced")
+          const producer = edge ? graph.nodes.find((item) => item.id === edge.from && item.kind === "run") : undefined
+          const producedAt = producer ? Date.parse(producer.recordedAt) : Number.NaN
+          return {
+            toolID: `artifact-store:${version.id}`,
+            messageID: version.messageID ?? `artifact-store:${sessionID}`,
+            action: "save_file" as const,
+            artifactID: version.artifactID,
+            versionID: version.id,
+            path: version.sourcePath,
+            sha256: version.sha256,
+            provenanceID: producer?.id,
+            producedAt: Number.isFinite(producedAt) ? producedAt : undefined,
+            durable: true,
+            completedAt: version.createdAt,
+          }
+        }),
+    ].toSorted((a, b) => (a.completedAt ?? 0) - (b.completedAt ?? 0) || a.toolID.localeCompare(b.toolID))
     const persisted = reviews
       .filter((entry) => {
         const finding = (entry.finding.meta ?? {}) as Record<string, unknown>

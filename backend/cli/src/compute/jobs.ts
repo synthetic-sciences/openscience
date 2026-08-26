@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import crypto from "node:crypto"
-import { createReadStream } from "node:fs"
+import { createReadStream, watch as watchFile } from "node:fs"
 import fs from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
@@ -277,6 +277,7 @@ export namespace ComputeJobs {
         approval: z.string().length(64),
         sdk: z.string(),
         volume: z.string().optional(),
+        retained_volume: z.boolean().optional(),
       })
       .optional(),
     ssh: z
@@ -297,7 +298,8 @@ export namespace ComputeJobs {
   export const Plan = z.union([LocalPlan, ModalPlan.Schema, SshPlan.Schema])
   export type Plan = z.infer<typeof Plan>
 
-  export type ModalProvider = Pick<typeof ModalAdapter, "run" | "recover" | "find" | "close" | "release" | "volume">
+  export type ModalProvider = Pick<typeof ModalAdapter, "run" | "recover" | "find" | "close" | "release" | "volume"> &
+    Partial<Pick<typeof ModalAdapter, "collect">>
 
   export type Options = {
     data?: string
@@ -438,6 +440,7 @@ export namespace ComputeJobs {
   function reservesModal(job: Job) {
     if (job.target.kind !== "modal") return false
     const lifecycle = job.lifecycle ?? ComputeLifecycle.from(job.status)
+    if (terminal.has(job.status) && job.modal?.retained_volume) return false
     return !terminal.has(job.status) || lifecycle.resource !== "closed"
   }
 
@@ -2759,6 +2762,36 @@ export namespace ComputeJobs {
     await completeModal(Job.parse({ ...job, remote_id: id }), scope, context, result, provider)
   }
 
+  async function collectCancelledModal(
+    job: Job,
+    scope: Scope,
+    context: ModalAdapter.Context,
+    provider: ModalProvider,
+  ): Promise<void> {
+    const expected = [...(job.artifact_patterns ?? []), ...(job.checkpoint_path ? [job.checkpoint_path] : [])]
+    if (!expected.length) return
+    const log = path.join(logsOf(scope.root), `${job.id}.log`)
+    const spec = modalSpec(job, [], scope)
+    const result = await (provider.collect
+      ? provider.collect(context, spec, {
+          log: async (value) => event(scope.root, job.id, value),
+          output: async (value) => snapshot(log, value),
+        })
+      : provider.recover(context, spec, undefined, {
+          log: async (value) => event(scope.root, job.id, value),
+          output: async (value) => snapshot(log, value),
+        }))
+    await deliver(job.cwd!, result.outputs, expected, false)
+    const captured = await captureModal(job, result.outputs)
+    await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0 || jobs[index]!.lifecycle?.delivery !== "pending") return
+      const delivered = move(jobs[index]!, { type: "deliver" })
+      const updated = Job.parse({ ...delivered, ...captured, capture_error: undefined })
+      jobs[index] = Job.parse({ ...updated, provenance: provenance(updated) })
+    })
+  }
+
   async function cleanupModal(
     job: Job,
     scope: Scope,
@@ -2980,7 +3013,7 @@ export namespace ComputeJobs {
           throw new Error(`Compute job ${id} has no Modal resources to release`)
         }
         if (!terminal.has(job.status)) throw new Error(`Cancel compute job ${id} before releasing its resources`)
-        if (job.lifecycle?.resource === "closed") return job
+        if (job.lifecycle?.resource === "closed" && !job.modal.retained_volume) return job
         const context = await modalContext(options, "Enable Modal before releasing retained job resources")
         const provider = options.provider ?? ModalAdapter
         const spec = modalSpec(job, [], scope)
@@ -2991,10 +3024,15 @@ export namespace ComputeJobs {
           const index = jobs.findIndex((item) => item.id === id)
           if (index < 0) throw new Error(`Compute job ${id} was not found`)
           const current = jobs[index]!
-          if (current.lifecycle?.resource === "closed") return current
+          if (current.lifecycle?.resource === "closed" && !current.modal?.retained_volume) return current
           const abandoned = current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
-          const closed = move(abandoned, { type: "close" })
-          const updated = Job.parse({ ...closed, provenance: provenance(closed) })
+          const closed = abandoned.lifecycle?.resource === "closed" ? abandoned : move(abandoned, { type: "close" })
+          const updated = Job.parse({
+            ...closed,
+            modal: closed.modal ? { ...closed.modal, retained_volume: false } : undefined,
+            cleanup_error: undefined,
+            provenance: provenance(closed),
+          })
           jobs[index] = updated
           return updated
         })
@@ -3544,21 +3582,33 @@ export namespace ComputeJobs {
         await event(scope.root, job.id, result.cleanup ? "Retrying Modal cleanup" : "Cancellation requested")
       }
       const proc = runtime?.process
-      const modalClosed =
+      const provider = options.provider ?? runtime?.provider ?? ModalAdapter
+      const sandbox =
+        job.target.kind === "modal" && context
+          ? (job.remote_id ??
+            (await provider.find(context, job.id, modalSpec(job, [], scope).project).catch(() => undefined)))
+          : undefined
+      const modalStopped =
         job.target.kind === "modal"
           ? context
-            ? await (options.provider ?? runtime?.provider ?? ModalAdapter)
-                .release(context, modalSpec(job, [], scope), job.remote_id)
-                .then(
+            ? sandbox
+              ? await provider.close(context, sandbox, job.id, modalSpec(job, [], scope).project).then(
                   () => true,
                   () => false,
                 )
+              : true
             : false
           : true
-      if (job.target.kind === "modal" && job.remote_id && modalClosed) {
-        await event(scope.root, job.id, `Closed Modal sandbox ${job.remote_id}`)
+      if (job.target.kind === "modal" && modalStopped) {
+        await event(
+          scope.root,
+          job.id,
+          sandbox
+            ? `Stopped Modal sandbox ${sandbox}; durable volume retained`
+            : "No live Modal sandbox remained; durable volume retained",
+        )
       }
-      if (job.target.kind === "modal" && !modalClosed) {
+      if (job.target.kind === "modal" && !modalStopped) {
         await event(scope.root, job.id, "Modal did not confirm cancellation; the remote resource may still be billing")
       }
       if (proc) {
@@ -3615,23 +3665,59 @@ export namespace ComputeJobs {
           Sandbox.cleanup(planned)
         }
       }
+      if (job.target.kind === "modal") {
+        const expected = [...(job.artifact_patterns ?? []), ...(job.checkpoint_path ? [job.checkpoint_path] : [])]
+        const retained = await change(scope.root, (jobs) => {
+          const index = jobs.findIndex((item) => item.id === id)
+          if (index < 0) throw new Error(`Compute job ${id} was not found`)
+          const current = jobs[index]!
+          const unknown = current.lifecycle?.resource === "unknown" ? current : move(current, { type: "lose" })
+          const collecting =
+            modalStopped && expected.length && unknown.lifecycle?.delivery === "none"
+              ? move(unknown, { type: "collect" })
+              : unknown
+          const warning = !modalStopped
+            ? "Cancellation was recorded, but Modal did not confirm that the sandbox stopped. It may still be billing; retry cancellation or check Modal."
+            : undefined
+          const updated = Job.parse({
+            ...collecting,
+            modal: collecting.modal
+              ? { ...collecting.modal, retained_volume: modalStopped || collecting.modal.retained_volume }
+              : undefined,
+            error: current.error?.startsWith("Cancellation was recorded") ? undefined : current.error,
+            cleanup_error: warning,
+            provenance: provenance(collecting),
+          })
+          jobs[index] = updated
+          return updated
+        })
+        if (modalStopped && expected.length && retained.lifecycle?.delivery === "pending" && context) {
+          await collectCancelledModal(retained, scope, context, provider).catch(async (error) => {
+            const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
+            await event(scope.root, retained.id, `Partial Modal output collection failed: ${message}`)
+            await change(scope.root, (jobs) => {
+              const index = jobs.findIndex((item) => item.id === retained.id)
+              if (index < 0 || jobs[index]!.lifecycle?.delivery !== "pending") return
+              const failed = move(jobs[index]!, { type: "delivery_fail", message }, { capture_error: message })
+              jobs[index] = Job.parse({ ...failed, provenance: provenance(failed) })
+            })
+          })
+        }
+        return (await get(id, { root: scope.root, workspace: scope.workspace }))!
+      }
       return await change(scope.root, (jobs) => {
         const index = jobs.findIndex((item) => item.id === id)
         if (index < 0) throw new Error(`Compute job ${id} was not found`)
         const current = jobs[index]!
-        const abandoned = modalClosed && current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
-        const closed = modalClosed ? move(abandoned, { type: "close" }) : move(abandoned, { type: "lose" })
-        const warning =
-          job.target.kind === "modal" && !modalClosed
-            ? "Cancellation was recorded, but Modal did not confirm that the sandbox and durable volume stopped. It may still be billing; retry cancellation or check Modal."
-            : undefined
+        const abandoned = current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
+        const closed = move(abandoned, { type: "close" })
         const legacy =
           !current.cleanup_error &&
           (current.error?.startsWith("Cancellation was recorded") || current.error?.startsWith("Modal cleanup failed"))
         const updated = Job.parse({
           ...closed,
           error: legacy ? undefined : current.error,
-          cleanup_error: warning,
+          cleanup_error: undefined,
           provenance: provenance(closed),
         })
         jobs[index] = updated
@@ -3815,6 +3901,7 @@ export namespace ComputeJobs {
     const removed = await change(scope.root, (jobs) => {
       const clearable = (job: Job) =>
         terminal.has(job.status) &&
+        !job.modal?.retained_volume &&
         !(
           job.target.kind === "modal" &&
           job.lifecycle &&
@@ -3835,21 +3922,172 @@ export namespace ComputeJobs {
     return removed.length
   }
 
-  export async function wait(id: string, options: Options & { timeout?: number } = {}): Promise<Job> {
+  type WaitState = {
+    job: Job
+    state: string
+    output: { bytes: number; modified: number }
+    events: { bytes: number; modified: number }
+  }
+
+  export type WaitChange = {
+    job: Job
+    changed: string[]
+    timed_out: boolean
+    waited_ms: number
+    output_bytes: { before: number; after: number; delta: number }
+    event_bytes: { before: number; after: number; delta: number }
+  }
+
+  function waitJobState(job: Job) {
+    return JSON.stringify({
+      status: job.status,
+      lifecycle: job.lifecycle,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      exit_code: job.exit_code,
+      remote_id: job.remote_id,
+      artifacts: job.artifacts,
+      checkpoint: job.checkpoint,
+      error: job.error,
+      capture_error: job.capture_error,
+      cleanup_error: job.cleanup_error,
+    })
+  }
+
+  async function waitState(id: string, scope: Scope, options: Options): Promise<WaitState> {
+    const job = (await list({ ...options, root: scope.root, workspace: scope.workspace })).find(
+      (item) => item.id === id,
+    )
+    if (!job) throw new Error(`Compute job ${id} was not found`)
+    const [output, events] = await Promise.all([
+      fs.stat(path.join(logsOf(scope.root), `${id}.log`)).catch(() => undefined),
+      fs.stat(eventsOf(scope.root, id)).catch(() => undefined),
+    ])
+    return {
+      job,
+      state: waitJobState(job),
+      output: { bytes: output?.size ?? 0, modified: output?.mtimeMs ?? 0 },
+      events: { bytes: events?.size ?? 0, modified: events?.mtimeMs ?? 0 },
+    }
+  }
+
+  function waitChanges(before: WaitState, after: WaitState) {
+    return [
+      ...(before.state === after.state ? [] : ["state"]),
+      ...(before.output.bytes === after.output.bytes && before.output.modified === after.output.modified
+        ? []
+        : ["output"]),
+      ...(before.events.bytes === after.events.bytes && before.events.modified === after.events.modified
+        ? []
+        : ["events"]),
+    ]
+  }
+
+  function waitSettled(state: WaitState, scope: Scope) {
+    const lifecycle = state.job.lifecycle ?? ComputeLifecycle.from(state.job.status)
+    const pending =
+      lifecycle.delivery === "pending" || lifecycle.resource === "starting" || lifecycle.resource === "active"
+    return terminal.has(state.job.status) && !pending && !active.has(keyOf(scope.root, state.job.id))
+  }
+
+  async function waitSignal(scope: Scope, id: string, timeout: number, signal?: AbortSignal) {
+    if (signal?.aborted) throw signal.reason ?? new DOMException("Compute wait was aborted", "AbortError")
+    await fs.mkdir(logsOf(scope.root), { recursive: true })
+    return new Promise<void>((resolve, reject) => {
+      const watchers: ReturnType<typeof watchFile>[] = []
+      const state = { done: false }
+      const finish = (error?: unknown) => {
+        if (state.done) return
+        state.done = true
+        clearTimeout(timer)
+        signal?.removeEventListener("abort", abort)
+        for (const watcher of watchers) watcher.close()
+        if (error) reject(error)
+        else resolve()
+      }
+      const abort = () => finish(signal?.reason ?? new DOMException("Compute wait was aborted", "AbortError"))
+      const timer = setTimeout(finish, Math.max(1, Math.min(timeout, 5_000)))
+      signal?.addEventListener("abort", abort, { once: true })
+      for (const folder of [scope.root, logsOf(scope.root)]) {
+        try {
+          const watcher = watchFile(folder, (_event, filename) => {
+            if (folder === logsOf(scope.root) && filename && !String(filename).startsWith(`${id}.`)) return
+            finish()
+          })
+          watcher.once("error", () => finish())
+          if (state.done) watcher.close()
+          else watchers.push(watcher)
+        } catch {
+          // The five-second safety refresh below covers platforms or network
+          // filesystems where native file notifications are unavailable.
+        }
+      }
+    })
+  }
+
+  function waitResult(before: WaitState, after: WaitState, started: number, timedOut: boolean): WaitChange {
+    return {
+      job: after.job,
+      changed: waitChanges(before, after),
+      timed_out: timedOut,
+      waited_ms: Date.now() - started,
+      output_bytes: {
+        before: before.output.bytes,
+        after: after.output.bytes,
+        delta: after.output.bytes - before.output.bytes,
+      },
+      event_bytes: {
+        before: before.events.bytes,
+        after: after.events.bytes,
+        delta: after.events.bytes - before.events.bytes,
+      },
+    }
+  }
+
+  export async function waitForChange(
+    id: string,
+    options: Options & { timeout?: number; signal?: AbortSignal; after?: Job } = {},
+  ): Promise<WaitChange> {
+    const started = Date.now()
+    const timeout = Math.max(1, options.timeout ?? 10 * 60_000)
+    const scope = await scoped(options)
+    const current = await waitState(id, scope, options)
+    const before = options.after ? { ...current, job: options.after, state: waitJobState(options.after) } : current
+    if (waitChanges(before, current).length) return waitResult(before, current, started, false)
+    if (waitSettled(current, scope)) return { ...waitResult(before, current, started, false), changed: ["settled"] }
+    const next = async (): Promise<WaitChange> => {
+      const remaining = timeout - (Date.now() - started)
+      if (remaining <= 0) return waitResult(before, await waitState(id, scope, options), started, true)
+      await waitSignal(scope, id, remaining, options.signal)
+      const after = await waitState(id, scope, options)
+      const changed = waitChanges(before, after)
+      const structural = changed.some((item) => item !== "output" && item !== "events")
+      const activity = Math.max(after.output.modified, after.events.modified)
+      const quiet = activity > 0 && Date.now() - activity >= 2_000
+      if (waitSettled(after, scope) || structural || (changed.length > 0 && quiet)) {
+        return waitResult(before, after, started, false)
+      }
+      if (Date.now() - started >= timeout) return waitResult(before, after, started, true)
+      return next()
+    }
+    return next()
+  }
+
+  export async function wait(
+    id: string,
+    options: Options & { timeout?: number; signal?: AbortSignal } = {},
+  ): Promise<Job> {
     const started = Date.now()
     const timeout = options.timeout ?? 30_000
     const scope = await scoped(options)
-    for (;;) {
-      const job = (await list({ ...options, root: scope.root, workspace: scope.workspace })).find(
-        (item) => item.id === id,
-      )
-      if (!job) throw new Error(`Compute job ${id} was not found`)
-      const lifecycle = job.lifecycle ?? ComputeLifecycle.from(job.status)
-      const pending =
-        lifecycle.delivery === "pending" || lifecycle.resource === "starting" || lifecycle.resource === "active"
-      if (terminal.has(job.status) && !pending && !active.has(keyOf(scope.root, id))) return job
-      if (Date.now() - started >= timeout) throw new Error(`Timed out waiting for compute job ${id}`)
-      await Bun.sleep(25)
+    const next = async (): Promise<Job> => {
+      const state = await waitState(id, scope, options)
+      if (waitSettled(state, scope)) return state.job
+      const remaining = timeout - (Date.now() - started)
+      if (remaining <= 0) throw new Error(`Timed out waiting for compute job ${id}`)
+      await waitSignal(scope, id, remaining, options.signal)
+      return next()
     }
+    return next()
   }
 }

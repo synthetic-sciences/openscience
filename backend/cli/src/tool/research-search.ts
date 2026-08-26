@@ -9,13 +9,6 @@ import { Tool } from "./tool"
 
 const COMMUNITY_URL = "https://mcp.exa.ai/mcp"
 const ALTERNATIVES = ["science_search", "science_fetch", "WebFetch"] as const
-const MANAGED_SEARCH_COOLDOWN_MS = 60_000
-let managedSearchUnavailableUntil = 0
-
-/** Clear the short-lived managed-search circuit after account/runtime changes. */
-export function resetResearchSearchCircuitBreaker() {
-  managedSearchUnavailableUntil = 0
-}
 
 const Domain = z
   .string()
@@ -266,22 +259,12 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
         })
         if (route === "firecrawl_byok" && key) return firecrawl(input, ctx, key)
         if (route === "community") return community(input, ctx)
-        if (Date.now() < managedSearchUnavailableUntil) {
-          return fallback(
-            input,
-            ctx,
-            key,
-            "Ace managed search is recovering from a recent service failure. A non-managed fallback was used.",
-          )
-        }
-
         // The managed service is the pricing and settlement authority for Ace
         // search. It can choose Firecrawl without exposing that provider key to
         // this process. Replays use one durable operation key.
         const operationID = ctx.callID || randomUUID()
         const response = await OpenScience.dispatchResearchSearch(input as ResearchSearchInput, operationID, ctx.abort)
         if (!response) {
-          managedSearchUnavailableUntil = Date.now() + MANAGED_SEARCH_COOLDOWN_MS
           return fallback(input, ctx, key, "Ace managed search was unavailable. A non-managed fallback was used.")
         }
         const failure = detail(response.body)
@@ -314,7 +297,6 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
           )
         }
         if (response.status === 429 || response.status >= 500 || code === "operation_in_progress") {
-          managedSearchUnavailableUntil = Date.now() + MANAGED_SEARCH_COOLDOWN_MS
           const reason =
             typeof failure?.message === "string"
               ? failure.message
@@ -339,7 +321,6 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
         }
 
         const body = record(response.body)
-        managedSearchUnavailableUntil = 0
         const results = Array.isArray(body?.results) ? body.results : []
         const funding = typeof body?.funding === "string" ? body.funding : undefined
         // Search cost is settled by Synthetic Sciences and may vary by provider and

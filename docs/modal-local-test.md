@@ -51,10 +51,10 @@ Select **Review command**. Verify the app, image, GPU, network policy, timeout, 
 
 A successful run should show `nvidia-smi` in the streamed log and copy `outputs/modal-smoke.txt` into the project with its checksum in **Captured outputs**.
 
-Every governed job mounts a named per-job Modal Volume at `/workspace`. The volume name is recorded with the job without exposing the local project path. After the execution sandbox exits, OpenScience reads the command result and declared outputs directly through Modal's control-plane Volume API. It does not create a harvest sandbox. The Volume is deleted only after local delivery succeeds.
+Every governed job mounts a named per-job Modal Volume at `/workspace`. The volume name is recorded with the job without exposing the local project path. After the execution sandbox exits, OpenScience reads the command result and declared outputs directly through Modal's control-plane Volume API. It does not create a harvest sandbox. Normal completion deletes the Volume only after local delivery succeeds.
 
 If local output delivery fails, the finished run remains visible with **Retry delivery**. That action reattaches to a live execution sandbox when necessary or reads the retained Volume directly; it does not rerun the approved command. **Clear finished** keeps the record until delivery succeeds or the retained resource is explicitly cleaned up.
 
-To test cancellation, dispatch `sleep 300`, wait for the job to become running, then select **Cancel job**. Modal should terminate the tagged sandbox and the job should become cancelled.
+To test cancellation, dispatch a job that writes a declared partial output and then sleeps, wait for it to become running, then select **Cancel job**. Modal should terminate the tagged sandbox, mark the job cancelled, collect any declared partial output already present, and retain the Volume. Use the explicit release action after inspecting or delivering the partial output; cancellation itself never deletes recoverable data.
 
-If Modal does not confirm termination, the run remains visible with an explicit billing warning and **Retry cleanup**. Finished records whose remote resource is unknown or still holds recoverable output are not removed by **Clear finished**.
+If Modal does not confirm termination, the run remains visible with an explicit billing warning and a retry action. Finished records whose remote resource is unknown or still holds recoverable output are not removed by **Clear finished**.

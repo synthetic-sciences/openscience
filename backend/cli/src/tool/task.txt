@@ -1,4 +1,4 @@
-Delegate one bounded independent unit when parallel work materially improves the result.
+Delegate one independent unit when parallel work materially improves the result.
 
 Profiles:
 {agents}
@@ -6,11 +6,12 @@ Profiles:
 Choose by work: `explore` finds evidence and `execute` implements or computes. Lazy skills provide
 domain expertise; do not invent personas.
 
-- Default to no children. Normal permits two calls per turn; Ultra four, including continuations.
+- Use as many independent workers as materially useful. Delegation posture guides how readily to
+  delegate; it is not a quota. Runtime capacity may queue work.
 - Children cannot call Task. The lead owns synthesis and verification.
 - Do not delegate sequential work, small edits, ceremonial review, or duplicate retrieval.
 - Task blocks the lead. Issue independent calls together; optional failure must not block the result.
 - Continue a `session_id` only for missing work. Otherwise include objective, inputs, references,
   context, assumptions, exclusions, allowed actions, output, and validation.
-- A child returns a bounded handoff; its transcript remains in `session_id`. Preserve decisive
+- A child returns a concise handoff; its transcript remains in `session_id`. Preserve decisive
   evidence and do not redo its phase.

@@ -397,6 +397,57 @@ test("builds one local observable harness trace without reasoning or copied outp
   })
 })
 
+test("includes immutable session artifact versions without relying on artifact tool history", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "Store-backed trace" })
+      const other = await Session.create({ title: "Other artifact owner" })
+      const content = "metric,value\naccuracy,0.91\n"
+      const saved = await ArtifactStore.save({
+        projectID: Instance.project.id,
+        sessionID: session.id,
+        messageID: "msg_store_backed_artifact",
+        sourcePath: "results/metrics.csv",
+        filename: "metrics.csv",
+        kind: "dataset",
+        content: new Blob([content], { type: "text/csv" }),
+        captureQuality: "exact",
+      })
+      await ArtifactStore.save({
+        projectID: Instance.project.id,
+        sessionID: other.id,
+        sourcePath: "results/other.csv",
+        filename: "other.csv",
+        kind: "dataset",
+        content: new Blob(["other,value\n1,2\n"], { type: "text/csv" }),
+        captureQuality: "exact",
+      })
+
+      const trace = await SessionTrace.build(session.id)
+      expect(trace.tools).toEqual([])
+      expect(trace.summary.artifactSaves).toBe(1)
+      expect(trace.artifacts).toHaveLength(1)
+      expect(trace.artifacts[0]).toMatchObject({
+        toolID: `artifact-store:${saved.current.id}`,
+        messageID: "msg_store_backed_artifact",
+        artifactID: saved.id,
+        versionID: saved.current.id,
+        path: "results/metrics.csv",
+        sha256: saved.current.sha256,
+        durable: true,
+      })
+      expect(await ArtifactStore.listSessionVersions(Instance.project.id, session.id)).toEqual([
+        expect.objectContaining({ id: saved.current.id, sessionID: session.id }),
+      ])
+
+      await Session.remove(session.id)
+      await Session.remove(other.id)
+    },
+  })
+})
+
 test("synthetic Task wrappers are not model calls in traces or research usage", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({

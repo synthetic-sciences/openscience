@@ -234,6 +234,7 @@ export namespace ArtifactStore {
     );
     CREATE INDEX IF NOT EXISTS artifacts_project_updated ON artifacts(project_id, state, updated_at DESC);
     CREATE INDEX IF NOT EXISTS versions_artifact_version ON versions(artifact_id, version DESC);
+    CREATE INDEX IF NOT EXISTS versions_session_created ON versions(session_id, created_at, id);
   `
 
   async function prepare() {
@@ -740,6 +741,25 @@ export namespace ArtifactStore {
       versions,
       ...(run ? { execution: execution(run) } : {}),
     }
+  }
+
+  /** Immutable artifact versions produced by one session, including versions
+   * whose originating tool part is no longer present in message history. */
+  export async function listSessionVersions(projectID: string, sessionID: string): Promise<Version[]> {
+    const db = await prepare()
+    const versions = (
+      db
+        .query(
+          `SELECT v.*
+           FROM versions v
+           JOIN artifacts a ON a.id = v.artifact_id
+           WHERE a.project_id = ?1 AND v.session_id = ?2
+           ORDER BY v.created_at, v.id`,
+        )
+        .all(projectID, sessionID) as VersionRow[]
+    ).map(version)
+    db.close()
+    return versions
   }
 
   export async function read(

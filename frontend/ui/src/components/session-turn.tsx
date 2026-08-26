@@ -36,7 +36,7 @@ import {
   artifactActions,
   generatedArtifacts,
   reasoningTopic,
-  sessionErrorText,
+  sessionErrorDisplay,
   stripRedactedReasoning,
   writtenFiles,
 } from "./tool-display"
@@ -163,6 +163,31 @@ function AssistantTrace(props: {
 }
 
 type ResearchTraceEntry = { part: PartType; message: AssistantMessage }
+
+function SessionErrorNotice(props: { error: unknown }) {
+  const display = () => sessionErrorDisplay(props.error)
+  return (
+    <Card
+      variant={display().state === "paused" ? "warning" : "error"}
+      class="session-state-card"
+      classList={{ "error-card": display().state === "error" }}
+      data-state={display().state}
+      role={display().state === "paused" ? "status" : "alert"}
+      aria-live="polite"
+    >
+      <Show
+        when={display().state === "paused"}
+        fallback={<span data-slot="session-state-message">{display().message}</span>}
+      >
+        <Icon name="alert-circle" size="small" />
+        <div data-slot="session-state-copy">
+          <strong>{display().title}</strong>
+          <span data-slot="session-state-message">{display().message}</span>
+        </div>
+      </Show>
+    </Card>
+  )
+}
 
 export function SessionTurn(
   props: ParentProps<{
@@ -705,9 +730,7 @@ export function SessionTurn(
                           </div>
                         </Show>
                         <Show when={props.stepsExpanded && error()}>
-                          <Card variant="error" class="error-card">
-                            {sessionErrorText(error())}
-                          </Card>
+                          {(value) => <SessionErrorNotice error={value()} />}
                         </Show>
                       </div>
                     </Show>
@@ -944,9 +967,7 @@ export function SessionTurn(
                       </section>
                     </Show>
                     <Show when={error() && !props.stepsExpanded}>
-                      <Card variant="error" class="error-card">
-                        {sessionErrorText(error())}
-                      </Card>
+                      {(value) => <SessionErrorNotice error={value()} />}
                     </Show>
                   </Match>
                 </Switch>

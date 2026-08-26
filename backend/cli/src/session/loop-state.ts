@@ -4,6 +4,11 @@ import type { MessageV2 } from "./message-v2"
 export namespace SessionLoopState {
   export type Continuation = "output" | "contract" | "compaction" | "task"
 
+  export type ContractMarker = {
+    progress: string
+    repair: boolean
+  }
+
   export type Info = {
     epoch?: string
     step: number
@@ -51,6 +56,8 @@ export namespace SessionLoopState {
     text: string
     epoch: string
     transaction: string
+    progress?: string
+    repair?: boolean
   }): NonNullable<MessageV2.User["internal"]> {
     return {
       type: "continuation",
@@ -58,6 +65,8 @@ export namespace SessionLoopState {
       text: input.text,
       epoch: input.epoch,
       transaction: input.transaction,
+      ...(input.progress ? { progress: input.progress } : {}),
+      ...(input.repair === undefined ? {} : { repair: input.repair }),
     }
   }
 
@@ -91,12 +100,24 @@ export namespace SessionLoopState {
     return compatibleContinuation((message.internal as { kind?: unknown }).kind)
   }
 
-  export function continuation(kind: Continuation) {
+  export function continuation(kind: Continuation, marker?: ContractMarker) {
     return {
       [key]: {
         version: 2,
         type: "continuation",
         kind,
+        ...(marker ?? {}),
+      },
+    }
+  }
+
+  export function boundary(state: "blocked" | "partial", progress: string) {
+    return {
+      [key]: {
+        version: 2,
+        type: "contract-boundary",
+        state,
+        progress,
       },
     }
   }
@@ -154,6 +175,22 @@ export namespace SessionLoopState {
       return compatibleContinuation(value.kind)
     }
     return legacy(part)
+  }
+
+  export function contractMarker(messages: MessageV2.WithParts[]): ContractMarker | undefined {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]
+      if (message.info.role !== "user" || messageKind(message.info) !== "contract") continue
+      const intent = message.info.internal
+      if (intent?.type === "continuation" && intent.progress) {
+        return { progress: intent.progress, repair: intent.repair === true }
+      }
+      for (const part of message.parts) {
+        const value = metadata(part)
+        if (value?.type !== "continuation" || value.kind !== "contract" || typeof value.progress !== "string") continue
+        return { progress: value.progress, repair: value.repair === true }
+      }
+    }
   }
 
   export function external(message: MessageV2.WithParts) {
@@ -294,7 +331,12 @@ export namespace SessionLoopState {
       type: "text" as const,
       text: intent.text,
       synthetic: true,
-      metadata: continuation(kind),
+      metadata: continuation(
+        kind,
+        kind === "contract" && intent.progress
+          ? { progress: intent.progress, repair: intent.repair === true }
+          : undefined,
+      ),
     }
   }
 

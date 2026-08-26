@@ -147,7 +147,7 @@ export namespace ComputeLifecycle {
       })
     }
     if (event.type === "collect") {
-      accepts(["succeeded", "failed", "timed_out"])
+      accepts(["succeeded", "failed", "timed_out", "cancelled"])
       if (state.delivery === "complete") return invalid()
       return State.parse({ ...state, delivery: "pending" })
     }

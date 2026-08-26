@@ -292,9 +292,8 @@ export namespace Agent {
       // delegates only by the kind of work that needs doing.
       execute: {
         name: "execute",
-        steps: 16,
         description:
-          "Bounded implementation or computational work with the active project permissions. Returns concrete results to Research.",
+          "Implementation or computational work with the active project permissions. Returns concrete results to Research.",
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
@@ -328,7 +327,6 @@ export namespace Agent {
       },
       explore: {
         name: "explore",
-        steps: 12,
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({

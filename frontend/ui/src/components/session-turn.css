@@ -28,7 +28,7 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    gap: 18px;
+    gap: 16px;
     overflow-anchor: none;
 
     [data-slot="session-turn-badge"] {
@@ -515,6 +515,24 @@
     margin-left: -9px;
     padding-left: 9px;
     position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    > [data-component="reasoning-part"] {
+      margin: 2px 0 3px 5px;
+      padding: 4px 10px 4px 12px;
+      border-left: 1px solid var(--border-weaker-base);
+      color: var(--text-weak);
+    }
+
+    > [data-component="text-part"] [data-slot="text-part-body"] {
+      margin-top: 14px;
+    }
+
+    > [data-component="text-part"] + [data-component="text-part"] [data-slot="text-part-body"] {
+      margin-top: 2px;
+    }
 
     > [data-slot="session-turn-response-copy-wrapper"] {
       position: absolute;
@@ -545,6 +563,7 @@
     /* Bigger, obviously-clickable hit area for the show/hide-steps toggle.
        Negative inline margin keeps the enlarged target from shifting layout. */
     cursor: pointer;
+    min-height: 32px;
     padding: 6px 10px;
     margin: -6px -10px;
     border-radius: var(--radius-xs);
@@ -613,6 +632,45 @@
     color: var(--text-on-critical-base);
     max-height: 240px;
     overflow-y: auto;
+  }
+
+  .session-state-card {
+    min-height: 44px;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 10px 12px;
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+
+    &[data-state="paused"] {
+      border-color: var(--border-warning-base);
+      background: var(--surface-warning-weak);
+      color: var(--text-on-warning-base);
+    }
+
+    &[data-state="paused"] > [data-component="icon"] {
+      flex-shrink: 0;
+      margin-top: 2px;
+      color: var(--icon-warning-active);
+    }
+
+    [data-slot="session-state-copy"] {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+
+      strong {
+        color: var(--text-on-warning-strong);
+        font-weight: var(--font-weight-medium);
+      }
+    }
+
+    [data-slot="session-state-message"] {
+      overflow-wrap: anywhere;
+    }
   }
 
   [data-slot="session-turn-collapsible-content-inner"] {
@@ -828,6 +886,13 @@
     [data-slot="session-turn-artifact-action"][data-state="error"] {
       color: var(--text-critical-base);
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="session-turn"] [data-slot="session-turn-collapsible-trigger-content"],
+  [data-component="session-turn"] [data-slot="session-turn-trigger-icon"] {
+    transition: none;
   }
 }
 

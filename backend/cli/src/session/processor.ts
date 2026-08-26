@@ -38,6 +38,18 @@ export namespace SessionProcessor {
   const MAX_RETRY_ATTEMPTS = 10
   const log = Log.create({ service: "session.processor" })
 
+  export function managedPauseError(message: string) {
+    return new MessageV2.APIError({
+      message,
+      statusCode: 503,
+      isRetryable: true,
+      metadata: {
+        openscience_state: "paused",
+        action: "retry",
+      },
+    })
+  }
+
   function telemetryRoute(source: CredentialSource, model: Provider.Model) {
     if (
       model.providerID === "ollama" ||
@@ -536,8 +548,8 @@ export namespace SessionProcessor {
             if (requiresWalletBalance(credentialSource)) {
               const balance = await OpenScience.getBalance()
               if (balance === null) {
-                throw new Error(
-                  "OpenScience could not verify your Ace balance. Managed model calls require a live connection. Retry when connected, or use a direct BYOK, ChatGPT, or local model.",
+                throw managedPauseError(
+                  "Managed access is paused because OpenScience could not verify your Ace balance. Existing responses, Results, checkpoints, and remote jobs are preserved. Retry when the connection returns, or switch to a direct BYOK, ChatGPT, or local model.",
                 )
               }
               creditDecision ??= await SessionResearch.preflight(input.sessionID, balance)

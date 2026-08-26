@@ -84,16 +84,10 @@ async function within<T>(promise: Promise<T>, timeout = 15_000) {
   return Promise.race([promise, expired.promise]).finally(() => clearTimeout(timer))
 }
 
-function worker(mode: string, directory: string, seed: Seed, ready: string, budgetMs?: number, attemptAgeMs?: number) {
+function worker(mode: string, directory: string, seed: Seed, ready: string, attemptAgeMs?: number) {
   return spawn([process.execPath, fixture, mode, directory, seed.parentID, seed.messageID, seed.callID, ready], {
     cwd: directory,
-    env:
-      budgetMs || attemptAgeMs
-        ? {
-            ...(budgetMs && { OPENSCIENCE_TEST_TASK_BUDGET_MS: String(budgetMs) }),
-            ...(attemptAgeMs && { OPENSCIENCE_TEST_TASK_ATTEMPT_AGE_MS: String(attemptAgeMs) }),
-          }
-        : undefined,
+    env: attemptAgeMs ? { OPENSCIENCE_TEST_TASK_ATTEMPT_AGE_MS: String(attemptAgeMs) } : undefined,
     stdout: "pipe",
     stderr: "pipe",
   })
@@ -371,36 +365,32 @@ describe("durable Task attempts across Bun processes", () => {
     }
   }, 10_000)
 
-  test("resumed Task execution keeps unused active budget after longer process downtime", async () => {
+  test("resumed Task execution completes naturally after longer process downtime", async () => {
     const local = provider(true, 40)
     const processes = new Set<ReturnType<typeof worker>>()
-    // Attempt age and active execution are independent clocks. Backdate the
-    // reservation in the fixture so its elapsed age exceeds the budget without
-    // turning a 600 ms provider round trip into an accidental CI performance SLA.
-    const budgetMs = 5_000
-    const attemptAgeMs = budgetMs + 1_000
+    const attemptAgeMs = 6_000
     try {
       await using tmp = await tmpdir({
         git: true,
         config: stressProviderConfig(`http://127.0.0.1:${local.server.port}/v1`),
       })
       const input = await seed(tmp.path)
-      const first = worker("run", tmp.path, input, path.join(tmp.path, "budget-first.ready"), budgetMs, attemptAgeMs)
+      const first = worker("run", tmp.path, input, path.join(tmp.path, "natural-first.ready"), attemptAgeMs)
       processes.add(first)
       await within(local.entered.promise)
       first.kill("SIGKILL")
       await within(first.exited)
 
       local.release.resolve()
-      const second = worker("run", tmp.path, input, path.join(tmp.path, "budget-second.ready"), budgetMs)
+      const second = worker("run", tmp.path, input, path.join(tmp.path, "natural-second.ready"))
       processes.add(second)
       const output = await result(second)
 
       expect(output.output).toContain("DURABLE_CHILD_RESULT")
       expect(output.output).not.toContain("<task_metadata>")
-      expect(output.metadata.timedOut).toBe(false)
-      expect(Number(output.metadata.queuedMs)).toBeGreaterThan(budgetMs)
-      expect(Number(output.metadata.activeMs)).toBeLessThan(budgetMs)
+      expect(output.metadata.timedOut).toBeUndefined()
+      expect(Number(output.metadata.queuedMs)).toBeGreaterThan(attemptAgeMs)
+      expect(Number(output.metadata.activeMs)).toBeLessThan(attemptAgeMs)
       expect(local.requests.length).toBeGreaterThan(1)
     } finally {
       local.release.resolve()

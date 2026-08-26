@@ -27,7 +27,7 @@ const ACTION_DESCRIPTIONS = {
   start: "Create and dispatch a detached compute job after any required approval.",
   list: "List project-scoped compute jobs, optionally filtered by status.",
   status: "Inspect the latest state of one existing job.",
-  wait: "Wait briefly for one job to finish or return its latest state without using shell sleep.",
+  wait: "Wait for meaningful job, output, delivery, or resource change without model-driven polling.",
   logs: "Read lifecycle events and bounded command output for one existing job.",
   artifacts: "Inspect expected and delivered outputs for one existing job.",
   cancel: "Stop one live job after dedicated approval.",
@@ -42,7 +42,7 @@ const ACTION_EXAMPLES = {
     '{"action":"start","name":"Run analysis","purpose":"Produce the requested analysis output.","command":"python analysis.py","target":{"kind":"local"}}',
   list: '{"action":"list","limit":20}',
   status: '{"action":"status","job_id":"job_..."}',
-  wait: '{"action":"wait","job_id":"job_...","seconds":30}',
+  wait: '{"action":"wait","job_id":"job_...","seconds":600}',
   logs: '{"action":"logs","job_id":"job_...","bytes":64000}',
   artifacts: '{"action":"artifacts","job_id":"job_..."}',
   cancel: '{"action":"cancel","job_id":"job_..."}',
@@ -122,7 +122,7 @@ const ComputeJobActionParameters = z
       .object({
         action: action("wait"),
         job_id: z.string().trim().min(1),
-        seconds: z.number().int().min(1).max(60).default(30),
+        seconds: z.number().int().min(1).default(600),
       })
       .strict()
       .describe(ACTION_EXAMPLES.wait),
@@ -180,7 +180,7 @@ export const ComputeJobParameters = z
     status: JobBroker.Status.optional(),
     limit: z.number().int().min(1).max(100).optional(),
     job_id: z.string().trim().min(1).optional(),
-    seconds: z.number().int().min(1).max(60).optional(),
+    seconds: z.number().int().min(1).optional(),
     bytes: z.number().int().min(1).max(256_000).optional(),
   })
   .strict()
@@ -495,7 +495,7 @@ export function createComputeJobTool(base?: JobBroker.Options) {
         return {
           title: `Compute job: ${input.name}`,
           metadata: complete,
-          output: `Dispatched ${plan.provider} job ${job.id}. Status: ${job.status}. Use compute_job wait (up to 60 seconds), status, logs, artifacts, or cancel with this job id; do not poll with shell sleep.`,
+          output: `Dispatched ${plan.provider} job ${job.id}. Status: ${job.status}. Use compute_job wait to suspend until meaningful progress, completion, or your selected timeout; do not poll with shell sleep.`,
         }
       }
 
@@ -519,22 +519,23 @@ export function createComputeJobTool(base?: JobBroker.Options) {
         }
       }
       if (input.action === "wait") {
-        let job: JobBroker.Job
-        let timedOut = false
-        try {
-          job = await JobBroker.wait(state.job.id, {
-            ...state.resolved,
-            timeout: input.seconds * 1_000,
-          })
-        } catch (error) {
-          if (!(error instanceof Error) || !error.message.startsWith("Timed out waiting for compute job")) throw error
-          timedOut = true
-          job = (await selected(state.job.id, ctx.sessionID, base)).job
-        }
+        const result = await JobBroker.waitForChange(state.job.id, {
+          ...state.resolved,
+          timeout: input.seconds * 1_000,
+          signal: ctx.abort,
+          after: state.job,
+        })
         return {
-          title: `Compute job: ${job.name}`,
-          metadata: { compute_job: { action: input.action, job } },
-          output: json({ ...summary(job), waited_seconds: input.seconds, timed_out: timedOut }),
+          title: `Compute job: ${result.job.name}`,
+          metadata: { compute_job: { action: input.action, job: result.job } },
+          output: json({
+            ...summary(result.job),
+            changed: result.changed,
+            waited_ms: result.waited_ms,
+            timed_out: result.timed_out,
+            output_bytes: result.output_bytes,
+            event_bytes: result.event_bytes,
+          }),
         }
       }
       if (input.action === "logs") {

@@ -48,7 +48,9 @@ export const Preferences = z.object({
     })
     .nullable()
     .default(null),
+  // Independence applies to both the lead and delegated workers.
   delegation_autonomy: z.enum(["interactive", "balanced", "autonomous"]).default("balanced"),
+  // Deprecated no-op retained so older 2.x clients and settings files still round-trip.
   delegation_diversity: z.enum(["focused", "balanced", "exploratory"]).default("balanced"),
 })
 export type Preferences = z.infer<typeof Preferences>

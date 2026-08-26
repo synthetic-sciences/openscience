@@ -148,11 +148,14 @@ export namespace ModalAdapter {
     context: Context,
     spec: Spec,
     fallback?: { code: number; log: string },
+    options: { partial?: boolean } = {},
   ): Promise<Result & { log: string }> {
     if (fallback && !spec.outputs.length) return { code: fallback.code, outputs: [], log: fallback.log }
     const codePath = path.posix.basename(EXIT_CODE)
     const logPath = path.posix.basename(RUN_LOG)
-    const entries = await ModalVolume.wait(context, spec.volume, codePath)
+    const entries = options.partial
+      ? await ModalVolume.list(context, spec.volume, "/", true)
+      : await ModalVolume.wait(context, spec.volume, codePath)
     const complete = entries.some((entry) => entry.type === "file" && entry.path === codePath)
     if (!complete && fallback === undefined) throw new Error("Modal output Volume has no completed command result")
     const patterns = spec.outputs.map((pattern) => new Bun.Glob(pattern))
@@ -164,12 +167,16 @@ export namespace ModalAdapter {
     )
     const total = selected.reduce((sum, entry) => sum + entry.size, 0)
     if (total > 20 * 1024 * 1024 * 1024) throw new Error("Modal outputs exceed the 20 GiB recovery limit")
-    const paths = [
-      ...new Set([...(complete ? [codePath] : []), logPath, ...selected.map((entry) => clean(entry.path))]),
-    ]
     const sizes = new Map(
       entries.filter((entry) => entry.type === "file").map((entry) => [clean(entry.path), entry.size]),
     )
+    const paths = [
+      ...new Set([
+        ...(complete ? [codePath] : []),
+        ...(sizes.has(logPath) ? [logPath] : []),
+        ...selected.map((entry) => clean(entry.path)),
+      ]),
+    ]
     const declared = paths.map((entry) => sizes.get(entry))
     let declaredBytes: number | undefined
     if (declared.every((entry) => entry !== undefined)) {
@@ -182,7 +189,7 @@ export namespace ModalAdapter {
     const files = new Map(downloaded.map((entry) => [entry.path, entry]))
     const saved = files.get(codePath)
     const logged = files.get(logPath)
-    if (!logged || (!saved && fallback === undefined)) {
+    if ((!logged && !options.partial) || (!saved && fallback === undefined)) {
       throw new Error("Modal output Volume is missing its result metadata")
     }
     const code = saved
@@ -197,7 +204,7 @@ export namespace ModalAdapter {
     if (outputs.reduce((sum, entry) => sum + entry.size, 0) > 20 * 1024 * 1024 * 1024) {
       throw new Error("Modal outputs exceed the 20 GiB recovery limit")
     }
-    return { code, outputs, log: await Bun.file(logged.staging).text() }
+    return { code, outputs, log: logged ? await Bun.file(logged.staging).text() : (fallback?.log ?? "") }
   }
 
   export function validateUploads(files: File[]) {
@@ -391,6 +398,25 @@ export namespace ModalAdapter {
           `Recovered ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"} directly from Modal Volume`,
         )
         return result
+      })
+      .finally(() => modal.close())
+  }
+
+  /** Collect declared files from a stopped sandbox without requiring the
+   * command-completion marker. Cancellation deliberately retains the durable
+   * Volume, so partially written scientific outputs can still be delivered
+   * before an explicit release deletes that Volume. */
+  export async function collect(context: Context, spec: Spec, hooks: Pick<Hooks, "log" | "output">): Promise<Result> {
+    const modal = client(context)
+    return Promise.resolve()
+      .then(async () => {
+        await hooks.log(`Collecting partial output from durable volume ${spec.volume}`)
+        const recovered = await harvest(context, spec, { code: 130, log: "" }, { partial: true })
+        if (recovered.log) await hooks.output(recovered.log)
+        await hooks.log(
+          `Recovered ${recovered.outputs.length} partial output file${recovered.outputs.length === 1 ? "" : "s"}`,
+        )
+        return recovered
       })
       .finally(() => modal.close())
   }

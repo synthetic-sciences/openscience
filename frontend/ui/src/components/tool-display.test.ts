@@ -9,6 +9,7 @@ import {
   sentenceCaseLabel,
   savedArtifact,
   scienceTaskLabel,
+  sessionErrorDisplay,
   sessionErrorText,
   skillName,
   stripRedactedReasoning,
@@ -54,6 +55,30 @@ describe("sessionErrorText", () => {
 
   test("preserves ordinary provider errors", () => {
     expect(sessionErrorText({ data: { message: "Provider is overloaded" } })).toBe("Provider is overloaded")
+  })
+
+  test("presents a recoverable managed-access interruption as paused", () => {
+    expect(
+      sessionErrorDisplay({
+        name: "APIError",
+        data: {
+          message: "OpenScience could not verify your Ace balance. Retry when connectivity returns.",
+          metadata: {
+            openscience_state: "paused",
+            action: "retry",
+          },
+        },
+      }),
+    ).toEqual({
+      state: "paused",
+      title: "Paused",
+      message: "OpenScience could not verify your Ace balance. Retry when connectivity returns.",
+      action: "retry",
+    })
+    expect(sessionErrorDisplay({ data: { message: "Provider is overloaded" } })).toEqual({
+      state: "error",
+      message: "Provider is overloaded",
+    })
   })
 })
 

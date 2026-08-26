@@ -4,12 +4,12 @@ export type CapabilityPreferences = {
   delegation_level?: DelegationLevel
   delegation_worker_model?: DelegationModel | null
   delegation_autonomy?: DelegationAutonomy
-  delegation_diversity?: DelegationDiversity
+  /** @deprecated Accepted from older local servers but no longer used. */
+  delegation_diversity?: "focused" | "balanced" | "exploratory"
 }
 
 export type DelegationLevel = "off" | "light" | "standard" | "high"
 export type DelegationAutonomy = "interactive" | "balanced" | "autonomous"
-export type DelegationDiversity = "focused" | "balanced" | "exploratory"
 
 export type DelegationModel = {
   providerID: string
@@ -20,14 +20,13 @@ export type DelegationSettings = {
   level: DelegationLevel
   workerModel?: DelegationModel
   autonomy: DelegationAutonomy
-  diversity: DelegationDiversity
 }
 
 export const DELEGATION_LEVELS: Array<{ value: DelegationLevel; label: string; description: string }> = [
-  { value: "off", label: "Off", description: "No workers" },
-  { value: "light", label: "Light", description: "Use one worker when it clearly helps" },
-  { value: "standard", label: "Standard", description: "Use a small team for independent work" },
-  { value: "high", label: "High", description: "Use several workers for parallel research" },
+  { value: "off", label: "Off", description: "Keep work in the lead conversation" },
+  { value: "light", label: "Low", description: "Delegate only when it clearly helps" },
+  { value: "standard", label: "Normal", description: "Parallelize independent work when useful" },
+  { value: "high", label: "High", description: "Aggressively parallelize research and verification" },
 ]
 
 export const DELEGATION_AUTONOMY: Array<{
@@ -35,15 +34,26 @@ export const DELEGATION_AUTONOMY: Array<{
   label: string
   description: string
 }> = [
-  { value: "interactive", label: "Interactive", description: "Ask when an important choice is unclear" },
-  { value: "balanced", label: "Balanced", description: "Use safe assumptions; ask before consequential choices" },
-  { value: "autonomous", label: "Independent", description: "Ask only when blocked or missing permission" },
+  {
+    value: "interactive",
+    label: "Interactive",
+    description: "Lead and workers ask before consequential choices",
+  },
+  {
+    value: "balanced",
+    label: "Balanced",
+    description: "Lead and workers make routine assumptions and ask when stakes change",
+  },
+  {
+    value: "autonomous",
+    label: "Independent",
+    description: "Lead and workers ask only when blocked or missing permission",
+  },
 ]
 
 export const DEFAULT_DELEGATION: DelegationSettings = {
   level: "standard",
   autonomy: "balanced",
-  diversity: "balanced",
 }
 
 export function delegationSettings(preferences?: CapabilityPreferences): DelegationSettings {
@@ -52,14 +62,11 @@ export function delegationSettings(preferences?: CapabilityPreferences): Delegat
     level,
     workerModel: preferences?.delegation_worker_model ?? undefined,
     autonomy: preferences?.delegation_autonomy ?? DEFAULT_DELEGATION.autonomy,
-    // Kept in the wire contract for backward compatibility. The product no
-    // longer exposes a creativity/diversity control.
-    diversity: DEFAULT_DELEGATION.diversity,
   }
 }
 
 export function delegationLabel(settings: DelegationSettings) {
-  return DELEGATION_LEVELS.find((option) => option.value === settings.level)?.label ?? "Standard"
+  return DELEGATION_LEVELS.find((option) => option.value === settings.level)?.label ?? "Normal"
 }
 
 export type SpecialistOption = {

@@ -1,10 +1,10 @@
 ---
 title: "Agents"
-description: "One adaptive Research agent, bounded internal task profiles, a read-only plan mode, and custom agent profiles."
+description: "One adaptive Research agent, model-directed internal task profiles, a read-only plan mode, and custom agent profiles."
 icon: "bot"
 ---
 
-`research` is the single user-facing built-in agent. It owns the whole loop: literature review, hypothesis, code, experiments on real compute, analysis, and write-up. It loads narrow domain skills when they help and delegates only when a bounded piece of work is genuinely independent.
+`research` is the single user-facing built-in agent. It owns the whole loop: literature review, hypothesis, code, experiments on real compute, analysis, and write-up. It loads narrow domain skills when they help and delegates genuinely independent work when it improves the result.
 
 ## Built-in roster
 
@@ -13,13 +13,12 @@ icon: "bot"
 | `research` | Default | Scientific research across the full skill library — literature, data analysis, compute, and synthesis. |
 | `plan` | Mode | Read-only planning. Edit tools are disabled except for plan files. |
 
-Research has three canonical internal task profiles. They are hidden from the picker and selected by the kind of work, not by a user-facing persona:
+Research has two canonical internal task profiles. They are hidden from the picker and selected by the kind of work, not by a user-facing persona:
 
 | Profile | What it does |
 | --- | --- |
-| Explore | Bounded read/search work: inspect a codebase, source set, or project state. |
-| Execute | Bounded implementation or computation using the active project permissions. |
-| Review | Proportionate read-only review of files, results, citations, and provenance. |
+| Explore | Read/search work: inspect a codebase, source set, or project state. |
+| Execute | Implementation or computation using the active project permissions. |
 
 Older domain and helper names remain as hidden compatibility profiles so existing config and sessions keep working; they are not the product roster. Run `openscience agent list` to inspect the complete registry on your install, including hidden compatibility and system profiles.
 
@@ -29,11 +28,11 @@ Older domain and helper names remain as hidden compatibility profiles so existin
 # focused by default
 openscience run "Fit the dispersion relation in data/spectra.csv"
 
-# wider bounded investigation when independent branches justify it
+# wider investigation when independent branches justify it
 openscience run --effort ultra "Compare three defensible fitting approaches"
 ```
 
-Normal and Ultra use the same Research harness. Ultra raises the bounded delegation allowance; it does not switch to a different persona or force delegation. Plan mode is available when you want to agree on method, spend, or consequential actions before execution.
+Normal and Ultra use the same Research harness. Ultra asks the model to investigate additional branches when they could change the result; it does not switch personas or impose a worker count. In the workspace, delegation posture is separate: Off, Low, Normal, and High guide how readily the lead parallelizes work, while Independence controls when the lead and workers ask clarifying questions. Runtime machine capacity queues concurrent workers rather than turning those controls into quotas. Plan mode is available when you want to agree on method, spend, or consequential actions before execution.
 
 Custom agents remain available for teams with a deliberate specialized workflow. Set a custom agent with mode `primary` or `all` as `default_agent` in `openscience.json`; `subagent` profiles are reachable only by delegation.
 

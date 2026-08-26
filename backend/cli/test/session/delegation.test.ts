@@ -18,12 +18,11 @@ describe("Research delegation controls", () => {
     expect(SessionPrompt.delegationTarget("legacy-specialist")).toEqual({ profile: "execute" })
   })
 
-  test("effort reminders expose bounded Normal and Ultra behavior", () => {
+  test("effort reminders expose natural Normal and Ultra behavior", () => {
     expect(SessionPrompt.researchEffortReminder(undefined)).toContain("Research effort: NORMAL")
-    expect(SessionPrompt.researchEffortReminder("normal")).toContain("at most 3 Task calls total")
-    expect(SessionPrompt.researchEffortReminder("normal")).toContain("including continuations")
     expect(SessionPrompt.researchEffortReminder("ultra")).toContain("Research effort: ULTRA")
-    expect(SessionPrompt.researchEffortReminder("ultra")).toContain("at most 8 Task calls total")
+    expect(SessionPrompt.researchEffortReminder("normal")).not.toContain("Task calls total")
+    expect(SessionPrompt.researchEffortReminder("ultra")).not.toContain("Task calls total")
     expect(SessionPrompt.researchEffortReminder("normal")).toContain("safe, reversible assumptions")
   })
 
@@ -34,9 +33,9 @@ describe("Research delegation controls", () => {
       autonomy: "autonomous",
       diversity: "exploratory",
     })
-    expect(MessageV2.delegationLimit(settings)).toBe(1)
     expect(settings.workerModel?.modelID).toBe("worker")
-    expect(SessionPrompt.researchEffortReminder("ultra", settings)).toContain("at most 1 Task calls total")
+    expect(settings).not.toHaveProperty("diversity")
+    expect(SessionPrompt.researchEffortReminder("ultra", settings)).not.toContain("Task calls total")
     expect(SessionPrompt.researchEffortReminder("normal", { ...settings, level: "off" })).toContain(
       "Automatic delegation is off",
     )

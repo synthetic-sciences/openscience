@@ -121,6 +121,23 @@ export function sessionErrorText(value: unknown): string {
   return `Managed Credits: this step needs $${(Number(required) / 100).toFixed(2)}; $${(Number(available) / 100).toFixed(2)} is currently available. Pending requests may still be settling.`
 }
 
+export function sessionErrorDisplay(value: unknown): {
+  state: "paused" | "error"
+  title?: string
+  message: string
+  action?: "retry"
+} {
+  const error = record(value)
+  const data = record(error?.data)
+  const metadata = record(data?.metadata)
+  const state = metadata?.openscience_state ?? data?.openscience_state
+  const action = metadata?.action ?? data?.action
+  if (state === "paused" && action === "retry") {
+    return { state: "paused", title: "Paused", message: sessionErrorText(value), action: "retry" }
+  }
+  return { state: "error", message: sessionErrorText(value) }
+}
+
 export function savedArtifact(value: unknown): SavedArtifact | undefined {
   const item = record(value)
   if (

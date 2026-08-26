@@ -426,7 +426,6 @@ describe("session loop restart state", () => {
     source.info.delegationSettings = {
       level: "off",
       autonomy: "balanced",
-      diversity: "balanced",
     }
     source.info.system = "stay local"
     source.info.variant = "careful"
@@ -437,7 +436,6 @@ describe("session loop restart state", () => {
       delegationSettings: {
         level: "off",
         autonomy: "balanced",
-        diversity: "balanced",
       },
       system: "stay local",
       variant: "careful",
@@ -468,6 +466,31 @@ describe("session loop restart state", () => {
     ]
     expect(SessionLoopState.restore(history)).toMatchObject({
       contractContinuations: 1,
+    })
+  })
+
+  test("restores semantic contract progress and one focused repair marker", () => {
+    const progress = "a".repeat(64)
+    const continuation = user("contract-progress", [
+      {
+        ...text("contract-progress", "Continue the contract", { synthetic: true, kind: "contract" }),
+        metadata: SessionLoopState.continuation("contract", { progress, repair: true }),
+      },
+    ])
+    if (continuation.info.role !== "user") throw new Error("bad fixture")
+    continuation.info.internal = {
+      type: "continuation",
+      kind: "contract",
+      text: "Continue the contract",
+      epoch: "u1",
+      transaction: continuation.info.id,
+      progress,
+      repair: true,
+    }
+
+    expect(SessionLoopState.contractMarker([continuation])).toEqual({ progress, repair: true })
+    expect(SessionLoopState.boundary("partial", progress)).toMatchObject({
+      "openscience.loop": { type: "contract-boundary", state: "partial", progress },
     })
   })
 

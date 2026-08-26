@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { Global } from "../../src/global"
 import { OpenScience } from "../../src/openscience"
-import { ResearchSearchTool, resetResearchSearchCircuitBreaker } from "../../src/tool/research-search"
+import { ResearchSearchTool } from "../../src/tool/research-search"
 
 const context = {
   sessionID: "ses_search",
@@ -32,7 +32,6 @@ function managedAce() {
 }
 
 afterEach(async () => {
-  resetResearchSearchCircuitBreaker()
   for (const spy of restores.splice(0)) spy.mockRestore()
   await fs.rm(sessionPath, { force: true })
 })
@@ -212,7 +211,7 @@ describe("research_search", () => {
     expect(invalidate).not.toHaveBeenCalled()
   })
 
-  test("opens a short circuit after a managed service failure", async () => {
+  test("retries managed search on a later request after a transient service failure", async () => {
     managedAce()
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue({
       status: 503,
@@ -232,7 +231,7 @@ describe("research_search", () => {
     await tool.execute(tool.parameters.parse({ query: "first managed search" }), context)
     const second = await tool.execute(tool.parameters.parse({ query: "second managed search" }), context)
 
-    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(dispatch).toHaveBeenCalledTimes(2)
     expect(fetcher).toHaveBeenCalledTimes(2)
     expect(JSON.parse(second.output)).toMatchObject({ provider: "community", content: "community fallback" })
   })

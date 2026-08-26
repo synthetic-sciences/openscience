@@ -82,7 +82,7 @@ Research runs also fail closed around completion:
 ## Research completion contracts
 
 Multi-stage research can define a durable completion contract without changing the fast path for
-ordinary questions or code work. Contracted runs add three fail-closed guarantees:
+ordinary questions or code work. Contracted runs add four fail-closed guarantees:
 
 - settled checks and advancing or regressing trials cite runtime-verified evidence references. The
   runtime resolves `artifact:<id>` and `artifact-path:<path>` to an immutable Result version and
@@ -90,7 +90,11 @@ ordinary questions or code work. Contracted runs add three fail-closed guarantee
   Free-text evidence remains useful explanation, but cannot pass a gate;
 - advancing or regressing empirical claims retain the exact producing run and immutable Result
   lineage. A later provenance record can support, refute, or qualify that result, but completion
-  never waits on a separate reviewer model or hidden review gate; and
+  never waits on a separate reviewer model or hidden review gate;
+- automatic contract continuation follows a fingerprint of gates, immutable ArtifactStore
+  versions, jobs, and kernels. It continues while that evidence changes, attempts one focused
+  repair when progress stalls, then preserves the agent's real response and records an explicit
+  partial or blocked boundary instead of looping; and
 - the complete session tree has configurable model-call, tool-call, token, wall-clock, and cost
   ceilings. Model calls, including provider retries and delegated child calls, are reserved
   atomically against the parent contract. Defaults are intentionally generous. Near a ceiling, two

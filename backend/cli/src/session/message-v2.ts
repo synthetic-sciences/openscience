@@ -22,15 +22,10 @@ export namespace MessageV2 {
     ref: "ResearchEffort",
   })
   export type ResearchEffort = z.infer<typeof ResearchEffort>
-  export const ResearchEffortLimits = {
-    normal: 2,
-    ultra: 4,
-  } as const satisfies Record<ResearchEffort, number>
 
   export const DelegationLevel = z.enum(["off", "light", "standard", "high"])
   export type DelegationLevel = z.infer<typeof DelegationLevel>
   export const DelegationAutonomy = z.enum(["interactive", "balanced", "autonomous"])
-  export const DelegationDiversity = z.enum(["focused", "balanced", "exploratory"])
   export const DelegationSettings = z.object({
     level: DelegationLevel.default("standard"),
     workerModel: z
@@ -40,23 +35,12 @@ export namespace MessageV2 {
       })
       .optional(),
     autonomy: DelegationAutonomy.default("balanced"),
-    diversity: DelegationDiversity.default("balanced"),
   })
   export type DelegationSettings = z.infer<typeof DelegationSettings>
-  export const DelegationLimits = {
-    off: 0,
-    light: 1,
-    standard: 3,
-    high: 8,
-  } as const satisfies Record<DelegationLevel, number>
 
   /** Historical messages predate Research effort and therefore resolve to Normal. */
   export function resolveResearchEffort(value: unknown): ResearchEffort {
     return ResearchEffort.safeParse(value).data ?? "normal"
-  }
-
-  export function childAgentLimit(value: unknown) {
-    return ResearchEffortLimits[resolveResearchEffort(value)]
   }
 
   export function resolveDelegationSettings(
@@ -68,10 +52,6 @@ export namespace MessageV2 {
     const level =
       fallback?.enabled === false ? "off" : resolveResearchEffort(fallback?.effort) === "ultra" ? "high" : "standard"
     return DelegationSettings.parse({ level })
-  }
-
-  export function delegationLimit(value: unknown, fallback?: { effort?: unknown; enabled?: boolean }) {
-    return DelegationLimits[resolveDelegationSettings(value, fallback).level]
   }
 
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -422,6 +402,13 @@ export namespace MessageV2 {
           text: z.string(),
           epoch: z.string(),
           transaction: z.string(),
+          /** Semantic research progress captured by the durable controller. */
+          progress: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+          /** True for the single focused repair after unchanged progress. */
+          repair: z.boolean().optional(),
         }),
         z.object({
           type: z.literal("compaction"),
@@ -1337,6 +1324,8 @@ export namespace MessageV2 {
             cause: e,
           },
         ).toObject()
+      case MessageV2.APIError.isInstance(e):
+        return e.toObject()
       case MessageV2.OutputLengthError.isInstance(e):
         return e
       case LoadAPIKeyError.isInstance(e):

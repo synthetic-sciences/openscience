@@ -6,14 +6,10 @@ import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { TaskAttempt, TaskCapacity } from "../../src/tool/task-attempt"
-import { TASK_WALL_CLOCK_MS, TaskTool } from "../../src/tool/task"
+import { TaskTool } from "../../src/tool/task"
 import { LockCoordination } from "../../src/util/lock-coordination"
 
 const [mode, directory, parentID, messageID, callID, ready] = process.argv.slice(2)
-const budget = Number(process.env.OPENSCIENCE_TEST_TASK_BUDGET_MS)
-if (Number.isSafeInteger(budget) && budget > 0) {
-  Object.assign(TASK_WALL_CLOCK_MS, { normal: budget, ultra: budget })
-}
 const attemptAge = Number(process.env.OPENSCIENCE_TEST_TASK_ATTEMPT_AGE_MS)
 
 if (!mode || !ready) throw new Error("Missing durable Task fixture arguments")

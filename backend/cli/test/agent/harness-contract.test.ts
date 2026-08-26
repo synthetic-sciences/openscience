@@ -3,13 +3,7 @@ import path from "node:path"
 import { Instance } from "../../src/project/instance"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SystemPrompt } from "../../src/session/system"
-import {
-  DELEGATION_PROFILES,
-  MAX_CHILD_AGENTS,
-  NORMAL_CHILD_AGENTS,
-  TASK_WALL_CLOCK_MS,
-  isComputeDelegationProfile,
-} from "../../src/tool/task"
+import { DELEGATION_PROFILES, MAX_CHILD_AGENTS, isComputeDelegationProfile } from "../../src/tool/task"
 import { tmpdir } from "../fixture/fixture"
 
 const root = new URL("../../src/", import.meta.url)
@@ -141,25 +135,22 @@ test("ordinary literature reviews stay conversational instead of becoming report
   expect(specialist).not.toContain("Before ANY literature search")
 })
 
-test("delegation is rare, bounded, and observable", async () => {
+test("delegation is model-directed, capacity-bound, and observable", async () => {
   const [prompt, source] = await Promise.all([read("tool/task.txt"), read("tool/task.ts")])
   expect(DELEGATION_PROFILES).toEqual(["explore", "execute"])
-  expect(NORMAL_CHILD_AGENTS).toBe(2)
-  expect(MAX_CHILD_AGENTS).toBe(4)
-  expect(TASK_WALL_CLOCK_MS).toEqual({ normal: 600_000, ultra: 1_200_000 })
+  expect(MAX_CHILD_AGENTS).toBeGreaterThanOrEqual(2)
   expect(DELEGATION_PROFILES.filter(isComputeDelegationProfile)).toEqual(["execute"])
   expect(["biology", "ml", "physics"].some(isComputeDelegationProfile)).toBe(false)
-  expect(prompt).toContain("Default to no children")
-  expect(prompt).toContain("Normal permits two calls per turn")
-  expect(prompt).toContain("Ultra four")
-  expect(prompt).toContain("including continuations")
+  expect(prompt).toContain("Use as many independent workers as materially useful")
+  expect(prompt).toContain("it is not a quota")
   expect(prompt).toContain("optional failure must not block")
-  expect(prompt).toContain("bounded handoff")
+  expect(prompt).toContain("concise handoff")
   expect(prompt).not.toContain("trusted")
   expect(source).toContain("durationMs")
   expect(source).toContain("failedToolCalls")
   expect(source).toContain("usage")
-  expect(source).toContain("taskDispatchBudget")
+  expect(source).not.toContain("taskDispatchBudget")
+  expect(source).not.toContain("TASK_WALL_CLOCK_MS")
   expect(source).toContain("system: childGuidance")
   expect(source).toContain("Your final response is a decision-ready handoff")
   expect(source).toContain("handoff: memory.text")

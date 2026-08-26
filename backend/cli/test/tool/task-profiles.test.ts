@@ -7,13 +7,10 @@ import {
   classifyTaskOutcome,
   summarizeTurn,
   taskHandoff,
-  taskDispatchBudget,
   taskText,
   TASK_HANDOFF_CHARS,
-  TASK_WALL_CLOCK_MS,
   TaskTool,
   taskContinuationID,
-  withTaskDeadline,
 } from "../../src/tool/task"
 import { PermissionNext } from "../../src/permission/next"
 import { tmpdir } from "../fixture/fixture"
@@ -266,173 +263,36 @@ test("Task handoffs honor very small defensive limits", () => {
   expect(result).toEqual({ text: "a result", truncated: true })
 })
 
-test("Task dispatch budget counts continuations across one parent user turn", () => {
-  const message = (input: {
-    id: string
-    parent: string
-    created: number
-    calls: Array<{ id: string; callID: string; sessionID?: string; failed?: boolean }>
-  }): MessageV2.WithParts => ({
-    info: {
-      id: input.id,
-      sessionID: "ses_parent",
-      role: "assistant",
-      time: { created: input.created, completed: input.created + 1 },
-      parentID: input.parent,
-      modelID: "model",
-      providerID: "provider",
-      mode: "research",
-      agent: "research",
-      path: { cwd: "/tmp", root: "/tmp" },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: input.calls.map((call) => ({
-      id: call.id,
-      sessionID: "ses_parent",
-      messageID: input.id,
-      type: "tool" as const,
-      callID: call.callID,
-      tool: "task",
-      state: call.failed
-        ? {
-            status: "error" as const,
-            input: call.sessionID ? { session_id: call.sessionID } : {},
-            error: "Invalid Task continuation handle",
-            time: { start: input.created, end: input.created + 1 },
-          }
-        : {
-            status: "running" as const,
-            input: call.sessionID ? { session_id: call.sessionID } : {},
-            time: { start: input.created },
-          },
-    })),
-  })
-  const user = (input: { id: string; created: number; carrier?: boolean }): MessageV2.WithParts => ({
-    info: {
-      id: input.id,
-      sessionID: "ses_parent",
-      role: "user",
-      time: { created: input.created },
-      agent: "research",
-      model: { providerID: "provider", modelID: "model" },
-      effort: "normal",
-    },
-    parts: input.carrier
-      ? [
-          {
-            id: `prt_${input.id}`,
-            sessionID: "ses_parent",
-            messageID: input.id,
-            type: "compaction",
-            auto: true,
-          },
-        ]
-      : [
-          {
-            id: `prt_${input.id}`,
-            sessionID: "ses_parent",
-            messageID: input.id,
-            type: "text",
-            text: "real user request",
-          },
-        ],
-  })
-  const messages = [
-    user({ id: "msg_user", created: 0 }),
-    message({
-      id: "msg_first",
-      parent: "msg_user",
-      created: 1,
-      calls: [
-        { id: "prt_failed_001", callID: "call_failed_1", sessionID: "ses_parent", failed: true },
-        { id: "prt_failed_002", callID: "call_failed_2", sessionID: "ses_parent", failed: true },
-        { id: "prt_001", callID: "call_1" },
-        { id: "prt_002", callID: "call_2", sessionID: "ses_child" },
-      ],
-    }),
-    user({ id: "msg_compaction", created: 2, carrier: true }),
-    message({
-      id: "msg_second",
-      parent: "msg_compaction",
-      created: 3,
-      calls: [
-        { id: "prt_003", callID: "call_3" },
-        { id: "prt_004", callID: "call_4" },
-        { id: "prt_005", callID: "call_5" },
-      ],
-    }),
-    user({ id: "msg_other_user", created: 4 }),
-    message({
-      id: "msg_other_turn",
-      parent: "msg_other_user",
-      created: 5,
-      calls: [{ id: "prt_006", callID: "call_other" }],
-    }),
-  ]
-
-  expect(taskDispatchBudget(messages, "msg_user", "call_1", "normal")).toEqual({ dispatch: 1, limit: 3 })
-  expect(taskDispatchBudget(messages, "msg_user", "call_2", "normal")).toEqual({ dispatch: 2, limit: 3 })
-  expect(taskDispatchBudget(messages, "msg_compaction", "call_3", "normal")).toEqual({ dispatch: 3, limit: 3 })
-  expect(taskDispatchBudget(messages, "msg_compaction", "call_4", "ultra")).toEqual({ dispatch: 4, limit: 8 })
-  expect(taskDispatchBudget(messages, "msg_compaction", "call_5", "ultra")).toEqual({ dispatch: 5, limit: 8 })
-  expect(taskDispatchBudget(messages, "msg_other_user", "call_other", "normal")).toEqual({ dispatch: 1, limit: 3 })
-})
-
-test("Task deadlines preserve work that settles before the cutoff", async () => {
-  expect(TASK_WALL_CLOCK_MS).toEqual({ normal: 600_000, ultra: 1_200_000 })
-  const result = await withTaskDeadline(
-    () => Promise.resolve("completed findings"),
-    () => {},
-    100,
-  )
-
-  expect(result).toEqual({ result: "completed findings", error: undefined, timedOut: false })
-})
-
-test("Task deadlines return even when stalled work ignores cancellation", async () => {
-  const pending = Promise.withResolvers<string>()
-  let cancelled = false
-  const started = Date.now()
-  const result = await withTaskDeadline(
-    () => pending.promise,
-    () => {
-      cancelled = true
-    },
-    5,
-  )
-
-  expect(result).toEqual({ result: undefined, error: undefined, timedOut: true })
-  expect(cancelled).toBe(true)
-  expect(Date.now() - started).toBeLessThan(250)
+test("Task runtime has no per-turn dispatch quota or default deadline", async () => {
+  const source = await Bun.file(new URL("../../src/tool/task.ts", import.meta.url)).text()
+  expect(source).not.toContain("taskDispatchBudget")
+  expect(source).not.toContain("TASK_WALL_CLOCK_MS")
+  expect(source).not.toContain("withTaskDeadline")
+  expect(source).toContain('TaskCapacity.acquire("child", MAX_CHILD_AGENTS')
 })
 
 test("Task outcomes distinguish bounded partial work from completion and failure", () => {
-  expect(classifyTaskOutcome({ timedOut: false, finish: "stop" })).toEqual({
+  expect(classifyTaskOutcome({ finish: "stop" })).toEqual({
     outcome: "completed",
     stopReason: "completed",
   })
-  expect(classifyTaskOutcome({ timedOut: false, finish: "max-steps" })).toEqual({
+  expect(classifyTaskOutcome({ finish: "max-steps" })).toEqual({
     outcome: "partial",
     stopReason: "max_steps",
   })
-  expect(classifyTaskOutcome({ timedOut: true, finish: "stop" })).toEqual({
-    outcome: "timed_out",
-    stopReason: "wall_clock",
-  })
-  expect(classifyTaskOutcome({ timedOut: false, error: { name: "UnknownError" } })).toEqual({
+  expect(classifyTaskOutcome({ error: { name: "UnknownError" } })).toEqual({
     outcome: "error",
     stopReason: "provider_error",
   })
-  expect(classifyTaskOutcome({ timedOut: false, error: { name: "UnknownError" }, hasText: true })).toEqual({
+  expect(classifyTaskOutcome({ error: { name: "UnknownError" }, hasText: true })).toEqual({
     outcome: "partial",
     stopReason: "provider_error",
   })
-  expect(classifyTaskOutcome({ timedOut: false, finish: "stop", toolCalls: 5, failedToolCalls: 5 })).toEqual({
+  expect(classifyTaskOutcome({ finish: "stop", toolCalls: 5, failedToolCalls: 5 })).toEqual({
     outcome: "partial",
     stopReason: "tool_failures",
   })
-  expect(classifyTaskOutcome({ timedOut: false, finish: "stop", toolCalls: 5, failedToolCalls: 4 })).toEqual({
+  expect(classifyTaskOutcome({ finish: "stop", toolCalls: 5, failedToolCalls: 4 })).toEqual({
     outcome: "completed",
     stopReason: "completed",
   })

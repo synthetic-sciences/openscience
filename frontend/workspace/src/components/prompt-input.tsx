@@ -188,6 +188,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
     return model?.name ?? selected.modelID
   })
+  const independenceSelection = createMemo(
+    () => DELEGATION_AUTONOMY.find((option) => option.value === delegation().autonomy)?.label ?? "Balanced",
+  )
   const saveDelegation = (patch: {
     level?: DelegationLevel
     workerModel?: DelegationModel | null
@@ -198,7 +201,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       level: patch.level ?? current.level,
       workerModel: patch.workerModel === null ? undefined : (patch.workerModel ?? current.workerModel),
       autonomy: patch.autonomy ?? current.autonomy,
-      diversity: current.diversity,
     }
     saveCapabilities({
       delegation_enabled: next.level !== "off",
@@ -346,7 +348,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const navigateResearchChoices = (event: KeyboardEvent) => {
-    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
+    if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
     const target = event.target
     const scope = event.currentTarget
     if (!(target instanceof HTMLButtonElement) || target.getAttribute("role") !== "radio") return
@@ -359,7 +361,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         ? 0
         : event.key === "End"
           ? choices.length - 1
-          : event.key === "ArrowDown"
+          : event.key === "ArrowDown" || event.key === "ArrowRight"
             ? (index + 1) % choices.length
             : (index <= 0 ? choices.length : index) - 1
     const choice = choices[next]
@@ -2761,17 +2763,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             </For>
                           </div>
                         </details>
-                        <div class="workspace-composer__independence">
-                          <header>
-                            <strong>Independence</strong>
-                            <small>
-                              {
-                                DELEGATION_AUTONOMY.find((option) => option.value === delegation().autonomy)
-                                  ?.description
-                              }
-                            </small>
-                          </header>
-                          <div role="radiogroup" aria-label="Agent independence" onKeyDown={navigateResearchChoices}>
+                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
+                          <summary aria-label={`Independence, ${independenceSelection()}`}>
+                            <span>Independence</span>
+                            <strong>{independenceSelection()}</strong>
+                            <Icon name="chevron-right" size="small" />
+                          </summary>
+                          <div
+                            class="workspace-composer__research-choice-menu"
+                            role="radiogroup"
+                            aria-label="Lead and worker independence"
+                            onKeyDown={navigateResearchChoices}
+                          >
                             <For each={DELEGATION_AUTONOMY}>
                               {(option) => (
                                 <button
@@ -2779,17 +2782,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                   role="radio"
                                   aria-checked={delegation().autonomy === option.value}
                                   tabindex={delegation().autonomy === option.value ? 0 : -1}
-                                  title={option.description}
-                                  onClick={() => {
+                                  onClick={(event) => {
                                     saveDelegation({ autonomy: option.value })
+                                    event.currentTarget.closest("details")?.removeAttribute("open")
                                   }}
                                 >
-                                  {option.label}
+                                  <span>
+                                    <strong>{option.label}</strong>
+                                    <small>{option.description}</small>
+                                  </span>
+                                  <Show when={delegation().autonomy === option.value}>
+                                    <Icon name="check" size="small" />
+                                  </Show>
                                 </button>
                               )}
                             </For>
                           </div>
-                        </div>
+                        </details>
                       </Show>
                       <div class="workspace-composer__research-divider" />
                       <Show
