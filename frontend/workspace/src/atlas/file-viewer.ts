@@ -38,6 +38,26 @@ export interface FileRequestTicket {
   controller: AbortController
 }
 
+export type FileOpenScope = "project" | "session" | "auto"
+export type ResolvedFileScope = Exclude<FileOpenScope, "auto">
+
+/** Chat links do not encode whether the agent wrote a scratch file or cited a
+ * durable project file. Try the active session first, then fall back only for
+ * a genuine missing-file response. Permission and transport failures must
+ * remain visible rather than silently changing authority. */
+export function initialFileScope(scope: FileOpenScope = "project"): ResolvedFileScope {
+  return scope === "project" ? "project" : "session"
+}
+
+export function missingFileFallback(input: {
+  requested: FileOpenScope
+  resolved: ResolvedFileScope
+  error: unknown
+}): ResolvedFileScope | undefined {
+  if (input.requested !== "auto" || input.resolved !== "session") return
+  return /(?:file\s+)?not found|\bENOENT\b/i.test(fileErrorMessage(input.error)) ? "project" : undefined
+}
+
 /**
  * File reads are owned by the exact project, session, and path that started
  * them. A sequential id alone protects one mounted component, but it cannot

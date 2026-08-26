@@ -43,24 +43,24 @@ describe("tool selection", () => {
     expect(ToolSelection.relevant("science_search", input)).toBe(false)
   })
 
-  test("keeps the full registry for scientific and mixed work", () => {
+  test("activates scientific capabilities only when the request needs them", () => {
     expect(
       ToolSelection.relevant("compute_job", {
         agent: "research",
         message: "Fix the repository pipeline for this genomic dataset experiment.",
       }),
-    ).toBe(true)
+    ).toBe(false)
     expect(ToolSelection.relevant("python", { agent: "research", message: "Analyze this dataset." })).toBe(true)
     expect(ToolSelection.relevant("science_search", { agent: "biology", message: "Fix this file." })).toBe(true)
     expect(ToolSelection.relevant("science_search", { agent: "research", message: "Summarize this source." })).toBe(
-      true,
+      false,
     )
     expect(
       ToolSelection.relevant("research_contract", {
         agent: "research",
         message: "Update the Python harness and benchmark the model against a baseline metric.",
       }),
-    ).toBe(true)
+    ).toBe(false)
     expect(ToolSelection.relevant("atlas", { agent: "research", message: "Analyze this protein dataset." })).toBe(false)
     expect(
       ToolSelection.relevant("atlas_record", {
@@ -252,7 +252,7 @@ describe("tool selection", () => {
     ).toBe(false)
   })
 
-  test("gives the minimal research profile every relevant native capability without an arbitrary ceiling", () => {
+  test("keeps a small core and adds only request-local scientific capabilities", () => {
     const message =
       "Use Modal and BioNeMo to execute a protein benchmark, search the literature, and deliver a LaTeX paper with artifacts."
     const available = [
@@ -278,7 +278,7 @@ describe("tool selection", () => {
     const relevant = available.filter((tool) =>
       ToolSelection.relevant(tool, { agent: ToolSelection.THIN_RESEARCH_AGENT, message }),
     )
-    expect(relevant.length).toBeGreaterThan(12)
+    expect(relevant.length).toBeLessThanOrEqual(13)
     expect(relevant).toEqual(
       expect.arrayContaining([
         "question",
@@ -286,20 +286,36 @@ describe("tool selection", () => {
         "read",
         "glob",
         "grep",
-        "apply_patch",
         "task",
         "compute_job",
         "research_search",
         "webfetch",
         "skill",
         "artifact",
-        "generate_image",
         "python",
-        "r",
-        "research_contract",
-        "context7_query-docs",
       ]),
     )
+    expect(relevant).not.toContain("r")
+    expect(relevant).not.toContain("research_contract")
+    expect(relevant).not.toContain("context7_query-docs")
+  })
+
+  test("a loaded skill activates its bounded capability bundle", () => {
+    const capabilities = new Set(["literature-review"])
+    expect(
+      ToolSelection.relevant("query_pubmed", {
+        agent: "research",
+        message: "Continue with the review.",
+        capabilities,
+      }),
+    ).toBe(true)
+    expect(
+      ToolSelection.relevant("compute_job", {
+        agent: "research",
+        message: "Continue.",
+        capabilities,
+      }),
+    ).toBe(false)
   })
 
   test("keeps normal research relevance filtering for a code-only minimal-profile request", () => {

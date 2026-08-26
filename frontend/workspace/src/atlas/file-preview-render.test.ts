@@ -10,8 +10,11 @@ describe("file preview markdown images", () => {
     expect(preview).toContain('import { assetUrl, localAssetPath } from "@/utils/markdown-assets"')
     expect(preview).toContain("base: props.path")
     expect(preview).toContain("url: (path) =>")
-    expect(preview).toContain("rawFileQuery({ directory: dir, path, sessionID: session, inline: true })")
-    expect(preview).toContain("const sessionID = () =>")
+    expect(preview).toContain(
+      "rawFileQuery({ directory: dir, path, sessionID: session, scope: resolvedScope(), inline: true })",
+    )
+    expect(preview).toContain("const activeSessionID = () =>")
+    expect(preview).toContain('resolvedScope() === "session"')
     expect(preview).toContain("resolveImage={image}")
     expect(preview).toContain("resolveFile={file}")
     expect(preview).toContain("onOpenFile={openFile}")
@@ -76,7 +79,7 @@ describe("file preview sandboxed html", () => {
   test("html files render inside a fully sandboxed iframe with a Source toggle", async () => {
     const preview = await read("./FilePreview.tsx")
 
-    expect(preview).toContain('if (x === "html" || x === "htm") return "html"')
+    expect(preview).toContain('if (common().kind === "html") return "html"')
     expect(preview).toContain('sandbox=""')
     expect(preview).toContain("rewriteHtmlAssets")
     expect(preview).toContain('from "@/utils/html-assets"')

@@ -80,6 +80,8 @@ export interface ExecuteResult {
   executionCount?: number
   /** Local content-addressed record for this execution and its outputs. */
   provenanceID?: string
+  /** Session-workspace files created or changed by this execution. */
+  files?: string[]
 }
 
 export interface ExecuteOptions {

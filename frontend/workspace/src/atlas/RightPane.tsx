@@ -277,7 +277,9 @@ export function RightPane(
   const terminalVisible = () => uiStore.rightPaneOpen() && terminal() && context() === "terminal"
   const selectedFile = (tab: Extract<WorkTab, { kind: "file" }>) => {
     const current = uiStore.file()
-    return current?.directory === tab.file.directory && current.path === tab.file.path
+    return (
+      current?.directory === tab.file.directory && current.path === tab.file.path && current.scope === tab.file.scope
+    )
   }
   const visibleFile = (tab: Extract<WorkTab, { kind: "file" }>) =>
     context() === "files" && uiStore.activeWorkTab() === tab.id
@@ -296,7 +298,7 @@ export function RightPane(
       if (!confirmed) return
       markDirty(target.id, false)
     }
-    if (target?.kind === "file") discardFileDraft(target.file.directory, target.file.path)
+    if (target?.kind === "file") discardFileDraft(target.file.directory, target.file.path, target.file.scope)
     uiStore.closeWorkTab(id)
   }
   const closePane = async () => {
@@ -313,7 +315,7 @@ export function RightPane(
     }
     for (const id of pending) {
       const tab = fileTabs().find((item) => item.id === id)
-      if (tab) discardFileDraft(tab.file.directory, tab.file.path)
+      if (tab) discardFileDraft(tab.file.directory, tab.file.path, tab.file.scope)
       uiStore.closeWorkTab(id)
     }
     uiStore.closeContext()
@@ -529,8 +531,15 @@ export function RightPane(
                     <FileView
                       directory={tab.file.directory}
                       path={tab.file.path}
+                      scope={tab.file.scope ?? "project"}
                       sessionID={session() === "new" ? undefined : session()}
-                      subtitle={tab.file.external ? "Session files" : "Project files"}
+                      subtitle={
+                        tab.file.scope === "auto"
+                          ? undefined
+                          : tab.file.scope === "session" || tab.file.external
+                            ? "Session files"
+                            : "Project files"
+                      }
                       active={selectedFile(tab) && (context() === "files" || context() === "artifact")}
                       onDirtyChange={(dirty) => markDirty(tab.id, dirty)}
                     />

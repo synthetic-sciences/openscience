@@ -535,7 +535,7 @@ export default function Page(): JSX.Element {
     const onOpenFile = (e: Event) => {
       const path = (e as CustomEvent).detail?.path
       if (typeof path !== "string" || !path) return
-      uiStore.openFile(projectPath(), path)
+      uiStore.openFile(projectPath(), path, { scope: "auto" })
     }
     document.addEventListener("openscience:open-file", onOpenFile)
     const onOpenContext = (event: Event) => {
@@ -1240,7 +1240,7 @@ export default function Page(): JSX.Element {
                                       <CompactionBoundary
                                         part={compactionPart(message.id)}
                                         summary={compactionSummary(message.id)}
-                                        onOpenFile={(path) => uiStore.openFile(projectPath(), path)}
+                                        onOpenFile={(path) => uiStore.openFile(projectPath(), path, { scope: "auto" })}
                                       />
                                     }
                                   >

@@ -371,12 +371,12 @@ test("Task dispatch budget counts continuations across one parent user turn", ()
     }),
   ]
 
-  expect(taskDispatchBudget(messages, "msg_user", "call_1", "normal")).toEqual({ dispatch: 1, limit: 2 })
-  expect(taskDispatchBudget(messages, "msg_user", "call_2", "normal")).toEqual({ dispatch: 2, limit: 2 })
-  expect(() => taskDispatchBudget(messages, "msg_compaction", "call_3", "normal")).toThrow("continuations count")
-  expect(taskDispatchBudget(messages, "msg_compaction", "call_4", "ultra")).toEqual({ dispatch: 4, limit: 4 })
-  expect(() => taskDispatchBudget(messages, "msg_compaction", "call_5", "ultra")).toThrow("Task call 5")
-  expect(taskDispatchBudget(messages, "msg_other_user", "call_other", "normal")).toEqual({ dispatch: 1, limit: 2 })
+  expect(taskDispatchBudget(messages, "msg_user", "call_1", "normal")).toEqual({ dispatch: 1, limit: 3 })
+  expect(taskDispatchBudget(messages, "msg_user", "call_2", "normal")).toEqual({ dispatch: 2, limit: 3 })
+  expect(taskDispatchBudget(messages, "msg_compaction", "call_3", "normal")).toEqual({ dispatch: 3, limit: 3 })
+  expect(taskDispatchBudget(messages, "msg_compaction", "call_4", "ultra")).toEqual({ dispatch: 4, limit: 8 })
+  expect(taskDispatchBudget(messages, "msg_compaction", "call_5", "ultra")).toEqual({ dispatch: 5, limit: 8 })
+  expect(taskDispatchBudget(messages, "msg_other_user", "call_other", "normal")).toEqual({ dispatch: 1, limit: 3 })
 })
 
 test("Task deadlines preserve work that settles before the cutoff", async () => {

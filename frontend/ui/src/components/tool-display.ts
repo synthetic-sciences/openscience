@@ -237,8 +237,12 @@ export function writtenFiles(
     if (part.type !== "tool" || part.state?.status !== "completed") continue
     const input = (part.state.input ?? {}) as Record<string, unknown>
     if (part.tool === "write" || part.tool === "edit" || part.tool === "multiedit") push(input.filePath)
-    if (part.tool !== "apply_patch") continue
     const metadata = (part.state.metadata ?? {}) as Record<string, unknown>
+    if (["notebook", "python", "r", "rkernel"].includes(part.tool ?? "")) {
+      for (const file of Array.isArray(metadata.files) ? metadata.files : []) push(file)
+    }
+    if (part.tool === "generate_image") push(metadata.filepath)
+    if (part.tool !== "apply_patch") continue
     const changes = Array.isArray(metadata.files) ? metadata.files : []
     for (const change of changes) {
       if (!change || typeof change !== "object") continue

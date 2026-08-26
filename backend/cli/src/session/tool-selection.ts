@@ -6,20 +6,31 @@ export namespace ToolSelection {
   export function minimalResearchAgent(agent: string | undefined) {
     return agent === "research" || agent === THIN_RESEARCH_AGENT
   }
-  const domain = new Set([
-    "artifact",
-    "atlas",
-    "atlas_record",
-    "compute_job",
-    "generate_image",
-    "provenance_query",
-    "provenance_record",
-    "python",
-    "r",
-    "research_contract",
-    "science_fetch",
-    "science_list_dbs",
-    "science_search",
+  const core = new Set([
+    "invalid",
+    "question",
+    "bash",
+    "read",
+    "glob",
+    "grep",
+    "webfetch",
+    "research_search",
+    "skill",
+    "task",
+  ])
+  const edits = new Set(["write", "edit"])
+  const python = new Set(["python", "notebook"])
+  const r = new Set(["r", "rkernel"])
+  const codeTools = new Set(["apply_patch", "codesearch", "lsp", "multiedit"])
+  const todo = new Set(["todowrite", "todoread", "planwrite"])
+  const biology = new Set([
+    "query_ensembl",
+    "query_kegg",
+    "query_ncbi_gene",
+    "query_pdb",
+    "query_pubmed",
+    "query_string",
+    "query_uniprot",
   ])
   const code =
     /\b(?:api|backend|bash|branch|bug|build|cli|code|codebase|commit|compile|endpoint|frontend|git|github|golang|java|javascript|kotlin|lint|package manager|php|pull request|python|refactor|repo|repository|ruby|rust|sdk|server|shell|source code|swift|test suite|typecheck|typescript|working tree)\b/i
@@ -137,6 +148,7 @@ export namespace ToolSelection {
       message?: string
       tools?: Record<string, boolean>
       direct?: boolean
+      capabilities?: ReadonlySet<string>
     },
   ) {
     if (input.tools?.[tool] === true) return true
@@ -150,23 +162,53 @@ export namespace ToolSelection {
     // unrelated scientific prompts wander into a retired service path.
     if (tool === "atlas" || tool === "atlas_record") return Boolean(message && /\batlas\b/i.test(message))
     if (tool.startsWith("provenance_")) return Boolean(message && /\b(?:lineage|provenance)\b/i.test(message))
-    if (!domain.has(tool)) return true
-    if (!message || !code.test(message) || science.test(message)) return true
+    if (core.has(tool)) return true
 
-    const named = (() => {
-      if (tool === "python") return /\bpython\b|\bpy(?:thon)? kernel\b|\bnotebook\b/i.test(message)
-      if (tool === "r") return /\bR\b|\br (?:kernel|language)\b|\brstudio\b/.test(message)
-      if (tool === "compute_job")
-        return /\b(?:cluster|compute job|gpu|job broker|modal|remote compute|slurm)\b/i.test(message)
-      if (tool === "research_contract")
-        return /\b(?:research contract|research loop|autonomous research)\b/i.test(message)
-      if (tool === "generate_image")
-        return /\b(?:diagram|figure|graphic|illustration|image|nano banana|poster|schematic|slide|visual)\b/i.test(
-          message,
-        )
-      if (tool.startsWith("science_")) return /\bscientific database\b|\bscience tool\b/i.test(message)
-      return /\b(?:artifact|chart|figure|report|visualization)\b/i.test(message)
-    })()
-    return named
+    const text = message ?? ""
+    const capabilities = input.capabilities ?? new Set<string>()
+    const capability = [...capabilities].join(" ")
+    const scientific =
+      science.test(text) || /protein|biology|interpretability|literature|scientific|modal/i.test(capability)
+    const analysis =
+      /\b(?:analy[sz](?:e|is)|benchmark|calculate|chart|data|dataset|experiment|fit|model|plot|simulation|statistics?|visuali[sz])\b/i.test(
+        text,
+      ) || /protein-binder|mechanistic-interpretability/i.test(capability)
+    const writing =
+      /\b(?:create|deliver|draft|edit|file|manuscript|paper|report|save|write)\b/i.test(text) ||
+      /scientific-writing|paper-writing/i.test(capability)
+
+    if (edits.has(tool)) return writing || analysis || code.test(text)
+    if (codeTools.has(tool)) return code.test(text)
+    if (python.has(tool)) return analysis || /\bpython\b|\bnotebook\b/i.test(text)
+    if (r.has(tool)) return /\bR\b|\br (?:kernel|language)\b|\brstudio\b/.test(text)
+    if (tool === "artifact") return writing || analysis || /\b(?:deliverable|result)\b/i.test(text)
+    if (tool === "generate_image")
+      return /\b(?:diagram|figure|graphic|illustration|image|poster|schematic|slide|visual)\b/i.test(text)
+    if (tool === "compute_job" || tool === "modal")
+      return (
+        /\b(?:cluster|compute job|gpu|modal|remote compute|slurm|pbs|h100)\b/i.test(text) ||
+        /modal-compute|protein-binder/i.test(capability)
+      )
+    if (tool === "research_contract") return /\bresearch contract\b/i.test(text)
+    if (todo.has(tool))
+      return (
+        text.length > 700 || /\b(?:autonomous|comprehensive|end-to-end|multi-step|publication-quality)\b/i.test(text)
+      )
+    if (biology.has(tool)) {
+      if (/literature-review/i.test(capability) && tool === "query_pubmed") return true
+      const pattern: Record<string, RegExp> = {
+        query_ensembl: /\b(?:ensembl|gene|genom)/i,
+        query_kegg: /\b(?:kegg|pathway)/i,
+        query_ncbi_gene: /\b(?:ncbi|gene)/i,
+        query_pdb: /\b(?:pdb|protein structure|complex|binder)/i,
+        query_pubmed: /\b(?:pubmed|literature|paper|citation)/i,
+        query_string: /\b(?:string database|protein interaction)/i,
+        query_uniprot: /\b(?:uniprot|protein|sequence)/i,
+      }
+      return pattern[tool]?.test(text) ?? false
+    }
+    if (tool.startsWith("science_"))
+      return scientific && /\b(?:accession|database|dataset|doi|identifier|literature|source)\b/i.test(text)
+    return false
   }
 }

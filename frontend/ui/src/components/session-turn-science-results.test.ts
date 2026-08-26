@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url"
 const source = readFileSync(fileURLToPath(new URL("./session-turn.tsx", import.meta.url)), "utf8")
 
 test("science tools stay in the chronological activity stream while generated artifacts use their result strip", () => {
-  expect(source).toContain("Other changed files")
+  expect(source).toContain("Session outputs")
+  expect(source).toContain("Keep important deliverables in Results")
   expect(source).not.toContain("Analysis outputs")
   expect(source).not.toContain("isPromotedTool")
   expect(source).toContain("hideGeneratedTools")
@@ -65,7 +66,8 @@ test("activity keeps the full provider reasoning mounted while the turn streams"
   const english = readFileSync(fileURLToPath(new URL("../i18n/en.ts", import.meta.url)), "utf8")
 
   expect(source).not.toContain('data-slot="session-turn-trace-legend"')
-  expect(source).toContain("hideReasoning={false}")
+  expect(source).toContain("hideReasoning={!props.stepsExpanded}")
+  expect(source).toContain("hideTools={!props.stepsExpanded}")
   expect(source).not.toContain("latestReasoningOnly")
   expect(source).not.toContain("liveReasoningDisplayText")
   expect(source).toContain("return visibleResearchTrace(entries)")
@@ -73,6 +75,13 @@ test("activity keeps the full provider reasoning mounted while the turn streams"
   expect(parts).toContain('data-origin="provider-reasoning"')
   expect(english).toContain('"ui.sessionTurn.steps.show": "Show reasoning and activity"')
   expect(english).not.toContain("model summaries are provider-generated")
+})
+
+test("assistant text remains in the literal trace instead of a generated Response block", () => {
+  expect(source).toContain("hideTools={!props.stepsExpanded}")
+  expect(source).not.toContain("hideResponsePart")
+  expect(source).not.toContain("ui.sessionTurn.summary.response")
+  expect(source).toContain('data-slot="session-turn-response-section"')
 })
 
 test("live status skips invisible lifecycle parts and recognizes remote compute", () => {

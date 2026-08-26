@@ -231,6 +231,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         output,
         metadata: {
           name: skill.name,
+          ...(skill.capability ? { capability: skill.capability } : {}),
           dir,
           matches: [],
         },

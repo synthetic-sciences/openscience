@@ -28,6 +28,7 @@ export interface ContextFile {
   directory: string
   path: string
   name: string
+  scope?: "session" | "auto"
   external?: boolean
 }
 
@@ -114,9 +115,22 @@ function normalize(value: string) {
   return `${prefix}${parts.join("/")}` || prefix || "."
 }
 
-export function resolveContextFile(directory: string, path: string): ContextFile {
+export function resolveContextFile(
+  directory: string,
+  path: string,
+  options?: { scope?: "project" | "session" | "auto" },
+): ContextFile {
   const root = normalize(directory).replace(/\/+$/, "") || "/"
   const input = slash(path)
+  if (options?.scope === "session" || options?.scope === "auto") {
+    const sessionPath = normalize(input)
+    return {
+      directory: root,
+      path: sessionPath,
+      name: sessionPath.split("/").pop() || sessionPath,
+      scope: options.scope,
+    }
+  }
   const absolute = input.startsWith("/") || /^[A-Za-z]:\//.test(input)
   const full = normalize(absolute ? input : `${root}/${input}`)
   const windows = /^[A-Za-z]:\//.test(root) || /^[A-Za-z]:\//.test(full)
@@ -146,13 +160,15 @@ function record(value: unknown): Record<string, unknown> | undefined {
 function restoreFile(value: unknown) {
   const row = record(value)
   if (!row || typeof row.directory !== "string" || typeof row.path !== "string") return
-  const file = resolveContextFile(row.directory, row.path)
+  const file = resolveContextFile(row.directory, row.path, {
+    scope: row.scope === "session" || row.scope === "auto" ? row.scope : "project",
+  })
   if (row.external === true) return { ...file, external: true }
   return file
 }
 
 function fileKey(file: ContextFile) {
-  return `${file.directory}\n${file.path}`
+  return `${file.scope ?? "project"}\n${file.directory}\n${file.path}`
 }
 
 function viewTab(context: ContextTab): WorkTab {
@@ -165,7 +181,7 @@ function viewTab(context: ContextTab): WorkTab {
 
 function fileTab(file: ContextFile): WorkTab {
   return {
-    id: `file:${encodeURIComponent(file.directory)}:${encodeURIComponent(file.path)}`,
+    id: `file:${file.scope ? `${file.scope}:` : ""}${encodeURIComponent(file.directory)}:${encodeURIComponent(file.path)}`,
     kind: "file",
     file,
   }
@@ -422,9 +438,9 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
     if (state.open && state.activeWorkTab === id) return
     update(select(state, tabs, id))
   }
-  const openFile = (directory: string, path: string) => {
+  const openFile = (directory: string, path: string, options?: { scope?: "project" | "session" | "auto" }) => {
     const state = current()
-    const file = resolveContextFile(directory, path)
+    const file = resolveContextFile(directory, path, options)
     const existing = state.files ?? []
     const known = existing.some((item) => fileKey(item) === fileKey(file))
     const files = known ? existing : [...existing, file]

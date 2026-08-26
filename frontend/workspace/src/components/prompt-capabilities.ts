@@ -24,10 +24,10 @@ export type DelegationSettings = {
 }
 
 export const DELEGATION_LEVELS: Array<{ value: DelegationLevel; label: string; description: string }> = [
-  { value: "off", label: "Off", description: "Keep all work in this conversation" },
-  { value: "light", label: "Light", description: "Use one worker for a clear parallel task" },
-  { value: "standard", label: "Standard", description: "Delegate when it materially speeds up research" },
-  { value: "high", label: "High", description: "Explore several useful branches in parallel" },
+  { value: "off", label: "Off", description: "No workers" },
+  { value: "light", label: "Light", description: "Use one worker when it clearly helps" },
+  { value: "standard", label: "Standard", description: "Use a small team for independent work" },
+  { value: "high", label: "High", description: "Use several workers for parallel research" },
 ]
 
 export const DELEGATION_AUTONOMY: Array<{
@@ -35,19 +35,9 @@ export const DELEGATION_AUTONOMY: Array<{
   label: string
   description: string
 }> = [
-  { value: "interactive", label: "Interactive", description: "Ask before consequential delegated work" },
-  { value: "balanced", label: "Balanced", description: "Proceed on routine work and surface decisions" },
-  { value: "autonomous", label: "Autonomous", description: "Complete delegated work within current permissions" },
-]
-
-export const DELEGATION_DIVERSITY: Array<{
-  value: DelegationDiversity
-  label: string
-  description: string
-}> = [
-  { value: "focused", label: "Focused", description: "Keep workers on the most likely approach" },
-  { value: "balanced", label: "Balanced", description: "Mix confirmation with distinct approaches" },
-  { value: "exploratory", label: "Exploratory", description: "Favor independent approaches and broader search" },
+  { value: "interactive", label: "Interactive", description: "Ask when an important choice is unclear" },
+  { value: "balanced", label: "Balanced", description: "Use safe assumptions; ask before consequential choices" },
+  { value: "autonomous", label: "Independent", description: "Ask only when blocked or missing permission" },
 ]
 
 export const DEFAULT_DELEGATION: DelegationSettings = {
@@ -62,7 +52,9 @@ export function delegationSettings(preferences?: CapabilityPreferences): Delegat
     level,
     workerModel: preferences?.delegation_worker_model ?? undefined,
     autonomy: preferences?.delegation_autonomy ?? DEFAULT_DELEGATION.autonomy,
-    diversity: preferences?.delegation_diversity ?? DEFAULT_DELEGATION.diversity,
+    // Kept in the wire contract for backward compatibility. The product no
+    // longer exposes a creativity/diversity control.
+    diversity: DEFAULT_DELEGATION.diversity,
   }
 }
 

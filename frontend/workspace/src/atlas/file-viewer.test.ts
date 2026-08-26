@@ -5,6 +5,8 @@ import {
   describeFile,
   fileRequestKey,
   fileErrorMessage,
+  initialFileScope,
+  missingFileFallback,
   PDF_PREVIEW_LIMIT,
   pdfPreviewMode,
   readFile,
@@ -134,6 +136,19 @@ describe("file viewer capabilities", () => {
 })
 
 describe("file viewer reads", () => {
+  test("resolves ambiguous chat links from session scratch before durable project files", () => {
+    expect(initialFileScope("auto")).toBe("session")
+    expect(
+      missingFileFallback({ requested: "auto", resolved: "session", error: new Error("File not found: result.csv") }),
+    ).toBe("project")
+    expect(
+      missingFileFallback({ requested: "auto", resolved: "session", error: new Error("Project file access denied") }),
+    ).toBeUndefined()
+    expect(
+      missingFileFallback({ requested: "session", resolved: "session", error: new Error("File not found") }),
+    ).toBeUndefined()
+  })
+
   test("normalizes successful reads without changing their data", async () => {
     const data = { content: "# Result", encoding: "utf8", mimeType: "text/markdown", size: 8 }
 

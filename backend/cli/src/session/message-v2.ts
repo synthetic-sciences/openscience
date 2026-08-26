@@ -46,8 +46,8 @@ export namespace MessageV2 {
   export const DelegationLimits = {
     off: 0,
     light: 1,
-    standard: 2,
-    high: 4,
+    standard: 3,
+    high: 8,
   } as const satisfies Record<DelegationLevel, number>
 
   /** Historical messages predate Research effort and therefore resolve to Normal. */

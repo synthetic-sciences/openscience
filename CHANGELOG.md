@@ -26,6 +26,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   delegated specialists. Removed the mandatory research-contract and eager
   capability prose from ordinary work while preserving explicit tools,
   permissions, evidence, compute, and durable Results.
+- Materialized a small request-local tool set on every Research turn, with
+  loaded skills activating only their bounded scientific capabilities, and
+  simplified delegation to level, worker model, and agent independence.
 - Stopped bundling or offering Atlas through the OpenScience npm distribution
   and `synsci` launcher, including both graph-initialization slash-command
   skills, while preserving automatic native-binary installation.
@@ -51,10 +54,14 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 - Kept live reasoning and tool activity mounted in chronological order, removed
   the streaming-only truncation and regrouping that made rows disappear until
-  refresh, and made semantic status changes visible immediately.
+  refresh, kept assistant text in that same literal timeline, and made semantic
+  status changes visible immediately.
 - Kept durable Project-file browsing and previews separate from session scratch
-  authority, surfaced structured file errors, and labeled opened files by their
-  real workspace instead of reporting valid project folders as disconnected.
+  authority, resolved chat file links against session scratch before durable
+  project files, surfaced
+  Python and R output files with explicit Save to Results actions, and labeled
+  opened files by their real workspace instead of reporting valid project
+  folders as disconnected.
 - Made active Python and R startup visible in Compute, removed duplicate
   `/compact` and `/context` actions, retained the latest readable streamed
   thought through provider-redacted parts, and kept routine analysis outputs in

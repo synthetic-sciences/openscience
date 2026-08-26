@@ -203,7 +203,7 @@ export default function Layout(props: ParentProps) {
                 // conversation in the center.
                 const openFile = (path: string) => {
                   const dir = directory()
-                  uiStore.openFile(dir, path)
+                  uiStore.openFile(dir, path, { scope: "auto" })
                 }
 
                 const openArtifact = (id: string) => {
@@ -281,6 +281,7 @@ export default function Layout(props: ParentProps) {
                           directory: directory(),
                           path,
                           sessionID: params.id && params.id !== "new" ? params.id : undefined,
+                          scope: "session",
                           inline: true,
                         }),
                       ),

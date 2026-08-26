@@ -1027,6 +1027,7 @@ export namespace KernelRuntime {
                   .then((before) => ExecutionFiles.changed(running.fileRoot!, before, completedAt))
                   .catch(() => [])
               : []
+          const filePaths = files.flatMap((file) => (file.path.status === "available" ? [file.path.value] : []))
           const summary = complete.outputs.find((item) => item.type === "result")?.data?.["text/plain"] ?? ""
           const fault = complete.outputs.find((item) => item.type === "error")?.error
           await ExecutionHistory.complete(running.journal!, {
@@ -1058,7 +1059,11 @@ export namespace KernelRuntime {
             ),
           )
           if (node) await saveOptionalProvenance(() => ExecutionHistory.link(running.journal!, node.id))
-          return { ...complete, ...(node ? { provenanceID: node.id } : {}) }
+          return {
+            ...complete,
+            ...(filePaths.length ? { files: filePaths } : {}),
+            ...(node ? { provenanceID: node.id } : {}),
+          }
         }),
       (error) =>
         withLease(value, async () => {

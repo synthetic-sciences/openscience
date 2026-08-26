@@ -40,7 +40,6 @@ import {
   stripRedactedReasoning,
   writtenFiles,
 } from "./tool-display"
-import { Markdown } from "./markdown"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
@@ -138,9 +137,8 @@ function isGeneratedTool(part: PartType | undefined): part is ToolPart {
 
 function AssistantTrace(props: {
   messages: AssistantMessage[]
-  responsePartId: string | undefined
-  hideResponsePart: boolean
   hideReasoning: boolean
+  hideTools?: boolean
   hideGeneratedTools?: boolean
   pendingRequestCallID?: string
 }) {
@@ -151,7 +149,7 @@ function AssistantTrace(props: {
       const parts = data.store.part[message.id] ?? emptyParts
       return parts.flatMap((part) => {
         if (props.hideReasoning && part?.type === "reasoning") return []
-        if (props.hideResponsePart && props.responsePartId === part?.id) return []
+        if (props.hideTools && part?.type === "tool") return []
         if (part?.type === "tool" && part.callID === props.pendingRequestCallID) return []
         if (props.hideGeneratedTools && isGeneratedTool(part)) return [{ message, part, hidden: true }]
         if (part?.type === "tool" && part.tool === "todoread") return [{ message, part, hidden: true }]
@@ -425,10 +423,8 @@ export function SessionTurn(
   )
 
   const response = createMemo(() => lastTextPart()?.text)
-  const responsePartId = createMemo(() => lastTextPart()?.id)
   const messageDiffs = createMemo(() => message()?.summary?.diffs ?? emptyDiffs)
   const hasDiffs = createMemo(() => messageDiffs().length > 0)
-  const hideResponsePart = createMemo(() => !!responsePartId())
 
   const [copied, setCopied] = createSignal(false)
 
@@ -673,18 +669,42 @@ export function SessionTurn(
                         </div>
                       </Show>
                     </div>
-                    {/* Response */}
-                    <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner">
+                    <Show when={assistantMessages().length > 0}>
+                      <div
+                        data-slot="session-turn-response-section"
+                        data-expanded={props.stepsExpanded ? "true" : undefined}
+                      >
                         <AssistantTrace
                           messages={assistantMessages()}
-                          responsePartId={responsePartId()}
-                          hideResponsePart={hideResponsePart()}
-                          hideReasoning={false}
+                          hideReasoning={!props.stepsExpanded}
+                          hideTools={!props.stepsExpanded}
                           hideGeneratedTools
                           pendingRequestCallID={pendingRequestCallID()}
                         />
-                        <Show when={error()}>
+                        <Show when={response()}>
+                          <div
+                            data-slot="session-turn-response-copy-wrapper"
+                            data-copied={copied() ? "true" : undefined}
+                          >
+                            <Tooltip
+                              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                              placement="top"
+                              gutter={8}
+                            >
+                              <IconButton
+                                icon={copied() ? "check" : "copy"}
+                                variant="ghost"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleCopy()
+                                }}
+                                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                              />
+                            </Tooltip>
+                          </div>
+                        </Show>
+                        <Show when={props.stepsExpanded && error()}>
                           <Card variant="error" class="error-card">
                             {sessionErrorText(error())}
                           </Card>
@@ -703,42 +723,8 @@ export function SessionTurn(
                         </Show>
                       </div>
                     </Show>
-                    <Show when={response() || hasDiffs()}>
+                    <Show when={hasDiffs()}>
                       <div data-slot="session-turn-summary-section">
-                        <div data-slot="session-turn-summary-header">
-                          <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
-                          <div data-slot="session-turn-response" aria-live="polite" aria-atomic="true">
-                            <Markdown
-                              data-slot="session-turn-markdown"
-                              data-diffs={hasDiffs()}
-                              text={response() ?? ""}
-                              cacheKey={responsePartId()}
-                            />
-                            <Show when={response()}>
-                              <div
-                                data-slot="session-turn-response-copy-wrapper"
-                                data-copied={copied() ? "true" : undefined}
-                              >
-                                <Tooltip
-                                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                                  placement="top"
-                                  gutter={8}
-                                >
-                                  <IconButton
-                                    icon={copied() ? "check" : "copy"}
-                                    variant="ghost"
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      handleCopy()
-                                    }}
-                                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                                  />
-                                </Tooltip>
-                              </div>
-                            </Show>
-                          </div>
-                        </div>
                         <Accordion
                           data-slot="session-turn-accordion"
                           multiple
@@ -907,12 +893,16 @@ export function SessionTurn(
                         </div>
                       </section>
                     </Show>
-                    {/* Explicit save: offer the written files as durable Results */}
+                    {/* Session outputs stay editable in scratch until explicitly kept as immutable Results. */}
                     <Show when={isLastUserMessage() && !working() && !!data.saveArtifact && written().length > 0}>
-                      <details data-slot="session-turn-metadata">
-                        <summary>
-                          Other changed files<span>· {artifactActions(written()).length}</span>
-                        </summary>
+                      <section data-slot="session-turn-session-outputs">
+                        <header>
+                          <span>
+                            <strong>Session outputs</strong>
+                            <small>Saved in this session. Keep important deliverables in Results.</small>
+                          </span>
+                          <span>{artifactActions(written()).length}</span>
+                        </header>
                         <div data-slot="session-turn-artifact-save">
                           <For each={artifactActions(written())}>
                             {(action) => {
@@ -922,25 +912,36 @@ export function SessionTurn(
                                   return `Saving ${action.path.split("/").pop() ?? action.path}…`
                                 if (state()?.state === "saved") return "Saved to Results"
                                 if (state()?.state === "error") return "Save failed · retry"
-                                return action.label
+                                return "Save to Results"
                               }
                               return (
-                                <Button
-                                  data-slot="session-turn-artifact-action"
-                                  data-state={state()?.state}
-                                  variant="ghost"
-                                  size="small"
-                                  title={state()?.error ?? action.path}
-                                  disabled={state()?.state === "saving"}
-                                  onClick={() => saveArtifact(action.path)}
-                                >
-                                  {label()}
-                                </Button>
+                                <div data-slot="session-turn-output-row">
+                                  <button
+                                    type="button"
+                                    data-slot="session-turn-output-file"
+                                    title={action.path}
+                                    onClick={() => data.openFile?.(action.path)}
+                                  >
+                                    <FileIcon node={{ path: action.path, type: "file" }} />
+                                    <span>{action.path.split("/").pop() ?? action.path}</span>
+                                  </button>
+                                  <Button
+                                    data-slot="session-turn-artifact-action"
+                                    data-state={state()?.state}
+                                    variant="ghost"
+                                    size="small"
+                                    title={state()?.error ?? action.path}
+                                    disabled={state()?.state === "saving"}
+                                    onClick={() => saveArtifact(action.path)}
+                                  >
+                                    {label()}
+                                  </Button>
+                                </div>
                               )
                             }}
                           </For>
                         </div>
-                      </details>
+                      </section>
                     </Show>
                     <Show when={error() && !props.stepsExpanded}>
                       <Card variant="error" class="error-card">

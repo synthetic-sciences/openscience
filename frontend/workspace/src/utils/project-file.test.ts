@@ -33,6 +33,22 @@ describe("project file requests", () => {
     })
   })
 
+  test("keeps session-workspace paths relative to the active session grant", () => {
+    expect(
+      rawFileQuery({
+        directory: "/work/CERBench",
+        path: "analysis/results.csv",
+        sessionID: "ses_research",
+        scope: "session",
+        inline: true,
+      }),
+    ).toEqual({
+      path: "analysis/results.csv",
+      sessionID: "ses_research",
+      inline: "true",
+    })
+  })
+
   test("preserves absolute granted paths and forwards an explicit byte cap", () => {
     expect(
       rawFileQuery({

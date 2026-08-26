@@ -119,8 +119,18 @@ describe("writtenFiles", () => {
     ).toEqual(["a.py", "new.py"])
   })
 
-  test("never guesses paths for the notebook tool, whose input is only code", () => {
+  test("never guesses paths for the notebook tool when execution metadata has none", () => {
     expect(writtenFiles([completed("notebook", { code: "open('x.csv','w').write('1')" })])).toEqual([])
+  })
+
+  test("collects files observed by Python, R, and image execution metadata", () => {
+    expect(
+      writtenFiles([
+        completed("notebook", { code: "..." }, { files: ["results.csv", "figure.png"] }),
+        completed("r", { code: "..." }, { files: ["model.rds"] }),
+        completed("generate_image", {}, { filepath: "diagram.png" }),
+      ]),
+    ).toEqual(["results.csv", "figure.png", "model.rds", "diagram.png"])
   })
 })
 

@@ -29,12 +29,16 @@ import {
   describeFile,
   createFileRequestOwner,
   fileRequestKey,
+  initialFileScope,
+  missingFileFallback,
   PDF_PREVIEW_LIMIT,
   pdfPreviewMode,
   readFile,
   reconcileSavedDraft,
   type FileData,
   type FileKind,
+  type FileOpenScope,
+  type ResolvedFileScope,
 } from "@/atlas/file-viewer"
 import { LANG, extension as ext } from "@/atlas/files/artifact-thumb"
 import { resolveViewer } from "@/atlas/files/viewer-registry"
@@ -104,6 +108,7 @@ export function FileView(props: {
   path: string
   directory?: string
   sessionID?: string
+  scope?: FileOpenScope
   subtitle?: string
   onClose?: () => void
   active?: boolean
@@ -115,8 +120,21 @@ export function FileView(props: {
   const params = useParams()
   const directory = () => props.directory || sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
   const activeSessionID = () => props.sessionID ?? (params.id && params.id !== "new" ? params.id : undefined)
-  const requestPath = () => resolveArtifactPath(directory(), props.path)
-  const fileSessionID = () => (projectContains(directory(), requestPath()) ? undefined : activeSessionID())
+  const [resolvedScope, setResolvedScope] = createSignal<ResolvedFileScope>(initialFileScope(props.scope))
+  let scopeIdentity = ""
+  createEffect(() => {
+    const next = [props.scope ?? "project", directory(), props.path, activeSessionID() ?? ""].join("\n")
+    if (next === scopeIdentity) return
+    scopeIdentity = next
+    setResolvedScope(initialFileScope(props.scope))
+  })
+  const requestPath = () => (resolvedScope() === "session" ? props.path : resolveArtifactPath(directory(), props.path))
+  const fileSessionID = () =>
+    resolvedScope() === "session"
+      ? activeSessionID()
+      : projectContains(directory(), requestPath())
+        ? undefined
+        : activeSessionID()
   const name = () => props.path.split("/").pop() || props.path
   const e = () => ext(name())
 
@@ -189,6 +207,15 @@ export function FileView(props: {
         return
       }
       if (result.error) {
+        const fallback = missingFileFallback({
+          requested: props.scope ?? "project",
+          resolved: resolvedScope(),
+          error: result.error,
+        })
+        if (fallback) {
+          setResolvedScope(fallback)
+          return
+        }
         setView({ status: "error", error: result.error, data: undefined })
         return
       }
@@ -199,7 +226,7 @@ export function FileView(props: {
         status: "ready",
         data,
         error: undefined,
-        draft: recoverFileDraft(dir, path, text),
+        draft: recoverFileDraft(dir, path, text, resolvedScope() === "session" ? "session" : undefined),
         saved: text,
       })
     })
@@ -219,7 +246,13 @@ export function FileView(props: {
   createEffect(() => props.onDirtyChange?.(dirty()))
   createEffect(() => {
     if (view.status !== "ready") return
-    rememberFileDraft(directory(), props.path, view.draft, view.saved)
+    rememberFileDraft(
+      directory(),
+      props.path,
+      view.draft,
+      view.saved,
+      resolvedScope() === "session" ? "session" : undefined,
+    )
   })
   const scientific = createMemo(() => (isBinary() ? undefined : detectScientificFile(e(), view.draft)))
   const biological = createMemo(() => (isBinary() ? undefined : detectBiologicalFormat(e())))
@@ -254,14 +287,17 @@ export function FileView(props: {
   // Relative image references in previewed markdown resolve against the
   // file's own directory through the backend raw-file endpoint.
   const rawUrl = (path: string, dir = directory(), session = fileSessionID()) =>
-    sdk.request.url("/file/raw", rawFileQuery({ directory: dir, path, sessionID: session, inline: true }))
+    sdk.request.url(
+      "/file/raw",
+      rawFileQuery({ directory: dir, path, sessionID: session, scope: resolvedScope(), inline: true }),
+    )
   const image = (src: string) =>
     assetUrl(src, {
       base: props.path,
       url: (path) => rawUrl(path),
     })
   const file = (href: string) => localAssetPath(href, props.path)
-  const openFile = (path: string) => uiStore.openFile(directory(), path)
+  const openFile = (path: string) => uiStore.openFile(directory(), path, { scope: resolvedScope() })
   const html = () => htmlView.value
 
   createEffect(() => {
@@ -296,7 +332,13 @@ export function FileView(props: {
         const response = await sdk.request(
           "/file/raw",
           { signal: controller.signal },
-          rawFileQuery({ directory: dir, path, sessionID: session, maxBytes: HTML_STYLESHEET_BYTES }),
+          rawFileQuery({
+            directory: dir,
+            path,
+            sessionID: session,
+            scope: resolvedScope(),
+            maxBytes: HTML_STYLESHEET_BYTES,
+          }),
         )
         if (!response.ok) return
         return response.text()
@@ -369,7 +411,13 @@ export function FileView(props: {
       .request(
         "/file/raw",
         { signal: controller.signal },
-        rawFileQuery({ directory: directory(), path, sessionID: session, maxBytes: PDF_PREVIEW_LIMIT }),
+        rawFileQuery({
+          directory: directory(),
+          path,
+          sessionID: session,
+          scope: resolvedScope(),
+          maxBytes: PDF_PREVIEW_LIMIT,
+        }),
       )
       .then(async (response) => {
         if (response.ok) return new Uint8Array(await response.arrayBuffer())
@@ -534,7 +582,7 @@ export function FileView(props: {
       const response = await sdk.request(
         "/file/raw",
         undefined,
-        rawFileQuery({ directory: directory(), path: requestPath(), sessionID: session }),
+        rawFileQuery({ directory: directory(), path: requestPath(), sessionID: session, scope: resolvedScope() }),
       )
       if (!response.ok) throw new Error(`download failed (${response.status})`)
       downloadBlob(name(), await response.blob())
@@ -546,7 +594,7 @@ export function FileView(props: {
   const location = () => {
     if (props.subtitle) return props.subtitle
     const index = props.path.lastIndexOf("/")
-    return index > 0 ? props.path.slice(0, index) : "Session files"
+    return index > 0 ? props.path.slice(0, index) : resolvedScope() === "session" ? "Session files" : "Project files"
   }
 
   return (

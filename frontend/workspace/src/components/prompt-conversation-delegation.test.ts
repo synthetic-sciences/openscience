@@ -15,7 +15,8 @@ test("keeps conversation references typed from chip through request", () => {
 test("offers bounded delegation controls and sends the normalized contract", () => {
   expect(capabilities).toContain('export type DelegationLevel = "off" | "light" | "standard" | "high"')
   expect(capabilities).toContain('export type DelegationAutonomy = "interactive" | "balanced" | "autonomous"')
-  expect(capabilities).toContain('export type DelegationDiversity = "focused" | "balanced" | "exploratory"')
   expect(input).toContain("delegationSettings: delegationConfig")
   expect(input).toContain("delegation_worker_model")
+  expect(input).toContain("Agent independence")
+  expect(input).not.toContain("Approaches")
 })

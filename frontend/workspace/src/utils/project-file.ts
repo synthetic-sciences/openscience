@@ -31,18 +31,23 @@ export function projectContains(directory: string, file: string) {
 }
 
 /** Build a session-authorized project-file query, with an optional path for collection endpoints. */
-export function projectFileQuery(input: { directory: string; path?: string; sessionID?: string }) {
+export type FileScope = "project" | "session"
+
+export function projectFileQuery(input: { directory: string; path?: string; sessionID?: string; scope?: FileScope }) {
   return {
-    ...(input.path ? { path: resolveArtifactPath(input.directory, input.path) } : {}),
+    ...(input.path
+      ? { path: input.scope === "session" ? input.path : resolveArtifactPath(input.directory, input.path) }
+      : {}),
     ...(input.sessionID ? { sessionID: input.sessionID } : {}),
   }
 }
 
-/** Build a raw-file query whose path remains project-relative in meaning even when a session grant is present. */
+/** Build a raw-file query for either the durable project root or session scratch. */
 export function rawFileQuery(input: {
   directory: string
   path: string
   sessionID?: string
+  scope?: FileScope
   maxBytes?: number
   inline?: boolean
 }) {

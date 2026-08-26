@@ -137,6 +137,19 @@ describe("context pane state", () => {
     expect(state.prefill()).toBe("alpha")
   })
 
+  test("keeps chat-linked files ambiguous until the preview resolves their real workspace", () => {
+    const state = createContextState({ storage: memoryStorage() })
+    state.activateScope("project-a", "session-a")
+    state.openFile("/work/alpha", "results/curve.csv", { scope: "auto" })
+
+    expect(state.file()).toEqual({
+      directory: "/work/alpha",
+      path: "results/curve.csv",
+      name: "curve.csv",
+      scope: "auto",
+    })
+  })
+
   test("active context remains selected and a different context switches directly", () => {
     const state = createContextState()
 
@@ -242,6 +255,19 @@ describe("context pane state", () => {
       path: "results/curve.csv",
       name: "curve.csv",
     })
+  })
+
+  test("keeps session scratch distinct from a project file with the same relative path", () => {
+    const state = createContextState({ storage: memoryStorage() })
+
+    state.openFile("/work/alpha", "results/curve.csv")
+    state.openFile("/work/alpha", "results/curve.csv", { scope: "session" })
+
+    expect(state.files()).toEqual([
+      { directory: "/work/alpha", path: "results/curve.csv", name: "curve.csv" },
+      { directory: "/work/alpha", path: "results/curve.csv", name: "curve.csv", scope: "session" },
+    ])
+    expect(state.file()?.scope).toBe("session")
   })
 
   test("marks external absolute files for permission without changing the project root", () => {

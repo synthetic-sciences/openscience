@@ -70,11 +70,9 @@ import {
   delegationLabel,
   delegationSettings,
   DELEGATION_AUTONOMY,
-  DELEGATION_DIVERSITY,
   DELEGATION_LEVELS,
   type CapabilityPreferences,
   type DelegationAutonomy,
-  type DelegationDiversity,
   type DelegationLevel,
   type DelegationModel,
   type DelegationSettings,
@@ -194,21 +192,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     level?: DelegationLevel
     workerModel?: DelegationModel | null
     autonomy?: DelegationAutonomy
-    diversity?: DelegationDiversity
   }) => {
     const current = delegation()
     const next = {
       level: patch.level ?? current.level,
       workerModel: patch.workerModel === null ? undefined : (patch.workerModel ?? current.workerModel),
       autonomy: patch.autonomy ?? current.autonomy,
-      diversity: patch.diversity ?? current.diversity,
+      diversity: current.diversity,
     }
     saveCapabilities({
       delegation_enabled: next.level !== "off",
       delegation_level: next.level,
       delegation_worker_model: next.workerModel ?? null,
       delegation_autonomy: next.autonomy,
-      delegation_diversity: next.diversity,
     })
   }
   const projectAccess = async (projectID: string, init?: RequestInit) => {
@@ -2765,20 +2761,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             </For>
                           </div>
                         </details>
-                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
-                          <summary aria-label={`Worker independence, ${delegation().autonomy}`}>
-                            <span>Independence</span>
-                            <strong>
-                              {DELEGATION_AUTONOMY.find((option) => option.value === delegation().autonomy)?.label}
-                            </strong>
-                            <Icon name="chevron-right" size="small" />
-                          </summary>
-                          <div
-                            class="workspace-composer__research-choice-menu"
-                            role="radiogroup"
-                            aria-label="Worker independence"
-                            onKeyDown={navigateResearchChoices}
-                          >
+                        <div class="workspace-composer__independence">
+                          <header>
+                            <strong>Independence</strong>
+                            <small>
+                              {
+                                DELEGATION_AUTONOMY.find((option) => option.value === delegation().autonomy)
+                                  ?.description
+                              }
+                            </small>
+                          </header>
+                          <div role="radiogroup" aria-label="Agent independence" onKeyDown={navigateResearchChoices}>
                             <For each={DELEGATION_AUTONOMY}>
                               {(option) => (
                                 <button
@@ -2786,61 +2779,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                   role="radio"
                                   aria-checked={delegation().autonomy === option.value}
                                   tabindex={delegation().autonomy === option.value ? 0 : -1}
-                                  onClick={(event) => {
+                                  title={option.description}
+                                  onClick={() => {
                                     saveDelegation({ autonomy: option.value })
-                                    event.currentTarget.closest("details")?.removeAttribute("open")
                                   }}
                                 >
-                                  <span>
-                                    <strong>{option.label}</strong>
-                                    <small>{option.description}</small>
-                                  </span>
-                                  <Show when={delegation().autonomy === option.value}>
-                                    <Icon name="check" size="small" />
-                                  </Show>
+                                  {option.label}
                                 </button>
                               )}
                             </For>
                           </div>
-                        </details>
-                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
-                          <summary aria-label={`Approach diversity, ${delegation().diversity}`}>
-                            <span>Approaches</span>
-                            <strong>
-                              {DELEGATION_DIVERSITY.find((option) => option.value === delegation().diversity)?.label}
-                            </strong>
-                            <Icon name="chevron-right" size="small" />
-                          </summary>
-                          <div
-                            class="workspace-composer__research-choice-menu"
-                            role="radiogroup"
-                            aria-label="Approach diversity"
-                            onKeyDown={navigateResearchChoices}
-                          >
-                            <For each={DELEGATION_DIVERSITY}>
-                              {(option) => (
-                                <button
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={delegation().diversity === option.value}
-                                  tabindex={delegation().diversity === option.value ? 0 : -1}
-                                  onClick={(event) => {
-                                    saveDelegation({ diversity: option.value })
-                                    event.currentTarget.closest("details")?.removeAttribute("open")
-                                  }}
-                                >
-                                  <span>
-                                    <strong>{option.label}</strong>
-                                    <small>{option.description}</small>
-                                  </span>
-                                  <Show when={delegation().diversity === option.value}>
-                                    <Icon name="check" size="small" />
-                                  </Show>
-                                </button>
-                              )}
-                            </For>
-                          </div>
-                        </details>
+                        </div>
                       </Show>
                       <div class="workspace-composer__research-divider" />
                       <Show
