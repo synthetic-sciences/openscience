@@ -261,7 +261,7 @@ export namespace ToolRegistry {
           // use apply tool in same format as codex
           const usePatch =
             model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
-          const thin = agent?.name === "researchagent-test" || agent?.name === "research"
+          const thin = agent?.name === "researchagent-test"
           if (t.id === "apply_patch") return thin || usePatch
           if (t.id === "edit" || t.id === "write") return !thin && !usePatch
 

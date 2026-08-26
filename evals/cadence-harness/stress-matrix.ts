@@ -171,7 +171,7 @@ export const STRESS_MATRIX: readonly StressScenario[] = [
     id: "indexing.local-private",
     category: "indexing",
     title: "Local folder stays private",
-    prompt: "Index the attached fixture folder as a private local source.",
+    prompt: "Use Atlas to index the attached fixture folder as a private local source.",
     config: { permissionReply: "once" },
     stimulus: {
       kind: "tool",
@@ -484,7 +484,7 @@ export const STRESS_MATRIX: readonly StressScenario[] = [
   clean({
     id: "budgets.soft-finalization",
     category: "budgets",
-    title: "Soft boundary preserves finalization calls",
+    title: "Legacy contract adds no hidden finalization calls",
     prompt: "Use the remaining bounded call to summarize current verified work.",
     turns: ["Now return the bounded final summary."],
     config: { researchContract: true, modelCalls: 3 },
@@ -494,16 +494,16 @@ export const STRESS_MATRIX: readonly StressScenario[] = [
   clean({
     id: "budgets.hard-block",
     category: "budgets",
-    title: "Hard boundary is terminal",
+    title: "Minimal Research ignores the legacy hard boundary",
     prompt: "Attempt one call after the bounded epoch is exhausted.",
     config: { researchContract: true, modelCalls: 1, exhausted: true },
     stimulus: { kind: "inspect", target: "messages" },
-    expect: { terminal: "blocked", tools: 0, retries: 0, artifacts: "none", contains: ["budget"] },
+    expect: { terminal: "completed", tools: 0, retries: 0, artifacts: "none", contains: ["budget"] },
   }),
   clean({
     id: "budgets.explicit-resume",
     category: "budgets",
-    title: "Continue starts one fresh epoch",
+    title: "Continue remains an ordinary conversational turn",
     prompt: "continue",
     config: { researchContract: true, exhausted: true, epoch: 1 },
     stimulus: { kind: "reply", text: "MATRIX_EPOCH_2" },

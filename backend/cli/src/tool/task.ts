@@ -372,11 +372,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const profile = await Agent.get(params.subagent_type)
       if (!profile) throw new Error(`Internal delegation profile ${params.subagent_type} is unavailable`)
       // Minimal Research parents delegate through the same minimal runtime.
-      // Specialist intent remains explicit in child guidance without silently
-      // restoring the legacy system prompt and eager tool catalog.
-      // Specialist intent remains explicit in childGuidance and skill routing.
+      // Specialist intent remains explicit in childGuidance and skill routing
+      // without restoring the legacy system prompt and eager tool catalog.
       const agent = thinCaller
-        ? await Agent.get("researchagent-test")
+        ? await Agent.get("research")
         : params.specialist
           ? await Agent.get(params.specialist)
           : profile

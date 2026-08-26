@@ -1,18 +1,9 @@
-Run a shell command in the session workspace; set `workdir` instead of changing directories in the command.
+Run a shell command in the session workspace. Set `workdir` instead of changing directories in the command.
 
-Use Bash for builds, tests, package managers, Git, utilities, and scripts. Use dedicated file tools for reading, searching, creating, or editing files; do not write through shell redirection, `echo`, or `cat` when a file tool fits.
+Use Bash for builds, tests, packages, Git, utilities, and scripts. Prefer file tools for reading, searching, creating, or editing files; do not write through shell redirection when a file tool fits.
 
-Use research_search or webfetch for internet retrieval instead of curl, wget, or package-specific HTTP clients in the shell. Those tools cross the network boundary safely and preserve source provenance; ordinary shell execution may be network-isolated.
+Use research_search or webfetch for internet retrieval, not curl or wget. Use `compute_job` action `wait` for detached compute instead of shell polling or sleep.
 
-Do not use shell `sleep` to poll detached compute. Use `compute_job` with action `wait` so progress, cancellation, and the Compute pane remain coherent.
+Quote paths containing spaces. Output beyond ${maxLines} lines or ${maxBytes} bytes is saved automatically. Run independent calls together; join dependent commands only when later work must stop after failure.
 
-Quote paths containing spaces. `command` is required and `timeout` is optional. Output beyond ${maxLines} lines or ${maxBytes} bytes is saved automatically; do not add `head` or `tail` only to limit output. Describe each call in 5–10 words.
-
-Issue independent calls together. Join dependent commands with `&&` only when later work must stop after failure.
-
-Git and GitHub safety:
-- Commit, push, or create a pull request only when explicitly requested.
-- Before committing, inspect status, diff, and recent log; stage only intended paths.
-- Never change Git config, bypass hooks, force-push, use interactive Git, or destructively reset/checkout without explicit authorization.
-- Never amend a pushed commit or push directly to `main`/`master`.
-- For a requested PR, inspect the full branch diff, use `gh`, create at most one, and return its URL.
+Commit, push, or open one PR only when requested. Inspect status and diff, stage only intended paths, never bypass hooks or force-push, and never amend a pushed commit or push directly to `main`/`master`.

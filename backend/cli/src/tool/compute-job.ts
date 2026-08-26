@@ -59,7 +59,7 @@ function action<const Value extends ComputeAction>(value: Value) {
 }
 
 const ComputeTarget = JobBroker.Target.describe(
-  'Pass a JSON object, never a quoted JSON string: {"kind":"local"}, {"kind":"modal"}, or {"kind":"ssh","host_id":"saved-host-id"}.',
+  'Object: {"kind":"local"}, {"kind":"modal"}, or {"kind":"ssh","host_id":"saved-host-id"}; never a JSON string.',
 )
 const ComputeWorkload = z
   .object({
@@ -72,9 +72,7 @@ const ComputeWorkload = z
       .min(1)
       .max(2_000)
       .optional()
-      .describe(
-        "Existing relative working directory inside the session workspace; create it before planning or starting. Omit to use the session workspace, which is recommended for Modal.",
-      ),
+      .describe("Existing relative workspace directory; create it first. Omit for the workspace root."),
     target: ComputeTarget,
     resources: JobBroker.Resources.optional(),
     modules: z.array(z.string().trim().min(1).max(240)).max(64).optional(),
@@ -96,9 +94,7 @@ const ComputeWorkload = z
     secret_refs: JobBroker.SecretRef.array()
       .max(8)
       .optional()
-      .describe(
-        "Reviewed symbolic Modal credentials shown as available by targets; never values and never request an unavailable reference.",
-      ),
+      .describe("Available reviewed Modal credential names; never values."),
   })
   .strict()
 
@@ -422,13 +418,11 @@ function artifacts(job: JobBroker.Job) {
 export function createComputeJobTool(base?: JobBroker.Options) {
   return Tool.define<typeof ComputeJobParameters, Metadata>("compute_job", {
     description: [
-      "Project JobBroker for detached local, SSH/scheduler, and Modal work; prefer Python/R for interactive analysis.",
-      "Actions: targets discovers providers; plan previews without dispatch; start dispatches; list filters project jobs; status, wait, logs, artifacts, cancel, retry_delivery, and release require job_id. wait replaces shell sleep and returns after at most 60 seconds; logs optionally accepts bytes.",
-      "plan/start require name, purpose, command, and target; remote start presents an immutable scoped approval. Optional workload fields are cwd, resources, modules, container, artifacts, checkpoint, uploads, packages, image, gpu, and reviewed secret_refs.",
-      'Example: {"action":"start","name":"Run analysis","purpose":"Produce the result","command":"python analysis.py","target":{"kind":"local"}}.',
-      "list/status/logs/artifacts are read-only. cancel stops a live job; retry_delivery harvests retained Modal output without rerunning; release discards retained resources.",
-      "Never redispatch Modal to inspect a job or invoke Modal SDK/CLI directly.",
-      'Always use "action", never "operation". target is a nested object, never a JSON-encoded string.',
+      "Detached local, SSH/scheduler, and Modal jobs; prefer Python/R for interactive work.",
+      "Use targets to discover, plan to preview, start to dispatch, and wait instead of shell polling. list/status/logs/artifacts inspect jobs; cancel, retry_delivery, and release manage them.",
+      "plan/start require name, purpose, command, and target. Remote starts require scoped approval. Other job actions use job_id.",
+      'Example: {"action":"start","name":"Analysis","purpose":"Produce results","command":"python analysis.py","target":{"kind":"local"}}.',
+      'Use "action", never "operation"; target is an object, never a JSON string. Never call Modal SDK/CLI directly.',
     ].join("\n"),
     parameters: ComputeJobParameters,
     normalizeInput,

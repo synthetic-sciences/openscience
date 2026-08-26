@@ -1352,7 +1352,7 @@ export namespace SessionPrompt {
         ...(await SystemPrompt.environment(model, sessionID)),
         ...(narrow || minimal ? [] : await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
-        ...(SKILL_ROUTING_AGENTS.has(agent.name) && !narrow && !minimal
+        ...(SKILL_ROUTING_AGENTS.has(agent.name) && !narrow && (!minimal || ToolSelection.slashInvocation(route.text))
           ? [await SystemPrompt.availableSkills(agent.permission, route.text)]
           : []),
         ...(contract ? [contract] : []),

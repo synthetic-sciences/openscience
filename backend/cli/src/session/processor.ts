@@ -27,6 +27,7 @@ import type { CredentialSource } from "./billing-gate"
 import { SearchDedupe } from "./search-dedupe"
 import { SessionLoopState } from "./loop-state"
 import { InvalidCall } from "@/tool/invalid-call"
+import { ToolSelection } from "./tool-selection"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -550,7 +551,14 @@ export namespace SessionProcessor {
               }
             }
 
-            runtimeDecision = await SessionResearch.runtimePreflight(input.sessionID)
+            // The conversation-first Research agent does not create or require
+            // legacy research contracts, so an old persisted contract must not
+            // silently reintroduce bounded-run finalization or block a turn.
+            // Keep the gate for specialist/legacy agents that still opt into
+            // that contract explicitly. Ace balance safety above is separate.
+            runtimeDecision = ToolSelection.minimalResearchAgent(streamInput.agent.name)
+              ? { decision: "allow" }
+              : await SessionResearch.runtimePreflight(input.sessionID)
             if (runtimeDecision.decision === "block") {
               throw new Error(SessionResearch.exhaustionMessage(runtimeDecision))
             }
