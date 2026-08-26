@@ -1,18 +1,15 @@
-Delegate one independent unit when parallel work materially improves the result.
+Delegate independent work when parallelism materially improves the result.
 
 Profiles:
 {agents}
 
-Choose by work: `explore` finds evidence and `execute` implements or computes. Lazy skills provide
-domain expertise; do not invent personas.
+Use `explore` for evidence and `execute` for implementation or compute.
 
-- Use as many independent workers as materially useful. Delegation posture guides how readily to
-  delegate; it is not a quota. Runtime capacity may queue work.
-- Children may call Task for genuinely independent work within the same permission boundary. The
-  lead still owns synthesis and verification.
+- Use as many independent workers as useful. Delegation posture is guidance, not a quota; capacity
+  may queue work.
+- Children may delegate within the same permission boundary; the lead owns synthesis and verification.
 - Do not delegate sequential work, small edits, ceremonial review, or duplicate retrieval.
-- Task returns when that child hands off. Issue independent calls together; optional failure must
-  not block the result.
+- Task returns with the child's handoff. Issue independent calls together.
 - Continue a `session_id` only for missing work. Otherwise include objective, inputs, references,
   context, assumptions, exclusions, allowed actions, output, and validation.
 - A child returns a decision-ready handoff; its transcript remains in `session_id`. Preserve decisive
