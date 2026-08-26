@@ -89,6 +89,7 @@ export const EVENT_TYPES = [
   "user.message",
   "model.request",
   "model.response",
+  "model.usage",
   "assistant.message",
   "tool.started",
   "tool.completed",
@@ -1495,6 +1496,42 @@ export namespace OutboundTelemetry {
         parts: input.parts,
         tokens: input.tokens,
         finish: input.finish,
+      },
+    })
+  }
+
+  export function modelUsage(input: {
+    sessionID: string
+    messageID: string
+    operationID: string
+    attempt: number
+    route: string
+    provider: string
+    model: string
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: { read: number; write: number }
+    }
+    cost: number
+  }) {
+    return append("model.usage", {
+      sessionID: input.sessionID,
+      runID: input.messageID,
+      spanKey: `${input.messageID}:usage:${input.operationID}`,
+      parentSpanID: `${input.messageID}:model:${input.attempt}:response`,
+      route: input.route,
+      provider: input.provider,
+      model: input.model,
+      payload: {
+        input_tokens: input.tokens.input,
+        output_tokens: input.tokens.output,
+        reasoning_tokens: input.tokens.reasoning,
+        cache_read_tokens: input.tokens.cache.read,
+        cache_write_tokens: input.tokens.cache.write,
+        estimated_cost_microusd: Math.max(0, Math.round(input.cost * 1_000_000)),
+        cost_source: "model_catalog",
       },
     })
   }
