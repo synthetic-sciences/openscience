@@ -49,7 +49,14 @@ test("Task advertises generic phases and accepts an explicit domain specialist l
           subagent_type: "biology",
         }).success,
       ).toBe(false)
-
+      expect(
+        task.parameters.safeParse({
+          description: "Invalid continuation",
+          prompt: "Continue the earlier inspection.",
+          subagent_type: "explore",
+          session_id: "current-session",
+        }).success,
+      ).toBe(false)
       expect(await Agent.get("biology")).toBeDefined()
       expect(await Agent.get("reviewer")).toBeUndefined()
       expect(await Agent.get("plan")).toBeDefined()
@@ -254,7 +261,7 @@ test("Task dispatch budget counts continuations across one parent user turn", ()
     id: string
     parent: string
     created: number
-    calls: Array<{ id: string; callID: string; sessionID?: string }>
+    calls: Array<{ id: string; callID: string; sessionID?: string; failed?: boolean }>
   }): MessageV2.WithParts => ({
     info: {
       id: input.id,
@@ -277,11 +284,18 @@ test("Task dispatch budget counts continuations across one parent user turn", ()
       type: "tool" as const,
       callID: call.callID,
       tool: "task",
-      state: {
-        status: "running" as const,
-        input: call.sessionID ? { session_id: call.sessionID } : {},
-        time: { start: input.created },
-      },
+      state: call.failed
+        ? {
+            status: "error" as const,
+            input: call.sessionID ? { session_id: call.sessionID } : {},
+            error: "Invalid Task continuation handle",
+            time: { start: input.created, end: input.created + 1 },
+          }
+        : {
+            status: "running" as const,
+            input: call.sessionID ? { session_id: call.sessionID } : {},
+            time: { start: input.created },
+          },
     })),
   })
   const user = (input: { id: string; created: number; carrier?: boolean }): MessageV2.WithParts => ({
@@ -321,6 +335,8 @@ test("Task dispatch budget counts continuations across one parent user turn", ()
       parent: "msg_user",
       created: 1,
       calls: [
+        { id: "prt_failed_001", callID: "call_failed_1", sessionID: "ses_parent", failed: true },
+        { id: "prt_failed_002", callID: "call_failed_2", sessionID: "ses_parent", failed: true },
         { id: "prt_001", callID: "call_1" },
         { id: "prt_002", callID: "call_2", sessionID: "ses_child" },
       ],

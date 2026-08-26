@@ -81,6 +81,27 @@ export namespace SessionProcessor {
     return last.every((part) => InvalidCall.signature(part.state.input) === signature)
   }
 
+  function toolErrorSignature(error: string) {
+    return error
+      .toLowerCase()
+      .replace(/\b(?:artifact-path|artifact|tool-call|tool):[^\s,;]+/g, "$ref")
+      .replace(/\b(?:ses|msg|prt|call|job|lesson)[_-][a-z0-9_-]+\b/g, "$id")
+      .replace(/\b\d+(?:\.\d+)?\b/g, "#")
+      .replace(/\s+/g, " ")
+      .trim()
+  }
+
+  export function isToolErrorLoop(parts: MessageV2.Part[], toolName: string, threshold = 2) {
+    const calls = parts.filter(
+      (part): part is MessageV2.ToolPart & { state: MessageV2.ToolStateError } =>
+        part.type === "tool" && part.tool === toolName && part.state.status === "error",
+    )
+    const last = calls.slice(-threshold)
+    if (last.length < threshold) return false
+    const signature = toolErrorSignature(last.at(-1)!.state.error)
+    return last.every((part) => toolErrorSignature(part.state.error) === signature)
+  }
+
   /** Collect all assistant parts produced for one user request. The prompt loop
    * creates a new assistant message after every tool step, so checking only the
    * current message misses the most common repeated-call failure mode. */
@@ -705,7 +726,22 @@ export namespace SessionProcessor {
                 }
 
                 case "tool-error": {
+                  const part = toolOutcomes.part(value.toolCallId)
                   await result.toolError(value.toolCallId, value.input, value.error)
+                  if (!part) break
+                  const history = await Array.fromAsync(MessageV2.stream(input.sessionID))
+                  const parts = turnParts(history, input.assistantMessage.parentID)
+                  if (!isToolErrorLoop(parts, part.tool)) break
+                  blocked = true
+                  await Session.updatePart({
+                    id: Identifier.ascending("part"),
+                    messageID: input.assistantMessage.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `OpenScience stopped after the same ${part.tool} failure occurred twice. No further retry was attempted; continue with another available step or correct the tool input.`,
+                    time: { start: Date.now(), end: Date.now() },
+                  } satisfies MessageV2.TextPart)
                   break
                 }
                 case "error":

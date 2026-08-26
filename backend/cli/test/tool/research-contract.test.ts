@@ -3,6 +3,7 @@ import { ArtifactStore } from "../../src/artifact/store"
 import { Instance } from "../../src/project/instance"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionResearch } from "../../src/session/research"
+import { SessionProcessor } from "../../src/session/processor"
 import { ResearchContractTool } from "../../src/tool/research-contract"
 import { executionSession, tmpdir } from "../fixture/fixture"
 
@@ -36,7 +37,7 @@ function request(sessionID: string, text: string): MessageV2.WithParts {
   }
 }
 
-test("hard runtime ceilings require exact authority from the current user request", async () => {
+test("hard runtime ceilings use only exact authority from the current user request", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
     directory: tmp.path,
@@ -44,17 +45,19 @@ test("hard runtime ceilings require exact authority from the current user reques
       const session = await executionSession()
       const tool = await ResearchContractTool.init()
       try {
-        await expect(
-          tool.execute(
-            {
-              action: "define",
-              objective: "Run an extensive study",
-              max_tokens: 500_000,
-            },
-            context(session.id, [request(session.id, "Keep going for hours; do not set a token budget.")]),
-          ),
-        ).rejects.toThrow("max_tokens=500000 is not an exact hard ceiling authorized by the current user request")
-        expect(await SessionResearch.read(session.id)).toBeUndefined()
+        await tool.execute(
+          {
+            action: "define",
+            objective: "Run an extensive study",
+            max_tokens: 500_000,
+          },
+          context(session.id, [request(session.id, "Keep going for hours; do not set a token budget.")]),
+        )
+        expect((await SessionResearch.read(session.id))?.budget).toMatchObject({
+          reserveUsd: 1,
+          limits: { modelCalls: 128, toolCalls: 1_024, tokens: 20_000_000, wallClockMs: 86_400_000, costUsd: 200 },
+        })
+        await SessionResearch.remove(session.id)
 
         await tool.execute(
           {
@@ -92,6 +95,115 @@ test("hard runtime ceilings require exact authority from the current user reques
       }
     },
   })
+})
+
+test("define ignores unrelated autofilled action fields and unrequested sentinel limits", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await executionSession()
+      const tool = await ResearchContractTool.init()
+      try {
+        await tool.execute(
+          {
+            action: "define",
+            objective: "Run the approved empirical workflow",
+            domain: "ml",
+            template: "empirical",
+            deliverables: [{ path: "paper/main.pdf", label: "Paper", required: true }],
+            reserve_usd: 0,
+            max_model_calls: 1,
+            max_tool_calls: 1,
+            max_tokens: 1,
+            max_minutes: 1,
+            max_cost_usd: 1,
+            stage: "setup",
+            check: "initialized",
+            label: "Initialize workflow",
+            status: "running",
+            evidence: "Implementation has not begun.",
+            evidence_refs: ["tool:compute_job"],
+            detail: "Start locally before paid dispatch.",
+            candidate: "benchmark",
+            message: "Begin.",
+            disposition: "none",
+            branch: "main",
+            outcome: "neutral",
+            summary: "Initialized.",
+            metric: { name: "placeholder", value: 0, direction: "maximize", baseline: 0, target: 0, unit: "none" },
+            source_trial: "none",
+            situation: "setup",
+            guidance: "Proceed.",
+            lesson: "lesson-00000000000000000000",
+            reason: "Authorized.",
+          },
+          context(session.id, [request(session.id, "Start the workflow. Modal is enabled.")]),
+        )
+        expect(await SessionResearch.read(session.id)).toMatchObject({
+          objective: "Run the approved empirical workflow",
+          domain: "ml",
+          budget: {
+            reserveUsd: 1,
+            limits: { modelCalls: 128, toolCalls: 1_024, tokens: 20_000_000, wallClockMs: 86_400_000, costUsd: 200 },
+          },
+        })
+      } finally {
+        await SessionResearch.remove(session.id)
+      }
+    },
+  })
+})
+
+test("tool evidence errors explain that references point to prior calls", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await executionSession()
+      const tool = await ResearchContractTool.init()
+      try {
+        await tool.execute({ action: "define", objective: "Verify a compute result" }, context(session.id))
+        await expect(
+          tool.execute(
+            {
+              action: "check",
+              check: "compute",
+              status: "passed",
+              evidence_refs: ["tool:compute_job"],
+            },
+            context(session.id),
+          ),
+        ).rejects.toThrow("looks backward for an earlier completed compute_job call; it does not run that tool")
+      } finally {
+        await SessionResearch.remove(session.id)
+      }
+    },
+  })
+})
+
+test("semantic tool-error loops normalize dynamic evidence selectors", () => {
+  const failure = (id: string, error: string): MessageV2.ToolPart => ({
+    id: `prt_${id}`,
+    sessionID: "ses_loop",
+    messageID: "msg_loop",
+    type: "tool",
+    callID: `call_${id}`,
+    tool: "research_contract",
+    state: { status: "error", input: {}, error, time: { start: 1, end: 2 } },
+  })
+  const parts = [
+    failure("one", "Evidence reference tool:compute_job looks backward for an earlier completed call"),
+    failure("two", "Evidence reference tool:research_search looks backward for an earlier completed call"),
+  ]
+
+  expect(SessionProcessor.isToolErrorLoop(parts, "research_contract")).toBe(true)
+  expect(
+    SessionProcessor.isToolErrorLoop(
+      [...parts.slice(0, 1), failure("three", "max_model_calls=1 is not an exact hard ceiling")],
+      "research_contract",
+    ),
+  ).toBe(false)
 })
 
 test("research checks settle only from a runtime-verified immutable Result", async () => {

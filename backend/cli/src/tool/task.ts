@@ -46,7 +46,13 @@ const parameters = z.object({
     .enum(DELEGATION_SPECIALISTS)
     .optional()
     .describe("Optional user-selected biology, physics, or ML specialist for an execute phase"),
-  session_id: z.string().describe("Existing Task session to continue").optional(),
+  session_id: z
+    .string()
+    .startsWith("ses_")
+    .describe(
+      "Exact sessionId returned by an earlier successful Task call from this parent session. Never use the current or parent session ID.",
+    )
+    .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
 
@@ -62,7 +68,7 @@ export function childPermissionRules(primaryTools: string[] = []): PermissionNex
 export function assertTaskContinuation(input: { session: Session.Info; parentSessionID: string; projectID: string }) {
   if (input.session.projectID !== input.projectID || input.session.parentID !== input.parentSessionID) {
     throw new Error(
-      `Task continuation session ${input.session.id} is not a direct child of the calling session ${input.parentSessionID}`,
+      `Task continuation session ${input.session.id} is not a direct child of the calling session ${input.parentSessionID}. Use only the exact sessionId returned by an earlier successful Task call from this session.`,
     )
   }
   return input.session
@@ -254,7 +260,10 @@ export function taskDispatchBudget(
     })
     .flatMap((message) =>
       message.parts
-        .filter((part): part is MessageV2.ToolPart => part.type === "tool" && part.tool === "task")
+        .filter(
+          (part): part is MessageV2.ToolPart =>
+            part.type === "tool" && part.tool === "task" && part.state.status !== "error",
+        )
         .map((part) => ({ created: message.info.time.created, part })),
     )
     .sort((a, b) => a.created - b.created || a.part.id.localeCompare(b.part.id))
@@ -318,6 +327,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
       const maxConcurrentChildren = MessageV2.childAgentLimit(effort)
       const budgetMs = TASK_WALL_CLOCK_MS[effort]
+      const continuation = params.session_id
+        ? assertTaskContinuation({
+            session: await Session.get(params.session_id),
+            parentSessionID: ctx.sessionID,
+            projectID: Instance.project.id,
+          })
+        : undefined
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -368,10 +384,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         if (!current) throw new Error(`Durable Task attempt ${ctx.callID} disappeared after reservation`)
         if (current.status === "completed" && current.result) return current.result
 
-        const existing = await Session.get(reserved.childSessionID).catch((error) => {
-          if (Storage.NotFoundError.isInstance(error)) return
-          throw error
-        })
+        const existing =
+          continuation ??
+          (await Session.get(reserved.childSessionID).catch((error) => {
+            if (Storage.NotFoundError.isInstance(error)) return
+            throw error
+          }))
         const session = existing
           ? assertTaskContinuation({
               session: existing,

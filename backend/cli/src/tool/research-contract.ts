@@ -222,20 +222,25 @@ function authorized(text: string, value: number, unit: RegExp) {
   return limit.test(window) && !denied.test(window)
 }
 
-function assertLimits(input: z.infer<typeof Define>, ctx: Tool.Context) {
+function limits(input: z.infer<typeof Define>, ctx: Tool.Context) {
   const text = authority(ctx)
-  const limits = [
-    ["max_model_calls", input.max_model_calls, /(?:model|inference)[\s-]*calls?/i],
-    ["max_tool_calls", input.max_tool_calls, /tool[\s-]*calls?/i],
-    ["max_tokens", input.max_tokens, /tokens?/i],
-    ["max_minutes", input.max_minutes, /minutes?|mins?/i],
-    ["max_cost_usd", input.max_cost_usd, /(?:usd|dollars?|\$)/i],
-  ] as const
-  for (const [field, value, unit] of limits) {
-    if (value === undefined || authorized(text, value, unit)) continue
-    throw new Error(
-      `${field}=${value} is not an exact hard ceiling authorized by the current user request. Omit ${field} and use the runtime default.`,
-    )
+  return {
+    ...(input.max_model_calls !== undefined &&
+    authorized(text, input.max_model_calls, /(?:model|inference)[\s-]*calls?/i)
+      ? { modelCalls: input.max_model_calls }
+      : {}),
+    ...(input.max_tool_calls !== undefined && authorized(text, input.max_tool_calls, /tool[\s-]*calls?/i)
+      ? { toolCalls: input.max_tool_calls }
+      : {}),
+    ...(input.max_tokens !== undefined && authorized(text, input.max_tokens, /tokens?/i)
+      ? { tokens: input.max_tokens }
+      : {}),
+    ...(input.max_minutes !== undefined && authorized(text, input.max_minutes, /minutes?|mins?/i)
+      ? { wallClockMs: input.max_minutes * 60_000 }
+      : {}),
+    ...(input.max_cost_usd !== undefined && authorized(text, input.max_cost_usd, /(?:usd|dollars?|\$)/i)
+      ? { costUsd: input.max_cost_usd }
+      : {}),
   }
 }
 
@@ -327,7 +332,14 @@ async function evidence(
           (!("tool" in parsed) || part.tool === parsed.tool),
       )
       if (!found) {
-        throw new Error(`No terminal tool call matches ${request}`)
+        if (request.startsWith("tool-call:")) {
+          throw new Error(
+            `Evidence reference ${request} must use the exact call ID returned by an earlier completed tool call. No prior call with that ID exists in this session tree.`,
+          )
+        }
+        throw new Error(
+          `Evidence reference ${request} looks backward for an earlier completed ${parsed.tool} call; it does not run that tool. Run ${parsed.tool} first, then cite its returned call ID.`,
+        )
       }
       const output = found.state.status === "completed" ? found.state.output : found.state.error
       return SessionResearch.EvidenceReference.parse({
@@ -341,6 +353,26 @@ async function evidence(
       })
     }),
   )
+}
+
+const Schemas = {
+  define: Define,
+  preregister: Preregister,
+  stage: Stage,
+  check: Check,
+  trial: Trial,
+  failure: Failure,
+  learn: Learn,
+  unlearn: Unlearn,
+  status: Status,
+} as const
+
+function normalize(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input
+  const action = "action" in input && typeof input.action === "string" ? input.action : undefined
+  if (!action || !(action in Schemas)) return input
+  const parsed = Schemas[action as keyof typeof Schemas].safeParse(input)
+  return parsed.success ? parsed.data : input
 }
 
 const Params = z
@@ -377,17 +409,7 @@ const Params = z
     reason: Unlearn.shape.reason.optional(),
   })
   .superRefine((value, ctx) => {
-    const schema = {
-      define: Define,
-      preregister: Preregister,
-      stage: Stage,
-      check: Check,
-      trial: Trial,
-      failure: Failure,
-      learn: Learn,
-      unlearn: Unlearn,
-      status: Status,
-    }[value.action]
+    const schema = Schemas[value.action]
     const parsed = schema.safeParse(value)
     if (parsed.success) return
     parsed.error.issues.forEach((issue) => ctx.addIssue({ code: "custom", path: issue.path, message: issue.message }))
@@ -400,14 +422,17 @@ export const ResearchContractTool = Tool.define("research_contract", {
     "Add metric plus baseline when quantitative; contradictory outcomes fail.",
     "Learn methods only from verified trials; unlearn with verified counterevidence.",
     "Preregister freezes an empirical plan Result before trials and verifies hash and chronology.",
-    "Never infer max_* fields: set only exact numeric ceilings from the user. Omitted limits are generous. Status inspects state.",
+    "Set max_* only for exact user ceilings; other limits are ignored. Status inspects state.",
   ].join(" "),
   parameters: Params,
+  normalizeInput: normalize,
   formatValidationError(error) {
     return error.issues[0]?.message ?? "Invalid research contract input"
   },
   async execute(params, ctx) {
-    const refs = await evidence(params.evidence_refs, ctx.sessionID)
+    const refs = ["preregister", "check", "trial", "learn", "unlearn"].includes(params.action)
+      ? await evidence(params.evidence_refs, ctx.sessionID)
+      : []
     const lesson = await (async () => {
       if (params.action === "learn") {
         const input = Learn.parse(params)
@@ -433,23 +458,14 @@ export const ResearchContractTool = Tool.define("research_contract", {
     const contract = await (async () => {
       if (params.action === "define") {
         const input = Define.parse(params)
-        assertLimits(input, ctx)
+        const ceiling = limits(input, ctx)
         return SessionResearch.define(ctx.sessionID, {
           objective: input.objective,
           domain: input.domain,
           template: input.template,
           deliverables: input.deliverables,
-          reserveUsd: input.reserve_usd,
-          limits:
-            input.max_model_calls || input.max_tool_calls || input.max_tokens || input.max_minutes || input.max_cost_usd
-              ? {
-                  ...(input.max_model_calls ? { modelCalls: input.max_model_calls } : {}),
-                  ...(input.max_tool_calls ? { toolCalls: input.max_tool_calls } : {}),
-                  ...(input.max_tokens ? { tokens: input.max_tokens } : {}),
-                  ...(input.max_minutes ? { wallClockMs: input.max_minutes * 60_000 } : {}),
-                  ...(input.max_cost_usd ? { costUsd: input.max_cost_usd } : {}),
-                }
-              : undefined,
+          reserveUsd: input.reserve_usd || undefined,
+          limits: Object.keys(ceiling).length ? ceiling : undefined,
         })
       }
       if (params.action === "preregister") {
