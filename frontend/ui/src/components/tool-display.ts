@@ -74,6 +74,15 @@ export function liveReasoningDisplayText(text: string, maximum = 260): string {
   return `${readable.slice(0, Math.max(end, maximum - 40)).trimEnd()}…`
 }
 
+/** Select the newest reasoning part that still has something a person can
+ * read after provider-only placeholders and phase labels are removed. A fully
+ * encrypted `[REDACTED]` part must not displace the last useful live thought. */
+export function latestVisibleReasoningPartID(
+  parts: ReadonlyArray<{ id: string; type: string; text?: string }>,
+): string | undefined {
+  return parts.findLast((part) => part.type === "reasoning" && Boolean(part.text?.trim()))?.id
+}
+
 /** The most recent provider phase is useful as one compact live status. */
 export function reasoningTopic(text: string): string | undefined {
   const visible = stripRedactedReasoning(text)

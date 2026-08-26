@@ -5,6 +5,7 @@ import {
   generatedArtifacts,
   humanizeToolName,
   liveReasoningDisplayText,
+  latestVisibleReasoningPartID,
   reasoningDisplayText,
   reasoningTopic,
   sentenceCaseLabel,
@@ -179,6 +180,20 @@ describe("provider reasoning presentation", () => {
     expect(liveReasoningDisplayText(titanic)).toBe("I can keep the work focused.")
     expect(liveReasoningDisplayText(`**Working**\n${"long explanation ".repeat(80)}`)).toEndWith("…")
     expect(liveReasoningDisplayText(`**Working**\n${"long explanation ".repeat(80)}`).length).toBeLessThanOrEqual(261)
+  })
+
+  test("keeps the latest readable thought through newer redacted or status-only parts", () => {
+    const visible = liveReasoningDisplayText("**Inspecting data**\nThe download contains 891 rows.")
+    const redacted = liveReasoningDisplayText("[REDACTED]")
+    const headingOnly = liveReasoningDisplayText("Planning the next analysis step")
+    expect(
+      latestVisibleReasoningPartID([
+        { id: "readable", type: "reasoning", text: visible },
+        { id: "hidden", type: "reasoning", text: redacted },
+        { id: "heading", type: "reasoning", text: headingOnly },
+      ]),
+    ).toBe("readable")
+    expect(latestVisibleReasoningPartID([{ id: "hidden", type: "reasoning", text: redacted }])).toBeUndefined()
   })
 
   test("leaves ordinary readable reasoning unchanged", () => {

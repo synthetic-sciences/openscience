@@ -35,6 +35,7 @@ import {
   artifactTypeLabel,
   artifactActions,
   generatedArtifacts,
+  latestVisibleReasoningPartID,
   liveReasoningDisplayText,
   reasoningTopic,
   sessionErrorText,
@@ -178,11 +179,11 @@ function AssistantTrace(props: {
       })
     })
     const latestReasoning = props.latestReasoningOnly
-      ? entries.findLast((entry) => entry.part?.type === "reasoning")?.part.id
+      ? latestVisibleReasoningPartID(entries.map((entry) => entry.part))
       : undefined
     return groupResearchTrace(
       entries.filter(
-        (entry) => !latestReasoning || entry.part?.type !== "reasoning" || entry.part.id === latestReasoning,
+        (entry) => !props.latestReasoningOnly || entry.part?.type !== "reasoning" || entry.part.id === latestReasoning,
       ),
     )
   })

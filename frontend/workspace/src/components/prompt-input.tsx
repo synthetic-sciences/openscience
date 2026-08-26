@@ -816,23 +816,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         category: "session" as const,
         type: "action" as const,
       }))
-    const builtin = SLASH_NATIVE.filter((name) => skillAction(sync.data.config.permission, name) !== "deny").map(
-      (name) => {
-        const item = catalog.get(name)
-        return {
-          id: `command.${name}`,
-          trigger: name,
-          title: name,
-          description: item?.description,
-          usage: usage[name],
-          source: "builtin" as const,
-          category: ((["compact", "context", "status"] as string[]).includes(name) ? "session" : "research") as
-            | "session"
-            | "research",
-          type: slashMode({ trigger: name }) ? ("mode" as const) : ("action" as const),
-        }
-      },
-    )
+    const localTriggers = new Set(local.map((item) => item.trigger))
+    const builtin = SLASH_NATIVE.filter(
+      (name) => !localTriggers.has(name) && skillAction(sync.data.config.permission, name) !== "deny",
+    ).map((name) => {
+      const item = catalog.get(name)
+      return {
+        id: `command.${name}`,
+        trigger: name,
+        title: name,
+        description: item?.description,
+        usage: usage[name],
+        source: "builtin" as const,
+        category: ((["compact", "context", "status"] as string[]).includes(name) ? "session" : "research") as
+          | "session"
+          | "research",
+        type: slashMode({ trigger: name }) ? ("mode" as const) : ("action" as const),
+      }
+    })
 
     const reserved = new Set<string>([...SLASH_NATIVE, ...local.map((item) => item.trigger)])
 
