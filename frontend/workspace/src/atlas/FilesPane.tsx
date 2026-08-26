@@ -168,6 +168,15 @@ export function fileChangeTouchesSource(input: { kind: PaneSource["kind"]; targe
   return containsFilePath(target, changed) || containsFilePath(changed, target)
 }
 
+/** Durable project files are already bounded by the active project instance.
+ * Session capabilities belong only on scratch and connected sources. */
+export function fileListQuery(kind: PaneSource["kind"], target: string, session?: string) {
+  return {
+    path: target,
+    ...(session && kind !== "project" ? { sessionID: session } : {}),
+  }
+}
+
 // FileExplorer.tsx:57-77 keeps equivalent readAccess/grantAccess/revokeAccess
 // helpers, but they are private, unexported, and typed against ProjectRequest
 // (which carries a .url this pane's injected transport does not). They are
@@ -549,8 +558,7 @@ export function FilesPane(
           })
           .catch((value) => failure(value, volume))
       }
-      const query: Record<string, string> = { path: target }
-      if (session) query.sessionID = session
+      const query = fileListQuery(kind, target, session)
       return transport("/file", { signal: ticket.controller.signal }, query)
         .then(listingJson)
         .then((value) => {

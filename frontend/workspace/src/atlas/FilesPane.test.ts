@@ -132,6 +132,18 @@ const grant = (id: string, path: string, access: "read" | "write") => ({
 })
 
 describe("files pane", () => {
+  test("does not scope durable project listings to a session scratch capability", () => {
+    expect(subject.fileListQuery("project", DIRECTORY, SESSION)).toEqual({ path: DIRECTORY })
+    expect(subject.fileListQuery("session", "/scratch/session", SESSION)).toEqual({
+      path: "/scratch/session",
+      sessionID: SESSION,
+    })
+    expect(subject.fileListQuery("connected", "/shared/data", SESSION)).toEqual({
+      path: "/shared/data",
+      sessionID: SESSION,
+    })
+  })
+
   // Artifacts are what a session produces, so the pane opens on them rather than
   // on the project tree.
   test("opens on artifacts when nothing has been picked yet", async () => {

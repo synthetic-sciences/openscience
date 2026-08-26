@@ -4,6 +4,7 @@ import {
   createFileRequestOwner,
   describeFile,
   fileRequestKey,
+  fileErrorMessage,
   PDF_PREVIEW_LIMIT,
   pdfPreviewMode,
   readFile,
@@ -147,6 +148,19 @@ describe("file viewer reads", () => {
     expect(result.data).toBeUndefined()
     expect(result.error).toBeInstanceOf(Error)
     expect(result.error?.message).toBe("file access denied")
+  })
+
+  test("extracts useful messages from structured SDK failures", async () => {
+    expect(fileErrorMessage({ data: { message: "Session scratch does not grant access to this project file" } })).toBe(
+      "Session scratch does not grant access to this project file",
+    )
+    expect(fileErrorMessage({ error: { message: "File not found" } })).toBe("File not found")
+    expect(fileErrorMessage({ code: 403 })).toBe('{"code":403}')
+
+    const result = await readFile(async () => {
+      throw { data: { message: "Project file access denied" } }
+    })
+    expect(result.error?.message).toBe("Project file access denied")
   })
 
   test("classifies aborted primary reads as cancellation instead of a visible error", async () => {

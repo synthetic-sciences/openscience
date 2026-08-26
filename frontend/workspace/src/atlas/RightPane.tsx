@@ -529,7 +529,8 @@ export function RightPane(
                     <FileView
                       directory={tab.file.directory}
                       path={tab.file.path}
-                      subtitle="Session files"
+                      sessionID={session() === "new" ? undefined : session()}
+                      subtitle={tab.file.external ? "Session files" : "Project files"}
                       active={selectedFile(tab) && (context() === "files" || context() === "artifact")}
                       onDirtyChange={(dirty) => markDirty(tab.id, dirty)}
                     />

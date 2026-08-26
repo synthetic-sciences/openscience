@@ -41,7 +41,7 @@ import { resolveViewer } from "@/atlas/files/viewer-registry"
 import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { recoverFileDraft, rememberFileDraft } from "@/atlas/file-drafts"
 import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
-import { rawFileQuery } from "@/utils/project-file"
+import { projectContains, rawFileQuery } from "@/utils/project-file"
 import { CodeEditor } from "@/atlas/CodeEditor"
 import { HTML_STYLESHEET_BYTES, htmlStylesheets, loadHtmlStylesheets, rewriteHtmlAssets } from "@/utils/html-assets"
 import "./FilePreview.css"
@@ -103,6 +103,7 @@ interface HtmlState {
 export function FileView(props: {
   path: string
   directory?: string
+  sessionID?: string
   subtitle?: string
   onClose?: () => void
   active?: boolean
@@ -113,8 +114,9 @@ export function FileView(props: {
   const sync = useSync()
   const params = useParams()
   const directory = () => props.directory || sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
-  const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)
+  const activeSessionID = () => props.sessionID ?? (params.id && params.id !== "new" ? params.id : undefined)
   const requestPath = () => resolveArtifactPath(directory(), props.path)
+  const fileSessionID = () => (projectContains(directory(), requestPath()) ? undefined : activeSessionID())
   const name = () => props.path.split("/").pop() || props.path
   const e = () => ext(name())
 
@@ -138,7 +140,7 @@ export function FileView(props: {
   createEffect(() => {
     const dir = directory()
     const path = requestPath()
-    const activeSession = sessionID()
+    const activeSession = fileSessionID()
     view.refresh
     const key = fileRequestKey({ projectID: sdk.projectID, directory: dir, sessionID: activeSession, path })
     if (readRetry.key !== key) {
@@ -251,7 +253,7 @@ export function FileView(props: {
   const manuscript = createMemo(() => parseManuscript(view.draft).bibliographies.length > 0)
   // Relative image references in previewed markdown resolve against the
   // file's own directory through the backend raw-file endpoint.
-  const rawUrl = (path: string, dir = directory(), session = sessionID()) =>
+  const rawUrl = (path: string, dir = directory(), session = fileSessionID()) =>
     sdk.request.url("/file/raw", rawFileQuery({ directory: dir, path, sessionID: session, inline: true }))
   const image = (src: string) =>
     assetUrl(src, {
@@ -265,7 +267,7 @@ export function FileView(props: {
   createEffect(() => {
     const source = view.draft
     const dir = directory()
-    const session = sessionID()
+    const session = fileSessionID()
     const base = props.path
     const active = view.status === "ready" && kind() === "html" && !view.source
     const id = ++htmlRequest.current
@@ -354,7 +356,7 @@ export function FileView(props: {
   createEffect(() => {
     const mode = kind() === "pdf" ? pdfMode() : "inline"
     const path = requestPath()
-    const session = sessionID()
+    const session = fileSessionID()
     const id = ++pdfRequest.current
     pdfAbort.current?.abort()
     pdfAbort.current = undefined
@@ -413,7 +415,7 @@ export function FileView(props: {
       toast.error("read-only source", "Reconnect this location with Read & write access to change files.")
       return
     }
-    const session = sessionID()
+    const session = activeSessionID()
     if (!session) {
       toast.error("save unavailable", "Start a research session before changing workspace files.")
       return
@@ -445,7 +447,7 @@ export function FileView(props: {
         fileRequestKey({
           projectID: sdk.projectID,
           directory: directory(),
-          sessionID: sessionID(),
+          sessionID: activeSessionID(),
           path: requestPath(),
         })
       )
@@ -463,7 +465,7 @@ export function FileView(props: {
         fileRequestKey({
           projectID: sdk.projectID,
           directory: directory(),
-          sessionID: sessionID(),
+          sessionID: activeSessionID(),
           path: requestPath(),
         })
       )
@@ -484,7 +486,7 @@ export function FileView(props: {
       toast.info("save file first", "Save your changes before creating an immutable Result version.")
       return
     }
-    const session = sessionID()
+    const session = activeSessionID()
     if (!session) {
       toast.error("artifact unavailable", "Open this file inside a research session to save artifacts.")
       return
@@ -528,7 +530,7 @@ export function FileView(props: {
 
   const download = async () => {
     try {
-      const session = sessionID()
+      const session = fileSessionID()
       const response = await sdk.request(
         "/file/raw",
         undefined,
@@ -559,7 +561,7 @@ export function FileView(props: {
         saving={view.saving}
         writable={props.writable}
         disabled={view.status !== "ready"}
-        artifact={Boolean(sessionID())}
+        artifact={Boolean(activeSessionID())}
         archiving={archiving()}
         onPreview={() => setView("source", false)}
         onSource={() => setView("source", true)}
@@ -732,7 +734,7 @@ export function FileView(props: {
                       <BinaryScienceView
                         path={requestPath()}
                         directory={directory()}
-                        sessionID={sessionID()}
+                        sessionID={fileSessionID()}
                         format={format()}
                       />
                     )}

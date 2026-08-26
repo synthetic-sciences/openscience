@@ -33,6 +33,39 @@ afterAll(() => vite.close())
 const unreachable = "http://127.0.0.1:65535"
 
 describe("kernel panel poll", () => {
+  test("shows a running Python tool while its interpreter is still starting", () => {
+    const pending = subject.provisionalKernels(
+      [
+        {
+          id: "part_1",
+          sessionID: "ses_1",
+          messageID: "msg_1",
+          type: "tool",
+          callID: "call_1",
+          tool: "python",
+          state: {
+            status: "running",
+            input: { title: "Analyze Titanic", environment: "python", code: "print(891)" },
+            title: "Analyze Titanic",
+            time: { start: 1234 },
+          },
+        },
+      ],
+      [],
+    )
+
+    expect(pending).toHaveLength(1)
+    expect(pending[0]).toMatchObject({
+      id: "starting:call_1",
+      sessionID: "ses_1",
+      state: "starting",
+      language: "python",
+      environment_name: "python",
+      active: true,
+      last_execution: { title: "Analyze Titanic", status: "running", call_id: "call_1" },
+    })
+  })
+
   test("only reports no active compute after both inventories succeed", () => {
     expect(subject.freshness({ runtime: "", remote: "", runtimeSeen: false, remoteSeen: false }).empty).toBe(
       "Reading compute…",

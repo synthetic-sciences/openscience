@@ -12,6 +12,7 @@ import { createKernelRouteRequester, kernelAPI, type KernelRoute } from "@/atlas
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { kernelMemoryLabel, type CommandStatus, type KernelStatus } from "@/atlas/kernel-runtime"
+import type { Part, ToolPart } from "@synsci/sdk/v2/client"
 
 type KernelsPayload = { kernels: KernelStatus[] }
 type CommandsPayload = { commands: CommandStatus[] }
@@ -81,6 +82,79 @@ export const usage = (group: Group) => {
 }
 
 const emptyGroup = (): Group => ({ kernels: [], commands: [], jobs: [] })
+const kernelTools = new Set(["python", "notebook", "r", "rkernel"])
+type RunningToolPart = ToolPart & { state: Extract<ToolPart["state"], { status: "running" }> }
+
+const field = (value: unknown, name: string) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return
+  const result = (value as Record<string, unknown>)[name]
+  return typeof result === "string" && result.trim() ? result.trim() : undefined
+}
+
+/** Tool streaming starts before the interpreter process reaches the kernel
+ * registry. Bridge that startup window so Compute reflects work immediately,
+ * then yield to the real registry row as soon as it appears. */
+export function provisionalKernels(parts: Part[], registered: KernelStatus[]): KernelStatus[] {
+  const running = parts.filter(
+    (part): part is RunningToolPart =>
+      part.type === "tool" &&
+      kernelTools.has(part.tool) &&
+      part.state.status === "running" &&
+      field(part.state.input, "action") !== "stop",
+  )
+  const latest = new Map<string, RunningToolPart>()
+  for (const part of running) {
+    const language = part.tool === "python" || part.tool === "notebook" ? "python" : "r"
+    const environment = field(part.state.metadata, "environment") ?? field(part.state.input, "environment") ?? language
+    latest.set(`${part.sessionID}\0${language}\0${environment}`, part)
+  }
+  return [...latest.entries()].flatMap(([key, part]) => {
+    const [, language, environment] = key.split("\0")
+    const claimed = registered.some(
+      (kernel) =>
+        kernel.sessionID === part.sessionID &&
+        kernel.language === language &&
+        (kernel.environment_name ?? kernel.language) === environment &&
+        (kernel.active || kernel.state === "starting" || kernel.state === "running"),
+    )
+    if (claimed) return []
+    const title = part.state.status === "running" ? (part.state.title ?? field(part.state.input, "title")) : undefined
+    const source = field(part.state.input, "source")
+    const code = field(part.state.input, "code") ?? ""
+    const started = part.state.status === "running" ? part.state.time.start : Date.now()
+    return [
+      {
+        id: `starting:${part.callID}`,
+        active: true,
+        state: "starting" as const,
+        projectID: registered[0]?.projectID ?? "",
+        sessionID: part.sessionID,
+        name: "agent",
+        language,
+        environment_name: environment,
+        target: { kind: "local" as const },
+        incarnation: null,
+        execution_count: 0,
+        queue_depth: 0,
+        environment: null,
+        process_id: null,
+        process_started_at: null,
+        process_identity_verified: null,
+        started_at: started,
+        last_activity_at: started,
+        last_execution: {
+          title: title ?? null,
+          source: source ?? null,
+          code,
+          status: "running" as const,
+          execution_count: null,
+          message_id: part.messageID,
+          call_id: part.callID,
+        },
+      },
+    ]
+  })
+}
 
 export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   const transport = props.request ?? useSDK().request
@@ -140,9 +214,17 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
 
   // An idle active kernel is still valuable state: it retains variables for a
   // follow-up, including when it belongs to another session on this machine.
-  const live = createMemo(() =>
-    kernels.filter((kernel) => kernel.active || kernel.state === "starting" || kernel.state === "running"),
-  )
+  const activeParts = createMemo(() => {
+    const sessionID = route()
+    if (!sessionID) return []
+    return (sync.data.message[sessionID] ?? []).flatMap((message) => sync.data.part[message.id] ?? [])
+  })
+  const live = createMemo(() => {
+    const registered = kernels.filter(
+      (kernel) => kernel.active || kernel.state === "starting" || kernel.state === "running",
+    )
+    return [...registered, ...provisionalKernels(activeParts(), kernels)]
+  })
   const title = (sessionID: string) =>
     sessionID === projectJobs ? "Project jobs" : sync.session.get(sessionID)?.title?.trim() || "Untitled session"
   const grouped = createMemo(() => {

@@ -59,6 +59,27 @@ export function isFileRequestCancellation(error: unknown) {
   return /\bab(?:ort|orted)\b|cancell?ed|the user aborted|signal is aborted/i.test(message)
 }
 
+/** SDK failures can be Error instances or structured API envelopes. Render
+ * the server's useful message instead of JavaScript's `[object Object]`. */
+export function fileErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === "string") return error
+  if (!error || typeof error !== "object" || Array.isArray(error)) return String(error ?? "File request failed")
+  const value = error as Record<string, unknown>
+  for (const candidate of [value.message, value.error, value.data]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+      const nested = fileErrorMessage(candidate)
+      if (nested && nested !== "[object Object]") return nested
+    }
+  }
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return "File request failed"
+  }
+}
+
 /** Single-view request owner. Starting a new identity actively cancels the
  * previous transport and makes its eventual resolution ineligible to render. */
 export function createFileRequestOwner() {
@@ -195,6 +216,6 @@ export async function readFile(
     (error: unknown) =>
       isFileRequestCancellation(error)
         ? { cancelled: true as const }
-        : { error: error instanceof Error ? error : new Error(String(error)) },
+        : { error: error instanceof Error ? error : new Error(fileErrorMessage(error)) },
   )
 }

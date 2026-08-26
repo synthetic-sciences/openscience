@@ -35,6 +35,7 @@ describe("project Compute tracker", () => {
     expect(panel).toContain("summary().kinds")
     expect(panel).toContain("summary().memory")
     expect(panel).toContain("summary().cpu")
+    expect(panel).toContain("provisionalKernels(activeParts(), kernels)")
   })
 
   test("polls while visible without loading conversation or completed history", () => {
