@@ -24,7 +24,6 @@ const LOGOS = [
      H_MED   card and FAQ titles
      P_BIG   section subheads, max-w-[54ch]
      P       card bodies
-     CAPTION 13px/50 under visuals
    Every content section: Eyebrow, H_BIG, one P_BIG sub, content at mt-14.
    Product moments can break the grid when the interaction benefits. */
 
@@ -33,7 +32,6 @@ const H_BIG = "text-[clamp(30px,3.4vw,48px)] leading-[1.06] tracking-[-0.02em]"
 const H_MED = "text-[22px] sm:text-[26px] leading-[1.14] tracking-[-0.012em]"
 const P = "text-[14px] leading-[1.7] text-foreground/75"
 const P_BIG = "text-[16px] sm:text-[17px] leading-[1.7] text-foreground/75"
-const CAPTION = "text-[13px] leading-[1.6] text-foreground/50"
 const LABEL = "text-[14px] text-muted-foreground"
 
 const GITHUB = "https://github.com/synthetic-sciences/openscience"
@@ -413,7 +411,7 @@ function ModelRouteVisual() {
   const model = MODELS[index]
 
   return (
-    <div className="model-stage overflow-hidden border border-border/55 bg-[hsl(28,14%,5%)] shadow-[0_30px_90px_-30px_rgba(0,0,0,0.75)]">
+    <div className="model-stage h-full overflow-hidden border border-border/55 bg-[hsl(28,14%,5%)] shadow-[0_30px_90px_-30px_rgba(0,0,0,0.75)]">
       <div className="flex items-center justify-between border-b border-border/55 px-5 py-3.5 sm:px-6">
         <span className="text-[12px] text-foreground/45">research-session / working</span>
         <span className="flex items-center gap-2 font-terminal text-[9px] tracking-[0.08em] text-foreground/35">
@@ -631,7 +629,7 @@ function CritiqueVisual() {
 
 function ProjectContextVisual() {
   return (
-    <div className="overflow-hidden border border-border/55 bg-[hsl(28,14%,5%)] shadow-[0_30px_90px_-35px_rgba(0,0,0,0.8)]">
+    <div className="flex h-full flex-col overflow-hidden border border-border/55 bg-[hsl(28,14%,5%)] shadow-[0_30px_90px_-35px_rgba(0,0,0,0.8)]">
       <div className="flex items-center justify-between border-b border-border/55 px-5 py-3.5 sm:px-6">
         <span className="text-[12px] text-foreground/50">project / context</span>
         <span className="flex items-center gap-2 font-terminal text-[9px] tracking-[0.08em] text-foreground/35">
@@ -639,7 +637,7 @@ function ProjectContextVisual() {
         </span>
       </div>
 
-      <div className="grid min-h-[390px] md:grid-cols-[230px_1fr]">
+      <div className="grid min-h-[390px] flex-1 md:grid-cols-[230px_1fr]">
         <div className="border-b border-border/55 bg-background/55 p-5 md:border-b-0 md:border-r sm:p-6">
           <div className="font-terminal text-[9px] tracking-[0.08em] text-foreground/35">LOCAL PROJECT</div>
           <div className="mt-5 space-y-1 font-terminal text-[10.5px] text-foreground/45">
@@ -880,28 +878,33 @@ export default function Landing({
 
       {/* ---------------------- RESEARCH CONTEXT ----------------------- */}
       <section id="sources" className="relative w-full overflow-hidden border-t border-border/40">
-        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
-          <SectionHeader
-            eyebrow="Project context"
-            title="Everything the work depends on."
-            sub="Papers, datasets, code, notes, and prior runs stay together in the local workspace."
-          />
-
-          <Reveal delay={140} className="mt-14">
-            <ProjectContextVisual />
-          </Reveal>
-
-          <Reveal delay={220} className="mt-20">
-            <div className="tool-field overflow-hidden border border-border/55 p-5 sm:p-8">
-              <div className="mb-8 text-center">
-                <Eyebrow className="mb-3">Scientific sources</Eyebrow>
-                <h3 className="text-[clamp(24px,2.6vw,36px)] leading-[1.08] tracking-[-0.018em] text-foreground">
-                  42 scientific sources, searched directly.
-                </h3>
-                <p className={`mx-auto mt-3 max-w-[52ch] ${P}`}>
-                  Literature, structures, variants, compounds, pathways, and expression data, inside the same session.
+        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-28 sm:px-10 sm:py-40">
+          <div className="grid gap-8 lg:grid-cols-2 lg:items-stretch lg:gap-12">
+            <Reveal className="dither-red flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:p-14">
+              <div className="dither-content max-w-[520px]">
+                <Eyebrow className="mb-6 text-foreground/70">Project context</Eyebrow>
+                <h2 className={`text-balance ${H_HUGE} text-foreground`}>Everything the work depends on.</h2>
+                <p className={`mt-7 max-w-[38ch] ${P_BIG} text-foreground/85`}>
+                  Papers, datasets, code, notes, and prior runs stay together in the local workspace.
                 </p>
               </div>
+            </Reveal>
+            <Reveal delay={120} className="min-w-0">
+              <ProjectContextVisual />
+            </Reveal>
+          </div>
+
+          <Reveal delay={220} className="mt-28 sm:mt-36">
+            <div className="mb-10 text-center sm:mb-12">
+              <Eyebrow className="mb-3">Scientific sources</Eyebrow>
+              <h3 className="text-[clamp(24px,2.6vw,36px)] leading-[1.08] tracking-[-0.018em] text-foreground">
+                42 scientific sources, searched directly.
+              </h3>
+              <p className={`mx-auto mt-3 max-w-[52ch] ${P}`}>
+                Literature, structures, variants, compounds, pathways, and expression data, inside the same session.
+              </p>
+            </div>
+            <div className="tool-field overflow-hidden border border-border/55 p-5 sm:p-8">
               <ConnectorWall />
             </div>
           </Reveal>
@@ -910,15 +913,21 @@ export default function Landing({
 
       {/* ----------------------- MODEL FREEDOM ------------------------- */}
       <section id="models" className="relative w-full overflow-hidden border-t border-border/40">
-        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
-          <SectionHeader
-            eyebrow="Model access"
-            title="Use the model the work needs."
-            sub="Switch between Ace, eligible ChatGPT access, your provider keys, and local models."
-          />
-          <Reveal delay={150} className="mt-14">
-            <ModelRouteVisual />
-          </Reveal>
+        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-28 sm:px-10 sm:py-40">
+          <div className="grid gap-8 lg:grid-cols-2 lg:items-stretch lg:gap-12">
+            <Reveal className="dither-purple order-1 flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:order-2 lg:p-14">
+              <div className="dither-content max-w-[520px]">
+                <Eyebrow className="mb-6 text-foreground/70">Model access</Eyebrow>
+                <h2 className={`text-balance ${H_HUGE} text-foreground`}>Use the model the work needs.</h2>
+                <p className={`mt-7 max-w-[36ch] ${P_BIG} text-foreground/85`}>
+                  Switch between Ace, eligible ChatGPT access, your provider keys, and local models.
+                </p>
+              </div>
+            </Reveal>
+            <Reveal delay={120} className="order-2 min-w-0 lg:order-1">
+              <ModelRouteVisual />
+            </Reveal>
+          </div>
         </div>
       </section>
 
@@ -952,43 +961,52 @@ export default function Landing({
 
       {/* ------------------------------ ACE --------------------------- */}
       <Section seed={9} id="ace">
-        <SectionHeader
-          eyebrow="OpenScience Ace"
-          title="Managed models. Pay as you go."
-          sub="OpenScience and your account are free. Add $20 when you want Ace. There is no monthly subscription."
-        />
-
-        <Reveal delay={160} className="mt-14">
-          <div className="grid gap-px border border-border/55 bg-border/55 lg:grid-cols-[0.8fr_1.2fr]">
-            <div className="bg-background p-7 sm:p-10">
-              <div className={LABEL}>Add to start</div>
-              <div className="mt-5 font-display text-[clamp(50px,7vw,78px)] leading-none tracking-[-0.03em]">$20</div>
-              <div className={`mt-4 ${CAPTION}`}>20 credits of purchased balance · 1 credit = $1</div>
-              <div className="mt-8 w-fit border border-border/70 px-3 py-1.5 font-terminal text-[10px] tracking-[0.08em] text-foreground/55">
-                PAY AS YOU GO
-              </div>
-            </div>
-            <div className="flex flex-col bg-background p-7 sm:p-10">
-              <div className="divide-y divide-border/45 border-y border-border/45">
-                {[
-                  "Models and enhanced research search",
-                  "Every charge in Billing and Usage",
-                  "Local models, your own keys, and eligible ChatGPT access stay separate",
-                ].map((item) => (
-                  <div key={item} className="flex items-center gap-3 py-4 text-[14px] text-foreground/75">
-                    <span className="text-[hsl(var(--accent-coral))]">✓</span>
-                    {item}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-8">
-                <Cta href={`${APP}/billing`}>Open billing</Cta>
-              </div>
-            </div>
+        <div className="grid gap-12 lg:grid-cols-12 lg:items-end lg:gap-16">
+          <div className="lg:col-span-7">
+            <Reveal>
+              <Eyebrow className="mb-5">OpenScience Ace</Eyebrow>
+              <h2 className={`max-w-[13ch] text-balance ${H_BIG}`}>Managed models, when you need them.</h2>
+            </Reveal>
+            <Reveal delay={140}>
+              <p className={`mt-5 max-w-[50ch] ${P_BIG}`}>
+                Add funds when you want Ace, then pay only for the models and research search you use. OpenScience
+                remains free.
+              </p>
+            </Reveal>
+            <Reveal delay={240} className="mt-9">
+              <Cta href={`${APP}/billing`}>Add funds</Cta>
+            </Reveal>
           </div>
-          <p className={`mt-4 max-w-[64ch] ${CAPTION}`}>
-            Any processing fee is shown before payment. Unused credits remain in your wallet. While Ace is on, a balance
-            below $2 is restored to $20. Turn it off any time.
+
+          <Reveal
+            delay={180}
+            className="border-t border-border/55 pt-8 lg:col-span-5 lg:border-l lg:border-t-0 lg:pl-12 lg:pt-0"
+          >
+            <div className="text-[13px] text-foreground/55">Start with</div>
+            <div className="mt-3 font-display text-[clamp(58px,8vw,94px)] leading-none tracking-[-0.035em]">$20</div>
+            <div className="mt-4 text-[14px] text-foreground/70">No monthly charge.</div>
+          </Reveal>
+        </div>
+
+        <Reveal delay={300} className="mt-16 border-t border-border/55 pt-8 sm:mt-20 sm:pt-10">
+          <div className="grid gap-9 sm:grid-cols-3 sm:gap-10 lg:gap-16">
+            {[
+              ["Models", "Managed access without setting up provider keys."],
+              ["Research search", "Search and retrieve sources through Ace."],
+              ["Usage", "See every charge in Billing and Usage."],
+            ].map((item) => (
+              <div key={item[0]}>
+                <h3 className="text-[17px] leading-tight text-foreground">{item[0]}</h3>
+                <p className="mt-2 text-[14px] leading-6 text-foreground/60">{item[1]}</p>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+
+        <Reveal delay={360}>
+          <p className="mt-10 max-w-[78ch] text-[13px] leading-6 text-foreground/50">
+            Unused balance stays in your account. Local models, your own keys, and eligible ChatGPT access remain
+            separate. Any processing fee is shown before payment.
           </p>
         </Reveal>
       </Section>
@@ -1057,7 +1075,7 @@ export default function Landing({
               <div className="col-span-12 lg:col-span-5">
                 <Reveal delay={200}>
                   <p className={`${P_BIG} text-foreground/85 max-w-[38ch]`}>
-                    Free and open source. Use your keys, eligible ChatGPT, local models, or optional Ace credits.
+                    Free and open source. Use your keys, eligible ChatGPT, local models, or Ace.
                   </p>
                   <div className="mt-8 flex flex-wrap items-center gap-3">
                     <Cta href="/download">Download OpenScience</Cta>

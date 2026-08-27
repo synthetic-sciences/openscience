@@ -39,23 +39,22 @@ test("keeps the public bundled-skill count current", () => {
 
 describe("OpenScience landing contract", () => {
   test("keeps the free product independent from Ace", () => {
-    expect(landing).toContain("OpenScience and your account are free")
+    expect(landing).toMatch(/OpenScience\s+remains free/)
     expect(landing).toContain("BYOK")
     expect(landing).toContain("eligible ChatGPT")
     expect(landing).toContain("Do I need Ace to use OpenScience?")
   })
 
-  test("publishes Ace as a single pay as you go offer", () => {
+  test("publishes Ace as a single usage-based offer", () => {
     expect(landing).toContain("$20")
-    expect(landing).toContain("20 credits")
     expect(landing).toContain("OpenScience Ace")
-    expect(landing).toContain("PAY AS YOU GO")
-    expect(landing).toContain("Models and enhanced research search")
-    expect(landing).toContain("no monthly subscription")
+    expect(landing).toContain("pay only for the models and research search you use")
+    expect(landing).toContain("No monthly charge")
+    expect(landing).not.toMatch(/\bcredits?\b/i)
+    expect(landing).not.toContain("PAY AS YOU GO")
     expect(landing).not.toContain("Ace+")
     expect(landing).not.toContain("per month")
     expect(landing).not.toContain("included every month")
-    expect(landing).not.toContain("promotional credits")
     expect(landing).not.toContain("research quota")
   })
 
@@ -130,6 +129,22 @@ describe("OpenScience landing contract", () => {
     }
   })
 
+  test("uses alternating editorial panels for project context and model access", () => {
+    const sources = landing.slice(landing.indexOf('id="sources"'), landing.indexOf("MODEL FREEDOM"))
+    const models = landing.slice(landing.indexOf('id="models"'), landing.indexOf("OPEN SOURCE"))
+
+    expect(sources).toContain("Everything the work depends on.")
+    expect(sources).toContain("dither-red flex min-h-[470px]")
+    expect(sources).toContain("sm:py-40")
+    expect(sources.indexOf("dither-red")).toBeLessThan(sources.indexOf("<ProjectContextVisual"))
+
+    expect(models).toContain("Use the model the work needs.")
+    expect(models).toContain("dither-purple order-1 flex min-h-[470px]")
+    expect(models).toContain("lg:order-2")
+    expect(models).toContain("order-2 min-w-0 lg:order-1")
+    expect(models).toContain("sm:py-40")
+  })
+
   test("keeps internal model routing out of the editable product story", () => {
     const start = landing.indexOf("<TrustStrip />")
     const end = landing.indexOf("FAQ -----------------------------", start)
@@ -145,15 +160,15 @@ describe("OpenScience landing contract", () => {
     expect(ace).toBeGreaterThan(-1)
     expect(faq).toBeGreaterThan(ace)
     expect(landing.slice(ace, faq)).toContain("${APP}/billing")
-    expect(landing.slice(ace, faq)).toContain("Open billing")
+    expect(landing.slice(ace, faq)).toContain("Add funds")
   })
 
   test("keeps Ace pricing concise and separates other access routes", () => {
     expect(landing).not.toContain("auto-reload")
     expect(landing).not.toContain("Set a monthly cap")
-    expect(landing).toContain("Unused credits remain in your wallet.")
+    expect(landing).toContain("Unused balance stays in your account.")
     expect(landing).toContain("Any processing fee is shown before payment")
-    expect(landing).toContain("Local models, your own keys, and eligible ChatGPT access stay separate")
+    expect(landing).toMatch(/Local models, your own keys, and eligible ChatGPT access remain\s+separate/)
     expect(landing).not.toContain("Synthetic Scientists")
   })
 
@@ -167,8 +182,8 @@ describe("OpenScience landing contract", () => {
       expect(source).not.toMatch(/Synthetic Scientists/i)
       expect(source).not.toMatch(/research quota/i)
     }
-    expect(landing).toContain("20 credits")
-    expect(landing).toMatch(/pay[- ]as[- ]you[- ]go/i)
+    expect(landing).toContain("pay only for the models and research search you use")
+    expect(landing).not.toMatch(/\bcredits?\b/i)
     expect(landing).not.toMatch(/OpenRouter/i)
     expect(landing).not.toMatch(/Ace\+/i)
   })
