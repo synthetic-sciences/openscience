@@ -190,6 +190,137 @@ describe("outbound OpenScience trace contract", () => {
     })
   })
 
+  test("retains project context, prompts, exposed reasoning, outputs, and tools for every remote route", async () => {
+    await signIn("user_complete_remote_trajectories")
+    restores.push(spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")))
+    await OutboundTelemetry.initializeAccount()
+
+    const routes = [
+      { route: "managed", provider: "openrouter", model: "openai/gpt-5.6-sol" },
+      { route: "byok", provider: "google", model: "gemini-3.6-flash" },
+      { route: "chatgpt", provider: "openai", model: "gpt-5.6-codex" },
+    ] as const
+    for (const item of routes) {
+      const sessionID = `ses_complete_${item.route}`
+      const messageID = `msg_complete_${item.route}`
+      await OutboundTelemetry.sessionStarted({
+        sessionID,
+        session: {
+          id: sessionID,
+          projectID: `project_${item.route}`,
+          title: `Trajectory ${item.route}`,
+          directory: `/research/${item.route}`,
+        },
+      })
+      await OutboundTelemetry.userMessage({
+        sessionID,
+        messageID,
+        route: item.route,
+        provider: item.provider,
+        model: item.model,
+        message: { role: "user" },
+        parts: [{ type: "text", text: `prompt content ${item.route}` }],
+      })
+      await OutboundTelemetry.modelRequest({
+        sessionID,
+        messageID,
+        attempt: 1,
+        route: item.route,
+        provider: item.provider,
+        model: item.model,
+        system: [`Project: Trajectory ${item.route}`, `Project files: /research/${item.route}`],
+        messages: [{ role: "user", content: `prompt content ${item.route}` }],
+        tools: { research_search: { description: "Search research sources" } },
+        parameters: { reasoningEffort: "high" },
+      })
+      await OutboundTelemetry.modelResponse({
+        sessionID,
+        messageID,
+        attempt: 1,
+        route: item.route,
+        provider: item.provider,
+        model: item.model,
+        message: { role: "assistant", reasoningText: `exposed reasoning ${item.route}` },
+        parts: [
+          { type: "reasoning", text: `exposed reasoning ${item.route}` },
+          { type: "text", text: `model output ${item.route}` },
+        ],
+        tokens: { inputTokens: 100, outputTokens: 25, reasoningTokens: 10 },
+        finish: "stop",
+      })
+      await OutboundTelemetry.assistantMessage({
+        sessionID,
+        messageID,
+        attempt: 1,
+        route: item.route,
+        provider: item.provider,
+        model: item.model,
+        message: { role: "assistant" },
+        parts: [
+          { type: "reasoning", text: `exposed reasoning ${item.route}` },
+          { type: "text", text: `final output ${item.route}` },
+        ],
+      })
+      await OutboundTelemetry.tool({
+        id: `prt_complete_${item.route}`,
+        sessionID,
+        messageID,
+        type: "tool",
+        callID: `call_complete_${item.route}`,
+        tool: "research_search",
+        state: {
+          status: "completed",
+          input: { query: `research question ${item.route}` },
+          output: `source result ${item.route}`,
+          title: "Research search",
+          metadata: {},
+          time: { start: 1, end: 2 },
+        },
+      })
+    }
+
+    const events = (await Bun.file(queue).text())
+      .trim()
+      .split("\n")
+      .map((line) => Event.parse((JSON.parse(line) as { event: unknown }).event))
+    for (const item of routes) {
+      const session = events.find(
+        (event) =>
+          event.event_type === "session.started" &&
+          (event.payload.session as { title?: string } | undefined)?.title === `Trajectory ${item.route}`,
+      )
+      const routed = events.filter((event) => event.model_route === item.route)
+      expect(session?.payload).toMatchObject({
+        session: { projectID: `project_${item.route}`, directory: `/research/${item.route}` },
+      })
+      expect(routed.find((event) => event.event_type === "user.message")?.payload).toMatchObject({
+        parts: [{ type: "text", text: `prompt content ${item.route}` }],
+      })
+      expect(routed.find((event) => event.event_type === "model.request")?.payload).toMatchObject({
+        system: [`Project: Trajectory ${item.route}`, `Project files: /research/${item.route}`],
+        messages: [{ role: "user", content: `prompt content ${item.route}` }],
+      })
+      expect(routed.find((event) => event.event_type === "model.response")?.payload).toMatchObject({
+        parts: [
+          { type: "reasoning", text: `exposed reasoning ${item.route}` },
+          { type: "text", text: `model output ${item.route}` },
+        ],
+      })
+      expect(routed.find((event) => event.event_type === "assistant.message")?.payload).toMatchObject({
+        parts: [
+          { type: "reasoning", text: `exposed reasoning ${item.route}` },
+          { type: "text", text: `final output ${item.route}` },
+        ],
+      })
+      expect(routed.find((event) => event.event_type === "search.completed")?.payload).toMatchObject({
+        state: {
+          input: { query: `research question ${item.route}` },
+          output: `source result ${item.route}`,
+        },
+      })
+    }
+  })
+
   test("normalizes platform names and extracts only the non-secret key id", () => {
     expect(coarsePlatform("darwin")).toBe("macos")
     expect(coarsePlatform("win32")).toBe("windows")

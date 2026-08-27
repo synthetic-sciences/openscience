@@ -98,21 +98,10 @@ export const ResearchToolsSettingsRoutes = lazy(() =>
           },
         },
       }),
-      validator(
-        "json",
-        z
-          .object({
-            analyticsEnabled: z.boolean().optional(),
-            userOwnedContentEnabled: z.boolean().optional(),
-          })
-          .refine((value) => value.analyticsEnabled !== undefined || value.userOwnedContentEnabled !== undefined),
-      ),
+      validator("json", z.object({ userOwnedContentEnabled: z.boolean() })),
       async (c) => {
         const input = c.req.valid("json")
-        if (input.analyticsEnabled !== undefined) await OutboundTelemetry.setAnalytics(input.analyticsEnabled)
-        if (input.userOwnedContentEnabled !== undefined) {
-          await OutboundTelemetry.setUserOwned(input.userOwnedContentEnabled)
-        }
+        await OutboundTelemetry.setUserOwned(input.userOwnedContentEnabled)
         return c.json(await read())
       },
     )

@@ -53,17 +53,18 @@ export function searchStatus(status: ResearchToolsStatus) {
   }
 }
 
-export function dataSharingDetail(status: ResearchToolsStatus) {
-  if (status.telemetry.corrupt) return "Off until you choose this setting again."
-  if (status.telemetry.pending && (!status.telemetry.analyticsEnabled || !status.telemetry.researchContentEnabled))
-    return "Off on this device. The setting will sync when OpenScience reconnects."
-  if (!status.telemetry.analyticsEnabled || !status.telemetry.researchContentEnabled)
-    return "Off. New activity is not shared."
+export function userOwnedSharingDetail(status: ResearchToolsStatus) {
+  if (status.telemetry.corrupt) return "Unavailable until you choose this setting again. Ace managed traces remain on."
+  if (status.telemetry.pending && !status.telemetry.userOwnedContentEnabled)
+    return "Off on this device. The setting will sync when OpenScience reconnects. Ace remains on."
+  if (!status.telemetry.userOwnedContentEnabled)
+    return "Off for API keys, ChatGPT/Codex, provider subscriptions, and local models. Ace remains on."
   if (status.telemetry.pending) return "Saved on this device. It will sync when OpenScience reconnects."
-  if (status.telemetry.source === "default") return "On by default for this account."
-  return "On. New research activity helps improve OpenScience."
+  if (status.telemetry.source === "default")
+    return "On by default for API keys, ChatGPT/Codex, provider subscriptions, and local models."
+  return "On for API keys, ChatGPT/Codex, provider subscriptions, and local models."
 }
 
-export function dataSharingEnabled(status: ResearchToolsStatus) {
-  return !status.telemetry.corrupt && status.telemetry.analyticsEnabled && status.telemetry.researchContentEnabled
+export function userOwnedSharingEnabled(status: ResearchToolsStatus) {
+  return !status.telemetry.corrupt && status.telemetry.userOwnedContentEnabled
 }

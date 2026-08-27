@@ -112,4 +112,39 @@ describe("research tools settings route", () => {
       search: { route: "credits", state: "basic", enabled: true, balanceUsd: -0.25 },
     })
   })
+
+  test("the settings switch changes only user-owned routes and cannot disable Ace", async () => {
+    restores.push(
+      spyOn(OpenScience, "getSession").mockResolvedValue({ api_key: "thk_fixture", user_id: "user_fixture" } as never),
+    )
+    restores.push(spyOn(OpenScience, "getBalance").mockResolvedValue(20))
+    restores.push(
+      spyOn(OutboundTelemetry, "status").mockResolvedValue({ ...telemetry, userOwnedContentEnabled: false }),
+    )
+    const userOwned = spyOn(OutboundTelemetry, "setUserOwned").mockResolvedValue({
+      ...telemetry,
+      userOwnedContentEnabled: false,
+    })
+    const analytics = spyOn(OutboundTelemetry, "setAnalytics")
+    restores.push(userOwned, analytics)
+
+    const response = await ResearchToolsSettingsRoutes().request("/telemetry", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userOwnedContentEnabled: false }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(userOwned).toHaveBeenCalledWith(false)
+    expect(analytics).not.toHaveBeenCalled()
+  })
+
+  test("rejects the removed global telemetry switch", async () => {
+    const response = await ResearchToolsSettingsRoutes().request("/telemetry", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analyticsEnabled: false }),
+    })
+    expect(response.status).toBe(400)
+  })
 })

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { dataSharingDetail, dataSharingEnabled, searchStatus, type ResearchToolsStatus } from "./research-tools-state"
+import {
+  searchStatus,
+  type ResearchToolsStatus,
+  userOwnedSharingDetail,
+  userOwnedSharingEnabled,
+} from "./research-tools-state"
 
 const status = (patch?: Partial<ResearchToolsStatus>): ResearchToolsStatus => ({
   signedIn: true,
@@ -73,33 +78,34 @@ describe("Research Tools settings", () => {
     ).toMatchObject({ label: "Basic", tone: "neutral" })
   })
 
-  test("discloses default-on sharing and corrupt-record fail-closed behavior", () => {
-    expect(dataSharingEnabled(status())).toBe(true)
-    expect(dataSharingDetail(status())).toContain("On by default")
+  test("discloses default-on user-owned sharing without presenting Ace as optional", () => {
+    expect(userOwnedSharingEnabled(status())).toBe(true)
+    expect(userOwnedSharingDetail(status())).toContain("On by default")
     const migrated = status({
-      telemetry: { ...status().telemetry, analyticsEnabled: true, researchContentEnabled: false, source: "account" },
+      telemetry: { ...status().telemetry, userOwnedContentEnabled: false, source: "account" },
     })
-    expect(dataSharingEnabled(migrated)).toBe(false)
-    expect(dataSharingDetail(migrated)).toBe("Off. New activity is not shared.")
+    expect(userOwnedSharingEnabled(migrated)).toBe(false)
+    expect(userOwnedSharingDetail(migrated)).toContain("Ace remains on")
     expect(
-      dataSharingEnabled(
+      userOwnedSharingEnabled(
         status({
-          telemetry: { ...status().telemetry, analyticsEnabled: true, researchContentEnabled: true, corrupt: true },
+          telemetry: { ...status().telemetry, corrupt: true },
         }),
       ),
     ).toBe(false)
     expect(
-      dataSharingDetail(
-        status({ telemetry: { ...status().telemetry, analyticsEnabled: false, corrupt: true, source: "account" } }),
+      userOwnedSharingDetail(
+        status({
+          telemetry: { ...status().telemetry, userOwnedContentEnabled: false, corrupt: true, source: "account" },
+        }),
       ),
-    ).toContain("Off until")
+    ).toContain("Ace managed traces remain on")
     expect(
-      dataSharingDetail(
+      userOwnedSharingDetail(
         status({
           telemetry: {
             ...status().telemetry,
-            analyticsEnabled: false,
-            researchContentEnabled: false,
+            userOwnedContentEnabled: false,
             pending: true,
             source: "account",
           },
@@ -129,11 +135,15 @@ describe("Research Tools settings", () => {
 
   test("places route-aware data controls at the end of General settings", async () => {
     const source = await Bun.file(new URL("./DataUse.tsx", import.meta.url)).text()
+    const stateSource = await Bun.file(new URL("./research-tools-state.ts", import.meta.url)).text()
     const general = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
     const copy = source.replace(/\s+/g, " ")
-    expect(copy).toContain("Improve OpenScience with my activity")
-    expect(copy).toContain("Include user-owned routes")
-    expect(copy).toContain("ChatGPT/Codex or provider subscriptions")
+    expect(copy).toContain("OpenScience Ace traces")
+    expect(copy).toContain("Always on")
+    expect(copy).toContain("Share user-owned routes")
+    expect(stateSource).toContain("ChatGPT/Codex, provider subscriptions")
+    expect(stateSource).toContain("Ace remains on")
+    expect(copy).not.toContain("analyticsEnabled")
     expect(copy).toContain("queued")
     expect(general.lastIndexOf("<DataUse />")).toBeGreaterThan(general.lastIndexOf("settings-disclosure-group"))
     expect(copy).not.toContain("complete research trajectory")

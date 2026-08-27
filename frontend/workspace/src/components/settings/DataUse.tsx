@@ -1,11 +1,11 @@
-import { Show, createMemo, createSignal, onMount } from "solid-js"
+import { Show, createSignal, onMount } from "solid-js"
 import { Icon } from "@synsci/ui/icon"
 import { Switch } from "@synsci/ui/switch"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { Card, Row, RowCopy, Section } from "./_shared"
 import { settingsApi } from "./api"
-import { dataSharingDetail, dataSharingEnabled, type ResearchToolsStatus } from "./research-tools-state"
+import { type ResearchToolsStatus, userOwnedSharingDetail, userOwnedSharingEnabled } from "./research-tools-state"
 
 export function DataUse() {
   const platform = usePlatform()
@@ -14,20 +14,18 @@ export function DataUse() {
   const [error, setError] = createSignal<string>()
   const [saving, setSaving] = createSignal(false)
   const fetcher = () => platform.fetch ?? fetch
-  const enabled = createMemo(() => (state() ? dataSharingEnabled(state()!) : false))
-
   const load = async () => {
     setError(undefined)
     setState(await settingsApi<ResearchToolsStatus>(server.url, fetcher(), "/settings/research-tools"))
   }
 
-  const update = async (body: { analyticsEnabled?: boolean; userOwnedContentEnabled?: boolean }) => {
+  const update = async (userOwnedContentEnabled: boolean) => {
     if (saving()) return
     setSaving(true)
     setError(undefined)
     const result = await settingsApi<ResearchToolsStatus>(server.url, fetcher(), "/settings/research-tools/telemetry", {
       method: "PUT",
-      body: JSON.stringify(body),
+      body: JSON.stringify({ userOwnedContentEnabled }),
     }).catch((cause) => {
       setError(cause instanceof Error ? cause.message : String(cause))
       return undefined
@@ -39,7 +37,10 @@ export function DataUse() {
   onMount(() => void load().catch((cause) => setError(cause instanceof Error ? cause.message : String(cause))))
 
   return (
-    <Section title="Data & privacy" description="Control exactly which OpenScience traces leave this device.">
+    <Section
+      title="Data & privacy"
+      description="Ace records its managed service activity. You control sharing from routes that use your own credentials."
+    >
       <Show when={error()}>
         <div class="settings-alert" data-tone="critical" role="alert">
           <span>{error()}</span>
@@ -50,37 +51,32 @@ export function DataUse() {
       </Show>
       <Card>
         <Row>
-          <span class="settings-preference-icon" data-tone={enabled() ? "success" : undefined} aria-hidden="true">
+          <span class="settings-preference-icon" data-tone="success" aria-hidden="true">
             <Icon name="activity" size="small" />
           </span>
           <RowCopy
-            title="Improve OpenScience with my activity"
-            description={state() ? dataSharingDetail(state()!) : "Loading your preference…"}
+            title="OpenScience Ace traces"
+            description="Managed prompts, provider-visible reasoning, tool results, outputs, tokens, and spend are recorded as part of the Ace service."
           />
-          <Switch
-            hideLabel
-            checked={enabled()}
-            disabled={!state() || saving()}
-            onChange={(value) => void update({ analyticsEnabled: value })}
-          >
-            Improve OpenScience with my activity
-          </Switch>
+          <span class="settings-preference-status" data-tone="success">
+            Always on
+          </span>
         </Row>
         <Row>
           <span class="settings-preference-icon" aria-hidden="true">
             <Icon name="shield" size="small" />
           </span>
           <RowCopy
-            title="Include user-owned routes"
-            description="Include prompts, traces, tool results, and final answers from API keys, ChatGPT/Codex or provider subscriptions, and local models. Ace is covered by the main switch."
+            title="Share user-owned routes"
+            description={state() ? userOwnedSharingDetail(state()!) : "Loading your preference…"}
           />
           <Switch
             hideLabel
-            checked={state()?.telemetry.userOwnedContentEnabled ?? false}
-            disabled={!state() || saving() || !enabled()}
-            onChange={(value) => void update({ userOwnedContentEnabled: value })}
+            checked={state() ? userOwnedSharingEnabled(state()!) : false}
+            disabled={!state() || saving()}
+            onChange={(value) => void update(value)}
           >
-            Include user-owned routes
+            Share user-owned routes
           </Switch>
         </Row>
         <Row>
