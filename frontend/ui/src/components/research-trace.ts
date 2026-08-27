@@ -1,5 +1,5 @@
-import type { AssistantMessage, Part } from "@synsci/sdk/v2/client"
-import { reasoningDisplayText } from "./tool-display"
+import type { AssistantMessage, Part, ToolPart, ToolStateCompleted } from "@synsci/sdk/v2/client"
+import { reasoningDisplayText, skillName } from "./tool-display"
 
 export type ResearchTraceEntry = {
   message: AssistantMessage
@@ -31,7 +31,7 @@ const sources = new Set(["webfetch", "websearch", "science_fetch", "science_sear
 const commands = new Set(["bash", "python", "r", "notebook", "rkernel", "modal", "compute_job"])
 const changes = new Set(["edit", "write", "multiedit", "apply_patch"])
 const images = new Set(["generate_image"])
-const skills = new Set(["skill", "learn"])
+const skills = new Set(["skill"])
 
 export function traceFamily(tool: string): TraceFamily {
   if (context.has(tool)) return "context"
@@ -50,7 +50,7 @@ export function traceLabel(family: TraceFamily, count: number) {
   if (family === "commands") return `Ran ${count} build or verification ${count === 1 ? "step" : "steps"}`
   if (family === "changes") return `Updated ${count} ${count === 1 ? "file" : "files"}`
   if (family === "images") return `Generated ${count} ${count === 1 ? "image" : "images"}`
-  if (family === "skills") return `Loaded ${count} research ${count === 1 ? "skill" : "skills"}`
+  if (family === "skills") return `Using ${count} ${count === 1 ? "skill" : "skills"}`
   return `Completed ${count} research ${count === 1 ? "operation" : "operations"}`
 }
 
@@ -65,27 +65,87 @@ function lifecycle(part: Part) {
   return part.type === "step-start" || part.type === "step-finish" || part.type === "snapshot" || part.type === "patch"
 }
 
+type CompletedSkillEntry = ResearchTraceEntry & {
+  part: ToolPart & { state: ToolStateCompleted }
+}
+
+function completedSkillLoad(entry: ResearchTraceEntry): entry is CompletedSkillEntry {
+  if (entry.part.type !== "tool" || entry.part.tool !== "skill" || entry.part.state.status !== "completed") return false
+  return !!skillName({
+    input: (entry.part.state.input ?? {}) as Record<string, unknown>,
+    metadata: (entry.part.state.metadata ?? {}) as Record<string, unknown>,
+    title: entry.part.state.title,
+  })
+}
+
 /**
  * Keep the primary activity transcript literal and chronological. Streaming
  * state changes must not replace already-visible rows with aggregate summaries;
  * compact grouping is reserved for secondary child-agent summaries below.
  */
 export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
-  return entries.filter((entry) => {
+  const visible = entries.filter((entry) => {
     if (entry.hidden || lifecycle(entry.part)) return false
     if (entry.part.type === "reasoning" && !reasoningDisplayText(entry.part.text ?? "")) return false
     return true
   })
+  const result: ResearchTraceEntry[] = []
+  for (let index = 0; index < visible.length; index++) {
+    const first = visible[index]!
+    if (!completedSkillLoad(first)) {
+      result.push(first)
+      continue
+    }
+    const group: CompletedSkillEntry[] = [first]
+    while (index + 1 < visible.length) {
+      const next = visible[index + 1]!
+      if (!completedSkillLoad(next)) break
+      group.push(next)
+      index++
+    }
+    if (group.length === 1) {
+      result.push(first)
+      continue
+    }
+    const names = [
+      ...new Set(
+        group
+          .map((entry) =>
+            skillName({
+              input: (entry.part.state.input ?? {}) as Record<string, unknown>,
+              metadata: (entry.part.state.metadata ?? {}) as Record<string, unknown>,
+              title: entry.part.state.title,
+            }),
+          )
+          .filter((name): name is string => !!name),
+      ),
+    ]
+    result.push({
+      message: first.message,
+      part: {
+        ...first.part,
+        state: {
+          ...first.part.state,
+          title: `Using ${names.length} ${names.length === 1 ? "skill" : "skills"}`,
+          input: {},
+          output: names.map((name) => `- ${name}`).join("\n"),
+          metadata: { names },
+        },
+      },
+    })
+  }
+  return result
 }
 
 export function summarizeTaskActivity(items: TaskActivity[]): TaskActivityGroup[] {
   const groups = new Map<TraceFamily, TaskActivityGroup & { titles: string[] }>()
   for (const item of items) {
+    const directSkill = item.tool === "skill" && item.state.title?.startsWith("Loaded skill: ")
+    if (item.tool === "skill" && !directSkill) continue
     const family = traceFamily(item.tool)
     const previous = groups.get(family)
-    const titles = item.state.title?.trim()
-      ? [...(previous?.titles ?? []), item.state.title.trim()]
-      : (previous?.titles ?? [])
+    const title = directSkill ? item.state.title?.replace(/^Loaded skill:\s*/, "") : item.state.title
+    const titles = title?.trim() ? [...(previous?.titles ?? []), title.trim()] : (previous?.titles ?? [])
     groups.set(family, {
       family,
       count: (previous?.count ?? 0) + 1,

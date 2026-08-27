@@ -259,6 +259,9 @@ export function writtenFiles(
       for (const file of Array.isArray(metadata.files) ? metadata.files : []) push(file)
     }
     if (part.tool === "generate_image") push(metadata.filepath)
+    if (part.tool === "webfetch" && metadata.download && typeof metadata.download === "object") {
+      push((metadata.download as Record<string, unknown>).path)
+    }
     if (part.tool !== "apply_patch") continue
     const changes = Array.isArray(metadata.files) ? metadata.files : []
     for (const change of changes) {
@@ -287,12 +290,40 @@ export function skillName(source: {
   metadata?: Record<string, unknown>
   input?: Record<string, unknown>
   title?: string
-}): string {
+}): string | undefined {
   const meta = source.metadata?.name
   if (typeof meta === "string" && meta) return meta
   const input = source.input?.name
   if (typeof input === "string" && input) return input
   const title = source.title
   if (typeof title === "string" && title.startsWith("Loaded skill: ")) return title.slice("Loaded skill: ".length)
-  return "skill"
+  return undefined
+}
+
+export function skillActivity(source: {
+  metadata?: Record<string, unknown>
+  input?: Record<string, unknown>
+  title?: string
+  status?: string
+}): { title: string; subtitle?: string } {
+  const used = Array.isArray(source.metadata?.names)
+    ? source.metadata.names.filter((name): name is string => typeof name === "string" && !!name)
+    : []
+  if (used.length > 1) {
+    return { title: `Using ${used.length} skills`, subtitle: used.join(" · ") }
+  }
+  const search =
+    typeof source.input?.query === "string" ||
+    typeof source.input?.category === "string" ||
+    source.title?.startsWith("Skill matches:") ||
+    source.title?.startsWith("Skills in category:")
+  if (search) {
+    const matches = Array.isArray(source.metadata?.matches) ? source.metadata.matches.length : 0
+    return source.status === "completed" && matches > 0
+      ? { title: `Found ${matches} relevant ${matches === 1 ? "skill" : "skills"}` }
+      : { title: "Finding relevant skills" }
+  }
+
+  const name = skillName(source)
+  return name ? { title: `Using ${name}` } : { title: "Finding relevant skills" }
 }

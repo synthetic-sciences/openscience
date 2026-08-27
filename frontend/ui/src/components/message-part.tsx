@@ -56,7 +56,7 @@ import {
   savedArtifact,
   scienceTaskLabel,
   sentenceCaseLabel,
-  skillName,
+  skillActivity,
   toolErrorDisplay,
 } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
@@ -166,6 +166,7 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
       )}
       fallback={
         <div data-component="permission-prompt">
+          <span data-slot="permission-origin">OpenScience approval</span>
           <Show when={summary()}>
             <div data-slot="permission-summary">{summary()}</div>
           </Show>
@@ -204,6 +205,7 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
       }
     >
       <div data-component="permission-prompt" data-kind={mutation() ? "environment-mutation" : "remote-compute"}>
+        <span data-slot="permission-origin">OpenScience approval</span>
         <div data-slot="permission-summary" data-kind={mutation() ? "environment-mutation" : "remote-compute"}>
           <strong data-slot="permission-compute-title">
             {mutation()
@@ -1185,10 +1187,10 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "skill",
   render(props) {
-    const i18n = useI18n()
-    const name = skillName({ metadata: props.metadata, input: props.input, title: props.title })
+    const activity = () =>
+      skillActivity({ metadata: props.metadata, input: props.input, title: props.title, status: props.status })
     return (
-      <BasicTool {...props} icon="mcp" trigger={{ title: i18n.t("ui.tool.skill", { name }) }}>
+      <BasicTool {...props} icon="mcp" trigger={{ title: activity().title, subtitle: activity().subtitle }}>
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
@@ -1315,13 +1317,29 @@ ToolRegistry.register({
   name: "webfetch",
   render(props) {
     const i18n = useI18n()
+    const data = useData()
+    const downloaded = () => {
+      const value = props.metadata.download
+      return value && typeof value === "object" ? (value as { path?: unknown; autoOpen?: unknown }) : undefined
+    }
+    // Do not reopen persisted downloads on reload, but keep listening if the
+    // completed metadata arrives one event after the terminal status.
+    let opened = props.status === "completed"
+    createEffect(() => {
+      const status = props.status
+      const download = downloaded()
+      if (!opened && status === "completed" && download?.autoOpen === true && typeof download.path === "string") {
+        opened = true
+        data.openFile?.(download.path)
+      }
+    })
     return (
       <BasicTool
         {...props}
         icon="window-cursor"
         trigger={{
-          title: i18n.t("ui.tool.webfetch"),
-          subtitle: props.input.url || "",
+          title: downloaded() ? "Downloaded file" : i18n.t("ui.tool.webfetch"),
+          subtitle: typeof downloaded()?.path === "string" ? (downloaded()!.path as string) : props.input.url || "",
           args: props.input.format ? ["format=" + props.input.format] : [],
           action: (
             <div data-component="tool-action">
@@ -1329,6 +1347,9 @@ ToolRegistry.register({
             </div>
           ),
         }}
+        onSubtitleClick={
+          typeof downloaded()?.path === "string" ? () => data.openFile?.(downloaded()!.path as string) : undefined
+        }
       >
         <Show when={props.output}>
           {(output) => (

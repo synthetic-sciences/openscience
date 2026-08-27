@@ -1171,6 +1171,15 @@
   background-color: var(--surface-raised-strong);
   border-radius: 0 0 var(--radius-xs) var(--radius-xs);
 
+  [data-slot="permission-origin"] {
+    color: var(--text-weaker);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
   [data-slot="permission-summary"] {
     font-size: 12px;
     color: var(--text-weak);

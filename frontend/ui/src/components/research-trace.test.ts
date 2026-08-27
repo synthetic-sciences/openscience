@@ -68,6 +68,64 @@ describe("research trace presentation", () => {
     expect(trace.map((item) => item.part.id)).toEqual(["read", "grep", "list"])
   })
 
+  test("collapses adjacent completed skill loads into one truthful disclosure", () => {
+    const trace = visibleResearchTrace([
+      {
+        ...entry("skill-1", "skill", "Loaded skill: scientific-schematics"),
+        part: {
+          ...entry("skill-1", "skill", "Loaded skill: scientific-schematics").part,
+          state: {
+            status: "completed",
+            input: { name: "scientific-schematics" },
+            metadata: { name: "scientific-schematics" },
+            output: "instructions",
+          },
+        },
+      } as unknown as ResearchTraceEntry,
+      {
+        ...entry("skill-2", "skill", "Loaded skill: ml-paper-writing"),
+        part: {
+          ...entry("skill-2", "skill", "Loaded skill: ml-paper-writing").part,
+          state: {
+            status: "completed",
+            input: { name: "ml-paper-writing" },
+            metadata: { name: "ml-paper-writing" },
+            output: "instructions",
+          },
+        },
+      } as unknown as ResearchTraceEntry,
+    ])
+
+    expect(trace).toHaveLength(1)
+    const aggregated = trace[0]?.part
+    expect(aggregated?.type === "tool" && aggregated.state.status === "completed" && aggregated.state.metadata).toEqual(
+      {
+        names: ["scientific-schematics", "ml-paper-writing"],
+      },
+    )
+  })
+
+  test("does not group skill search results as skills that were used", () => {
+    const searched = entry("skill-search", "skill", "Skill matches: figures")
+    const trace = visibleResearchTrace([
+      {
+        ...searched,
+        part: {
+          ...searched.part,
+          state: {
+            status: "completed",
+            input: { query: "figures" },
+            metadata: { matches: ["scientific-schematics"] },
+            output: "matches",
+          },
+        },
+      } as unknown as ResearchTraceEntry,
+      entry("read", "read", "Read paper.tex"),
+    ])
+
+    expect(trace.map((item) => item.part.id)).toEqual(["skill-search", "read"])
+  })
+
   test("keeps repeated failed source attempts individually inspectable", () => {
     const trace = visibleResearchTrace([
       entry("fetch-1", "webfetch", "Download returned HTML", "error"),
@@ -108,6 +166,17 @@ describe("delegation summaries", () => {
     expect(groups).toHaveLength(2)
     expect(groups[0]).toMatchObject({ family: "sources", count: 2, failed: 1 })
     expect(groups[1]).toMatchObject({ family: "context", count: 1, failed: 0 })
+  })
+
+  test("counts only loaded skills as used", () => {
+    const groups = summarizeTaskActivity([
+      { id: "1", tool: "skill", state: { status: "completed", title: "Loaded skill: scientific-schematics" } },
+      { id: "2", tool: "skill", state: { status: "completed", title: "Skill matches: figures" } },
+    ])
+
+    expect(groups).toEqual([
+      { family: "skills", count: 1, failed: 0, label: "Using 1 skill", detail: "scientific-schematics" },
+    ])
   })
 
   test("removes the internal task metadata envelope from user-visible findings", () => {

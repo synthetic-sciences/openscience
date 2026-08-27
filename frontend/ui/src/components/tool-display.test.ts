@@ -11,6 +11,7 @@ import {
   scienceTaskLabel,
   sessionErrorDisplay,
   sessionErrorText,
+  skillActivity,
   skillName,
   stripRedactedReasoning,
   toolErrorDisplay,
@@ -92,8 +93,26 @@ describe("skillName", () => {
   test("strips the title prefix", () => {
     expect(skillName({ title: "Loaded skill: qa" })).toBe("qa")
   })
-  test("defaults to 'skill'", () => {
-    expect(skillName({})).toBe("skill")
+  test("does not invent a literal skill name while streaming", () => {
+    expect(skillName({})).toBeUndefined()
+    expect(skillActivity({ status: "running" })).toEqual({ title: "Finding relevant skills" })
+  })
+  test("distinguishes using a skill from merely finding candidates", () => {
+    expect(skillActivity({ input: { name: "scientific-schematics" }, status: "running" })).toEqual({
+      title: "Using scientific-schematics",
+    })
+    expect(
+      skillActivity({
+        input: { query: "scientific figures" },
+        metadata: { matches: ["scientific-schematics", "matplotlib"] },
+        title: "Skill matches: scientific figures",
+        status: "completed",
+      }),
+    ).toEqual({ title: "Found 2 relevant skills" })
+    expect(skillActivity({ metadata: { names: ["scientific-schematics", "ml-paper-writing"] } })).toEqual({
+      title: "Using 2 skills",
+      subtitle: "scientific-schematics · ml-paper-writing",
+    })
   })
 })
 
@@ -156,6 +175,14 @@ describe("writtenFiles", () => {
         completed("generate_image", {}, { filepath: "diagram.png" }),
       ]),
     ).toEqual(["results.csv", "figure.png", "model.rds", "diagram.png"])
+  })
+
+  test("offers brokered web downloads as session outputs", () => {
+    expect(
+      writtenFiles([
+        completed("webfetch", { url: "https://example.com/paper.pdf" }, { download: { path: "paper.pdf" } }),
+      ]),
+    ).toEqual(["paper.pdf"])
   })
 })
 
