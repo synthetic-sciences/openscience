@@ -702,6 +702,7 @@ export namespace Agent {
     } finally {
       await OutboundTelemetry.sessionCompleted({
         sessionID,
+        messageID,
         reason: outcome,
         session: { purpose, source: "cli", ephemeral: true },
       }).catch(() => false)

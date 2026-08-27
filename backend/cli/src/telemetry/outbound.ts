@@ -1626,19 +1626,25 @@ export namespace OutboundTelemetry {
     })
   }
 
-  export function sessionCompleted(input: {
+  export async function sessionCompleted(input: {
     sessionID: string
     reason: string
     session?: unknown
     messageID?: string
   }) {
-    return append("session.completed", {
+    const result = await append("session.completed", {
       sessionID: input.sessionID,
       runID: input.messageID,
       spanKey: `session:${input.sessionID}:completed:${input.messageID ?? input.reason}`,
       parentSpanID: input.messageID ?? `session:${input.sessionID}`,
       payload: { reason: input.reason, session: input.session },
     })
+    const prefix = `${input.sessionID}\0`
+    routes.delete(input.sessionID)
+    for (const key of routes.keys()) {
+      if (key.startsWith(prefix)) routes.delete(key)
+    }
+    return result
   }
 
   export function userMessage(input: {
