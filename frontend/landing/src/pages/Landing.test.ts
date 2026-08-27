@@ -20,7 +20,7 @@ test("keeps the public bundled-skill count current", () => {
 
 describe("OpenScience landing contract", () => {
   test("keeps the free product independent from Ace", () => {
-    expect(landing).toMatch(/The desktop and local runtime\s+remain free/)
+    expect(landing).toMatch(/OpenScience itself remains\s+free/)
     expect(landing).toContain("BYOK")
     expect(landing).toContain("eligible ChatGPT")
     expect(landing).toContain("Do I need Ace to use OpenScience?")

@@ -529,91 +529,71 @@ function DownloadSection() {
   return (
     <section id="install" className="relative w-full overflow-hidden border-t border-border/40">
       <div className="absolute inset-0 graticule opacity-[0.035]" />
-      <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
-        <div className="grid grid-cols-12 items-start gap-10 lg:gap-16">
-          <div className="col-span-12 lg:col-span-5">
-            <Reveal>
-              <Eyebrow className="mb-5">Download OpenScience</Eyebrow>
-              <h2 className={`text-balance ${H_BIG}`}>Your research workspace, on your computer.</h2>
-            </Reveal>
-            <Reveal delay={120}>
-              <p className={`mt-5 max-w-[45ch] ${P_BIG}`}>
-                Download the current release, sign in once, and open any project in the local workspace. OpenScience
-                keeps your files, terminals, sessions, and artifacts beside the work.
-              </p>
-            </Reveal>
-          </div>
+      <div className="relative z-10 mx-auto flex w-full max-w-[1100px] flex-col items-center px-6 py-24 text-center sm:px-10 sm:py-28">
+        <Reveal>
+          <Eyebrow className="mb-5">The current release</Eyebrow>
+          <h2 className={`text-balance ${H_HUGE}`}>Download OpenScience.</h2>
+        </Reveal>
+        <Reveal delay={120}>
+          <p className={`mx-auto mt-5 max-w-[54ch] ${P_BIG}`}>
+            Install it, open a project, and start working in your local research workspace.
+          </p>
+        </Reveal>
+        <Reveal delay={180}>
+          <a
+            href={`${RELEASE}/${download.file}`}
+            className="btn-primary mt-9 inline-flex min-h-14 w-full max-w-[440px] items-center justify-center gap-3 px-7 text-[16px] sm:w-auto sm:min-w-[420px]"
+            aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
+          >
+            <svg width="15" height="16" viewBox="0 0 15 16" fill="none" aria-hidden>
+              <path d="M7.5 1v9m0 0L11 6.5M7.5 10 4 6.5M1 14.5h13" stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+            Download for {download.label} ({download.detail})
+          </a>
+        </Reveal>
 
-          <Reveal delay={180} className="col-span-12 lg:col-span-7">
-            <div className="border border-border/60 bg-background/70 p-5 backdrop-blur-[4px] sm:p-7">
-              <div className="flex flex-col gap-5 border-b border-border/50 pb-6 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-4">
-                  <span className="grid size-11 place-items-center border border-foreground/20 bg-foreground/[0.035] text-foreground/80">
-                    <PlatformMark platform={platform} />
-                  </span>
-                  <div>
-                    <div className="text-[17px] text-foreground">OpenScience for {download.label}</div>
-                    <div className={`mt-1 ${CAPTION}`}>{download.detail} · latest release</div>
-                  </div>
-                </div>
-                <a
-                  href={`${RELEASE}/${download.file}`}
-                  className="btn-primary group/download inline-flex h-11 shrink-0 items-center justify-center gap-2.5 px-6 text-[14px] leading-none"
-                  aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
-                >
-                  Download
-                  <svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden>
-                    <path d="M6.5 1v8m0 0 3-3m-3 3-3-3M1 12.5h11" stroke="currentColor" strokeWidth="1.2" />
-                  </svg>
-                </a>
-              </div>
-
-              <div
-                className="mt-5 grid grid-cols-3 gap-px border border-border/50 bg-border/50"
-                aria-label="Choose your operating system"
+        <Reveal delay={230} className="mt-7 w-full max-w-[560px]">
+          <div
+            className="grid grid-cols-3 gap-px border border-border/50 bg-border/50 p-px"
+            aria-label="Choose your operating system"
+          >
+            {(Object.keys(DOWNLOADS) as Platform[]).map((item) => (
+              <button
+                type="button"
+                key={item}
+                onClick={() => setPlatform(item)}
+                className={`flex min-h-11 items-center justify-center gap-2 bg-background px-3 text-[13px] transition-colors duration-300 ${
+                  item === platform
+                    ? "bg-foreground/[0.08] text-foreground"
+                    : "text-foreground/45 hover:bg-foreground/[0.035] hover:text-foreground/75"
+                }`}
+                aria-pressed={item === platform}
               >
-                {(Object.keys(DOWNLOADS) as Platform[]).map((item) => (
-                  <button
-                    type="button"
-                    key={item}
-                    onClick={() => setPlatform(item)}
-                    className={`flex min-h-20 flex-col items-start justify-center gap-2 bg-background px-4 text-left transition-colors duration-300 sm:flex-row sm:items-center sm:justify-start sm:px-5 ${
-                      item === platform
-                        ? "bg-foreground/[0.075] text-foreground"
-                        : "text-foreground/50 hover:bg-foreground/[0.035] hover:text-foreground/80"
-                    }`}
-                    aria-pressed={item === platform}
-                  >
-                    <PlatformMark platform={item} />
-                    <span className="text-[13px] sm:text-[14px]">{DOWNLOADS[item].label}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap gap-x-5 gap-y-2">
-                  {download.options.map(([label, file]) => (
-                    <a
-                      key={file}
-                      href={`${RELEASE}/${file}`}
-                      className="link-underline text-[13px] text-foreground/55 transition-colors hover:text-foreground"
-                    >
-                      {label}
-                    </a>
-                  ))}
-                </div>
-                <a
-                  href={`${GITHUB}/releases/latest`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="link-underline text-[13px] text-foreground/45 transition-colors hover:text-foreground"
-                >
-                  Release notes
-                </a>
-              </div>
-            </div>
-          </Reveal>
-        </div>
+                <PlatformMark platform={item} />
+                <span>{DOWNLOADS[item].label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+            {download.options.map(([label, file]) => (
+              <a
+                key={file}
+                href={`${RELEASE}/${file}`}
+                className="link-underline text-[12.5px] text-foreground/50 transition-colors hover:text-foreground"
+              >
+                {label}
+              </a>
+            ))}
+            <a
+              href={`${GITHUB}/releases/latest`}
+              target="_blank"
+              rel="noreferrer"
+              className="link-underline text-[12.5px] text-foreground/40 transition-colors hover:text-foreground"
+            >
+              Release notes
+            </a>
+          </div>
+        </Reveal>
       </div>
     </section>
   )
@@ -628,6 +608,8 @@ const ROUTES = [
       ["5.6 Sol", "Reasoning · 1m context", "OpenAI"],
       ["Opus 5", "Reasoning · 1m context", "Anthropic"],
       ["Gemini 3.6 Flash", "Fast · 1m context", "Google"],
+      ["Kimi K3", "Reasoning · 256k context", "Moonshot AI"],
+      ["GLM 5.3", "Reasoning · 1m context", "Z.AI"],
     ],
   },
   {
@@ -637,6 +619,8 @@ const ROUTES = [
     models: [
       ["5.6 Sol", "Reasoning · 1m context", "OpenAI"],
       ["5.6 Terra", "Reasoning · 1m context", "OpenAI"],
+      ["5.6 Luna", "Fast · 1m context", "OpenAI"],
+      ["GPT-5.5", "Reasoning · 1m context", "OpenAI"],
       ["GPT-5.4", "Reasoning · 400k context", "OpenAI"],
     ],
   },
@@ -646,8 +630,10 @@ const ROUTES = [
     detail: "Calls your providers directly",
     models: [
       ["Opus 5", "Reasoning · 1m context", "Anthropic"],
+      ["Gemini 3.6 Flash", "Fast · 1m context", "Google"],
       ["DeepSeek V4 Pro", "Reasoning · 1m context", "DeepSeek"],
       ["Kimi K3", "Reasoning · 256k context", "Moonshot AI"],
+      ["GLM 5.3", "Reasoning · 1m context", "Z.AI"],
     ],
   },
   {
@@ -657,6 +643,8 @@ const ROUTES = [
     models: [
       ["Your Ollama models", "Local · private", "Ollama"],
       ["Your LM Studio models", "Local · private", "LM Studio"],
+      ["Your llama.cpp models", "Local · private", "llama.cpp"],
+      ["Your vLLM models", "Local or remote endpoint", "vLLM"],
       ["OpenAI-compatible", "Local or remote endpoint", "Custom"],
     ],
   },
@@ -686,10 +674,7 @@ function ModelRouteVisual() {
       onBlur={() => (paused.current = false)}
     >
       <div className="flex items-center justify-between border-b border-border/55 px-5 py-4 sm:px-6">
-        <div>
-          <div className="text-[14px] text-foreground/90">Models</div>
-          <div className={`mt-1 ${CAPTION}`}>Choose a model, then choose how to access it.</div>
-        </div>
+        <div className="text-[14px] text-foreground/90">Models</div>
         <span className="flex items-center gap-2 font-terminal text-[10px] tracking-[0.08em] text-foreground/40">
           <span className="size-1.5 rounded-full bg-[hsl(92,36%,56%)]" /> LIVE
         </span>
@@ -713,20 +698,17 @@ function ModelRouteVisual() {
         ))}
       </div>
 
-      <div className="px-5 py-5 sm:px-6 sm:py-6">
+      <div className="px-5 py-4 sm:px-6 sm:py-5">
         <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="font-terminal text-[10px] uppercase tracking-[0.1em] text-foreground/35">Access</div>
-            <div className="mt-1.5 text-[15px] text-foreground/90">{route.label}</div>
-          </div>
-          <span className="border border-border/60 px-2.5 py-1 text-[11px] text-foreground/50">{route.detail}</span>
+          <div className="text-[14px] text-foreground/85">{route.label}</div>
+          <span className="text-[11px] text-foreground/40">{route.detail}</span>
         </div>
 
-        <div className="mt-5 border border-border/50">
+        <div className="mt-4 border border-border/50">
           {route.models.map(([name, detail, provider], modelIndex) => (
             <div
               key={`${route.id}-${name}`}
-              className={`flex w-full items-center justify-between gap-4 border-b border-border/45 px-4 py-3.5 text-left transition-colors last:border-b-0 ${
+              className={`flex w-full items-center justify-between gap-4 border-b border-border/45 px-4 py-2.5 text-left transition-colors last:border-b-0 ${
                 modelIndex === 0 ? "bg-foreground/[0.035]" : ""
               }`}
             >
@@ -858,55 +840,42 @@ function CritiqueVisual() {
   )
 }
 
-function ContextVisual() {
+function ProjectContextVisual() {
+  const sources = ["Papers", "Datasets", "Repositories", "Prior runs", "Lab notes", "Local files"]
+  const tools = ["Python", "R", "Shell", "Jupyter", "Scientific search", "Git", "Databases", "Lab software"]
+
   return (
-    <Visual label="source-grounded research">
-      <div className="mx-auto w-full max-w-[520px] space-y-4">
-        <div className="border border-border/55 bg-background/65 px-4 py-3 text-[13px] text-foreground/85">
-          What evidence would falsify the proposed mechanism?
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {["paper / methods", "dataset / cohort", "repo / analysis", "notes / prior attempt"].map((source) => (
+    <Visual label="project context / live">
+      <div className="py-3">
+        <div className="grid grid-cols-2 gap-px border border-border/50 bg-border/50 sm:grid-cols-3">
+          {sources.map((source) => (
             <div
               key={source}
-              className="border border-border/45 bg-background/50 px-3 py-2.5 font-terminal text-[10px] text-foreground/55"
+              className="flex items-center gap-2 bg-background/75 px-4 py-3.5 text-[12px] text-foreground/70"
             >
-              <span className="mr-2 text-[hsl(var(--accent-coral))]">●</span>
+              <span className="size-1.5 rounded-full bg-[hsl(var(--accent-coral))]/70" />
               {source}
             </div>
           ))}
         </div>
-        <div className="border-t border-border/45 pt-4 text-[12px] leading-[1.65] text-foreground/65">
-          The answer stays attached to the sources and the work that followed from them.
-        </div>
-      </div>
-    </Visual>
-  )
-}
 
-function LocalVisual() {
-  return (
-    <Visual label="local project / openscience">
-      <div className="grid gap-5 sm:grid-cols-[0.8fr_1.2fr]">
-        <div className="border border-border/45 bg-background/55 p-4 font-terminal text-[10px] leading-[1.9] text-foreground/55">
-          <div className="text-foreground/85">project/</div>
-          <div>├─ data/</div>
-          <div>├─ notebooks/</div>
-          <div>├─ results/</div>
-          <div>└─ manuscript.md</div>
-        </div>
-        <div className="border border-border/45 bg-background/55 p-4">
-          <div className="font-terminal text-[10px] text-foreground/40">model route</div>
-          <div className="mt-3 text-[14px] text-foreground/90">Use the model that fits the task.</div>
-          <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-foreground/60">
-            {["your provider", "local model", "managed model"].map((item) => (
-              <span key={item} className="border border-border/55 px-2.5 py-1.5">
-                {item}
-              </span>
-            ))}
+        <div className="mt-4 grid gap-4 sm:grid-cols-[0.72fr_1.28fr]">
+          <div className="border border-border/50 bg-background/65 p-4 font-terminal text-[10px] leading-[1.9] text-foreground/50">
+            <div className="mb-2 text-foreground/80">project/</div>
+            <div>├─ data/</div>
+            <div>├─ notebooks/</div>
+            <div>├─ results/</div>
+            <div>└─ manuscript.md</div>
           </div>
-          <div className="mt-5 text-[11px] leading-[1.6] text-foreground/50">
-            Files and credentials stay in the environment you control.
+          <div className="grid grid-cols-2 gap-px border border-border/50 bg-border/50 sm:grid-cols-4">
+            {tools.map((tool) => (
+              <div
+                key={tool}
+                className="flex min-h-12 items-center bg-background/65 px-3 text-[11px] text-foreground/55"
+              >
+                {tool}
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1067,70 +1036,42 @@ export default function Landing({
       <section id="sources" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
           <div className="grid grid-cols-12 items-stretch gap-8 lg:gap-12">
-            <Reveal className="order-2 col-span-12 self-center lg:order-1 lg:col-span-6">
-              <div className="h-[440px] overflow-hidden border border-border/40">
-                <ContextVisual />
-              </div>
-            </Reveal>
-            <Reveal delay={150} className="order-1 col-span-12 lg:order-2 lg:col-span-6">
-              <div className="dither-purple flex h-full min-h-[440px] flex-col justify-center border border-border/40 p-8 sm:p-12">
+            <Reveal className="col-span-12 lg:col-span-4">
+              <div className="dither-purple flex h-full min-h-[360px] flex-col justify-center border border-border/40 p-8 sm:min-h-[420px] sm:p-10 lg:min-h-[460px]">
                 <div className="dither-content">
                   <Eyebrow className="mb-6 text-foreground/70">Research context</Eyebrow>
-                  <h2 className={`text-balance ${H_HUGE} text-foreground`}>Read the record before making a claim.</h2>
-                  <p className={`mt-7 max-w-[40ch] ${P_BIG} text-foreground/85`}>
-                    Papers, datasets, repositories, and prior attempts become working context. The agent can search the
-                    scientific record directly and keep the trail from source to decision intact.
+                  <h2 className={`text-balance ${H_BIG} text-foreground`}>The whole project, in context.</h2>
+                  <p className={`mt-6 max-w-[28ch] ${P_BIG} text-foreground/85`}>
+                    Papers, data, code, notes, and prior runs stay connected to the work.
                   </p>
                 </div>
+              </div>
+            </Reveal>
+            <Reveal delay={150} className="col-span-12 self-center lg:col-span-8">
+              <div className="min-h-[460px] overflow-hidden border border-border/40 lg:h-[460px]">
+                <ProjectContextVisual />
               </div>
             </Reveal>
           </div>
         </div>
       </section>
 
-      <Section seed={4}>
-        <div className="grid grid-cols-12 items-stretch gap-8 lg:gap-12">
-          <Reveal className="col-span-12 self-center lg:col-span-5">
-            <Eyebrow className="mb-5">Grounded work</Eyebrow>
-            <h2 className={`text-balance ${H_BIG}`}>Your project is the context.</h2>
-            <p className={`mt-6 max-w-[42ch] ${P_BIG}`}>
-              OpenScience works across the materials researchers already use. It does not flatten a paper, a dataset,
-              and a failed run into the same anonymous search result.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-2 text-[13px]">
-              {["Literature", "Data", "Code", "Prior runs", "Lab notes"].map((item) => (
-                <span key={item} className="border border-border/60 bg-background/40 px-3 py-1.5 text-foreground/70">
-                  {item}
-                </span>
-              ))}
-            </div>
-          </Reveal>
-          <Reveal delay={150} className="col-span-12 lg:col-span-7">
-            <div className="h-[400px] overflow-hidden border border-border/40">
-              <LocalVisual />
-            </div>
-          </Reveal>
-        </div>
-      </Section>
-
       {/* ----------------------- MODEL FREEDOM ------------------------- */}
       <section id="models" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
           <div className="grid grid-cols-12 items-stretch gap-8 lg:gap-12">
-            <Reveal className="col-span-12 lg:col-span-6">
-              <div className="dither-blue flex h-full min-h-[440px] flex-col justify-center border border-border/40 p-8 sm:p-12">
+            <Reveal className="col-span-12 lg:col-span-4">
+              <div className="dither-blue flex h-full min-h-[360px] flex-col justify-center border border-border/40 p-8 sm:min-h-[420px] sm:p-10 lg:min-h-[460px]">
                 <div className="dither-content">
                   <Eyebrow className="mb-6 text-foreground/70">Model freedom</Eyebrow>
-                  <h2 className={`text-balance ${H_HUGE} text-foreground`}>Use the model the work deserves.</h2>
-                  <p className={`mt-7 max-w-[40ch] ${P_BIG} text-foreground/85`}>
-                    After signing in, choose local models, your own provider accounts, eligible ChatGPT access, or Ace.
-                    OpenScience shows how each model is connected before a session starts. The desktop and local runtime
-                    remain free; BYOK and ChatGPT remain separate from the Ace wallet.
+                  <h2 className={`text-balance ${H_BIG} text-foreground`}>Every model. One place.</h2>
+                  <p className={`mt-6 max-w-[30ch] ${P_BIG} text-foreground/85`}>
+                    Switch between Ace, ChatGPT, your own keys, and local models without leaving the workspace.
                   </p>
                 </div>
               </div>
             </Reveal>
-            <Reveal delay={150} className="col-span-12 self-center lg:col-span-6">
+            <Reveal delay={150} className="col-span-12 self-center lg:col-span-8">
               <ModelRouteVisual />
             </Reveal>
           </div>
@@ -1139,40 +1080,25 @@ export default function Landing({
 
       {/* ---------------------------- INSTALL -------------------------- */}
       <Section seed={8} id="terminal">
-        <div className="grid grid-cols-12 items-start gap-10 lg:gap-16">
-          <div className="col-span-12 lg:col-span-5">
-            <Reveal>
-              <Eyebrow className="mb-5">Command line</Eyebrow>
-              <h2 className={`text-balance ${H_BIG}`}>Prefer the terminal?</h2>
-            </Reveal>
-            <Reveal delay={150}>
-              <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
-                Install with npm or the shell installer, then run OpenScience from any project. Sessions and artifacts
-                stay on disk. Your own provider accounts connect directly; Ace is available when you want managed access
-                without configuring keys.
-              </p>
-              <div className="mt-7 flex flex-wrap gap-2 text-[13px]">
-                {["Your files", "Your keys", "Your environment"].map((item) => (
-                  <span key={item} className="border border-border/60 px-3 py-1.5 text-foreground/70">
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </Reveal>
-          </div>
-          <Reveal delay={200} className="col-span-12 lg:col-span-7">
-            <div className="flex flex-col items-start gap-3 lg:pt-2">
+        <div className="mx-auto max-w-[920px] text-center">
+          <Reveal>
+            <Eyebrow className="mb-5">Command line</Eyebrow>
+            <h2 className={`text-balance ${H_BIG}`}>Two commands. That is it.</h2>
+            <p className={`mx-auto mt-4 max-w-[34ch] ${P_BIG}`}>Install once, then run OpenScience from any project.</p>
+          </Reveal>
+          <Reveal delay={160}>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <CopyChip cmd={NPM_CMD} />
               <CopyChip cmd={CURL_CMD} />
-              <a
-                href={`${GITHUB}/releases`}
-                target="_blank"
-                rel="noreferrer"
-                className="link-underline mt-3 text-[13.5px] text-foreground/60 hover:text-foreground"
-              >
-                Binaries on GitHub Releases
-              </a>
             </div>
+            <a
+              href={`${GITHUB}/releases`}
+              target="_blank"
+              rel="noreferrer"
+              className="link-underline mt-5 inline-block text-[12.5px] text-foreground/45 hover:text-foreground"
+            >
+              All releases
+            </a>
           </Reveal>
         </div>
       </Section>
