@@ -26,6 +26,48 @@ const Result = z.object({
   releaseNotes: z.string().url(),
 })
 
+const InstallResult = Result.extend({
+  installed: z.boolean(),
+  restartRequired: z.boolean(),
+})
+
+type UpdateResult = z.infer<typeof Result>
+type UpdateInstallResult = z.infer<typeof InstallResult>
+
+export function supportsAutomaticUpdate(method: string) {
+  return ["curl", "npm", "pnpm", "yarn", "bun", "brew", "choco", "scoop"].includes(method)
+}
+
+export function createUpdateInstaller(input: {
+  resolve: () => Promise<UpdateResult>
+  upgrade: (method: Installation.Method, target: string) => Promise<void>
+}) {
+  const state: { pending?: Promise<UpdateInstallResult> } = {}
+  return () => {
+    if (state.pending) return state.pending
+    const pending = input.resolve().then(async (result) => {
+      if (!result.updateAvailable) {
+        return InstallResult.parse({ ...result, installed: false, restartRequired: false })
+      }
+      if (!supportsAutomaticUpdate(result.method)) {
+        throw new Error("Automatic updates are unavailable for this installation.")
+      }
+      await input.upgrade(result.method as Installation.Method, result.latest)
+      return InstallResult.parse({ ...result, installed: true, restartRequired: true })
+    })
+    state.pending = pending
+    void pending.then(
+      () => {
+        if (state.pending === pending) state.pending = undefined
+      },
+      () => {
+        if (state.pending === pending) state.pending = undefined
+      },
+    )
+    return pending
+  }
+}
+
 /**
  * Deduplicates startup/background update probes without making an explicit
  * manual check stale. Failed probes are never retained, so a transient package
@@ -82,6 +124,11 @@ const update = createUpdateCache({
   },
 })
 
+const install = createUpdateInstaller({
+  resolve: () => update(true),
+  upgrade: Installation.upgrade,
+})
+
 export const UpdatesSettingsRoutes = lazy(() =>
   new Hono()
     .get(
@@ -98,6 +145,22 @@ export const UpdatesSettingsRoutes = lazy(() =>
       }),
       async (c) => {
         return c.json(await update(c.req.query("refresh") === "1"))
+      },
+    )
+    .post(
+      "/",
+      describeRoute({
+        summary: "Install the latest OpenScience release",
+        operationId: "settings.updates.install",
+        responses: {
+          200: {
+            description: "Installation result",
+            content: { "application/json": { schema: resolver(InstallResult) } },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await install())
       },
     )
     .get("/releases", async (c) => {

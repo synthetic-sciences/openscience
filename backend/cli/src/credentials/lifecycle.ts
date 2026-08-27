@@ -53,6 +53,11 @@ export namespace CredentialLifecycle {
   let checking: Promise<boolean> | undefined
   let reconciliation: Promise<void> = Promise.resolve()
   let timer: ReturnType<typeof setInterval> | undefined
+  const retry: {
+    progress?: { token: string; refreshers: Set<Handler>; revokers: Set<Handler> }
+    retryAt: number
+    retryDelay: number
+  } = { retryAt: 0, retryDelay: 250 }
 
   function parse(value: unknown): Revision {
     if (!value || typeof value !== "object") throw new Error("credential revision is not an object")
@@ -120,9 +125,14 @@ export namespace CredentialLifecycle {
     return current
   }
 
-  async function run(handlers: Set<Handler>, event: Event): Promise<void> {
-    const results = await Promise.allSettled([...handlers].map((handler) => handler(event)))
-    const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+  async function run(handlers: Set<Handler>, complete: Set<Handler>, event: Event): Promise<void> {
+    const pending = [...handlers].filter((handler) => !complete.has(handler))
+    const results = await Promise.allSettled(pending.map((handler) => handler(event)))
+    const failures = results.flatMap((result, index) => {
+      if (result.status === "rejected") return [result.reason]
+      complete.add(pending[index]!)
+      return []
+    })
     if (failures.length) throw new AggregateError(failures, "Credential invalidation did not complete")
   }
 
@@ -130,9 +140,15 @@ export namespace CredentialLifecycle {
     const task = reconciliation.then(async () => {
       if (!local && seen === revision.token) return false
       const event = { token: revision.token, reason: revision.reason, pid: revision.pid }
-      await run(refreshers, event)
-      await run(revokers, event)
+      const current =
+        retry.progress?.token === revision.token
+          ? retry.progress
+          : { token: revision.token, refreshers: new Set<Handler>(), revokers: new Set<Handler>() }
+      retry.progress = current
+      await run(refreshers, current.refreshers, event)
+      await run(revokers, current.revokers, event)
       seen = revision.token
+      retry.progress = undefined
       return true
     })
     reconciliation = task.then(
@@ -273,7 +289,18 @@ export namespace CredentialLifecycle {
       void ensureFresh().catch((error) => log.warn("credential revision baseline failed", { error }))
       timer = setInterval(
         () => {
-          void ensureFresh().catch((error) => log.error("credential revision reconciliation failed", { error }))
+          if (Date.now() < retry.retryAt) return
+          void ensureFresh().then(
+            () => {
+              retry.retryAt = 0
+              retry.retryDelay = 250
+            },
+            (error) => {
+              retry.retryAt = Date.now() + retry.retryDelay
+              retry.retryDelay = Math.min(5_000, retry.retryDelay * 2)
+              log.error("credential revision reconciliation failed", { error })
+            },
+          )
         },
         Math.max(25, interval),
       )
@@ -285,6 +312,8 @@ export namespace CredentialLifecycle {
   export function stopWatching(): void {
     if (timer) clearInterval(timer)
     timer = undefined
+    retry.retryAt = 0
+    retry.retryDelay = 250
   }
 
   /** Exposed for narrow integration tests and sandbox deny-list construction. */

@@ -9,6 +9,7 @@ import type {
   AccountDeviceRevokeResponses,
   AccountDevicesResponses,
   AccountGetResponses,
+  AccountLoginBrowserResponses,
   AccountLoginKeyResponses,
   AccountLogoutResponses,
   AccountSessionResponses,
@@ -342,6 +343,7 @@ import type {
   SettingsStorageResetLocationResponses,
   SettingsStorageUsageResponses,
   SettingsUpdatesCheckResponses,
+  SettingsUpdatesInstallResponses,
   SettingsUsageGetResponses,
   SettingsWalletGetResponses,
   SubtaskPartInput,
@@ -701,6 +703,16 @@ export class Account extends HeyApiClient {
   public devices<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<AccountDevicesResponses, unknown, ThrowOnError>({
       url: "/account/devices",
+      ...options,
+    })
+  }
+
+  /**
+   * Sign in through the system browser
+   */
+  public loginBrowser<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<AccountLoginBrowserResponses, unknown, ThrowOnError>({
+      url: "/account/login-browser",
       ...options,
     })
   }
@@ -1679,6 +1691,7 @@ export class Preferences extends HeyApiClient {
       extra_budget_usd?: number
       show_trace?: boolean
       show_local_models?: boolean
+      desktop_onboarding_version?: number
       atlas_enabled?: boolean
       delegation_enabled?: boolean
       delegation_specialist?: string | null
@@ -1702,6 +1715,7 @@ export class Preferences extends HeyApiClient {
             { in: "body", key: "extra_budget_usd" },
             { in: "body", key: "show_trace" },
             { in: "body", key: "show_local_models" },
+            { in: "body", key: "desktop_onboarding_version" },
             { in: "body", key: "atlas_enabled" },
             { in: "body", key: "delegation_enabled" },
             { in: "body", key: "delegation_specialist" },
@@ -1793,6 +1807,16 @@ export class Updates extends HeyApiClient {
       ...options,
     })
   }
+
+  /**
+   * Install the latest OpenScience release
+   */
+  public install<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<SettingsUpdatesInstallResponses, unknown, ThrowOnError>({
+      url: "/settings/updates",
+      ...options,
+    })
+  }
 }
 
 export class Telemetry extends HeyApiClient {
@@ -1800,12 +1824,23 @@ export class Telemetry extends HeyApiClient {
    * Update OpenScience data-use consent
    */
   public update<ThrowOnError extends boolean = false>(
-    parameters: {
-      analyticsEnabled: boolean
+    parameters?: {
+      analyticsEnabled?: boolean
+      userOwnedContentEnabled?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "analyticsEnabled" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "analyticsEnabled" },
+            { in: "body", key: "userOwnedContentEnabled" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).put<SettingsResearchToolsTelemetryUpdateResponses, unknown, ThrowOnError>({
       url: "/settings/research-tools/telemetry",
       ...options,
@@ -3495,7 +3530,6 @@ export class Session extends HeyApiClient {
           modelID: string
         }
         autonomy?: "interactive" | "balanced" | "autonomous"
-        diversity?: "focused" | "balanced" | "exploratory"
       }
       system?: string
       variant?: string
@@ -3599,7 +3633,6 @@ export class Session extends HeyApiClient {
           modelID: string
         }
         autonomy?: "interactive" | "balanced" | "autonomous"
-        diversity?: "focused" | "balanced" | "exploratory"
       }
       system?: string
       variant?: string
@@ -3666,7 +3699,6 @@ export class Session extends HeyApiClient {
           modelID: string
         }
         autonomy?: "interactive" | "balanced" | "autonomous"
-        diversity?: "focused" | "balanced" | "exploratory"
       }
       variant?: string
       tier?: string

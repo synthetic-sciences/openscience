@@ -149,6 +149,9 @@ export namespace Installation {
       case "pnpm":
         cmd = $`pnpm install -g @synsci/openscience@${target}`
         break
+      case "yarn":
+        cmd = $`yarn global add @synsci/openscience@${target}`
+        break
       case "bun":
         cmd = $`bun install -g @synsci/openscience@${target}`
         break

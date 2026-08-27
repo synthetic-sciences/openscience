@@ -110,6 +110,19 @@ const platform: Platform = {
     const result = (await response.json()) as { updateAvailable: boolean; latest?: string }
     return { updateAvailable: result.updateAvailable, version: result.latest }
   },
+  update: async () => {
+    const url = resolveServerRoute("/settings/updates", server(), window.location.origin)
+    const response = await openscienceFetch(url, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    })
+    if (!response.ok) {
+      const detail = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+      throw new Error(detail?.error ?? `Update install failed (${response.status})`)
+    }
+    const result = (await response.json()) as { installed: boolean; restartRequired: boolean; latest?: string }
+    return { installed: result.installed, restartRequired: result.restartRequired, version: result.latest }
+  },
   getDefaultServerUrl: () => stored() ?? null,
   setDefaultServerUrl: (url) => {
     if (desktopUrl) return

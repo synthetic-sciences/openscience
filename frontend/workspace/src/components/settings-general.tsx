@@ -58,11 +58,22 @@ export const AppearanceSections: Component = () => {
   })
 
   const install = () => {
-    if (!platform.update || !platform.restart || store.installing) return
+    if (!platform.update || store.installing) return
     setStore("installing", true)
     void platform
       .update()
-      .then(() => platform.restart!())
+      .then((result) => {
+        setStore("installing", false)
+        setStore("available", undefined)
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: result.installed ? `OpenScience ${result.version ?? ""} installed` : "OpenScience is up to date",
+          description: result.restartRequired
+            ? "Restart the OpenScience command to finish the update."
+            : "You're running the latest version of OpenScience.",
+        })
+      })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
         showToast({ title: language.t("common.requestFailed"), description: message })
@@ -90,27 +101,23 @@ export const AppearanceSections: Component = () => {
 
         setStore("available", result.version ?? "Update available")
 
-        const actions =
-          platform.update && platform.restart
-            ? [
-                {
-                  label: language.t("toast.update.action.installRestart"),
-                  onClick: async () => {
-                    await platform.update!()
-                    await platform.restart!()
-                  },
-                },
-                {
-                  label: language.t("toast.update.action.notYet"),
-                  onClick: "dismiss" as const,
-                },
-              ]
-            : [
-                {
-                  label: language.t("toast.update.action.notYet"),
-                  onClick: "dismiss" as const,
-                },
-              ]
+        const actions = platform.update
+          ? [
+              {
+                label: "Install update",
+                onClick: install,
+              },
+              {
+                label: language.t("toast.update.action.notYet"),
+                onClick: "dismiss" as const,
+              },
+            ]
+          : [
+              {
+                label: language.t("toast.update.action.notYet"),
+                onClick: "dismiss" as const,
+              },
+            ]
 
         showToast({
           persistent: true,
@@ -411,7 +418,7 @@ export const AppearanceSections: Component = () => {
             description={language.t("settings.updates.row.check.description")}
           >
             <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
-              <Show when={store.available && platform.update && platform.restart}>
+              <Show when={store.available && platform.update}>
                 <Button size="small" variant="primary" disabled={store.installing} onClick={install}>
                   {store.installing ? "Installing…" : `Install ${store.available}`}
                 </Button>

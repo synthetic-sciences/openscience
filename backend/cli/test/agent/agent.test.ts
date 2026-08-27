@@ -52,10 +52,11 @@ function generationTelemetrySpies() {
   const userMessage = spyOn(OutboundTelemetry, "userMessage").mockResolvedValue(true)
   const modelRequest = spyOn(OutboundTelemetry, "modelRequest").mockResolvedValue(true)
   const modelResponse = spyOn(OutboundTelemetry, "modelResponse").mockResolvedValue(true)
+  const modelUsage = spyOn(OutboundTelemetry, "modelUsage").mockResolvedValue(true)
   const error = spyOn(OutboundTelemetry, "error").mockResolvedValue(true)
   const sessionCompleted = spyOn(OutboundTelemetry, "sessionCompleted").mockResolvedValue(true)
-  restores.push(sessionStarted, userMessage, modelRequest, modelResponse, error, sessionCompleted)
-  return { sessionStarted, userMessage, modelRequest, modelResponse, error, sessionCompleted }
+  restores.push(sessionStarted, userMessage, modelRequest, modelResponse, modelUsage, error, sessionCompleted)
+  return { sessionStarted, userMessage, modelRequest, modelResponse, modelUsage, error, sessionCompleted }
 }
 
 test("returns default native agents when no config", async () => {
@@ -965,6 +966,17 @@ test("agent configuration generation emits one canonical ephemeral model trace a
         model: "anthropic/claude-test",
         parts: [{ type: "json", value: output }],
       })
+      expect(telemetry.modelUsage).toHaveBeenCalledWith({
+        sessionID: started?.sessionID,
+        messageID: user?.messageID,
+        operationID: "agent-config-generation",
+        attempt: 1,
+        route: "byok",
+        provider: "openrouter",
+        model: "anthropic/claude-test",
+        tokens: { input: 20, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
+        cost: 0,
+      })
       expect(telemetry.error).not.toHaveBeenCalled()
       expect(telemetry.sessionCompleted).toHaveBeenCalledWith({
         sessionID: started?.sessionID,
@@ -1028,6 +1040,12 @@ test("OAuth configuration generation traces the streamObject response without pr
         model: "gpt-test",
         parts: [{ type: "json", value: output }],
       })
+      expect(telemetry.modelUsage.mock.calls[0]?.[0]).toMatchObject({
+        route: "subscription",
+        provider: "openai",
+        model: "gpt-test",
+        tokens: { input: 20, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
       expect(telemetry.error).not.toHaveBeenCalled()
     },
   })
@@ -1057,6 +1075,7 @@ test("agent configuration generation records provider errors under the model req
 
       const request = telemetry.modelRequest.mock.calls[0]?.[0]
       expect(telemetry.modelResponse).not.toHaveBeenCalled()
+      expect(telemetry.modelUsage).not.toHaveBeenCalled()
       expect(telemetry.error).toHaveBeenCalledTimes(1)
       expect(telemetry.error.mock.calls[0]?.[0]).toMatchObject({
         sessionID: request?.sessionID,

@@ -1,9 +1,13 @@
-import { createEffect, onCleanup, type Component } from "solid-js"
+import { Show, createEffect, onCleanup, type Component } from "solid-js"
+import { createStore } from "solid-js/store"
+import { Button } from "@synsci/ui/button"
+import { Icon } from "@synsci/ui/icon"
+import { useDialog } from "@synsci/ui/context/dialog"
 import { showToast } from "@synsci/ui/toast"
-import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
-import { URLS } from "@/config/urls"
+import { DialogSettings } from "@/components/dialog-settings"
+import "./startup-update.css"
 
 type UpdateResult = { updateAvailable: boolean; version?: string }
 
@@ -45,9 +49,49 @@ export function queueStartupUpdateCheck(input: {
 export const StartupUpdateCheck: Component = () => {
   const platform = usePlatform()
   const settings = useSettings()
-  const language = useLanguage()
+  const dialog = useDialog()
+  const [store, setStore] = createStore({
+    available: undefined as string | undefined,
+    dismissed: false,
+    installing: false,
+    installed: false,
+  })
   let queued = false
   let cancel = () => {}
+
+  const install = async () => {
+    if (!platform.update || store.installing) return
+    setStore("installing", true)
+    await platform
+      .update()
+      .then((result) => {
+        if (!result.installed) {
+          setStore({ dismissed: true, installing: false })
+          showToast({
+            variant: "success",
+            icon: "circle-check",
+            title: "OpenScience is up to date",
+            description: "You're running the latest version of OpenScience.",
+          })
+          return
+        }
+        setStore({ installed: true, installing: false })
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: `OpenScience ${result.version ?? store.available ?? ""} installed`,
+          description: "Restart the OpenScience command to finish the update.",
+        })
+      })
+      .catch((error: unknown) => {
+        setStore("installing", false)
+        showToast({
+          variant: "error",
+          title: "Update failed",
+          description: error instanceof Error ? error.message : String(error),
+        })
+      })
+  }
 
   createEffect(() => {
     if (queued || !settings.ready()) return
@@ -56,28 +100,47 @@ export const StartupUpdateCheck: Component = () => {
       enabled: settings.updates.startup(),
       check: platform.checkUpdate,
       notify: (result) => {
-        showToast({
-          persistent: true,
-          icon: "download",
-          title: language.t("toast.update.title"),
-          description: language.t("toast.update.description", { version: result.version ?? "" }),
-          actions: [
-            {
-              label: language.t("settings.general.row.releaseNotes.title"),
-              onClick: () => platform.openLink(URLS.releases),
-            },
-            {
-              label: language.t("toast.update.action.notYet"),
-              onClick: "dismiss",
-            },
-          ],
-        })
+        setStore({ available: result.version ?? "latest", dismissed: false })
       },
     })
   })
 
   onCleanup(() => cancel())
-  return null
+  return (
+    <Show when={store.available && !store.dismissed}>
+      <aside class="startup-update" aria-label="OpenScience update available" aria-live="polite">
+        <span class="startup-update__icon" aria-hidden="true">
+          <Icon name={store.installed ? "circle-check" : "download"} size="small" />
+        </span>
+        <span class="startup-update__copy">
+          <strong>{store.installed ? "Update installed" : `OpenScience ${store.available} is ready`}</strong>
+          <small>
+            {store.installed ? "Restart OpenScience to finish." : "Install it now or manage updates in Customize."}
+          </small>
+        </span>
+        <Show when={!store.installed && platform.update}>
+          <Button size="small" variant="primary" disabled={store.installing} onClick={() => void install()}>
+            {store.installing ? "Installing…" : "Update"}
+          </Button>
+        </Show>
+        <Button
+          size="small"
+          variant="secondary"
+          onClick={() => dialog.show(() => <DialogSettings initial="general" />)}
+        >
+          Customize
+        </Button>
+        <button
+          type="button"
+          class="startup-update__dismiss"
+          aria-label="Dismiss update notice"
+          onClick={() => setStore("dismissed", true)}
+        >
+          <Icon name="close" size="small" />
+        </button>
+      </aside>
+    </Show>
+  )
 }
 
 export default StartupUpdateCheck

@@ -667,6 +667,20 @@ export namespace Agent {
           tokens,
           finish,
         }).catch(() => false)
+        if (tokens) {
+          const usage = await import("@/session").then((module) => module.Session.getUsage({ model, usage: tokens }))
+          await OutboundTelemetry.modelUsage({
+            sessionID,
+            messageID,
+            operationID: "agent-config-generation",
+            attempt: 1,
+            route,
+            provider: model.providerID,
+            model: model.id,
+            tokens: usage.tokens,
+            cost: usage.cost,
+          }).catch(() => false)
+        }
         outcome = "completed"
         return object
       }
@@ -683,6 +697,18 @@ export namespace Agent {
         parts: [{ type: "json", value: result.object }],
         tokens: result.usage,
         finish: result.finishReason,
+      }).catch(() => false)
+      const usage = await import("@/session").then((module) => module.Session.getUsage({ model, usage: result.usage }))
+      await OutboundTelemetry.modelUsage({
+        sessionID,
+        messageID,
+        operationID: "agent-config-generation",
+        attempt: 1,
+        route,
+        provider: model.providerID,
+        model: model.id,
+        tokens: usage.tokens,
+        cost: usage.cost,
       }).catch(() => false)
       outcome = "completed"
       return result.object

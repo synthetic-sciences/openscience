@@ -842,6 +842,41 @@
         ]
       }
     },
+    "/account/login-browser": {
+      "post": {
+        "operationId": "account.loginBrowser",
+        "summary": "Sign in through the system browser",
+        "responses": {
+          "200": {
+            "description": "Login result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.loginBrowser({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/account/login-key": {
       "post": {
         "operationId": "account.loginKey",
@@ -7733,6 +7768,9 @@
                           },
                           "volume": {
                             "type": "string"
+                          },
+                          "retained_volume": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -10168,6 +10206,9 @@
                         },
                         "volume": {
                           "type": "string"
+                        },
+                        "retained_volume": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -13569,6 +13610,9 @@
                         },
                         "volume": {
                           "type": "string"
+                        },
+                        "retained_volume": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -16033,6 +16077,9 @@
                         },
                         "volume": {
                           "type": "string"
+                        },
+                        "retained_volume": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -18497,6 +18544,9 @@
                         },
                         "volume": {
                           "type": "string"
+                        },
+                        "retained_volume": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -18739,6 +18789,12 @@
                       "default": true,
                       "type": "boolean"
                     },
+                    "desktop_onboarding_version": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "atlas_enabled": {
                       "default": false,
                       "type": "boolean"
@@ -18865,6 +18921,12 @@
                       "default": true,
                       "type": "boolean"
                     },
+                    "desktop_onboarding_version": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "atlas_enabled": {
                       "default": false,
                       "type": "boolean"
@@ -18948,7 +19010,6 @@
                 "type": "object",
                 "properties": {
                   "reasoning_effort": {
-                    "default": "medium",
                     "type": "string",
                     "enum": [
                       "minimal",
@@ -18958,7 +19019,6 @@
                     ]
                   },
                   "intent": {
-                    "default": "non-commercial",
                     "type": "string",
                     "enum": [
                       "commercial",
@@ -18966,29 +19026,27 @@
                     ]
                   },
                   "extra_budget_usd": {
-                    "description": "@deprecated No billing effect. OpenScience compute is user-owned.",
-                    "default": 0,
                     "type": "number",
                     "minimum": 0
                   },
                   "show_trace": {
-                    "default": false,
                     "type": "boolean"
                   },
                   "show_local_models": {
-                    "default": true,
                     "type": "boolean"
                   },
+                  "desktop_onboarding_version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
                   "atlas_enabled": {
-                    "default": false,
                     "type": "boolean"
                   },
                   "delegation_enabled": {
-                    "default": true,
                     "type": "boolean"
                   },
                   "delegation_specialist": {
-                    "default": null,
                     "anyOf": [
                       {
                         "type": "string"
@@ -18999,7 +19057,6 @@
                     ]
                   },
                   "delegation_level": {
-                    "default": "standard",
                     "type": "string",
                     "enum": [
                       "off",
@@ -19009,7 +19066,6 @@
                     ]
                   },
                   "delegation_worker_model": {
-                    "default": null,
                     "anyOf": [
                       {
                         "type": "object",
@@ -19032,7 +19088,6 @@
                     ]
                   },
                   "delegation_autonomy": {
-                    "default": "balanced",
                     "type": "string",
                     "enum": [
                       "interactive",
@@ -19041,7 +19096,6 @@
                     ]
                   },
                   "delegation_diversity": {
-                    "default": "balanced",
                     "type": "string",
                     "enum": [
                       "focused",
@@ -19696,6 +19750,65 @@
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.check({\n  ...\n})"
           }
         ]
+      },
+      "post": {
+        "operationId": "settings.updates.install",
+        "summary": "Install the latest OpenScience release",
+        "responses": {
+          "200": {
+            "description": "Installation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "string"
+                    },
+                    "latest": {
+                      "type": "string"
+                    },
+                    "channel": {
+                      "type": "string"
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "updateAvailable": {
+                      "type": "boolean"
+                    },
+                    "releaseNotes": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "installed": {
+                      "type": "boolean"
+                    },
+                    "restartRequired": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "latest",
+                    "channel",
+                    "method",
+                    "updateAvailable",
+                    "releaseNotes",
+                    "installed",
+                    "restartRequired"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.install({\n  ...\n})"
+          }
+        ]
       }
     },
     "/settings/research-tools": {
@@ -19851,6 +19964,9 @@
                         "researchContentEnabled": {
                           "type": "boolean"
                         },
+                        "userOwnedContentEnabled": {
+                          "type": "boolean"
+                        },
                         "source": {
                           "type": "string",
                           "enum": [
@@ -19873,17 +19989,30 @@
                         },
                         "deletionAvailable": {
                           "type": "boolean"
+                        },
+                        "queuedEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quarantinedEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
                         "analyticsEnabled",
                         "researchContentEnabled",
+                        "userOwnedContentEnabled",
                         "source",
                         "signedIn",
                         "consentVersion",
                         "pending",
                         "corrupt",
-                        "deletionAvailable"
+                        "deletionAvailable",
+                        "queuedEvents",
+                        "quarantinedEvents"
                       ]
                     }
                   },
@@ -20059,6 +20188,9 @@
                         "researchContentEnabled": {
                           "type": "boolean"
                         },
+                        "userOwnedContentEnabled": {
+                          "type": "boolean"
+                        },
                         "source": {
                           "type": "string",
                           "enum": [
@@ -20081,17 +20213,30 @@
                         },
                         "deletionAvailable": {
                           "type": "boolean"
+                        },
+                        "queuedEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quarantinedEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
                         "analyticsEnabled",
                         "researchContentEnabled",
+                        "userOwnedContentEnabled",
                         "source",
                         "signedIn",
                         "consentVersion",
                         "pending",
                         "corrupt",
-                        "deletionAvailable"
+                        "deletionAvailable",
+                        "queuedEvents",
+                        "quarantinedEvents"
                       ]
                     }
                   },
@@ -20114,11 +20259,11 @@
                 "properties": {
                   "analyticsEnabled": {
                     "type": "boolean"
+                  },
+                  "userOwnedContentEnabled": {
+                    "type": "boolean"
                   }
-                },
-                "required": [
-                  "analyticsEnabled"
-                ]
+                }
               }
             }
           }
@@ -26254,15 +26399,6 @@
                           "balanced",
                           "autonomous"
                         ]
-                      },
-                      "diversity": {
-                        "default": "balanced",
-                        "type": "string",
-                        "enum": [
-                          "focused",
-                          "balanced",
-                          "exploratory"
-                        ]
                       }
                     }
                   },
@@ -26698,15 +26834,6 @@
                           "balanced",
                           "autonomous"
                         ]
-                      },
-                      "diversity": {
-                        "default": "balanced",
-                        "type": "string",
-                        "enum": [
-                          "focused",
-                          "balanced",
-                          "exploratory"
-                        ]
                       }
                     }
                   },
@@ -26890,15 +27017,6 @@
                           "interactive",
                           "balanced",
                           "autonomous"
-                        ]
-                      },
-                      "diversity": {
-                        "default": "balanced",
-                        "type": "string",
-                        "enum": [
-                          "focused",
-                          "balanced",
-                          "exploratory"
                         ]
                       }
                     }
@@ -47862,6 +47980,12 @@
                       "capability": {
                         "type": "string"
                       },
+                      "allowed_tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "requirements": {
                         "type": "object",
                         "properties": {
@@ -48007,6 +48131,12 @@
                     },
                     "capability": {
                       "type": "string"
+                    },
+                    "allowed_tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "requirements": {
                       "type": "object",
@@ -49126,6 +49256,13 @@
                   },
                   "transaction": {
                     "type": "string"
+                  },
+                  "progress": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "repair": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -49229,15 +49366,6 @@
                   "interactive",
                   "balanced",
                   "autonomous"
-                ]
-              },
-              "diversity": {
-                "default": "balanced",
-                "type": "string",
-                "enum": [
-                  "focused",
-                  "balanced",
-                  "exploratory"
                 ]
               }
             }

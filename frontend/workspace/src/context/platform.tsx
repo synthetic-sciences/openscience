@@ -45,8 +45,8 @@ export type Platform = {
   /** Check for updates (Tauri only) */
   checkUpdate?(options?: { refresh?: boolean }): Promise<{ updateAvailable: boolean; version?: string }>
 
-  /** Install updates (Tauri only) */
-  update?(): Promise<void>
+  /** Install the latest update through the local OpenScience server */
+  update?(): Promise<{ installed: boolean; restartRequired: boolean; version?: string }>
 
   /** Fetch override */
   fetch?: typeof fetch

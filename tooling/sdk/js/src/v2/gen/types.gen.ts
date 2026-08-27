@@ -233,6 +233,8 @@ export type UserMessage = {
         text: string
         epoch: string
         transaction: string
+        progress?: string
+        repair?: boolean
       }
     | {
         type: "compaction"
@@ -255,7 +257,6 @@ export type UserMessage = {
       modelID: string
     }
     autonomy?: "interactive" | "balanced" | "autonomous"
-    diversity?: "focused" | "balanced" | "exploratory"
   }
   variant?: string
   tier?: string
@@ -2881,6 +2882,25 @@ export type AccountBillingModeSetResponses = {
 
 export type AccountBillingModeSetResponse = AccountBillingModeSetResponses[keyof AccountBillingModeSetResponses]
 
+export type AccountLoginBrowserData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/login-browser"
+}
+
+export type AccountLoginBrowserResponses = {
+  /**
+   * Login result
+   */
+  200: {
+    ok: boolean
+    error?: string
+  }
+}
+
+export type AccountLoginBrowserResponse = AccountLoginBrowserResponses[keyof AccountLoginBrowserResponses]
+
 export type AccountLoginKeyData = {
   body?: {
     key: string
@@ -4803,6 +4823,7 @@ export type SettingsComputeJobsListResponses = {
       approval: string
       sdk: string
       volume?: string
+      retained_volume?: boolean
     }
     ssh?: {
       protocol: 1
@@ -5561,6 +5582,7 @@ export type SettingsComputeJobsStartResponses = {
       approval: string
       sdk: string
       volume?: string
+      retained_volume?: boolean
     }
     ssh?: {
       protocol: 1
@@ -6519,6 +6541,7 @@ export type SettingsComputeJobsRetryResponses = {
       approval: string
       sdk: string
       volume?: string
+      retained_volume?: boolean
     }
     ssh?: {
       protocol: 1
@@ -7247,6 +7270,7 @@ export type SettingsComputeJobsReleaseResponses = {
       approval: string
       sdk: string
       volume?: string
+      retained_volume?: boolean
     }
     ssh?: {
       protocol: 1
@@ -7971,6 +7995,7 @@ export type SettingsComputeJobsCancelResponses = {
       approval: string
       sdk: string
       volume?: string
+      retained_volume?: boolean
     }
     ssh?: {
       protocol: 1
@@ -8027,6 +8052,7 @@ export type SettingsPreferencesGetResponses = {
     extra_budget_usd?: number
     show_trace?: boolean
     show_local_models?: boolean
+    desktop_onboarding_version?: number
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
@@ -8046,12 +8072,10 @@ export type SettingsPreferencesUpdateData = {
   body?: {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
-    /**
-     * @deprecated No billing effect. OpenScience compute is user-owned.
-     */
     extra_budget_usd?: number
     show_trace?: boolean
     show_local_models?: boolean
+    desktop_onboarding_version?: number
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
@@ -8081,6 +8105,7 @@ export type SettingsPreferencesUpdateResponses = {
     extra_budget_usd?: number
     show_trace?: boolean
     show_local_models?: boolean
+    desktop_onboarding_version?: number
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
@@ -8323,6 +8348,31 @@ export type SettingsUpdatesCheckResponses = {
 
 export type SettingsUpdatesCheckResponse = SettingsUpdatesCheckResponses[keyof SettingsUpdatesCheckResponses]
 
+export type SettingsUpdatesInstallData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/updates"
+}
+
+export type SettingsUpdatesInstallResponses = {
+  /**
+   * Installation result
+   */
+  200: {
+    current: string
+    latest: string
+    channel: string
+    method: string
+    updateAvailable: boolean
+    releaseNotes: string
+    installed: boolean
+    restartRequired: boolean
+  }
+}
+
+export type SettingsUpdatesInstallResponse = SettingsUpdatesInstallResponses[keyof SettingsUpdatesInstallResponses]
+
 export type SettingsResearchToolsGetData = {
   body?: never
   path?: never
@@ -8370,12 +8420,15 @@ export type SettingsResearchToolsGetResponses = {
     telemetry: {
       analyticsEnabled: boolean
       researchContentEnabled: boolean
+      userOwnedContentEnabled: boolean
       source: "default" | "local" | "account"
       signedIn: boolean
       consentVersion: string
       pending: boolean
       corrupt: boolean
       deletionAvailable: boolean
+      queuedEvents: number
+      quarantinedEvents: number
     }
   }
 }
@@ -8385,7 +8438,8 @@ export type SettingsResearchToolsGetResponse =
 
 export type SettingsResearchToolsTelemetryUpdateData = {
   body?: {
-    analyticsEnabled: boolean
+    analyticsEnabled?: boolean
+    userOwnedContentEnabled?: boolean
   }
   path?: never
   query?: never
@@ -8432,12 +8486,15 @@ export type SettingsResearchToolsTelemetryUpdateResponses = {
     telemetry: {
       analyticsEnabled: boolean
       researchContentEnabled: boolean
+      userOwnedContentEnabled: boolean
       source: "default" | "local" | "account"
       signedIn: boolean
       consentVersion: string
       pending: boolean
       corrupt: boolean
       deletionAvailable: boolean
+      queuedEvents: number
+      quarantinedEvents: number
     }
   }
 }
@@ -10502,7 +10559,6 @@ export type SessionPromptData = {
         modelID: string
       }
       autonomy?: "interactive" | "balanced" | "autonomous"
-      diversity?: "focused" | "balanced" | "exploratory"
     }
     system?: string
     variant?: string
@@ -10701,7 +10757,6 @@ export type SessionPromptAsyncData = {
         modelID: string
       }
       autonomy?: "interactive" | "balanced" | "autonomous"
-      diversity?: "focused" | "balanced" | "exploratory"
     }
     system?: string
     variant?: string
@@ -10758,7 +10813,6 @@ export type SessionCommandData = {
         modelID: string
       }
       autonomy?: "interactive" | "balanced" | "autonomous"
-      diversity?: "focused" | "balanced" | "exploratory"
     }
     variant?: string
     tier?: string
@@ -16464,6 +16518,7 @@ export type AppSkillsResponses = {
     tags?: Array<string>
     role?: "workflow" | "support"
     capability?: string
+    allowed_tools?: Array<string>
     requirements?: {
       all?: Array<string>
       any?: Array<string>
@@ -16528,6 +16583,7 @@ export type AppSkillWriteResponses = {
     tags?: Array<string>
     role?: "workflow" | "support"
     capability?: string
+    allowed_tools?: Array<string>
     requirements?: {
       all?: Array<string>
       any?: Array<string>
