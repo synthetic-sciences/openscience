@@ -86,10 +86,14 @@ describe("OpenScience landing contract", () => {
   test("keeps one three-item navigation across the landing and download pages", () => {
     expect(landing).toContain("<Nav />")
     expect(download).toContain('<Nav current="download" />')
+    expect(landing).toContain("items-center justify-center")
+    expect(download).toContain("items-center justify-center")
     expect(nav).toContain('label: "Download"')
     expect(nav).toContain('label: "Docs"')
     expect(nav).toContain('label: "GitHub"')
     expect(nav).toContain('aria-label="Primary navigation"')
+    expect(nav).toContain("bg-background/70")
+    expect(nav).toContain("text-foreground/80")
   })
 
   test("does not use long dashes in public landing copy", () => {

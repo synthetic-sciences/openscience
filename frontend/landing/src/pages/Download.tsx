@@ -248,10 +248,14 @@ export default function Download({
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[720px] graticule opacity-[0.055]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[640px] bg-[radial-gradient(ellipse_at_top,hsl(var(--accent-coral)/0.065),transparent_58%)]" />
 
-      <header className="relative z-20 mx-auto flex h-20 w-full max-w-[1180px] items-center justify-between px-6 sm:px-10">
-        <a href="/" className="inline-flex min-h-11 items-center gap-2.5 text-foreground" aria-label="OpenScience home">
+      <header className="relative z-20 mx-auto flex h-20 w-full max-w-[1180px] items-center justify-center px-6 sm:px-10">
+        <a
+          href="/"
+          className="absolute left-6 inline-flex min-h-11 items-center gap-2.5 text-foreground sm:left-10"
+          aria-label="OpenScience home"
+        >
           <Mark />
-          <span className="font-display text-[21px] leading-none tracking-tight">openscience</span>
+          <span className="hidden font-display text-[21px] leading-none tracking-tight sm:inline">openscience</span>
         </a>
         <Nav current="download" />
       </header>

@@ -6,7 +6,10 @@ const LINKS = [
 
 export default function Nav({ current }: { current?: "download" }) {
   return (
-    <nav className="flex items-center gap-0.5 text-[12.5px] sm:gap-1 sm:text-[13px]" aria-label="Primary navigation">
+    <nav
+      className="flex items-center gap-0.5 rounded-full border border-foreground/10 bg-background/70 px-1 text-[13.5px] font-bold tracking-[0.01em] shadow-[0_10px_32px_rgba(0,0,0,0.28)] backdrop-blur-md sm:gap-1 sm:text-[14px]"
+      aria-label="Primary navigation"
+    >
       {LINKS.map((link) => {
         const active = current === link.id
         return (
@@ -16,7 +19,7 @@ export default function Nav({ current }: { current?: "download" }) {
             className={`relative inline-flex min-h-11 items-center px-2.5 transition-colors after:absolute after:inset-x-2.5 after:bottom-1 after:h-px after:bg-[hsl(var(--accent-coral))] after:transition-transform sm:px-3 sm:after:inset-x-3 ${
               active
                 ? "text-foreground after:scale-x-100"
-                : "text-foreground/55 after:scale-x-0 hover:text-foreground hover:after:scale-x-100"
+                : "text-foreground/80 after:scale-x-0 hover:text-foreground hover:after:scale-x-100"
             }`}
             aria-current={active ? "page" : undefined}
             {...("external" in link ? { target: "_blank", rel: "noreferrer" } : {})}

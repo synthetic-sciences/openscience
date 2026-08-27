@@ -325,7 +325,7 @@ function Hero() {
         }}
       />
 
-      <div className="absolute inset-x-0 top-0 z-20 mx-auto flex h-20 w-full max-w-[1400px] items-center justify-end px-6 sm:px-10">
+      <div className="absolute inset-x-0 top-0 z-20 mx-auto flex h-20 w-full max-w-[1400px] items-center justify-center px-6 sm:px-10">
         <Nav />
       </div>
 
