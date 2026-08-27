@@ -25,6 +25,24 @@ import { SkillCatalog } from "./catalog"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
+  const AllowedTools = z
+    .union([z.string(), z.array(z.string())])
+    .transform((value) => (Array.isArray(value) ? value : value.split(/[\s,]+/)))
+    .transform((value) =>
+      [
+        ...new Set(
+          value.map((item) =>
+            item
+              .trim()
+              .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+              .replace(/[-\s]+/g, "_")
+              .toLowerCase(),
+          ),
+        ),
+      ]
+        .filter(Boolean)
+        .filter((item) => /^[a-z0-9][a-z0-9_]*$/.test(item)),
+    )
   export const Info = z.object({
     name: z.string(),
     description: z.string(),
@@ -33,6 +51,10 @@ export namespace Skill {
     tags: z.array(z.string()).optional(),
     role: SkillCatalog.Role.optional(),
     capability: z.string().optional(),
+    /** Provider-facing capabilities this skill may request after the user
+     *  loads it. This only affects visibility; normal tool permissions remain
+     *  authoritative at execution time. */
+    allowed_tools: z.array(z.string()).optional(),
     requirements: z.object({ all: z.array(z.string()).optional(), any: z.array(z.string()).optional() }).optional(),
     catalog_status: SkillCatalog.Status.optional(),
     upstream: SkillCatalog.Upstream.optional(),
@@ -51,9 +73,14 @@ export namespace Skill {
     tags: true,
     role: true,
     capability: true,
+    allowed_tools: true,
     requirements: true,
     entry: true,
-  }).extend({ disabled: z.boolean().optional() })
+  }).extend({
+    "allowed-tools": AllowedTools.optional(),
+    allowed_tools: AllowedTools.optional(),
+    disabled: z.boolean().optional(),
+  })
 
   export const Event = {
     Updated: BusEvent.define("skill.updated", z.object({})),
@@ -126,6 +153,7 @@ export namespace Skill {
       tags: parsed.data.tags,
       role: parsed.data.role ?? catalog?.role,
       capability: parsed.data.capability ?? catalog?.capability,
+      allowed_tools: parsed.data.allowed_tools ?? parsed.data["allowed-tools"],
       requirements: parsed.data.requirements ?? catalog?.requirements,
       catalog_status: catalog?.status,
       upstream: catalog?.upstream,
@@ -473,6 +501,7 @@ export namespace Skill {
         tags: parsed.data.tags,
         role: parsed.data.role ?? SkillCatalog.get(parsed.data.name)?.role,
         capability: parsed.data.capability ?? SkillCatalog.get(parsed.data.name)?.capability,
+        allowed_tools: parsed.data.allowed_tools ?? parsed.data["allowed-tools"],
         requirements: parsed.data.requirements ?? SkillCatalog.get(parsed.data.name)?.requirements,
         catalog_status: SkillCatalog.get(parsed.data.name)?.status,
         upstream: SkillCatalog.get(parsed.data.name)?.upstream,

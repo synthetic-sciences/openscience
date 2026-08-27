@@ -232,6 +232,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         metadata: {
           name: skill.name,
           ...(skill.capability ? { capability: skill.capability } : {}),
+          ...(skill.allowed_tools?.length ? { allowedTools: skill.allowed_tools } : {}),
           dir,
           matches: [],
         },

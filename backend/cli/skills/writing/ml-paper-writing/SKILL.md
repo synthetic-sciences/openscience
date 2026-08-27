@@ -13,6 +13,28 @@ dependencies: [semanticscholar, arxiv, habanero, requests]
 
 Expert-level guidance for writing publication-ready papers targeting **NeurIPS, ICML, ICLR, ACL, AAAI, and COLM**. This skill combines writing philosophy from top researchers (Nanda, Farquhar, Karpathy, Lipton, Steinhardt) with practical tools: LaTeX templates, citation verification APIs, and conference checklists.
 
+## Refinement mode (takes precedence for an existing manuscript)
+
+When the user asks to refine, polish, edit, shorten, format, or improve an
+existing paper, treat that request as a bounded edit—not as permission to start
+a new research program.
+
+1. Read the manuscript, relevant source files, and the specific figures or
+   sections named by the user.
+2. Make the requested changes first and preserve unaffected claims, citations,
+   experiments, and figures.
+3. Do not automatically launch literature review, citation audit, peer review,
+   new experiments, statistical re-analysis, or figure regeneration.
+4. Expand scope only when the user explicitly asks, or when a requested edit
+   would otherwise preserve a demonstrably false or unsupported claim. In that
+   case, explain the narrow issue and fix only what is necessary.
+5. Use existing verified bibliography entries when possible. Verify a new
+   citation only when the edit actually introduces one.
+
+An explicit slash invocation of this skill controls the workflow scope. Do not
+add adjacent writing or review skills merely because their descriptions share
+words with the request.
+
 ## Core Philosophy: Collaborative Writing
 
 **Paper writing is collaborative, but Claude should be proactive in delivering drafts.**
@@ -935,4 +957,3 @@ See [templates/README.md](templates/README.md) for detailed setup instructions.
 **APIs:** [Semantic Scholar](https://api.semanticscholar.org/api-docs/) | [CrossRef](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) | [arXiv](https://info.arxiv.org/help/api/basics.html)
 
 **Venues:** [NeurIPS](https://neurips.cc/Conferences/2025/PaperInformation/StyleFiles) | [ICML](https://icml.cc/Conferences/2025/AuthorInstructions) | [ICLR](https://iclr.cc/Conferences/2026/AuthorGuide) | [ACL](https://github.com/acl-org/acl-style-files)
-

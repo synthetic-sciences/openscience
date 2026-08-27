@@ -149,9 +149,11 @@ export namespace ToolSelection {
       tools?: Record<string, boolean>
       direct?: boolean
       capabilities?: ReadonlySet<string>
+      activatedTools?: ReadonlySet<string>
     },
   ) {
     if (input.tools?.[tool] === true) return true
+    if (input.activatedTools?.has(tool)) return true
     if (input.direct) return false
     if (!minimalResearchAgent(input.agent)) return true
 
@@ -184,7 +186,9 @@ export namespace ToolSelection {
     if (r.has(tool)) return /\bR\b|\br (?:kernel|language)\b|\brstudio\b/.test(text)
     if (tool === "artifact") return writing || analysis || /\b(?:deliverable|result)\b/i.test(text)
     if (tool === "generate_image")
-      return /\b(?:diagram|figure|graphic|illustration|image|poster|schematic|slide|visual)\b/i.test(text)
+      return /\b(?:diagrams?|figures?|graphics?|illustrations?|images?|posters?|schematics?|slides?|visuals?)\b/i.test(
+        text,
+      )
     if (tool === "compute_job" || tool === "modal")
       return (
         /\b(?:cluster|compute job|gpu|modal|remote compute|slurm|pbs|h100)\b/i.test(text) ||

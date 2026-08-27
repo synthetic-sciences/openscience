@@ -6,6 +6,8 @@ import path from "path"
 import fs from "fs/promises"
 import { ConfigMarkdown } from "../../src/config/markdown"
 import { ProjectTrust } from "../../src/project/trust"
+import { SkillTool } from "../../src/tool/skill"
+import type { Tool } from "../../src/tool/tool"
 
 async function trust() {
   const status = await ProjectTrust.status(Instance.project)
@@ -62,6 +64,45 @@ Instructions here.
       expect(testSkill).toBeDefined()
       expect(testSkill!.description).toBe("A test skill for verification.")
       expect(testSkill!.location).toContain("skill/test-skill/SKILL.md")
+    },
+  })
+})
+
+test("normalizes allowed-tools without granting execution authority", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, ".openscience", "skill", "figure-skill", "SKILL.md"),
+        `---
+name: figure-skill
+description: Create a requested technical figure.
+allowed-tools: [Read, generate-image, generate_image, Bash]
+---
+
+# Figure skill
+`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      expect((await Skill.get("figure-skill"))?.allowed_tools).toEqual(["read", "generate_image", "bash"])
+      const tool = await SkillTool.init()
+      const result = await tool.execute({ name: "figure-skill" }, {
+        sessionID: "session_skill_allowed_tools",
+        messageID: "message_skill_allowed_tools",
+        callID: "call_skill_allowed_tools",
+        agent: "research",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => {},
+        ask: async () => {},
+      } satisfies Tool.Context)
+      expect((result.metadata as { allowedTools?: string[] }).allowedTools).toEqual(["read", "generate_image", "bash"])
     },
   })
 })

@@ -20,6 +20,101 @@ const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 const DEFAULT_DOWNLOAD_TIMEOUT = 10 * 60 * 1000 // 10 minutes
 const MAX_DOWNLOAD_TIMEOUT = 30 * 60 * 1000 // 30 minutes
 export const DOWNLOAD_DISK_RESERVE_BYTES = 512 * 1024 * 1024 // preserve 512 MiB for the host
+const DEFAULT_RATE_LIMIT_DELAY = 1_000
+const MAX_RATE_LIMIT_DELAY = 120_000
+const HOST_PACING_LIMIT = 256
+
+type HostPacingState = {
+  tail: Promise<void>
+  cooldownUntil: number
+  pending: number
+}
+
+const hostPacing = new Map<string, HostPacingState>()
+
+export function webFetchRetryAfterMs(value: string | null, now = Date.now()) {
+  if (!value) return DEFAULT_RATE_LIMIT_DELAY
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(Math.ceil(seconds * 1_000), MAX_RATE_LIMIT_DELAY)
+  }
+  const date = Date.parse(value)
+  if (!Number.isFinite(date)) return DEFAULT_RATE_LIMIT_DELAY
+  return Math.min(Math.max(0, date - now), MAX_RATE_LIMIT_DELAY)
+}
+
+function abortError(signal: AbortSignal) {
+  return signal.reason instanceof Error ? signal.reason : new DOMException("The operation was aborted", "AbortError")
+}
+
+async function abortableWait(promise: Promise<void>, signal: AbortSignal) {
+  if (signal.aborted) throw abortError(signal)
+  const aborted = Promise.withResolvers<never>()
+  const onAbort = () => aborted.reject(abortError(signal))
+  signal.addEventListener("abort", onAbort, { once: true })
+  try {
+    await Promise.race([promise, aborted.promise])
+  } finally {
+    signal.removeEventListener("abort", onAbort)
+  }
+}
+
+async function waitUntil(timestamp: number, signal: AbortSignal) {
+  const delay = timestamp - Date.now()
+  if (delay <= 0) return
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const waiting = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, delay)
+  })
+  try {
+    await abortableWait(waiting, signal)
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/** Serialize request starts per host. A 429 applies its Retry-After cooldown to
+ * queued calls, so one provider response cannot turn parallel tool calls into
+ * a rate-limit stampede. Different hosts remain fully concurrent. */
+async function pacedHostRequest(url: string, signal: AbortSignal, run: () => Promise<Response>) {
+  const host = new URL(url).hostname.toLowerCase()
+  let state = hostPacing.get(host)
+  if (!state) {
+    state = { tail: Promise.resolve(), cooldownUntil: 0, pending: 0 }
+    hostPacing.set(host, state)
+  } else {
+    hostPacing.delete(host)
+    hostPacing.set(host, state)
+  }
+  while (hostPacing.size > HOST_PACING_LIMIT) {
+    const oldest = hostPacing.entries().next().value as [string, HostPacingState] | undefined
+    if (!oldest || oldest[1].pending > 0) break
+    hostPacing.delete(oldest[0])
+  }
+
+  const previous = state.tail.catch(() => undefined)
+  const turn = Promise.withResolvers<void>()
+  state.tail = previous.then(() => turn.promise)
+  state.pending++
+  try {
+    await abortableWait(previous, signal)
+    await waitUntil(state.cooldownUntil, signal)
+    const response = await run()
+    if (response.status === 429) {
+      state.cooldownUntil = Math.max(
+        state.cooldownUntil,
+        Date.now() + webFetchRetryAfterMs(response.headers.get("retry-after")),
+      )
+    }
+    return response
+  } finally {
+    state.pending--
+    turn.resolve()
+    if (state.pending === 0 && state.cooldownUntil <= Date.now() && hostPacing.get(host) === state) {
+      hostPacing.delete(host)
+    }
+  }
+}
 
 function generatedDownloadName(url: unknown, format: unknown) {
   const suffix = format === "html" ? "html" : format === "markdown" ? "md" : "txt"
@@ -193,24 +288,28 @@ export const WebFetchTool = Tool.define("webfetch", {
     }
 
     try {
-      const initial = await Network.fetch(
-        params.url,
-        { signal, headers },
-        download
-          ? { authorize, streamResponse: true, maxResponseBytes: downloadCapacity! }
-          : { authorize, maxResponseBytes: MAX_RESPONSE_SIZE },
+      const initial = await pacedHostRequest(params.url, signal, () =>
+        Network.fetch(
+          params.url,
+          { signal, headers },
+          download
+            ? { authorize, streamResponse: true, maxResponseBytes: downloadCapacity! }
+            : { authorize, maxResponseBytes: MAX_RESPONSE_SIZE },
+        ),
       )
 
       // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
       let response = initial
       if (initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge") {
         await initial.body?.cancel().catch(() => {})
-        response = await Network.fetch(
-          params.url,
-          { signal, headers: { ...headers, "User-Agent": "openscience" } },
-          download
-            ? { authorize, streamResponse: true, maxResponseBytes: downloadCapacity! }
-            : { authorize, maxResponseBytes: MAX_RESPONSE_SIZE },
+        response = await pacedHostRequest(params.url, signal, () =>
+          Network.fetch(
+            params.url,
+            { signal, headers: { ...headers, "User-Agent": "openscience" } },
+            download
+              ? { authorize, streamResponse: true, maxResponseBytes: downloadCapacity! }
+              : { authorize, maxResponseBytes: MAX_RESPONSE_SIZE },
+          ),
         )
       }
 
@@ -227,6 +326,12 @@ export const WebFetchTool = Tool.define("webfetch", {
             "Request failed with status code: 405. Web fetch sends GET, but this endpoint does not accept GET. " +
               "Do not retry the same URL with Web fetch; verify the documented HTTP method and use a targeted built-in connector " +
               "or a documented GET endpoint. Shell network access may be unavailable in the sandbox.",
+          )
+        }
+        if (response.status === 429) {
+          const retryAfter = webFetchRetryAfterMs(response.headers.get("retry-after"))
+          throw new Error(
+            `Request failed with status code: 429. This host is rate limiting requests; queued WebFetch calls to the same host are now paced for ${Math.ceil(retryAfter / 1_000)} seconds. Do not fan out more requests to this service; continue sequentially or use a different authoritative source.`,
           )
         }
         throw new Error(`Request failed with status code: ${response.status}`)

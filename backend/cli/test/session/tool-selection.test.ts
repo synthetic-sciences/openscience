@@ -317,6 +317,20 @@ describe("tool selection", () => {
         capabilities,
       }),
     ).toBe(false)
+
+    expect(
+      ToolSelection.relevant("generate_image", {
+        agent: "research",
+        message: "Continue with the requested refinement.",
+        activatedTools: new Set(["generate_image"]),
+      }),
+    ).toBe(true)
+  })
+
+  test("plural figure requests keep native image generation visible", () => {
+    const message = "Use /scientific-schematics to improve the images and figures in this paper."
+    expect(ToolSelection.slashInvocation(message)).toBe(true)
+    expect(ToolSelection.relevant("generate_image", { agent: "research", message })).toBe(true)
   })
 
   test("keeps normal research relevance filtering for a code-only minimal-profile request", () => {

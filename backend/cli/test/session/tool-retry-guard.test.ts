@@ -578,10 +578,33 @@ test("an identical failed patch requires a reread before another write", async (
   const ctx = { ...context(messages), sessionID }
 
   await expect(ToolRetryGuard.assertApplyPatch(ctx, patchText)).rejects.toThrow(
-    "This exact patch already failed verification",
+    "A patch already failed verification for analysis.py",
   )
+  const revised = patchText.replace("missing old line", "observed current line")
+  await expect(ToolRetryGuard.assertApplyPatch(ctx, revised)).rejects.toThrow("analysis.py")
+  const reread = {
+    info: { id: "message_read", sessionID, role: "assistant" },
+    parts: [
+      {
+        id: "part_read",
+        sessionID,
+        messageID: "message_read",
+        type: "tool",
+        tool: "read",
+        callID: "call_read",
+        state: {
+          status: "completed",
+          input: { filePath: "/workspace/analysis.py", offset: 1, limit: 80 },
+          output: "observed current line",
+          title: "analysis.py",
+          metadata: {},
+          time: { start: 3, end: 4 },
+        },
+      },
+    ],
+  } as unknown as Tool.Context["messages"][number]
   await expect(
-    ToolRetryGuard.assertApplyPatch(ctx, patchText.replace("missing old line", "observed current line")),
+    ToolRetryGuard.assertApplyPatch({ ...ctx, messages: [...messages, reread] }, revised),
   ).resolves.toBeUndefined()
   await expect(
     ToolRetryGuard.assertApplyPatch({ ...ctx, messages: [...messages, userMessage(sessionID, 3)] }, patchText),

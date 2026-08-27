@@ -53,6 +53,13 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Activated a loaded skill's declared tools on the current Research turn while
+  preserving normal execution permissions, restored plural image and figure
+  routing, and made explicit slash skills authoritative instead of expanding
+  them into unrelated writing or review workflows.
+- Paced same-host WebFetch calls with `Retry-After` handling to prevent citation
+  lookup stampedes, and required a fresh file read before retrying a stale
+  patch against the same target.
 - Removed the remaining child-agent wall-clock, dispatch, step, handoff, and
   output-recovery ceilings; delegated agents may delegate further while shared
   concurrency still protects machine capacity.

@@ -191,27 +191,65 @@ export namespace ToolRetryGuard {
     return crypto.createHash("sha256").update(value.replace(/\r\n?/g, "\n")).digest("hex")
   }
 
+  function patchTargets(value: string) {
+    return [
+      ...new Set(
+        Array.from(value.replace(/\r\n?/g, "\n").matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s*(.+?)\s*$/gm))
+          .map((match) => path.posix.normalize(match[1]!.trim().replaceAll("\\", "/")))
+          .filter((item) => item && item !== "."),
+      ),
+    ]
+  }
+
+  function samePath(left: string, right: string) {
+    const a = path.posix.normalize(left.replaceAll("\\", "/"))
+    const b = path.posix.normalize(right.replaceAll("\\", "/"))
+    return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`)
+  }
+
+  function readAfter(ctx: Tool.Context, target: string, after: number) {
+    return ctx.messages.some((message) =>
+      message.parts.some((part) => {
+        if (part.type !== "tool" || part.tool !== "read" || part.state.status !== "completed") return false
+        if (stateTime(part) <= after) return false
+        const filePath = part.state.input.filePath
+        return typeof filePath === "string" && samePath(filePath, target)
+      }),
+    )
+  }
+
   export async function assertApplyPatch(ctx: Tool.Context, patchText: string) {
     const expected = patchHash(patchText)
-    const previous = (await events(ctx))
+    const failures = (await events(ctx))
       .filter((event): event is Extract<HistoryEvent, { kind: "error" }> => event.kind === "error")
       .filter((event) => event.tool === "apply_patch")
       .filter((event) => /apply_patch verification failed/i.test(event.error))
-      .findLast(
-        (event) =>
-          typeof event.input.patchText === "string" &&
-          patchHash(event.input.patchText) === expected &&
-          !userTurnAfter(ctx, event.at),
-      )
+      .filter((event) => !userTurnAfter(ctx, event.at))
+    const targets = patchTargets(patchText)
+    const previous = failures.findLast((event) => {
+      const priorText = event.input.patchText
+      if (typeof priorText !== "string") return false
+      if (patchHash(priorText) === expected) return true
+      if (!/failed to find expected lines|expected context/i.test(event.error)) return false
+      const priorTargets = patchTargets(priorText)
+      if (targets.length === 0 || priorTargets.length === 0) return false
+      return targets.some((target) => priorTargets.some((prior) => samePath(target, prior)))
+    })
     if (!previous) return
+    const previousTargets = typeof previous.input.patchText === "string" ? patchTargets(previous.input.patchText) : []
+    const stale = targets
+      .filter((target) => previousTargets.length === 0 || previousTargets.some((prior) => samePath(target, prior)))
+      .filter((target) => !readAfter(ctx, target, previous.at))
+    if (targets.length > 0 && stale.length === 0) return
     throw blocked(
       {
         code: "apply_patch_reread_required",
         tool: "apply_patch",
         prior_call_id: previous.callID,
         patch_sha256: expected,
+        stale_paths: stale,
       },
-      "This exact patch already failed verification in the current user turn. It was stopped before another file write or approval. Re-read the current file around the intended edit and construct a new patch from the observed text; use a smaller anchored hunk if the file changed.",
+      `A patch already failed verification for ${stale.length ? stale.join(", ") : "this same patch"} in the current user turn. The retry was stopped before another file write or approval. Re-read each affected file around the intended edit, then construct a new patch from the observed text; use a smaller anchored hunk if the file changed.`,
     )
   }
 

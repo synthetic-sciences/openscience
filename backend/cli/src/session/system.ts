@@ -147,19 +147,20 @@ export namespace SystemPrompt {
         skills: item.skills.map((skill) => names.get(skill)).filter((skill): skill is string => !!skill),
       }))
       .filter((item) => item.skills.length > 0)
-    const routing = route.length
-      ? [
-          "<skill-routing>",
-          "When a request clearly matches one of these routes, load the listed skill or skills before the first substantive edit, build, search, or generation step. Do not merely mention the skill in prose.",
-          ...route.map((item) => `- ${item.when}: ${item.skills.join(", ")}`),
-          "For an existing manuscript, preserve its scientific content and existing figures unless the user asks for content or figure changes. When creating or replacing a technical figure, use scientific-schematics and the native generate_image tool so Nano Banana Pro runs through connected BYOK or a funded OpenScience wallet without exposing credentials to shell scripts.",
-          "</skill-routing>",
-        ]
-      : []
+    const routing =
+      route.length && invoked.length === 0
+        ? [
+            "<skill-routing>",
+            "When a request clearly matches one of these routes, load the listed skill or skills before the first substantive edit, build, search, or generation step. Do not merely mention the skill in prose.",
+            ...route.map((item) => `- ${item.when}: ${item.skills.join(", ")}`),
+            "For an existing manuscript, preserve its scientific content and existing figures unless the user asks for content or figure changes. When creating or replacing a technical figure, use scientific-schematics and the native generate_image tool so Nano Banana Pro runs through connected BYOK or a funded OpenScience wallet without exposing credentials to shell scripts.",
+            "</skill-routing>",
+          ]
+        : []
     const invoke = invoked.length
       ? [
           "<slash-skill-invocation>",
-          `The user explicitly invoked ${invoked.map((name) => `/${name}`).join(", ")}. Before substantive work, load ${invoked.map((name) => `skill({name:"${name}"})`).join(" and ")} with no preceding text. Then answer the surrounding request.`,
+          `The user explicitly invoked ${invoked.map((name) => `/${name}`).join(", ")}. Before substantive work, load ${invoked.map((name) => `skill({name:"${name}"})`).join(" and ")} with no preceding text. Treat these explicit skills as the complete requested workflow scope; do not add likely matches or routing-table skills unless a loaded skill names a required dependency. Then answer the surrounding request.`,
           "</slash-skill-invocation>",
         ]
       : []
@@ -169,8 +170,10 @@ export namespace SystemPrompt {
         "<available-skills>",
         `${total} callable across: ${list}.`,
         ...routing,
-        ...likely,
-        "Load a likely match directly, or browse a relevant category when the shortlist is insufficient. Do not guess other names from static routing tables.",
+        ...(invoked.length ? [] : likely),
+        invoked.length
+          ? "Use only the explicitly invoked skills for this request unless one of their loaded instructions names a required dependency."
+          : "Load a likely match directly, or browse a relevant category when the shortlist is insufficient. Do not guess other names from static routing tables.",
         "</available-skills>",
         ...invoke,
       ].join("\n"),

@@ -1729,12 +1729,23 @@ export namespace SessionPrompt {
       .join("\n")
       .slice(-8_000)
     const loadedCapabilities = new Set<string>()
-    for (const message of input.messages) {
+    const activatedTools = new Set<string>()
+    const currentTurn = input.messages.slice(
+      Math.max(
+        0,
+        input.messages.findLastIndex((message) => message.info.role === "user"),
+      ),
+    )
+    for (const message of currentTurn) {
       if (message.info.role !== "assistant") continue
       for (const part of message.parts) {
         if (part.type !== "tool" || part.tool !== "skill" || part.state.status !== "completed") continue
         const capability = (part.state.metadata as { capability?: unknown } | undefined)?.capability
         if (typeof capability === "string") loadedCapabilities.add(capability)
+        const allowedTools = (part.state.metadata as { allowedTools?: unknown } | undefined)?.allowedTools
+        if (Array.isArray(allowedTools)) {
+          for (const tool of allowedTools) if (typeof tool === "string") activatedTools.add(tool)
+        }
       }
     }
 
@@ -1750,6 +1761,7 @@ export namespace SessionPrompt {
           tools: input.tools,
           direct: input.direct,
           capabilities: loadedCapabilities,
+          activatedTools,
         }),
       input.request,
     )
@@ -1814,6 +1826,7 @@ export namespace SessionPrompt {
           tools: input.tools,
           direct: input.direct,
           capabilities: loadedCapabilities,
+          activatedTools,
         })
       )
         continue

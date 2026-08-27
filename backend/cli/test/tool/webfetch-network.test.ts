@@ -5,6 +5,7 @@ import {
   MAX_RESPONSE_SIZE,
   WebFetchTool,
   normalizeDownloadOutputPath,
+  webFetchRetryAfterMs,
 } from "../../src/tool/webfetch"
 import type { Tool } from "../../src/tool/tool"
 import { SessionFilesystem } from "../../src/session/filesystem"
@@ -90,6 +91,41 @@ test("webfetch schema teaches the root-download then sandboxed-move sequence", a
   expect(schema.properties?.max_bytes).toBeUndefined()
   expect(schema.properties?.declared_size_bytes).toBeUndefined()
   expect(schema.properties?.declared_size_evidence_call_id).toBeUndefined()
+})
+
+test("webfetch serializes same-host requests and honors Retry-After after a 429", async () => {
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  let active = 0
+  let maxActive = 0
+  let calls = 0
+  globalThis.fetch = (async () => {
+    const call = ++calls
+    active++
+    maxActive = Math.max(maxActive, active)
+    await Bun.sleep(10)
+    active--
+    if (call === 1) {
+      return new Response("rate limited", { status: 429, headers: { "retry-after": "0.01" } })
+    }
+    return new Response("ok", { headers: { "content-type": "text/plain" } })
+  }) as unknown as typeof fetch
+
+  const webfetch = await WebFetchTool.init()
+  const first = captureError(
+    webfetch.execute(
+      { url: "https://example.com/crossref-a", format: "text" },
+      context(async () => {}),
+    ),
+  )
+  const second = webfetch.execute(
+    { url: "https://example.com/crossref-b", format: "text" },
+    context(async () => {}),
+  )
+  expect((await first).message).toContain("same host are now paced")
+  expect((await second).output).toBe("ok")
+  expect(calls).toBe(2)
+  expect(maxActive).toBe(1)
+  expect(webFetchRetryAfterMs("2")).toBe(2_000)
 })
 
 test("webfetch reduces absolute, temp-directory, and nested destinations to safe root filenames", () => {
