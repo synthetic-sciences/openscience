@@ -968,6 +968,7 @@ test("agent configuration generation emits one canonical ephemeral model trace a
       expect(telemetry.error).not.toHaveBeenCalled()
       expect(telemetry.sessionCompleted).toHaveBeenCalledWith({
         sessionID: started?.sessionID,
+        messageID: user?.messageID,
         reason: "completed",
         session: { purpose: "agent_config_generation", source: "cli", ephemeral: true },
       })
