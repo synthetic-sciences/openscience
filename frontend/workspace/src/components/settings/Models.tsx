@@ -3,10 +3,10 @@ import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
 import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useModels, type ModelKey } from "@/context/models"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
 import { productPreferences } from "@/context/product-preferences"
 import {
   displayProviderForModel,
@@ -88,7 +88,7 @@ const scopes: Array<{ id: Scope; label: string }> = [
 
 export default function Models() {
   const sync = useGlobalSync()
-  const sdk = useSDK()
+  const sdk = useGlobalSDK()
   const models = useModels()
   const platform = usePlatform()
   const fetchFn = platform.fetch ?? fetch

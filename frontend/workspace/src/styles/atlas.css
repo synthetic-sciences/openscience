@@ -37,13 +37,13 @@
   --color-text: var(--text-strong);
   --color-text-muted: var(--text-weak);
   --color-text-faint: var(--text-weaker);
-  --color-accent: var(--text-strong);
-  --color-accent-hover: var(--text-base);
-  --color-accent-subtle: var(--surface-base-hover);
+  --color-accent: var(--surface-brand-base);
+  --color-accent-hover: var(--surface-brand-hover);
+  --color-accent-subtle: var(--surface-interactive-weak);
   --color-focus: var(--border-selected);
-  --color-on-accent: var(--background-base);
-  --glass-bg: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(0, 0, 0, 0.1);
+  --color-on-accent: var(--text-on-brand-base);
+  --glass-bg: color-mix(in srgb, var(--background-stronger) 82%, transparent);
+  --glass-border: var(--border-weak-base);
   --glass-shadow: var(--atlas-shadow-sm);
   --glass-blur: 20px;
 
@@ -51,9 +51,9 @@
      shared --radius-* scale so importing atlas.css cannot restyle UI
      primitives such as dialogs, popovers, and buttons. */
   --atlas-radius-xs: 8px;
-  --atlas-radius-sm: 10px;
-  --atlas-radius-md: 12px;
-  --atlas-radius-lg: 20px;
+  --atlas-radius-sm: 12px;
+  --atlas-radius-md: 14px;
+  --atlas-radius-lg: 24px;
   --workspace-composer-reserve: 116px;
 
   --color-success: var(--surface-success-strong);
@@ -83,20 +83,20 @@
      distinct from shared --shadow-* primitives and adapt through color-scheme
      without falling back to visually harsh pure-black shadows. */
   --atlas-shadow-xs:
-    0 1px 2px -1px light-dark(hsl(220 8% 14% / 0.12), hsl(220 8% 4% / 0.34)),
-    0 1px 3px light-dark(hsl(220 8% 14% / 0.06), hsl(220 8% 4% / 0.22));
+    0 1px 2px -1px light-dark(hsl(28 16% 14% / 0.12), hsl(28 20% 4% / 0.34)),
+    0 1px 3px light-dark(hsl(28 16% 14% / 0.06), hsl(28 20% 4% / 0.22));
   --atlas-shadow-sm:
-    0 1px 2px -1px light-dark(hsl(220 8% 14% / 0.1), hsl(220 8% 4% / 0.32)),
-    0 8px 22px -10px light-dark(hsl(220 8% 14% / 0.16), hsl(220 8% 4% / 0.42)),
-    0 16px 36px -22px light-dark(hsl(220 8% 14% / 0.1), hsl(220 8% 4% / 0.3));
+    0 1px 2px -1px light-dark(hsl(28 16% 14% / 0.1), hsl(28 20% 4% / 0.32)),
+    0 8px 22px -10px light-dark(hsl(28 16% 14% / 0.16), hsl(28 20% 4% / 0.42)),
+    0 16px 36px -22px light-dark(hsl(28 16% 14% / 0.1), hsl(28 20% 4% / 0.3));
   --atlas-shadow-md:
-    0 2px 5px -2px light-dark(hsl(220 8% 14% / 0.12), hsl(220 8% 4% / 0.34)),
-    0 14px 36px -14px light-dark(hsl(220 8% 14% / 0.18), hsl(220 8% 4% / 0.48)),
-    0 28px 60px -28px light-dark(hsl(220 8% 14% / 0.12), hsl(220 8% 4% / 0.34));
+    0 2px 5px -2px light-dark(hsl(28 16% 14% / 0.12), hsl(28 20% 4% / 0.34)),
+    0 14px 36px -14px light-dark(hsl(28 16% 14% / 0.18), hsl(28 20% 4% / 0.48)),
+    0 28px 60px -28px light-dark(hsl(28 16% 14% / 0.12), hsl(28 20% 4% / 0.34));
   --atlas-shadow-float:
-    0 2px 5px -2px light-dark(hsl(220 8% 14% / 0.12), hsl(220 8% 4% / 0.36)),
-    0 16px 40px -16px light-dark(hsl(220 8% 14% / 0.2), hsl(220 8% 4% / 0.5)),
-    0 32px 84px -28px light-dark(hsl(220 8% 14% / 0.14), hsl(220 8% 4% / 0.38)),
+    0 2px 5px -2px light-dark(hsl(28 16% 14% / 0.12), hsl(28 20% 4% / 0.36)),
+    0 16px 40px -16px light-dark(hsl(28 16% 14% / 0.2), hsl(28 20% 4% / 0.5)),
+    0 32px 84px -28px light-dark(hsl(28 16% 14% / 0.14), hsl(28 20% 4% / 0.38)),
     inset 0 1px 0 light-dark(hsl(0 0% 100% / 0.6), hsl(0 0% 100% / 0.04));
 
   --text-2xs: 11px;
@@ -222,8 +222,8 @@
 html[data-color-scheme="dark"] {
   /* --color-* aliases resolve through the mode-aware semantic tokens, so only
      the values with no semantic source live here. */
-  --glass-bg: rgba(23, 23, 23, 0.9);
-  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-bg: color-mix(in srgb, var(--background-stronger) 86%, transparent);
+  --glass-border: var(--border-weak-base);
 
   --kind-insight: #a596b8;
   --kind-insight-bg: rgba(165, 150, 184, 0.12);
@@ -308,15 +308,15 @@ html[data-color-scheme="dark"] {
 }
 
 .g-strip {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  background: color-mix(in srgb, var(--background-base) 78%, transparent);
+  backdrop-filter: blur(20px) saturate(1.18);
+  -webkit-backdrop-filter: blur(20px) saturate(1.18);
   border-bottom: 1px solid var(--color-border);
 }
 
 .dark .g-strip,
 html[data-color-scheme="dark"] .g-strip {
-  background: rgba(23, 23, 23, 0.7);
+  background: color-mix(in srgb, var(--background-base) 82%, transparent);
 }
 
 .g-composer {

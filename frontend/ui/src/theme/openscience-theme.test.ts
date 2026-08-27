@@ -22,33 +22,33 @@ const fallback = {
 }
 
 const darkPalette = {
-  "background-base": "#17191c",
-  "background-weak": "#1d2024",
-  "background-strong": "#1a1c20",
-  "background-stronger": "#202328",
-  "surface-inset-base": "#141619",
-  "surface-inset-strong": "#111316",
-  "surface-float-base": "#25292e",
-  "surface-raised-strong": "#23262b",
-  "surface-raised-strong-hover": "#292d32",
-  "surface-raised-stronger": "#272b30",
-  "surface-raised-stronger-hover": "#2f343a",
-  "surface-strong": "#2c3137",
-  "surface-raised-stronger-non-alpha": "#23262b",
-  "input-base": "#202328",
-  "input-hover": "#272b30",
-  "button-secondary-base": "#23262b",
-  "button-secondary-hover": "#2c3137",
-  "border-weaker-base": "#edf1f50a",
-  "border-weak-base": "#edf1f514",
-  "border-weak-hover": "#edf1f522",
-  "border-base": "#edf1f52e",
-  "border-hover": "#edf1f53d",
-  "border-strong-base": "#edf1f54d",
-  "text-base": "#d8dde2",
-  "text-weak": "#aeb5bd",
-  "text-weaker": "#8d959e",
-  "text-strong": "#f3f5f7",
+  "background-base": "#151311",
+  "background-weak": "#1a1714",
+  "background-strong": "#171411",
+  "background-stronger": "#1f1b17",
+  "surface-inset-base": "#15120f",
+  "surface-inset-strong": "#141210",
+  "surface-float-base": "#29231f",
+  "surface-raised-strong": "#24201c",
+  "surface-raised-strong-hover": "#2b2520",
+  "surface-raised-stronger": "#2b2520",
+  "surface-raised-stronger-hover": "#342c26",
+  "surface-strong": "#302923",
+  "surface-raised-stronger-non-alpha": "#24201c",
+  "input-base": "#201c18",
+  "input-hover": "#28221e",
+  "button-secondary-base": "#24201c",
+  "button-secondary-hover": "#302923",
+  "border-weaker-base": "#f4eadf0a",
+  "border-weak-base": "#f4eadf14",
+  "border-weak-hover": "#f4eadf22",
+  "border-base": "#f4eadf2e",
+  "border-hover": "#f4eadf3d",
+  "border-strong-base": "#f4eadf4d",
+  "text-base": "#ddd6cc",
+  "text-weak": "#b6aea3",
+  "text-weaker": "#948b80",
+  "text-strong": "#f4efe7",
 } as const
 
 const luminance = (color: string) => {
@@ -155,12 +155,12 @@ const darkStructuralTokens = [
 ] as const
 
 describe("OpenScience default theme", () => {
-  test("uses canonical paper-gray, slate dark, and teal anchors", () => {
-    expect(openscience.light.overrides["background-base"]).toBe("#f5f6f7")
-    expect(openscience.light.overrides["text-strong"]).toBe("#20252b")
-    expect(openscience.light.overrides["surface-brand-base"]).toBe("#376d70")
-    expect(openscience.dark.seeds.neutral).toBe("#626a73")
-    expect(openscience.dark.overrides["surface-brand-base"]).toBe("#75a8aa")
+  test("uses canonical warm paper, espresso dark, and coral anchors", () => {
+    expect(openscience.light.overrides["background-base"]).toBe("#f5f2ec")
+    expect(openscience.light.overrides["text-strong"]).toBe("#24201d")
+    expect(openscience.light.overrides["surface-brand-base"]).toBe("#9d4f3f")
+    expect(openscience.dark.seeds.neutral).toBe("#6e655d")
+    expect(openscience.dark.overrides["surface-brand-base"]).toBe("#e1a08e")
 
     for (const entry of Object.entries(darkPalette)) {
       expect(darkOverrides[entry[0]]).toBe(entry[1])
@@ -206,6 +206,12 @@ describe("OpenScience default theme", () => {
   test("keeps the pre-JavaScript dark semantic scales identical to the resolved theme", () => {
     for (const token of darkSemantics) {
       expect(fallback.dark[token]).toBe(resolved.dark[token])
+    }
+  })
+
+  test("keeps every explicit light override identical before and after JavaScript loads", () => {
+    for (const token of Object.keys(theme.light.overrides ?? {})) {
+      expect(fallback.light[token]).toBe(resolved.light[token])
     }
   })
 

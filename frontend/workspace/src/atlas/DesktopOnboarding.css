@@ -2,21 +2,22 @@
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 32px;
-  background: var(--background-base);
+  padding: 40px;
+  background: var(--background-weak);
   color: var(--text-strong);
 }
 
 .desktop-onboarding__shell {
-  width: min(860px, 100%);
-  min-height: 620px;
+  width: min(900px, 100%);
+  min-height: 640px;
   display: flex;
   flex-direction: column;
-  gap: 26px;
-  padding: 28px;
+  gap: 30px;
+  padding: 34px;
   border: 1px solid var(--border-weak-base);
-  border-radius: 18px;
-  background: var(--surface-base);
+  border-radius: 24px;
+  background: var(--surface-raised-stronger-non-alpha);
+  box-shadow: var(--atlas-shadow-md);
 }
 
 .desktop-onboarding__shell > header,
@@ -28,8 +29,18 @@
 
 .desktop-onboarding__shell > header span {
   font-size: 14px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.desktop-onboarding__shell > header span::before {
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--surface-brand-base);
+  content: "";
 }
 
 .desktop-onboarding__shell > header small,
@@ -54,8 +65,8 @@
 
 .desktop-onboarding__intro h1 {
   margin: 0 0 10px;
-  font-size: clamp(28px, 5vw, 44px);
-  font-weight: 560;
+  font-size: clamp(32px, 5vw, 48px);
+  font-weight: 540;
   letter-spacing: -0.05em;
   line-height: 1.02;
 }
@@ -63,7 +74,7 @@
 .desktop-onboarding__choices {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .desktop-onboarding__choices--three {
@@ -71,25 +82,37 @@
 }
 
 .desktop-onboarding__choices button {
-  min-height: 112px;
+  min-height: 122px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 18px;
+  gap: 9px;
+  padding: 20px;
   border: 1px solid var(--border-weak-base);
-  border-radius: 12px;
-  background: var(--surface-raised-base);
+  border-radius: 14px;
+  background: var(--input-base);
   color: inherit;
   text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 120ms ease;
 }
 
 .desktop-onboarding__choices button:hover {
   border-color: var(--border-strong-base);
+  background: var(--input-hover);
+}
+
+.desktop-onboarding__choices button:active {
+  transform: scale(0.99);
 }
 
 .desktop-onboarding__choices button[data-selected="true"] {
-  border-color: var(--text-strong);
-  box-shadow: inset 0 0 0 1px var(--text-strong);
+  border-color: var(--border-selected);
+  background: var(--surface-interactive-weak);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-selected) 55%, transparent);
 }
 
 .desktop-onboarding__choices strong {
@@ -103,8 +126,8 @@
 .desktop-onboarding__choices em {
   padding: 3px 7px;
   border-radius: 999px;
-  background: var(--surface-base-hover);
-  color: var(--text-weak);
+  background: var(--surface-interactive-base);
+  color: var(--text-interactive-base);
   font-size: 10px;
   font-style: normal;
   font-weight: 600;
@@ -135,8 +158,8 @@
   min-height: 38px;
   padding: 0 10px;
   border: 1px solid var(--border-weak-base);
-  border-radius: 8px;
-  background: var(--surface-raised-base);
+  border-radius: 10px;
+  background: var(--input-base);
   color: var(--text-strong);
 }
 
@@ -156,6 +179,12 @@
   border-top: 1px solid var(--border-weak-base);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .desktop-onboarding__choices button {
+    transition: none;
+  }
+}
+
 @media (max-width: 720px) {
   .desktop-onboarding {
     padding: 12px;
@@ -163,6 +192,7 @@
   .desktop-onboarding__shell {
     min-height: calc(100vh - 24px);
     padding: 20px;
+    border-radius: 18px;
   }
   .desktop-onboarding__choices,
   .desktop-onboarding__choices--three,

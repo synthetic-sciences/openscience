@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "project": {
+    "name": "OpenScience",
+    "productType": "local scientific research workspace",
+    "stack": ["SolidJS", "TypeScript", "Vite", "CSS custom properties"]
+  },
+  "sources": {
+    "tokens": [
+      "frontend/ui/src/theme/themes/openscience.json",
+      "frontend/ui/src/styles/theme.css",
+      "frontend/workspace/src/styles/atlas.css"
+    ],
+    "components": ["frontend/ui/src/components", "frontend/workspace/src/components"],
+    "assets": ["frontend/workspace/public", "assets"],
+    "instructions": ["AGENTS.md", "CLAUDE.md"]
+  },
+  "design": {
+    "colorMode": "adaptive light and dark",
+    "colors": {
+      "paper": "#f5f2ec",
+      "paperRaised": "#fffdf9",
+      "ink": "#24201d",
+      "espresso": "#151311",
+      "cream": "#f4efe7",
+      "coralLight": "#9d4f3f",
+      "coralDark": "#e1a08e"
+    },
+    "typography": {
+      "interface": "Inter Variable",
+      "research": "Computer Modern",
+      "code": "user-selected bundled monospace"
+    },
+    "spacing": { "base": "4px", "page": "24px to 48px" },
+    "radius": { "control": "8px to 10px", "group": "12px to 14px", "modal": "20px to 24px" },
+    "shadows": { "style": "low-contrast warm layered elevation" },
+    "motion": { "style": "120ms to 160ms ease, disabled for reduced motion" },
+    "density": "comfortable desktop"
+  },
+  "components": {
+    "installed": [],
+    "preferredPrimitives": ["@synsci/ui", "existing SolidJS workspace components"],
+    "patterns": ["translucent toolbar", "inset grouped list", "sidebar settings", "quiet empty state"]
+  },
+  "constraints": {
+    "must": [
+      "Use semantic theme tokens in all product surfaces",
+      "Support both light and dark appearance",
+      "Keep visible keyboard focus and reduced-motion behavior",
+      "Use coral only for interaction, selection, and brand recognition",
+      "Preserve status colors for success, warning, error, and information"
+    ],
+    "avoid": [
+      "Decorative gradients",
+      "Glass on every surface",
+      "Card grids where a grouped list is clearer",
+      "Low-contrast text",
+      "Editorial serif typography on settings and controls"
+    ]
+  },
+  "decisions": [
+    {
+      "date": "2026-08-26",
+      "decision": "Connect the application to the public OpenScience brand with warm paper and espresso neutrals plus a restrained coral accent.",
+      "reason": "The previous cool gray and teal theme felt unrelated to the warm editorial landing page."
+    },
+    {
+      "date": "2026-08-26",
+      "decision": "Use Apple-like hierarchy and materials without imitating macOS chrome.",
+      "reason": "Stable sidebars, grouped lists, quiet toolbars, and deliberate spacing make a dense research product easier to understand."
+    }
+  ],
+  "evidence": [
+    { "fact": "public brand palette and typography", "source": "frontend/landing/src/index.css" },
+    { "fact": "semantic product theme", "source": "frontend/ui/src/theme/themes/openscience.json" },
+    { "fact": "workspace geometry and accessibility", "source": "frontend/workspace/src/styles/atlas.css" }
+  ],
+  "generatedAt": "2026-08-26T23:00:00-07:00"
+}

@@ -13,7 +13,7 @@ describe("OpenScience theme gallery", () => {
     expect(preload).toContain('localStorage.getItem("openscience-theme-id") || "openscience"')
     expect(preload).toContain('"openscience-theme-css-" + themeId + "-" + mode')
     expect(preload).toContain('localStorage.getItem("openscience-color-scheme") || "dark"')
-    expect(index).toContain('<meta name="theme-color" content="#17191c" />')
+    expect(index).toContain('<meta name="theme-color" content="#151311" />')
     expect(preload).toContain('scheme === "system" && matchMedia("(prefers-color-scheme: dark)").matches')
     expect(preload).not.toContain('localStorage.setItem("openscience-color-scheme", mode)')
     expect(preload).toContain("css.match(/--background-base:")

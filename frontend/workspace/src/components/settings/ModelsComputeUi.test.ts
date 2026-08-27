@@ -40,6 +40,8 @@ describe("models and compute settings UI contract", () => {
     expect(models).not.toContain('<Row title="Background model"')
     expect(models).toContain('title="Access and routing"')
     expect(models).toContain('class="settings-card models-access-card"')
+    expect(models).toContain("useGlobalSDK()")
+    expect(models).not.toContain("useSDK()")
     expect(models).not.toContain('id="model-defaults"')
     expect(models).toContain("takeModelGroups(groups(), renderLimit())")
     expect(models).toContain("groupModelRoutes")
