@@ -34,12 +34,29 @@ describe("PDF preview workbench", () => {
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/)
   })
 
+  test("uses a compact thumbnail rail when the inspector has room", async () => {
+    const source = await read("./PdfViewer.tsx")
+    const css = await read("./PdfViewer.css")
+
+    expect(source).toContain('class="pdf-viewer-workspace"')
+    expect(source).toContain('aria-label="PDF page thumbnails"')
+    expect(source).toContain("view.viewportWidth >= 720")
+    expect(source).toContain('thumb.setAttribute("aria-label", `Go to page ${n}`)')
+    expect(css).toMatch(/\.pdf-viewer-thumbnails\.is-visible\s*\{[^}]*display: flex/s)
+    expect(css).toMatch(/\.pdf-viewer-thumbnail\.is-active\s*\{[^}]*border-color:/s)
+  })
+
   test("retains bounded rendering and safe pdfjs cleanup", async () => {
     const source = await read("./PdfViewer.tsx")
+    const worker = await read("./pdfjs-worker.ts")
 
     expect(source).toContain("Math.min(total, cfg.maxPages)")
     expect(source).toContain("loadingTask?.destroy?.().catch?.")
     expect(source).toContain("cancelTasks()")
     expect(source).toContain("pdfjs-dist/legacy/build/pdf.mjs")
+    expect(source).toContain("ensurePdfWorker(pdfjs.GlobalWorkerOptions)")
+    expect(source).not.toContain('import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url")')
+    expect(worker).toContain('import workerSrc from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"')
+    expect(worker).toContain('typeof workerSrc !== "string"')
   })
 })

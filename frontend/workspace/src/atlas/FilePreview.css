@@ -22,13 +22,13 @@
   z-index: 2;
   display: flex;
   min-width: 0;
-  min-height: 50px;
+  min-height: 48px;
   flex: none;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border: 0;
+  gap: 9px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--color-border-weak-base);
   background: var(--color-surface-solid);
 }
 
@@ -40,9 +40,23 @@
   gap: 8px;
 }
 
-.atlas-file-identity > svg {
+.atlas-file-kind-icon {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
   flex: none;
-  color: var(--color-text-faint);
+  place-items: center;
+  border-radius: var(--atlas-radius-xs);
+  background: var(--color-bg-subtle);
+}
+
+.atlas-file-kind-icon > svg {
+  display: block;
+}
+
+.atlas-file-type-glyph {
+  width: 19px;
+  height: 19px;
 }
 
 .atlas-file-heading {
@@ -496,6 +510,21 @@
   height: 100%;
 }
 
+/* The outer file toolbar already owns the filename and type. Inside a file
+   tab, PDF controls therefore stay on one compact line instead of repeating a
+   second document title row. Standalone artifact PDFs retain their title. */
+.atlas-file-pdf .pdf-viewer-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.atlas-file-pdf .pdf-viewer-title {
+  display: none;
+}
+
+.atlas-file-pdf .pdf-viewer-page-controls {
+  justify-self: start;
+}
+
 .atlas-file-image {
   display: grid;
   width: 100%;
@@ -609,44 +638,33 @@
 
 @media (max-width: 760px) {
   .atlas-file-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px;
+    align-items: center;
+    flex-direction: row;
+    gap: 5px;
+    padding: 6px 8px;
   }
 
   .atlas-file-identity {
-    width: 100%;
-    padding-right: 38px;
+    width: auto;
+    min-width: 72px;
+    padding-right: 0;
   }
 
   .atlas-file-controls {
-    width: 100%;
+    width: auto;
+    min-width: 0;
     overflow-x: auto;
-    padding-bottom: 1px;
+    gap: 3px;
+    scrollbar-width: none;
   }
 
-  .atlas-file-close {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-  }
-
-  .atlas-file-document {
-    padding: 28px 20px 52px;
-  }
-}
-
-@media (max-width: 520px) {
-  .atlas-file-meta-separator,
-  .atlas-file-location {
+  .atlas-file-controls::-webkit-scrollbar {
     display: none;
   }
 
-  .atlas-file-mode,
-  .atlas-file-button,
-  .atlas-file-action {
-    min-height: 34px;
+  .atlas-file-meta-separator,
+  .atlas-file-location {
+    display: none;
   }
 
   .atlas-file-action span {
@@ -659,6 +677,28 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+
+  .atlas-file-action {
+    width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .atlas-file-document {
+    padding: 28px 20px 52px;
+  }
+}
+
+@media (max-width: 520px) {
+  .atlas-file-meta {
+    display: none;
+  }
+
+  .atlas-file-mode,
+  .atlas-file-button,
+  .atlas-file-action {
+    min-height: 34px;
   }
 
   .atlas-file-action {
@@ -676,44 +716,33 @@
    inside the Files pane as well as in a narrow window. */
 @container atlas-file-view (max-width: 760px) {
   .atlas-file-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px;
+    align-items: center;
+    flex-direction: row;
+    gap: 5px;
+    padding: 6px 8px;
   }
 
   .atlas-file-identity {
-    width: 100%;
-    padding-right: 38px;
+    width: auto;
+    min-width: 72px;
+    padding-right: 0;
   }
 
   .atlas-file-controls {
-    width: 100%;
+    width: auto;
+    min-width: 0;
     overflow-x: auto;
-    padding-bottom: 1px;
+    gap: 3px;
+    scrollbar-width: none;
   }
 
-  .atlas-file-close {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-  }
-
-  .atlas-file-document {
-    padding: 28px 20px 52px;
-  }
-}
-
-@container atlas-file-view (max-width: 520px) {
-  .atlas-file-meta-separator,
-  .atlas-file-location {
+  .atlas-file-controls::-webkit-scrollbar {
     display: none;
   }
 
-  .atlas-file-mode,
-  .atlas-file-button,
-  .atlas-file-action {
-    min-height: 34px;
+  .atlas-file-meta-separator,
+  .atlas-file-location {
+    display: none;
   }
 
   .atlas-file-action span {
@@ -726,6 +755,28 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+
+  .atlas-file-action {
+    width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .atlas-file-document {
+    padding: 28px 20px 52px;
+  }
+}
+
+@container atlas-file-view (max-width: 520px) {
+  .atlas-file-meta {
+    display: none;
+  }
+
+  .atlas-file-mode,
+  .atlas-file-button,
+  .atlas-file-action {
+    min-height: 34px;
   }
 
   .atlas-file-action {

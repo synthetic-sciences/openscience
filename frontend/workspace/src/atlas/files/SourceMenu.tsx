@@ -7,6 +7,7 @@ import {
   IconFolder,
   IconFolderAdd,
   IconLink,
+  IconMoreH,
   IconTrash,
 } from "@/atlas/shared/Icon"
 import "./file-items.css"
@@ -31,6 +32,8 @@ export function SourceMenu(props: {
   onPick: (source: PaneSource) => void
   onAdd?: () => void
   onRevoke?: (source: PaneSource) => void
+  /** Use a stable label such as “More” when primary locations are separate tabs. */
+  triggerLabel?: string
   /**
    * Called the first time the menu is opened. Listing Modal Volumes is a call
    * to Modal's API, so it is paid when someone looks for a source rather than
@@ -101,14 +104,26 @@ export function SourceMenu(props: {
         data-source-kind={props.active.kind}
         aria-haspopup="menu"
         aria-expanded={open()}
-        aria-label={`File source: ${props.active.name}`}
-        title={props.active.detail ?? props.active.sub}
+        aria-label={
+          props.triggerLabel
+            ? `${props.triggerLabel} file locations; current: ${props.active.name}`
+            : `File source: ${props.active.name}`
+        }
+        title={
+          props.triggerLabel
+            ? "Connected folders, remote storage, and Trash"
+            : (props.active.detail ?? props.active.sub)
+        }
         onClick={toggle}
       >
         <span class="files-source__glyph" aria-hidden="true">
-          {glyph(props.active.kind)({ size: 15, strokeWidth: 1.5 })}
+          {props.triggerLabel ? (
+            <IconMoreH size={15} strokeWidth={1.5} />
+          ) : (
+            glyph(props.active.kind)({ size: 15, strokeWidth: 1.5 })
+          )}
         </span>
-        <span class="files-source__name">{props.active.name}</span>
+        <span class="files-source__name">{props.triggerLabel ?? props.active.name}</span>
         <span class="files-source__caret" aria-hidden="true">
           <IconChevronDown size={12} strokeWidth={1.5} />
         </span>
@@ -193,11 +208,11 @@ export function SourceMenu(props: {
                           </span>
                           <span>
                             <span class="files-menu__label">{source.name}</span>
+                            <Show when={source.detail}>
+                              <span class="files-menu__context">{source.detail}</span>
+                            </Show>
                             <Show when={source.sub}>
                               <span class="files-menu__sub">{source.sub}</span>
-                            </Show>
-                            <Show when={!source.sub && source.detail}>
-                              <span class="files-menu__context">{source.detail}</span>
                             </Show>
                           </span>
                           <span class="files-menu__tail">

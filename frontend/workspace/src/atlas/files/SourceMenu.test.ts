@@ -76,8 +76,8 @@ describe("source menu", () => {
 
     expect(host.querySelector("[data-source-menu]")).not.toBeNull()
     expect([...host.querySelectorAll("[data-source-group]")].map((n) => n.textContent)).toEqual([
-      "Results",
       "Working files",
+      "Results",
     ])
   })
 
@@ -230,7 +230,7 @@ describe("source menu", () => {
     await Promise.resolve()
 
     const focused = document.activeElement as HTMLElement
-    expect(focused.getAttribute("data-source-item")).toBe("artifacts")
+    expect(focused.getAttribute("data-source-item")).toBe("project")
 
     // A filesystem snapshot refresh rebuilds PaneSource objects. Browsers
     // report the focused row's removal as focusout with no related target.
@@ -239,7 +239,7 @@ describe("source menu", () => {
     await Promise.resolve()
 
     expect(host.querySelector("[data-source-menu]")).not.toBeNull()
-    expect(document.activeElement?.getAttribute("data-source-item")).toBe("artifacts")
+    expect(document.activeElement?.getAttribute("data-source-item")).toBe("project")
   })
 
   test("uses roving arrow navigation and keeps the invisible scrim out of the tab order", async () => {

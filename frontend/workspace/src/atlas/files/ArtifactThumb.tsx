@@ -1,6 +1,7 @@
 import { Match, Show, Switch, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
 import { blobDataUrl } from "@/artifacts/bytes"
 import type { StoredArtifact } from "@/artifacts/store"
+import { ensurePdfWorker } from "@/science/renderers/documents/pdfjs-worker"
 import { extension, thumbKind, thumbLanguage } from "./artifact-thumb"
 
 export interface ThumbProps {
@@ -47,9 +48,7 @@ const notebookText = (body: string) => {
 
 const pdfImage = async (blob: Blob) => {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
-  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-    pdfjs.GlobalWorkerOptions.workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url")).default
-  }
+  ensurePdfWorker(pdfjs.GlobalWorkerOptions)
   const task = pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) })
   const pdf = await task.promise
   try {

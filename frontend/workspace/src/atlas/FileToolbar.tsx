@@ -1,5 +1,6 @@
 import { createMemo, For, Show, type JSX } from "solid-js"
-import { IconArchive, IconCopy, IconDownload, IconFile, IconX } from "@/atlas/shared/Icon"
+import { FileIcon } from "@synsci/ui/file-icon"
+import { IconArchive, IconCopy, IconDownload, IconX } from "@/atlas/shared/Icon"
 import { artifactControl, toolbarControls, type FileDescription } from "./file-viewer"
 
 export interface FileToolbarProps {
@@ -52,7 +53,9 @@ export function FileToolbar(props: FileToolbarProps): JSX.Element {
   return (
     <header class="atlas-file-toolbar" data-slot="file-toolbar">
       <div class="atlas-file-identity">
-        <IconFile size={15} strokeWidth={1.45} />
+        <span class="atlas-file-kind-icon" aria-hidden="true">
+          <FileIcon node={{ path: props.name, type: "file" }} class="atlas-file-type-glyph" />
+        </span>
         <div class="atlas-file-heading">
           <div class="atlas-file-name" title={props.name}>
             {props.name}

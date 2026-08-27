@@ -22,6 +22,7 @@ import { TerminalSurface } from "@/atlas/TerminalSurface"
 import { SessionTraceSurface } from "@/atlas/SessionTraceSurface"
 import { artifactContext } from "@/artifacts/context"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { FileIcon } from "@synsci/ui/file-icon"
 import { ArtifactInspector } from "@/artifacts/ArtifactInspector"
 import { StoredArtifactView } from "@/artifacts/StoredArtifactView"
 import { confirmDialog } from "@/atlas/dialogs"
@@ -31,17 +32,13 @@ import {
   IconActivity,
   IconArchive,
   IconArtifact,
-  IconBookOpen,
-  IconBraces,
   IconChevronLeft,
   IconCollapse,
   IconCpu,
   IconExpand,
-  IconFile,
   IconFolder,
   IconNetwork,
   IconSplit,
-  IconTable,
   IconTerminal,
   IconX,
 } from "@/atlas/shared/Icon"
@@ -612,16 +609,8 @@ function workTabLabel(tab: WorkTab) {
 
 function workTabIcon(tab: WorkTab): JSX.Element {
   if (tab.kind === "saved") return <IconArchive size={16} strokeWidth={1.5} />
-  if (tab.kind === "file") {
-    const extension = tab.file.name.split(".").at(-1)?.toLowerCase()
-    if (extension === "md" || extension === "markdown" || extension === "mdx")
-      return <IconBookOpen size={16} strokeWidth={1.5} />
-    if (["csv", "tsv", "json", "jsonl", "xlsx", "xls"].includes(extension ?? ""))
-      return <IconTable size={16} strokeWidth={1.5} />
-    if (["py", "r", "js", "jsx", "ts", "tsx", "jl", "sh", "sql", "tex"].includes(extension ?? ""))
-      return <IconBraces size={16} strokeWidth={1.5} />
-    return <IconFile size={16} strokeWidth={1.5} />
-  }
+  if (tab.kind === "file")
+    return <FileIcon node={{ path: tab.file.name, type: "file" }} class="right-pane-file-icon" aria-hidden="true" />
   if (tab.context === "files") return <IconFolder size={16} strokeWidth={1.5} />
   if (tab.context === "terminal") return <IconTerminal size={16} strokeWidth={1.5} />
   if (tab.context === "kernels") return <IconCpu size={16} strokeWidth={1.5} />

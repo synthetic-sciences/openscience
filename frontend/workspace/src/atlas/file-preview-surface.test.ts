@@ -4,7 +4,7 @@ const css = await Bun.file(new URL("./FilePreview.css", import.meta.url)).text()
 
 describe("file preview surface", () => {
   test("uses one compact operational toolbar", () => {
-    expect(css).toContain("min-height: 50px")
+    expect(css).toContain("min-height: 48px")
     expect(css).toContain("font-size: 14px")
     expect(css).toContain("font-size: 11px")
     expect(css).toContain("min-height: 32px")
@@ -26,7 +26,7 @@ describe("file preview surface", () => {
   })
 
   test("keeps the preview chrome seamless and touch targets reachable", () => {
-    expect(css).toMatch(/\.atlas-file-toolbar\s*\{[^}]*border: 0;/s)
+    expect(css).toMatch(/\.atlas-file-toolbar\s*\{[^}]*border-bottom: 1px solid/s)
     expect(css).toMatch(/\.atlas-file-modes\s*\{[^}]*border: 0;/s)
     expect(css).toMatch(/\.atlas-file-button,\s*\.atlas-file-action\s*\{[^}]*border: 0;/s)
     expect(css).toContain("@media (pointer: coarse)")

@@ -30,7 +30,15 @@ import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/reso
 import type { StoredArtifact } from "@/artifacts/store"
 import { uiStore } from "@/atlas/store/ui"
 import { FolderPicker } from "@/atlas/FolderPicker"
-import { IconChevronRight, IconFolder, IconRefresh, IconSearch, IconX } from "@/atlas/shared/Icon"
+import {
+  IconArchive,
+  IconChevronRight,
+  IconClock,
+  IconFolder,
+  IconRefresh,
+  IconSearch,
+  IconX,
+} from "@/atlas/shared/Icon"
 import {
   connectedFilesystemGrants,
   containsFilePath,
@@ -418,16 +426,31 @@ export function FilesPane(
     writeSource(id)
   }
 
-  // Artifacts lead: they are what a session produces, and a remembered pick only
-  // wins while it still names a source that exists — a grant that was revoked, or
-  // a project that was closed, falls back rather than showing nothing.
+  // Project files are the durable working default. A remembered pick only wins
+  // while it still names a source that exists — a revoked grant falls back
+  // rather than leaving the pane on an empty location.
   const current = createMemo(
     () =>
       sources().find((item) => item.id === picked()) ??
-      sources().find((item) => item.kind === "artifacts") ??
       sources().find((item) => item.kind === "project") ??
+      sources().find((item) => item.kind === "artifacts") ??
       sources()[0]!,
   )
+  const primarySources = createMemo(() =>
+    (["project", "session", "artifacts"] as const).flatMap((kind) => {
+      const source = sources().find((item) => item.kind === kind)
+      return source ? [source] : []
+    }),
+  )
+  // Project, session scratch, and Results already have permanent tabs. More is
+  // the overflow for connected folders, remote storage, and recovery only;
+  // repeating the primary destinations in both controls gives one location two
+  // competing owners and makes the workspace model look more complicated than
+  // it is.
+  const overflowSources = createMemo(() =>
+    sources().filter((source) => !["project", "session", "artifacts"].includes(source.kind)),
+  )
+  const primaryActive = () => primarySources().some((source) => source.id === current().id)
   const [path, setPath] = createSignal<string[]>([])
   const [filter, setFilter] = createSignal("")
   const [error, setError] = createSignal("")
@@ -444,6 +467,14 @@ export function FilesPane(
     access: "read" as FilesystemAccess,
     scope: "project" as FilesystemScope,
   })
+
+  const pickSource = (next: PaneSource) => {
+    choose(next.id)
+    setPath([])
+    setFilter("")
+    setError("")
+    setListingError("")
+  }
 
   const where = () => [current().root, ...path()].filter(Boolean).join("/")
 
@@ -667,13 +698,7 @@ export function FilesPane(
     // The artifact catalog and Trash already explain their retention model in
     // their own first content row. Repeating it here would add a third label
     // for the same concept directly above that row.
-    if (source.kind === "artifacts" || source.kind === "trash") return
-    if (source.kind === "session")
-      return {
-        label: "Session workspace",
-        copy: "Scratch files for this session.",
-        badge: "Scratch",
-      }
+    if (["artifacts", "trash", "project", "session"].includes(source.kind)) return
     if (source.kind === "modal")
       return {
         label: "Remote files",
@@ -692,11 +717,7 @@ export function FilesPane(
             copy: "Approved tools and sandboxed runtimes can read and write files here.",
             badge: "Read & write",
           }
-    return {
-      label: "Project files",
-      copy: "Working files in this project's folder.",
-      badge: "This computer",
-    }
+    return
   })
 
   // Session titles label the grid's groups. They live in the sync store, which
@@ -832,7 +853,7 @@ export function FilesPane(
     const file: PaneFile = {
       name: row.name,
       path: target,
-      source: from.name,
+      source: from.kind === "project" ? projectName() : from.name,
       readonly: from.readonly,
     }
     if (props.onOpenFile) return props.onOpenFile(file)
@@ -1026,9 +1047,38 @@ export function FilesPane(
     <div class="files-browser" data-files-browser data-source-kind={current().kind}>
       <header class="files-browser__header">
         <div class="files-browser__toolbar">
+          <div class="files-workspace-switcher" role="tablist" aria-label="Project file locations">
+            <For each={primarySources()}>
+              {(source) => (
+                <button
+                  type="button"
+                  role="tab"
+                  class="files-workspace-switcher__tab"
+                  classList={{ "is-active": source.id === current().id }}
+                  data-workspace-source={source.kind}
+                  aria-selected={source.id === current().id}
+                  aria-label={`${source.name}. ${source.detail ?? ""}`.trim()}
+                  title={source.detail}
+                  onClick={() => pickSource(source)}
+                >
+                  <span aria-hidden="true">
+                    {source.kind === "project" ? (
+                      <IconFolder size={14} strokeWidth={1.5} />
+                    ) : source.kind === "session" ? (
+                      <IconClock size={14} strokeWidth={1.5} />
+                    ) : (
+                      <IconArchive size={14} strokeWidth={1.5} />
+                    )}
+                  </span>
+                  <span>{source.name}</span>
+                </button>
+              )}
+            </For>
+          </div>
           <SourceMenu
-            sources={sources()}
+            sources={overflowSources()}
             active={current()}
+            triggerLabel={primaryActive() ? "More" : undefined}
             onOpen={() => {
               setOpened(opened() + 1)
               // Grants may be added by another surface or process. The picker
@@ -1036,14 +1086,7 @@ export function FilesPane(
               // an SSE reconnect caused the change event to be missed.
               if (identity()) void refetchSnapshot()
             }}
-            onPick={(next) => {
-              choose(next.id)
-              setPath([])
-              setFilter("")
-              // The notice describes the source being left, not the one arriving.
-              setError("")
-              setListingError("")
-            }}
+            onPick={pickSource}
             onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "project" })}
           />
 

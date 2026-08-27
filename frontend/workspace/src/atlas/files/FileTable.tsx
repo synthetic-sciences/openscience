@@ -1,5 +1,6 @@
 import { For, Show, createMemo, type JSX } from "solid-js"
-import { IconArrowUp, IconEdit, IconFile, IconFolder, IconTrash } from "@/atlas/shared/Icon"
+import { FileIcon } from "@synsci/ui/file-icon"
+import { IconArrowUp, IconEdit, IconTrash } from "@/atlas/shared/Icon"
 import { bytes } from "./bytes"
 
 export interface FileRow {
@@ -104,11 +105,7 @@ export function FileTable(props: {
                 onClick={() => props.onOpen(row)}
               >
                 <span class="files-row__glyph" aria-hidden="true">
-                  {row.type === "directory" ? (
-                    <IconFolder size={15} strokeWidth={1.45} />
-                  ) : (
-                    <IconFile size={15} strokeWidth={1.45} />
-                  )}
+                  <FileIcon node={{ path: row.name, type: row.type }} class="files-row__type-glyph" />
                 </span>
                 <span class="files-row__name" data-file-name>
                   {row.name}

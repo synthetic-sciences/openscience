@@ -13,17 +13,17 @@ const grant = (id: string, path: string, access: "read" | "write"): FilesystemGr
 })
 
 describe("pane sources", () => {
-  test("puts Results first, working files next, and recovery last", () => {
+  test("puts shared project files first, saved Results next, and recovery last", () => {
     const list = buildSources({
       projectRoot: "/home/keertan/codes/openscience-demoo",
       projectName: "openscience-demoo",
       grants: [grant("g1", "/home/keertan/data/pdebench", "read")],
     })
 
-    expect(list.map((s) => s.id)).toEqual(["artifacts", "project", "g1", "trash"])
-    expect(list[0]).toMatchObject({ group: "Results", name: "Results" })
-    expect(list[1]?.group).toBe("Working files")
-    expect(list[1]?.sub).toBe("/home/keertan/codes/openscience-demoo")
+    expect(list.map((s) => s.id)).toEqual(["project", "artifacts", "g1", "trash"])
+    expect(list[0]).toMatchObject({ group: "Working files", name: "Project files" })
+    expect(list[0]?.sub).toBe("/home/keertan/codes/openscience-demoo")
+    expect(list[1]).toMatchObject({ group: "Results", name: "Results" })
     expect(list.at(-1)?.group).toBe("Recovery")
   })
 
@@ -54,8 +54,8 @@ describe("pane sources", () => {
     expect(without.some((s) => s.kind === "session")).toBe(false)
     expect(with_.find((s) => s.kind === "session")?.root).toBe("/p/.session")
     expect(with_.find((s) => s.kind === "session")).toMatchObject({
-      name: "Session workspace",
-      detail: "Scratch files for this session",
+      name: "This session",
+      detail: "Temporary working files for this conversation",
     })
   })
 
@@ -87,8 +87,8 @@ describe("pane sources", () => {
     })
 
     expect(list.find((source) => source.kind === "session")).toMatchObject({
-      name: "Session workspace",
-      detail: "Scratch files for this session",
+      name: "This session",
+      detail: "Temporary working files for this conversation",
       root: "/app-data/workspaces/prj_1/ses_1",
     })
   })
@@ -96,7 +96,7 @@ describe("pane sources", () => {
   test("groups in a fixed order and drops empty groups", () => {
     const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [] }))
 
-    expect(groups.map((g) => g.group)).toEqual(["Results", "Working files", "Recovery"])
+    expect(groups.map((g) => g.group)).toEqual(["Working files", "Results", "Recovery"])
   })
 
   // One entry per provider. Remote will hold AWS, GCP and the rest, and an
@@ -126,7 +126,7 @@ describe("pane sources", () => {
   test("keeps remote sources after local ones so the picker order is stable", () => {
     const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [], modal: true }))
 
-    expect(groups.map((g) => g.group)).toEqual(["Results", "Working files", "Remote", "Recovery"])
+    expect(groups.map((g) => g.group)).toEqual(["Working files", "Results", "Remote", "Recovery"])
   })
 })
 

@@ -34,7 +34,7 @@ afterEach(() => {
   globalThis.localStorage?.clear()
 })
 
-/** Starts the pane on a source other than its artifacts default. */
+/** Starts the pane on a source other than its project-files default. */
 const startOn = (id: string) => globalThis.localStorage?.setItem("openscience:files-source", id)
 
 const mount = (view: () => JSX.Element) => {
@@ -144,9 +144,7 @@ describe("files pane", () => {
     })
   })
 
-  // Artifacts are what a session produces, so the pane opens on them rather than
-  // on the project tree.
-  test("opens on artifacts when nothing has been picked yet", async () => {
+  test("opens on shared project files when nothing has been picked yet", async () => {
     const host = mount(() =>
       subject.FilesPane({
         request: async (path) => {
@@ -158,10 +156,9 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Results")
-    expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.placeholder).toBe("Search artifacts")
-    expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
-    expect(host.textContent).not.toContain("SHOULD_NOT_APPEAR.py")
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.placeholder).toBe("Filter this folder")
+    expect(host.querySelector('[data-file-row="SHOULD_NOT_APPEAR.py"]')).not.toBeNull()
   })
 
   test("keeps source and search together as the primary browser toolbar", async () => {
@@ -186,6 +183,46 @@ describe("files pane", () => {
     expect(host.querySelector("[data-source-context]")).toBeNull()
   })
 
+  test("keeps primary workspaces out of More", async () => {
+    const workspace = {
+      ...grant("fsg_workspace", "/home/keertan/.openscience/workspaces/ses_1", "write"),
+      scope: "session",
+      source: "workspace",
+    }
+    const connected = grant("fsg_dataset", "/home/keertan/data/pdebench", "read")
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return new Response(JSON.stringify(snapshot([workspace, connected])), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          if (path === "/settings/compute") return listing({ providers: [] })
+          if (path.startsWith("/file/artifact-store")) return listing([])
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector('[data-workspace-source="project"]')).not.toBeNull()
+    expect(host.querySelector('[data-workspace-source="session"]')).not.toBeNull()
+    expect(host.querySelector('[data-workspace-source="artifacts"]')).not.toBeNull()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await settle()
+
+    expect(host.querySelector('[data-source-item="project"]')).toBeNull()
+    expect(host.querySelector('[data-source-item="session"]')).toBeNull()
+    expect(host.querySelector('[data-source-item="artifacts"]')).toBeNull()
+    expect(host.querySelector('[data-source-item="fsg_dataset"]')).not.toBeNull()
+    expect(host.querySelector('[data-source-item="trash"]')).not.toBeNull()
+    expect(host.querySelector("[data-source-add]")).not.toBeNull()
+  })
+
   test("uses the human project name instead of a managed storage UUID", async () => {
     const managed = "/Users/researcher/.openscience/projects/58e4a6d9-f9cb-4de0-83aa-a236cb718206"
     startOn("project")
@@ -201,7 +238,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Spatial Biology")
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("title")).toContain("Spatial Biology")
     expect(host.textContent).not.toContain("58e4a6d9-f9cb-4de0-83aa-a236cb718206")
   })
 
@@ -248,6 +285,7 @@ describe("files pane", () => {
   })
 
   test("remembers the source it was left on", async () => {
+    startOn("artifacts")
     const request = async (path: string) => {
       if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
       if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
@@ -256,8 +294,7 @@ describe("files pane", () => {
     const first = mount(() => subject.FilesPane({ request }))
     await settle()
 
-    first.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    first.querySelector<HTMLButtonElement>('[data-source-item="project"]')?.click()
+    first.querySelector<HTMLButtonElement>('[data-workspace-source="project"]')?.click()
     await settle()
     expect(first.querySelector(".files-table")).not.toBeNull()
 
@@ -273,7 +310,7 @@ describe("files pane", () => {
 
   // A remembered grant that was later revoked names a source that no longer
   // exists; falling back beats rendering nothing.
-  test("falls back to artifacts when the remembered source is gone", async () => {
+  test("falls back to project files when the remembered source is gone", async () => {
     startOn("grant_that_no_longer_exists")
     const host = mount(() =>
       subject.FilesPane({
@@ -286,10 +323,8 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Results")
-    // The store is empty in this fixture, so the surface is the empty state
-    // rather than a grid container.
-    expect(host.querySelector(".artifact-surface")).not.toBeNull()
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector(".files-table")).not.toBeNull()
     expect(host.querySelector('[data-source-item="modal"]')).toBeNull()
   })
 
@@ -399,10 +434,8 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>("[data-source-button]")!.click()
     await settle()
 
-    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Results")
-    // The store is empty in this fixture, so the surface is the empty state
-    // rather than a grid container.
-    expect(host.querySelector(".artifact-surface")).not.toBeNull()
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector(".files-table")).not.toBeNull()
     expect(host.querySelector('[data-source-item="modal"]')).toBeNull()
   })
 
@@ -410,6 +443,7 @@ describe("files pane", () => {
     const { calls, request } = modal()
     const host = mount(() => subject.FilesPane({ request }))
     await settle()
+    const localListings = calls.filter((path) => path.startsWith("/file?")).length
     await enterModal(host)
 
     expect(calls).toContain("/settings/compute/modal/volumes")
@@ -419,7 +453,7 @@ describe("files pane", () => {
       "weights",
     ])
     // A Volume path is not this machine's path; the local listing must not run.
-    expect(calls.filter((path) => path.startsWith("/file?")).length).toBe(0)
+    expect(calls.filter((path) => path.startsWith("/file?")).length).toBe(localListings)
   })
 
   test("browses inside a Volume over the Modal API", async () => {
@@ -501,7 +535,7 @@ describe("files pane", () => {
     notes!.click()
     for (let attempt = 0; attempt < 20 && !host.querySelector("[data-remote-text]"); attempt += 1) await settle()
 
-    expect(host.querySelector('[role="tablist"]')).toBeNull()
+    expect(host.querySelector('.files-workspace-switcher[role="tablist"]')).toBeNull()
     expect(host.querySelector("[data-remote-text]")?.textContent).toContain("remote bytes")
     expect(calls).toContain("/settings/compute/modal/volumes/weights/file?path=/notes.md")
 
@@ -529,7 +563,7 @@ describe("files pane", () => {
 
     expect(got).toEqual(["model.safetensors"])
     expect(host.querySelector("[data-remote-unsupported]")).toBeNull()
-    expect(host.querySelector('[role="tablist"]')).toBeNull()
+    expect(host.querySelector('.files-workspace-switcher[role="tablist"]')).not.toBeNull()
   })
 
   test("navigates large Volume downloads directly instead of buffering them through transport", async () => {
@@ -578,7 +612,7 @@ describe("files pane", () => {
     )
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    expect(host.querySelector('[role="tablist"]')).toBeNull()
+    expect(host.querySelector('.files-workspace-switcher[role="tablist"]')).not.toBeNull()
     expect(host.querySelector("[data-source-button]")).not.toBeNull()
     expect(host.querySelector(".files-table")).not.toBeNull()
     expect(host.querySelectorAll("[data-file-row]").length).toBe(1)
@@ -636,7 +670,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-source-context]")?.textContent).toContain("Project files")
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("true")
 
     host.querySelector<HTMLButtonElement>('[data-file-row="data"]')?.click()
     await settle()
@@ -650,7 +684,7 @@ describe("files pane", () => {
     await settle()
 
     expect(host.querySelector("[data-path-crumb]")).toBeNull()
-    expect(host.querySelector("[data-source-context]")?.textContent).toContain("Project files")
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("true")
     expect(host.querySelector('[data-file-row="data"]')).not.toBeNull()
   })
 
@@ -779,6 +813,7 @@ describe("files pane", () => {
   })
 
   test("surfaces and retries the selected artifact source independently", async () => {
+    startOn("artifacts")
     let activeAttempts = 0
     const host = mount(() =>
       subject.FilesPane({
@@ -948,8 +983,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    host.querySelector<HTMLButtonElement>('[data-workspace-source="artifacts"]')?.click()
     await settle()
 
     const names = [...host.querySelectorAll("[data-card-open]")].map((node) => node.getAttribute("aria-label"))
@@ -971,8 +1005,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    host.querySelector<HTMLButtonElement>('[data-workspace-source="artifacts"]')?.click()
     await settle()
 
     expect(host.querySelector(".files-table")).toBeNull()
@@ -990,8 +1023,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    host.querySelector<HTMLButtonElement>('[data-workspace-source="artifacts"]')?.click()
     await settle()
 
     expect(host.textContent).toContain("No saved results yet")
@@ -1020,8 +1052,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    host.querySelector<HTMLButtonElement>('[data-workspace-source="artifacts"]')?.click()
     await settle()
 
     host.querySelector<HTMLButtonElement>("[data-card-open]")?.click()
@@ -1053,8 +1084,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    host.querySelector<HTMLButtonElement>('[data-workspace-source="artifacts"]')?.click()
     await settle()
 
     host.querySelector<HTMLButtonElement>("[data-card-menu]")?.click()
@@ -1094,8 +1124,7 @@ describe("files pane", () => {
     )
     await settle()
 
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    host.querySelector<HTMLButtonElement>('[data-workspace-source="artifacts"]')?.click()
     await settle()
 
     host.querySelector<HTMLButtonElement>("[data-card-menu]")?.click()
@@ -1275,7 +1304,7 @@ describe("files pane", () => {
     expect(opened).toEqual([{ name: "train_lr.py", path: "src/train_lr.py", source: "proj", readonly: undefined }])
     // FilesPane never creates a competing inner strip. In production the
     // uiStore callback activates RightPane's persisted WorkTabStrip.
-    expect(host.querySelector('[role="tablist"]')).toBeNull()
+    expect(host.querySelector('.files-workspace-switcher[role="tablist"]')).not.toBeNull()
     expect(host.querySelector(".files-table")).not.toBeNull()
   })
 
@@ -1369,8 +1398,7 @@ describe("files pane", () => {
 
     // Moving the browser after opening does not mutate the location already
     // handed to the owning work tab.
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    host.querySelector<HTMLButtonElement>('[data-source-item="project"]')?.click()
+    host.querySelector<HTMLButtonElement>('[data-workspace-source="project"]')?.click()
     await settle()
 
     expect(seen.at(-1)).toMatchObject({ source: "pdebench", readonly: true })

@@ -358,6 +358,11 @@
   justify-content: center;
   color: var(--color-text-faint);
 }
+
+.files-row__type-glyph {
+  width: 17px;
+  height: 17px;
+}
 .files-row__name {
   min-width: 0;
   overflow: hidden;
@@ -547,12 +552,72 @@
 }
 
 .files-browser__toolbar .files-source {
-  max-width: min(48cqi, 210px);
+  max-width: min(34cqi, 160px);
 }
 
 .files-browser__toolbar .files-source__button {
   width: 100%;
   max-width: 100%;
+}
+
+.files-workspace-switcher {
+  display: inline-flex;
+  min-width: 0;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--atlas-radius-sm);
+  background: var(--color-bg-subtle);
+}
+
+.files-workspace-switcher__tab {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  background: transparent;
+  color: var(--color-text-faint);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+}
+
+.files-workspace-switcher__tab > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.files-workspace-switcher__tab > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.files-workspace-switcher__tab:hover:not(.is-active) {
+  color: var(--color-text);
+}
+
+.files-workspace-switcher__tab.is-active {
+  background: var(--color-surface-solid);
+  box-shadow: var(--atlas-shadow-xs);
+  color: var(--color-text);
+}
+
+.files-workspace-switcher__tab:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -2px;
 }
 
 /* The source control names a location; this compact second line explains its
@@ -1604,6 +1669,30 @@
    the helper row here preserves the primary source/search controls and avoids
    spending scarce vertical space on text that would be truncated anyway. */
 @container files-pane (max-width: 400px) {
+  .files-browser__toolbar {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .files-workspace-switcher {
+    max-width: calc(100% - 70px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .files-workspace-switcher::-webkit-scrollbar {
+    display: none;
+  }
+
+  .files-search {
+    order: 3;
+    flex-basis: calc(100% - 38px);
+  }
+
+  .files-refresh {
+    order: 4;
+  }
+
   .files-source-context {
     display: none;
   }
@@ -1611,6 +1700,7 @@
 
 @media (pointer: coarse) {
   .files-source__button,
+  .files-workspace-switcher__tab,
   .files-menu__item,
   .files-menu__revoke,
   .files-row,

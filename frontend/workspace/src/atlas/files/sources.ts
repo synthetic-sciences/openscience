@@ -20,7 +20,7 @@ export interface PaneSource {
   live?: boolean
 }
 
-const ORDER: SourceGroup[] = ["Results", "Working files", "Remote", "Recovery"]
+const ORDER: SourceGroup[] = ["Working files", "Results", "Remote", "Recovery"]
 
 export function buildSources(input: {
   projectRoot: string
@@ -32,17 +32,10 @@ export function buildSources(input: {
 }): PaneSource[] {
   const list: PaneSource[] = [
     {
-      id: "artifacts",
-      group: "Results",
-      name: "Results",
-      detail: "Durable deliverables with immutable versions",
-      root: "",
-      kind: "artifacts",
-    },
-    {
       id: "project",
       group: "Working files",
-      name: input.projectName,
+      name: "Project files",
+      detail: `Shared working files for ${input.projectName}`,
       sub: input.projectRoot,
       root: input.projectRoot,
       kind: "project",
@@ -56,13 +49,21 @@ export function buildSources(input: {
     list.push({
       id: "session",
       group: "Working files",
-      name: "Session workspace",
-      detail: "Scratch files for this session",
+      name: "This session",
+      detail: "Temporary working files for this conversation",
       sub: input.sessionRoot,
       root: input.sessionRoot,
       kind: "session",
     })
   }
+  list.push({
+    id: "artifacts",
+    group: "Results",
+    name: "Results",
+    detail: "Saved deliverables from every session in this project",
+    root: "",
+    kind: "artifacts",
+  })
   for (const grant of input.grants) {
     list.push({
       id: grant.id,

@@ -1,6 +1,7 @@
 import { For, Show, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ArtifactRenderProps } from "../registry"
+import { ensurePdfWorker } from "./pdfjs-worker"
 import "./PdfViewer.css"
 
 /**
@@ -30,6 +31,7 @@ interface PdfViewState {
   rendering: boolean
   viewportWidth: number
   fitScale: number
+  thumbnails: boolean
 }
 
 const ZOOM_LEVELS = [0.35, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5]
@@ -87,8 +89,10 @@ interface PdfLib {
 }
 
 export function PdfViewer(props: ArtifactRenderProps) {
+  let shell!: HTMLElement
   let viewport!: HTMLDivElement
   let host!: HTMLDivElement
+  let thumbHost!: HTMLElement
   const cfg = normalize(props.data)
   const hasSource = Boolean(cfg.url || cfg.bytes || cfg.base64)
   const [view, setView] = createStore<PdfViewState>({
@@ -98,6 +102,7 @@ export function PdfViewer(props: ArtifactRenderProps) {
     rendering: false,
     viewportWidth: 0,
     fitScale: 1,
+    thumbnails: false,
   })
 
   let requestRender = () => {}
@@ -125,6 +130,7 @@ export function PdfViewer(props: ArtifactRenderProps) {
     let scrollFrame = 0
     let lastFitWidth = 0
     let pageNodes: HTMLElement[] = []
+    let thumbNodes: HTMLButtonElement[] = []
     let tasks: Array<{ cancel(): void }> = []
 
     const cancelTasks = () => {
@@ -156,13 +162,16 @@ export function PdfViewer(props: ArtifactRenderProps) {
       cancelTasks()
       setView({ rendering: true, error: undefined })
       host.replaceChildren()
+      thumbHost.replaceChildren()
       pageNodes = []
+      thumbNodes = []
 
       const total = doc.numPages
       const shown = Math.min(total, cfg.maxPages)
       const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
-      const available = Math.max(240, view.viewportWidth - 32)
-      setView("pages", { total, shown, rendered: 0 })
+      const thumbnails = view.viewportWidth >= 720 && shown > 1
+      const available = Math.max(240, view.viewportWidth - (thumbnails ? 160 : 32))
+      setView({ pages: { total, shown, rendered: 0 }, thumbnails })
 
       for (let n = 1; n <= shown; n++) {
         if (disposed || version !== renderVersion) return
@@ -196,13 +205,44 @@ export function PdfViewer(props: ArtifactRenderProps) {
         host.appendChild(frame)
         pageNodes.push(frame)
 
+        let thumbTask: { promise: Promise<void>; cancel(): void } | undefined
+        if (thumbnails) {
+          const thumb = document.createElement("button")
+          thumb.type = "button"
+          thumb.className = "pdf-viewer-thumbnail"
+          thumb.dataset.page = String(n)
+          thumb.setAttribute("aria-label", `Go to page ${n}`)
+          thumb.addEventListener("click", () => goToPage(n))
+
+          const thumbScale = Math.min(0.28, 88 / Math.max(1, natural.width))
+          const thumbSize = page.getViewport({ scale: thumbScale })
+          const thumbCanvas = document.createElement("canvas")
+          thumbCanvas.width = Math.max(1, Math.floor(thumbSize.width * dpr))
+          thumbCanvas.height = Math.max(1, Math.floor(thumbSize.height * dpr))
+          thumbCanvas.style.width = `${Math.floor(thumbSize.width)}px`
+          thumbCanvas.style.height = `${Math.floor(thumbSize.height)}px`
+
+          const thumbLabel = document.createElement("span")
+          thumbLabel.textContent = String(n)
+          thumb.append(thumbCanvas, thumbLabel)
+          thumbHost.appendChild(thumb)
+          thumbNodes.push(thumb)
+
+          const thumbContext = thumbCanvas.getContext("2d")
+          if (thumbContext) {
+            if (dpr !== 1) thumbContext.scale(dpr, dpr)
+            thumbTask = page.render({ canvasContext: thumbContext, viewport: thumbSize })
+            tasks.push(thumbTask)
+          }
+        }
+
         const context = canvas.getContext("2d")
         if (!context) continue
         if (dpr !== 1) context.scale(dpr, dpr)
         const task = page.render({ canvasContext: context, viewport: size })
         tasks.push(task)
         try {
-          await task.promise
+          await Promise.all([task.promise, thumbTask?.promise])
         } catch {
           if (disposed || version !== renderVersion) return
         }
@@ -222,13 +262,23 @@ export function PdfViewer(props: ArtifactRenderProps) {
       renderFrame = requestAnimationFrame(() => void renderPages())
     }
 
+    const setCurrentPage = (page: number) => {
+      setView("currentPage", page)
+      for (const [index, node] of thumbNodes.entries()) node.classList.toggle("is-active", index === page - 1)
+      const thumb = thumbNodes[page - 1]
+      if (!thumb || !thumbHost) return
+      if (thumb.offsetTop < thumbHost.scrollTop) thumbHost.scrollTop = thumb.offsetTop
+      else if (thumb.offsetTop + thumb.offsetHeight > thumbHost.scrollTop + thumbHost.clientHeight)
+        thumbHost.scrollTop = thumb.offsetTop + thumb.offsetHeight - thumbHost.clientHeight
+    }
+
     goToPage = (page) => {
       const count = view.pages?.shown ?? 1
       const next = Math.max(1, Math.min(count, page))
       const target = pageNodes[next - 1]
       if (!target || !viewport) return
       viewport.scrollTo({ top: Math.max(0, target.offsetTop - 12), behavior: "auto" })
-      setView("currentPage", next)
+      setCurrentPage(next)
     }
 
     const onScroll = () => {
@@ -240,7 +290,7 @@ export function PdfViewer(props: ArtifactRenderProps) {
           if (node.offsetTop > top) break
           current = Number(node.dataset.page ?? current)
         }
-        setView("currentPage", current)
+        if (current !== view.currentPage) setCurrentPage(current)
       })
     }
     viewport.addEventListener("scroll", onScroll, { passive: true })
@@ -256,17 +306,14 @@ export function PdfViewer(props: ArtifactRenderProps) {
             lastFitWidth = width
             requestRender()
           })
-    if (observer) observer.observe(viewport)
+    if (observer) observer.observe(shell)
     else setView("viewportWidth", 640)
 
     if (hasSource) {
       ;(async () => {
         try {
           const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as unknown as PdfLib
-          if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-            const workerUrl = (await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url")).default
-            pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
-          }
+          ensurePdfWorker(pdfjs.GlobalWorkerOptions)
 
           const src: Record<string, unknown> = cfg.url
             ? { url: cfg.url }
@@ -308,6 +355,7 @@ export function PdfViewer(props: ArtifactRenderProps) {
 
   return (
     <section
+      ref={shell}
       class="pdf-viewer"
       data-component="science-pdf"
       style={{ height: props.height ? `${props.height}px` : undefined }}
@@ -370,40 +418,50 @@ export function PdfViewer(props: ArtifactRenderProps) {
         </div>
       </header>
 
-      <div ref={viewport} class="atlas-scroll pdf-viewer-body" data-slot="pdf-body">
-        <Show when={!hasSource}>
-          <div class="pdf-viewer-message" data-slot="pdf-empty">
-            No PDF source. Provide <code>{`{ url }`}</code>, <code>{`{ bytes }`}</code>, or <code>{`{ base64 }`}</code>.
-          </div>
-        </Show>
-        <Show when={view.status}>
-          <div class="pdf-viewer-message" role="status" aria-live="polite">
-            {view.status}
-          </div>
-        </Show>
-        <Show when={view.rendering && !view.status}>
-          <div class="pdf-viewer-rendering" role="status" aria-live="polite">
-            Rendering {view.pages?.rendered ?? 0} of {view.pages?.shown ?? 0}
-          </div>
-        </Show>
-        <Show when={view.error}>
-          {(message) => (
-            <div class="pdf-viewer-error" data-slot="pdf-error" role="alert">
-              <strong>Couldn’t render this PDF</strong>
-              <span>{message()}</span>
+      <div class="pdf-viewer-workspace">
+        <nav
+          ref={thumbHost}
+          class="pdf-viewer-thumbnails"
+          classList={{ "is-visible": view.thumbnails }}
+          aria-label="PDF page thumbnails"
+          aria-hidden={!view.thumbnails}
+        />
+        <div ref={viewport} class="atlas-scroll pdf-viewer-body" data-slot="pdf-body">
+          <Show when={!hasSource}>
+            <div class="pdf-viewer-message" data-slot="pdf-empty">
+              No PDF source. Provide <code>{`{ url }`}</code>, <code>{`{ bytes }`}</code>, or{" "}
+              <code>{`{ base64 }`}</code>.
             </div>
-          )}
-        </Show>
-        <div ref={host} class="pdf-viewer-pages" data-slot="pdf-pages" />
-        <Show when={view.pages && view.pages.shown < view.pages.total}>
-          <div class="pdf-viewer-cap-note">
-            <For each={[view.pages!]}>
-              {(count) =>
-                `${count.total - count.shown} more page${count.total - count.shown === 1 ? "" : "s"} not rendered`
-              }
-            </For>
-          </div>
-        </Show>
+          </Show>
+          <Show when={view.status}>
+            <div class="pdf-viewer-message" role="status" aria-live="polite">
+              {view.status}
+            </div>
+          </Show>
+          <Show when={view.rendering && !view.status}>
+            <div class="pdf-viewer-rendering" role="status" aria-live="polite">
+              Rendering {view.pages?.rendered ?? 0} of {view.pages?.shown ?? 0}
+            </div>
+          </Show>
+          <Show when={view.error}>
+            {(message) => (
+              <div class="pdf-viewer-error" data-slot="pdf-error" role="alert">
+                <strong>Couldn’t render this PDF</strong>
+                <span>{message()}</span>
+              </div>
+            )}
+          </Show>
+          <div ref={host} class="pdf-viewer-pages" data-slot="pdf-pages" />
+          <Show when={view.pages && view.pages.shown < view.pages.total}>
+            <div class="pdf-viewer-cap-note">
+              <For each={[view.pages!]}>
+                {(count) =>
+                  `${count.total - count.shown} more page${count.total - count.shown === 1 ? "" : "s"} not rendered`
+                }
+              </For>
+            </div>
+          </Show>
+        </div>
       </div>
     </section>
   )

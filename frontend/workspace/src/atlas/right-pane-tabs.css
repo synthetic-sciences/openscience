@@ -253,6 +253,12 @@
   color: var(--color-text-faint);
 }
 
+.right-pane-file-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
 .inspector-tab-pair[data-active="true"] .inspector-tab__icon {
   color: var(--color-text-muted);
 }
