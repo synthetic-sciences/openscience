@@ -73,10 +73,37 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  macos-signing-preflight:
+    needs: release-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require Developer ID and notarization credentials
+        shell: bash
+        env:
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_NOTARY_APPLE_ID APPLE_NOTARY_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::macOS release signing is not configured. Missing repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
   version:
     needs:
       - release-source
       - npm-preflight
+      - macos-signing-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -107,8 +134,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
-      # The job verifies/uploads native archives and checksums to the draft release.
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -143,8 +169,124 @@ jobs:
             frontend/workspace/dist/version.json
           key: cli-build-${{ needs.version.outputs.version }}
 
-      # Persist the nondeterministic binary build before the first draft-asset
-      # mutation. A retry can then verify/upload these exact bytes.
+    outputs:
+      version: ${{ needs.version.outputs.version }}
+
+  sign-macos-cli:
+    needs:
+      - version
+      - build-cli
+    runs-on: macos-15
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.source }}
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Restore signed CLI build
+        id: signed-cli-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: cli-build-signed-${{ needs.version.outputs.version }}
+
+      - name: Restore unsigned CLI build
+        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: cli-build-${{ needs.version.outputs.version }}
+          fail-on-cache-miss: true
+
+      - name: Developer ID sign and notarize macOS binaries
+        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          certificate="$RUNNER_TEMP/openscience-developer-id.p12"
+          keychain="$RUNNER_TEMP/openscience-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -f "$certificate"' EXIT
+
+          printf '%s' "$APPLE_DEVELOPER_ID_P12_BASE64" | openssl base64 -d -A -out "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          if [[ -z "$identity" ]]; then
+            echo "::error::The imported certificate does not contain a Developer ID Application identity."
+            exit 1
+          fi
+
+          shopt -s nullglob
+          binaries=(backend/cli/dist/@synsci/openscience-darwin-*/bin/openscience)
+          if [[ ${#binaries[@]} -ne 3 ]]; then
+            echo "::error::Expected exactly 3 macOS native binaries; found ${#binaries[@]}."
+            exit 1
+          fi
+          for binary in "${binaries[@]}"; do
+            codesign --force --options runtime --timestamp \
+              --identifier ai.syntheticsciences.openscience \
+              --keychain "$keychain" --sign "$identity" "$binary"
+            codesign --verify --strict --verbose=2 "$binary"
+            details="$(codesign -dv --verbose=4 "$binary" 2>&1)"
+            grep -Fxq 'Identifier=ai.syntheticsciences.openscience' <<<"$details"
+            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
+
+            package_dir="$(dirname "$(dirname "$binary")")"
+            package_name="$(basename "$package_dir")"
+            archive="backend/cli/dist/${package_name}.zip"
+            rm -f "$archive"
+            (cd "$package_dir/bin" && /usr/bin/zip -q -r "$GITHUB_WORKSPACE/$archive" openscience)
+          done
+
+          archives=(backend/cli/dist/openscience-darwin-*.zip)
+          if [[ ${#archives[@]} -ne 3 ]]; then
+            echo "::error::Expected exactly 3 macOS release archives; found ${#archives[@]}."
+            exit 1
+          fi
+          for archive in "${archives[@]}"; do
+            xcrun notarytool submit "$archive" \
+              --apple-id "$APPLE_NOTARY_APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_NOTARY_PASSWORD" \
+              --wait
+          done
+
+          : > backend/cli/dist/checksums.txt
+          while IFS= read -r archive; do
+            printf '%s  %s\n' "$(shasum -a 256 "$archive" | awk '{print $1}')" "$(basename "$archive")" \
+              >> backend/cli/dist/checksums.txt
+          done < <(find backend/cli/dist -maxdepth 1 -type f \( -name 'openscience-*.zip' -o -name 'openscience-*.tar.gz' \) | sort)
+
+      - name: Cache immutable signed CLI build
+        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: cli-build-signed-${{ needs.version.outputs.version }}
+
+      # Remote assets must be derived from the signed, notarization-accepted
+      # bytes. Uploading in build-cli would permanently expose unsigned assets.
       - name: Verify or upload immutable draft assets
         run: ./tooling/repo/release-assets.ts backend/cli/dist
         env:
@@ -152,13 +294,10 @@ jobs:
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
           GH_TOKEN: ${{ github.token }}
 
-    outputs:
-      version: ${{ needs.version.outputs.version }}
-
   verify-native-cli:
     needs:
       - version
-      - build-cli
+      - sign-macos-cli
     strategy:
       fail-fast: false
       matrix:
@@ -188,7 +327,7 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-${{ needs.version.outputs.version }}
+          key: cli-build-signed-${{ needs.version.outputs.version }}
           fail-on-cache-miss: true
 
       - name: Install the native npm distribution
@@ -220,7 +359,7 @@ jobs:
   prepare-npm:
     needs:
       - version
-      - build-cli
+      - sign-macos-cli
       - verify-native-cli
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -244,7 +383,7 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-${{ needs.version.outputs.version }}
+          key: cli-build-signed-${{ needs.version.outputs.version }}
           fail-on-cache-miss: true
 
       - name: Restore immutable npm artifacts
@@ -320,7 +459,7 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-${{ needs.version.outputs.version }}
+          key: cli-build-signed-${{ needs.version.outputs.version }}
           fail-on-cache-miss: true
 
       - name: Publish

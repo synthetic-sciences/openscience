@@ -42,7 +42,7 @@ test("production release preparation jobs can write their draft GitHub release",
   const source = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
   const jobs = [
     ["version", "build-cli"],
-    ["build-cli", "verify-native-cli"],
+    ["sign-macos-cli", "verify-native-cli"],
   ]
 
   for (const item of jobs) {
@@ -84,6 +84,7 @@ test("production release caches exact builds and packed npm artifacts by version
   const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
 
   expect(workflow).toContain("key: cli-build-${{ needs.version.outputs.version }}")
+  expect(workflow).toContain("key: cli-build-signed-${{ needs.version.outputs.version }}")
   expect(workflow).toContain("key: npm-release-${{ needs.version.outputs.version }}")
   expect(workflow).toContain("run: ./tooling/repo/prepare-npm.ts")
   expect(workflow).toContain("OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}")
@@ -99,6 +100,26 @@ test("production release caches exact builds and packed npm artifacts by version
   expect(prepare.indexOf("Verify packed SDK and plugin exports before publication")).toBeLessThan(
     prepare.indexOf("Cache immutable npm artifacts"),
   )
+})
+
+test("production release signs and notarizes every macOS binary before artifacts or npm packages are created", async () => {
+  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
+  const sign = workflow.slice(workflow.indexOf("\n  sign-macos-cli:"), workflow.indexOf("\n  verify-native-cli:"))
+  const prepare = workflow.slice(workflow.indexOf("\n  prepare-npm:"), workflow.indexOf("\n  publish:"))
+  const publish = workflow.slice(workflow.indexOf("\n  publish:"), workflow.indexOf("\n  deployment:"))
+
+  expect(workflow.indexOf("macos-signing-preflight:")).toBeLessThan(workflow.indexOf("\n  version:"))
+  expect(sign).toContain("Developer ID sign and notarize macOS binaries")
+  expect(sign).toContain("--identifier ai.syntheticsciences.openscience")
+  expect(sign).toContain("codesign --verify --strict")
+  expect(sign).toContain("xcrun notarytool submit")
+  expect(sign).toContain("TeamIdentifier=$APPLE_TEAM_ID")
+  expect(sign.indexOf("xcrun notarytool submit")).toBeLessThan(sign.indexOf("Cache immutable signed CLI build"))
+  expect(sign.indexOf("Cache immutable signed CLI build")).toBeLessThan(
+    sign.indexOf("Verify or upload immutable draft assets"),
+  )
+  expect(prepare).toContain("key: cli-build-signed-${{ needs.version.outputs.version }}")
+  expect(publish).toContain("key: cli-build-signed-${{ needs.version.outputs.version }}")
 })
 
 test("production npm writes stage the complete set before latest promotion and release publication", async () => {
