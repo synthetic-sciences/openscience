@@ -3,7 +3,9 @@ import { CONNECTORS } from "../data/connectors"
 
 const landing = await Bun.file(new URL("./Landing.tsx", import.meta.url)).text()
 const download = await Bun.file(new URL("./Download.tsx", import.meta.url)).text()
+const nav = await Bun.file(new URL("../Nav.tsx", import.meta.url)).text()
 const main = await Bun.file(new URL("../main.tsx", import.meta.url)).text()
+const html = await Bun.file(new URL("../../index.html", import.meta.url)).text()
 const readme = await Bun.file(new URL("../../../../README.md", import.meta.url)).text()
 const gateway = await Bun.file(new URL("../../../docs/src/content/openscience/gateway.mdx", import.meta.url)).text()
 const security = await Bun.file(new URL("../../../docs/src/content/openscience/security.mdx", import.meta.url)).text()
@@ -79,6 +81,19 @@ describe("OpenScience landing contract", () => {
     expect(download).toContain('role="group"')
     expect(download).toContain("aria-pressed")
     expect(download.match(/id="terminal"/g)).toHaveLength(1)
+  })
+
+  test("keeps one three-item navigation across the landing and download pages", () => {
+    expect(landing).toContain("<Nav />")
+    expect(download).toContain('<Nav current="download" />')
+    expect(nav).toContain('label: "Download"')
+    expect(nav).toContain('label: "Docs"')
+    expect(nav).toContain('label: "GitHub"')
+    expect(nav).toContain('aria-label="Primary navigation"')
+  })
+
+  test("does not use long dashes in public landing copy", () => {
+    expect(`${landing}\n${download}\n${nav}\n${html}`).not.toMatch(/[—–]/)
   })
 
   test("shows the real model picker and all shipped scientific sources", async () => {

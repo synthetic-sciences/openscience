@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import Nav from "@/Nav"
 
 const GITHUB = "https://github.com/synthetic-sciences/openscience"
 const DOCS = "https://openscience.sh/docs"
@@ -252,19 +253,7 @@ export default function Download({
           <Mark />
           <span className="font-display text-[21px] leading-none tracking-tight">openscience</span>
         </a>
-        <nav className="flex items-center gap-1 text-[13px] text-foreground/55" aria-label="Primary navigation">
-          <a href={DOCS} className="inline-flex min-h-11 items-center px-3 transition-colors hover:text-foreground">
-            Docs
-          </a>
-          <a
-            href={GITHUB}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-11 items-center px-3 transition-colors hover:text-foreground"
-          >
-            GitHub
-          </a>
-        </nav>
+        <Nav current="download" />
       </header>
 
       <main className="relative z-10">

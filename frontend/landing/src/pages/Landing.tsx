@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import heroPlate from "@/assets/hero.webp"
 import { CONNECTORS } from "@/data/connectors"
+import Nav from "@/Nav"
 
 const LOGOS = [
   { id: "harvard", src: "/logos/harvard.png", alt: "Harvard University" },
@@ -253,12 +254,12 @@ function Section({
 }
 
 /* ----------------------------- Hero plate ------------------------------- */
-/* The Pharos of Alexandria engraving — the beam sweeps from the tower at the
+/* The Pharos of Alexandria engraving. The beam sweeps from the tower at the
    right down to a small ship steering by its light at bottom-left. The plate
    is already monochrome warm sepia, the same hue family as the site's cream,
    so it ships unfiltered. Covered and biased right so the tower sits on the
    right and the ship stays in view at bottom-left; the veil blends the edges.
-   One rule at every width — the crop reads the same on any screen. */
+   One rule at every width keeps the crop consistent on any screen. */
 
 const HERO_NOISE =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")"
@@ -323,6 +324,10 @@ function Hero() {
           background: "linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background) / 0) 100%)",
         }}
       />
+
+      <div className="absolute inset-x-0 top-0 z-20 mx-auto flex h-20 w-full max-w-[1400px] items-center justify-end px-6 sm:px-10">
+        <Nav />
+      </div>
 
       <div className="absolute inset-0 z-10 mx-auto flex h-full max-w-[1400px] flex-col px-6 sm:px-10">
         <div className="hero-text rise self-start mt-[9vh]" style={{ animationDelay: "120ms" }}>
@@ -817,7 +822,7 @@ export default function Landing({
                   <Eyebrow className="mb-6 text-foreground/70">Research loop</Eyebrow>
                   <h2 className={`text-balance ${H_HUGE} text-foreground`}>Chat is where the work starts.</h2>
                   <p className={`mt-7 max-w-[40ch] ${P_BIG} text-foreground/85`}>
-                    Carry the conversation into papers, files, terminals, analyses, and results—all in one local
+                    Carry the conversation into papers, files, terminals, analyses, and results, all in one local
                     workspace.
                   </p>
                 </div>
@@ -894,7 +899,7 @@ export default function Landing({
                   42 scientific sources, searched directly.
                 </h3>
                 <p className={`mx-auto mt-3 max-w-[52ch] ${P}`}>
-                  Literature, structures, variants, compounds, pathways, and expression data—inside the same session.
+                  Literature, structures, variants, compounds, pathways, and expression data, inside the same session.
                 </p>
               </div>
               <ConnectorWall />
