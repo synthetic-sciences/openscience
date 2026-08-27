@@ -1,11 +1,18 @@
 import { Server } from "../../server/server"
 import { OpenScience } from "../../openscience"
+import { Installation } from "../../installation"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { openUrl } from "../../util/open-url"
 import { probeProtectedFolderAccess } from "../../file/protected-folder-access"
-import { DEFAULT_LOCAL_PORT, localServerBase, localWorkspaceUrl, probeLocalServer } from "../local-server"
+import {
+  LOCAL_WORKSPACE_PORTS,
+  findWorkspaceServer,
+  localServerBase,
+  localWorkspaceUrl,
+  probeWorkspaceServer,
+} from "../local-server"
 
 async function announceFdaIfNeeded() {
   const result = await probeProtectedFolderAccess()
@@ -48,13 +55,17 @@ export const WebCommand = cmd({
     }
     const opts = await resolveNetworkOptions(args)
     const directory = args.project ? process.cwd() : undefined
-    const preferred = localServerBase(opts.port || DEFAULT_LOCAL_PORT)
+    const existingPort = opts.port
+      ? (await probeWorkspaceServer(localServerBase(opts.port), Installation.VERSION))
+        ? opts.port
+        : undefined
+      : await findWorkspaceServer(Installation.VERSION)
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
 
-    if (await probeLocalServer(preferred)) {
-      const target = localWorkspaceUrl(preferred, directory)
+    if (existingPort) {
+      const target = localWorkspaceUrl(localServerBase(existingPort), directory)
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
       UI.empty()
       UI.println(UI.Style.TEXT_DIM, "  Using the OpenScience server that is already running.")
@@ -108,15 +119,18 @@ export const WebCommand = cmd({
     const server = Server.listen(opts)
 
     const base = `http://localhost:${server.port}`
-    if (opts.port === 0 && server.port !== DEFAULT_LOCAL_PORT && (await probeLocalServer(localServerBase()))) {
-      await server.stop(true)
-      const target = localWorkspaceUrl(localServerBase(), directory)
-      UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
-      UI.empty()
-      UI.println(UI.Style.TEXT_DIM, "  Using the OpenScience server started by the other launch.")
-      openUrl(target)
-      await announceFdaIfNeeded()
-      return
+    if (opts.port === 0 && !LOCAL_WORKSPACE_PORTS.includes(server.port as (typeof LOCAL_WORKSPACE_PORTS)[number])) {
+      const racedPort = await findWorkspaceServer(Installation.VERSION)
+      if (racedPort) {
+        await server.stop(true)
+        const target = localWorkspaceUrl(localServerBase(racedPort), directory)
+        UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
+        UI.empty()
+        UI.println(UI.Style.TEXT_DIM, "  Using the OpenScience server started by the other launch.")
+        openUrl(target)
+        await announceFdaIfNeeded()
+        return
+      }
     }
 
     const target = localWorkspaceUrl(base, directory)

@@ -815,7 +815,9 @@ export namespace Server {
         return undefined
       }
     }
-    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
+    // Keep browser storage on a stable origin when 4096 is occupied by a dev,
+    // eval, or stale API process. Random ports remain the final fallback only.
+    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(4097) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url
