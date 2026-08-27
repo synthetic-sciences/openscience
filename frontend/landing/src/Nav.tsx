@@ -16,11 +16,7 @@ export default function Nav({ current }: { current?: "download" }) {
           <a
             key={link.id}
             href={link.href}
-            className={`inline-flex min-h-11 items-center px-0.5 text-foreground underline underline-offset-[5px] transition-[text-decoration-color] ${
-              active
-                ? "decoration-2 decoration-[hsl(var(--accent-coral))]"
-                : "decoration-[1px] decoration-foreground/45 hover:decoration-foreground"
-            }`}
+            className="inline-flex min-h-11 items-center px-0.5 text-foreground transition-opacity hover:opacity-70"
             aria-current={active ? "page" : undefined}
             {...("external" in link ? { target: "_blank", rel: "noreferrer" } : {})}
           >

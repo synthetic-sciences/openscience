@@ -93,7 +93,7 @@ describe("OpenScience landing contract", () => {
     expect(nav).toContain('label: "GitHub"')
     expect(nav).toContain('aria-label="Primary navigation"')
     expect(nav).toContain("text-foreground")
-    expect(nav).toContain("underline")
+    expect(nav).not.toContain("underline")
     expect(nav).not.toContain("text-black")
     expect(nav).not.toContain("drop-shadow")
     expect(nav).not.toContain("rounded-full")
