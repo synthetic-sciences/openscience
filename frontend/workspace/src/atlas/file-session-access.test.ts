@@ -27,6 +27,8 @@ describe("session-scoped file requests", () => {
     expect(preview).toContain("{ signal: ticket.controller.signal }")
     expect(preview).toContain("body: JSON.stringify({ path, content, sessionID: session })")
     expect(preview).toContain("sessionID: session,")
+    expect(preview).toContain("sessionID={fileSessionID()}")
+    expect(preview).toContain("scope={resolvedScope()}")
   })
 
   test("threads the session through scientific inspection and artifact provenance", () => {
@@ -39,10 +41,14 @@ describe("session-scoped file requests", () => {
     expect(inspector).toContain("sdk.request(route, undefined, query(path))")
     expect(inspector).toContain('read("/file/provenance", current.path)')
     expect(manuscript).toContain('sdk.request("/file/artifacts", undefined, query())')
+    expect(manuscript).toContain("sessionID: props.sessionID")
+    expect(manuscript).toContain("scope: props.scope")
     expect(manuscript).toContain('sdk.request("/file/content", undefined, query(path))')
     expect(manuscript).toContain('sdk.request.url("/file/raw", raw(path))')
     expect(manuscript).toContain('sdk.request.url("/file/raw", raw(figure.path))')
     expect(manuscript).toMatch(/"\/file\/publication",[\s\S]*?\n\s+query\(\),\n\s+\)/)
+    expect(manuscript).toContain("uiStore.openFile(props.directory, path, { scope: props.scope })")
+    expect(manuscript).toContain("uiStore.openFile(props.directory, result.path, { scope: props.scope })")
   })
 
   test("keeps project-scoped drafts stable across session navigation and blocks stale artifact saves", () => {

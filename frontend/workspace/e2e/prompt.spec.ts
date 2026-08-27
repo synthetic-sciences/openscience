@@ -8,7 +8,8 @@ test.skip(
 
 function sessionIDFromUrl(url: string) {
   const match = /\/session\/([^/?#]+)/.exec(url)
-  return match?.[1]
+  const id = match?.[1]
+  return id && id !== "new" ? id : undefined
 }
 
 test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession }) => {
@@ -29,7 +30,7 @@ test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession })
   await page.keyboard.type(`Reply with exactly: ${token}`)
   await page.keyboard.press("Enter")
 
-  await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
+  await expect(page).toHaveURL(/\/session\/(?!new(?:[/?#]|$))[^/?#]+/, { timeout: 30_000 })
 
   const sessionID = (() => {
     const id = sessionIDFromUrl(page.url())
@@ -54,7 +55,7 @@ test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession })
 
       .toContain(token)
 
-    const reply = page.locator('[data-slot="session-turn-summary-section"]').filter({ hasText: token }).first()
+    const reply = page.locator('[data-slot="session-turn-response-section"]').filter({ hasText: token }).first()
     await expect(reply).toBeVisible({ timeout: 20_000 })
   } finally {
     page.off("pageerror", onPageError)
@@ -115,7 +116,7 @@ test("an incomplete provider tool call is recovered without a raw schema error",
   await prompt.click()
   await page.keyboard.type(token)
   await page.keyboard.press("Enter")
-  await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
+  await expect(page).toHaveURL(/\/session\/(?!new(?:[/?#]|$))[^/?#]+/, { timeout: 30_000 })
 
   const sessionID = sessionIDFromUrl(page.url())
   if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)

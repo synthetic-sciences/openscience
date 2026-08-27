@@ -215,6 +215,8 @@ test("packaged npm rehearsal pins one account data root and waits for the seeded
   )
 
   expect(workflow).toContain('echo "OPENSCIENCE_DATA_DIR=$RUNNER_TEMP/openscience-e2e/data"')
+  expect(workflow).toContain('echo "OPENSCIENCE_E2E_PROJECT_DIR=$GITHUB_WORKSPACE"')
+  expect(workflow).toContain('echo "OPENSCIENCE_E2E_RUNTIME=$(command -v bun)"')
   expect(workflow).toContain("printf '%s\\n' \"SYNSC_API_BASE=http://127.0.0.1:4097\"")
   expect(workflow).toContain('test -s "$OPENSCIENCE_DATA_DIR/openscience-session.json"')
   expect(readiness).toContain('"http://127.0.0.1:4096/account/session" || true)')

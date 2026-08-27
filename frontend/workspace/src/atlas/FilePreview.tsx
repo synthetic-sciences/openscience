@@ -758,6 +758,8 @@ export function FileView(props: {
                   <ManuscriptWorkbench
                     directory={directory()}
                     path={requestPath()}
+                    sessionID={fileSessionID()}
+                    scope={resolvedScope()}
                     text={view.draft}
                     dirty={dirty()}
                     saving={view.saving}

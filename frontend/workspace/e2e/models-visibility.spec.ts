@@ -25,14 +25,15 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
 
   const manage = page.getByRole("dialog")
   await expect(manage.getByRole("heading", { name: "Models", exact: true })).toBeVisible()
+  await manage.locator(".models-preferences-card").getByRole("button", { name: "Edit", exact: true }).click()
   const search = manage.getByLabel("Filter models")
   await expect(search).toBeVisible()
   await search.fill(name)
 
-  const input = manage.getByRole("switch", { name: `Hide ${name}`, exact: true })
+  const input = manage.getByRole("switch", { name: `Show ${name} in composer`, exact: true })
   await expect(input).toBeChecked()
   await input.locator("..").locator('[data-slot="switch-control"]').click()
-  await expect(manage.getByRole("switch", { name: `Show ${name}`, exact: true })).not.toBeChecked()
+  await expect(input).not.toBeChecked()
 
   await manage.getByRole("button", { name: "Close" }).click()
   await expect(manage).toHaveCount(0)
@@ -42,6 +43,6 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
     pickerAgain.locator("[data-model-catalog-item]").filter({ has: pickerAgain.getByText(name, { exact: true }) }),
   ).toHaveCount(0)
 
-  await page.keyboard.press("Escape")
+  await page.locator(modelTriggerSelector).click()
   await expect(pickerAgain).toBeHidden()
 })

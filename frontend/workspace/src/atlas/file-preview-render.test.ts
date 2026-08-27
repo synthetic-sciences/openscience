@@ -8,7 +8,7 @@ describe("file preview markdown images", () => {
     const preview = await read("./FilePreview.tsx")
 
     expect(preview).toContain('import { assetUrl, localAssetPath } from "@/utils/markdown-assets"')
-    expect(preview).toContain("base: props.path")
+    expect(preview).toContain("base: resolvedPath()")
     expect(preview).toContain("url: (path) =>")
     expect(preview).toContain(
       "rawFileQuery({ directory: dir, path, sessionID: session, scope: resolvedScope(), inline: true })",
@@ -25,7 +25,7 @@ describe("file preview markdown images", () => {
     const manuscript = await read("../manuscript/ManuscriptWorkbench.tsx")
 
     expect(preview).toContain('import { assetUrl, localAssetPath } from "@/utils/markdown-assets"')
-    expect(preview).toContain("const file = (href: string) => localAssetPath(href, props.path)")
+    expect(preview).toContain("const file = (href: string) => localAssetPath(href, resolvedPath())")
     expect(preview).toContain("resolveFile={file}")
     expect(manuscript).toContain("const file = (href: string) => localAssetPath(href, props.path)")
     expect(manuscript).toContain("text={preview()} resolveFile={file} onOpenFile={openFile}")
@@ -37,6 +37,7 @@ describe("file preview markdown images", () => {
 
     expect(preview).toContain('sourceLabel={description().source && props.writable !== false ? "Edit" : undefined}')
     expect(preview).toContain('import { CodeEditor } from "@/atlas/CodeEditor"')
+    expect(preview).toContain("label={`${name()} source`}")
     expect(preview).toContain('wrap={kind() === "markdown"}')
     expect(preview).toContain("void save()")
     expect(css).toContain(".atlas-code-editor .cm-editor")

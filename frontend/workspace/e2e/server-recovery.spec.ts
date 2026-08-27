@@ -1,11 +1,10 @@
 import { expect, test } from "./fixtures"
 
-test("retries a failed server health check immediately and clears the recovery banner", async ({
-  page,
-  gotoSession,
-}) => {
+test("does not claim the server is lost after one transient health failure", async ({ page, gotoSession }) => {
   let available = false
+  let requests = 0
   await page.route("**/global/health", async (route) => {
+    requests += 1
     if (!available) {
       await route.abort("connectionfailed")
       return
@@ -19,10 +18,10 @@ test("retries a failed server health check immediately and clears the recovery b
 
   await gotoSession()
   const recovery = page.getByRole("alert", { name: "Server connection lost" })
-  await expect(recovery).toBeVisible()
+  await expect(recovery).toHaveCount(0)
 
   available = true
-  await recovery.getByRole("button", { name: "Retry Now", exact: true }).click()
+  await expect.poll(() => requests, { timeout: 15_000 }).toBeGreaterThan(1)
   await expect(recovery).toHaveCount(0)
 })
 

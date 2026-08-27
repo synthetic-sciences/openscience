@@ -15,8 +15,8 @@ test("markdown files render and can toggle their editable source", async ({ page
   ).toBeVisible()
   await view(page).getByRole("tab", { name: "Edit", exact: true }).click()
   await expect(view(page).getByRole("tab", { name: "Preview", exact: true })).toBeVisible()
-  await expect(view(page).getByLabel("File source")).toHaveValue(
-    /### The open-source AI workbench for scientific research/,
+  await expect(view(page).getByRole("textbox", { name: "README.md source", exact: true })).toContainText(
+    "### The open-source AI workbench for scientific research",
   )
 })
 
@@ -78,7 +78,7 @@ test("XYZ files open as interactive 3D chemistry with source access", async ({ p
 
   await view(page).getByRole("tab", { name: "Edit", exact: true }).click()
   await expect(view(page).getByRole("tab", { name: "Preview", exact: true })).toBeVisible()
-  await expect(view(page).getByLabel("File source")).toHaveValue(/water/)
+  await expect(view(page).getByRole("textbox", { name: "water.xyz source", exact: true })).toContainText("water")
 })
 
 test("PDB and SDF files select their molecular renderers", async ({ page, openSession }) => {

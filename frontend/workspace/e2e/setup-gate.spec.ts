@@ -17,9 +17,11 @@ test("an unconfigured first run requires the one-time Synthetic Sciences connect
 
   await page.goto(`/${slug}/session/new`)
 
-  await expect(page.getByRole("heading", { name: "Sign in to continue", exact: true })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Open Synthetic Sciences", exact: true })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Connect OpenScience", exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Continue to sign in", exact: true })).toBeVisible()
+  await expect(page.getByLabel("Synthetic Sciences API key", { exact: true })).toBeHidden()
+  await page.getByText("Connect with a device key", { exact: true }).click()
   await expect(page.getByLabel("Synthetic Sciences API key", { exact: true })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Connect key", exact: true })).toBeDisabled()
   await expect(page.locator('[data-component="prompt-input"]')).toHaveCount(0)
 })

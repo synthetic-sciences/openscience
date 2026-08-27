@@ -1,7 +1,21 @@
-import { defineConfig } from "vite"
+import { realpathSync } from "node:fs"
+import { join } from "node:path"
+import { defineConfig, searchForWorkspaceRoot } from "vite"
 import desktopPlugin from "./vite"
 
 const MOLSTAR_PACKAGE_ROOT = "/node_modules/molstar/"
+
+export function workspaceServerAllow(cwd = process.cwd()): string[] {
+  const workspace = searchForWorkspaceRoot(cwd)
+  try {
+    // Worktrees commonly share one Bun install through a node_modules symlink.
+    // Vite resolves those imports to the real dependency directory, so include
+    // that exact directory without broadening access to the sibling worktree.
+    return [workspace, realpathSync(join(workspace, "node_modules"))]
+  } catch {
+    return [workspace]
+  }
+}
 
 export function workspaceManualChunks(id: string): string | undefined {
   const normalized = id.replaceAll("\\", "/")
@@ -28,6 +42,9 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     port: 3000,
+    fs: {
+      allow: workspaceServerAllow(),
+    },
   },
   build: {
     target: "esnext",

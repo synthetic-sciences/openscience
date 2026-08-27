@@ -7,8 +7,12 @@ test("models settings exposes provider connection controls", async ({ page, goto
   const dialog = await openSettings(page)
 
   await expect(dialog.getByRole("heading", { name: "Models", exact: true })).toBeVisible()
-  await expect(dialog.getByRole("heading", { name: "Provider keys" })).toBeVisible()
+  await expect(dialog.getByRole("heading", { name: "Connections", exact: true })).toBeVisible()
   await expect(dialog.getByText("ChatGPT / Codex", { exact: true }).first()).toBeVisible()
+  await expect(dialog.getByText("Provider API keys", { exact: true })).toBeVisible()
+  await expect(dialog.getByRole("button", { name: "Add key", exact: true })).toBeVisible()
+  await expect(dialog.getByLabel("API key", { exact: true })).toHaveCount(0)
+  await dialog.getByRole("button", { name: "Add key", exact: true }).click()
   await expect(dialog.getByLabel("API key", { exact: true })).toBeVisible()
   await expect(dialog.getByRole("button", { name: "Save key" })).toBeDisabled()
 
@@ -22,7 +26,7 @@ test("Models keeps ChatGPT Codex access first-class", async ({ page, gotoSession
   const dialog = await openSettings(page)
 
   await expect(dialog.getByRole("heading", { name: "Models", exact: true })).toBeVisible()
-  await expect(dialog.getByRole("heading", { name: "Access and routing", exact: true })).toBeVisible()
+  await expect(dialog.getByRole("heading", { name: "Model access", exact: true })).toBeVisible()
   await expect(dialog.getByText("ChatGPT / Codex", { exact: true }).first()).toBeVisible()
 })
 
@@ -33,6 +37,7 @@ test("models settings saves and removes a local provider key", async ({ page, go
     await gotoSession()
     const dialog = await openSettings(page)
 
+    await dialog.getByRole("button", { name: "Add key", exact: true }).click()
     await dialog.getByRole("button", { name: /^Model provider / }).click()
     await page
       .locator('[data-slot="select-select-item"]')
@@ -49,10 +54,7 @@ test("models settings saves and removes a local provider key", async ({ page, go
       .toBe(true)
     await expect(dialog.getByText("OpenAI", { exact: true }).last()).toBeVisible()
 
-    await dialog
-      .getByRole("region", { name: "Provider keys", exact: true })
-      .getByRole("button", { name: "Remove", exact: true })
-      .click()
+    await dialog.locator(".models-provider-keys").getByRole("button", { name: "Remove", exact: true }).click()
     const confirmation = page.getByRole("alertdialog")
     await expect(confirmation.getByText("Remove OpenAI key?", { exact: true })).toBeVisible()
     await confirmation.getByRole("button", { name: "Remove key", exact: true }).click()

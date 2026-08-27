@@ -79,13 +79,11 @@ export async function openFilesSources(page: Page) {
     await page.getByRole("button", { name: "Open project files", exact: true }).click()
     await expect(files).toBeVisible()
   }
-  const picker = files.locator("[data-source-button]")
-  await expect(picker).toBeVisible()
-  if ((await picker.getAttribute("data-source-kind")) !== "project") {
-    await picker.click()
-    await files.locator('[data-source-item="project"]').click()
-  }
-  await expect(picker).toHaveAttribute("data-source-kind", "project")
+  const project = files.locator('[data-workspace-source="project"]')
+  await expect(project).toBeVisible()
+  if ((await project.getAttribute("aria-selected")) !== "true") await project.click()
+  await expect(project).toHaveAttribute("aria-selected", "true")
+  await expect(files.locator("[data-files-browser]")).toHaveAttribute("data-source-kind", "project")
   const root = files.locator("[data-path-root]")
   if (await root.isVisible().catch(() => false)) await root.click()
 }

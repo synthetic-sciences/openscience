@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
 import * as ts from "typescript"
-import config, { workspaceManualChunks } from "../vite.config"
+import config, { workspaceManualChunks, workspaceServerAllow } from "../vite.config"
 
 test("Vite keeps the complete Molstar package in one explicit chunk", () => {
   expect(workspaceManualChunks("/repo/node_modules/molstar/lib/mol-plugin/context.js")).toBe("molstar")
@@ -22,6 +22,7 @@ test("Vite keeps the complete Molstar package in one explicit chunk", () => {
 
 test("Vite pre-bundles RDKit before a module worker requests it", () => {
   expect(config.optimizeDeps?.include).toContain("@rdkit/rdkit")
+  expect(config.server?.fs?.allow).toEqual(workspaceServerAllow())
 })
 
 function packageName(node: ts.Expression | undefined) {

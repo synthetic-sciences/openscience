@@ -8,37 +8,31 @@ test("opens, edits, and saves a Jupyter notebook as source", async ({ page, sdk,
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "openscience-notebook-e2e-")))
   const filename = "analysis.ipynb"
   const filepath = path.join(directory, filename)
-  writeFileSync(
-    filepath,
-    JSON.stringify(
+  const source = {
+    cells: [
+      { cell_type: "markdown", id: "intro", metadata: {}, source: ["# Experiment\n", "Persistent kernel"] },
       {
-        cells: [
-          { cell_type: "markdown", id: "intro", metadata: {}, source: ["# Experiment\n", "Persistent kernel"] },
-          {
-            cell_type: "code",
-            id: "setup",
-            metadata: {},
-            source: ["value = 41"],
-            execution_count: null,
-            outputs: [],
-          },
-          {
-            cell_type: "code",
-            id: "result",
-            metadata: {},
-            source: ["value + 1"],
-            execution_count: null,
-            outputs: [],
-          },
-        ],
-        metadata: { kernelspec: { display_name: "Python 3", language: "python", name: "python3" } },
-        nbformat: 4,
-        nbformat_minor: 5,
+        cell_type: "code",
+        id: "setup",
+        metadata: {},
+        source: ["value = 41"],
+        execution_count: null,
+        outputs: [],
       },
-      null,
-      2,
-    ),
-  )
+      {
+        cell_type: "code",
+        id: "result",
+        metadata: {},
+        source: ["value + 1"],
+        execution_count: null,
+        outputs: [],
+      },
+    ],
+    metadata: { kernelspec: { display_name: "Python 3", language: "python", name: "python3" } },
+    nbformat: 4,
+    nbformat_minor: 5,
+  }
+  writeFileSync(filepath, JSON.stringify(source, null, 2))
 
   try {
     const sessionID = await openSession()
@@ -52,9 +46,8 @@ test("opens, edits, and saves a Jupyter notebook as source", async ({ page, sdk,
     await expect(view.getByText('"nbformat": 4,', { exact: true })).toBeVisible()
 
     await view.getByRole("tab", { name: "Edit", exact: true }).click()
-    const editor = view.getByLabel("File source")
-    const source = JSON.parse(await editor.inputValue())
-    expect(source.cells[2].source).toEqual(["value + 1"])
+    const editor = view.getByRole("textbox", { name: `${filename} source`, exact: true })
+    await expect(editor).toContainText('"value + 1"')
     source.cells[2].source = ["value + 2"]
     await editor.fill(JSON.stringify(source, null, 2))
     await view.getByRole("button", { name: "Save changes", exact: true }).click()

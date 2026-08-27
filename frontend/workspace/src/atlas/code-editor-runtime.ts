@@ -40,6 +40,7 @@ const theme = EditorView.theme({
 
 export function mountCodeEditor(input: {
   parent: HTMLElement
+  label: string
   value: string
   language: string
   readOnly: boolean
@@ -57,6 +58,7 @@ export function mountCodeEditor(input: {
       extensions: [
         basicSetup,
         theme,
+        EditorView.contentAttributes.of({ "aria-label": input.label }),
         ...(lang ? [lang] : []),
         editable.of(EditorView.editable.of(!input.readOnly)),
         wrapping.of(input.wrap ? EditorView.lineWrapping : []),

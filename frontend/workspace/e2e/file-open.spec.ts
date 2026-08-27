@@ -40,6 +40,7 @@ test("open files become tabs in the right pane", async ({ page, openSession }) =
   // Inactive tabs reveal their close action on hover, matching the user path.
   await fileTab(page, "README.md").hover()
   await page.getByRole("button", { name: "Close README.md", exact: true }).click()
+  await fileTab(page, "package.json").hover()
   await page.getByRole("button", { name: "Close package.json", exact: true }).click()
   await expect(fileTab(page, "README.md")).toHaveCount(0)
   await expect(fileTab(page, "package.json")).toHaveCount(0)
@@ -60,11 +61,11 @@ test("can edit, discard, save, and close a text file", async ({ page, sdk, openS
     const view = page.locator('[data-component="file-view"]:visible')
     await view.getByRole("tab", { name: "Edit", exact: true }).click()
 
-    const editor = view.getByRole("textbox", { name: "File source", exact: true })
-    await expect(editor).toHaveValue("original\n")
+    const editor = view.getByRole("textbox", { name: `${filename} source`, exact: true })
+    await expect(editor).toHaveText("original")
     await editor.fill("discarded\n")
     await view.getByRole("button", { name: "Discard changes", exact: true }).click()
-    await expect(editor).toHaveValue("original\n")
+    await expect(editor).toHaveText("original")
 
     await editor.fill("saved\n")
     await view.getByRole("button", { name: "Save changes", exact: true }).click()
@@ -98,8 +99,8 @@ test("opens ordinary Markdown as a focused document", async ({ page, sdk, openSe
     await expect(view.getByRole("button", { name: "Publish", exact: true })).toHaveCount(0)
 
     await view.getByRole("tab", { name: "Edit", exact: true }).click()
-    const editor = view.getByLabel("File source")
-    await expect(editor).toHaveValue("# Notes\n\nA focused research note.\n")
+    const editor = view.getByRole("textbox", { name: `${filename} source`, exact: true })
+    await expect(editor).toContainText("A focused research note.")
     await editor.fill("# Notes\n\nA calmer research note.\n")
     await view.getByRole("button", { name: "Save changes", exact: true }).click()
     await expect.poll(() => readFileSync(filepath, "utf8")).toBe("# Notes\n\nA calmer research note.\n")

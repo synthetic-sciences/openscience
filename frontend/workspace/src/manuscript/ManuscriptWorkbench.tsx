@@ -1,6 +1,5 @@
 import { For, Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
 import { Markdown } from "@synsci/ui/markdown"
-import { useParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
 import { uiStore } from "@/atlas/store/ui"
 import { toast } from "@/atlas/Toast"
@@ -19,7 +18,7 @@ import {
   type Citation,
 } from "./model"
 import { localAssetPath } from "@/utils/markdown-assets"
-import { projectContains, projectFileQuery, rawFileQuery } from "@/utils/project-file"
+import { projectContains, projectFileQuery, rawFileQuery, type FileScope } from "@/utils/project-file"
 import {
   normalizePublicationReview,
   type PublicationReviewReport,
@@ -48,13 +47,14 @@ interface CitationItem extends Citation {
 export function ManuscriptWorkbench(props: {
   directory: string
   path: string
+  sessionID?: string
+  scope: FileScope
   text: string
   dirty: boolean
   saving: boolean
   onChange: (text: string) => void
 }): JSX.Element {
   const sdk = useSDK()
-  const params = useParams()
   const [panel, setPanel] = createSignal<Panel>()
   const [citationQuery, setCitationQuery] = createSignal("")
   const [figureQuery, setFigureQuery] = createSignal("")
@@ -64,23 +64,24 @@ export function ManuscriptWorkbench(props: {
   const [editor, setEditor] = createSignal<HTMLTextAreaElement>()
   const [reviewKey, setReviewKey] = createSignal(0)
   const manuscript = createMemo(() => parseManuscript(props.text))
-  const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)
   const query = (path?: string) =>
     projectFileQuery({
       directory: props.directory,
       path,
-      sessionID: sessionID(),
+      sessionID: props.sessionID,
+      scope: props.scope,
     })
   const raw = (path: string, inline = true) =>
     rawFileQuery({
       directory: props.directory,
       path,
-      sessionID: sessionID(),
+      sessionID: props.sessionID,
+      scope: props.scope,
       inline,
     })
 
   const [artifacts] = createResource(
-    () => `${props.directory}:${sessionID() ?? ""}`,
+    () => `${props.directory}:${props.scope}:${props.sessionID ?? ""}`,
     async () => {
       const response = await sdk.request("/file/artifacts", undefined, query())
       if (!response.ok) throw new Error(`Artifact discovery failed (${response.status})`)
@@ -91,7 +92,8 @@ export function ManuscriptWorkbench(props: {
   )
 
   const [citations] = createResource(
-    () => `${props.directory}:${props.path}:${sessionID() ?? ""}:${manuscript().bibliographies.join("|")}`,
+    () =>
+      `${props.directory}:${props.path}:${props.scope}:${props.sessionID ?? ""}:${manuscript().bibliographies.join("|")}`,
     async () => {
       const rows = await Promise.all(
         manuscript().bibliographies.map(async (reference) => {
@@ -120,7 +122,7 @@ export function ManuscriptWorkbench(props: {
   )
 
   const [review, reviewApi] = createResource(
-    () => `${props.directory}:${props.path}:${sessionID() ?? ""}:${reviewKey()}`,
+    () => `${props.directory}:${props.path}:${props.scope}:${props.sessionID ?? ""}:${reviewKey()}`,
     async () => {
       const response = await sdk.request("/file/reviews", undefined, query(props.path))
       if (response.status === 404) return
@@ -157,7 +159,7 @@ export function ManuscriptWorkbench(props: {
     rewritePreviewImages(manuscript().body, props.path, (path) => sdk.request.url("/file/raw", raw(path))),
   )
   const file = (href: string) => localAssetPath(href, props.path)
-  const openFile = (path: string) => uiStore.openFile(props.directory, path)
+  const openFile = (path: string) => uiStore.openFile(props.directory, path, { scope: props.scope })
 
   const toggle = (next: Panel) => setPanel((current) => (current === next ? undefined : next))
   const openPublish = () => {
@@ -299,7 +301,7 @@ export function ManuscriptWorkbench(props: {
     const result = (await response.json()) as PublicationResult
     toast.success(`${format.toUpperCase()} ready`, result.path)
     if (!["docx", "pptx"].includes(result.format)) {
-      uiStore.openFile(props.directory, result.path)
+      uiStore.openFile(props.directory, result.path, { scope: props.scope })
       return
     }
     const download = await sdk.request("/file/raw", undefined, raw(result.path, false))

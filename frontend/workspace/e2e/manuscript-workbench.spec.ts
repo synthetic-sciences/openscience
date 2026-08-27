@@ -37,7 +37,7 @@ test("authors Markdown with live preview, local citations, and local figures", a
 
 test("exposes exact-byte review and publication export controls", async ({ page, openSession }) => {
   const exports: Array<Record<string, unknown>> = []
-  await page.route("**/file/publication", async (route) => {
+  await page.route(/\/file\/publication(?:\?|$)/, async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue()
       return
@@ -74,15 +74,15 @@ test("exposes exact-byte review and publication export controls", async ({ page,
   expect(exports[0].path).toMatch(/(^|\/)manuscript\.md$/)
 })
 
-test("routes manuscript review into the artifact inspector", async ({ page, openSession }) => {
+test("keeps manuscript review in the focused publication preflight", async ({ page, openSession }) => {
   await openSession()
   await openWorkspaceFile(page, MANUSCRIPT)
   const workbench = page.locator('[data-component="manuscript-workbench"]')
 
-  // Review stages the preflight into the artifact inspector's Review tab and
-  // points the author to Details; opening Details surfaces it there.
   await workbench.getByRole("button", { name: "Review", exact: true }).click()
-  await page.getByRole("button", { name: "Open file details", exact: true }).click()
-  const inspector = page.locator('[data-component="artifact-inspector"]')
-  await expect(inspector.getByRole("tab", { name: "Review", exact: true })).toHaveAttribute("aria-selected", "true")
+  const preflight = workbench.locator('[data-component="publication-preflight"]')
+  await expect(preflight).toBeVisible()
+  await expect(preflight.getByText("Publication preflight", { exact: true })).toBeVisible()
+  await expect(preflight.getByRole("button", { name: "Run checks", exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Open file details", exact: true })).toHaveCount(0)
 })

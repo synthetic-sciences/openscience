@@ -184,7 +184,7 @@ test("notebook artifact metadata renders through the canonical kernel tool", asy
       await expect(image).toBeVisible()
       await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(1)
     },
-    (current) => current.locator('[data-slot="session-turn-promoted-results"] [data-component="tool-part-wrapper"]'),
+    (current) => current.locator('[data-component="tool-part-wrapper"]').filter({ hasText: "Python" }),
   )
 })
 
@@ -199,8 +199,18 @@ test("renders an inline 2D chemical structure without network access", async ({ 
     { kind: "chem-2d", data: { smiles: "CC(=O)Oc1ccccc1C(=O)O", width: 360, height: 220 } },
     async (artifact) => {
       const molecule = artifact.locator('[data-component="chem-2d"]')
-      await expect(molecule.locator("svg")).toBeVisible({ timeout: 30_000 })
-      await expect(molecule.getByText(/Could not render molecule/)).toHaveCount(0)
+      await expect
+        .poll(
+          async () => ({
+            svg: await molecule.locator("svg").count(),
+            error: await molecule
+              .getByText(/Could not render molecule/)
+              .allTextContents()
+              .then((matches) => matches.join("\n")),
+          }),
+          { timeout: 35_000 },
+        )
+        .toEqual({ svg: 1, error: "" })
     },
   )
 

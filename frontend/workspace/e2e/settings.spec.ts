@@ -12,7 +12,10 @@ test("settings dialog navigates between sections and closes", async ({ page, got
   await expect(dialog.getByRole("heading", { name: "General" })).toBeVisible()
   await expect(dialog.getByRole("heading", { name: "Account", exact: true })).toBeVisible()
   await expect(dialog.getByRole("button", { name: "Open billing", exact: true })).toBeVisible()
-  await expect(dialog.getByRole("button", { name: "Show sound and update settings", exact: true })).toBeVisible()
+  const sounds = dialog.getByRole("button", { name: "Show sound settings", exact: true })
+  await expect(sounds).toBeVisible()
+  await sounds.click()
+  await expect(dialog.getByRole("button", { name: "Hide sound settings", exact: true })).toBeVisible()
 
   const back = dialog.getByRole("button", { name: "Back" })
   const forward = dialog.getByRole("button", { name: "Forward" })

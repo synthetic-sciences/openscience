@@ -39,7 +39,13 @@ test("keeps Files and Customize labels visually consistent", async ({ page, goto
   }
 
   await dialog.getByRole("button", { name: "Storage", exact: true }).click()
-  await dialog.getByRole("button", { name: /^Change location/ }).click()
+  const change = dialog.getByRole("button", { name: /^Change location/ })
+  await expect(change).toHaveCSS("font-family", /Inter/)
+  if (await change.isDisabled()) {
+    await expect(dialog.getByText(/OPENSCIENCE_DATA_DIR owns this process/)).toBeVisible()
+    return
+  }
+  await change.click()
   const location = dialog.getByRole("textbox", { name: "New data directory", exact: true })
   await expect(location).toBeVisible()
   await expect(location).toHaveCSS("font-family", /Söhne Mono|Sohne Mono|ui-monospace/)

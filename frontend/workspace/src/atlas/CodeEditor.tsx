@@ -25,6 +25,7 @@ export function CodeEditor(props: {
       if (!live) return
       editor = mountCodeEditor({
         parent: host,
+        label: props.label ?? "Code editor",
         value: props.value,
         language: props.language,
         readOnly: props.readOnly === true,
@@ -39,9 +40,20 @@ export function CodeEditor(props: {
     })
   })
 
-  createEffect(() => editor?.setValue(props.value))
-  createEffect(() => editor?.setReadOnly(props.readOnly === true))
-  createEffect(() => editor?.setWrap(props.wrap === true))
+  createEffect(() => {
+    const value = props.value
+    editor?.setValue(value)
+  })
+  createEffect(() => {
+    const readOnly = props.readOnly === true
+    editor?.setReadOnly(readOnly)
+  })
+  createEffect(() => {
+    const wrap = props.wrap === true
+    editor?.setWrap(wrap)
+  })
 
-  return <div ref={host} class="atlas-code-editor" role="region" aria-label={props.label ?? "Code editor"} />
+  return (
+    <div ref={host} class="atlas-code-editor" role="region" aria-label={`${props.label ?? "Code editor"} editor`} />
+  )
 }

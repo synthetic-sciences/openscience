@@ -22,7 +22,7 @@ const completedJob = {
       modified_at: "2026-08-08T10:01:01.000Z",
     },
   ],
-  lifecycle: { execution: "succeeded", delivery: "delivered", resource: "closed", recoverable: false },
+  lifecycle: { execution: "succeeded", delivery: "failed", resource: "closed", recoverable: true },
   modal: {
     app: "openscience",
     image: "python:3.12",
@@ -43,7 +43,7 @@ async function openCompute(page: Page) {
   return surface
 }
 
-test("keeps a completed remote result readable in project Compute", async ({ page, openSession }) => {
+test("keeps a recoverable remote result visible in project Compute", async ({ page, openSession }) => {
   await page.route("**/settings/compute/jobs", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([completedJob]) }),
   )
@@ -52,8 +52,9 @@ test("keeps a completed remote result readable in project Compute", async ({ pag
   const surface = await openCompute(page)
 
   await expect(surface.getByText("Completed remote result", { exact: true })).toBeVisible()
-  await expect(surface.getByText("Exit 0 · 1 file", { exact: true })).toBeVisible()
-  await expect(surface.getByRole("region", { name: "Remote activity", exact: true })).toBeVisible()
+  await expect(surface.getByText("Succeeded · output recovery pending", { exact: true })).toBeVisible()
+  await expect(surface.getByLabel("Requested resources", { exact: true })).toContainText("A100 · 4 CPU · 16 GB")
+  await expect(surface.getByRole("region", { name: "Project jobs compute", exact: true })).toBeVisible()
   await expect(surface.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0)
 })
 
