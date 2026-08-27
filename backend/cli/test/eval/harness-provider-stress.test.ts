@@ -468,7 +468,7 @@ describe("provider-driven harness stress campaign", () => {
             expect(childGrants.some((grant) => grant.path === outcome.workspace)).toBe(false)
           }
           expect((await Session.get(grantChild.id)).permission).toContainEqual(
-            expect.objectContaining({ permission: "task", action: "allow" }),
+            expect.objectContaining({ permission: "task", action: "deny" }),
           )
 
           for (const id of [

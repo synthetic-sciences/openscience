@@ -125,7 +125,7 @@ test("synthesized Codex OAuth models use Codex variants and preserve model-speci
         expect(sol.providerID).toBe("openai-codex")
         expect(sol.limit.context).toBe(1_050_000)
         expect(sol.cost).toEqual({ input: 0, output: 0, cache: { read: 0, write: 0 } })
-        expect(Object.keys(sol.variants ?? {})).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"])
+        expect(Object.keys(sol.variants ?? {})).toEqual(["low", "medium", "high", "xhigh", "max"])
         expect(Object.keys(sol.modes ?? {})).toEqual(["fast"])
         expect(sol.modes?.fast.provider?.body).toEqual({ service_tier: "priority" })
 

@@ -46,13 +46,13 @@ async function send(language: any, providerOptions: Record<string, any>) {
 }
 
 describe("reasoning options serialize onto provider request bodies", () => {
-  test("Codex OAuth ultra reaches the OpenAI Responses wire shape", async () => {
+  test("Codex OAuth max reaches the OpenAI Responses wire shape", async () => {
     const target = model({
       id: "gpt-5.6-sol",
       providerID: "openai-codex",
       api: { id: "gpt-5.6-sol", url: "https://chatgpt.com/backend-api/codex", npm: "@ai-sdk/openai" },
     })
-    const selected = ProviderTransform.variants(target).ultra
+    const selected = ProviderTransform.variants(target).max
     const options = mergeDeep(ProviderTransform.options({ model: target, sessionID, providerOptions: {} }), selected)
     const wire = recorder()
     const sdk = createOpenAI({ apiKey: "test", baseURL: "https://codex.test/v1", fetch: wire.fetch })
@@ -63,7 +63,7 @@ describe("reasoning options serialize onto provider request bodies", () => {
     expect(wire.bodies[0]).toMatchObject({
       store: false,
       include: ["reasoning.encrypted_content"],
-      reasoning: { effort: "ultra", summary: "auto" },
+      reasoning: { effort: "max", summary: "auto" },
     })
   })
 
