@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
 import {
+  assertLeadDelegationSession,
   assertTaskContinuation,
   childPermissionRules,
   classifyTaskOutcome,
@@ -61,12 +62,27 @@ test("Task advertises generic phases and accepts an explicit domain specialist l
   })
 })
 
-test("child sessions preserve the active Task permission for nested independent work", () => {
+test("child sessions deny nested delegation and user questions", () => {
   const configuredProfile = [{ permission: "task", pattern: "*", action: "allow" as const }]
   const child = childPermissionRules()
 
-  expect(PermissionNext.evaluate("task", "explore", configuredProfile, child).action).toBe("allow")
-  expect(PermissionNext.disabled(["task"], child)).not.toContain("task")
+  expect(PermissionNext.evaluate("task", "explore", configuredProfile, child).action).toBe("deny")
+  expect(PermissionNext.evaluate("question", "*", child).action).toBe("deny")
+  expect(PermissionNext.disabled(["task", "question"], child)).toEqual(new Set(["task", "question"]))
+})
+
+test("only a lead session may dispatch Task workers", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const lead = await Session.create({})
+      const child = await Session.create({ parentID: lead.id })
+
+      expect(assertLeadDelegationSession(lead)).toBe(lead)
+      expect(() => assertLeadDelegationSession(child)).toThrow("Only the lead Research session")
+    },
+  })
 })
 
 test("Task treats provider placeholder session IDs as a new child", () => {
@@ -266,8 +282,9 @@ test("Task runtime has no per-turn dispatch quota or default deadline", async ()
   expect(source).not.toContain("taskDispatchBudget")
   expect(source).not.toContain("TASK_WALL_CLOCK_MS")
   expect(source).not.toContain("withTaskDeadline")
-  expect(source).not.toContain("delegation: false")
-  expect(source).toContain("task: true")
+  expect(source).toContain("delegation: false")
+  expect(source).toContain("task: false")
+  expect(source).toContain("assertLeadDelegationSession")
   expect(source).toContain('TaskCapacity.acquire("child", MAX_CHILD_AGENTS')
 })
 

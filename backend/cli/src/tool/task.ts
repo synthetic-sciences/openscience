@@ -65,9 +65,20 @@ const parameters = z.object({
 export function childPermissionRules(primaryTools: string[] = []): PermissionNext.Ruleset {
   return [
     ...primaryTools.map((permission) => ({ permission, pattern: "*", action: "allow" as const })),
+    { permission: "task", pattern: "*", action: "deny" },
+    { permission: "question", pattern: "*", action: "deny" },
     { permission: "todowrite", pattern: "*", action: "deny" },
     { permission: "todoread", pattern: "*", action: "deny" },
   ]
+}
+
+export function assertLeadDelegationSession(session: Session.Info) {
+  if (session.parentID) {
+    throw new Error(
+      `Only the lead Research session may dispatch Task workers. Child session ${session.id} must return follow-up recommendations to its lead.`,
+    )
+  }
+  return session
 }
 
 export function assertTaskContinuation(input: { session: Session.Info; parentSessionID: string; projectID: string }) {
@@ -258,6 +269,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
+      assertLeadDelegationSession(await Session.get(ctx.sessionID))
       const config = await Config.get()
       const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
       const configured = MessageV2.resolveDelegationSettings(ctx.extra?.delegationSettings, { effort })
@@ -481,7 +493,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 )
                 const childGuidance = [
                   `You own one ${params.subagent_type} phase${params.specialist ? ` with the ${params.specialist} specialist` : ""} for the lead Research agent. The assignment in the user message is authoritative.`,
-                  "Work independently on that phase. Delegate genuinely independent work when it materially improves the result; runtime capacity may queue it. Load a domain skill only when useful.",
+                  "Work independently on that phase and load a domain skill only when useful. You cannot dispatch workers; recommend any worthwhile follow-up to the lead in your handoff.",
                   "Do not return a diary of searches, reads, or commands. Your final response is a decision-ready handoff to the lead, not a second user-facing report.",
                   "Use only the Markdown sections that carry substance: Outcome; Findings; Evidence; Changes / outputs; Limitations; Next action.",
                   "Preserve exact paths, identifiers, numeric results, commands, and error strings when they matter. Distinguish observed evidence from inference. If blocked or partial, say exactly what remains.",
@@ -505,13 +517,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     model,
                     agent: agent.name,
                     effort,
-                    delegation: true,
-                    delegationSettings: settings,
+                    delegation: false,
+                    delegationSettings: { ...settings, level: "off" },
                     system: childGuidance,
                     tools: {
                       todowrite: false,
                       todoread: false,
-                      task: true,
+                      question: false,
+                      task: false,
                       ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((tool) => [tool, false])),
                     },
                     parts: await SessionPrompt.resolvePromptParts(transfer.prompt),

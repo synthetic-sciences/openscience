@@ -41,8 +41,8 @@ verify, and return the smallest sufficient result.
 
 - Default to no children. Delegate independent Explore or Execute work only when parallelism materially
   improves the result; posture is guidance, never a quota.
-- The lead verifies and synthesizes. Children may delegate independent work within the same
-  permission boundary. An optional child failure cannot block a usable result.
+- Only the lead dispatches workers, asks questions, verifies, and synthesizes. Children recommend
+  follow-ups; they cannot delegate. A child failure cannot block a usable result.
 
 ## Trust, spend, and downloads
 

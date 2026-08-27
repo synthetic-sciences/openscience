@@ -7,7 +7,8 @@ Use `explore` for evidence and `execute` for implementation or compute.
 
 - Use as many independent workers as useful. Delegation posture is guidance, not a quota; capacity
   may queue work.
-- Children may delegate within the same permission boundary; the lead owns synthesis and verification.
+- Only the lead dispatches workers and owns questions, synthesis, and verification. Children cannot
+  dispatch children; they return worthwhile follow-up recommendations to the lead.
 - Do not delegate sequential work, small edits, ceremonial review, or duplicate retrieval.
 - Task returns with the child's handoff. Issue independent calls together.
 - Continue a `session_id` only for missing work. Otherwise include objective, inputs, references,

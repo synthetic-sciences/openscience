@@ -44,6 +44,16 @@ const scenarios: StressScenario[] = [
   },
 ]
 
+const childScenario: StressScenario = {
+  id: "delegation-schema-child",
+  category: "delegation",
+  title: "Child delegation provider schema",
+  prompt: "Ask the explicitly attached execution agent to inspect another independent branch.",
+  config: { delegation: true, explicitAgent: "execute" },
+  stimulus: { kind: "inspect", target: "tools" },
+  expect: { terminal: "completed", children: 0, artifacts: "none" },
+}
+
 function text(value: unknown): string {
   if (typeof value === "string") return value
   if (Array.isArray(value)) return value.map(text).join("\n")
@@ -64,7 +74,7 @@ function role(body: { messages?: unknown }, name: string) {
 
 describe("delegation at the provider boundary", () => {
   test("keeps internal reminders in system messages and applies explicit delegation to the actual tool schema", async () => {
-    const local = startStressProvider(scenarios)
+    const local = startStressProvider([...scenarios, childScenario])
     try {
       await using tmp = await tmpdir({
         git: true,
@@ -123,13 +133,30 @@ describe("delegation at the provider boundary", () => {
             expect(JSON.stringify(user)).not.toContain("Research effort:")
           }
 
+          const lead = await Session.create({ title: "Delegation lead" })
+          const child = await Session.create({ parentID: lead.id, title: childScenario.title })
+          await SessionPrompt.prompt({
+            sessionID: child.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+            agent: "research",
+            effort: "normal",
+            delegation: true,
+            system: `${STRESS_SCENARIO_MARKER}${childScenario.id}`,
+            parts: [
+              { type: "text", text: childScenario.prompt },
+              { type: "agent", name: "execute" },
+            ],
+          })
+
           await local.quiet()
           const disabled = local.main("delegation-schema-disabled")[0]
           const explicit = local.main("delegation-schema-explicit")[0]
-          if (!disabled || !explicit) throw new Error("Missing provider request")
+          const childRequest = local.main(childScenario.id)[0]
+          if (!disabled || !explicit || !childRequest) throw new Error("Missing provider request")
 
           expect(disabled.tools).not.toContain("task")
           expect(explicit.tools).toContain("task")
+          expect(childRequest.tools).not.toContain("task")
           expect(disabled.tools).toContain("read")
           expect(explicit.tools).toContain("read")
 
@@ -138,7 +165,7 @@ describe("delegation at the provider boundary", () => {
           expect(role(legacy.body, "user")).not.toContain("LEGACY_INTERNAL_GUIDANCE")
           expect(role(legacy.body, "system")).toContain("LEGACY_INTERNAL_GUIDANCE")
 
-          for (const request of [disabled, explicit, legacy]) {
+          for (const request of [disabled, explicit, childRequest, legacy]) {
             const user = role(request.body, "user")
             const system = role(request.body, "system")
             expect(user).not.toContain("<system-reminder>")

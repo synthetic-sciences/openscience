@@ -135,7 +135,7 @@ test("ordinary literature reviews stay conversational instead of becoming report
   expect(specialist).not.toContain("Before ANY literature search")
 })
 
-test("delegation is model-directed, capacity-bound, nested, and observable", async () => {
+test("delegation is lead-owned, capacity-bound, flat, and observable", async () => {
   const [prompt, source, core, research, processor] = await Promise.all([
     read("tool/task.txt"),
     read("tool/task.ts"),
@@ -150,7 +150,8 @@ test("delegation is model-directed, capacity-bound, nested, and observable", asy
   expect(prompt).toContain("Use as many independent workers as useful")
   expect(prompt).toContain("Delegation posture is guidance, not a quota")
   expect(prompt).toContain("Issue independent calls together")
-  expect(prompt).toContain("Children may delegate")
+  expect(prompt).toContain("Only the lead dispatches workers")
+  expect(prompt).toContain("Children cannot")
   expect(prompt).toContain("decision-ready handoff")
   expect(core).not.toMatch(/Normal .*(?:two|2).*Task/i)
   expect(research).not.toMatch(/Ultra .*(?:four|4).*Task/i)
@@ -161,7 +162,9 @@ test("delegation is model-directed, capacity-bound, nested, and observable", asy
   expect(source).not.toContain("taskDispatchBudget")
   expect(source).not.toContain("TASK_WALL_CLOCK_MS")
   expect(source).toContain("system: childGuidance")
-  expect(source).toContain("task: true")
+  expect(source).toContain("task: false")
+  expect(source).toContain("delegation: false")
+  expect(source).toContain("assertLeadDelegationSession")
   expect(source).not.toContain("Delegation is unavailable")
   expect(source).not.toContain("under 1,200 words")
   expect(source).toContain("Your final response is a decision-ready handoff")

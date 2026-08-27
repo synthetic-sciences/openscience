@@ -1753,7 +1753,7 @@ export namespace SessionPrompt {
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
       (id) =>
-        (id !== TaskTool.id || input.delegation) &&
+        (id !== TaskTool.id || (input.delegation && !input.session.parentID)) &&
         ToolSelection.enabled(id, { permission, tools: input.tools }) &&
         ToolSelection.relevant(id, {
           agent: input.agent.name,
