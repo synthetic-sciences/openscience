@@ -720,8 +720,78 @@ form.workspace-composer .workspace-composer__research-tools-menu {
 form.workspace-composer .workspace-composer__research-controls {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 7px;
+  padding: 6px;
+}
+
+form.workspace-composer .workspace-composer__research-slider {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+form.workspace-composer .workspace-composer__research-slider-label {
+  padding-inline: 2px;
+  color: var(--text-weak);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  line-height: 14px;
+}
+
+form.workspace-composer .workspace-composer__research-slider > [role="radiogroup"] {
+  min-width: 0;
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 2px;
   padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle, var(--surface-raised-base));
+}
+
+form.workspace-composer .workspace-composer__research-slider button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--text-weak);
+  font: inherit;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+  cursor: pointer;
+  transition:
+    background-color 150ms var(--ease-standard),
+    color 150ms var(--ease-standard),
+    box-shadow 150ms var(--ease-standard),
+    transform 120ms var(--ease-standard);
+}
+
+form.workspace-composer .workspace-composer__research-slider button:hover:not(:disabled) {
+  color: var(--text-strong);
+}
+
+form.workspace-composer .workspace-composer__research-slider button[aria-checked="true"] {
+  background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
+  color: var(--text-strong);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text-strong) 10%, transparent);
+}
+
+form.workspace-composer .workspace-composer__research-slider button:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: -2px;
+}
+
+form.workspace-composer .workspace-composer__research-slider button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+form.workspace-composer .workspace-composer__research-slider button:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 form.workspace-composer .workspace-composer__research-control,
@@ -1027,6 +1097,7 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
   form.workspace-composer .workspace-composer__attach,
   form.workspace-composer .workspace-composer__research-tools > summary,
   form.workspace-composer .workspace-composer__research-control,
+  form.workspace-composer .workspace-composer__research-slider button,
   form.workspace-composer .workspace-composer__research-choice > summary,
   form.workspace-composer .workspace-composer__research-choice-menu > button,
   form.workspace-composer .workspace-composer__send {
@@ -1055,6 +1126,7 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
   form.workspace-composer .workspace-composer__research-tools > summary,
   form.workspace-composer .workspace-composer__research-tools > summary [data-component="icon"],
   form.workspace-composer .workspace-composer__research-choice > summary,
+  form.workspace-composer .workspace-composer__research-slider button,
   form.workspace-composer .workspace-composer__research-choice-menu > button,
   form.workspace-composer .workspace-composer__attach {
     transition: none;

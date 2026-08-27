@@ -389,7 +389,7 @@ export namespace Provider {
   }
 
   function codexOAuthModes(modelID: string) {
-    if (!/^gpt-5[.-](?:4(?:-mini)?|5|6(?:-(?:sol|terra|luna))?)$/.test(modelID)) return undefined
+    if (!/^gpt-5[.-](?:4|5|6(?:-(?:sol|terra|luna))?)$/.test(modelID)) return undefined
     return {
       fast: {
         provider: {
@@ -1361,6 +1361,10 @@ export namespace Provider {
         .filter(([key, mode]) => {
           if (!mode) return false
           if (key === "pro" && /(^|\/)gpt-/.test(modelID)) return false
+          // The pinned xAI adapter drops service_tier from both its Chat and
+          // Responses payloads. Do not advertise a no-op Fast toggle until
+          // the transport can prove that it sends the requested tier.
+          if (providerID === "xai" && key === "fast") return false
           if (providerID !== "anthropic" || key !== "fast") return true
           const id = modelID.toLowerCase().replaceAll(".", "-")
           return id.startsWith("claude-opus-5") || id.startsWith("claude-opus-4-8")
@@ -1394,40 +1398,28 @@ export namespace Provider {
 
   function modelModes(provider: ModelsDev.Provider, model: ModelsDev.Model): Model["modes"] | undefined {
     const direct = directModes(provider.id, model.id, model.experimental) ?? {}
-    // Fast is a routing preference, not a second catalog. OpenRouter's
-    // throughput sort works across its model surface (managed Ace and a
-    // user-owned OpenRouter key alike). Models with a dedicated fast sibling
-    // keep that exact SKU, while supported OpenAI flagships additionally ask
-    // for the native priority tier.
-    const openrouter =
-      provider.id === "openrouter" && !/-fast$/.test(model.id)
-        ? (() => {
-            const route = provider.models[`${model.id}-fast`]
-            const priority = /^openai\/gpt-5[.-]6-sol(?:-\d+)?$/.test(model.id.toLowerCase())
-            return {
-              fast: {
-                model: route?.id,
-                cost: route?.cost
-                  ? {
-                      input: route.cost.input,
-                      output: route.cost.output,
-                      cache: {
-                        read: route.cost.cache_read ?? 0,
-                        write: route.cost.cache_write ?? 0,
-                      },
-                    }
-                  : undefined,
-                provider: {
-                  body: {
-                    provider: { sort: "throughput" },
-                    ...(priority ? { service_tier: "priority" } : {}),
-                  },
-                  headers: {},
+    // OpenRouter Nitro is a broad throughput-routing preference, not a
+    // model-specific Fast capability. Only advertise Fast when the catalog
+    // contains a dedicated immutable sibling that the request can select.
+    const openrouter: NonNullable<Model["modes"]> = {}
+    if (provider.id === "openrouter" && !/-fast$/.test(model.id)) {
+      const route = provider.models[`${model.id}-fast`]
+      if (route && route.status !== "deprecated") {
+        openrouter.fast = {
+          model: route.id,
+          cost: route.cost
+            ? {
+                input: route.cost.input,
+                output: route.cost.output,
+                cache: {
+                  read: route.cost.cache_read ?? 0,
+                  write: route.cost.cache_write ?? 0,
                 },
-              },
-            } satisfies NonNullable<Model["modes"]>
-          })()
-        : {}
+              }
+            : undefined,
+        }
+      }
+    }
     const result = { ...direct, ...openrouter }
     if (Object.keys(result).length === 0) return undefined
     return result
@@ -2012,6 +2004,17 @@ export namespace Provider {
             provider.models[wlid] = _syntheticOpenRouterModel(wlid)
           }
         }
+      }
+
+      // A mode that points at a dedicated catalog route is valid only while
+      // that exact route remains available after status/config/managed
+      // filtering. Otherwise the UI would offer Fast and silently fall back to
+      // the base model.
+      for (const model of Object.values(provider.models)) {
+        const fast = model.modes?.fast
+        if (!fast?.model || provider.models[fast.model]) continue
+        delete model.modes?.fast
+        if (model.modes && Object.keys(model.modes).length === 0) model.modes = undefined
       }
 
       if (Object.keys(provider.models).length === 0) {

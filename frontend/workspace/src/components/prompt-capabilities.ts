@@ -1,14 +1,14 @@
 export type CapabilityPreferences = {
   delegation_enabled: boolean
   delegation_specialist: string | null
-  delegation_level?: DelegationLevel
+  delegation_level?: DelegationLevel | "light"
   delegation_worker_model?: DelegationModel | null
   delegation_autonomy?: DelegationAutonomy
   /** @deprecated Accepted from older local servers but no longer used. */
   delegation_diversity?: "focused" | "balanced" | "exploratory"
 }
 
-export type DelegationLevel = "off" | "light" | "standard" | "high"
+export type DelegationLevel = "off" | "standard" | "high"
 export type DelegationAutonomy = "interactive" | "balanced" | "autonomous"
 
 export type DelegationModel = {
@@ -22,33 +22,19 @@ export type DelegationSettings = {
   autonomy: DelegationAutonomy
 }
 
-export const DELEGATION_LEVELS: Array<{ value: DelegationLevel; label: string; description: string }> = [
-  { value: "off", label: "Off", description: "Keep work in the lead conversation" },
-  { value: "light", label: "Low", description: "Delegate only when it clearly helps" },
-  { value: "standard", label: "Normal", description: "Parallelize independent work when useful" },
-  { value: "high", label: "High", description: "Aggressively parallelize research and verification" },
+export const DELEGATION_LEVELS: Array<{ value: DelegationLevel; label: string }> = [
+  { value: "off", label: "Off" },
+  { value: "standard", label: "Auto" },
+  { value: "high", label: "High" },
 ]
 
 export const DELEGATION_AUTONOMY: Array<{
   value: DelegationAutonomy
   label: string
-  description: string
 }> = [
-  {
-    value: "interactive",
-    label: "Interactive",
-    description: "Lead and workers ask before consequential choices",
-  },
-  {
-    value: "balanced",
-    label: "Balanced",
-    description: "Lead and workers make routine assumptions and ask when stakes change",
-  },
-  {
-    value: "autonomous",
-    label: "Independent",
-    description: "Lead and workers ask only when blocked or missing permission",
-  },
+  { value: "interactive", label: "Interactive" },
+  { value: "balanced", label: "Balanced" },
+  { value: "autonomous", label: "Independent" },
 ]
 
 export const DEFAULT_DELEGATION: DelegationSettings = {
@@ -57,7 +43,9 @@ export const DEFAULT_DELEGATION: DelegationSettings = {
 }
 
 export function delegationSettings(preferences?: CapabilityPreferences): DelegationSettings {
-  const level = preferences?.delegation_level ?? (preferences?.delegation_enabled === false ? "off" : "standard")
+  const stored = preferences?.delegation_level
+  const level =
+    stored === "light" ? "standard" : (stored ?? (preferences?.delegation_enabled === false ? "off" : "standard"))
   return {
     level,
     workerModel: preferences?.delegation_worker_model ?? undefined,
@@ -66,7 +54,13 @@ export function delegationSettings(preferences?: CapabilityPreferences): Delegat
 }
 
 export function delegationLabel(settings: DelegationSettings) {
-  return DELEGATION_LEVELS.find((option) => option.value === settings.level)?.label ?? "Normal"
+  return DELEGATION_LEVELS.find((option) => option.value === settings.level)?.label ?? "Auto"
+}
+
+export const CAPABILITY_PREFERENCES_EVENT = "openscience:capability-preferences"
+
+export function publishCapabilityPreferences(preferences: CapabilityPreferences) {
+  globalThis.dispatchEvent(new CustomEvent(CAPABILITY_PREFERENCES_EVENT, { detail: preferences }))
 }
 
 export type SpecialistOption = {

@@ -273,14 +273,10 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
     </Show>
     <Show when={props.fast}>
       {(fast) => (
-        <section class="model-settings-option-section model-settings-speed-section" aria-label="Response speed">
-          <div class="model-settings-heading">Response speed</div>
+        <section class="model-settings-option-section model-settings-speed-section" aria-label="Fast mode">
           <div data-model-fast-toggle>
             <Switch checked={fast().active} onChange={(checked) => props.onTierSelect(checked ? "fast" : "standard")}>
-              <span class="model-settings-setting">
-                <span class="model-settings-fast-label">Fast mode</span>
-                <small>Prefer faster responses on supported models</small>
-              </span>
+              <span class="model-settings-fast-label">Fast mode</span>
             </Switch>
           </div>
         </section>

@@ -66,16 +66,16 @@ import {
   attachmentSize,
 } from "./prompt-attachment"
 import {
+  CAPABILITY_PREFERENCES_EVENT,
   delegatedSpecialist,
-  delegationLabel,
   delegationSettings,
   DELEGATION_AUTONOMY,
   DELEGATION_LEVELS,
   type CapabilityPreferences,
   type DelegationAutonomy,
   type DelegationLevel,
-  type DelegationModel,
   type DelegationSettings,
+  publishCapabilityPreferences,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
 import { requestFailure, requestStatus } from "@/utils/request-error"
@@ -123,6 +123,60 @@ interface ResearchAccessSnapshot {
   sandboxStatus: { available: boolean; reason?: string }
 }
 
+type ResearchSliderOption = { value: string; label: string }
+
+const ResearchSlider: Component<{
+  label: string
+  value: string
+  options: ResearchSliderOption[]
+  disabled?: boolean
+  onSelect: (value: string) => void
+}> = (props) => {
+  const move = (event: KeyboardEvent) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
+    const target = event.target
+    const scope = event.currentTarget
+    if (!(target instanceof HTMLButtonElement)) return
+    if (!(scope instanceof HTMLElement)) return
+    const options = Array.from(scope.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
+    const current = options.indexOf(target)
+    if (current < 0) return
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? options.length - 1
+          : event.key === "ArrowRight"
+            ? (current + 1) % options.length
+            : (current - 1 + options.length) % options.length
+    event.preventDefault()
+    options[next]?.focus()
+    options[next]?.click()
+  }
+
+  return (
+    <div class="workspace-composer__research-slider">
+      <span class="workspace-composer__research-slider-label">{props.label}</span>
+      <div role="radiogroup" aria-label={props.label} onKeyDown={move}>
+        <For each={props.options}>
+          {(option) => (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={props.value === option.value}
+              tabindex={props.value === option.value ? 0 : -1}
+              disabled={props.disabled}
+              onClick={() => props.onSelect(option.value)}
+            >
+              {option.label}
+            </button>
+          )}
+        </For>
+      </div>
+    </div>
+  )
+}
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -153,6 +207,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [capabilities, capabilityActions] = createResource(() =>
     settings<CapabilityPreferences>("/settings/preferences"),
   )
+  onMount(() => {
+    const update = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return
+      capabilityActions.mutate(event.detail as CapabilityPreferences)
+    }
+    globalThis.addEventListener(CAPABILITY_PREFERENCES_EVENT, update)
+    onCleanup(() => globalThis.removeEventListener(CAPABILITY_PREFERENCES_EVENT, update))
+  })
   const saveCapabilities = (patch: Partial<CapabilityPreferences>) => {
     const previous = capabilities()
     if (!previous) return
@@ -163,7 +225,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(patch),
     })
-      .then(capabilityActions.mutate)
+      .then((value) => {
+        capabilityActions.mutate(value)
+        publishCapabilityPreferences(value)
+      })
       .catch((error) => {
         capabilityActions.mutate(previous)
         showToast({
@@ -173,33 +238,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
   }
   const delegation = createMemo(() => delegationSettings(capabilities()))
-  const delegationSelection = createMemo(() => delegationLabel(delegation()))
-  const workerModels = createMemo(() =>
-    local.model
-      .list()
-      .filter((model) => local.model.visible({ providerID: model.provider.id, modelID: model.id }))
-      .toSorted((a, b) => a.name.localeCompare(b.name) || a.provider.name.localeCompare(b.provider.name)),
-  )
-  const workerSelection = createMemo(() => {
-    const selected = delegation().workerModel
-    if (!selected) return "Inherit"
-    const model = workerModels().find(
-      (item) => item.id === selected.modelID && item.provider.id === selected.providerID,
-    )
-    return model?.name ?? selected.modelID
-  })
-  const independenceSelection = createMemo(
-    () => DELEGATION_AUTONOMY.find((option) => option.value === delegation().autonomy)?.label ?? "Balanced",
-  )
-  const saveDelegation = (patch: {
-    level?: DelegationLevel
-    workerModel?: DelegationModel | null
-    autonomy?: DelegationAutonomy
-  }) => {
+  const saveDelegation = (patch: { level?: DelegationLevel; autonomy?: DelegationAutonomy }) => {
     const current = delegation()
     const next = {
       level: patch.level ?? current.level,
-      workerModel: patch.workerModel === null ? undefined : (patch.workerModel ?? current.workerModel),
+      workerModel: current.workerModel,
       autonomy: patch.autonomy ?? current.autonomy,
     }
     saveCapabilities({
@@ -2664,141 +2707,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </summary>
                   <div class="workspace-composer__research-tools-menu" role="group" aria-label="Research tools">
                     <section class="workspace-composer__research-controls" aria-label="Research roles">
-                      <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
-                        <summary aria-label={`Delegation, ${delegationSelection()}`}>
-                          <span>Delegation</span>
-                          <strong>{delegationSelection()}</strong>
-                          <Icon name="chevron-right" size="small" />
-                        </summary>
-                        <div
-                          class="workspace-composer__research-choice-menu"
-                          role="radiogroup"
-                          aria-label="Delegation level"
-                          onKeyDown={navigateResearchChoices}
-                        >
-                          <For each={DELEGATION_LEVELS}>
-                            {(option) => (
-                              <button
-                                type="button"
-                                role="radio"
-                                aria-checked={delegation().level === option.value}
-                                tabindex={delegation().level === option.value ? 0 : -1}
-                                disabled={!capabilities()}
-                                onClick={(event) => {
-                                  saveDelegation({ level: option.value })
-                                  event.currentTarget.closest("details")?.removeAttribute("open")
-                                }}
-                              >
-                                <span>
-                                  <strong>{option.label}</strong>
-                                  <small>{option.description}</small>
-                                </span>
-                                <Show when={delegation().level === option.value}>
-                                  <Icon name="check" size="small" />
-                                </Show>
-                              </button>
-                            )}
-                          </For>
-                        </div>
-                      </details>
+                      <ResearchSlider
+                        label="Delegation"
+                        value={delegation().level}
+                        options={DELEGATION_LEVELS}
+                        disabled={!capabilities()}
+                        onSelect={(value) => saveDelegation({ level: value as DelegationLevel })}
+                      />
                       <Show when={delegation().level !== "off"}>
-                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
-                          <summary aria-label={`Worker model, ${workerSelection()}`}>
-                            <span>Worker model</span>
-                            <strong>{workerSelection()}</strong>
-                            <Icon name="chevron-right" size="small" />
-                          </summary>
-                          <div
-                            class="workspace-composer__research-choice-menu"
-                            role="radiogroup"
-                            aria-label="Worker model"
-                            onKeyDown={navigateResearchChoices}
-                          >
-                            <button
-                              type="button"
-                              role="radio"
-                              aria-checked={!delegation().workerModel}
-                              tabindex={!delegation().workerModel ? 0 : -1}
-                              onClick={(event) => {
-                                saveDelegation({ workerModel: null })
-                                event.currentTarget.closest("details")?.removeAttribute("open")
-                              }}
-                            >
-                              <span>
-                                <strong>Inherit</strong>
-                                <small>Use the model selected for this conversation</small>
-                              </span>
-                              <Show when={!delegation().workerModel}>
-                                <Icon name="check" size="small" />
-                              </Show>
-                            </button>
-                            <For each={workerModels()}>
-                              {(model) => {
-                                const selected = () =>
-                                  delegation().workerModel?.providerID === model.provider.id &&
-                                  delegation().workerModel?.modelID === model.id
-                                return (
-                                  <button
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={selected()}
-                                    tabindex={selected() ? 0 : -1}
-                                    onClick={(event) => {
-                                      saveDelegation({
-                                        workerModel: { providerID: model.provider.id, modelID: model.id },
-                                      })
-                                      event.currentTarget.closest("details")?.removeAttribute("open")
-                                    }}
-                                  >
-                                    <span>
-                                      <strong>{model.name}</strong>
-                                      <small>{model.provider.name}</small>
-                                    </span>
-                                    <Show when={selected()}>
-                                      <Icon name="check" size="small" />
-                                    </Show>
-                                  </button>
-                                )
-                              }}
-                            </For>
-                          </div>
-                        </details>
-                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
-                          <summary aria-label={`Independence, ${independenceSelection()}`}>
-                            <span>Independence</span>
-                            <strong>{independenceSelection()}</strong>
-                            <Icon name="chevron-right" size="small" />
-                          </summary>
-                          <div
-                            class="workspace-composer__research-choice-menu"
-                            role="radiogroup"
-                            aria-label="Lead and worker independence"
-                            onKeyDown={navigateResearchChoices}
-                          >
-                            <For each={DELEGATION_AUTONOMY}>
-                              {(option) => (
-                                <button
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={delegation().autonomy === option.value}
-                                  tabindex={delegation().autonomy === option.value ? 0 : -1}
-                                  onClick={(event) => {
-                                    saveDelegation({ autonomy: option.value })
-                                    event.currentTarget.closest("details")?.removeAttribute("open")
-                                  }}
-                                >
-                                  <span>
-                                    <strong>{option.label}</strong>
-                                    <small>{option.description}</small>
-                                  </span>
-                                  <Show when={delegation().autonomy === option.value}>
-                                    <Icon name="check" size="small" />
-                                  </Show>
-                                </button>
-                              )}
-                            </For>
-                          </div>
-                        </details>
+                        <ResearchSlider
+                          label="Independence"
+                          value={delegation().autonomy}
+                          options={DELEGATION_AUTONOMY}
+                          onSelect={(value) => saveDelegation({ autonomy: value as DelegationAutonomy })}
+                        />
                       </Show>
                       <div class="workspace-composer__research-divider" />
                       <Show

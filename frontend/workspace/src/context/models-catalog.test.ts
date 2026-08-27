@@ -111,7 +111,7 @@ describe("frontier model canonicalization", () => {
     )
   })
 
-  test("logical models appear once while subscription routes remain separate", () => {
+  test("exact access routes survive before logical presentation grouping", () => {
     const provider = (id: string) => ({ id, name: id })
     const models = preferredModels([
       {
@@ -145,6 +145,7 @@ describe("frontier model canonicalization", () => {
       "openrouter/openai/gpt-5.6-sol",
       "openrouter/openai/gpt-5.6-sol-pro",
       "openrouter/meta/muse-spark-1.1",
+      "anthropic/claude-sonnet-5",
       "openai-codex/gpt-5.6-sol",
     ])
   })
@@ -338,7 +339,7 @@ describe("frontier model canonicalization", () => {
     })
   })
 
-  test("managed routes win logical duplicates and persisted native selections follow them", () => {
+  test("keeps exact native and managed routes while presentation groups them", () => {
     const provider = (id: string) => ({ id, name: id })
     const managed = { id: "anthropic/claude-sonnet-5", provider: provider("openrouter") }
     const native = { id: "claude-sonnet-5", provider: provider("anthropic") }
@@ -348,8 +349,10 @@ describe("frontier model canonicalization", () => {
       [native, managed],
     ]) {
       const models = preferredModels(input)
-      expect(models).toEqual([managed])
-      expect(preferredModel(models, { providerID: "anthropic", modelID: native.id })).toEqual(managed)
+      expect(models).toEqual(input)
+      expect(preferredModel(models, { providerID: "anthropic", modelID: native.id })).toBe(native)
+      expect(preferredModel(models, { providerID: "openrouter", modelID: managed.id })).toBe(managed)
+      expect(groupModelRoutes({ models })).toHaveLength(1)
     }
   })
 

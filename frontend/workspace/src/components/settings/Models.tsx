@@ -1,9 +1,12 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
+import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useModels, type ModelKey } from "@/context/models"
+import { usePlatform } from "@/context/platform"
+import { useSDK } from "@/context/sdk"
 import { productPreferences } from "@/context/product-preferences"
 import {
   displayProviderForModel,
@@ -20,6 +23,8 @@ import { ProviderKeys } from "./ProviderKeys"
 import { ProviderLogo } from "./ProviderLogo"
 import { modelGroup, modelGroupLabel, modelGroupRank } from "../model-groups"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
+import { settingsApi } from "./api"
+import { type CapabilityPreferences, type DelegationModel, publishCapabilityPreferences } from "../prompt-capabilities"
 import "./models.css"
 
 type AvailableModel = ReturnType<ReturnType<typeof useModels>["list"]>[number]
@@ -54,6 +59,13 @@ type Option = {
 
 type Scope = "all" | "reasoning" | "latest" | "long"
 type OptionGroup<T> = { id: string; label: string; models: T[] }
+type WorkerOption = {
+  value: string
+  label: string
+  provider?: string
+  providerLogo?: string
+  model?: DelegationModel
+}
 
 export function takeModelGroups<T>(groups: OptionGroup<T>[], limit: number): OptionGroup<T>[] {
   let remaining = Math.max(0, limit)
@@ -76,11 +88,17 @@ const scopes: Array<{ id: Scope; label: string }> = [
 
 export default function Models() {
   const sync = useGlobalSync()
+  const sdk = useSDK()
   const models = useModels()
+  const platform = usePlatform()
+  const fetchFn = platform.fetch ?? fetch
   const [query, setQuery] = createSignal("")
   const [scope, setScope] = createSignal<Scope>("all")
   const [catalogOpen, setCatalogOpen] = createSignal(false)
   const [error, setError] = createSignal<string>()
+  const [preferences, preferenceActions] = createResource(() =>
+    settingsApi<CapabilityPreferences>(sdk.url, fetchFn, "/settings/preferences"),
+  )
   const routeAccess = (item: AvailableModel) =>
     inferenceSourceLabel(
       inferenceSource({
@@ -188,6 +206,54 @@ export default function Models() {
   const [notice, setNotice] = createSignal("Pinned models appear first. Hidden models stay out of the picker.")
   const pinnedCount = createMemo(() => options().filter((model) => model.pinned).length)
   const visibleCount = createMemo(() => options().filter((model) => model.visible).length)
+  const workerOptions = createMemo<WorkerOption[]>(() => {
+    const selected = preferences()?.delegation_worker_model
+    const routes = models
+      .list()
+      .filter(
+        (model) =>
+          models.visible({ providerID: model.provider.id, modelID: model.id }) ||
+          (selected?.providerID === model.provider.id && selected.modelID === model.id),
+      )
+      .map((model) => {
+        const display = displayProviderForModel(model.provider, model.id)
+        const key = { providerID: model.provider.id, modelID: model.id }
+        return {
+          value: modelRouteValue(key),
+          label: modelDisplayName(model.name, model.provider.id, model.id),
+          provider: display.name,
+          providerLogo: display.id,
+          model: key,
+        }
+      })
+      .toSorted((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value))
+    return [{ value: "inherit", label: "Same as conversation" }, ...routes]
+  })
+  const workerSelection = createMemo(() => {
+    const selected = preferences()?.delegation_worker_model
+    if (!selected) return workerOptions()[0]
+    return workerOptions().find(
+      (option) => option.model?.providerID === selected.providerID && option.model.modelID === selected.modelID,
+    )
+  })
+  const setWorkerModel = async (option: WorkerOption) => {
+    const previous = preferences()
+    if (!previous) return
+    const next = { ...previous, delegation_worker_model: option.model ?? null }
+    preferenceActions.mutate(next)
+    setError(undefined)
+    try {
+      const saved = await settingsApi<CapabilityPreferences>(sdk.url, fetchFn, "/settings/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({ delegation_worker_model: option.model ?? null }),
+      })
+      preferenceActions.mutate(saved)
+      publishCapabilityPreferences(saved)
+    } catch (cause) {
+      preferenceActions.mutate(previous)
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
 
   const togglePin = (model: Option) => {
     if (model.pinned) {
@@ -243,6 +309,41 @@ export default function Models() {
               <CodexConnection onError={setError} />
             </div>
             <ProviderKeys onError={setError} />
+          </Section>
+
+          <Section id="worker-model" title="Worker model">
+            <div class="settings-card settings-defaults-card models-worker-card">
+              <Select
+                aria-label="Worker model"
+                options={workerOptions()}
+                current={workerSelection()}
+                value={(option) => option.value}
+                label={(option) => option.label}
+                disabled={!preferences()}
+                onSelect={(option) => option && void setWorkerModel(option)}
+                variant="secondary"
+                size="small"
+                triggerVariant="settings"
+              >
+                {(option) => (
+                  <Show when={option}>
+                    {(entry) => (
+                      <span class="models-default-option">
+                        <Show when={entry().providerLogo}>
+                          {(logo) => (
+                            <ProviderLogo id={logo()} label={entry().provider ?? "Model provider"} size="small" />
+                          )}
+                        </Show>
+                        <span class="min-w-0 truncate">{entry().label}</span>
+                        <Show when={entry().provider}>
+                          <span class="models-default-option__provider">{entry().provider}</span>
+                        </Show>
+                      </span>
+                    )}
+                  </Show>
+                )}
+              </Select>
+            </div>
           </Section>
 
           <Section

@@ -543,7 +543,7 @@
 }
 
 [data-model-popover-kind="effort"] {
-  width: min(268px, calc(100vw - 24px));
+  width: min(232px, calc(100vw - 24px));
   max-height: min(72dvh, 390px);
 }
 
@@ -588,9 +588,15 @@
 }
 
 .model-settings-speed-section {
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 4px;
+  padding-top: 4px;
   border-top: 1px solid var(--model-control-border);
+}
+
+.model-settings-speed-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 [data-model-fast-toggle] {
@@ -608,9 +614,9 @@
 
 [data-model-fast-toggle] [data-component="switch"] {
   width: 100%;
-  min-height: 40px;
+  min-height: 36px;
   justify-content: space-between;
-  padding: 4px 8px;
+  padding: 2px 8px;
   cursor: pointer;
 }
 
@@ -633,7 +639,7 @@
   }
 
   [data-model-settings-popover][data-model-popover-kind="effort"] {
-    width: min(268px, calc(100vw - 24px));
+    width: min(232px, calc(100vw - 24px));
   }
 
   [data-model-settings-popover]:not([data-model-settings-view="root"]) [data-model-settings-layout] {
@@ -788,7 +794,7 @@
   }
 
   [data-model-fast-toggle] [data-component="switch"] {
-    min-height: 52px;
+    min-height: 44px;
   }
 
   [data-model-settings-popover] [data-model-menu-label],

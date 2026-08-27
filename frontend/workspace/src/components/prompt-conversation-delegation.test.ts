@@ -13,12 +13,14 @@ test("keeps conversation references typed from chip through request", () => {
 })
 
 test("offers model-directed delegation controls and sends the normalized contract", () => {
-  expect(capabilities).toContain('export type DelegationLevel = "off" | "light" | "standard" | "high"')
+  expect(capabilities).toContain('export type DelegationLevel = "off" | "standard" | "high"')
   expect(capabilities).toContain('export type DelegationAutonomy = "interactive" | "balanced" | "autonomous"')
-  expect(capabilities).toContain('value: "light", label: "Low"')
-  expect(capabilities).toContain('value: "standard", label: "Normal"')
+  expect(capabilities).toContain('value: "standard", label: "Auto"')
+  expect(capabilities).not.toContain('value: "light", label: "Low"')
   expect(input).toContain("delegationSettings: delegationConfig")
   expect(input).toContain("delegation_worker_model")
-  expect(input).toContain("Lead and worker independence")
+  expect(input).toContain('label="Delegation"')
+  expect(input).toContain('label="Independence"')
+  expect(input).not.toContain("Worker model, ${workerSelection()}")
   expect(input).not.toContain("Approaches")
 })

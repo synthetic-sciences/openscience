@@ -135,7 +135,7 @@ test("synthesized Codex OAuth models use Codex variants and preserve model-speci
         expect(Object.keys(codex54.modes ?? {})).toEqual(["fast"])
         const mini = codex.models["gpt-5.4-mini"]
         expect(mini.limit.context).toBe(400_000)
-        expect(Object.keys(mini.modes ?? {})).toEqual(["fast"])
+        expect(mini.modes).toBeUndefined()
         expect(codex.name).toBe("OpenAI (Codex subscription)")
 
         const publicSol = providers.openai?.models["gpt-5.6-sol"]
@@ -186,13 +186,12 @@ test("current frontier models are routable from the seeded catalog", async () =>
         service_tier: "priority",
       })
       expect(Object.keys(providers["openai"].models["gpt-5.6-sol"].modes ?? {})).toEqual(["fast"])
-      expect(providers["openrouter"].models["openai/gpt-5.6-sol"].modes?.fast.provider?.body).toEqual({
-        provider: { sort: "throughput" },
-        service_tier: "priority",
-      })
-      expect(providers["openrouter"].models["x-ai/grok-4.5"].modes?.fast.provider?.body).toEqual({
-        provider: { sort: "throughput" },
-      })
+      expect(providers["openrouter"].models["openai/gpt-5.6-sol"].modes?.fast).toBeUndefined()
+      expect(providers["openrouter"].models["x-ai/grok-4.5"].modes?.fast).toBeUndefined()
+      expect(providers["openrouter"].models["anthropic/claude-opus-5"].modes?.fast?.model).toBe(
+        "anthropic/claude-opus-5-fast",
+      )
+      expect(providers["xai"].models["grok-4.5"].modes?.fast).toBeUndefined()
       expect(providers["openrouter"].models["openai/gpt-5.6-sol"].modes?.pro).toBeUndefined()
       expect(providers["openrouter"].models["openai/gpt-5.6-sol-pro"]).toBeDefined()
       expect((providers["anthropic"].models["claude-opus-4-8"] as any).modes?.fast?.provider?.body).toEqual({

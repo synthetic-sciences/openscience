@@ -341,18 +341,14 @@ export function preferredModels<T extends CatalogModel>(models: T[]): T[] {
   const result: T[] = []
   const seen = new Map<string, number>()
   const score = (model: T) => {
-    // Synced managed routes are removed by the backend in explicit BYOK mode.
-    // When both survive in auto mode, prefer the managed OpenRouter route so a
-    // stale native key cannot shadow the healthy wallet route.
-    const route = model.provider.id === "openrouter" ? 2 : 0
     // Models.dev sometimes ships both a stable alias and its dated Anthropic
-    // snapshot under the same display name. Keep the stable id.
-    const stable = /-\d{8}$/.test(model.id) ? 0 : 1
-    return route + stable
+    // snapshot on the same provider. Keep the stable id without collapsing a
+    // native, subscription, or managed access route into another provider.
+    return /-\d{8}$/.test(model.id) ? 0 : 1
   }
 
   for (const model of routed) {
-    const key = canonicalKey(model.provider.id, model.id)
+    const key = `${model.provider.id}:${canonicalKey(model.provider.id, model.id)}`
     const index = seen.get(key)
     if (index === undefined) {
       seen.set(key, result.length)
