@@ -1,10 +1,27 @@
 import { describe, expect, test } from "bun:test"
+import { CONNECTORS } from "../data/connectors"
 
 const landing = await Bun.file(new URL("./Landing.tsx", import.meta.url)).text()
+const download = await Bun.file(new URL("./Download.tsx", import.meta.url)).text()
 const main = await Bun.file(new URL("../main.tsx", import.meta.url)).text()
 const readme = await Bun.file(new URL("../../../../README.md", import.meta.url)).text()
 const gateway = await Bun.file(new URL("../../../docs/src/content/openscience/gateway.mdx", import.meta.url)).text()
 const security = await Bun.file(new URL("../../../docs/src/content/openscience/security.mdx", import.meta.url)).text()
+const catalog = Bun.spawn(
+  [
+    "bun",
+    "-e",
+    'import { registry } from "./backend/cli/src/science/connectors"; console.log(JSON.stringify(registry.catalog().map((connector) => [connector.id, connector.name, connector.homepage])))',
+  ],
+  {
+    cwd: new URL("../../../../", import.meta.url).pathname,
+    stdout: "pipe",
+    stderr: "pipe",
+  },
+)
+const status = await catalog.exited
+if (status !== 0) throw new Error(await new Response(catalog.stderr).text())
+const shipped = (await new Response(catalog.stdout).json()) as Array<[string, string, string | undefined]>
 const docs = await Bun.file(new URL("../../public/docs/index.html", import.meta.url)).text()
 const asset = docs.match(/assets\/(index-[^"']+\.js)/)?.[1]
 if (!asset) throw new Error("Built docs index does not reference a JavaScript bundle")
@@ -32,7 +49,7 @@ describe("OpenScience landing contract", () => {
     expect(landing).toContain("OpenScience Ace")
     expect(landing).toContain("PAY AS YOU GO")
     expect(landing).toContain("Models and enhanced research search")
-    expect(landing).toContain("no fixed monthly charge")
+    expect(landing).toContain("no monthly subscription")
     expect(landing).not.toContain("Ace+")
     expect(landing).not.toContain("per month")
     expect(landing).not.toContain("included every month")
@@ -40,32 +57,54 @@ describe("OpenScience landing contract", () => {
     expect(landing).not.toContain("research quota")
   })
 
-  test("offers a direct, platform-aware download before the product story", () => {
-    expect(landing).toContain("<DownloadSection />")
-    expect(landing).toContain("openscience-darwin-arm64.zip")
-    expect(landing).toContain("openscience-darwin-x64.zip")
-    expect(landing).toContain("openscience-windows-x64.zip")
-    expect(landing).toContain("openscience-linux-x64.tar.gz")
-    expect(landing).toContain("openscience-linux-arm64.tar.gz")
-    expect(landing).toContain("onClick={() => setTarget(item)}")
-    expect(landing.match(/id="terminal"/g)).toHaveLength(1)
-    expect(landing.indexOf("<DownloadSection />")).toBeLessThan(landing.indexOf("RESEARCH LOOP"))
+  test("keeps installation on a dedicated platform-aware download page", () => {
+    expect(landing).toContain('href="/download"')
+    expect(landing).toContain("Download OpenScience")
+    expect(landing).not.toContain("<DownloadSection />")
+    expect(landing).not.toContain("function DownloadSection")
+    expect(landing).not.toContain("<ProductShot />")
+    expect(landing).not.toContain("workspaceShot")
+    expect(landing).not.toContain('href="#install"')
+    expect(landing).not.toContain("Install OpenScience")
+
+    expect(main).toContain('path === "/download"')
+    expect(main).toContain("<Download")
+    expect(download).toContain("openscience-darwin-arm64.zip")
+    expect(download).toContain("openscience-darwin-x64.zip")
+    expect(download).toContain("openscience-windows-x64.zip")
+    expect(download).toContain("openscience-linux-x64.tar.gz")
+    expect(download).toContain("openscience-linux-arm64.tar.gz")
+    expect(download).toContain("npm i -g @synsci/openscience")
+    expect(download).toContain("curl -fsSL https://openscience.sh/install | bash")
+    expect(download).toContain('role="group"')
+    expect(download).toContain("aria-pressed")
+    expect(download.match(/id="terminal"/g)).toHaveLength(1)
   })
 
-  test("shows the real model picker and the scientific tool wall", () => {
+  test("shows the real model picker and all shipped scientific sources", async () => {
     expect(landing).toContain("More models")
     expect(landing).toContain("Manage models")
     expect(landing).toContain("DeepSeek V4 Flash")
     expect(landing).toContain("setInterval")
 
-    const start = landing.indexOf("const TOOLS = [")
-    const end = landing.indexOf("] as const", start)
-    const tools = landing.slice(start, end).match(/^\s+"[^"]+",?$/gm) ?? []
-    expect(tools).toHaveLength(54)
-    expect(landing).toContain("54 tools. Ready when the task calls.")
-    expect(landing).toContain("function ToolLogo")
-    expect(landing).toContain("data-logo={brand}")
-    expect(landing).toContain("data-logo={kind}")
+    expect(CONNECTORS).toHaveLength(42)
+    expect(new Set(CONNECTORS.map((connector) => connector.id)).size).toBe(42)
+    expect(JSON.stringify(CONNECTORS.map((connector) => [connector.id, connector.name, connector.home]))).toBe(
+      JSON.stringify(shipped),
+    )
+    expect(landing).toContain("42 scientific sources, searched directly.")
+    expect(landing).toContain("function ConnectorLogo")
+    expect(landing).toContain("<ConnectorWall />")
+    expect(landing).not.toContain("const TOOLS")
+    expect(landing).not.toContain("function ToolLogo")
+    expect(landing).not.toContain('data-logo="protein"')
+
+    for (const connector of CONNECTORS) {
+      expect(connector.home).toMatch(/^https:\/\//)
+      expect(connector.source).toMatch(/^https:\/\//)
+      expect(connector.logo).toMatch(/^\/connector-logos\//)
+      expect(await Bun.file(new URL(`../../public${connector.logo}`, import.meta.url)).exists()).toBe(true)
+    }
   })
 
   test("keeps internal model routing out of the editable product story", () => {
@@ -89,7 +128,7 @@ describe("OpenScience landing contract", () => {
   test("keeps Ace pricing concise and separates other access routes", () => {
     expect(landing).not.toContain("auto-reload")
     expect(landing).not.toContain("Set a monthly cap")
-    expect(landing).toContain("Your remaining balance stays available.")
+    expect(landing).toContain("Unused credits remain in your wallet.")
     expect(landing).toContain("Any processing fee is shown before payment")
     expect(landing).toContain("Local models, your own keys, and eligible ChatGPT access stay separate")
     expect(landing).not.toContain("Synthetic Scientists")

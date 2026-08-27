@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import workspaceShot from "@/assets/workspace.png"
 import heroPlate from "@/assets/hero.webp"
+import { CONNECTORS } from "@/data/connectors"
 
 const LOGOS = [
   { id: "harvard", src: "/logos/harvard.png", alt: "Harvard University" },
@@ -38,51 +38,6 @@ const LABEL = "text-[14px] text-muted-foreground"
 const GITHUB = "https://github.com/synthetic-sciences/openscience"
 const DOCS = "https://openscience.sh/docs"
 const APP = "https://app.syntheticsciences.ai"
-const NPM_CMD = "npm i -g @synsci/openscience"
-const CURL_CMD = "curl -fsSL https://openscience.sh/install | bash"
-const RELEASE = `${GITHUB}/releases/latest/download`
-
-const DOWNLOADS = {
-  "mac-arm64": {
-    platform: "mac",
-    label: "macOS",
-    detail: "Apple Silicon",
-    file: "openscience-darwin-arm64.zip",
-  },
-  "mac-x64": {
-    platform: "mac",
-    label: "macOS",
-    detail: "Intel",
-    file: "openscience-darwin-x64.zip",
-  },
-  "windows-x64": {
-    platform: "windows",
-    label: "Windows",
-    detail: "64-bit",
-    file: "openscience-windows-x64.zip",
-  },
-  "linux-x64": {
-    platform: "linux",
-    label: "Linux",
-    detail: "x86_64",
-    file: "openscience-linux-x64.tar.gz",
-  },
-  "linux-arm64": {
-    platform: "linux",
-    label: "Linux",
-    detail: "ARM64",
-    file: "openscience-linux-arm64.tar.gz",
-  },
-} as const
-
-type Target = keyof typeof DOWNLOADS
-type Platform = (typeof DOWNLOADS)[Target]["platform"]
-
-const PLATFORMS = [
-  { id: "mac", label: "macOS", target: "mac-arm64" },
-  { id: "windows", label: "Windows", target: "windows-x64" },
-  { id: "linux", label: "Linux", target: "linux-x64" },
-] as const
 
 const MODELS = [
   ["5.6 Sol", "OpenAI", "Reasoning"],
@@ -92,123 +47,6 @@ const MODELS = [
   ["GLM 5.3", "Z.AI", "Reasoning"],
   ["DeepSeek V4 Flash", "DeepSeek", "General"],
 ] as const
-
-const TOOLS = [
-  "AiZynthFinder",
-  "AlphaFold2",
-  "AlphaFold2-Multimer",
-  "AutoDock Vina",
-  "Biopython",
-  "Boltz-2",
-  "Cantera",
-  "cclib",
-  "cctbx_project",
-  "chemdataextractor2",
-  "Chemprop",
-  "ChemPy",
-  "CREST",
-  "DeepChem",
-  "DiffDock",
-  "ESM-2",
-  "ESMFold",
-  "Evo 2",
-  "Gemmi",
-  "GenMol",
-  "GoodVibes",
-  "hplc-py",
-  "lmfit-py",
-  "Marker",
-  "matchms",
-  "Matplotlib",
-  "molmass",
-  "MolMM",
-  "Mordred",
-  "MSA Search",
-  "nmrglue",
-  "NWChem",
-  "Open Babel",
-  "OpenFold2",
-  "OpenFold3",
-  "OpenMM",
-  "OpenMS",
-  "paper-qa",
-  "ProteinMPNN",
-  "Psi4",
-  "PubChemPy",
-  "PyAlex",
-  "pybaselines",
-  "pymatgen",
-  "PySCF",
-  "Pyteomics",
-  "RDKit",
-  "RFdiffusion",
-  "scikit-learn",
-  "SciPy",
-  "statsmodels",
-  "Syntheseus",
-  "thermo",
-  "xtb",
-] as const
-
-// Compact canonical project and maker marks. They stay inline so the wall never
-// depends on a third-party request at runtime.
-const MARKS = {
-  alphafold:
-    "M15 38.438c0-3.526.725-6.25 2.175-8.175S19.563 26.25 22.988 24c-2.45-2.25-4.4-4.338-5.85-6.263-1.45-1.925-2.175-4.65-2.175-8.175v-.45c0-.2.062-.362.187-.487s.288-.188.488-.188.362.063.487.188.188.287.188.487v.45c0 .525.012 1.013.037 1.463s.075.887.15 1.312h14.963c.075-.425.125-.862.15-1.312.05-.45.075-.938.075-1.463v-.45c0-.2.062-.362.187-.487s.275-.188.45-.188c.2 0 .363.063.488.188s.187.287.187.487v.45c0 3.525-.725 6.25-2.175 8.175S27.438 21.75 25.013 24c2.425 2.225 4.362 4.313 5.812 6.263S33 34.913 33 38.438v.45c0 .2-.063.362-.188.487s-.287.188-.487.188c-.175 0-.325-.063-.45-.188s-.188-.287-.188-.487v-.45c0-.525-.025-1.013-.075-1.463-.025-.45-.075-.888-.15-1.313H16.538c-.075.425-.138.863-.188 1.313-.025.45-.037.938-.037 1.463v.45c0 .2-.063.362-.188.487s-.275.188-.45.188c-.2 0-.362-.063-.487-.188S15 39.088 15 38.888v-.45ZM18.975 18h10.05c.475-.65.9-1.325 1.275-2.025s.675-1.463.9-2.288H16.8c.225.825.512 1.588.862 2.288.375.7.813 1.375 1.313 2.025ZM24 23.1c.75-.675 1.45-1.313 2.1-1.913.65-.625 1.25-1.25 1.8-1.875h-7.838c.55.625 1.15 1.25 1.8 1.875.675.625 1.388 1.263 2.138 1.913Zm-3.9 5.588h7.8c-.55-.625-1.15-1.238-1.8-1.838-.65-.625-1.35-1.275-2.1-1.95-.75.675-1.45 1.325-2.1 1.95-.65.6-1.25 1.213-1.8 1.838Zm-3.263 5.624H31.2c-.25-.825-.55-1.587-.9-2.287s-.775-1.375-1.275-2.025h-10.05c-.5.65-.938 1.325-1.313 2.025-.35.7-.625 1.462-.825 2.287Z",
-  python:
-    "M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z",
-  nvidia:
-    "M8.948 8.798v-1.43a6.7 6.7 0 0 1 .424-.018c3.922-.124 6.493 3.374 6.493 3.374s-2.774 3.851-5.75 3.851c-.398 0-.787-.062-1.158-.185v-4.346c1.528.185 1.837.857 2.747 2.385l2.04-1.714s-1.492-1.952-4-1.952a6.016 6.016 0 0 0-.796.035m0-4.735v2.138l.424-.027c5.45-.185 9.01 4.47 9.01 4.47s-4.08 4.964-8.33 4.964c-.37 0-.733-.035-1.095-.097v1.325c.3.035.61.062.91.062 3.957 0 6.82-2.023 9.593-4.408.459.371 2.34 1.263 2.73 1.652-2.633 2.208-8.772 3.984-12.253 3.984-.335 0-.653-.018-.971-.053v1.864H24V4.063zm0 10.326v1.131c-3.657-.654-4.673-4.46-4.673-4.46s1.758-1.944 4.673-2.262v1.237H8.94c-1.528-.186-2.73 1.245-2.73 1.245s.68 2.412 2.739 3.11M2.456 10.9s2.164-3.197 6.5-3.533V6.201C4.153 6.59 0 10.653 0 10.653s2.35 6.802 8.948 7.42v-1.237c-4.84-.6-6.492-5.936-6.492-5.936z",
-  meta: "M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973.14.604.35 1.145.636 1.621.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.942-1.664.183.3 2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843C23.624 17.993 24 16.444 24 14.41c0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.29-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.9 44.9 0 0 0-1.255-1.98c1.19-1.85 2.218-2.929 3.568-2.929zm-10.201.553c1.265 0 2.058.791 2.675 1.446.307.327.737.871 1.234 1.579l-1.02 1.566c-.757 1.163-1.882 3.017-2.837 4.338-1.191 1.649-1.81 1.817-2.486 1.817-.524 0-1.038-.237-1.383-.794-.263-.426-.464-1.13-.464-2.046 0-2.221.63-4.535 1.66-6.088.8-1.21 1.67-1.818 2.621-1.818z",
-  pytorch:
-    "M12.005 0 4.952 7.053a9.865 9.865 0 0 0 0 14.022 9.866 9.866 0 0 0 14.022 0c3.984-3.9 3.986-10.205.085-14.023l-1.744 1.743c2.904 2.905 2.904 7.634 0 10.538s-7.634 2.904-10.538 0-2.904-7.634 0-10.538l4.647-4.646.582-.665zm3.568 3.899a1.327 1.327 0 1 0 0 2.655 1.327 1.327 0 0 0 0-2.655z",
-  scipy:
-    "M15.697 13.496c-.784-1.072-1.982-1.519-3.694-1.88l-1.592-.375-1.201-.515c-.631-.446-1.17-1.634-1.017-2.681a3 3 0 0 1 3.386-2.526 2.962 2.962 0 0 1 1.962 1.155L15.35 9.05c1.033 1.33 2.195 1.727 3.459 1.098l.637-.27a.22.22 0 0 1 .278.087l.127.19c.097.145.3.18.486.073l1.467-1.384c.257-.22.182-.422.182-.422l-.354-.806s-.097-.193-.431-.149l-1.968.181a.327.327 0 0 0-.27.411l.071.227a.219.219 0 0 1-.129.273l-.556.235c-.582.341-1.244.123-1.686-.417l-1.943-2.58a4.421 4.421 0 0 0-2.929-1.72C9.355 3.733 7.095 5.42 6.741 7.84c-.179 1.22.187 2.375.855 3.302.485.674 1.373 1.06 1.854 1.18l2.47.637c.166.04.634.155.91.255.256.092.845.31 1.324.701.572.582.875 1.413.746 2.284a2.744 2.744 0 0 1-4.897 1.255l-1.726-2.292a2.304 2.304 0 0 0-3.222-.451l-3.632 2.71A11.002 11.002 0 0 1 0 12C0 5.798 5.133.768 11.465.768c4.715 0 8.761 2.788 10.523 6.77l.581-.27.393-1.072.411.144-.353.96.98.337-.148.402-1.095-.382-.603.277c.5 1.262.778 2.632.778 4.066 0 6.203-5.135 11.232-11.467 11.232a11.526 11.526 0 0 1-9.26-4.61l3.721-2.788a.855.855 0 0 1 1.163.19l1.826 2.455a4.186 4.186 0 0 0 2.673 1.502c2.302.322 4.439-1.273 4.773-3.563a4.14 4.14 0 0 0-.664-2.922",
-} as const
-
-const TOOL_MARKS = {
-  AlphaFold2: "alphafold",
-  "AlphaFold2-Multimer": "alphafold",
-  "MSA Search": "nvidia",
-  SciPy: "scipy",
-} as const
-
-const PROTEIN = new Set<string>([
-  "AlphaFold2",
-  "AlphaFold2-Multimer",
-  "Biopython",
-  "Boltz-2",
-  "DeepChem",
-  "DiffDock",
-  "ESM-2",
-  "ESMFold",
-  "Evo 2",
-  "GenMol",
-  "MolMM",
-  "MSA Search",
-  "OpenFold2",
-  "OpenFold3",
-  "ProteinMPNN",
-  "RFdiffusion",
-])
-const CHEMISTRY = new Set<string>([
-  "AiZynthFinder",
-  "AutoDock Vina",
-  "Cantera",
-  "cclib",
-  "cctbx_project",
-  "chemdataextractor2",
-  "Chemprop",
-  "CREST",
-  "GoodVibes",
-  "NWChem",
-  "Open Babel",
-  "OpenMM",
-  "Psi4",
-  "RDKit",
-  "xtb",
-])
-const DATA = new Set<string>(["Gemmi", "Marker", "Matplotlib", "OpenMS", "scikit-learn", "Syntheseus"])
 
 /* Eyebrow, the quiet label above every section heading. */
 function Eyebrow({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -284,41 +122,6 @@ function Cta({
         </svg>
       ) : null}
     </a>
-  )
-}
-
-/* CopyChip, a copyable shell command. Click to copy, icon confirms. */
-function CopyChip({ cmd, className = "" }: { cmd: string; className?: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        navigator.clipboard?.writeText(cmd).catch(() => {})
-        setCopied(true)
-        window.setTimeout(() => setCopied(false), 1600)
-      }}
-      className={`group/chip inline-flex items-center gap-3 border border-border/70 bg-background/45 backdrop-blur-[3px] pl-4 pr-3 h-11 font-terminal text-[13px] text-foreground/80 hover:border-foreground/35 hover:text-foreground transition-colors duration-300 cursor-pointer max-w-full ${className}`}
-      aria-label={`Copy command: ${cmd}`}
-    >
-      <span className="text-foreground/40 shrink-0">$</span>
-      <span className="truncate min-w-0">{cmd}</span>
-      <span
-        className="ml-1 text-foreground/40 group-hover/chip:text-foreground/75 transition-colors shrink-0"
-        aria-hidden
-      >
-        {copied ? (
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <path d="M2.5 7 5 9.5 10.5 3.5" stroke="hsl(86 30% 60%)" strokeWidth="1.4" />
-          </svg>
-        ) : (
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <rect x="4" y="4" width="7" height="7" stroke="currentColor" />
-            <path d="M9 4V2H2v7h2" stroke="currentColor" fill="none" />
-          </svg>
-        )}
-      </span>
-    </button>
   )
 }
 
@@ -544,45 +347,15 @@ function Hero() {
             className="rise mt-9 flex flex-wrap items-center justify-end gap-3 [text-shadow:none]"
             style={{ animationDelay: "420ms" }}
           >
-            <Cta href="#install">Install OpenScience</Cta>
+            <Cta href="/download">Download OpenScience</Cta>
             <Cta href={GITHUB} variant="ghost" arrow={false} external>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
               </svg>
               Star on GitHub
             </Cta>
-            <CopyChip cmd={NPM_CMD} className="hidden lg:inline-flex ml-2" />
           </div>
         </div>
-      </div>
-    </section>
-  )
-}
-
-/* --------------------------- Product screenshot ------------------------- */
-
-function ProductShot() {
-  return (
-    <section className="relative w-full overflow-hidden border-t border-border/40">
-      <div className="absolute inset-0 graticule opacity-[0.04]" />
-      <div className="relative z-10 mx-auto max-w-[1400px] w-full px-6 sm:px-10 py-20 sm:py-24">
-        <Reveal>
-          <div className="border border-border/50 bg-[hsl(28,14%,6%)] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.8)]">
-            <img
-              src={workspaceShot}
-              alt="The OpenScience workspace: a research session with agent selector, model picker, files, terminal, and the research graph"
-              className="block w-full h-auto select-none"
-              draggable={false}
-              decoding="async"
-            />
-          </div>
-        </Reveal>
-        <Reveal delay={150}>
-          <div className={`mt-5 flex items-center justify-between gap-4 ${CAPTION}`}>
-            <span>The workspace. One command, and it opens in your browser.</span>
-            <span className="font-terminal hidden sm:block">localhost:4096</span>
-          </div>
-        </Reveal>
       </div>
     </section>
   )
@@ -616,166 +389,6 @@ function TrustStrip() {
             ))}
           </div>
         </div>
-      </div>
-    </section>
-  )
-}
-
-function PlatformMark({ platform }: { platform: Platform }) {
-  if (platform === "mac") {
-    return (
-      <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
-        <rect x="3.5" y="4.5" width="17" height="11" rx="1" stroke="currentColor" />
-        <path d="M8 19.5h8M10 15.5v4m4-4v4" stroke="currentColor" />
-      </svg>
-    )
-  }
-  if (platform === "windows") {
-    return (
-      <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
-        <path
-          d="m3.5 5.25 7.2-.95v7.15H3.5v-6.2Zm8.45-1.12 8.55-1.12v8.44h-8.55V4.13ZM3.5 12.7h7.2v7.15l-7.2-.96V12.7Zm8.45 0h8.55v8.43l-8.55-1.12V12.7Z"
-          stroke="currentColor"
-        />
-      </svg>
-    )
-  }
-  return (
-    <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
-      <path
-        d="M7 17.5c0-2.7 2.25-4.5 5-4.5s5 1.8 5 4.5M9 8.5C9 6.57 10.34 5 12 5s3 1.57 3 3.5S13.66 12 12 12 9 10.43 9 8.5Z"
-        stroke="currentColor"
-      />
-      <path d="m7.5 16-2 3m11-3 2 3M9.25 7.5 7.5 5m7.25 2.5L16.5 5" stroke="currentColor" />
-    </svg>
-  )
-}
-
-function DownloadSection() {
-  const [target, setTarget] = useState<Target>("mac-arm64")
-
-  useEffect(() => {
-    const agent = `${navigator.userAgent} ${navigator.platform}`.toLowerCase()
-    if (agent.includes("win")) return setTarget("windows-x64")
-    const platform = agent.includes("linux") || agent.includes("x11") ? "linux" : "mac"
-    const arm = /arm64|aarch64/.test(agent)
-    setTarget(platform === "linux" ? (arm ? "linux-arm64" : "linux-x64") : "mac-arm64")
-
-    const data = (
-      navigator as Navigator & {
-        userAgentData?: { getHighEntropyValues: (hints: string[]) => Promise<{ architecture?: string }> }
-      }
-    ).userAgentData
-    if (!data?.getHighEntropyValues) return
-
-    void data.getHighEntropyValues(["architecture"]).then(
-      (value) => {
-        const architecture = value.architecture?.toLowerCase()
-        if (!architecture) return
-        const hinted = architecture.includes("arm")
-        setTarget(platform === "linux" ? (hinted ? "linux-arm64" : "linux-x64") : hinted ? "mac-arm64" : "mac-x64")
-      },
-      () => undefined,
-    )
-  }, [])
-
-  const download = DOWNLOADS[target]
-  const options = (Object.keys(DOWNLOADS) as Target[]).filter((item) => DOWNLOADS[item].platform === download.platform)
-
-  return (
-    <section id="install" className="relative w-full overflow-hidden border-t border-border/40">
-      <div className="absolute inset-0 graticule opacity-[0.035]" />
-      <div className="relative z-10 mx-auto w-full max-w-[1120px] px-6 py-20 sm:px-10 sm:py-24">
-        <Reveal>
-          <div className="text-center">
-            <Eyebrow className="mb-5">The current release</Eyebrow>
-            <h2 className={`text-balance ${H_HUGE}`}>Download OpenScience.</h2>
-            <p className={`mx-auto mt-5 max-w-[45ch] ${P_BIG}`}>Your research workspace, on your computer.</p>
-          </div>
-        </Reveal>
-
-        <Reveal delay={150}>
-          <div className="mx-auto mt-9 flex max-w-[540px] flex-col items-center">
-            <a
-              href={`${RELEASE}/${download.file}`}
-              className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-7 text-[16px] sm:min-w-[460px]"
-              aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
-            >
-              <svg width="15" height="16" viewBox="0 0 15 16" fill="none" aria-hidden>
-                <path d="M7.5 1v9m0 0L11 6.5M7.5 10 4 6.5M1 14.5h13" stroke="currentColor" strokeWidth="1.3" />
-              </svg>
-              Download for {download.label} ({download.detail})
-            </a>
-            <span className={`mt-3 ${CAPTION}`}>Latest release · free and open source</span>
-          </div>
-        </Reveal>
-
-        <Reveal delay={220}>
-          <div className="mx-auto mt-12 max-w-[920px]">
-            <div
-              className="grid grid-cols-3 gap-px border border-border/55 bg-border/55"
-              aria-label="Choose your operating system"
-            >
-              {PLATFORMS.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  onClick={() => setTarget(item.target)}
-                  className={`flex min-h-14 items-center justify-center gap-2.5 bg-background px-3 text-[13px] transition-colors duration-300 ${
-                    item.id === download.platform
-                      ? "bg-foreground/[0.08] text-foreground"
-                      : "text-foreground/45 hover:bg-foreground/[0.035] hover:text-foreground/75"
-                  }`}
-                  aria-pressed={item.id === download.platform}
-                >
-                  <PlatformMark platform={item.id} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-1 flex flex-wrap items-center justify-center gap-x-2">
-              {options.map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  onClick={() => setTarget(item)}
-                  className={`relative flex min-h-11 items-center px-2 text-[12.5px] transition-colors ${
-                    item === target
-                      ? "text-foreground after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px after:bg-[hsl(var(--accent-coral))]"
-                      : "text-foreground/55 hover:text-foreground/80"
-                  }`}
-                  aria-pressed={item === target}
-                >
-                  {DOWNLOADS[item].detail}
-                </button>
-              ))}
-            </div>
-
-            <div
-              id="terminal"
-              className="mt-7 grid border border-border/55 bg-background/75 lg:grid-cols-[0.75fr_1.25fr]"
-            >
-              <div className="border-b border-border/55 p-6 text-left lg:border-b-0 lg:border-r sm:p-8">
-                <Eyebrow className="mb-4">Command line</Eyebrow>
-                <h3 className={H_MED}>Prefer the terminal?</h3>
-                <p className={`mt-3 max-w-[32ch] ${P}`}>Install once, then run OpenScience from any project.</p>
-                <a
-                  href={`${GITHUB}/releases`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="link-underline mt-5 inline-block text-[12.5px] text-foreground/45 hover:text-foreground"
-                >
-                  All releases
-                </a>
-              </div>
-              <div className="flex flex-col justify-center gap-3 p-6 sm:p-8">
-                <CopyChip cmd={NPM_CMD} className="w-full justify-start" />
-                <CopyChip cmd={CURL_CMD} className="w-full justify-start" />
-              </div>
-            </div>
-          </div>
-        </Reveal>
       </div>
     </section>
   )
@@ -929,34 +542,30 @@ function LoopVisual() {
   return (
     <Visual label="research session / active">
       <div className="mx-auto w-full max-w-[510px] py-4">
-        {[
-          "Read the literature",
-          "Form a testable claim",
-          "Run the analysis",
-          "Challenge the result",
-          "Write from evidence",
-        ].map((item, index) => (
-          <div key={item} className="flex items-stretch gap-4">
-            <div className="flex w-4 shrink-0 flex-col items-center">
-              <span
-                className={`mt-[5px] size-2 rounded-full border ${
-                  index < 3
-                    ? "border-[hsl(86_30%_62%)] bg-[hsl(86_30%_62%)]/70"
-                    : index === 3
-                      ? "border-[hsl(var(--accent-coral))] bg-[hsl(var(--accent-coral))]/65"
-                      : "border-foreground/30"
-                }`}
-              />
-              {index < 4 ? <span className="my-1 w-px flex-1 bg-border/70" /> : null}
-            </div>
-            <div className="pb-5">
-              <div className="text-[15px] leading-none text-foreground/90">{item}</div>
-              <div className="mt-1.5 font-terminal text-[10px] text-foreground/40">
-                {index < 3 ? "complete" : index === 3 ? "in progress" : "waiting on evidence"}
+        {["Read the sources", "Frame the claim", "Run the analysis", "Check the result", "Write from evidence"].map(
+          (item, index) => (
+            <div key={item} className="flex items-stretch gap-4">
+              <div className="flex w-4 shrink-0 flex-col items-center">
+                <span
+                  className={`mt-[5px] size-2 rounded-full border ${
+                    index < 3
+                      ? "border-[hsl(86_30%_62%)] bg-[hsl(86_30%_62%)]/70"
+                      : index === 3
+                        ? "border-[hsl(var(--accent-coral))] bg-[hsl(var(--accent-coral))]/65"
+                        : "border-foreground/30"
+                  }`}
+                />
+                {index < 4 ? <span className="my-1 w-px flex-1 bg-border/70" /> : null}
+              </div>
+              <div className="pb-5">
+                <div className="text-[15px] leading-none text-foreground/90">{item}</div>
+                <div className="mt-1.5 font-terminal text-[10px] text-foreground/40">
+                  {index < 3 ? "complete" : index === 3 ? "in progress" : "waiting on evidence"}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ),
+        )}
       </div>
     </Visual>
   )
@@ -992,7 +601,7 @@ function RunVisual() {
         <div className="text-[hsl(86_30%_62%)]">saved results/model-summary.csv</div>
         <div className="text-[hsl(86_30%_62%)]">saved results/diagnostic.png</div>
         <div className="mt-3 flex items-center gap-2 text-foreground/55">
-          <span className="inline-block h-2 w-2 bg-[hsl(var(--accent-coral))]" /> evidence attached to the session
+          <span className="inline-block h-2 w-2 bg-[hsl(var(--accent-coral))]" /> outputs remain in this session
         </div>
       </div>
     </Visual>
@@ -1009,7 +618,7 @@ function CritiqueVisual() {
         <div className="border-l border-[hsl(var(--accent-coral))]/70 pl-4 text-foreground/65">
           The subgroup split was chosen after inspection. Re-run with the declared grouping and report both results.
         </div>
-        <div className="font-terminal text-[10px] text-foreground/40">claim held until the check resolves</div>
+        <div className="font-terminal text-[10px] text-foreground/40">check before writing the conclusion</div>
       </div>
     </Visual>
   )
@@ -1021,7 +630,7 @@ function ProjectContextVisual() {
       <div className="flex items-center justify-between border-b border-border/55 px-5 py-3.5 sm:px-6">
         <span className="text-[12px] text-foreground/50">project / context</span>
         <span className="flex items-center gap-2 font-terminal text-[9px] tracking-[0.08em] text-foreground/35">
-          <span className="size-1.5 rounded-full bg-[hsl(92,36%,56%)]" /> INDEXED
+          <span className="size-1.5 rounded-full bg-[hsl(92,36%,56%)]" /> LOCAL
         </span>
       </div>
 
@@ -1049,19 +658,19 @@ function ProjectContextVisual() {
           <div className="flex flex-col gap-2 border-b border-border/45 pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <div className="text-[15px] text-foreground/90">Working context</div>
-              <div className="mt-1 text-[11px] text-foreground/35">Evidence stays linked from source to claim.</div>
+              <div className="mt-1 text-[11px] text-foreground/35">Files, sources, and outputs stay within reach.</div>
             </div>
             <span className="font-terminal text-[9px] tracking-[0.06em] text-foreground/35">
-              6 SOURCES · 3 ARTIFACTS
+              4 ITEMS · LOCAL PROJECT
             </span>
           </div>
 
           <div className="mt-3">
             {[
-              ["PAPER", "held-out-cohort.pdf", "cited in manuscript.md", "12 passages"],
-              ["DATA", "study.csv", "used by analysis.ipynb", "2.4 MB"],
-              ["RUN", "model-summary.csv", "supports result §3", "verified"],
-              ["NOTE", "lab-notes.md", "linked to methods", "local"],
+              ["PAPER", "held-out-cohort.pdf", "opened in this session", "PDF"],
+              ["DATA", "study.csv", "used by analysis.py", "2.4 MB"],
+              ["RUN", "model-summary.csv", "saved to results/", "CSV"],
+              ["NOTE", "lab-notes.md", "local project file", "MARKDOWN"],
             ].map(([kind, name, link, meta], index) => (
               <div
                 key={name}
@@ -1087,81 +696,32 @@ function ProjectContextVisual() {
   )
 }
 
-function ToolLogo({ tool }: { tool: string }) {
-  const brand = TOOL_MARKS[tool as keyof typeof TOOL_MARKS]
-  if (brand) {
-    return (
-      <span className="tool-logo" data-logo={brand} aria-hidden>
-        <svg viewBox={brand === "alphafold" ? "0 0 48 48" : "0 0 24 24"} className="size-[19px]" fill="currentColor">
-          <path d={MARKS[brand]} />
-        </svg>
-      </span>
-    )
-  }
-
-  const kind = PROTEIN.has(tool) ? "protein" : CHEMISTRY.has(tool) ? "chemistry" : DATA.has(tool) ? "data" : "atom"
-
-  if (kind === "protein") {
-    return (
-      <span className="tool-logo" data-logo={kind} aria-hidden>
-        <svg viewBox="0 0 24 24" className="size-5" fill="none">
-          <path d="M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9" stroke="currentColor" />
-          <path d="M8.8 6h6.4M8.4 12h7.2M8.8 18h6.4" stroke="currentColor" opacity=".55" />
-        </svg>
-      </span>
-    )
-  }
-
-  if (kind === "chemistry") {
-    return (
-      <span className="tool-logo" data-logo={kind} aria-hidden>
-        <svg viewBox="0 0 24 24" className="size-5" fill="none">
-          <path
-            d="M9 3h6M10 3v6l-5.2 8.6A2.2 2.2 0 0 0 6.7 21h10.6a2.2 2.2 0 0 0 1.9-3.4L14 9V3"
-            stroke="currentColor"
-          />
-          <path d="M7.7 16h8.6" stroke="currentColor" opacity=".55" />
-          <circle cx="10" cy="13.5" r=".8" fill="currentColor" />
-        </svg>
-      </span>
-    )
-  }
-
-  if (kind === "data") {
-    return (
-      <span className="tool-logo" data-logo={kind} aria-hidden>
-        <svg viewBox="0 0 24 24" className="size-5" fill="none">
-          <path d="M4 19h16M6 16l3-4 3 2 5-7 2 2" stroke="currentColor" />
-          <circle cx="9" cy="12" r="1" fill="currentColor" />
-          <circle cx="17" cy="7" r="1" fill="currentColor" />
-        </svg>
-      </span>
-    )
-  }
-
+function ConnectorLogo({ connector }: { connector: (typeof CONNECTORS)[number] }) {
   return (
-    <span className="tool-logo" data-logo={kind} aria-hidden>
-      <svg viewBox="0 0 24 24" className="size-5" fill="none">
-        <circle cx="12" cy="12" r="2" fill="currentColor" />
-        <ellipse cx="12" cy="12" rx="9" ry="4" stroke="currentColor" />
-        <ellipse cx="12" cy="12" rx="9" ry="4" stroke="currentColor" transform="rotate(60 12 12)" />
-        <ellipse cx="12" cy="12" rx="9" ry="4" stroke="currentColor" transform="rotate(120 12 12)" />
-      </svg>
+    <span
+      className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-white/10 bg-white/[0.94] p-1.5 shadow-[0_6px_18px_-10px_rgba(0,0,0,0.9)]"
+      aria-hidden
+    >
+      <img src={connector.logo} alt="" className="size-full object-contain" loading="lazy" decoding="async" />
     </span>
   )
 }
 
-function ToolWall() {
+function ConnectorWall() {
   return (
     <ul className="tool-wall grid grid-cols-2 gap-px bg-border/45 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-      {TOOLS.map((tool) => (
-        <li
-          key={tool}
-          title={tool}
-          className="group relative flex min-h-[58px] min-w-0 items-center gap-2.5 overflow-hidden bg-[hsl(28,14%,7%)] px-3 py-3 text-[10.5px] text-foreground/60 transition-colors duration-300 hover:bg-foreground/[0.065] hover:text-foreground sm:px-4 sm:py-3.5 sm:text-[11.5px]"
-        >
-          <ToolLogo tool={tool} />
-          <span className="min-w-0 break-words leading-[1.35] [overflow-wrap:anywhere]">{tool}</span>
+      {CONNECTORS.map((connector) => (
+        <li key={connector.id} className="min-w-0">
+          <a
+            href={connector.home}
+            target="_blank"
+            rel="noreferrer"
+            title={connector.name}
+            className="group relative flex min-h-[72px] min-w-0 items-center gap-3 overflow-hidden bg-[hsl(28,14%,7%)] px-3 py-3 text-[10.5px] text-foreground/65 transition-[background-color,color,transform] duration-300 hover:-translate-y-px hover:bg-foreground/[0.07] hover:text-foreground focus-visible:z-10 focus-visible:outline focus-visible:outline-1 focus-visible:outline-[hsl(var(--accent-coral))] sm:px-4 sm:text-[11.5px]"
+          >
+            <ConnectorLogo connector={connector} />
+            <span className="min-w-0 break-words leading-[1.35] [overflow-wrap:anywhere]">{connector.name}</span>
+          </a>
         </li>
       ))}
     </ul>
@@ -1245,11 +805,7 @@ export default function Landing({
     >
       <Hero />
 
-      <ProductShot />
-
       <TrustStrip />
-
-      <DownloadSection />
 
       {/* ----------------------- RESEARCH LOOP ------------------------- */}
       <section id="how" className="relative w-full overflow-hidden border-t border-border/40">
@@ -1259,10 +815,10 @@ export default function Landing({
               <div className="dither-warm flex h-full min-h-[440px] flex-col justify-center border border-border/40 p-8 sm:p-12">
                 <div className="dither-content">
                   <Eyebrow className="mb-6 text-foreground/70">Research loop</Eyebrow>
-                  <h2 className={`text-balance ${H_HUGE} text-foreground`}>A chat window is not a laboratory.</h2>
+                  <h2 className={`text-balance ${H_HUGE} text-foreground`}>Chat is where the work starts.</h2>
                   <p className={`mt-7 max-w-[40ch] ${P_BIG} text-foreground/85`}>
-                    OpenScience runs the whole arc of a project: reading, planning, analysis, critique, and writing. The
-                    files, terminal, evidence, and conversation stay in one working session.
+                    Carry the conversation into papers, files, terminals, analyses, and results—all in one local
+                    workspace.
                   </p>
                 </div>
               </div>
@@ -1278,26 +834,26 @@ export default function Landing({
 
       <Section seed={3} id="skills">
         <SectionHeader
-          eyebrow="How it works"
-          title="Built around the research loop."
-          sub="The agent does more than produce an answer. It defines the test, runs the work, and makes the result defend itself."
+          eyebrow="From prompt to result"
+          title="Plan. Run. Check."
+          sub="One research agent works through the method, computation, and evidence with you."
         />
         <div className="mt-16 grid grid-cols-12 gap-px border border-border/40 bg-border/40">
           {[
             {
               visual: <PlanVisual />,
-              title: "Plan before acting.",
-              body: "The session turns a broad goal into a testable plan, including what evidence would change the conclusion.",
+              title: "Plan the work.",
+              body: "Turn a broad goal into a testable plan and make the success criteria explicit.",
             },
             {
               visual: <RunVisual />,
-              title: "Work in the real environment.",
-              body: "It reads project files, writes and runs code, inspects outputs, and keeps artifacts beside the reasoning that produced them.",
+              title: "Run in your project.",
+              body: "Read files, write code, use the terminal, and inspect the result in the same session.",
             },
             {
               visual: <CritiqueVisual />,
-              title: "Challenge weak claims.",
-              body: "Critique agents look for leakage, confounds, unsupported leaps, and missing controls before the result becomes a write-up.",
+              title: "Check the claim.",
+              body: "Look for confounds, leakage, missing controls, and unsupported conclusions before writing.",
             },
           ].map((feature, index) => (
             <Reveal key={feature.title} delay={index * 90} className="col-span-12 bg-background md:col-span-4">
@@ -1321,9 +877,9 @@ export default function Landing({
       <section id="sources" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
           <SectionHeader
-            eyebrow="Research context"
-            title="The project is the context."
-            sub="Papers, data, code, notes, and prior runs stay linked from source to result."
+            eyebrow="Project context"
+            title="Everything the work depends on."
+            sub="Papers, datasets, code, notes, and prior runs stay together in the local workspace."
           />
 
           <Reveal delay={140} className="mt-14">
@@ -1333,15 +889,15 @@ export default function Landing({
           <Reveal delay={220} className="mt-20">
             <div className="tool-field overflow-hidden border border-border/55 p-5 sm:p-8">
               <div className="mb-8 text-center">
-                <Eyebrow className="mb-3">Scientific tools</Eyebrow>
+                <Eyebrow className="mb-3">Scientific sources</Eyebrow>
                 <h3 className="text-[clamp(24px,2.6vw,36px)] leading-[1.08] tracking-[-0.018em] text-foreground">
-                  54 tools. Ready when the task calls.
+                  42 scientific sources, searched directly.
                 </h3>
-                <p className={`mx-auto mt-3 max-w-[40ch] ${P}`}>
-                  The research stack, available from the same workspace.
+                <p className={`mx-auto mt-3 max-w-[52ch] ${P}`}>
+                  Literature, structures, variants, compounds, pathways, and expression data—inside the same session.
                 </p>
               </div>
-              <ToolWall />
+              <ConnectorWall />
             </div>
           </Reveal>
         </div>
@@ -1351,15 +907,12 @@ export default function Landing({
       <section id="models" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
           <SectionHeader
-            eyebrow="Model freedom"
-            title="Pick the right model."
-            sub="One selector. Every model you connect."
+            eyebrow="Model access"
+            title="Use the model the work needs."
+            sub="Switch between Ace, eligible ChatGPT access, your provider keys, and local models."
           />
           <Reveal delay={150} className="mt-14">
             <ModelRouteVisual />
-          </Reveal>
-          <Reveal delay={220}>
-            <p className={`mt-5 ${CAPTION}`}>Ace · eligible ChatGPT access · your provider keys · local models</p>
           </Reveal>
         </div>
       </section>
@@ -1370,18 +923,18 @@ export default function Landing({
           <div className="mx-auto max-w-[900px] text-center">
             <Reveal>
               <Eyebrow className="mb-5 flex justify-center text-foreground/70">Open source</Eyebrow>
-              <h2 className={`text-balance ${H_HUGE} text-foreground`}>Inspect the scientist in the loop.</h2>
+              <h2 className={`text-balance ${H_HUGE} text-foreground`}>See how the work gets done.</h2>
             </Reveal>
             <Reveal delay={200}>
               <p className={`mx-auto mt-6 max-w-[46ch] ${P_BIG} text-foreground/85`}>
-                The prompts, agents, tools, and interfaces are in the repository. Read how a decision gets made, replace
-                what does not fit your lab, and keep the full system under your control.
+                The agent loop, skills, tools, and workspace are Apache-2.0. Read the code, change the workflow, or
+                connect your own tools.
               </p>
             </Reveal>
             <Reveal delay={320}>
               <div className="mt-10 flex flex-col items-center gap-4">
                 <Cta href={GITHUB} external>
-                  Read the source
+                  Explore the code
                 </Cta>
                 <span className="font-terminal text-[12.5px] text-foreground/60">
                   github.com/synthetic-sciences/openscience
@@ -1396,14 +949,14 @@ export default function Landing({
       <Section seed={9} id="ace">
         <SectionHeader
           eyebrow="OpenScience Ace"
-          title="Add $20. Use it when you need it."
-          sub="OpenScience and your account are free. Ace is pay as you go, with no fixed monthly charge."
+          title="Managed models. Pay as you go."
+          sub="OpenScience and your account are free. Add $20 when you want Ace. There is no monthly subscription."
         />
 
         <Reveal delay={160} className="mt-14">
           <div className="grid gap-px border border-border/55 bg-border/55 lg:grid-cols-[0.8fr_1.2fr]">
             <div className="bg-background p-7 sm:p-10">
-              <div className={LABEL}>Starting balance</div>
+              <div className={LABEL}>Add to start</div>
               <div className="mt-5 font-display text-[clamp(50px,7vw,78px)] leading-none tracking-[-0.03em]">$20</div>
               <div className={`mt-4 ${CAPTION}`}>20 credits of purchased balance · 1 credit = $1</div>
               <div className="mt-8 w-fit border border-border/70 px-3 py-1.5 font-terminal text-[10px] tracking-[0.08em] text-foreground/55">
@@ -1429,7 +982,8 @@ export default function Landing({
             </div>
           </div>
           <p className={`mt-4 max-w-[64ch] ${CAPTION}`}>
-            Any processing fee is shown before payment. Your remaining balance stays available.
+            Any processing fee is shown before payment. Unused credits remain in your wallet. While Ace is on, a balance
+            below $2 is restored to $20. Turn it off any time.
           </p>
         </Reveal>
       </Section>
@@ -1451,39 +1005,31 @@ export default function Landing({
               items={[
                 {
                   q: "What is OpenScience?",
-                  a: "An open-source AI workbench for scientific research. You give it a goal and it works through literature, hypotheses, code, experiments, critique, and a write-up in one local workspace.",
+                  a: "An open-source research workspace with one adaptive agent for literature, files, code, analysis, and writing.",
                 },
                 {
                   q: "How is it different from a coding agent?",
-                  a: "It is organized around evidence and the research loop rather than a ticket. The agent plans what would change its mind, runs the analysis, preserves artifacts, and challenges claims before writing them up.",
+                  a: "It is organized around research evidence and project context, while still giving the agent access to code, files, and the terminal.",
                 },
                 {
                   q: "Which models can it use?",
-                  a: "Use frontier providers, open-weight models, local models, eligible ChatGPT access, or Ace. Local, provider-account, and ChatGPT-backed use does not debit the Ace wallet.",
+                  a: "Use Ace, eligible ChatGPT access, your provider keys, or local models. Only Ace activity uses the Ace wallet.",
                 },
                 {
                   q: "Where does my work live?",
-                  a: "Sessions and artifacts stay on your machine. BYOK keys remain local and requests go straight to your provider. When Use my data is enabled, OpenScience uploads a redacted complete session trajectory to improve the product.",
+                  a: "Sessions and artifacts stay on your machine. BYOK requests go directly to your provider. If Use my data is on, OpenScience sends a credential-redacted research trace to Synthetic Sciences.",
                 },
                 {
                   q: "Do I need Ace to use OpenScience?",
-                  a: "No paid plan is required. A free Synthetic Sciences account is required to keep your sessions and settings connected, while local models, BYOK providers, and eligible ChatGPT access remain available without Ace.",
+                  a: "No. A free Synthetic Sciences account is required to connect the installation. Local models, your keys, and eligible ChatGPT access remain separate from Ace.",
                 },
                 {
-                  q: "What if enhanced search is unavailable?",
-                  a: "OpenScience uses the free basic-search fallback instead of breaking the research session. Ace can use enhanced search when it is available.",
-                },
-                {
-                  q: "Can it work with my field?",
-                  a: "OpenScience loads the tools the task calls for, from scientific search and analysis libraries to domain software and your lab's own interfaces. The workflow stays the same while the tools change with the research.",
+                  q: "Can it work with my tools?",
+                  a: "Yes. OpenScience can use its built-in scientific sources, code in your project, software in your environment, and MCP or lab tools you configure.",
                 },
                 {
                   q: "Can I extend it?",
-                  a: "Yes. Add skills, plugins, MCP servers, custom agents and commands, or use the TypeScript SDK to connect a private lab tool.",
-                },
-                {
-                  q: "How do I manage my account?",
-                  a: "Open Settings for connected accounts and model access, or use the Synthetic Sciences dashboard to manage Ace, receipts, and devices.",
+                  a: "Yes. Add skills, plugins, MCP servers, custom agents and commands, or use the SDK to connect a private lab tool.",
                 },
               ]}
             />
@@ -1499,7 +1045,7 @@ export default function Landing({
               <div className="col-span-12 lg:col-span-7">
                 <Reveal>
                   <h2 className={`max-w-[16ch] text-balance ${H_HUGE} text-foreground`}>
-                    Run your first experiment tonight.
+                    Open your next project in OpenScience.
                   </h2>
                 </Reveal>
               </div>
@@ -1509,8 +1055,7 @@ export default function Landing({
                     Free and open source. Use your keys, eligible ChatGPT, local models, or optional Ace credits.
                   </p>
                   <div className="mt-8 flex flex-wrap items-center gap-3">
-                    <Cta href="#install">Install OpenScience</Cta>
-                    <CopyChip cmd={NPM_CMD} />
+                    <Cta href="/download">Download OpenScience</Cta>
                   </div>
                 </Reveal>
               </div>
@@ -1529,7 +1074,7 @@ export default function Landing({
                 <span className="font-display text-[22px] tracking-tight leading-none">openscience</span>
               </div>
               <p className="mt-4 max-w-[36ch] text-[13.5px] leading-[1.7] text-foreground/55">
-                The open-source AI workbench for scientific research, by Synthetic Sciences.
+                Open-source research workspace by Synthetic Sciences.
               </p>
             </div>
             <div className="col-span-6 sm:col-span-4 md:col-span-2">
@@ -1586,8 +1131,8 @@ export default function Landing({
                   </a>
                 </li>
                 <li>
-                  <a href="#install" className="link-underline text-foreground/70 hover:text-foreground">
-                    Install
+                  <a href="/download" className="link-underline text-foreground/70 hover:text-foreground">
+                    Download
                   </a>
                 </li>
                 <li>
