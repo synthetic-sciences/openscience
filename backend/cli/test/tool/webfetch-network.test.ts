@@ -4,6 +4,7 @@ import {
   DOWNLOAD_DISK_RESERVE_BYTES,
   MAX_RESPONSE_SIZE,
   WebFetchTool,
+  automaticDownloadName,
   normalizeDownloadOutputPath,
   webFetchRetryAfterMs,
 } from "../../src/tool/webfetch"
@@ -98,8 +99,10 @@ test("webfetch serializes same-host requests and honors Retry-After after a 429"
   let active = 0
   let maxActive = 0
   let calls = 0
+  const started = Promise.withResolvers<void>()
   globalThis.fetch = (async () => {
     const call = ++calls
+    if (call === 1) started.resolve()
     active++
     maxActive = Math.max(maxActive, active)
     await Bun.sleep(10)
@@ -117,6 +120,7 @@ test("webfetch serializes same-host requests and honors Retry-After after a 429"
       context(async () => {}),
     ),
   )
+  await started.promise
   const second = webfetch.execute(
     { url: "https://example.com/crossref-b", format: "text" },
     context(async () => {}),
@@ -354,7 +358,9 @@ test("webfetch bounds a chunked response while it is being read", async () => {
   expect(cancelled).toBe(true)
 })
 
-test("webfetch refuses binary attachments instead of decoding them as UTF-8", async () => {
+test("webfetch automatically saves binary attachments instead of decoding them as UTF-8", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-auto-binary-"))
+  const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
   globalThis.fetch = (async () =>
     new Response(new Uint8Array([0x1f, 0x8b, 0x08, 0x00]), {
@@ -366,14 +372,75 @@ test("webfetch refuses binary attachments instead of decoding them as UTF-8", as
     })) as unknown as typeof fetch
 
   const webfetch = await WebFetchTool.init()
-  await expect(
-    webfetch.execute(
+  try {
+    const result = await webfetch.execute(
       { url: "https://example.com/masked-maf", format: "text" },
       context(async () => {}),
-    ),
-  ).rejects.toThrow(
-    'Web fetch is text-only; the response is a file (application/octet-stream, 4 bytes, attachment; filename="masked.maf.gz").',
+    )
+    expect(await fs.readFile(path.join(root, "masked.maf.gz"))).toEqual(Buffer.from([0x1f, 0x8b, 0x08, 0x00]))
+    expect(result.metadata).toMatchObject({
+      download: {
+        path: "masked.maf.gz",
+        filename: "masked.maf.gz",
+        bytes: 4,
+        contentType: "application/octet-stream",
+        automatic: true,
+        autoOpen: false,
+      },
+    })
+  } finally {
+    workspace.mockRestore()
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("automatic binary downloads use the response MIME type instead of a misleading URL extension", () => {
+  expect(automaticDownloadName(new Response(), "https://publisher.example/article.html", "application/pdf")).toBe(
+    "article.pdf",
   )
+  expect(automaticDownloadName(new Response(), "https://packages.example/model.whl", "application/zip")).toBe(
+    "model.whl",
+  )
+})
+
+test("webfetch saves a PDF under a non-overwriting name and marks it for preview", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "webfetch-auto-pdf-"))
+  await fs.writeFile(path.join(root, "paper.pdf"), "existing")
+  const workspace = spyOn(SessionFilesystem, "workspace").mockResolvedValue(root)
+  const payload = new TextEncoder().encode("%PDF-1.7\n%%EOF\n")
+  await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })
+  globalThis.fetch = (async () =>
+    new Response(payload, {
+      headers: {
+        "content-type": "application/pdf",
+        "content-length": String(payload.byteLength),
+        "content-disposition": 'inline; filename="paper.pdf"',
+      },
+    })) as unknown as typeof fetch
+
+  const webfetch = await WebFetchTool.init()
+  try {
+    const result = await webfetch.execute(
+      { url: "https://example.com/paper", format: "markdown" },
+      context(async () => {}),
+    )
+    expect(await fs.readFile(path.join(root, "paper.pdf"), "utf8")).toBe("existing")
+    expect(await fs.readFile(path.join(root, "paper-2.pdf"))).toEqual(Buffer.from(payload))
+    expect(result.metadata).toMatchObject({
+      download: {
+        path: "paper-2.pdf",
+        filename: "paper-2.pdf",
+        sourceFilename: "paper.pdf",
+        bytes: payload.byteLength,
+        contentType: "application/pdf",
+        automatic: true,
+        autoOpen: true,
+      },
+    })
+  } finally {
+    workspace.mockRestore()
+    await fs.rm(root, { recursive: true, force: true })
+  }
 })
 
 test("webfetch marks a 404 as terminal instead of inviting a blind retry", async () => {

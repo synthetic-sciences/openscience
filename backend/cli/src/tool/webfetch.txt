@@ -1,7 +1,7 @@
 Fetch a fully formed HTTP(S) URL as markdown (default), text, HTML, or a workspace download. Prefer a more targeted available tool.
 
 - Text mode is read-only and capped at 5 MiB; use it for bounded pages and API responses. Full bounded text may be retained in managed output when only a preview is shown.
-- For large or binary scientific data, archives, compressed datasets, or larger text, set `output_path`. Absolute and nested paths become a new root filename and never overwrite.
+- Binary responses (including PDFs) are detected and streamed into session scratch under a safe non-overwriting filename automatically. Set `output_path` only when you need a specific root filename or when a large text response should bypass model context.
 - For `papers/foo.pdf`, use `output_path:"foo.pdf"`; only after success run sandboxed Bash `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`.
 - Downloads stream through the network broker to disk, never model context, and return filename, bytes, SHA-256, and content type.
 - Capacity is live free disk minus a 512 MiB reserve; never send cap or claimed-size override fields. After a capacity failure, paginate, free space, or use an approved transfer instead of retrying unchanged.

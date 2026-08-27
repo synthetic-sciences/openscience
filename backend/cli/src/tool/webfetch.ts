@@ -160,7 +160,7 @@ const parameters = z
     timeout: z
       .number()
       .positive()
-      .describe("Optional timeout in seconds (max 120 for text, 1800 when output_path is set)")
+      .describe("Optional timeout in seconds (max 120 for text, 1800 for explicit or automatically detected downloads)")
       .optional(),
     output_path: z
       .string()
@@ -258,9 +258,16 @@ export const WebFetchTool = Tool.define("webfetch", {
       : undefined
     const defaultTimeout = download ? DEFAULT_DOWNLOAD_TIMEOUT : DEFAULT_TIMEOUT
     const maxTimeout = download ? MAX_DOWNLOAD_TIMEOUT : MAX_TIMEOUT
-    const timeout = Math.min((params.timeout ?? defaultTimeout / 1000) * 1000, maxTimeout)
+    let timeout = Math.min((params.timeout ?? defaultTimeout / 1000) * 1000, maxTimeout)
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeout)
+    let timeoutId = setTimeout(() => controller.abort(), timeout)
+    const useDownloadTimeout = () => {
+      const next = Math.min((params.timeout ?? DEFAULT_DOWNLOAD_TIMEOUT / 1000) * 1000, MAX_DOWNLOAD_TIMEOUT)
+      if (next <= timeout) return
+      timeout = next
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => controller.abort(), timeout)
+    }
 
     // Build Accept header based on requested format with q parameters for fallbacks
     let acceptHeader = "*/*"
@@ -294,7 +301,7 @@ export const WebFetchTool = Tool.define("webfetch", {
           { signal, headers },
           download
             ? { authorize, streamResponse: true, maxResponseBytes: downloadCapacity! }
-            : { authorize, maxResponseBytes: MAX_RESPONSE_SIZE },
+            : { authorize, streamResponse: true },
         ),
       )
 
@@ -308,7 +315,7 @@ export const WebFetchTool = Tool.define("webfetch", {
             { signal, headers: { ...headers, "User-Agent": "openscience" } },
             download
               ? { authorize, streamResponse: true, maxResponseBytes: downloadCapacity! }
-              : { authorize, maxResponseBytes: MAX_RESPONSE_SIZE },
+              : { authorize, streamResponse: true },
           ),
         )
       }
@@ -371,12 +378,40 @@ export const WebFetchTool = Tool.define("webfetch", {
       const contentType = response.headers.get("content-type") || ""
       const mime = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? ""
       if (!isTextualMime(mime)) {
-        await response.body?.cancel().catch(() => {})
-        throw unsupportedFileError({
-          contentType,
-          contentDisposition: response.headers.get("content-disposition") ?? undefined,
-          declaredBytes: parseContentLength(response.headers.get("content-length")),
+        useDownloadTimeout()
+        using automatic = await resolveAutomaticDownloadTarget(ctx.sessionID, response, params.url, mime)
+        const capacity = await safeDownloadCapacity(automatic).catch((error) => {
+          if (error instanceof DownloadCapacityError) {
+            throw ToolRetryGuard.annotateWebFetch(ctx, params, error, {
+              safeCapacityBytes: error.safeCapacityBytes,
+              declaredSizeBytes: error.responseBytes,
+            })
+          }
+          throw error
         })
+        const result = await streamDownload(response, automatic, capacity)
+        return {
+          title: `Downloaded ${result.filename}`,
+          output: [
+            "Downloaded the binary response through the authorized network broker into this session's workspace.",
+            `Path: ${result.path}`,
+            `Filename: ${result.filename}`,
+            ...(result.sourceFilename && result.sourceFilename !== result.filename
+              ? [`Source filename: ${result.sourceFilename}`]
+              : []),
+            `Bytes: ${result.bytes}`,
+            `SHA-256: ${result.sha256}`,
+            `Content type: ${result.contentType || "unknown"}`,
+          ].join("\n"),
+          metadata: {
+            download: {
+              url: Network.finalURL(response) || params.url,
+              ...result,
+              automatic: true,
+              autoOpen: mime === "application/pdf",
+            },
+          } as Record<string, unknown>,
+        }
       }
 
       const contentLength = response.headers.get("content-length")
@@ -525,14 +560,6 @@ function responseTooLargeError(input: {
   return new Error(
     `Response is too large for Web fetch${details.length ? ` (${details.join(", ")})` : ""}; ` +
       `the text-response limit is ${formatBytes(input.limitBytes)}. ${downloadGuidance()}`,
-  )
-}
-
-function unsupportedFileError(input: { contentType: string; contentDisposition?: string; declaredBytes?: number }) {
-  const details = [input.contentType, formatBytes(input.declaredBytes), input.contentDisposition].filter(Boolean)
-  return new Error(
-    `Web fetch is text-only; the response is a file${details.length ? ` (${details.join(", ")})` : ""}. ` +
-      downloadGuidance(),
   )
 }
 
@@ -710,6 +737,74 @@ function sourceFilename(response: Response) {
   const ordinary = /filename\s*=\s*(?:"([^"]+)"|([^;]+))/i.exec(disposition)
   const value = ordinary?.[1] ?? ordinary?.[2]?.trim()
   return value ? path.basename(value) : undefined
+}
+
+const MIME_EXTENSIONS: Record<string, string> = {
+  "application/pdf": ".pdf",
+  "application/zip": ".zip",
+  "application/gzip": ".gz",
+  "application/x-gzip": ".gz",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/svg+xml": ".svg",
+  "image/webp": ".webp",
+}
+
+const MIME_EXTENSION_ALIASES: Record<string, readonly string[]> = {
+  "application/pdf": [".pdf"],
+  "application/zip": [".zip", ".whl", ".jar"],
+  "application/gzip": [".gz", ".tgz"],
+  "application/x-gzip": [".gz", ".tgz"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+  "image/png": [".png"],
+  "image/jpeg": [".jpg", ".jpeg"],
+  "image/svg+xml": [".svg"],
+  "image/webp": [".webp"],
+}
+
+export function automaticDownloadName(response: Response, requestURL: string, mime: string) {
+  const finalURL = Network.finalURL(response) || requestURL
+  const urlName = (() => {
+    try {
+      return path.basename(decodeURIComponent(new URL(finalURL).pathname))
+    } catch {
+      return ""
+    }
+  })()
+  const fallback = `download-${crypto.createHash("sha256").update(finalURL).digest("hex").slice(0, 12)}`
+  const raw = sourceFilename(response) || urlName || fallback
+  const sanitized = raw
+    .replace(/[\u0000-\u001f\u007f/\\:]/g, "-")
+    .replace(/^\.+$/, "")
+    .trim()
+    .slice(0, 180)
+  const base = sanitized || fallback
+  const expected = MIME_EXTENSIONS[mime]
+  const extension = path.extname(base).toLowerCase()
+  if (expected && !MIME_EXTENSION_ALIASES[mime]?.includes(extension)) {
+    return `${extension ? base.slice(0, -extension.length) : base}${expected}`
+  }
+  return extension ? base : `${base}${expected ?? ".bin"}`
+}
+
+async function resolveAutomaticDownloadTarget(sessionID: string, response: Response, requestURL: string, mime: string) {
+  const filename = automaticDownloadName(response, requestURL, mime)
+  const parsed = path.parse(filename)
+  for (let index = 0; index < 1_000; index++) {
+    const candidate = index === 0 ? filename : `${parsed.name}-${index + 1}${parsed.ext}`
+    try {
+      return await resolveDownloadTarget(sessionID, candidate)
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith("Refusing to overwrite an unapproved file:"))
+        throw error
+    }
+  }
+  throw new Error(`Could not choose a new workspace filename for ${filename}`)
 }
 
 async function writeChunk(handle: fs.FileHandle, chunk: Uint8Array) {
