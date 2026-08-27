@@ -138,7 +138,7 @@ export const WebCommand = cmd({
     UI.empty()
     UI.println(UI.Style.TEXT_DIM, "  Opening your browser… if it doesn't open, visit the URL above.")
 
-    openUrl(target)
+    if (process.env.OPENSCIENCE_RESTARTED !== "1") openUrl(target)
 
     // macOS-only: warn when the host explicitly denies protected-folder
     // access. System Settings opens only after a deliberate UI action.

@@ -10,6 +10,7 @@ import { openNativeDirectoryPicker } from "@/utils/native-picker"
 import { normalizeServerUrl } from "@/context/server"
 import { resolveDefaultServerUrl, resolveDesktopServerUrl, resolveServerRoute } from "@/config/server-url"
 import pkg from "../package.json"
+import { waitForUpdatedServer, type UpdateHealth } from "@/utils/update-restart"
 
 const DEFAULT_SERVER_URL_KEY = "openscience.settings.dat:defaultServerUrl"
 const desktopUrl = resolveDesktopServerUrl(location.search, window.location.origin)
@@ -111,6 +112,10 @@ const platform: Platform = {
     return { updateAvailable: result.updateAvailable, version: result.latest }
   },
   update: async () => {
+    const healthUrl = resolveServerRoute("/global/health", server(), window.location.origin)
+    const before = await openscienceFetch(healthUrl, { headers: { Accept: "application/json" } })
+      .then(async (response) => (response.ok ? ((await response.json()) as UpdateHealth) : undefined))
+      .catch(() => undefined)
     const url = resolveServerRoute("/settings/updates", server(), window.location.origin)
     const response = await openscienceFetch(url, {
       method: "POST",
@@ -120,8 +125,49 @@ const platform: Platform = {
       const detail = (await response.json().catch(() => undefined)) as { error?: string } | undefined
       throw new Error(detail?.error ?? `Update install failed (${response.status})`)
     }
-    const result = (await response.json()) as { installed: boolean; restartRequired: boolean; latest?: string }
-    return { installed: result.installed, restartRequired: result.restartRequired, version: result.latest }
+    const result = (await response.json()) as {
+      installed: boolean
+      restartRequired: boolean
+      restartScheduled: boolean
+      latest?: string
+    }
+    if (result.installed && result.restartScheduled) {
+      await waitForUpdatedServer({
+        previous: before?.runId,
+        version: result.latest,
+        check: async () => {
+          const current = await openscienceFetch(healthUrl, { headers: { Accept: "application/json" } })
+          if (!current.ok) return
+          return (await current.json()) as UpdateHealth
+        },
+      })
+      window.location.reload()
+    }
+    return {
+      installed: result.installed,
+      restartRequired: result.restartRequired,
+      restartScheduled: result.restartScheduled,
+      version: result.latest,
+    }
+  },
+  listUpdates: async () => {
+    const url = resolveServerRoute("/settings/updates/releases", server(), window.location.origin)
+    const response = await openscienceFetch(url, { headers: { Accept: "application/json" } })
+    if (!response.ok) throw new Error(`Release history failed (${response.status})`)
+    const releases = (await response.json()) as Array<{
+      tag_name?: string
+      name?: string
+      body?: string
+      published_at?: string
+      html_url?: string
+    }>
+    return releases.slice(0, 5).map((release) => ({
+      version: release.tag_name?.replace(/^v/, "") ?? "Release",
+      name: release.name || release.tag_name || "OpenScience release",
+      notes: release.body?.trim() || "Maintenance and reliability improvements.",
+      publishedAt: release.published_at,
+      url: release.html_url || URLS.releases,
+    }))
   },
   getDefaultServerUrl: () => stored() ?? null,
   setDefaultServerUrl: (url) => {

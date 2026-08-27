@@ -51,6 +51,16 @@ import { disposeDataRootOperation, runDataRootMiddleware } from "./cli/cmd/cmd"
 import { ACCOUNT_REQUIRED_MESSAGE, requiresOpenScienceAccount } from "./cli/account-gate"
 import { OutboundTelemetry } from "./telemetry/outbound"
 import { purgeRetiredAtlasAgentInstall } from "./skill/retired-install"
+import { SELF_RESTART_ARG, SelfRestart } from "./process/self-restart"
+
+if (process.argv[2] === SELF_RESTART_ARG) {
+  try {
+    process.exit(await SelfRestart.run(process.argv[3] ?? ""))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  }
+}
 
 if (process.argv[2] === WINDOWS_JOB_LAUNCHER_ARG) {
   try {

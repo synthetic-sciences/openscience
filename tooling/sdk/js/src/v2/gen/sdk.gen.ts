@@ -1824,23 +1824,12 @@ export class Telemetry extends HeyApiClient {
    * Update OpenScience data-use consent
    */
   public update<ThrowOnError extends boolean = false>(
-    parameters?: {
-      analyticsEnabled?: boolean
-      userOwnedContentEnabled?: boolean
+    parameters: {
+      userOwnedContentEnabled: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "body", key: "analyticsEnabled" },
-            { in: "body", key: "userOwnedContentEnabled" },
-          ],
-        },
-      ],
-    )
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "userOwnedContentEnabled" }] }])
     return (options?.client ?? this.client).put<SettingsResearchToolsTelemetryUpdateResponses, unknown, ThrowOnError>({
       url: "/settings/research-tools/telemetry",
       ...options,

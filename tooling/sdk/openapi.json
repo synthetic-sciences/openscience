@@ -19786,6 +19786,10 @@
                     },
                     "restartRequired": {
                       "type": "boolean"
+                    },
+                    "restartScheduled": {
+                      "default": false,
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -20257,13 +20261,13 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "analyticsEnabled": {
-                    "type": "boolean"
-                  },
                   "userOwnedContentEnabled": {
                     "type": "boolean"
                   }
-                }
+                },
+                "required": [
+                  "userOwnedContentEnabled"
+                ]
               }
             }
           }

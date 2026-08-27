@@ -8368,6 +8368,7 @@ export type SettingsUpdatesInstallResponses = {
     releaseNotes: string
     installed: boolean
     restartRequired: boolean
+    restartScheduled?: boolean
   }
 }
 
@@ -8438,8 +8439,7 @@ export type SettingsResearchToolsGetResponse =
 
 export type SettingsResearchToolsTelemetryUpdateData = {
   body?: {
-    analyticsEnabled?: boolean
-    userOwnedContentEnabled?: boolean
+    userOwnedContentEnabled: boolean
   }
   path?: never
   query?: never

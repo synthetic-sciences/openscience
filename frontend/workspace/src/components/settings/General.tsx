@@ -146,8 +146,8 @@ export default function General() {
             </div>
           </Section>
 
-          {/* Keep frequently used display and notification controls visible;
-              disclose sound and update preferences only when requested. */}
+          {/* Keep display, notification, and update controls visible. Sound
+              preferences are the only low-frequency controls disclosed. */}
           <div class="settings-disclosure-group">
             <div class="settings-general-extras" data-expanded={showAdvanced() ? "true" : "false"}>
               <AppearanceSections />
@@ -166,7 +166,7 @@ export default function General() {
                   classList={{ "rotate-180": showAdvanced() }}
                   aria-hidden="true"
                 />
-                {showAdvanced() ? "Show fewer settings" : "Show sound and update settings"}
+                {showAdvanced() ? "Hide sound settings" : "Show sound settings"}
               </button>
             </div>
           </div>

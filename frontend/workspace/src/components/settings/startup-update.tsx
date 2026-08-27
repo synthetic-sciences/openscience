@@ -54,7 +54,6 @@ export const StartupUpdateCheck: Component = () => {
     available: undefined as string | undefined,
     dismissed: false,
     installing: false,
-    installed: false,
   })
   let queued = false
   let cancel = () => {}
@@ -75,12 +74,14 @@ export const StartupUpdateCheck: Component = () => {
           })
           return
         }
-        setStore({ installed: true, installing: false })
+        setStore("installing", false)
         showToast({
           variant: "success",
           icon: "circle-check",
           title: `OpenScience ${result.version ?? store.available ?? ""} installed`,
-          description: "Restart the OpenScience command to finish the update.",
+          description: result.restartScheduled
+            ? "Restarting OpenScience now."
+            : "Restart OpenScience once to finish the update.",
         })
       })
       .catch((error: unknown) => {
@@ -110,17 +111,15 @@ export const StartupUpdateCheck: Component = () => {
     <Show when={store.available && !store.dismissed}>
       <aside class="startup-update" aria-label="OpenScience update available" aria-live="polite">
         <span class="startup-update__icon" aria-hidden="true">
-          <Icon name={store.installed ? "circle-check" : "download"} size="small" />
+          <Icon name="download" size="small" />
         </span>
         <span class="startup-update__copy">
-          <strong>{store.installed ? "Update installed" : `OpenScience ${store.available} is ready`}</strong>
-          <small>
-            {store.installed ? "Restart OpenScience to finish." : "Install it now or manage updates in Customize."}
-          </small>
+          <strong>{`OpenScience ${store.available} is ready`}</strong>
+          <small>Update and restart now, or review the release in Customize.</small>
         </span>
-        <Show when={!store.installed && platform.update}>
+        <Show when={platform.update}>
           <Button size="small" variant="primary" disabled={store.installing} onClick={() => void install()}>
-            {store.installing ? "Installing…" : "Update"}
+            {store.installing ? "Updating & restarting…" : "Update"}
           </Button>
         </Show>
         <Button

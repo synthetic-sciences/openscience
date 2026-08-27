@@ -46,7 +46,15 @@ export type Platform = {
   checkUpdate?(options?: { refresh?: boolean }): Promise<{ updateAvailable: boolean; version?: string }>
 
   /** Install the latest update through the local OpenScience server */
-  update?(): Promise<{ installed: boolean; restartRequired: boolean; version?: string }>
+  update?(): Promise<{
+    installed: boolean
+    restartRequired: boolean
+    restartScheduled: boolean
+    version?: string
+  }>
+
+  /** Load recent OpenScience release notes on demand in Settings */
+  listUpdates?(): Promise<Array<{ version: string; name: string; notes: string; publishedAt?: string; url: string }>>
 
   /** Fetch override */
   fetch?: typeof fetch

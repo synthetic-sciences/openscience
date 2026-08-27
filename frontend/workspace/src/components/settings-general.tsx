@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo, onCleanup, type JSX } from "solid-js"
+import { Component, For, Show, createMemo, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
@@ -52,9 +52,18 @@ export const AppearanceSections: Component = () => {
     checking: boolean
     installing: boolean
     available?: string
+    releases: Array<{ version: string; name: string; notes: string; publishedAt?: string; url: string }>
   }>({
     checking: false,
     installing: false,
+    releases: [],
+  })
+
+  onMount(() => {
+    void platform
+      .listUpdates?.()
+      .then((releases) => setStore("releases", releases))
+      .catch(() => undefined)
   })
 
   const install = () => {
@@ -69,9 +78,11 @@ export const AppearanceSections: Component = () => {
           variant: "success",
           icon: "circle-check",
           title: result.installed ? `OpenScience ${result.version ?? ""} installed` : "OpenScience is up to date",
-          description: result.restartRequired
-            ? "Restart the OpenScience command to finish the update."
-            : "You're running the latest version of OpenScience.",
+          description: result.restartScheduled
+            ? "Restarting OpenScience now."
+            : result.restartRequired
+              ? "Restart OpenScience once to finish the update."
+              : "You're running the latest version of OpenScience.",
         })
       })
       .catch((error: unknown) => {
@@ -420,7 +431,7 @@ export const AppearanceSections: Component = () => {
             <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
               <Show when={store.available && platform.update}>
                 <Button size="small" variant="primary" disabled={store.installing} onClick={install}>
-                  {store.installing ? "Installing…" : `Install ${store.available}`}
+                  {store.installing ? "Updating & restarting…" : `Update to ${store.available}`}
                 </Button>
               </Show>
               <Button
@@ -436,6 +447,32 @@ export const AppearanceSections: Component = () => {
             </div>
           </SettingsRow>
         </div>
+        <Show when={store.releases.length > 0}>
+          <div class="settings-update-history" aria-label="Recent OpenScience releases">
+            <For each={store.releases.slice(0, 3)}>
+              {(release) => (
+                <button type="button" onClick={() => platform.openLink(release.url)}>
+                  <span>
+                    <strong>{release.name}</strong>
+                    <small>
+                      {release.notes
+                        .split("\n")
+                        .find((line) => line.trim())
+                        ?.replace(/^#+\s*/, "")}
+                    </small>
+                  </span>
+                  <time datetime={release.publishedAt}>
+                    {release.publishedAt
+                      ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(
+                          new Date(release.publishedAt),
+                        )
+                      : release.version}
+                  </time>
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
       </SettingsSection>
     </>
   )

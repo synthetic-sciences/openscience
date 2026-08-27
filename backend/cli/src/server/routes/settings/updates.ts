@@ -3,6 +3,7 @@ import { describeRoute, resolver } from "hono-openapi"
 import z from "zod"
 import { Installation } from "../../../installation"
 import { lazy } from "../../../util/lazy"
+import { SelfRestart } from "../../../process/self-restart"
 
 const RELEASES = "https://github.com/synthetic-sciences/openscience/releases"
 const RELEASES_API = "https://api.github.com/repos/synthetic-sciences/openscience/releases?per_page=20"
@@ -29,6 +30,7 @@ const Result = z.object({
 const InstallResult = Result.extend({
   installed: z.boolean(),
   restartRequired: z.boolean(),
+  restartScheduled: z.boolean().default(false),
 })
 
 type UpdateResult = z.infer<typeof Result>
@@ -47,13 +49,23 @@ export function createUpdateInstaller(input: {
     if (state.pending) return state.pending
     const pending = input.resolve().then(async (result) => {
       if (!result.updateAvailable) {
-        return InstallResult.parse({ ...result, installed: false, restartRequired: false })
+        return InstallResult.parse({
+          ...result,
+          installed: false,
+          restartRequired: false,
+          restartScheduled: false,
+        })
       }
       if (!supportsAutomaticUpdate(result.method)) {
         throw new Error("Automatic updates are unavailable for this installation.")
       }
       await input.upgrade(result.method as Installation.Method, result.latest)
-      return InstallResult.parse({ ...result, installed: true, restartRequired: true })
+      return InstallResult.parse({
+        ...result,
+        installed: true,
+        restartRequired: true,
+        restartScheduled: false,
+      })
     })
     state.pending = pending
     void pending.then(
@@ -160,7 +172,9 @@ export const UpdatesSettingsRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await install())
+        const result = await install()
+        const restartScheduled = result.installed ? SelfRestart.schedule() : false
+        return c.json(InstallResult.parse({ ...result, restartScheduled }))
       },
     )
     .get("/releases", async (c) => {

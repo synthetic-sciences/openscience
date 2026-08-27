@@ -28,9 +28,9 @@ describe("minimal grouped settings panels", () => {
   test("uses progressive disclosure and aligned numeric metrics", () => {
     expect(source("Permissions")).toContain("Show all tool defaults")
     expect(source("Permissions")).toContain("aria-expanded={showAllDefaults()}")
-    expect(source("General")).toContain("Show sound and update settings")
+    expect(source("General")).toContain("Show sound settings")
     expect(source("General")).toContain("aria-expanded={showAdvanced()}")
-    expect(styles).toContain('data-expanded="false"')
+    expect(styles).toContain('data-expanded="false"] > .settings-section:nth-child(n + 3):not(:last-child)')
     expect(styles).toContain("font-variant-numeric: tabular-nums")
   })
 

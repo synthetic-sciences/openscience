@@ -675,7 +675,7 @@
   gap: var(--settings-space-5);
 }
 
-.settings-general-extras[data-expanded="false"] > .settings-section:nth-child(n + 3) {
+.settings-general-extras[data-expanded="false"] > .settings-section:nth-child(n + 3):not(:last-child) {
   display: none;
 }
 
