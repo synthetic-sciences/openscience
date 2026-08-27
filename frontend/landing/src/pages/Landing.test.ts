@@ -92,8 +92,10 @@ describe("OpenScience landing contract", () => {
     expect(nav).toContain('label: "Docs"')
     expect(nav).toContain('label: "GitHub"')
     expect(nav).toContain('aria-label="Primary navigation"')
-    expect(nav).toContain("bg-background/70")
-    expect(nav).toContain("text-foreground/80")
+    expect(nav).toContain("text-black")
+    expect(nav).toContain("underline")
+    expect(nav).not.toContain("rounded-full")
+    expect(nav).not.toContain("backdrop-blur")
   })
 
   test("does not use long dashes in public landing copy", () => {

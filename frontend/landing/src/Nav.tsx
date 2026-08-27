@@ -7,7 +7,7 @@ const LINKS = [
 export default function Nav({ current }: { current?: "download" }) {
   return (
     <nav
-      className="flex items-center gap-0.5 rounded-full border border-foreground/10 bg-background/70 px-1 text-[13.5px] font-bold tracking-[0.01em] shadow-[0_10px_32px_rgba(0,0,0,0.28)] backdrop-blur-md sm:gap-1 sm:text-[14px]"
+      className="flex items-center gap-3 text-[12px] font-bold tracking-[0.015em] text-black drop-shadow-[0_0_3px_rgba(239,232,216,0.9)] sm:gap-4 sm:text-[12.5px]"
       aria-label="Primary navigation"
     >
       {LINKS.map((link) => {
@@ -16,10 +16,10 @@ export default function Nav({ current }: { current?: "download" }) {
           <a
             key={link.id}
             href={link.href}
-            className={`relative inline-flex min-h-11 items-center px-2.5 transition-colors after:absolute after:inset-x-2.5 after:bottom-1 after:h-px after:bg-[hsl(var(--accent-coral))] after:transition-transform sm:px-3 sm:after:inset-x-3 ${
+            className={`inline-flex min-h-11 items-center px-0.5 text-black underline underline-offset-[5px] transition-[text-decoration-color] ${
               active
-                ? "text-foreground after:scale-x-100"
-                : "text-foreground/80 after:scale-x-0 hover:text-foreground hover:after:scale-x-100"
+                ? "decoration-2 decoration-[hsl(var(--accent-coral))]"
+                : "decoration-[1px] decoration-black/60 hover:decoration-black"
             }`}
             aria-current={active ? "page" : undefined}
             {...("external" in link ? { target: "_blank", rel: "noreferrer" } : {})}
