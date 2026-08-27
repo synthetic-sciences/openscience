@@ -207,13 +207,29 @@ test("packaged npm rehearsal imports every public SDK and plugin export", async 
   }
 })
 
-test("packaged npm rehearsal pins and verifies one account data root", async () => {
+test("packaged npm rehearsal pins one account data root and waits for the seeded session", async () => {
   const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
+  const readiness = workflow.slice(
+    workflow.indexOf("      - name: Wait for published OpenScience server"),
+    workflow.indexOf("      - name: Run packaged E2E"),
+  )
 
   expect(workflow).toContain('echo "OPENSCIENCE_DATA_DIR=$RUNNER_TEMP/openscience-e2e/data"')
+  expect(workflow).toContain("printf '%s\\n' \"SYNSC_API_BASE=http://127.0.0.1:4097\"")
   expect(workflow).toContain('test -s "$OPENSCIENCE_DATA_DIR/openscience-session.json"')
-  expect(workflow).toContain('"http://127.0.0.1:4096/account/session"')
-  expect(workflow).toContain('[[ "$SESSION" == \'{"session":true}\' ]]')
+  expect(readiness).toContain('"http://127.0.0.1:4096/account/session" || true)')
+  expect(readiness).toContain('[[ "$SESSION" == \'{"session":true}\' ]]')
+  expect(readiness.match(/sleep 1/g)).toHaveLength(1)
+  expect(readiness.match(/exit 1/g)).toHaveLength(1)
+  expect(readiness.indexOf("sleep 1")).toBeLessThan(readiness.indexOf("never loaded the isolated account session"))
+})
+
+test("npm test candidates advance from the public stable version, not the static workspace manifest", async () => {
+  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
+  const versionJob = workflow.slice(workflow.indexOf("\n  version:"), workflow.indexOf("\n  build-cli:"))
+
+  expect(versionJob).toContain("npm view @synsci/openscience@latest version")
+  expect(versionJob).not.toContain('require("./backend/cli/package.json").version')
 })
 
 test("npm test rehearsal stages immutable exact artifacts and promotes only after every smoke gate", async () => {

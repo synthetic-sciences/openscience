@@ -60,7 +60,14 @@ jobs:
           if [ -n "$INPUT_VERSION" ]; then
             version="$INPUT_VERSION"
           else
-            current="$(node -p 'require("./backend/cli/package.json").version')"
+            # Match the production release script: workspace package versions
+            # intentionally stay static between releases, so the public stable
+            # tag is the only authoritative base for the next candidate.
+            current="$(npm view @synsci/openscience@latest version)"
+            if ! [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Could not resolve the current stable OpenScience version; received '$current'"
+              exit 1
+            fi
             core="${current%%-*}"
             IFS=. read -r major minor patch <<< "$core"
             version="${major}.${minor}.$((patch + 1))-test.${GITHUB_RUN_ID}"
@@ -318,6 +325,7 @@ jobs:
             printf '%s\n' "OPENSCIENCE_CONFIG_CONTENT=$CONFIG"
             printf '%s\n' "OPENSCIENCE_E2E_MODEL=e2e/echo"
             printf '%s\n' "OPENSCIENCE_E2E_FAKE_MODEL=1"
+            printf '%s\n' "SYNSC_API_BASE=http://127.0.0.1:4097"
           } >> "$GITHUB_ENV"
           bun frontend/workspace/script/e2e-fake-model.ts --port 4097 > "$RUNNER_TEMP/openscience-fake-model.log" 2>&1 &
           for _ in $(seq 1 30); do
@@ -360,19 +368,23 @@ jobs:
           OPENSCIENCE_CLIENT: "app"
       - name: Wait for published OpenScience server
         run: |
+          HEALTHY=0
           for _ in $(seq 1 120); do
             if curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null; then
+              HEALTHY=1
               SESSION=$(curl -fsS -u "openscience:$OPENSCIENCE_SERVER_PASSWORD" \
-                "http://127.0.0.1:4096/account/session")
+                "http://127.0.0.1:4096/account/session" || true)
               if [[ "$SESSION" == '{"session":true}' ]]; then
                 exit 0
               fi
-              echo "::error::published OpenScience server did not load the isolated account session"
-              exit 1
             fi
             sleep 1
           done
-          echo "::error::published openscience server never became healthy on 127.0.0.1:4096"
+          if [[ "$HEALTHY" == "0" ]]; then
+            echo "::error::published OpenScience server never became healthy on 127.0.0.1:4096"
+          else
+            echo "::error::published OpenScience server became healthy but never loaded the isolated account session"
+          fi
           exit 1
       - name: Run packaged E2E
         working-directory: frontend/workspace
