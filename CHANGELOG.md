@@ -34,7 +34,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   permissions, evidence, compute, and durable Results.
 - Materialized a small request-local tool set on every Research turn, with
   loaded skills activating only their relevant scientific capabilities, and
-  simplified delegation to Off/Low/Normal/High posture, worker model, and agent
+  simplified delegation to Off/Auto/High posture, worker model, and agent
   independence without per-turn worker quotas or default child deadlines.
 - Stopped bundling or offering Atlas through the OpenScience npm distribution
   and `synsci` launcher, including both graph-initialization slash-command
