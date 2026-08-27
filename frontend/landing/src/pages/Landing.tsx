@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import workspaceShot from "@/assets/workspace.png"
-import modelPickerShot from "@/assets/model-picker.png"
 import heroPlate from "@/assets/hero.webp"
 
 const LOGOS = [
@@ -43,6 +42,36 @@ const DOCS = "https://openscience.sh/docs"
 const APP = "https://app.syntheticsciences.ai"
 const NPM_CMD = "npm i -g @synsci/openscience"
 const CURL_CMD = "curl -fsSL https://openscience.sh/install | bash"
+const RELEASE = `${GITHUB}/releases/latest/download`
+
+type Platform = "mac" | "windows" | "linux"
+
+const DOWNLOADS = {
+  mac: {
+    label: "macOS",
+    detail: "Apple Silicon",
+    file: "openscience-darwin-arm64.zip",
+    options: [
+      ["Apple Silicon", "openscience-darwin-arm64.zip"],
+      ["Intel", "openscience-darwin-x64.zip"],
+    ],
+  },
+  windows: {
+    label: "Windows",
+    detail: "64-bit",
+    file: "openscience-windows-x64.zip",
+    options: [["64-bit", "openscience-windows-x64.zip"]],
+  },
+  linux: {
+    label: "Linux",
+    detail: "x86_64",
+    file: "openscience-linux-x64.tar.gz",
+    options: [
+      ["x86_64", "openscience-linux-x64.tar.gz"],
+      ["ARM64", "openscience-linux-arm64.tar.gz"],
+    ],
+  },
+} as const
 
 /* Eyebrow, the quiet label above every section heading. */
 function Eyebrow({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -455,6 +484,274 @@ function TrustStrip() {
   )
 }
 
+function PlatformMark({ platform }: { platform: Platform }) {
+  if (platform === "mac") {
+    return (
+      <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
+        <rect x="3.5" y="4.5" width="17" height="11" rx="1" stroke="currentColor" />
+        <path d="M8 19.5h8M10 15.5v4m4-4v4" stroke="currentColor" />
+      </svg>
+    )
+  }
+  if (platform === "windows") {
+    return (
+      <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
+        <path
+          d="m3.5 5.25 7.2-.95v7.15H3.5v-6.2Zm8.45-1.12 8.55-1.12v8.44h-8.55V4.13ZM3.5 12.7h7.2v7.15l-7.2-.96V12.7Zm8.45 0h8.55v8.43l-8.55-1.12V12.7Z"
+          stroke="currentColor"
+        />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
+      <path
+        d="M7 17.5c0-2.7 2.25-4.5 5-4.5s5 1.8 5 4.5M9 8.5C9 6.57 10.34 5 12 5s3 1.57 3 3.5S13.66 12 12 12 9 10.43 9 8.5Z"
+        stroke="currentColor"
+      />
+      <path d="m7.5 16-2 3m11-3 2 3M9.25 7.5 7.5 5m7.25 2.5L16.5 5" stroke="currentColor" />
+    </svg>
+  )
+}
+
+function DownloadSection() {
+  const [platform, setPlatform] = useState<Platform>("mac")
+
+  useEffect(() => {
+    const agent = `${navigator.userAgent} ${navigator.platform}`.toLowerCase()
+    if (agent.includes("win")) return setPlatform("windows")
+    if (agent.includes("linux") || agent.includes("x11")) return setPlatform("linux")
+    setPlatform("mac")
+  }, [])
+
+  const download = DOWNLOADS[platform]
+
+  return (
+    <section id="install" className="relative w-full overflow-hidden border-t border-border/40">
+      <div className="absolute inset-0 graticule opacity-[0.035]" />
+      <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
+        <div className="grid grid-cols-12 items-start gap-10 lg:gap-16">
+          <div className="col-span-12 lg:col-span-5">
+            <Reveal>
+              <Eyebrow className="mb-5">Download OpenScience</Eyebrow>
+              <h2 className={`text-balance ${H_BIG}`}>Your research workspace, on your computer.</h2>
+            </Reveal>
+            <Reveal delay={120}>
+              <p className={`mt-5 max-w-[45ch] ${P_BIG}`}>
+                Download the current release, sign in once, and open any project in the local workspace. OpenScience
+                keeps your files, terminals, sessions, and artifacts beside the work.
+              </p>
+            </Reveal>
+          </div>
+
+          <Reveal delay={180} className="col-span-12 lg:col-span-7">
+            <div className="border border-border/60 bg-background/70 p-5 backdrop-blur-[4px] sm:p-7">
+              <div className="flex flex-col gap-5 border-b border-border/50 pb-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="grid size-11 place-items-center border border-foreground/20 bg-foreground/[0.035] text-foreground/80">
+                    <PlatformMark platform={platform} />
+                  </span>
+                  <div>
+                    <div className="text-[17px] text-foreground">OpenScience for {download.label}</div>
+                    <div className={`mt-1 ${CAPTION}`}>{download.detail} · latest release</div>
+                  </div>
+                </div>
+                <a
+                  href={`${RELEASE}/${download.file}`}
+                  className="btn-primary group/download inline-flex h-11 shrink-0 items-center justify-center gap-2.5 px-6 text-[14px] leading-none"
+                  aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
+                >
+                  Download
+                  <svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden>
+                    <path d="M6.5 1v8m0 0 3-3m-3 3-3-3M1 12.5h11" stroke="currentColor" strokeWidth="1.2" />
+                  </svg>
+                </a>
+              </div>
+
+              <div
+                className="mt-5 grid grid-cols-3 gap-px border border-border/50 bg-border/50"
+                aria-label="Choose your operating system"
+              >
+                {(Object.keys(DOWNLOADS) as Platform[]).map((item) => (
+                  <button
+                    type="button"
+                    key={item}
+                    onClick={() => setPlatform(item)}
+                    className={`flex min-h-20 flex-col items-start justify-center gap-2 bg-background px-4 text-left transition-colors duration-300 sm:flex-row sm:items-center sm:justify-start sm:px-5 ${
+                      item === platform
+                        ? "bg-foreground/[0.075] text-foreground"
+                        : "text-foreground/50 hover:bg-foreground/[0.035] hover:text-foreground/80"
+                    }`}
+                    aria-pressed={item === platform}
+                  >
+                    <PlatformMark platform={item} />
+                    <span className="text-[13px] sm:text-[14px]">{DOWNLOADS[item].label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  {download.options.map(([label, file]) => (
+                    <a
+                      key={file}
+                      href={`${RELEASE}/${file}`}
+                      className="link-underline text-[13px] text-foreground/55 transition-colors hover:text-foreground"
+                    >
+                      {label}
+                    </a>
+                  ))}
+                </div>
+                <a
+                  href={`${GITHUB}/releases/latest`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="link-underline text-[13px] text-foreground/45 transition-colors hover:text-foreground"
+                >
+                  Release notes
+                </a>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+const ROUTES = [
+  {
+    id: "ace",
+    label: "Ace",
+    detail: "Ready with your wallet",
+    models: [
+      ["5.6 Sol", "Reasoning · 1m context", "OpenAI"],
+      ["Opus 5", "Reasoning · 1m context", "Anthropic"],
+      ["Gemini 3.6 Flash", "Fast · 1m context", "Google"],
+    ],
+  },
+  {
+    id: "chatgpt",
+    label: "ChatGPT",
+    detail: "Uses eligible account access",
+    models: [
+      ["5.6 Sol", "Reasoning · 1m context", "OpenAI"],
+      ["5.6 Terra", "Reasoning · 1m context", "OpenAI"],
+      ["GPT-5.4", "Reasoning · 400k context", "OpenAI"],
+    ],
+  },
+  {
+    id: "keys",
+    label: "Own keys",
+    detail: "Calls your providers directly",
+    models: [
+      ["Opus 5", "Reasoning · 1m context", "Anthropic"],
+      ["DeepSeek V4 Pro", "Reasoning · 1m context", "DeepSeek"],
+      ["Kimi K3", "Reasoning · 256k context", "Moonshot AI"],
+    ],
+  },
+  {
+    id: "local",
+    label: "Local",
+    detail: "Runs on your own hardware",
+    models: [
+      ["Your Ollama models", "Local · private", "Ollama"],
+      ["Your LM Studio models", "Local · private", "LM Studio"],
+      ["OpenAI-compatible", "Local or remote endpoint", "Custom"],
+    ],
+  },
+] as const
+
+function ModelRouteVisual() {
+  const [index, setIndex] = useState(0)
+  const paused = useRef(false)
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    const timer = window.setInterval(() => {
+      if (paused.current) return
+      setIndex((value) => (value + 1) % ROUTES.length)
+    }, 3600)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const route = ROUTES[index]
+
+  return (
+    <div
+      className="overflow-hidden border border-border/55 bg-[hsl(28,14%,5%)] shadow-[0_30px_90px_-30px_rgba(0,0,0,0.75)]"
+      onMouseEnter={() => (paused.current = true)}
+      onMouseLeave={() => (paused.current = false)}
+      onFocus={() => (paused.current = true)}
+      onBlur={() => (paused.current = false)}
+    >
+      <div className="flex items-center justify-between border-b border-border/55 px-5 py-4 sm:px-6">
+        <div>
+          <div className="text-[14px] text-foreground/90">Models</div>
+          <div className={`mt-1 ${CAPTION}`}>Choose a model, then choose how to access it.</div>
+        </div>
+        <span className="flex items-center gap-2 font-terminal text-[10px] tracking-[0.08em] text-foreground/40">
+          <span className="size-1.5 rounded-full bg-[hsl(92,36%,56%)]" /> LIVE
+        </span>
+      </div>
+
+      <div className="grid grid-cols-4 border-b border-border/55 bg-background/80 p-1.5">
+        {ROUTES.map((item, itemIndex) => (
+          <button
+            type="button"
+            key={item.id}
+            onClick={() => setIndex(itemIndex)}
+            className={`min-h-10 px-2 text-[12px] transition-colors duration-300 sm:text-[13px] ${
+              itemIndex === index
+                ? "bg-foreground/[0.1] text-foreground"
+                : "text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/70"
+            }`}
+            aria-pressed={itemIndex === index}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="px-5 py-5 sm:px-6 sm:py-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="font-terminal text-[10px] uppercase tracking-[0.1em] text-foreground/35">Access</div>
+            <div className="mt-1.5 text-[15px] text-foreground/90">{route.label}</div>
+          </div>
+          <span className="border border-border/60 px-2.5 py-1 text-[11px] text-foreground/50">{route.detail}</span>
+        </div>
+
+        <div className="mt-5 border border-border/50">
+          {route.models.map(([name, detail, provider], modelIndex) => (
+            <div
+              key={`${route.id}-${name}`}
+              className={`flex w-full items-center justify-between gap-4 border-b border-border/45 px-4 py-3.5 text-left transition-colors last:border-b-0 ${
+                modelIndex === 0 ? "bg-foreground/[0.035]" : ""
+              }`}
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] text-foreground/85">{name}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-foreground/35">{detail}</span>
+              </span>
+              <span className="shrink-0 border border-border/55 px-2 py-1 font-terminal text-[9px] tracking-[0.04em] text-foreground/40">
+                {provider}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative h-0.5 overflow-hidden bg-foreground/[0.05]" aria-hidden>
+        <span
+          key={route.id}
+          className="model-route-progress absolute inset-y-0 left-0 bg-[hsl(var(--accent-coral))]/70"
+        />
+      </div>
+    </div>
+  )
+}
+
 function Visual({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="atmosphere atmosphere-stars h-full min-h-[300px] p-5 sm:p-7 flex flex-col">
@@ -698,6 +995,8 @@ export default function Landing({
 
       <TrustStrip />
 
+      <DownloadSection />
+
       {/* ----------------------- RESEARCH LOOP ------------------------- */}
       <section id="how" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
@@ -824,103 +1123,33 @@ export default function Landing({
                   <Eyebrow className="mb-6 text-foreground/70">Model freedom</Eyebrow>
                   <h2 className={`text-balance ${H_HUGE} text-foreground`}>Use the model the work deserves.</h2>
                   <p className={`mt-7 max-w-[40ch] ${P_BIG} text-foreground/85`}>
-                    After signing in, use local models, provider accounts, eligible ChatGPT access, or credit-backed
-                    models through OpenRouter. The desktop and local runtime remain free; BYOK and ChatGPT remain
-                    separate from the Ace wallet.
+                    After signing in, choose local models, your own provider accounts, eligible ChatGPT access, or Ace.
+                    OpenScience shows how each model is connected before a session starts. The desktop and local runtime
+                    remain free; BYOK and ChatGPT remain separate from the Ace wallet.
                   </p>
                 </div>
               </div>
             </Reveal>
             <Reveal delay={150} className="col-span-12 self-center lg:col-span-6">
-              <div className="border border-border/50 bg-[hsl(28,14%,6%)] p-6 shadow-[0_30px_90px_-30px_rgba(0,0,0,0.75)] sm:p-10">
-                <img
-                  src={modelPickerShot}
-                  alt="The OpenScience model selector showing available providers, models, pricing, and effort controls"
-                  className="block h-auto w-full select-none"
-                  draggable={false}
-                  loading="lazy"
-                  decoding="async"
-                />
-              </div>
+              <ModelRouteVisual />
             </Reveal>
           </div>
         </div>
       </section>
 
-      {/* ------------------------------ ACE --------------------------- */}
-      <Section seed={9} id="ace">
-        <div className="grid grid-cols-12 items-start gap-10 lg:gap-16">
-          <div className="col-span-12 lg:col-span-5">
-            <Reveal>
-              <Eyebrow className="mb-5">Ace</Eyebrow>
-              <h2 className={`text-balance ${H_BIG}`}>OpenScience is free. Ace is pay as you go.</h2>
-            </Reveal>
-            <Reveal delay={150}>
-              <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
-                Turn Ace on when you want credit-backed models or enhanced search. Ace is usage based, with no fixed
-                monthly charge.
-              </p>
-            </Reveal>
-          </div>
-          <Reveal delay={200} className="col-span-12 lg:col-span-7">
-            <div className="border border-border/60 bg-background/55 p-6 backdrop-blur-[3px] sm:p-9">
-              <div className="flex flex-col gap-4 border-b border-border/50 pb-7 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <div className="flex items-baseline gap-3">
-                    <span className="font-display text-[clamp(38px,5vw,56px)] leading-none tracking-[-0.025em]">
-                      $20
-                    </span>
-                    <span className={CAPTION}>to start</span>
-                  </div>
-                  <p className={`mt-3 ${P}`}>Your purchased Wallet starts at 20 credits.</p>
-                </div>
-                <span className="w-fit border border-border/70 px-3 py-1.5 font-terminal text-[11px] tracking-[0.08em] text-foreground/60">
-                  PAY AS YOU GO
-                </span>
-              </div>
-              <p className={`mt-7 max-w-[60ch] ${P_BIG}`}>
-                One credit is one dollar of prepaid OpenScience balance. Credits cover managed model and enhanced search
-                usage at the rates shown in Billing.
-              </p>
-              <div className="mt-7 grid gap-px border border-border/50 bg-border/50 sm:grid-cols-2">
-                {[
-                  ["Models through OpenRouter", "Underlying model prices plus the 2% service margin."],
-                  ["One balance for models and enhanced search", "Free basic search still works without Ace."],
-                  ["Restores only the gap to 20", "When the balance falls below 2, Ace never stacks another 20."],
-                  ["One Ace switch", "Turn Ace off any time. Your remaining balance stays available."],
-                ].map(([title, copy]) => (
-                  <div key={title} className="bg-background/90 p-5">
-                    <h3 className="text-[15px] leading-6 text-foreground/90">{title}</h3>
-                    <p className={`mt-2 ${CAPTION}`}>{copy}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-7 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                <p className={`max-w-[48ch] ${CAPTION}`}>
-                  Processing fee shown before payment and never added to your credit balance.
-                </p>
-                <Cta href={`${APP}/billing`} className="shrink-0">
-                  Manage Ace
-                </Cta>
-              </div>
-            </div>
-          </Reveal>
-        </div>
-      </Section>
-
       {/* ---------------------------- INSTALL -------------------------- */}
-      <Section seed={8} id="install">
+      <Section seed={8} id="terminal">
         <div className="grid grid-cols-12 items-start gap-10 lg:gap-16">
           <div className="col-span-12 lg:col-span-5">
             <Reveal>
-              <Eyebrow className="mb-5">Run it locally</Eyebrow>
-              <h2 className={`text-balance ${H_BIG}`}>The workbench lives with the work.</h2>
+              <Eyebrow className="mb-5">Command line</Eyebrow>
+              <h2 className={`text-balance ${H_BIG}`}>Prefer the terminal?</h2>
             </Reveal>
             <Reveal delay={150}>
               <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
-                Install OpenScience, sign in once, and point it at a project. Sessions and artifacts stay on disk.
-                Provider account requests go directly to that provider; Ace requests use Synthetic Sciences and
-                OpenRouter.
+                Install with npm or the shell installer, then run OpenScience from any project. Sessions and artifacts
+                stay on disk. Your own provider accounts connect directly; Ace is available when you want managed access
+                without configuring keys.
               </p>
               <div className="mt-7 flex flex-wrap gap-2 text-[13px]">
                 {["Your files", "Your keys", "Your environment"].map((item) => (
@@ -975,6 +1204,87 @@ export default function Landing({
           </div>
         </div>
       </section>
+
+      {/* ------------------------------ ACE --------------------------- */}
+      <Section seed={9} id="ace">
+        <div className="grid grid-cols-12 items-start gap-10 lg:gap-16">
+          <div className="col-span-12 lg:col-span-5">
+            <Reveal>
+              <Eyebrow className="mb-5">OpenScience Ace</Eyebrow>
+              <h2 className={`text-balance ${H_BIG}`}>Start with $20. Spend only when you use it.</h2>
+            </Reveal>
+            <Reveal delay={140}>
+              <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
+                Create a free Synthetic Sciences account to connect OpenScience. Add $20 when you want Ace for
+                credit-backed models and enhanced research search. There is no fixed monthly charge.
+              </p>
+            </Reveal>
+            <Reveal delay={220}>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Cta href={`${APP}/billing`}>Get OpenScience Ace</Cta>
+                <a
+                  href={`${APP}/billing`}
+                  className="link-underline px-2 py-2 text-[13.5px] text-foreground/55 transition-colors hover:text-foreground"
+                >
+                  Open billing
+                </a>
+              </div>
+            </Reveal>
+          </div>
+
+          <Reveal delay={180} className="col-span-12 lg:col-span-7">
+            <div className="border border-border/60 bg-background/65 p-6 backdrop-blur-[3px] sm:p-8">
+              <div className="flex flex-col gap-5 border-b border-border/50 pb-7 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <div className="flex items-baseline gap-3">
+                    <span className="font-display text-[clamp(42px,5vw,62px)] leading-none tracking-[-0.025em]">
+                      $20
+                    </span>
+                    <span className={CAPTION}>to start</span>
+                  </div>
+                  <p className={`mt-3 ${P}`}>Your purchased Wallet starts at 20 credits.</p>
+                </div>
+                <span className="w-fit border border-border/70 px-3 py-1.5 font-terminal text-[11px] tracking-[0.08em] text-foreground/60">
+                  PAY AS YOU GO
+                </span>
+              </div>
+
+              <div className="grid gap-px border-x border-b border-border/50 bg-border/50 sm:grid-cols-3">
+                {[
+                  ["01", "Create an account", "Sign in once to connect your local workspace."],
+                  ["02", "Add $20", "One credit equals one dollar of purchased balance."],
+                  ["03", "Choose Ace", "Use supported models and enhanced research search."],
+                ].map(([number, title, copy]) => (
+                  <div key={number} className="bg-background/90 p-5">
+                    <div className={MONO_N}>{number}</div>
+                    <h3 className="mt-4 text-[15px] leading-6 text-foreground/90">{title}</h3>
+                    <p className={`mt-2 ${CAPTION}`}>{copy}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-7 grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                {[
+                  ["Transparent usage", "See model prices before you run and every charge in Billing and Usage."],
+                  ["One balance", "Models and enhanced search draw from the same purchased Wallet."],
+                  ["Restores only the gap to 20", "When the balance falls below 2, Ace never stacks another 20."],
+                  ["One Ace switch", "Turn Ace off any time. Your remaining balance stays available."],
+                ].map(([title, copy]) => (
+                  <div key={title} className="border-t border-border/45 pt-4">
+                    <h3 className="text-[14px] leading-6 text-foreground/85">{title}</h3>
+                    <p className={`mt-1.5 ${CAPTION}`}>{copy}</p>
+                  </div>
+                ))}
+              </div>
+
+              <p className={`mt-7 max-w-[58ch] border-t border-border/45 pt-5 ${CAPTION}`}>
+                Processing fee shown before payment and never added to your credit balance. OpenScience itself remains
+                free; local models, BYOK, and eligible ChatGPT access stay separate from Ace.
+              </p>
+            </div>
+          </Reveal>
+        </div>
+      </Section>
 
       {/* ----------------------------- FAQ ----------------------------- */}
       <Section seed={7} id="faq">

@@ -11,15 +11,16 @@ if (!asset) throw new Error("Built docs index does not reference a JavaScript bu
 const bundle = await Bun.file(new URL(`../../public/docs/assets/${asset}`, import.meta.url)).text()
 
 test("keeps the public bundled-skill count current", () => {
-  expect(readme).toContain("310 bundled skills")
-  expect(bundle).toContain("310 bundled skills")
+  expect(readme).toContain("311 bundled skills")
+  expect(bundle).toContain("311 bundled skills")
+  expect(`${readme}\n${bundle}`).not.toContain("310 bundled")
   expect(`${readme}\n${bundle}`).not.toContain("295 bundled")
   expect(`${readme}\n${bundle}`).not.toContain("295-skill")
 })
 
 describe("OpenScience landing contract", () => {
   test("keeps the free product independent from Ace", () => {
-    expect(landing).toContain("The desktop and local runtime remain free")
+    expect(landing).toMatch(/The desktop and local runtime\s+remain free/)
     expect(landing).toContain("BYOK")
     expect(landing).toContain("eligible ChatGPT")
     expect(landing).toContain("Do I need Ace to use OpenScience?")
@@ -29,14 +30,41 @@ describe("OpenScience landing contract", () => {
     expect(landing).toContain("$20")
     expect(landing).toContain("20 credits")
     expect(landing).toContain("to start")
-    expect(landing).toContain("OpenScience is free. Ace is pay as you go.")
-    expect(landing).toContain("Models through OpenRouter")
-    expect(landing).toContain("One balance for models and enhanced search")
+    expect(landing).toContain("OpenScience Ace")
+    expect(landing).toContain("PAY AS YOU GO")
+    expect(landing).toContain("Models and enhanced search draw from the same purchased Wallet")
     expect(landing).not.toContain("Ace+")
     expect(landing).not.toContain("per month")
     expect(landing).not.toContain("included every month")
     expect(landing).not.toContain("promotional credits")
     expect(landing).not.toContain("research quota")
+  })
+
+  test("offers a direct, platform-aware download before the product story", () => {
+    expect(landing).toContain("<DownloadSection />")
+    expect(landing).toContain("openscience-darwin-arm64.zip")
+    expect(landing).toContain("openscience-darwin-x64.zip")
+    expect(landing).toContain("openscience-windows-x64.zip")
+    expect(landing).toContain("openscience-linux-x64.tar.gz")
+    expect(landing.indexOf("<DownloadSection />")).toBeLessThan(landing.indexOf("RESEARCH LOOP"))
+  })
+
+  test("keeps internal model routing out of the editable product story", () => {
+    const start = landing.indexOf("<TrustStrip />")
+    const end = landing.indexOf("FAQ -----------------------------", start)
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    expect(landing.slice(start, end)).not.toMatch(/OpenRouter/i)
+    expect(landing.slice(start, end)).toContain("OpenScience Ace")
+  })
+
+  test("places OpenScience Ace billing immediately before Questions", () => {
+    const ace = landing.indexOf('id="ace"')
+    const faq = landing.indexOf('id="faq"')
+    expect(ace).toBeGreaterThan(-1)
+    expect(faq).toBeGreaterThan(ace)
+    expect(landing.slice(ace, faq)).toContain("${APP}/billing")
+    expect(landing.slice(ace, faq)).toContain("Get OpenScience Ace")
   })
 
   test("explains Ace gap funding and separates the processing fee from credits", () => {

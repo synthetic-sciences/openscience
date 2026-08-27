@@ -263,6 +263,24 @@
     animation: term-blink 1.1s steps(1) infinite;
   }
 
+  @keyframes model-route-progress {
+    from {
+      width: 0;
+    }
+    to {
+      width: 100%;
+    }
+  }
+  .model-route-progress {
+    animation: model-route-progress 3600ms linear forwards;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .model-route-progress {
+      width: 100%;
+      animation: none;
+    }
+  }
+
   /* Full-bleed marquee: edge-to-edge auto-scrolling strip. */
   @keyframes marquee-x {
     from {
