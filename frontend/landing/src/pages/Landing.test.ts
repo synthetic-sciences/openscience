@@ -159,16 +159,15 @@ describe("OpenScience landing contract", () => {
     const faq = landing.indexOf('id="faq"')
     expect(ace).toBeGreaterThan(-1)
     expect(faq).toBeGreaterThan(ace)
-    expect(landing.slice(ace, faq)).toContain("${APP}/billing")
-    expect(landing.slice(ace, faq)).toContain("Add funds")
+    expect(landing.slice(ace, faq)).toContain("${APP}/billing?checkout=ace")
+    expect(landing.slice(ace, faq)).toContain("Add funds to get Ace")
   })
 
-  test("keeps Ace pricing concise and separates other access routes", () => {
+  test("keeps Ace pricing concise", () => {
     expect(landing).not.toContain("auto-reload")
     expect(landing).not.toContain("Set a monthly cap")
-    expect(landing).toContain("Unused balance stays in your account.")
-    expect(landing).toContain("Any processing fee is shown before payment")
-    expect(landing).toMatch(/Local models, your own keys, and eligible ChatGPT access remain\s+separate/)
+    expect(landing).not.toContain("Unused balance stays in your account.")
+    expect(landing).not.toContain("Any processing fee is shown before payment")
     expect(landing).not.toContain("Synthetic Scientists")
   })
 
@@ -213,8 +212,9 @@ describe("OpenScience landing contract", () => {
     expect(landing).not.toContain("Atlas")
   })
 
-  test("gives visitors an explicit website analytics control", () => {
+  test("keeps website analytics status out of public footer copy", () => {
     expect(main).toContain('window.localStorage.getItem(ANALYTICS_PREFERENCE) !== "off"')
-    expect(landing).toContain('Website analytics: {analyticsEnabled ? "on" : "off"}')
+    expect(landing).not.toMatch(/Website analytics:/i)
+    expect(download).not.toMatch(/Website analytics:/i)
   })
 })

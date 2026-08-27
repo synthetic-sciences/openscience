@@ -146,13 +146,7 @@ function Copy({ command }: { command: string }) {
   )
 }
 
-export default function Download({
-  analyticsEnabled = true,
-  onAnalyticsToggle,
-}: {
-  analyticsEnabled?: boolean
-  onAnalyticsToggle?: () => void
-} = {}) {
+export default function Download() {
   const [target, setTarget] = useState<Target>(detect)
 
   useEffect(() => {
@@ -385,17 +379,6 @@ export default function Download({
             >
               GitHub
             </a>
-            {onAnalyticsToggle ? (
-              <button
-                type="button"
-                onClick={onAnalyticsToggle}
-                aria-pressed={analyticsEnabled}
-                title="Website analytics records page activity, never research content"
-                className="min-h-11 hover:text-foreground"
-              >
-                Website analytics: {analyticsEnabled ? "on" : "off"}
-              </button>
-            ) : null}
           </div>
         </div>
       </footer>
