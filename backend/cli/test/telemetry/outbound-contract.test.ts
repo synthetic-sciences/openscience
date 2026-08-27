@@ -117,6 +117,79 @@ describe("outbound OpenScience trace contract", () => {
     })
   })
 
+  test("keeps concurrent model and tool routes isolated by message", async () => {
+    await signIn("user_route_lineage")
+    restores.push(spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")))
+    await OutboundTelemetry.initializeAccount()
+    await OutboundTelemetry.modelRequest({
+      sessionID: "ses_route_lineage",
+      messageID: "msg_primary",
+      attempt: 1,
+      route: "local",
+      provider: "ollama",
+      model: "qwen",
+      system: [],
+      messages: [],
+      tools: {},
+      parameters: {},
+    })
+    await OutboundTelemetry.modelResponse({
+      sessionID: "ses_route_lineage",
+      messageID: "msg_title",
+      attempt: 1,
+      route: "custom",
+      provider: "title-provider",
+      model: "title-model",
+      message: {},
+      parts: [],
+    })
+    await OutboundTelemetry.tool({
+      id: "prt_primary_tool",
+      sessionID: "ses_route_lineage",
+      messageID: "msg_primary",
+      type: "tool",
+      callID: "call_primary",
+      tool: "write",
+      state: {
+        status: "completed",
+        input: {},
+        output: "done",
+        title: "Write fixture",
+        metadata: {},
+        time: { start: 1, end: 2 },
+      },
+    })
+
+    const events = (await Bun.file(queue).text())
+      .trim()
+      .split("\n")
+      .map((line) => Event.parse((JSON.parse(line) as { event: unknown }).event))
+    const tool = events.find((event) => event.event_type === "tool.completed")
+    expect(tool).toMatchObject({
+      run_id: "msg_primary",
+      model_route: "local",
+      provider_id: "ollama",
+      model_id: "qwen",
+    })
+    await OutboundTelemetry.sessionCompleted({
+      sessionID: "ses_route_lineage",
+      messageID: "msg_primary",
+      reason: "completed",
+    })
+    const completed = (await Bun.file(queue).text())
+      .trim()
+      .split("\n")
+      .map((line) => Event.parse((JSON.parse(line) as { event: unknown }).event))
+      .find((event) => event.event_type === "session.completed")
+    expect(completed).toMatchObject({
+      run_id: "msg_primary",
+      model_route: "local",
+      provider_id: "ollama",
+      model_id: "qwen",
+      parent_span_id: tool?.parent_span_id,
+    })
+  })
+
   test("normalizes platform names and extracts only the non-secret key id", () => {
     expect(coarsePlatform("darwin")).toBe("macos")
     expect(coarsePlatform("win32")).toBe("windows")

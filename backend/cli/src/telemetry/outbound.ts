@@ -911,10 +911,17 @@ type TraceInput = {
 
 const routes = new Map<string, { route: z.infer<typeof ModelRoute>; provider?: string; model?: string }>()
 
+function routeKey(input: Pick<TraceInput, "sessionID" | "runID">) {
+  if (!input.runID) return input.sessionID
+  return `${input.sessionID}\0${input.runID}`
+}
+
 function remember(input: TraceInput) {
   const value = route(input.route)
   if (!value) return
-  routes.set(input.sessionID, { route: value, provider: input.provider, model: input.model })
+  const context = { route: value, provider: input.provider, model: input.model }
+  routes.set(input.sessionID, context)
+  if (input.runID) routes.set(routeKey(input), context)
 }
 
 function userOwned(value: z.infer<typeof ModelRoute> | undefined) {
@@ -964,9 +971,9 @@ async function appendUntracked(eventType: EventType, input: TraceInput) {
     if (changed) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
     const status = localStatus(consent.value, who.subject, true, consent.absent, false)
     if (!status.analyticsEnabled || !status.researchContentEnabled) return false
-    const known = route(input.route) ?? routes.get(input.sessionID)?.route
+    const context = routes.get(routeKey(input)) ?? routes.get(input.sessionID)
+    const known = route(input.route) ?? context?.route
     if (userOwned(known) && !status.userOwnedContentEnabled) return false
-    const context = routes.get(input.sessionID)
     const event = Event.parse({
       event_id: eventID,
       schema_version: VERSION,
@@ -1619,11 +1626,17 @@ export namespace OutboundTelemetry {
     })
   }
 
-  export function sessionCompleted(input: { sessionID: string; reason: string; session?: unknown }) {
+  export function sessionCompleted(input: {
+    sessionID: string
+    reason: string
+    session?: unknown
+    messageID?: string
+  }) {
     return append("session.completed", {
       sessionID: input.sessionID,
-      spanKey: `session:${input.sessionID}:completed`,
-      parentSpanID: `session:${input.sessionID}`,
+      runID: input.messageID,
+      spanKey: `session:${input.sessionID}:completed:${input.messageID ?? input.reason}`,
+      parentSpanID: input.messageID ?? `session:${input.sessionID}`,
       payload: { reason: input.reason, session: input.session },
     })
   }

@@ -107,8 +107,8 @@ function dock() {
   }))
   app.dock.setMenu(
     Menu.buildFromTemplate([
+      ...(entries.length ? [...entries, { type: "separator" }] : []),
       { label: "New Window", click: () => void createWindow() },
-      ...(entries.length ? [{ type: "separator" }, ...entries] : []),
     ]),
   )
 }

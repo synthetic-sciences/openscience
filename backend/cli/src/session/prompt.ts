@@ -1566,6 +1566,15 @@ export namespace SessionPrompt {
     await SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
+      await OutboundTelemetry.sessionCompleted({
+        sessionID,
+        messageID: item.info.id,
+        reason: abort.aborted ? "cancelled" : item.info.error ? "error" : "completed",
+        session: {
+          assistant: item.info,
+          parts: item.parts,
+        },
+      }).catch(() => undefined)
       const queued = state()[sessionID]?.callbacks ?? []
       for (const q of queued) {
         q.resolve(item)
