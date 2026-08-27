@@ -13,12 +13,15 @@ const status = (patch?: Partial<ResearchToolsStatus>): ResearchToolsStatus => ({
   telemetry: {
     analyticsEnabled: true,
     researchContentEnabled: true,
+    userOwnedContentEnabled: true,
     source: "default",
     signedIn: true,
     consentVersion: "openscience-trace-v2-2026-08-23",
     pending: false,
     corrupt: false,
     deletionAvailable: true,
+    queuedEvents: 0,
+    quarantinedEvents: 0,
   },
   ...patch,
 })
@@ -108,12 +111,12 @@ describe("Research Tools settings", () => {
   test("wires the real trust and sandbox contracts and warns before Full access", async () => {
     const source = await Bun.file(new URL("./ResearchTools.tsx", import.meta.url)).text()
     expect(source).toContain("RESEARCH_ACCESS_OPTIONS")
-    expect(source).toContain("researchAccessMutations(mode)")
-    expect(source).toContain("sdk.client.project.trust.update")
-    expect(source).toContain('projectRequest("/settings/sandbox"')
+    expect(source).toContain("researchAccessContract(option.value)")
+    expect(source).toContain("projectRequest(`/project/${encodeURIComponent(project.projectID)}/access`")
+    expect(source).toContain("body: JSON.stringify({ mode")
     expect(source).toContain('title: "Enable Full access?"')
     expect(source).toContain("Full access disables the execution sandbox")
-    expect(source).toContain("sandboxAvailable")
+    expect(source).toContain("sandboxStatus.available")
   })
 
   test("keeps global settings usable without a project-scoped SDK", async () => {
@@ -124,14 +127,30 @@ describe("Research Tools settings", () => {
     expect(source).not.toContain("useSDK()")
   })
 
-  test("uses one clear prospective data-use toggle", async () => {
-    const source = await Bun.file(new URL("./ResearchTools.tsx", import.meta.url)).text()
+  test("places route-aware data controls at the end of General settings", async () => {
+    const source = await Bun.file(new URL("./DataUse.tsx", import.meta.url)).text()
+    const general = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
     const copy = source.replace(/\s+/g, " ")
-    expect(copy).toContain("Use my data to improve OpenScience")
+    expect(copy).toContain("Improve OpenScience with my activity")
+    expect(copy).toContain("Include user-owned routes")
+    expect(copy).toContain("ChatGPT/Codex or provider subscriptions")
+    expect(copy).toContain("queued")
+    expect(general.lastIndexOf("<DataUse />")).toBeGreaterThan(general.lastIndexOf("settings-disclosure-group"))
     expect(copy).not.toContain("complete research trajectory")
     expect(copy).not.toContain("removes previously shared activity")
     expect(copy).not.toContain("Research content is never shared")
     expect(copy).not.toContain("managed searches remain")
     expect(copy).not.toContain("Delete shared data")
+  })
+
+  test("persists desktop onboarding outside random-port browser storage", async () => {
+    const source = await Bun.file(new URL("../../atlas/DesktopOnboarding.tsx", import.meta.url)).text()
+    const preferences = await Bun.file(
+      new URL("../../../../../backend/cli/src/server/routes/settings/preferences.ts", import.meta.url),
+    ).text()
+    expect(source).toContain("desktop_onboarding_version")
+    expect(source).toContain('settingsApi(server.url, fetcher(), "/settings/preferences"')
+    expect(source).not.toContain("localStorage")
+    expect(preferences).toContain("desktop_onboarding_version")
   })
 })

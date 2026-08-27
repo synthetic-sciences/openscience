@@ -12,12 +12,15 @@ export interface ResearchToolsStatus {
   telemetry: {
     analyticsEnabled: boolean
     researchContentEnabled: boolean
+    userOwnedContentEnabled: boolean
     source: "default" | "account"
     signedIn: boolean
     consentVersion: string
     pending: boolean
     corrupt: boolean
     deletionAvailable: boolean
+    queuedEvents: number
+    quarantinedEvents: number
   }
 }
 

@@ -28,6 +28,7 @@ import { SessionTraceStore } from "./trace-store"
 import { ToolSelection } from "./tool-selection"
 import { OutboundTelemetry } from "@/telemetry/outbound"
 import { InvalidCall } from "@/tool/invalid-call"
+import { resolveTelemetryRoute } from "./billing-gate"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -82,6 +83,7 @@ export namespace LLM {
       ? { model: undefined, options: {}, headers: {} }
       : ProviderTransform.tier(input.model, input.user.tier)
     const routed = tier.model ? await Provider.getModel(input.model.providerID, tier.model) : input.model
+    const traceRoute = input.route ?? (await resolveTelemetryRoute(routed.providerID, routed.id))
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)
@@ -274,7 +276,7 @@ export namespace LLM {
       sessionID: input.sessionID,
       messageID: traceMessageID,
       attempt: traceAttempt,
-      route: input.route ?? "custom",
+      route: traceRoute,
       provider: routed.providerID,
       model: routed.id,
       system,
@@ -302,7 +304,7 @@ export namespace LLM {
           sessionID: input.sessionID,
           messageID: traceMessageID,
           attempt: traceAttempt,
-          route: input.route ?? "custom",
+          route: traceRoute,
           provider: routed.providerID,
           model: routed.id,
           message: output,

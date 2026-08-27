@@ -20,6 +20,7 @@ import {
 
 const consent = path.join(Global.Path.data, "telemetry-consent-v2.json")
 const queue = path.join(Global.Path.data, "telemetry-queue-v2.jsonl")
+const dead = path.join(Global.Path.data, "telemetry-dead-letter-v2.jsonl")
 const stateLease = path.join(Global.Path.data, "telemetry-state-v2.lock")
 const legacyConsent = path.join(Global.Path.data, "telemetry-consent-v1.json")
 const legacyQueue = path.join(Global.Path.data, "telemetry-queue-v1.jsonl")
@@ -34,7 +35,7 @@ async function signIn(user = "user_fixture", apiKey = "thk_fixture") {
 afterEach(async () => {
   for (const restore of restores.splice(0)) restore.mockRestore()
   await Promise.all(
-    [consent, queue, stateLease, `${stateLease}.coord`, legacyConsent, legacyQueue, session, auth].map((file) =>
+    [consent, queue, dead, stateLease, `${stateLease}.coord`, legacyConsent, legacyQueue, session, auth].map((file) =>
       fs.rm(file, { recursive: true, force: true }),
     ),
   )
@@ -113,6 +114,79 @@ describe("outbound OpenScience trace contract", () => {
       cache_write_tokens: 5,
       estimated_cost_microusd: 1234,
       cost_source: "model_catalog",
+    })
+  })
+
+  test("keeps concurrent model and tool routes isolated by message", async () => {
+    await signIn("user_route_lineage")
+    restores.push(spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")))
+    await OutboundTelemetry.initializeAccount()
+    await OutboundTelemetry.modelRequest({
+      sessionID: "ses_route_lineage",
+      messageID: "msg_primary",
+      attempt: 1,
+      route: "local",
+      provider: "ollama",
+      model: "qwen",
+      system: [],
+      messages: [],
+      tools: {},
+      parameters: {},
+    })
+    await OutboundTelemetry.modelResponse({
+      sessionID: "ses_route_lineage",
+      messageID: "msg_title",
+      attempt: 1,
+      route: "custom",
+      provider: "title-provider",
+      model: "title-model",
+      message: {},
+      parts: [],
+    })
+    await OutboundTelemetry.tool({
+      id: "prt_primary_tool",
+      sessionID: "ses_route_lineage",
+      messageID: "msg_primary",
+      type: "tool",
+      callID: "call_primary",
+      tool: "write",
+      state: {
+        status: "completed",
+        input: {},
+        output: "done",
+        title: "Write fixture",
+        metadata: {},
+        time: { start: 1, end: 2 },
+      },
+    })
+
+    const events = (await Bun.file(queue).text())
+      .trim()
+      .split("\n")
+      .map((line) => Event.parse((JSON.parse(line) as { event: unknown }).event))
+    const tool = events.find((event) => event.event_type === "tool.completed")
+    expect(tool).toMatchObject({
+      run_id: "msg_primary",
+      model_route: "local",
+      provider_id: "ollama",
+      model_id: "qwen",
+    })
+    await OutboundTelemetry.sessionCompleted({
+      sessionID: "ses_route_lineage",
+      messageID: "msg_primary",
+      reason: "completed",
+    })
+    const completed = (await Bun.file(queue).text())
+      .trim()
+      .split("\n")
+      .map((line) => Event.parse((JSON.parse(line) as { event: unknown }).event))
+      .find((event) => event.event_type === "session.completed")
+    expect(completed).toMatchObject({
+      run_id: "msg_primary",
+      model_route: "local",
+      provider_id: "ollama",
+      model_id: "qwen",
+      parent_span_id: tool?.parent_span_id,
     })
   })
 
@@ -1010,7 +1084,7 @@ describe("outbound OpenScience trace contract", () => {
     expect(await Bun.file(queue).exists()).toBe(false)
   })
 
-  test("isolates a permanently rejected event so valid later rows still upload", async () => {
+  test("quarantines a permanently rejected event so valid later rows still upload", async () => {
     await signIn("user_rejected_trace")
     const offline = spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"))
     restores.push(offline)
@@ -1057,6 +1131,137 @@ describe("outbound OpenScience trace contract", () => {
     await OutboundTelemetry.flush()
     expect(attempts.map((ids) => ids.length)).toEqual([2, 1, 1])
     expect(accepted).toHaveLength(1)
+    expect(await Bun.file(queue).exists()).toBe(false)
+    const quarantined = JSON.parse((await Bun.file(dead).text()).trim()) as {
+      status: number
+      reason: string
+      event: { payload: unknown }
+    }
+    expect(quarantined.status).toBe(422)
+    expect(quarantined.reason).toContain("telemetry_schema_rejected")
+    expect(JSON.stringify(quarantined.event.payload)).toContain("server-reject-this-event")
+    expect(await OutboundTelemetry.status()).toMatchObject({ queuedEvents: 0, quarantinedEvents: 1 })
+  })
+
+  test("keeps Ace traces while user-owned route logging is disabled", async () => {
+    await signIn("user_owned_opt_out")
+    restores.push(spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")))
+    await OutboundTelemetry.initializeAccount()
+
+    await OutboundTelemetry.userMessage({
+      sessionID: "ses_managed_before",
+      messageID: "msg_managed_before",
+      route: "managed",
+      provider: "openrouter",
+      model: "anthropic/claude-sonnet-4.5",
+      message: { role: "user" },
+      parts: [{ text: "ace-before" }],
+    })
+    await OutboundTelemetry.userMessage({
+      sessionID: "ses_byok_before",
+      messageID: "msg_byok_before",
+      route: "byok",
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      message: { role: "user" },
+      parts: [{ text: "byok-before" }],
+    })
+
+    expect(await OutboundTelemetry.setUserOwned(false)).toMatchObject({
+      analyticsEnabled: true,
+      userOwnedContentEnabled: false,
+    })
+    for (const value of ["byok", "chatgpt", "subscription", "local", "custom"] as const) {
+      expect(
+        await OutboundTelemetry.userMessage({
+          sessionID: `ses_${value}_after`,
+          messageID: `msg_${value}_after`,
+          route: value,
+          provider: value,
+          model: "fixture-model",
+          message: { role: "user" },
+          parts: [{ text: `${value}-must-stay-local` }],
+        }),
+      ).toBe(false)
+    }
+    expect(
+      await OutboundTelemetry.userMessage({
+        sessionID: "ses_managed_after",
+        messageID: "msg_managed_after",
+        route: "managed",
+        provider: "openrouter",
+        model: "anthropic/claude-sonnet-4.5",
+        message: { role: "user" },
+        parts: [{ text: "ace-after" }],
+      }),
+    ).toBe(true)
+
+    const text = await Bun.file(queue).text()
+    expect(text).toContain("ace-before")
+    expect(text).toContain("ace-after")
+    expect(text).not.toContain("byok-before")
+    expect(text).not.toContain("must-stay-local")
+  })
+
+  test("recovers from a server-side user-owned opt-out without losing Ace traces", async () => {
+    await signIn("user_owned_server_opt_out")
+    const offline = spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"))
+    restores.push(offline)
+    await OutboundTelemetry.initializeAccount()
+    await OutboundTelemetry.userMessage({
+      sessionID: "ses_server_managed",
+      messageID: "msg_server_managed",
+      route: "managed",
+      provider: "openrouter",
+      model: "openai/gpt-test",
+      message: { role: "user" },
+      parts: [{ text: "ace-server-kept" }],
+    })
+    await OutboundTelemetry.userMessage({
+      sessionID: "ses_server_byok",
+      messageID: "msg_server_byok",
+      route: "byok",
+      provider: "anthropic",
+      model: "claude-test",
+      message: { role: "user" },
+      parts: [{ text: "byok-server-dropped" }],
+    })
+    await Bun.sleep(5)
+    offline.mockRestore()
+    restores.pop()
+
+    const batches: string[][] = []
+    restores.push(
+      spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+        if (String(input).endsWith("/api/v1/telemetry/consent")) {
+          return Response.json({
+            consent_version: CONSENT_VERSION,
+            analytics_enabled: true,
+            research_content_enabled: true,
+            user_owned_content_enabled: true,
+          })
+        }
+        const body = JSON.parse(gunzipSync(init?.body as Uint8Array).toString()) as {
+          events: Array<{ event_id: string; model_route?: string }>
+        }
+        batches.push(body.events.map((event) => event.model_route ?? "unknown"))
+        if (body.events.some((event) => event.model_route !== "managed")) {
+          return Response.json(
+            { detail: { code: "user_owned_telemetry_consent_disabled", retryable: false } },
+            { status: 403 },
+          )
+        }
+        return Response.json({ accepted: body.events.map((event) => event.event_id), replayed: [] })
+      }) as typeof fetch),
+    )
+
+    await OutboundTelemetry.flush()
+    expect(batches).toEqual([["managed", "byok"], ["managed"]])
+    expect(await OutboundTelemetry.status()).toMatchObject({
+      analyticsEnabled: true,
+      userOwnedContentEnabled: false,
+      queuedEvents: 0,
+    })
     expect(await Bun.file(queue).exists()).toBe(false)
   })
 

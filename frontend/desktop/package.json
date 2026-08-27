@@ -1,0 +1,17 @@
+{
+  "name": "@synsci/desktop",
+  "version": "2.0.47",
+  "description": "The native OpenScience research workspace for macOS, Windows, and Linux.",
+  "author": "Synthetic Sciences",
+  "private": true,
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --config electron-builder.mjs --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3"
+  }
+}

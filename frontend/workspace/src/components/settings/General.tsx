@@ -14,6 +14,7 @@ import { URLS } from "@/config/urls"
 import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { walletBalanceLabel } from "./credit-balance"
+import { DataUse } from "./DataUse"
 import "./preference-panels.css"
 
 type Account = {
@@ -169,6 +170,8 @@ export default function General() {
               </button>
             </div>
           </div>
+
+          <DataUse />
         </PanelBody>
       </div>
     </PanelScroll>

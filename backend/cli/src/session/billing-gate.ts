@@ -21,6 +21,7 @@ import { OpenScience } from "@/openscience"
 
 export type CredentialSource = "byok" | "managed" | "oauth-free"
 export type BillingMode = "managed" | "byok"
+export type TelemetryRoute = "managed" | "byok" | "chatgpt" | "subscription" | "local" | "custom"
 
 /** The user-facing model-access choice (Settings → Models). `undefined` = auto-detect
  *  from the resolved credential (legacy behaviour; `null` in the config file —
@@ -91,6 +92,26 @@ export async function resolveCredentialSource(providerID: string, _modelID: stri
 
   // 3) BYOK: the user's own key (or the zero-cost public demo). Never billable.
   return "byok"
+}
+
+export function telemetryRoute(source: CredentialSource, model: Provider.Model): TelemetryRoute {
+  if (
+    model.providerID === "ollama" ||
+    model.providerID === "lmstudio" ||
+    Provider.isLocalBaseURL(model.options?.baseURL ?? model.api.url)
+  ) {
+    return "local"
+  }
+  if (source === "managed") return "managed"
+  if (source === "oauth-free" && model.providerID === "openai-codex") return "chatgpt"
+  if (source === "oauth-free") return "subscription"
+  return "byok"
+}
+
+export async function resolveTelemetryRoute(providerID: string, modelID: string): Promise<TelemetryRoute> {
+  const model = await Provider.getModel(providerID, modelID).catch(() => undefined)
+  if (!model) return "custom"
+  return telemetryRoute(await resolveCredentialSource(providerID, modelID), model)
 }
 
 /**

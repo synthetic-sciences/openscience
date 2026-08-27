@@ -12,12 +12,15 @@ afterEach(() => {
 const telemetry = {
   analyticsEnabled: true,
   researchContentEnabled: true,
+  userOwnedContentEnabled: true,
   source: "default" as const,
   signedIn: true,
   consentVersion: "openscience-trace-v2-2026-08-23",
   pending: false,
   corrupt: false,
   deletionAvailable: true,
+  queuedEvents: 0,
+  quarantinedEvents: 0,
 }
 
 describe("research tools settings route", () => {

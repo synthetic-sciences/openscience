@@ -83,6 +83,7 @@ import { Token } from "@/util/token"
 import { Auth } from "@/auth"
 import { SafeFileIO } from "@/file/safe-io"
 import { OutboundTelemetry } from "@/telemetry/outbound"
+import { resolveTelemetryRoute } from "./billing-gate"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1565,6 +1566,15 @@ export namespace SessionPrompt {
     await SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
+      await OutboundTelemetry.sessionCompleted({
+        sessionID,
+        messageID: item.info.id,
+        reason: abort.aborted ? "cancelled" : item.info.error ? "error" : "completed",
+        session: {
+          assistant: item.info,
+          parts: item.parts,
+        },
+      }).catch(() => undefined)
       const queued = state()[sessionID]?.callbacks ?? []
       for (const q of queued) {
         q.resolve(item)
@@ -2517,6 +2527,9 @@ export namespace SessionPrompt {
     void OutboundTelemetry.userMessage({
       sessionID: input.sessionID,
       messageID: info.id,
+      route: await resolveTelemetryRoute(info.model.providerID, info.model.modelID),
+      provider: info.model.providerID,
+      model: info.model.modelID,
       message: info,
       parts,
     }).catch(() => undefined)
@@ -2689,6 +2702,9 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     void OutboundTelemetry.userMessage({
       sessionID: input.sessionID,
       messageID: userMsg.id,
+      route: await resolveTelemetryRoute(userMsg.model.providerID, userMsg.model.modelID),
+      provider: userMsg.model.providerID,
+      model: userMsg.model.modelID,
       message: userMsg,
       parts: [userPart],
     }).catch(() => undefined)
@@ -3007,6 +3023,9 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     void OutboundTelemetry.userMessage({
       sessionID: input.sessionID,
       messageID: user.id,
+      route: await resolveTelemetryRoute(user.model.providerID, user.model.modelID),
+      provider: user.model.providerID,
+      model: user.model.modelID,
       message: user,
       parts: [userPart],
     }).catch(() => undefined)

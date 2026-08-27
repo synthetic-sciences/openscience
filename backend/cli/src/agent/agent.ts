@@ -24,7 +24,7 @@ import { State } from "@/project/state"
 import { OutboundTelemetry } from "@/telemetry/outbound"
 import { ProjectTrust } from "@/project/trust"
 import { ProjectAccess } from "@/project/access"
-import { resolveCredentialSource, type CredentialSource } from "@/session/billing-gate"
+import { resolveCredentialSource, telemetryRoute } from "@/session/billing-gate"
 import { randomUUID } from "node:crypto"
 import { Flag } from "@/flag/flag"
 
@@ -541,20 +541,6 @@ export namespace Agent {
     return primaryVisible.name
   }
 
-  function generationRoute(source: CredentialSource, model: Provider.Model) {
-    if (
-      model.providerID === "ollama" ||
-      model.providerID === "lmstudio" ||
-      Provider.isLocalBaseURL(model.options?.baseURL ?? model.api.url)
-    ) {
-      return "local"
-    }
-    if (source === "managed") return "managed"
-    if (source === "oauth-free" && model.providerID === "openai-codex") return "chatgpt"
-    if (source === "oauth-free") return "subscription"
-    return "byok"
-  }
-
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
     // This command is not part of a durable research conversation, but the
     // model call still belongs to one coherent trace. Use an explicit
@@ -567,6 +553,10 @@ export namespace Agent {
     let requestStarted = false
     let outcome = "error"
 
+    const selected = input.model ?? (await Provider.defaultModel())
+    model = await Provider.getModel(selected.providerID, selected.modelID)
+    route = telemetryRoute(await resolveCredentialSource(model.providerID, model.id), model)
+
     await OutboundTelemetry.sessionStarted({
       sessionID,
       session: { purpose, source: "cli", ephemeral: true },
@@ -574,15 +564,16 @@ export namespace Agent {
     await OutboundTelemetry.userMessage({
       sessionID,
       messageID,
+      route,
+      provider: model.providerID,
+      model: model.id,
       message: { role: "user", purpose },
       parts: [{ type: "text", text: input.description }],
     }).catch(() => false)
 
     try {
-      const defaultModel = input.model ?? (await Provider.defaultModel())
-      model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
+      const defaultModel = selected
       const language = await Provider.getLanguage(model)
-      route = generationRoute(await resolveCredentialSource(model.providerID, model.id), model)
 
       const system = [PROMPT_GENERATE]
       await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
@@ -711,6 +702,7 @@ export namespace Agent {
     } finally {
       await OutboundTelemetry.sessionCompleted({
         sessionID,
+        messageID,
         reason: outcome,
         session: { purpose, source: "cli", ephemeral: true },
       }).catch(() => false)

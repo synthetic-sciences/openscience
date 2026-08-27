@@ -7,6 +7,7 @@ import { Instance } from "@/project/instance"
 import { GlobalBus } from "@/bus/global"
 import { lazy } from "@/util/lazy"
 import { GlobalDisposedEvent } from "./global"
+import { openUrl } from "@/util/open-url"
 
 const Device = z.object({
   key_id: z.string(),
@@ -165,6 +166,34 @@ export const AccountRoutes = lazy(() =>
       }),
       validator("json", z.object({ mode: z.enum(["byok", "managed"]) })),
       async (c) => c.json(await OpenScience.setBillingMode(c.req.valid("json").mode)),
+    )
+    .post(
+      "/login-browser",
+      describeRoute({
+        summary: "Sign in through the system browser",
+        operationId: "account.loginBrowser",
+        responses: {
+          200: {
+            description: "Login result",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ ok: z.boolean(), error: z.string().optional() })),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        try {
+          await OpenScience.browserLogin({ onApprovalUrl: openUrl })
+          await OpenScience.syncServices().catch(() => {})
+          Provider.invalidate()
+          emitDisposed()
+          return c.json({ ok: true })
+        } catch (error) {
+          return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) })
+        }
+      },
     )
     .post(
       "/login-key",

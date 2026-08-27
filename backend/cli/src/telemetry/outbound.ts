@@ -15,7 +15,7 @@ import { Log } from "@/util/log"
 
 const log = Log.create({ service: "telemetry.outbound" })
 const VERSION = 2 as const
-export const CONSENT_VERSION = "openscience-trace-v2-2026-08-23"
+export const CONSENT_VERSION = "openscience-trace-v3-2026-08-26"
 const MAX_EVENTS = 4096
 const MAX_QUEUE_BYTES = 64 * 1024 * 1024
 const MAX_BATCH_EVENTS = 64
@@ -30,6 +30,7 @@ const SUBJECT_DOMAIN = "openscience-telemetry-subject:v1"
 const LEGACY_CONSENT_EPOCH = "0".repeat(32)
 const consentPath = path.join(Global.Path.data, "telemetry-consent-v2.json")
 const queuePath = path.join(Global.Path.data, "telemetry-queue-v2.jsonl")
+const deadPath = path.join(Global.Path.data, "telemetry-dead-letter-v2.jsonl")
 const stateLeasePath = path.join(Global.Path.data, "telemetry-state-v2.lock")
 const consentSyncLeasePath = path.join(Global.Path.data, "telemetry-consent-sync-v2.lock")
 const legacyConsentPath = path.join(Global.Path.data, "telemetry-consent-v1.json")
@@ -133,6 +134,7 @@ export type EventType = Event["event_type"]
 const ConsentEntry = z.object({
   analytics_enabled: z.boolean(),
   research_content_enabled: z.boolean(),
+  user_owned_content_enabled: z.boolean().default(true),
   updated_at: z.string().datetime(),
   pending: z.boolean().optional(),
   generation: Hex(32).optional(),
@@ -168,17 +170,29 @@ const LegacyConsentFile = z.object({
 const QueueRow = z.object({ subject: z.string(), queued_at: z.number().int(), event: Event })
 type QueueRow = z.infer<typeof QueueRow>
 
+const DeadRow = z.object({
+  subject: z.string(),
+  failed_at: z.number().int(),
+  status: z.number().int(),
+  reason: z.string(),
+  event: Event,
+})
+type DeadRow = z.infer<typeof DeadRow>
+
 const queueCache: { signature?: string; rows: number } = { rows: 0 }
 
 export type Status = {
   analyticsEnabled: boolean
   researchContentEnabled: boolean
+  userOwnedContentEnabled: boolean
   source: "default" | "account"
   signedIn: boolean
   consentVersion: string
   pending: boolean
   corrupt: boolean
   deletionAvailable: boolean
+  queuedEvents: number
+  quarantinedEvents: number
 }
 
 export type DrainResult = {
@@ -346,6 +360,7 @@ async function migrateLegacy(state: ConsentFile, subject: string): Promise<boole
     // default.
     analytics_enabled: enabled,
     research_content_enabled: enabled,
+    user_owned_content_enabled: true,
     updated_at: new Date().toISOString(),
     pending: false,
     generation: generation(),
@@ -383,6 +398,7 @@ async function ensureSubject(state: ConsentFile, subject: string, token?: string
     state.subjects[subject] = {
       analytics_enabled: true,
       research_content_enabled: true,
+      user_owned_content_enabled: true,
       updated_at: new Date().toISOString(),
       // New authenticated accounts inherit the disclosed server default via
       // GET. Only an explicit switch action is persisted with PUT.
@@ -492,7 +508,10 @@ async function appendRowLocked(row: QueueRow) {
 
 async function activateLocked(state: ConsentFile, subject: string) {
   if (state.active_subject === subject) return false
-  if (state.active_subject) await mutateRowsLocked(() => [])
+  if (state.active_subject) {
+    await mutateRowsLocked(() => [])
+    await fs.rm(deadPath, { force: true }).catch(() => undefined)
+  }
   state.active_subject = subject
   return true
 }
@@ -509,12 +528,15 @@ function localStatus(
   return {
     analyticsEnabled: enabled,
     researchContentEnabled: enabled && (entry?.research_content_enabled ?? false),
+    userOwnedContentEnabled: enabled && (entry?.user_owned_content_enabled ?? true),
     source: entry ? "account" : "default",
     signedIn,
     consentVersion: state.consent_version,
     pending: entry?.pending === true || (signedIn && absent),
     corrupt,
     deletionAvailable: signedIn,
+    queuedEvents: 0,
+    quarantinedEvents: 0,
   }
 }
 
@@ -525,12 +547,21 @@ function consentDisabled(value: unknown) {
   return (detail as Record<string, unknown>).code === "telemetry_consent_disabled"
 }
 
+function userOwnedConsentDisabled(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const root = value as Record<string, unknown>
+  const detail = root.detail && typeof root.detail === "object" && !Array.isArray(root.detail) ? root.detail : root
+  return (detail as Record<string, unknown>).code === "user_owned_telemetry_consent_disabled"
+}
+
 async function disableSubjectLocked(state: ConsentFile, subject: string) {
   await mutateRowsLocked(() => [])
+  await fs.rm(deadPath, { force: true }).catch(() => undefined)
   state.installation_id = randomUUID()
   state.subjects[subject] = {
     analytics_enabled: false,
     research_content_enabled: false,
+    user_owned_content_enabled: false,
     updated_at: new Date().toISOString(),
     pending: false,
     generation: generation(),
@@ -546,6 +577,7 @@ type ConsentRequest = {
   updatedAt: string
   analytics: boolean
   content: boolean
+  userOwned: boolean
   pending: boolean
 }
 
@@ -588,6 +620,7 @@ async function synchronizeConsent(who: Awaited<ReturnType<typeof identity>>) {
         updatedAt: entry.updated_at,
         analytics: entry.analytics_enabled,
         content: entry.research_content_enabled,
+        userOwned: entry.user_owned_content_enabled,
         pending: entry.pending === true,
       }
     })
@@ -620,6 +653,7 @@ async function synchronizeConsent(who: Awaited<ReturnType<typeof identity>>) {
               consent_version: CONSENT_VERSION,
               analytics_enabled: request.analytics,
               research_content_enabled: request.content,
+              user_owned_content_enabled: request.userOwned,
               installation_id: request.installation,
             }),
           }
@@ -632,8 +666,13 @@ async function synchronizeConsent(who: Awaited<ReturnType<typeof identity>>) {
           consent_version?: string
           analytics_enabled?: boolean
           research_content_enabled?: boolean
+          user_owned_content_enabled?: boolean
           consent_epoch?: string
-          effective?: { analytics_enabled?: boolean; research_content_enabled?: boolean }
+          effective?: {
+            analytics_enabled?: boolean
+            research_content_enabled?: boolean
+            user_owned_content_enabled?: boolean
+          }
         }
       | undefined
 
@@ -649,6 +688,7 @@ async function synchronizeConsent(who: Awaited<ReturnType<typeof identity>>) {
         entry.updated_at !== request.updatedAt ||
         entry.analytics_enabled !== request.analytics ||
         entry.research_content_enabled !== request.content ||
+        entry.user_owned_content_enabled !== request.userOwned ||
         (entry.pending === true) !== request.pending
       ) {
         return false
@@ -659,7 +699,9 @@ async function synchronizeConsent(who: Awaited<ReturnType<typeof identity>>) {
       }
       const analytics = body?.analytics_enabled ?? body?.effective?.analytics_enabled ?? request.analytics
       const content = body?.research_content_enabled ?? body?.effective?.research_content_enabled ?? request.content
-      if (typeof analytics !== "boolean" || typeof content !== "boolean") return false
+      const userOwned =
+        body?.user_owned_content_enabled ?? body?.effective?.user_owned_content_enabled ?? request.userOwned
+      if (typeof analytics !== "boolean" || typeof content !== "boolean" || typeof userOwned !== "boolean") return false
       if (!analytics || !content) {
         await disableSubjectLocked(current.value, request.subject)
         return true
@@ -668,6 +710,7 @@ async function synchronizeConsent(who: Awaited<ReturnType<typeof identity>>) {
       current.value.subjects[request.subject] = {
         analytics_enabled: true,
         research_content_enabled: true,
+        user_owned_content_enabled: userOwned,
         updated_at: new Date().toISOString(),
         pending: false,
         generation: generation(),
@@ -866,6 +909,48 @@ type TraceInput = {
   payload?: Record<string, unknown>
 }
 
+const routes = new Map<string, { route: z.infer<typeof ModelRoute>; provider?: string; model?: string }>()
+
+function routeKey(input: Pick<TraceInput, "sessionID" | "runID">) {
+  if (!input.runID) return input.sessionID
+  return `${input.sessionID}\0${input.runID}`
+}
+
+function remember(input: TraceInput) {
+  const value = route(input.route)
+  if (!value) return
+  const context = { route: value, provider: input.provider, model: input.model }
+  routes.set(input.sessionID, context)
+  if (input.runID) routes.set(routeKey(input), context)
+}
+
+function userOwned(value: z.infer<typeof ModelRoute> | undefined) {
+  return value !== "managed"
+}
+
+function parseDeadRows(text: string): DeadRow[] {
+  return text
+    .split("\n")
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        return [DeadRow.parse(JSON.parse(line))]
+      } catch {
+        return []
+      }
+    })
+}
+
+async function deadRows() {
+  return parseDeadRows(await fs.readFile(deadPath, "utf8").catch(() => ""))
+}
+
+async function quarantine(rows: DeadRow[]) {
+  if (!rows.length) return
+  const selected = [...(await deadRows()), ...rows].slice(-MAX_EVENTS)
+  await atomic(deadPath, selected.map((row) => JSON.stringify(row)).join("\n") + "\n")
+}
+
 async function appendUntracked(eventType: EventType, input: TraceInput) {
   const who = await identity()
   if (!who.signedIn) return false
@@ -886,6 +971,9 @@ async function appendUntracked(eventType: EventType, input: TraceInput) {
     if (changed) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
     const status = localStatus(consent.value, who.subject, true, consent.absent, false)
     if (!status.analyticsEnabled || !status.researchContentEnabled) return false
+    const context = routes.get(routeKey(input)) ?? routes.get(input.sessionID)
+    const known = route(input.route) ?? context?.route
+    if (userOwned(known) && !status.userOwnedContentEnabled) return false
     const event = Event.parse({
       event_id: eventID,
       schema_version: VERSION,
@@ -902,9 +990,11 @@ async function appendUntracked(eventType: EventType, input: TraceInput) {
       installation_id: consent.value.installation_id,
       session_id: digest(consent.value.installation_id, input.sessionID, 32),
       ...(input.runID ? { run_id: input.runID } : {}),
-      ...(input.route ? { model_route: route(input.route) } : {}),
-      ...(input.provider ? { provider_id: telemetryIdentifier(input.provider) } : {}),
-      ...(input.model ? { model_id: telemetryIdentifier(input.model) } : {}),
+      ...(known ? { model_route: known } : {}),
+      ...(input.provider || context?.provider
+        ? { provider_id: telemetryIdentifier(input.provider || context!.provider!) }
+        : {}),
+      ...(input.model || context?.model ? { model_id: telemetryIdentifier(input.model || context!.model!) } : {}),
       payload,
     })
     await appendRowLocked({ subject: who.subject, queued_at: Date.now(), event })
@@ -915,6 +1005,7 @@ async function appendUntracked(eventType: EventType, input: TraceInput) {
 }
 
 function append(eventType: EventType, input: TraceInput) {
+  remember(input)
   return trackCapture(appendUntracked(eventType, input))
 }
 
@@ -956,23 +1047,26 @@ const PERMANENT_BATCH_REJECTIONS = new Set([400, 413, 415, 422])
 
 type DeliveryResult = {
   completed: Set<string>
-  dropped: Set<string>
+  quarantined: Map<string, { status: number; reason: string }>
   consentDisabled: boolean
+  userOwnedDisabled: boolean
 }
 
 function emptyDelivery(): DeliveryResult {
-  return { completed: new Set(), dropped: new Set(), consentDisabled: false }
+  return { completed: new Set(), quarantined: new Map(), consentDisabled: false, userOwnedDisabled: false }
 }
 
 function mergeDelivery(left: DeliveryResult, right: DeliveryResult): DeliveryResult {
   return {
     completed: new Set([...left.completed, ...right.completed]),
-    dropped: new Set([...left.dropped, ...right.dropped]),
+    quarantined: new Map([...left.quarantined, ...right.quarantined]),
     consentDisabled: left.consentDisabled || right.consentDisabled,
+    userOwnedDisabled: left.userOwnedDisabled || right.userOwnedDisabled,
   }
 }
 
 async function deliverTelemetryRows(rows: QueueRow[], token: string, installationID: string): Promise<DeliveryResult> {
+  const deliveryID = randomUUID()
   const response = await fetch(`${API_BASE}/api/v1/telemetry/batches`, {
     method: "POST",
     headers: {
@@ -985,6 +1079,7 @@ async function deliverTelemetryRows(rows: QueueRow[], token: string, installatio
         JSON.stringify({
           schema_version: VERSION,
           consent_version: CONSENT_VERSION,
+          delivery_id: deliveryID,
           installation_id: installationID,
           events: rows.map((row) => row.event),
         }),
@@ -1005,24 +1100,44 @@ async function deliverTelemetryRows(rows: QueueRow[], token: string, installatio
           ? [...(body?.accepted ?? []), ...(body?.replayed ?? [])]
           : rows.map((row) => row.event.event_id),
       ),
-      dropped: new Set(),
+      quarantined: new Map(),
       consentDisabled: false,
+      userOwnedDisabled: false,
     }
   }
   if (response.status === 403 && consentDisabled(body)) {
     return { ...emptyDelivery(), consentDisabled: true }
   }
+  if (response.status === 403 && userOwnedConsentDisabled(body)) {
+    const privateRows = rows.filter((row) => row.event.model_route !== "managed")
+    const managedRows = rows.filter((row) => row.event.model_route === "managed")
+    const managed = managedRows.length
+      ? await deliverTelemetryRows(managedRows, token, installationID)
+      : emptyDelivery()
+    return {
+      ...managed,
+      completed: new Set([...managed.completed, ...privateRows.map((row) => row.event.event_id)]),
+      userOwnedDisabled: true,
+    }
+  }
   if (!PERMANENT_BATCH_REJECTIONS.has(response.status)) return emptyDelivery()
 
   // A schema or size failure identifies the batch, not the offending row.
   // Bisect until the bad singleton is isolated. Valid siblings are delivered
-  // immediately and only the permanently rejected event is discarded.
+  // immediately and the permanently rejected event is preserved in a local
+  // quarantine with the server response for diagnosis and recovery.
   if (rows.length === 1) {
-    log.warn("dropping permanently rejected telemetry event", {
+    const reason = JSON.stringify(body ?? { code: "telemetry_rejected" }).slice(0, 2_048)
+    log.warn("quarantining permanently rejected telemetry event", {
       event_id: rows[0].event.event_id,
       status: response.status,
     })
-    return { completed: new Set(), dropped: new Set([rows[0].event.event_id]), consentDisabled: false }
+    return {
+      completed: new Set(),
+      quarantined: new Map([[rows[0].event.event_id, { status: response.status, reason }]]),
+      consentDisabled: false,
+      userOwnedDisabled: false,
+    }
   }
   const middle = Math.ceil(rows.length / 2)
   const left = await deliverTelemetryRows(rows.slice(0, middle), token, installationID)
@@ -1043,7 +1158,9 @@ export namespace OutboundTelemetry {
       const state = consent.corrupt ? fresh() : consent.value
       state.installation_id = randomUUID()
       state.active_subject = undefined
+      routes.clear()
       await mutateRowsLocked(() => [])
+      await fs.rm(deadPath, { force: true }).catch(() => undefined)
       await fs.rm(legacyQueuePath, { force: true }).catch(() => undefined)
       await atomic(consentPath, JSON.stringify(state, null, 2))
     })
@@ -1108,6 +1225,7 @@ export namespace OutboundTelemetry {
         consent.value.subjects[who.subject] = {
           analytics_enabled: false,
           research_content_enabled: false,
+          user_owned_content_enabled: false,
           updated_at: new Date().toISOString(),
           pending: false,
           generation: generation(),
@@ -1162,12 +1280,15 @@ export namespace OutboundTelemetry {
       return {
         analyticsEnabled: false,
         researchContentEnabled: false,
+        userOwnedContentEnabled: false,
         source: "default",
         signedIn: false,
         consentVersion: CONSENT_VERSION,
         pending: false,
         corrupt: false,
         deletionAvailable: false,
+        queuedEvents: 0,
+        quarantinedEvents: 0,
       }
     }
     const inspect = () =>
@@ -1183,10 +1304,15 @@ export namespace OutboundTelemetry {
         if (activated || ensured) await atomic(consentPath, JSON.stringify(consent.value, null, 2))
         return localStatus(consent.value, who.subject, true, consent.absent, false)
       })
+    const enrich = async (current: Status) => ({
+      ...current,
+      queuedEvents: await queuedForSubject(who.subject),
+      quarantinedEvents: (await deadRows()).filter((row) => row.subject === who.subject).length,
+    })
     const current = await inspect()
-    if (!refresh || !current.signedIn || current.corrupt) return current
+    if (!refresh || !current.signedIn || current.corrupt) return enrich(current)
     await synchronizeConsent(who)
-    return inspect()
+    return enrich(await inspect())
   }
 
   export async function enabled(): Promise<boolean> {
@@ -1216,6 +1342,7 @@ export namespace OutboundTelemetry {
         consent.value.subjects[who.subject] = {
           analytics_enabled: enabled,
           research_content_enabled: enabled,
+          user_owned_content_enabled: enabled ? (currentEntry?.user_owned_content_enabled ?? true) : false,
           updated_at: now.toISOString(),
           pending: true,
           generation: generation(),
@@ -1226,6 +1353,7 @@ export namespace OutboundTelemetry {
           // unsent local rows. Previously uploaded account history remains
           // intact unless the separate explicit deletion endpoint is used.
           await mutateRowsLocked(() => [])
+          await fs.rm(deadPath, { force: true }).catch(() => undefined)
         }
         await atomic(consentPath, JSON.stringify(consent.value, null, 2))
         return localStatus(consent.value, who.subject, true, false, false)
@@ -1234,6 +1362,37 @@ export namespace OutboundTelemetry {
       // deletion remains a separate operation and is never implied by opt-out.
       await synchronizeConsent(who).catch(() => false)
       return OutboundTelemetry.status(false).catch(() => status)
+    })
+  }
+
+  export async function setUserOwned(enabled: boolean): Promise<Status> {
+    return CredentialLifecycle.serialized(async () => {
+      const who = await identity()
+      if (!who.signedIn) return OutboundTelemetry.status()
+      await withStateLease(async () => {
+        if (!(await identityIsCurrent(who))) return
+        const consent = await readConsent()
+        if (consent.corrupt) consent.value = fresh()
+        await activateLocked(consent.value, who.subject)
+        await ensureSubject(consent.value, who.subject, who.token)
+        const entry = consent.value.subjects[who.subject]
+        consent.value.subjects[who.subject] = {
+          ...entry,
+          user_owned_content_enabled: enabled,
+          updated_at: new Date().toISOString(),
+          pending: true,
+          generation: generation(),
+        }
+        if (!enabled) {
+          await mutateRowsLocked((rows) =>
+            rows.filter((row) => row.subject === who.subject && row.event.model_route === "managed"),
+          )
+          await fs.rm(deadPath, { force: true }).catch(() => undefined)
+        }
+        await atomic(consentPath, JSON.stringify(consent.value, null, 2))
+      })
+      await synchronizeConsent(who).catch(() => false)
+      return OutboundTelemetry.status(false)
     })
   }
 
@@ -1302,16 +1461,41 @@ export namespace OutboundTelemetry {
           return
         }
         const queued = await rawRows()
+        const privateRows = entry.user_owned_content_enabled
+          ? new Set<string>()
+          : new Set(
+              queued
+                .filter((row) => row.subject === who.subject && row.event.model_route !== "managed")
+                .map((row) => row.event.event_id),
+            )
+        if (privateRows.size) {
+          await mutateRowsLocked((current) => current.filter((row) => !privateRows.has(row.event.event_id)))
+        }
         const oversized = new Set(
           queued
+            .filter((row) => !privateRows.has(row.event.event_id))
             .filter((row) => Buffer.byteLength(JSON.stringify(row.event)) > MAX_BATCH_BYTES)
             .map((row) => row.event.event_id),
         )
         if (oversized.size) {
+          await quarantine(
+            queued
+              .filter((row) => oversized.has(row.event.event_id))
+              .map((row) => ({
+                subject: who.subject,
+                failed_at: Date.now(),
+                status: 413,
+                reason: "local_batch_limit",
+                event: row.event,
+              })),
+          )
           await mutateRowsLocked((current) => current.filter((row) => !oversized.has(row.event.event_id)))
         }
         const rows = selectedBatch(
-          queued.filter((row) => row.subject === who.subject && !oversized.has(row.event.event_id)),
+          queued.filter(
+            (row) =>
+              row.subject === who.subject && !privateRows.has(row.event.event_id) && !oversized.has(row.event.event_id),
+          ),
         )
         if (!rows.length) return
         return {
@@ -1357,7 +1541,29 @@ export namespace OutboundTelemetry {
           await disableSubjectLocked(consent.value, selection.subject)
           return
         }
-        const removed = new Set([...delivery.completed, ...delivery.dropped])
+        if (delivery.userOwnedDisabled) {
+          consent.value.subjects[selection.subject] = {
+            ...entry,
+            user_owned_content_enabled: false,
+            updated_at: new Date().toISOString(),
+            pending: false,
+            generation: generation(),
+          }
+          await atomic(consentPath, JSON.stringify(consent.value, null, 2))
+          await mutateRowsLocked((current) =>
+            current.filter((row) => row.subject !== selection.subject || row.event.model_route === "managed"),
+          )
+        }
+        if (delivery.quarantined.size) {
+          await quarantine(
+            selection.rows.flatMap((row) => {
+              const failure = delivery.quarantined.get(row.event.event_id)
+              if (!failure) return []
+              return [{ subject: selection.subject, failed_at: Date.now(), ...failure, event: row.event }]
+            }),
+          )
+        }
+        const removed = new Set([...delivery.completed, ...delivery.quarantined.keys()])
         if (removed.size) {
           await mutateRowsLocked((current) => current.filter((row) => !removed.has(row.event.event_id)))
         }
@@ -1420,22 +1626,45 @@ export namespace OutboundTelemetry {
     })
   }
 
-  export function sessionCompleted(input: { sessionID: string; reason: string; session?: unknown }) {
-    return append("session.completed", {
+  export async function sessionCompleted(input: {
+    sessionID: string
+    reason: string
+    session?: unknown
+    messageID?: string
+  }) {
+    const result = await append("session.completed", {
       sessionID: input.sessionID,
-      spanKey: `session:${input.sessionID}:completed`,
-      parentSpanID: `session:${input.sessionID}`,
+      runID: input.messageID,
+      spanKey: `session:${input.sessionID}:completed:${input.messageID ?? input.reason}`,
+      parentSpanID: input.messageID ?? `session:${input.sessionID}`,
       payload: { reason: input.reason, session: input.session },
     })
+    const prefix = `${input.sessionID}\0`
+    routes.delete(input.sessionID)
+    for (const key of routes.keys()) {
+      if (key.startsWith(prefix)) routes.delete(key)
+    }
+    return result
   }
 
-  export function userMessage(input: { sessionID: string; message: unknown; parts: unknown[]; messageID?: string }) {
+  export function userMessage(input: {
+    sessionID: string
+    message: unknown
+    parts: unknown[]
+    messageID?: string
+    route?: string
+    provider?: string
+    model?: string
+  }) {
     const messageID = input.messageID || (input.message as { id?: string } | undefined)?.id || randomUUID()
     return append("user.message", {
       sessionID: input.sessionID,
       runID: messageID,
       spanKey: messageID,
       parentSpanID: `session:${input.sessionID}`,
+      route: input.route,
+      provider: input.provider,
+      model: input.model,
       payload: { message: input.message, parts: input.parts },
     })
   }
