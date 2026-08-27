@@ -2,7 +2,6 @@ import { useParams } from "@solidjs/router"
 import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
-import { Switch } from "@synsci/ui/switch"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { showToast } from "@synsci/ui/toast"
 import { confirmDialog } from "@/atlas/dialogs"
@@ -21,7 +20,7 @@ import {
 } from "../research-access"
 import { Card, PanelBody, PanelHeader, PanelScroll, Row, RowCopy, Section } from "./_shared"
 import { settingsApi } from "./api"
-import { dataSharingDetail, dataSharingEnabled, searchStatus, type ResearchToolsStatus } from "./research-tools-state"
+import { searchStatus, type ResearchToolsStatus } from "./research-tools-state"
 import "./preference-panels.css"
 
 export default function ResearchTools() {
@@ -34,7 +33,6 @@ export default function ResearchTools() {
   const route = createMemo(() => resolveProjectRoute(params.dir, globalSync.data.project))
   const [state, setState] = createSignal<ResearchToolsStatus>()
   const [error, setError] = createSignal<string>()
-  const [saving, setSaving] = createSignal(false)
   const [access, setAccess] = createSignal<{
     root: string
     mode: ResearchAccessMode
@@ -83,29 +81,6 @@ export default function ResearchTools() {
     const current = state()
     return current ? searchStatus(current) : undefined
   })
-  const sharingEnabled = createMemo(() => {
-    const current = state()
-    return current ? dataSharingEnabled(current) : false
-  })
-
-  const updateSharing = async (analyticsEnabled: boolean) => {
-    if (saving()) return
-    setSaving(true)
-    setError(undefined)
-    try {
-      setState(
-        await settingsApi<ResearchToolsStatus>(server.url, fetchFn(), "/settings/research-tools/telemetry", {
-          method: "PUT",
-          body: JSON.stringify({ analyticsEnabled }),
-        }),
-      )
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const updateAccess = async (mode: ResearchAccessMode) => {
     const project = route()
     const current = access()
@@ -239,28 +214,6 @@ export default function ResearchTools() {
                 </For>
               </div>
             </Show>
-          </Section>
-
-          <Section title="Data use" description="Choose whether activity from this device helps improve OpenScience.">
-            <Card>
-              <Row>
-                <span class="settings-preference-icon" data-tone={sharingEnabled() ? "success" : undefined}>
-                  <Icon name="activity" size="small" />
-                </span>
-                <RowCopy
-                  title="Use my data to improve OpenScience"
-                  description={state() ? dataSharingDetail(state()!) : "Loading consent…"}
-                />
-                <Switch
-                  hideLabel
-                  checked={sharingEnabled()}
-                  disabled={!state() || saving()}
-                  onChange={(enabled) => void updateSharing(enabled)}
-                >
-                  Use my data to improve OpenScience
-                </Switch>
-              </Row>
-            </Card>
           </Section>
         </PanelBody>
       </div>

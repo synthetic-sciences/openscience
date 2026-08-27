@@ -8,12 +8,14 @@ import { openscienceFetch } from "@/utils/openscience-fetch"
 import { URLS } from "@/config/urls"
 import { openNativeDirectoryPicker } from "@/utils/native-picker"
 import { normalizeServerUrl } from "@/context/server"
-import { resolveDefaultServerUrl, resolveServerRoute } from "@/config/server-url"
+import { resolveDefaultServerUrl, resolveDesktopServerUrl, resolveServerRoute } from "@/config/server-url"
 import pkg from "../package.json"
 
 const DEFAULT_SERVER_URL_KEY = "openscience.settings.dat:defaultServerUrl"
+const desktopUrl = resolveDesktopServerUrl(location.search, window.location.origin)
 
 const stored = () => {
+  if (desktopUrl) return
   if (typeof localStorage === "undefined") return
   try {
     return normalizeServerUrl(localStorage.getItem(DEFAULT_SERVER_URL_KEY) ?? "")
@@ -33,6 +35,7 @@ const configured = () => {
 
 const server = () =>
   resolveDefaultServerUrl({
+    explicit: desktopUrl,
     stored: stored(),
     configured: configured(),
     hostname: location.hostname,
@@ -58,7 +61,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 }
 
 const platform: Platform = {
-  platform: "web",
+  platform: desktopUrl ? "desktop" : "web",
   version: import.meta.env.VITE_OPENSCIENCE_VERSION || pkg.version,
   openLink(url: string) {
     window.open(url, "_blank")
@@ -109,6 +112,7 @@ const platform: Platform = {
   },
   getDefaultServerUrl: () => stored() ?? null,
   setDefaultServerUrl: (url) => {
+    if (desktopUrl) return
     if (typeof localStorage === "undefined") return
     try {
       if (url) {
@@ -127,7 +131,7 @@ render(
   () => (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        <AppInterface />
+        <AppInterface defaultUrl={desktopUrl} />
       </AppBaseProviders>
     </PlatformProvider>
   ),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { resolveDefaultServerUrl, resolveServerRoute } from "./server-url"
+import { resolveDefaultServerUrl, resolveDesktopServerUrl, resolveServerRoute } from "./server-url"
 
 const base = {
   hostname: "127.0.0.1",
@@ -25,6 +25,13 @@ describe("resolveDefaultServerUrl", () => {
 
   test("falls back to the static origin only when no server is configured", () => {
     expect(resolveDefaultServerUrl(base)).toBe("http://127.0.0.1:3010")
+  })
+})
+
+describe("resolveDesktopServerUrl", () => {
+  test("pins the native app to the random loopback origin", () => {
+    expect(resolveDesktopServerUrl("?desktop=1", "http://127.0.0.1:43819")).toBe("http://127.0.0.1:43819")
+    expect(resolveDesktopServerUrl("", "http://127.0.0.1:43819")).toBeUndefined()
   })
 })
 

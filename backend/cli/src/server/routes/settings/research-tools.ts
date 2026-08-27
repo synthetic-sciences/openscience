@@ -9,12 +9,15 @@ import { lazy } from "@/util/lazy"
 const Telemetry = z.object({
   analyticsEnabled: z.boolean(),
   researchContentEnabled: z.boolean(),
+  userOwnedContentEnabled: z.boolean(),
   source: z.enum(["default", "local", "account"]),
   signedIn: z.boolean(),
   consentVersion: z.string(),
   pending: z.boolean(),
   corrupt: z.boolean(),
   deletionAvailable: z.boolean(),
+  queuedEvents: z.number().int().nonnegative(),
+  quarantinedEvents: z.number().int().nonnegative(),
 })
 
 const State = z.object({
@@ -95,9 +98,21 @@ export const ResearchToolsSettingsRoutes = lazy(() =>
           },
         },
       }),
-      validator("json", z.object({ analyticsEnabled: z.boolean() })),
+      validator(
+        "json",
+        z
+          .object({
+            analyticsEnabled: z.boolean().optional(),
+            userOwnedContentEnabled: z.boolean().optional(),
+          })
+          .refine((value) => value.analyticsEnabled !== undefined || value.userOwnedContentEnabled !== undefined),
+      ),
       async (c) => {
-        await OutboundTelemetry.setAnalytics(c.req.valid("json").analyticsEnabled)
+        const input = c.req.valid("json")
+        if (input.analyticsEnabled !== undefined) await OutboundTelemetry.setAnalytics(input.analyticsEnabled)
+        if (input.userOwnedContentEnabled !== undefined) {
+          await OutboundTelemetry.setUserOwned(input.userOwnedContentEnabled)
+        }
         return c.json(await read())
       },
     )

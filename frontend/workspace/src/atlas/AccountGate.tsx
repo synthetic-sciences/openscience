@@ -2,11 +2,11 @@ import { Match, Show, Switch, createSignal, onCleanup, onMount, type ParentProps
 import { Button } from "@synsci/ui/button"
 import { TextField } from "@synsci/ui/text-field"
 import { settingsApi } from "@/components/settings/api"
-import { URLS } from "@/config/urls"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { fetchSetupSession } from "./setup-session"
 import { AsciiSpinner } from "./shared/AsciiSpinner"
+import { DesktopOnboarding } from "./DesktopOnboarding"
 import "./AccountGate.css"
 
 type State = "checking" | "signed-in" | "signed-out" | "unavailable"
@@ -55,6 +55,21 @@ export function AccountGate(props: ParentProps) {
     }
   }
 
+  const connectBrowser = async () => {
+    if (busy()) return
+    setBusy(true)
+    setError(undefined)
+    const result = await settingsApi<{ ok: boolean; error?: string }>(server.url, fetchFn(), "/account/login-browser", {
+      method: "POST",
+    }).catch((cause) => ({ ok: false, error: cause instanceof Error ? cause.message : "Could not start sign in." }))
+    if (result.ok) {
+      setState("signed-in")
+      window.dispatchEvent(new Event("openscience:account-changed"))
+    }
+    if (!result.ok) setError(result.error || "Sign in did not complete. Try again.")
+    setBusy(false)
+  }
+
   onMount(() => {
     void check()
     const refresh = () => void check(false)
@@ -98,51 +113,54 @@ export function AccountGate(props: ParentProps) {
               <Match when={state() === "signed-out"}>
                 <h1 id="account-gate-title">Sign in to continue</h1>
                 <p>
-                  Connect a free Synthetic Sciences account once. This device stays signed in with a revocable API key.
+                  Create a free Synthetic Sciences account or sign in. This device stays connected with a revocable key.
                 </p>
                 <p class="account-gate__disclosure">
                   Use my data is on by default for connected accounts and shares a redacted complete research
                   trajectory. Turn it off anytime in Settings.
                 </p>
                 <div class="account-gate__actions">
-                  <Button variant="primary" size="small" onClick={() => platform.openLink(URLS.dashboardCli)}>
-                    Open Synthetic Sciences
+                  <Button variant="primary" size="small" disabled={busy()} onClick={() => void connectBrowser()}>
+                    {busy() ? "Waiting for browser…" : "Sign in or create account"}
                   </Button>
                 </div>
-                <div class="account-gate__divider">
-                  <span>then paste your key</span>
-                </div>
-                <label class="account-gate__field">
-                  <span>Synthetic Sciences API key</span>
-                  <TextField
-                    type="password"
-                    hideLabel
-                    placeholder="thk_…"
-                    value={key()}
-                    disabled={busy()}
-                    onChange={setKey}
-                    onKeyDown={(event: KeyboardEvent) => {
-                      if (event.key !== "Enter") return
-                      event.preventDefault()
-                      void connect()
-                    }}
-                  />
-                </label>
                 <Show when={error()}>
                   <p class="account-gate__error" role="status">
                     {error()}
                   </p>
                 </Show>
-                <div class="account-gate__actions account-gate__actions--end">
-                  <Button
-                    variant="primary"
-                    size="small"
-                    disabled={busy() || !key().trim()}
-                    onClick={() => void connect()}
-                  >
-                    {busy() ? "Connecting…" : "Continue"}
-                  </Button>
-                </div>
+                <details>
+                  <summary>Use an API key instead</summary>
+                  <div class="account-gate__divider">
+                    <span>advanced</span>
+                  </div>
+                  <label class="account-gate__field">
+                    <span>Synthetic Sciences API key</span>
+                    <TextField
+                      type="password"
+                      hideLabel
+                      placeholder="thk_…"
+                      value={key()}
+                      disabled={busy()}
+                      onChange={setKey}
+                      onKeyDown={(event: KeyboardEvent) => {
+                        if (event.key !== "Enter") return
+                        event.preventDefault()
+                        void connect()
+                      }}
+                    />
+                  </label>
+                  <div class="account-gate__actions account-gate__actions--end">
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      disabled={busy() || !key().trim()}
+                      onClick={() => void connect()}
+                    >
+                      Connect key
+                    </Button>
+                  </div>
+                </details>
                 <p class="account-gate__note">You only need to do this once on this device.</p>
               </Match>
             </Switch>
@@ -150,7 +168,7 @@ export function AccountGate(props: ParentProps) {
         </main>
       }
     >
-      {props.children}
+      <DesktopOnboarding>{props.children}</DesktopOnboarding>
     </Show>
   )
 }

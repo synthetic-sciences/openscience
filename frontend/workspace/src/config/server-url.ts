@@ -17,6 +17,10 @@ export function resolveDefaultServerUrl(input: DefaultServerInput) {
   return input.origin
 }
 
+export function resolveDesktopServerUrl(search: string, origin: string) {
+  return new URLSearchParams(search).get("desktop") === "1" ? origin : undefined
+}
+
 /** Route browser calls through the selected OpenScience server when the UI is
  * hosted separately, while keeping compact relative URLs in bundled builds. */
 export function resolveServerRoute(path: string, server: string, pageOrigin: string) {

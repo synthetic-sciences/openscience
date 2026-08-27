@@ -33,6 +33,10 @@ export const Preferences = z.object({
   // Local providers remain configured and usable when hidden; this controls
   // only whether they appear in the Settings → Models catalog.
   show_local_models: z.boolean().default(true),
+  // Desktop uses a random loopback port on every launch, so origin-scoped
+  // browser storage cannot remember setup. Persist the completed wizard
+  // revision in the shared local settings store instead.
+  desktop_onboarding_version: z.number().int().min(0).default(0),
   // Atlas is opt-in navigation. The switch controls only whether its local
   // project surface is shown; it never changes or deletes graph data.
   atlas_enabled: z.boolean().default(false),
@@ -61,6 +65,7 @@ const PreferencesPatch = z.object({
   extra_budget_usd: Preferences.shape.extra_budget_usd.removeDefault().optional(),
   show_trace: Preferences.shape.show_trace.removeDefault().optional(),
   show_local_models: Preferences.shape.show_local_models.removeDefault().optional(),
+  desktop_onboarding_version: Preferences.shape.desktop_onboarding_version.removeDefault().optional(),
   atlas_enabled: Preferences.shape.atlas_enabled.removeDefault().optional(),
   delegation_enabled: Preferences.shape.delegation_enabled.removeDefault().optional(),
   delegation_specialist: Preferences.shape.delegation_specialist.removeDefault().optional(),

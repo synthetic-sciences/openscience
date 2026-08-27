@@ -294,6 +294,114 @@ jobs:
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
           GH_TOKEN: ${{ github.token }}
 
+  build-desktop:
+    needs:
+      - version
+      - sign-macos-cli
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: mac
+            arch: arm64
+            sidecar: backend/cli/dist/@synsci/openscience-darwin-arm64/bin/openscience
+            asset: OpenScience-mac-arm64.dmg
+            signing: mac
+          - runner: macos-14
+            target: mac
+            arch: x64
+            sidecar: backend/cli/dist/@synsci/openscience-darwin-x64/bin/openscience
+            asset: OpenScience-mac-x64.dmg
+            signing: mac
+          - runner: windows-2025
+            target: win
+            arch: x64
+            sidecar: backend/cli/dist/@synsci/openscience-windows-x64/bin/openscience.exe
+            asset: OpenScience-windows-x64.exe
+            signing: windows
+          - runner: ubuntu-24.04
+            target: linux
+            arch: x64
+            sidecar: backend/cli/dist/@synsci/openscience-linux-x64/bin/openscience
+            asset: OpenScience-linux-x64.AppImage
+            signing: none
+          - runner: ubuntu-24.04-arm
+            target: linux
+            arch: arm64
+            sidecar: backend/cli/dist/@synsci/openscience-linux-arm64/bin/openscience
+            asset: OpenScience-linux-arm64.AppImage
+            signing: none
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.source }}
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: cli-build-signed-${{ needs.version.outputs.version }}
+          fail-on-cache-miss: true
+
+      - run: bun install --frozen-lockfile
+
+      - name: Require release signing credentials
+        if: matrix.signing != 'none'
+        shell: bash
+        run: |
+          test -n "$CSC_LINK" || { echo "::error::Missing desktop code-signing certificate"; exit 1; }
+          test -n "$CSC_KEY_PASSWORD" || { echo "::error::Missing desktop certificate password"; exit 1; }
+          if [[ "${{ matrix.signing }}" == "mac" ]]; then
+            test -n "$APPLE_ID" || { echo "::error::Missing APPLE_ID for notarization"; exit 1; }
+            test -n "$APPLE_APP_SPECIFIC_PASSWORD" || { echo "::error::Missing Apple app password"; exit 1; }
+            test -n "$APPLE_TEAM_ID" || { echo "::error::Missing APPLE_TEAM_ID"; exit 1; }
+          fi
+        env:
+          CSC_LINK: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Make sidecar executable
+        if: matrix.target != 'win'
+        shell: bash
+        run: chmod +x "$OPENSCIENCE_DESKTOP_SIDECAR"
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
+
+      - name: Build signed desktop installer
+        shell: bash
+        run: bun --cwd frontend/desktop run dist -- --${{ matrix.target }} --${{ matrix.arch }}
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          CSC_LINK: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || matrix.signing == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || matrix.signing == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload desktop installer to draft release
+        shell: bash
+        run: gh release upload "$OPENSCIENCE_RELEASE" "frontend/desktop/dist/$DESKTOP_ASSET" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
+          DESKTOP_ASSET: ${{ matrix.asset }}
+
   verify-native-cli:
     needs:
       - version
@@ -420,6 +528,7 @@ jobs:
     needs:
       - version
       - prepare-npm
+      - build-desktop
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

@@ -16,14 +16,13 @@ import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 import { OpenScience } from "@/openscience"
-import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource } from "./billing-gate"
+import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource, telemetryRoute } from "./billing-gate"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { TokenUsage } from "@synsci/util/token-usage"
 import { ToolRetryGuard } from "./tool-retry-guard"
 import { SessionResearch } from "./research"
 import { OutboundTelemetry } from "@/telemetry/outbound"
-import type { CredentialSource } from "./billing-gate"
 import { SearchDedupe } from "./search-dedupe"
 import { SessionLoopState } from "./loop-state"
 import { InvalidCall } from "@/tool/invalid-call"
@@ -48,20 +47,6 @@ export namespace SessionProcessor {
         action: "retry",
       },
     })
-  }
-
-  function telemetryRoute(source: CredentialSource, model: Provider.Model) {
-    if (
-      model.providerID === "ollama" ||
-      model.providerID === "lmstudio" ||
-      Provider.isLocalBaseURL(model.options?.baseURL ?? model.api.url)
-    ) {
-      return "local"
-    }
-    if (source === "managed") return "managed"
-    if (source === "oauth-free" && model.providerID === "openai-codex") return "chatgpt"
-    if (source === "oauth-free") return "subscription"
-    return "byok"
   }
 
   /** True when the last `threshold` TOOL calls are the same tool with the same

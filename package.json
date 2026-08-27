@@ -23,6 +23,7 @@
     "packages": [
       "backend/cli",
       "frontend/workspace",
+      "frontend/desktop",
       "frontend/ui",
       "frontend/docs",
       "tooling/*",
