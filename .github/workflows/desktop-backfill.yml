@@ -235,6 +235,10 @@ jobs:
         run: |
           set -euo pipefail
           installer="frontend/desktop/dist/$DESKTOP_ASSET"
+          if [[ "${{ matrix.target }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
+            produced="frontend/desktop/dist/OpenScience-linux-x86_64.AppImage"
+            [[ -s "$produced" ]] && mv "$produced" "$installer"
+          fi
           [[ -s "$installer" ]] || {
             echo "::error::electron-builder did not produce $DESKTOP_ASSET"
             exit 1
