@@ -24,7 +24,6 @@ const LOGOS = [
      H_MED   card and FAQ titles
      P_BIG   section subheads, max-w-[54ch]
      P       card bodies
-   Every content section: Eyebrow, H_BIG, one P_BIG sub, content at mt-14.
    Product moments can break the grid when the interaction benefits. */
 
 const H_HUGE = "text-[clamp(40px,5vw,72px)] leading-[1.02] tracking-[-0.024em]"
@@ -50,33 +49,6 @@ const MODELS = [
 /* Eyebrow, the quiet label above every section heading. */
 function Eyebrow({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`text-[14px] tracking-[0.04em] text-foreground/55 ${className}`}>{children}</div>
-}
-
-/* SectionHeader, the one header pattern every content section uses. */
-function SectionHeader({
-  eyebrow,
-  title,
-  sub,
-  className = "",
-}: {
-  eyebrow: string
-  title: string
-  sub?: string
-  className?: string
-}) {
-  return (
-    <div className={`max-w-[820px] ${className}`}>
-      <Reveal>
-        <Eyebrow className="mb-5">{eyebrow}</Eyebrow>
-        <h2 className={`text-balance ${H_BIG}`}>{title}</h2>
-      </Reveal>
-      {sub ? (
-        <Reveal delay={150}>
-          <p className={`mt-5 max-w-[54ch] ${P_BIG}`}>{sub}</p>
-        </Reveal>
-      ) : null}
-    </div>
-  )
 }
 
 /* Cta, the one button system. Sharp corners on purpose; the arrow
@@ -413,7 +385,7 @@ function ModelRouteVisual() {
   return (
     <div className="model-stage h-full overflow-hidden border border-border/55 bg-[hsl(28,14%,5%)] shadow-[0_30px_90px_-30px_rgba(0,0,0,0.75)]">
       <div className="flex items-center justify-between border-b border-border/55 px-5 py-3.5 sm:px-6">
-        <span className="text-[12px] text-foreground/45">research-session / working</span>
+        <span className="text-[12px] text-foreground/45">session / models</span>
         <span className="flex items-center gap-2 font-terminal text-[9px] tracking-[0.08em] text-foreground/35">
           <span className="size-1.5 rounded-full bg-[hsl(92,36%,56%)]" /> LOCALHOST
         </span>
@@ -422,7 +394,7 @@ function ModelRouteVisual() {
       <div className="relative min-h-[620px] overflow-hidden bg-background/45 p-4 sm:min-h-[520px] sm:p-6">
         <div className="pointer-events-none absolute inset-0 grid-paper opacity-50" />
         <div className="pointer-events-none absolute left-8 top-9 hidden w-[42%] sm:block">
-          <div className="font-terminal text-[9px] tracking-[0.08em] text-foreground/25">CURRENT TASK</div>
+          <div className="font-terminal text-[9px] tracking-[0.08em] text-foreground/25">TASK</div>
           <p className="mt-3 max-w-[34ch] text-[13px] leading-6 text-foreground/35">
             Compare the held-out cohort with the preregistered result and cite the supporting evidence.
           </p>
@@ -541,42 +513,9 @@ function Visual({ label, children }: { label: string; children: React.ReactNode 
   )
 }
 
-function LoopVisual() {
-  return (
-    <Visual label="research session / active">
-      <div className="mx-auto w-full max-w-[510px] py-4">
-        {["Read the sources", "Frame the claim", "Run the analysis", "Check the result", "Write from evidence"].map(
-          (item, index) => (
-            <div key={item} className="flex items-stretch gap-4">
-              <div className="flex w-4 shrink-0 flex-col items-center">
-                <span
-                  className={`mt-[5px] size-2 rounded-full border ${
-                    index < 3
-                      ? "border-[hsl(86_30%_62%)] bg-[hsl(86_30%_62%)]/70"
-                      : index === 3
-                        ? "border-[hsl(var(--accent-coral))] bg-[hsl(var(--accent-coral))]/65"
-                        : "border-foreground/30"
-                  }`}
-                />
-                {index < 4 ? <span className="my-1 w-px flex-1 bg-border/70" /> : null}
-              </div>
-              <div className="pb-5">
-                <div className="text-[15px] leading-none text-foreground/90">{item}</div>
-                <div className="mt-1.5 font-terminal text-[10px] text-foreground/40">
-                  {index < 3 ? "complete" : index === 3 ? "in progress" : "waiting on evidence"}
-                </div>
-              </div>
-            </div>
-          ),
-        )}
-      </div>
-    </Visual>
-  )
-}
-
 function PlanVisual() {
   return (
-    <Visual label="plan / success criterion">
+    <Visual label="Plan">
       <div className="space-y-3 font-terminal text-[11px] leading-[1.65]">
         <div className="border border-border/50 bg-background/55 px-4 py-3">
           <span className="text-foreground/40">goal </span>
@@ -593,7 +532,7 @@ function PlanVisual() {
 
 function RunVisual() {
   return (
-    <Visual label="workspace / live run">
+    <Visual label="Run">
       <div className="font-terminal text-[11px] leading-[1.75]">
         <div>
           <span className="text-foreground/40">$ </span>
@@ -604,7 +543,7 @@ function RunVisual() {
         <div className="text-[hsl(86_30%_62%)]">saved results/model-summary.csv</div>
         <div className="text-[hsl(86_30%_62%)]">saved results/diagnostic.png</div>
         <div className="mt-3 flex items-center gap-2 text-foreground/55">
-          <span className="inline-block h-2 w-2 bg-[hsl(var(--accent-coral))]" /> outputs remain in this session
+          <span className="inline-block h-2 w-2 bg-[hsl(var(--accent-coral))]" /> saved to this project
         </div>
       </div>
     </Visual>
@@ -613,7 +552,7 @@ function RunVisual() {
 
 function CritiqueVisual() {
   return (
-    <Visual label="critique / claim review">
+    <Visual label="Check">
       <div className="space-y-3 text-[12px] leading-[1.55]">
         <div className="border border-border/50 bg-background/55 px-4 py-3 text-foreground/80">
           “The treatment improved recovery.”
@@ -631,7 +570,7 @@ function ProjectContextVisual() {
   return (
     <div className="flex h-full flex-col overflow-hidden border border-border/55 bg-[hsl(28,14%,5%)] shadow-[0_30px_90px_-35px_rgba(0,0,0,0.8)]">
       <div className="flex items-center justify-between border-b border-border/55 px-5 py-3.5 sm:px-6">
-        <span className="text-[12px] text-foreground/50">project / context</span>
+        <span className="text-[12px] text-foreground/50">project</span>
         <span className="flex items-center gap-2 font-terminal text-[9px] tracking-[0.08em] text-foreground/35">
           <span className="size-1.5 rounded-full bg-[hsl(92,36%,56%)]" /> LOCAL
         </span>
@@ -639,7 +578,7 @@ function ProjectContextVisual() {
 
       <div className="grid min-h-[390px] flex-1 md:grid-cols-[230px_1fr]">
         <div className="border-b border-border/55 bg-background/55 p-5 md:border-b-0 md:border-r sm:p-6">
-          <div className="font-terminal text-[9px] tracking-[0.08em] text-foreground/35">LOCAL PROJECT</div>
+          <div className="font-terminal text-[9px] tracking-[0.08em] text-foreground/35">FILES</div>
           <div className="mt-5 space-y-1 font-terminal text-[10.5px] text-foreground/45">
             <div className="pb-2 text-foreground/80">openscience/</div>
             {["data/", "notebooks/", "results/", "papers/", "lab-notes.md", "manuscript.md"].map((file, index) => (
@@ -653,15 +592,15 @@ function ProjectContextVisual() {
             ))}
           </div>
           <div className="mt-7 border-t border-border/45 pt-4 text-[10px] leading-5 text-foreground/35">
-            Files and artifacts stay beside the work.
+            Files and outputs stay in this project.
           </div>
         </div>
 
         <div className="p-5 sm:p-7">
           <div className="flex flex-col gap-2 border-b border-border/45 pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <div className="text-[15px] text-foreground/90">Working context</div>
-              <div className="mt-1 text-[11px] text-foreground/35">Files, sources, and outputs stay within reach.</div>
+              <div className="text-[15px] text-foreground/90">In this session</div>
+              <div className="mt-1 text-[11px] text-foreground/35">Open files, sources, and results.</div>
             </div>
             <span className="font-terminal text-[9px] tracking-[0.06em] text-foreground/35">
               4 ITEMS · LOCAL PROJECT
@@ -804,53 +743,46 @@ export default function Landing() {
 
       <TrustStrip />
 
-      {/* ----------------------- RESEARCH LOOP ------------------------- */}
-      <section id="how" className="relative w-full overflow-hidden border-t border-border/40">
+      {/* -------------------------- MODELS ---------------------------- */}
+      <section id="models" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
-          <div className="grid grid-cols-12 items-stretch gap-8 lg:gap-12">
-            <Reveal className="col-span-12 lg:col-span-6">
-              <div className="dither-warm flex h-full min-h-[440px] flex-col justify-center border border-border/40 p-8 sm:p-12">
-                <div className="dither-content">
-                  <Eyebrow className="mb-6 text-foreground/70">Research loop</Eyebrow>
-                  <h2 className={`text-balance ${H_HUGE} text-foreground`}>Chat is where the work starts.</h2>
-                  <p className={`mt-7 max-w-[40ch] ${P_BIG} text-foreground/85`}>
-                    Carry the conversation into papers, files, terminals, analyses, and results, all in one local
-                    workspace.
-                  </p>
-                </div>
+          <div className="grid gap-8 lg:grid-cols-2 lg:items-stretch lg:gap-12">
+            <Reveal className="dither-purple flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:p-14">
+              <div className="dither-content max-w-[520px]">
+                <h2 className={`text-balance ${H_HUGE} text-foreground`}>Model agnostic.</h2>
+                <p className={`mt-7 max-w-[38ch] ${P_BIG} text-foreground/85`}>
+                  Use Ace, an eligible ChatGPT account, your own keys, or a local model. Switch per session.
+                </p>
               </div>
             </Reveal>
-            <Reveal delay={150} className="col-span-12 self-center lg:col-span-6">
-              <div className="h-[440px] overflow-hidden border border-border/40">
-                <LoopVisual />
-              </div>
+            <Reveal delay={120} className="min-w-0">
+              <ModelRouteVisual />
             </Reveal>
           </div>
         </div>
       </section>
 
+      {/* ---------------------- PLAN, RUN, CHECK ---------------------- */}
       <Section seed={3} id="skills">
-        <SectionHeader
-          eyebrow="From prompt to result"
-          title="Plan. Run. Check."
-          sub="One research agent works through the method, computation, and evidence with you."
-        />
+        <Reveal>
+          <h2 className={`text-balance ${H_BIG}`}>Plan. Run. Check.</h2>
+        </Reveal>
         <div className="mt-16 grid grid-cols-12 gap-px border border-border/40 bg-border/40">
           {[
             {
               visual: <PlanVisual />,
-              title: "Plan the work.",
-              body: "Turn a broad goal into a testable plan and make the success criteria explicit.",
+              title: "Plan",
+              body: "Define the method and what would count as a useful result.",
             },
             {
               visual: <RunVisual />,
-              title: "Run in your project.",
-              body: "Read files, write code, use the terminal, and inspect the result in the same session.",
+              title: "Run",
+              body: "Use the files, code, terminal, and tools already in the project.",
             },
             {
               visual: <CritiqueVisual />,
-              title: "Check the claim.",
-              body: "Look for confounds, leakage, missing controls, and unsupported conclusions before writing.",
+              title: "Check",
+              body: "Check the result against the method and source material before writing it up.",
             },
           ].map((feature, index) => (
             <Reveal key={feature.title} delay={index * 90} className="col-span-12 bg-background md:col-span-4">
@@ -870,32 +802,33 @@ export default function Landing() {
         </div>
       </Section>
 
-      {/* ---------------------- RESEARCH CONTEXT ----------------------- */}
+      {/* ---------------------- PROJECT AND SOURCES -------------------- */}
       <section id="sources" className="relative w-full overflow-hidden border-t border-border/40">
-        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-28 sm:px-10 sm:py-40">
+        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
           <div className="grid gap-8 lg:grid-cols-2 lg:items-stretch lg:gap-12">
-            <Reveal className="dither-red flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:p-14">
+            <Reveal className="min-w-0">
+              <ProjectContextVisual />
+            </Reveal>
+            <Reveal
+              delay={120}
+              className="dither-red flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:p-14"
+            >
               <div className="dither-content max-w-[520px]">
-                <Eyebrow className="mb-6 text-foreground/70">Project context</Eyebrow>
-                <h2 className={`text-balance ${H_HUGE} text-foreground`}>Everything the work depends on.</h2>
+                <h2 className={`text-balance ${H_HUGE} text-foreground`}>Papers. Data. Code. Results.</h2>
                 <p className={`mt-7 max-w-[38ch] ${P_BIG} text-foreground/85`}>
-                  Papers, datasets, code, notes, and prior runs stay together in the local workspace.
+                  OpenScience reads the files in your project and keeps earlier work available in the same session.
                 </p>
               </div>
             </Reveal>
-            <Reveal delay={120} className="min-w-0">
-              <ProjectContextVisual />
-            </Reveal>
           </div>
 
-          <Reveal delay={220} className="mt-28 sm:mt-36">
+          <Reveal delay={220} className="mt-20 sm:mt-24">
             <div className="mb-10 text-center sm:mb-12">
-              <Eyebrow className="mb-3">Scientific sources</Eyebrow>
               <h3 className="text-[clamp(24px,2.6vw,36px)] leading-[1.08] tracking-[-0.018em] text-foreground">
-                42 scientific sources, searched directly.
+                Search 42 scientific sources.
               </h3>
               <p className={`mx-auto mt-3 max-w-[52ch] ${P}`}>
-                Literature, structures, variants, compounds, pathways, and expression data, inside the same session.
+                Papers, structures, variants, compounds, pathways, and expression data.
               </p>
             </div>
             <div className="tool-field overflow-hidden border border-border/55 p-5 sm:p-8">
@@ -905,44 +838,22 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ----------------------- MODEL FREEDOM ------------------------- */}
-      <section id="models" className="relative w-full overflow-hidden border-t border-border/40">
-        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-28 sm:px-10 sm:py-40">
-          <div className="grid gap-8 lg:grid-cols-2 lg:items-stretch lg:gap-12">
-            <Reveal className="dither-purple order-1 flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:order-2 lg:p-14">
-              <div className="dither-content max-w-[520px]">
-                <Eyebrow className="mb-6 text-foreground/70">Model access</Eyebrow>
-                <h2 className={`text-balance ${H_HUGE} text-foreground`}>Use the model the work needs.</h2>
-                <p className={`mt-7 max-w-[36ch] ${P_BIG} text-foreground/85`}>
-                  Switch between Ace, eligible ChatGPT access, your provider keys, and local models.
-                </p>
-              </div>
-            </Reveal>
-            <Reveal delay={120} className="order-2 min-w-0 lg:order-1">
-              <ModelRouteVisual />
-            </Reveal>
-          </div>
-        </div>
-      </section>
-
       {/* -------------------------- OPEN SOURCE ------------------------ */}
       <section id="opensource" className="dither-red relative w-full overflow-hidden border-t border-border/40">
         <div className="dither-content mx-auto w-full max-w-[1400px] px-6 py-28 sm:px-10 sm:py-36">
           <div className="mx-auto max-w-[900px] text-center">
             <Reveal>
-              <Eyebrow className="mb-5 flex justify-center text-foreground/70">Open source</Eyebrow>
-              <h2 className={`text-balance ${H_HUGE} text-foreground`}>See how the work gets done.</h2>
+              <h2 className={`text-balance ${H_HUGE} text-foreground`}>Open source, Apache 2.0.</h2>
             </Reveal>
             <Reveal delay={200}>
               <p className={`mx-auto mt-6 max-w-[46ch] ${P_BIG} text-foreground/85`}>
-                The agent loop, skills, tools, and workspace are Apache-2.0. Read the code, change the workflow, or
-                connect your own tools.
+                The agent, skills, tools, and workspace are public. Read the code, change it, or connect your own tools.
               </p>
             </Reveal>
             <Reveal delay={320}>
               <div className="mt-10 flex flex-col items-center gap-4">
                 <Cta href={GITHUB} external>
-                  Explore the code
+                  View on GitHub
                 </Cta>
                 <span className="font-terminal text-[12.5px] text-foreground/60">
                   github.com/synthetic-sciences/openscience
@@ -954,60 +865,54 @@ export default function Landing() {
       </section>
 
       {/* ------------------------------ ACE --------------------------- */}
-      <Section seed={9} id="ace">
-        <div className="grid gap-12 lg:grid-cols-12 lg:items-end lg:gap-16">
-          <div className="lg:col-span-7">
-            <Reveal>
-              <Eyebrow className="mb-5">OpenScience Ace</Eyebrow>
-              <h2 className={`max-w-[13ch] text-balance ${H_BIG}`}>Managed models, when you need them.</h2>
-            </Reveal>
-            <Reveal delay={140}>
-              <p className={`mt-5 max-w-[50ch] ${P_BIG}`}>
-                Add funds when you want Ace, then pay only for the models and research search you use. OpenScience
-                remains free.
-              </p>
-            </Reveal>
-            <Reveal delay={240} className="mt-9">
-              <Cta href={`${APP}/billing?checkout=ace`}>Add funds to get Ace</Cta>
-            </Reveal>
-          </div>
-
-          <Reveal
-            delay={180}
-            className="border-t border-border/55 pt-8 lg:col-span-5 lg:border-l lg:border-t-0 lg:pl-12 lg:pt-0"
-          >
-            <div className="text-[13px] text-foreground/55">Start with</div>
-            <div className="mt-3 font-display text-[clamp(58px,8vw,94px)] leading-none tracking-[-0.035em]">$20</div>
-            <div className="mt-4 text-[14px] text-foreground/70">No monthly charge.</div>
-          </Reveal>
-        </div>
-
-        <Reveal delay={300} className="mt-16 border-t border-border/55 pt-8 sm:mt-20 sm:pt-10">
-          <div className="grid gap-9 sm:grid-cols-3 sm:gap-10 lg:gap-16">
-            {[
-              ["Models", "Managed access without setting up provider keys."],
-              ["Research search", "Search and retrieve sources through Ace."],
-              ["Usage", "See every charge in Billing and Usage."],
-            ].map((item) => (
-              <div key={item[0]}>
-                <h3 className="text-[17px] leading-tight text-foreground">{item[0]}</h3>
-                <p className="mt-2 text-[14px] leading-6 text-foreground/60">{item[1]}</p>
+      <section id="ace" className="relative w-full overflow-hidden border-t border-border/40">
+        <div className="mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
+          <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-stretch lg:gap-12">
+            <Reveal className="dither-ace relative flex min-h-[430px] items-center overflow-hidden border border-border/40 p-8 sm:p-12 lg:p-14">
+              <div className="dither-content max-w-[580px]">
+                <h2 className={`text-balance ${H_HUGE} text-foreground`}>OpenScience Ace.</h2>
+                <p className={`mt-7 max-w-[42ch] ${P_BIG} text-foreground/85`}>
+                  Add funds for Ace models and research search. You pay only when you use it. OpenScience remains free.
+                </p>
+                <div className="mt-9">
+                  <Cta href={`${APP}/billing?checkout=ace`}>Add funds</Cta>
+                </div>
               </div>
-            ))}
+            </Reveal>
+
+            <Reveal
+              delay={140}
+              className="flex min-h-[430px] flex-col justify-center border border-border/55 bg-[hsl(28,14%,5%)] p-7 sm:p-10 lg:p-12"
+            >
+              <div className="text-[12px] text-foreground/50">Start with</div>
+              <div className="mt-3 font-display text-[clamp(54px,7vw,86px)] leading-none tracking-[-0.035em]">$20</div>
+              <div className="mt-4 text-[13px] text-foreground/70">No monthly charge.</div>
+              <div className="mt-8 divide-y divide-border/50 border-y border-border/50 text-[12px] sm:text-[13px]">
+                {[
+                  ["Models", "Pay per use"],
+                  ["Search", "Pay per request"],
+                  ["Billing", "Every charge listed"],
+                ].map((item) => (
+                  <div key={item[0]} className="flex items-center justify-between gap-6 py-3.5">
+                    <span className="text-foreground/55">{item[0]}</span>
+                    <span className="text-right text-foreground/85">{item[1]}</span>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
           </div>
-        </Reveal>
-      </Section>
+        </div>
+      </section>
 
       {/* ----------------------------- FAQ ----------------------------- */}
       <Section seed={7} id="faq">
         <div className="grid grid-cols-12 gap-10 lg:gap-16">
           <div className="col-span-12 self-start lg:sticky lg:top-28 lg:col-span-5">
             <Reveal>
-              <Eyebrow className="mb-5">FAQ</Eyebrow>
               <h2 className={`text-balance ${H_BIG}`}>Questions.</h2>
             </Reveal>
             <Reveal delay={150}>
-              <p className={`mt-5 max-w-[36ch] ${P_BIG}`}>Everything else lives in the docs.</p>
+              <p className={`mt-5 max-w-[36ch] ${P_BIG}`}>The rest is in the docs.</p>
             </Reveal>
           </div>
           <div className="col-span-12 lg:col-span-7">
@@ -1015,19 +920,19 @@ export default function Landing() {
               items={[
                 {
                   q: "What is OpenScience?",
-                  a: "An open-source research workspace with one adaptive agent for literature, files, code, analysis, and writing.",
+                  a: "OpenScience is a local app for research. Chat, files, terminals, sources, and results are in the same workspace.",
                 },
                 {
                   q: "How is it different from a coding agent?",
-                  a: "It is organized around research evidence and project context, while still giving the agent access to code, files, and the terminal.",
+                  a: "It works with papers and datasets as well as code, and saves results inside the project.",
                 },
                 {
                   q: "Which models can it use?",
-                  a: "Use Ace, eligible ChatGPT access, your provider keys, or local models. Only Ace activity uses the Ace wallet.",
+                  a: "Use Ace, eligible ChatGPT access, your own provider keys, or local models. Only Ace uses your Ace balance.",
                 },
                 {
                   q: "Where does my work live?",
-                  a: "Sessions and artifacts stay on your machine. BYOK requests go directly to your provider. If Use my data is on, OpenScience sends a credential-redacted research trace to Synthetic Sciences.",
+                  a: "Sessions and results stay on your machine. Calls made with your own keys go straight to that provider. If Use my data is on, credential-redacted session traces are also sent to Synthetic Sciences.",
                 },
                 {
                   q: "Do I need Ace to use OpenScience?",
@@ -1035,11 +940,11 @@ export default function Landing() {
                 },
                 {
                   q: "Can it work with my tools?",
-                  a: "Yes. OpenScience can use its built-in scientific sources, code in your project, software in your environment, and MCP or lab tools you configure.",
+                  a: "Yes. It can use the scientific sources that ship with OpenScience, code in your project, software on your machine, and MCP or lab tools you connect.",
                 },
                 {
                   q: "Can I extend it?",
-                  a: "Yes. Add skills, plugins, MCP servers, custom agents and commands, or use the SDK to connect a private lab tool.",
+                  a: "Yes. Add skills, plugins, MCP servers, custom agents, and commands. The SDK can also connect private lab tools.",
                 },
               ]}
             />
@@ -1055,14 +960,14 @@ export default function Landing() {
               <div className="col-span-12 lg:col-span-7">
                 <Reveal>
                   <h2 className={`max-w-[16ch] text-balance ${H_HUGE} text-foreground`}>
-                    Open your next project in OpenScience.
+                    OpenScience runs on your computer.
                   </h2>
                 </Reveal>
               </div>
               <div className="col-span-12 lg:col-span-5">
                 <Reveal delay={200}>
                   <p className={`${P_BIG} text-foreground/85 max-w-[38ch]`}>
-                    Free and open source. Use your keys, eligible ChatGPT, local models, or Ace.
+                    Free and open source. Use Ace, eligible ChatGPT access, your own keys, or local models.
                   </p>
                   <div className="mt-8 flex flex-wrap items-center gap-3">
                     <Cta href="/download">Download OpenScience</Cta>

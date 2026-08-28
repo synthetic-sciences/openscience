@@ -300,16 +300,14 @@
   }
 
   .tool-field {
-    background:
-      radial-gradient(circle at 18% 8%, hsl(158 30% 38% / 0.12), transparent 38%),
-      radial-gradient(circle at 82% 100%, hsl(var(--accent-coral) / 0.08), transparent 38%), hsl(28 14% 6%);
+    background: radial-gradient(circle at 82% 100%, hsl(var(--foreground) / 0.035), transparent 40%), hsl(28 14% 5%);
   }
   .tool-wall > li::before {
     content: "";
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: radial-gradient(circle at 18% 50%, hsl(158 38% 48% / 0.1), transparent 46%);
+    background: radial-gradient(circle at 18% 50%, hsl(var(--foreground) / 0.055), transparent 46%);
     opacity: 0;
     transition: opacity 280ms ease;
   }
@@ -522,6 +520,24 @@
     isolation: isolate;
   }
   .dither-purple::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.7' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 9 -4'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/></svg>");
+    mix-blend-mode: multiply;
+    opacity: 0.85;
+  }
+
+  .dither-ace {
+    position: relative;
+    background:
+      radial-gradient(78% 120% at 8% 35%, hsl(280 68% 52% / 0.88) 0%, transparent 58%),
+      radial-gradient(72% 110% at 94% 68%, hsl(8 80% 52% / 0.88) 0%, transparent 58%),
+      radial-gradient(72% 105% at 58% 8%, hsl(345 72% 54% / 0.58) 0%, transparent 62%), hsl(var(--background));
+    isolation: isolate;
+  }
+  .dither-ace::before {
     content: "";
     position: absolute;
     inset: 0;

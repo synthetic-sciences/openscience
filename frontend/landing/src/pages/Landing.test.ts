@@ -39,8 +39,8 @@ test("keeps the public bundled-skill count current", () => {
 
 describe("OpenScience landing contract", () => {
   test("keeps the free product independent from Ace", () => {
-    expect(landing).toMatch(/OpenScience\s+remains free/)
-    expect(landing).toContain("BYOK")
+    expect(landing).toMatch(/OpenScience\s+remains\s+free/)
+    expect(landing).toContain("your own keys")
     expect(landing).toContain("eligible ChatGPT")
     expect(landing).toContain("Do I need Ace to use OpenScience?")
   })
@@ -48,7 +48,7 @@ describe("OpenScience landing contract", () => {
   test("publishes Ace as a single usage-based offer", () => {
     expect(landing).toContain("$20")
     expect(landing).toContain("OpenScience Ace")
-    expect(landing).toContain("pay only for the models and research search you use")
+    expect(landing).toContain("pay only when you use it")
     expect(landing).toContain("No monthly charge")
     expect(landing).not.toMatch(/\bcredits?\b/i)
     expect(landing).not.toContain("PAY AS YOU GO")
@@ -114,7 +114,7 @@ describe("OpenScience landing contract", () => {
     expect(JSON.stringify(CONNECTORS.map((connector) => [connector.id, connector.name, connector.home]))).toBe(
       JSON.stringify(shipped),
     )
-    expect(landing).toContain("42 scientific sources, searched directly.")
+    expect(landing).toContain("Search 42 scientific sources.")
     expect(landing).toContain("function ConnectorLogo")
     expect(landing).toContain("<ConnectorWall />")
     expect(landing).not.toContain("const TOOLS")
@@ -129,20 +129,25 @@ describe("OpenScience landing contract", () => {
     }
   })
 
-  test("uses alternating editorial panels for project context and model access", () => {
-    const sources = landing.slice(landing.indexOf('id="sources"'), landing.indexOf("MODEL FREEDOM"))
-    const models = landing.slice(landing.indexOf('id="models"'), landing.indexOf("OPEN SOURCE"))
+  test("orders models before the workflow and alternates the project panel", () => {
+    const sources = landing.slice(landing.indexOf('id="sources"'), landing.indexOf("OPEN SOURCE"))
+    const models = landing.slice(landing.indexOf('id="models"'), landing.indexOf("PLAN, RUN, CHECK"))
+    const modelIndex = landing.indexOf('id="models"')
+    const workflowIndex = landing.indexOf('id="skills"')
+    const sourceIndex = landing.indexOf('id="sources"')
 
-    expect(sources).toContain("Everything the work depends on.")
+    expect(sources).toContain("Papers. Data. Code. Results.")
     expect(sources).toContain("dither-red flex min-h-[470px]")
-    expect(sources).toContain("sm:py-40")
-    expect(sources.indexOf("dither-red")).toBeLessThan(sources.indexOf("<ProjectContextVisual"))
+    expect(sources.indexOf("<ProjectContextVisual")).toBeLessThan(sources.indexOf("dither-red"))
 
-    expect(models).toContain("Use the model the work needs.")
-    expect(models).toContain("dither-purple order-1 flex min-h-[470px]")
-    expect(models).toContain("lg:order-2")
-    expect(models).toContain("order-2 min-w-0 lg:order-1")
-    expect(models).toContain("sm:py-40")
+    expect(models).toContain("Model agnostic.")
+    expect(models).toContain("dither-purple flex min-h-[470px]")
+    expect(models.indexOf("dither-purple")).toBeLessThan(models.indexOf("<ModelRouteVisual"))
+    expect(modelIndex).toBeGreaterThan(-1)
+    expect(modelIndex).toBeLessThan(workflowIndex)
+    expect(workflowIndex).toBeLessThan(sourceIndex)
+    expect(landing).not.toContain("Research loop")
+    expect(landing).not.toContain("Chat is where the work starts.")
   })
 
   test("keeps internal model routing out of the editable product story", () => {
@@ -160,7 +165,8 @@ describe("OpenScience landing contract", () => {
     expect(ace).toBeGreaterThan(-1)
     expect(faq).toBeGreaterThan(ace)
     expect(landing.slice(ace, faq)).toContain("${APP}/billing?checkout=ace")
-    expect(landing.slice(ace, faq)).toContain("Add funds to get Ace")
+    expect(landing.slice(ace, faq)).toContain("Add funds")
+    expect(landing.slice(ace, faq)).toContain("dither-ace")
   })
 
   test("keeps Ace pricing concise", () => {
@@ -181,7 +187,7 @@ describe("OpenScience landing contract", () => {
       expect(source).not.toMatch(/Synthetic Scientists/i)
       expect(source).not.toMatch(/research quota/i)
     }
-    expect(landing).toContain("pay only for the models and research search you use")
+    expect(landing).toContain("pay only when you use it")
     expect(landing).not.toMatch(/\bcredits?\b/i)
     expect(landing).not.toMatch(/OpenRouter/i)
     expect(landing).not.toMatch(/Ace\+/i)
