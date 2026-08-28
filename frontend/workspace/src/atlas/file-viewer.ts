@@ -49,13 +49,17 @@ export function initialFileScope(scope: FileOpenScope = "project"): ResolvedFile
   return scope === "project" ? "project" : "session"
 }
 
+export function isMissingFileError(error: unknown) {
+  return /(?:file\s+)?not found|\bENOENT\b/i.test(fileErrorMessage(error))
+}
+
 export function missingFileFallback(input: {
   requested: FileOpenScope
   resolved: ResolvedFileScope
   error: unknown
 }): ResolvedFileScope | undefined {
   if (input.requested !== "auto" || input.resolved !== "session") return
-  return /(?:file\s+)?not found|\bENOENT\b/i.test(fileErrorMessage(input.error)) ? "project" : undefined
+  return isMissingFileError(input.error) ? "project" : undefined
 }
 
 /**

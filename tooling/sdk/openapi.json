@@ -28780,6 +28780,108 @@
         ]
       }
     },
+    "/file/resolve": {
+      "get": {
+        "operationId": "file.resolveReference",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Resolve a session file reference",
+        "description": "Resolve an unambiguous relative file reference across project, session, and connected roots authorized for the active session.",
+        "responses": {
+          "200": {
+            "description": "Resolved authorized file path, or null when the reference is missing or ambiguous",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "writable": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "writable"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The session cannot resolve this file reference"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.file.resolveReference({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/file/trash": {
       "get": {
         "operationId": "file.trash.list",

@@ -1047,4 +1047,86 @@ export namespace File {
     log.info("search", { query, kind, results: output.length })
     return output
   }
+
+  const referenceScanLimit = 50_000
+
+  function relativeReference(value: string) {
+    const input = value.trim().replaceAll("\\", "/")
+    if (!input || input.length > 4_096 || input.startsWith("/") || /^[A-Za-z]:\//.test(input)) return
+    const parts = input.split("/").filter((part) => part && part !== ".")
+    if (!parts.length || parts.some((part) => part === ".." || part.includes("\0"))) return
+    return parts.join("/")
+  }
+
+  /**
+   * Resolve a chat-authored relative file reference across the exact roots the
+   * active session may read. Managed projects intentionally keep their durable
+   * directory separate from user-connected source folders, so joining every
+   * relative link to Instance.directory alone cannot open those source files.
+   *
+   * Explicit relative paths are checked directly. A bare filename gets a
+   * bounded recursive lookup. Both modes fail closed when multiple authorized
+   * files match, and the eventual read still re-authorizes the returned path so
+   * revocation wins between resolution and I/O.
+   */
+  export async function resolveReference(reference: string, options: { sessionID: string }) {
+    const requested = relativeReference(reference)
+    if (!requested) return
+
+    const rawRoots = [Instance.directory, ...(await SessionFilesystem.processReadRoots(options.sessionID))]
+    const roots: Array<{ path: string; type: "file" | "directory" }> = []
+    for (const raw of rawRoots) {
+      const canonical = await Filesystem.canonical(raw)
+      if (!canonical || FileTrash.protectedPath(canonical)) continue
+      const type = await fs.promises.stat(canonical).then(
+        (stat) => (stat.isFile() ? "file" : stat.isDirectory() ? "directory" : undefined),
+        () => undefined,
+      )
+      if (!type || roots.some((root) => root.path === canonical)) continue
+      roots.push({ path: canonical, type })
+    }
+
+    const matches = new Set<string>()
+    const add = async (candidate: string, root: string) => {
+      const canonical = await Filesystem.canonical(candidate)
+      if (!canonical || !Filesystem.contains(root, canonical) || FileTrash.protectedPath(canonical)) return
+      const regular = await fs.promises.stat(canonical).then(
+        (stat) => stat.isFile(),
+        () => false,
+      )
+      if (regular) matches.add(canonical)
+    }
+
+    const nested = requested.includes("/")
+    if (nested) {
+      for (const root of roots) {
+        if (root.type === "file") continue
+        await add(path.resolve(root.path, ...requested.split("/")), root.path)
+        if (matches.size > 1) return
+      }
+      return matches.size === 1 ? matches.values().next().value : undefined
+    }
+
+    let scanned = 0
+    let complete = true
+    for (const root of roots) {
+      if (root.type === "file") {
+        if (path.basename(root.path) === requested) matches.add(root.path)
+        if (matches.size > 1) return
+        continue
+      }
+      for await (const file of Ripgrep.files({ cwd: root.path })) {
+        scanned += 1
+        if (scanned > referenceScanLimit) {
+          complete = false
+          break
+        }
+        if (path.basename(file) !== requested) continue
+        await add(path.resolve(root.path, file), root.path)
+        if (matches.size > 1) return
+      }
+      if (!complete) break
+    }
+    return complete && matches.size === 1 ? matches.values().next().value : undefined
+  }
 }

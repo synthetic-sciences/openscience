@@ -7,6 +7,7 @@ import {
   fileReadRetryDelay,
   fileErrorMessage,
   initialFileScope,
+  isMissingFileError,
   missingFileFallback,
   PDF_PREVIEW_LIMIT,
   pdfPreviewMode,
@@ -148,6 +149,8 @@ describe("file viewer reads", () => {
     expect(
       missingFileFallback({ requested: "session", resolved: "session", error: new Error("File not found") }),
     ).toBeUndefined()
+    expect(isMissingFileError(new Error("ENOENT: no such file or directory"))).toBe(true)
+    expect(isMissingFileError(new Error("Project file access denied"))).toBe(false)
   })
 
   test("normalizes successful reads without changing their data", async () => {

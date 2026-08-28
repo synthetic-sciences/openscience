@@ -31,6 +31,7 @@ import {
   fileRequestKey,
   fileReadRetryDelay,
   initialFileScope,
+  isMissingFileError,
   missingFileFallback,
   PDF_PREVIEW_LIMIT,
   pdfPreviewMode,
@@ -46,7 +47,7 @@ import { resolveViewer } from "@/atlas/files/viewer-registry"
 import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { recoverFileDraft, rememberFileDraft } from "@/atlas/file-drafts"
 import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
-import { projectContains, rawFileQuery, resolveUniqueProjectFileReference } from "@/utils/project-file"
+import { projectContains, rawFileQuery } from "@/utils/project-file"
 import { CodeEditor } from "@/atlas/CodeEditor"
 import { HTML_STYLESHEET_BYTES, htmlStylesheets, loadHtmlStylesheets, rewriteHtmlAssets } from "@/utils/html-assets"
 import "./FilePreview.css"
@@ -123,6 +124,7 @@ export function FileView(props: {
   const activeSessionID = () => props.sessionID ?? (params.id && params.id !== "new" ? params.id : undefined)
   const [resolvedScope, setResolvedScope] = createSignal<ResolvedFileScope>(initialFileScope(props.scope))
   const [resolvedPath, setResolvedPath] = createSignal(props.path)
+  const [resolvedWritable, setResolvedWritable] = createSignal<boolean>()
   let scopeIdentity = ""
   createEffect(() => {
     const next = [props.scope ?? "project", directory(), props.path, activeSessionID() ?? ""].join("\n")
@@ -130,6 +132,7 @@ export function FileView(props: {
     scopeIdentity = next
     setResolvedScope(initialFileScope(props.scope))
     setResolvedPath(props.path)
+    setResolvedWritable(undefined)
   })
   const requestPath = () =>
     resolvedScope() === "session" ? resolvedPath() : resolveArtifactPath(directory(), resolvedPath())
@@ -243,24 +246,23 @@ export function FileView(props: {
           return
         }
         const reference = resolvedPath()
+        const session = activeSessionID()
         if (
           (props.scope ?? "project") === "auto" &&
           resolvedScope() === "project" &&
-          !reference.includes("/") &&
-          !reference.includes("\\")
+          session &&
+          isMissingFileError(result.error)
         ) {
-          const limit = 200
           const originalError = result.error
-          void sdk.client.find
-            .files({ query: reference, dirs: "false", type: "file", limit })
-            .then((response) => {
+          void sdk
+            .request("/file/resolve", { signal: ticket.controller.signal }, { path: reference, sessionID: session })
+            .then(async (response) => {
               if (!request.owns(ticket, key)) return
-              const matches = response.data ?? []
-              const recovered = resolveUniqueProjectFileReference(reference, matches, {
-                complete: matches.length < limit,
-              })
-              if (recovered) {
-                setResolvedPath(recovered)
+              if (!response.ok) throw new Error(await response.text())
+              const resolved = (await response.json()) as { path?: unknown; writable?: unknown }
+              if (typeof resolved.path === "string" && resolved.path) {
+                if (typeof resolved.writable === "boolean") setResolvedWritable(resolved.writable)
+                setResolvedPath(resolved.path)
                 return
               }
               setView({ status: "error", error: originalError, data: undefined })
@@ -293,6 +295,7 @@ export function FileView(props: {
   })
 
   const data = () => view.data
+  const writable = () => props.writable ?? resolvedWritable()
   const isBinary = () => data()?.encoding === "base64"
   const truncated = () => data()?.truncated === true
   const mime = () => data()?.mimeType ?? ""
@@ -515,7 +518,7 @@ export function FileView(props: {
 
   const save = async () => {
     if (view.saving || isBinary() || truncated() || !dirty()) return
-    if (props.writable === false) {
+    if (writable() === false) {
       toast.error("read-only source", "Reconnect this location with Read & write access to change files.")
       return
     }
@@ -661,10 +664,10 @@ export function FileView(props: {
         location={location()}
         description={description()}
         source={view.source}
-        sourceLabel={description().source && props.writable !== false ? "Edit" : undefined}
+        sourceLabel={description().source && writable() !== false ? "Edit" : undefined}
         dirty={dirty()}
         saving={view.saving}
-        writable={props.writable}
+        writable={writable()}
         disabled={view.status !== "ready"}
         artifact={Boolean(activeSessionID())}
         archiving={archiving()}
@@ -764,7 +767,7 @@ export function FileView(props: {
                     dirty={dirty()}
                     saving={view.saving}
                     onChange={(draft) => {
-                      if (props.writable === false) return
+                      if (writable() === false) return
                       setView({ draft, saveError: undefined })
                     }}
                   />
@@ -933,7 +936,7 @@ export function FileView(props: {
                     label={`${name()} source`}
                     value={view.draft}
                     language={LANG[e()] ?? "text"}
-                    readOnly={props.writable === false}
+                    readOnly={writable() === false}
                     wrap={kind() === "markdown"}
                     onChange={(draft) => setView({ draft, saveError: undefined })}
                     onSave={() => void save()}

@@ -71,6 +71,8 @@ import type {
   FileRenameErrors,
   FileRenameResponses,
   FileReproducibilityResponses,
+  FileResolveReferenceErrors,
+  FileResolveReferenceResponses,
   FileReviewsCurrentErrors,
   FileReviewsCurrentResponses,
   FileReviewsFinalizeErrors,
@@ -5421,6 +5423,42 @@ export class File_ extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Resolve a session file reference
+   *
+   * Resolve an unambiguous relative file reference across project, session, and connected roots authorized for the active session.
+   */
+  public resolveReference<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      path: string
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "path" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      FileResolveReferenceResponses,
+      FileResolveReferenceErrors,
+      ThrowOnError
+    >({
+      url: "/file/resolve",
+      ...options,
+      ...params,
     })
   }
 

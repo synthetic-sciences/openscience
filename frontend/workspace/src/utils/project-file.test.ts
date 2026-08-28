@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { projectContains, projectFileQuery, rawFileQuery, resolveUniqueProjectFileReference } from "./project-file"
+import { projectContains, projectFileQuery, rawFileQuery } from "./project-file"
 
 describe("project file requests", () => {
   test("builds collection and manuscript queries with the active session authority", () => {
@@ -75,23 +75,5 @@ describe("project file requests", () => {
     expect(projectContains("C:\\work\\CERBench", "figures\\result.png")).toBe(true)
     expect(projectContains("C:\\work\\CERBench", "..\\external\\result.png")).toBe(false)
     expect(projectContains("C:\\work\\CERBench", "D:\\figures\\result.png")).toBe(false)
-  })
-
-  test("recovers one unambiguous nested project file from a bare chat reference", () => {
-    expect(
-      resolveUniqueProjectFileReference("functional_annotations_top10.csv", [
-        "tara_mag_nutrient_analysis/report.md",
-        "tara_mag_nutrient_analysis/functional_annotations_top10.csv",
-      ]),
-    ).toBe("tara_mag_nutrient_analysis/functional_annotations_top10.csv")
-  })
-
-  test("does not guess explicit, ambiguous, truncated, or external file references", () => {
-    const duplicates = ["run-a/results.csv", "run-b/results.csv"]
-    expect(resolveUniqueProjectFileReference("run-a/results.csv", duplicates)).toBeUndefined()
-    expect(resolveUniqueProjectFileReference("results.csv", duplicates)).toBeUndefined()
-    expect(resolveUniqueProjectFileReference("results.csv", ["run-a/results.csv"], { complete: false })).toBeUndefined()
-    expect(resolveUniqueProjectFileReference("results.csv", ["/private/tmp/results.csv"])).toBeUndefined()
-    expect(resolveUniqueProjectFileReference("results.csv", ["../outside/results.csv"])).toBeUndefined()
   })
 })

@@ -1088,6 +1088,64 @@ describe("session filesystem grants", () => {
 })
 
 describe("file access uses session grants", () => {
+  test("resolves chat file references across connected project roots without guessing ambiguous files", async () => {
+    await using source = await tmpdir({
+      init: async (directory) => {
+        await fs.mkdir(path.join(directory, "ioai_final"), { recursive: true })
+        await Bun.write(path.join(directory, "ioai_final", "board.py"), "print('connected')\n")
+        await fs.mkdir(path.join(directory, "reports"), { recursive: true })
+        await Bun.write(path.join(directory, "reports", "unique.csv"), "value\n1\n")
+      },
+    })
+    await using duplicate = await tmpdir({
+      init: async (directory) => {
+        await fs.mkdir(path.join(directory, "other"), { recursive: true })
+        await Bun.write(path.join(directory, "other", "unique.csv"), "value\n2\n")
+      },
+    })
+    await using project = await tmpdir()
+    await withSession(project.path, async (session) => {
+      const sourceGrant = await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: source.path,
+        access: "read",
+        scope: "project",
+      })
+
+      const resolve = (reference: string) =>
+        FileRoutes().request(
+          `/file/resolve?path=${encodeURIComponent(reference)}&sessionID=${encodeURIComponent(session.id)}`,
+        )
+
+      const nested = await resolve("ioai_final/board.py")
+      expect(nested.status).toBe(200)
+      expect(await nested.json()).toEqual({ path: path.join(source.path, "ioai_final", "board.py"), writable: false })
+
+      const bare = await resolve("unique.csv")
+      expect(bare.status).toBe(200)
+      expect(await bare.json()).toEqual({ path: path.join(source.path, "reports", "unique.csv"), writable: false })
+
+      await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: duplicate.path,
+        access: "read",
+        scope: "project",
+      })
+      expect(await (await resolve("unique.csv")).json()).toEqual({ path: null, writable: null })
+      expect(await (await resolve("../board.py")).json()).toEqual({ path: null, writable: null })
+      expect(await (await resolve(path.join(source.path, "ioai_final", "board.py"))).json()).toEqual({
+        path: null,
+        writable: null,
+      })
+
+      await SessionFilesystem.revoke(session.id, sourceGrant.id)
+      expect(await (await resolve("ioai_final/board.py")).json()).toEqual({ path: null, writable: null })
+      await expect(
+        File.read(path.join(source.path, "ioai_final", "board.py"), { sessionID: session.id }),
+      ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+    })
+  })
+
   test("File authority scopes release every retained read and write binding", async () => {
     await using external = await tmpdir({
       init: async (directory) => {

@@ -30,38 +30,6 @@ export function projectContains(directory: string, file: string) {
   return path === base || path.startsWith(base === "/" ? base : `${base}/`)
 }
 
-/**
- * Chat responses sometimes introduce a directory once, then list its files by
- * basename. Keep explicit paths authoritative, but allow the file viewer to
- * recover a bare filename when the project contains exactly one matching
- * regular-file path. Ambiguous, truncated, or non-project results fail closed.
- */
-export function resolveUniqueProjectFileReference(
-  reference: string,
-  matches: string[],
-  options: { complete?: boolean } = {},
-) {
-  const requested = reference.trim().replaceAll("\\", "/")
-  if (!requested || requested.includes("/") || requested === "." || requested === "..") return
-  if (options.complete === false) return
-
-  const exact = new Set<string>()
-  for (const match of matches) {
-    const candidate = normalize(match)
-    if (
-      candidate === "." ||
-      candidate === ".." ||
-      candidate.startsWith("../") ||
-      candidate.startsWith("/") ||
-      /^[A-Za-z]:\//.test(candidate)
-    ) {
-      continue
-    }
-    if (candidate.split("/").at(-1) === requested) exact.add(candidate)
-  }
-  return exact.size === 1 ? exact.values().next().value : undefined
-}
-
 /** Build a session-authorized project-file query, with an optional path for collection endpoints. */
 export type FileScope = "project" | "session"
 

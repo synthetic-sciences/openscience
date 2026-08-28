@@ -11587,6 +11587,46 @@ export type FileWriteResponses = {
 
 export type FileWriteResponse = FileWriteResponses[keyof FileWriteResponses]
 
+export type FileResolveReferenceData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    path: string
+    sessionID: string
+  }
+  url: "/file/resolve"
+}
+
+export type FileResolveReferenceErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * The session cannot resolve this file reference
+   */
+  403: unknown
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type FileResolveReferenceError = FileResolveReferenceErrors[keyof FileResolveReferenceErrors]
+
+export type FileResolveReferenceResponses = {
+  /**
+   * Resolved authorized file path, or null when the reference is missing or ambiguous
+   */
+  200: {
+    path: string | null
+    writable: boolean | null
+  }
+}
+
+export type FileResolveReferenceResponse = FileResolveReferenceResponses[keyof FileResolveReferenceResponses]
+
 export type FileTrashListData = {
   body?: never
   path?: never
