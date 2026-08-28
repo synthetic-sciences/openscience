@@ -23,7 +23,7 @@ import type { IconProps } from "@synsci/ui/icon"
 // HARD RULE: no dead buttons. A panel either wires to a real backend or omits
 // the control. Placeholder panels below ship with zero interactive controls.
 
-export type SettingsSection = "workspace" | "runtime" | "app"
+export type SettingsSection = "inference" | "capabilities" | "runtime" | "app"
 
 // Source contract for every reachable Settings destination. Keep this list in
 // rail order; the registry contract test verifies that no panel can be added,
@@ -54,50 +54,46 @@ export interface SettingsPanel {
   icon: IconProps["name"]
   /** Which rail group the row lives under. */
   section: SettingsSection
-  /** Secondary destination disclosed beneath a primary rail item. */
-  parent?: SettingsPanelId
   /** Lazily-loaded panel body (default export of the file). */
   component: Component & { preload?: () => Promise<unknown> }
 }
 
 // Order here is the render order in the rail (top→bottom within each section).
 export const SETTINGS_PANELS: SettingsPanel[] = [
-  // ── Workspace ──
+  // ── Inference ──
   {
     id: "models",
     title: "Models",
     icon: "models",
-    section: "workspace",
+    section: "inference",
     component: lazy(() => import("./Models")),
   },
   {
     id: "local-models",
     title: "Local models",
     icon: "cpu",
-    section: "workspace",
-    parent: "models",
+    section: "inference",
     component: lazy(() => import("./LocalModels")),
   },
   {
     id: "skills",
     title: "Skills",
     icon: "flask",
-    section: "workspace",
+    section: "capabilities",
     component: lazy(() => import("./Skills")),
   },
   {
     id: "connectors",
-    title: "Connectors",
+    title: "MCP & connectors",
     icon: "mcp",
-    section: "workspace",
+    section: "capabilities",
     component: lazy(() => import("./Connectors")),
   },
   {
     id: "research-tools",
     title: "Research tools",
     icon: "magnifying-glass",
-    section: "workspace",
-    parent: "connectors",
+    section: "capabilities",
     component: lazy(() => import("./ResearchTools")),
   },
   // ── Runtime ──
@@ -120,7 +116,6 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     title: "Network",
     icon: "server",
     section: "runtime",
-    parent: "permissions",
     component: lazy(() => import("./Network")),
   },
   {
@@ -128,15 +123,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     title: "Sandbox",
     icon: "code",
     section: "runtime",
-    parent: "permissions",
     component: lazy(() => import("./Sandbox")),
   },
   {
     id: "credentials",
     title: "Credentials",
     icon: "providers",
-    section: "workspace",
-    parent: "connectors",
+    section: "runtime",
     component: lazy(() => import("./Credentials")),
   },
   // ── App ──
@@ -153,21 +146,11 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
 ]
 
 export const SETTINGS_SECTIONS: { id: SettingsSection; label: string }[] = [
-  { id: "workspace", label: "Workspace" },
+  { id: "inference", label: "Inference" },
+  { id: "capabilities", label: "Capabilities" },
   { id: "runtime", label: "Runtime" },
   { id: "app", label: "App" },
 ]
-
-export const SETTINGS_PRIMARY_PANELS = SETTINGS_PANELS.filter((panel) => !panel.parent)
-
-export function panelChildren(id: SettingsPanelId): SettingsPanel[] {
-  return SETTINGS_PANELS.filter((panel) => panel.parent === id)
-}
-
-export function panelRoot(id: SettingsPanelId): SettingsPanel {
-  const panel = findPanel(id)
-  return panel.parent ? findPanel(panel.parent) : panel
-}
 
 export function findPanel(id: SettingsPanelId): SettingsPanel {
   return SETTINGS_PANELS.find((p) => p.id === id) ?? SETTINGS_PANELS[0]

@@ -820,6 +820,58 @@ form.workspace-composer .workspace-composer__research-choice > summary {
   color: var(--text-base);
 }
 
+form.workspace-composer button.workspace-composer__research-control {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 150ms var(--ease-standard),
+    transform 120ms var(--ease-standard);
+}
+
+form.workspace-composer button.workspace-composer__research-control:hover,
+form.workspace-composer button.workspace-composer__research-control:focus-visible {
+  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+}
+
+form.workspace-composer button.workspace-composer__research-control:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: -2px;
+}
+
+form.workspace-composer button.workspace-composer__research-control:active {
+  transform: scale(0.985);
+}
+
+form.workspace-composer .workspace-composer__research-connectors > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+form.workspace-composer .workspace-composer__research-connectors > span > [data-component="icon"] {
+  flex: 0 0 auto;
+  color: var(--text-weak);
+}
+
+form.workspace-composer .workspace-composer__research-connectors > span > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+form.workspace-composer .workspace-composer__research-connectors small {
+  overflow: hidden;
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 form.workspace-composer .workspace-composer__research-control strong,
 form.workspace-composer .workspace-composer__research-choice > summary > span {
   color: var(--text-strong);
@@ -1159,6 +1211,7 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
   form.workspace-composer .workspace-composer__research-choice > summary,
   form.workspace-composer .workspace-composer__research-slider button,
   form.workspace-composer .workspace-composer__research-choice-menu > button,
+  form.workspace-composer button.workspace-composer__research-control,
   form.workspace-composer .workspace-composer__attach {
     transition: none;
   }

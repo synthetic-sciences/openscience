@@ -119,25 +119,12 @@ export function AccountGate(props: ParentProps) {
                 <p class="account-gate__eyebrow">Your research workspace</p>
                 <h1 id="account-gate-title">Connect OpenScience</h1>
                 <p>
-                  Sign in at <strong>app.syntheticsciences.ai</strong> to connect this device and use OpenScience Ace.
+                  Sign in with your Synthetic Sciences account to connect this device. Model access stays optional and
+                  can be configured after sign in.
                 </p>
-                <div class="account-gate__steps" aria-label="Setup overview">
-                  <div data-current="true">
-                    <span>1</span>
-                    <strong>Account</strong>
-                  </div>
-                  <div>
-                    <span>2</span>
-                    <strong>Model access</strong>
-                  </div>
-                  <div>
-                    <span>3</span>
-                    <strong>Workspace</strong>
-                  </div>
-                </div>
                 <div class="account-gate__actions">
                   <Button variant="primary" size="small" disabled={busy()} onClick={() => void connectBrowser()}>
-                    {busy() ? "Waiting for browser…" : "Continue to sign in"}
+                    {busy() ? "Waiting for browser…" : "Sign in"}
                   </Button>
                 </div>
                 <Show when={error()}>

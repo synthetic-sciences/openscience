@@ -100,9 +100,11 @@ describe("floating prompt surface", () => {
     expect(componentCss).toContain("overflow: visible")
   })
 
-  test("keeps high-frequency keyboard navigation immediate", () => {
-    expect(source).toContain('scrollIntoView({ block: "nearest", behavior: "auto" })')
-    expect(source).not.toContain('scrollIntoView({ block: "nearest", behavior: "smooth" })')
+  test("keeps slash keyboard navigation inside the picker scrollport", () => {
+    expect(source).not.toContain('scrollIntoView({ block: "nearest", behavior: "auto" })')
+    expect(source).toContain("const viewport = slashPopoverRef.getBoundingClientRect()")
+    expect(source).toContain("slashPopoverRef.scrollTop -= top - row.top")
+    expect(source).toContain("slashPopoverRef.scrollTop += row.bottom - bottom")
   })
 
   test("always treats the streaming action as Stop without consuming a queued draft", () => {
@@ -301,7 +303,10 @@ describe("composer control consolidation", () => {
     expect(source).not.toContain("Compute activity")
     expect(source).not.toContain("Compute providers")
     expect(source).not.toContain("Manage skills")
-    expect(source).not.toContain("Manage connectors")
+    expect(source).toContain("MCP servers")
+    expect(source).toContain('dialog.show(() => <DialogSettings initial="connectors" />)')
+    expect(source).toContain('class="workspace-composer__research-control workspace-composer__research-connectors"')
+    expect(componentCss).toContain("button.workspace-composer__research-control:focus-visible")
     expect(source).not.toContain("workspace-composer__research-tools-divider")
     expect(source).not.toContain('"/settings/compute/provider/modal/enabled"')
     expect(source).toContain("<ModelSettingsPopover />")

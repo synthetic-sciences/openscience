@@ -1904,17 +1904,27 @@ export namespace SessionPrompt {
     }
 
     const nativeIDs = new Set(native.map((item) => item.id))
-    const explicitMcp = ToolSelection.minimalResearchAgent(input.agent.name)
-      ? new Set(
-          Object.entries(input.tools ?? {}).flatMap(([key, enabled]) =>
-            enabled && key !== "*" && !nativeIDs.has(key) ? [key] : [],
-          ),
-        )
-      : undefined
-    const mcp = explicitMcp?.size === 0 ? {} : await MCP.tools()
+    // Connected MCP servers are part of the normal user-facing Research
+    // workspace. Keep the schema-free direct and inspection routes lean, and
+    // keep the development-only thin agent opt-in, but do not require the
+    // composer to enumerate every configured server tool per turn.
+    const connectedResearchMcp = input.agent.name === "research" && !input.direct && !input.inspection
+    const explicitMcp =
+      ToolSelection.minimalResearchAgent(input.agent.name) && !connectedResearchMcp
+        ? new Set(
+            Object.entries(input.tools ?? {}).flatMap(([key, enabled]) =>
+              enabled && key !== "*" && !nativeIDs.has(key) ? [key] : [],
+            ),
+          )
+        : undefined
+    const mcp = input.tools?.["*"] === false || explicitMcp?.size === 0 ? {} : await MCP.tools()
     for (const [key, item] of Object.entries(mcp)) {
+      if (nativeIDs.has(key)) continue
       if (explicitMcp && !explicitMcp.has(key)) continue
+      if (!ToolSelection.enabled(key, { permission, tools: input.tools })) continue
+      if (PermissionNext.evaluate("mcp", key, permission).action === "deny") continue
       if (
+        !connectedResearchMcp &&
         !ToolSelection.relevant(key, {
           agent: input.agent.name,
           message: selectionRequest || input.request,

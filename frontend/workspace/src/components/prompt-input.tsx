@@ -1100,8 +1100,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const scrollSlashActive = () => {
     const activeId = slashActive()
     if (!activeId || !slashPopoverRef) return
-    const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
-    element?.scrollIntoView({ block: "nearest", behavior: "auto" })
+    const element = slashPopoverRef.querySelector<HTMLElement>(`[data-slash-id="${activeId}"]`)
+    if (!element) return
+    const viewport = slashPopoverRef.getBoundingClientRect()
+    const top = viewport.top + slashPopoverRef.clientTop
+    const bottom = top + slashPopoverRef.clientHeight
+    const row = element.getBoundingClientRect()
+    if (row.top < top) {
+      slashPopoverRef.scrollTop -= top - row.top
+      return
+    }
+    if (row.bottom > bottom) slashPopoverRef.scrollTop += row.bottom - bottom
   }
 
   const selectPopoverActive = () => {
@@ -2791,6 +2800,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </div>
                         </details>
                       </Show>
+                      <div class="workspace-composer__research-divider" />
+                      <button
+                        type="button"
+                        class="workspace-composer__research-control workspace-composer__research-connectors"
+                        onClick={() => {
+                          closeResearchTools()
+                          dialog.show(() => <DialogSettings initial="connectors" />)
+                        }}
+                      >
+                        <span>
+                          <Icon name="mcp" size="small" />
+                          <span>
+                            <strong>MCP servers</strong>
+                            <small>Connected tools and data</small>
+                          </span>
+                        </span>
+                        <Icon name="chevron-right" size="small" />
+                      </button>
                     </section>
                   </div>
                 </details>

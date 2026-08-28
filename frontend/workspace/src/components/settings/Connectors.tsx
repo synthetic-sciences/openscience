@@ -277,7 +277,7 @@ export default function Connectors() {
     <PanelScroll>
       <div class="connectors-panel">
         <PanelHeader
-          title="Connectors"
+          title="MCP & connectors"
           description="Connect MCP servers that provide external research tools and data."
           toolbar={
             <Show when={!form()}>
