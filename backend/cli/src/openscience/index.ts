@@ -686,8 +686,7 @@ export namespace OpenScience {
         return {
           organizations: organizations(body.organizations ?? body.available_organizations),
           pinned_organization_id: pinned,
-          workspace_locked:
-            body.api_key?.workspace_locked === true || body.funding_context?.locked === true || !!pinned,
+          workspace_locked: body.api_key?.workspace_locked === true || !!pinned,
           funding_context: body.funding_context,
         }
       })
@@ -712,11 +711,7 @@ export namespace OpenScience {
       }
       delete next.organization_locked
       if (!organizationID) delete next.organization_id
-      await atomicWrite(
-        filepath,
-        JSON.stringify(next, null, 2),
-        { mode: 0o600 },
-      )
+      await atomicWrite(filepath, JSON.stringify(next, null, 2), { mode: 0o600 })
       changed.value = true
     })
     if (!changed.value) return false
@@ -777,6 +772,35 @@ export namespace OpenScience {
     }
   }
 
+  /** Reconcile browser-issued workspace scope before taking the immutable
+   * snapshot used by account-summary reads. Managed operations deliberately do
+   * not use this helper: they retain the snapshot captured at operation start. */
+  export async function getReconciledFundingState(): Promise<{
+    snapshot: FundingSnapshot
+    context: FundingContext
+  } | null> {
+    const read = async (
+      snapshot: FundingSnapshot,
+      tries: number,
+    ): Promise<{ snapshot: FundingSnapshot; context: FundingContext } | null> => {
+      const context = await getFundingContext(snapshot)
+      const current = await getFundingSnapshot()
+      if (!current) return null
+      if (
+        current.api_key === snapshot.api_key &&
+        current.user_id === snapshot.user_id &&
+        current.organization_id === snapshot.organization_id
+      ) {
+        return { snapshot: current, context }
+      }
+      if (tries === 0) return null
+      return read(current, tries - 1)
+    }
+    const snapshot = await getFundingSnapshot()
+    if (!snapshot) return null
+    return read(snapshot, 2)
+  }
+
   /** Change only the local non-secret funding selection. Flexible legacy keys
    * validate organization choices against Atlas. A key issued for one
    * organization cannot be relabeled locally; choosing another account
@@ -789,9 +813,7 @@ export namespace OpenScience {
     }
     const requested = organizationID ?? undefined
     if (connected.workspace_locked && requested !== connected.organization_id) {
-      throw new FundingContextError(
-        "This sign-in is tied to one workspace. Sign in again to choose another account.",
-      )
+      throw new FundingContextError("This sign-in is tied to one workspace. Sign in again to choose another account.")
     }
     if (connected.workspace_locked) return getFundingContext()
     const snapshot = Object.freeze({
@@ -815,9 +837,7 @@ export namespace OpenScience {
         throw new FundingContextError("The connected account changed while the funding selection was being saved.")
       }
       if (current.workspace_locked && requested !== current.organization_id) {
-        throw new FundingContextError(
-          "This sign-in is tied to one workspace. Sign in again to choose another account.",
-        )
+        throw new FundingContextError("This sign-in is tied to one workspace. Sign in again to choose another account.")
       }
       const next = { ...current, organization_id: requested }
       await atomicWrite(filepath, JSON.stringify(next, null, 2), { mode: 0o600 })
@@ -1390,15 +1410,16 @@ export namespace OpenScience {
     )
       .then(async (response) => (response.ok ? ((await response.json()) as AuthStatusResponse) : undefined))
       .catch(() => undefined)
-    const organizationID = (() => {
+    const pinned = loginOrganizationID(status?.api_key?.organization_id)
+    const selected = (() => {
       const context = status?.funding_context
       if (context?.type !== "organization") return undefined
       const value = context.organization_id
       if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) return undefined
       return value
     })()
-    const workspaceLocked =
-      status?.api_key?.workspace_locked === true || status?.funding_context?.locked === true || !!organizationID
+    const workspaceLocked = status?.api_key?.workspace_locked === true || !!pinned
+    const organizationID = pinned ?? (workspaceLocked ? undefined : selected)
     const session: OpenScienceSession = {
       api_key: key,
       user_id: profile?.user?.user_id || "",

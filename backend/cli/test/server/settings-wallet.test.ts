@@ -67,6 +67,80 @@ test("uses current Atlas access plus purchased Wallet truth without calling the 
   expect(calls.filter((call) => call.path === "/api/cli/billing-mode" && call.method === "POST")).toHaveLength(0)
 })
 
+test("settings summaries repair stale locked Personal scope before funded reads", async () => {
+  const calls: Array<{ path: string; organization: string | null }> = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(String(input)).pathname
+    const organization = new Headers(init?.headers).get("X-Organization-ID")
+    calls.push({ path, organization })
+    if (path === "/api/v1/auth/status") {
+      if (organization) return new Response("workspace mismatch", { status: 403 })
+      return Response.json({
+        api_key: { organization_id: null, workspace_locked: true },
+        organizations: [],
+        funding_context: { type: "personal", locked: true },
+      })
+    }
+    if (path === "/api/v1/wallet") {
+      return Response.json({ balance_cents: 2_000, purchased_cents: 2_000, promotional_cents: 0 })
+    }
+    if (path === "/api/credits") return Response.json({ lifetime_spent_cents: 500 })
+    if (path === "/api/credits/transactions") return Response.json({ transactions: [] })
+    if (path === "/api/cli/access") {
+      return Response.json({ managed_supported: true, managed_unlocked: true, ace_enabled: true })
+    }
+    if (path === "/api/cli/billing-mode") return new Response("retired", { status: 404 })
+    return new Response("not found", { status: 404 })
+  }) as typeof fetch
+
+  const stale = {
+    api_key: "thk_wallet-test",
+    user_id: "user-wallet",
+    organization_id: "org_stale",
+  }
+  const verify = () => {
+    expect(calls.filter((call) => call.organization === stale.organization_id)).toEqual([
+      { path: "/api/v1/auth/status", organization: stale.organization_id },
+    ])
+    expect(
+      calls
+        .filter((call) =>
+          [
+            "/api/v1/wallet",
+            "/api/credits",
+            "/api/credits/transactions",
+            "/api/cli/access",
+            "/api/cli/billing-mode",
+          ].includes(call.path),
+        )
+        .every((call) => call.organization === null),
+    ).toBe(true)
+  }
+
+  await Bun.write(session, JSON.stringify(stale))
+  OpenScience.invalidateBalance()
+  const wallet = await (await WalletSettingsRoutes().request("/")).json()
+  expect(wallet).toMatchObject({ signedIn: true, balanceUsd: 20, managedSupported: true })
+  expect(await Bun.file(session).json()).toEqual({
+    api_key: stale.api_key,
+    user_id: stale.user_id,
+    workspace_locked: true,
+  })
+  verify()
+
+  calls.length = 0
+  await Bun.write(session, JSON.stringify(stale))
+  OpenScience.invalidateBalance()
+  const billing = await (await BillingSettingsRoutes().request("/")).json()
+  expect(billing.wallet).toEqual({ signedIn: true, balanceUsd: 20 })
+  expect(await Bun.file(session).json()).toEqual({
+    api_key: stale.api_key,
+    user_id: stale.user_id,
+    workspace_locked: true,
+  })
+  verify()
+})
+
 test("mirrors an explicit mode to old Atlas even when the shared access endpoint already exists", async () => {
   const calls: Array<{ path: string; method: string }> = []
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {

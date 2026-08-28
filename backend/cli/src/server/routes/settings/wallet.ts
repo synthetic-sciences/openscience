@@ -39,12 +39,12 @@ const SIGNED_OUT: WalletState = {
 }
 
 async function readWallet(): Promise<WalletState> {
-  const session = await OpenScience.getFundingSnapshot().catch(() => null)
-  if (!session) return SIGNED_OUT
+  const state = await OpenScience.getReconciledFundingState().catch(() => null)
+  if (!state) return SIGNED_OUT
   const [credits, mode, txns] = await Promise.all([
-    OpenScience.getCredits(session).catch(() => null),
-    OpenScience.getBillingMode(session).catch(() => null),
-    OpenScience.getTransactions(20, session).catch(() => null),
+    OpenScience.getCredits(state.snapshot).catch(() => null),
+    OpenScience.getBillingMode(state.snapshot).catch(() => null),
+    OpenScience.getTransactions(20, state.snapshot).catch(() => null),
   ])
   return {
     signedIn: true,

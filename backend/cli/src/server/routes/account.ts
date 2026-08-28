@@ -104,21 +104,31 @@ export const AccountRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const session = await OpenScience.getFundingSnapshot()
-        const [user, credits, billing, funding] = session
-          ? await Promise.all([
-              OpenScience.getProfile(session),
-              OpenScience.getCredits(session),
-              OpenScience.getBillingMode(session),
-              OpenScience.getFundingContext(session),
-            ])
-          : [null, null, null, { type: "personal", available: true, locked: false, organizations: [] } as const]
+        const state = await OpenScience.getReconciledFundingState()
+        if (!state) {
+          return c.json({
+            session: false,
+            balance_usd: null,
+            billing_mode: null,
+            funding_context: {
+              type: "personal" as const,
+              available: true,
+              locked: false,
+              organizations: [],
+            },
+          })
+        }
+        const [user, credits, billing] = await Promise.all([
+          OpenScience.getProfile(state.snapshot),
+          OpenScience.getCredits(state.snapshot),
+          OpenScience.getBillingMode(state.snapshot),
+        ])
         return c.json({
-          session: !!session,
-          user: user ?? (session?.user_id ? { user_id: session.user_id } : undefined),
+          session: true,
+          user: user ?? (state.snapshot.user_id ? { user_id: state.snapshot.user_id } : undefined),
           balance_usd: credits?.balanceUsd ?? null,
           billing_mode: billing,
-          funding_context: funding,
+          funding_context: state.context,
         })
       },
     )

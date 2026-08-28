@@ -86,6 +86,17 @@ async function gateway(reply: Reply) {
             funding_context: { type: "personal", locked: true },
           })
         }
+        if (key === "Bearer thk_legacy-selected.secret") {
+          return Response.json({
+            api_key: { organization_id: null, workspace_locked: false },
+            organizations: [alpha],
+            funding_context: {
+              type: "organization",
+              organization_id: alpha.organization_id,
+              locked: false,
+            },
+          })
+        }
         if (key === "Bearer thk_legacy-personal.secret") return new Response("not found", { status: 404 })
         return Response.json({ organizations: [alpha], funding_context: { type: "personal" } })
       }
@@ -234,9 +245,7 @@ describe("browser login funding context", () => {
         organizations: [],
       })
       expect(await OpenScience.setFundingContext(null)).toMatchObject({ type: "personal", locked: true })
-      await expect(OpenScience.setFundingContext(alpha.organization_id)).rejects.toThrow(
-        "tied to one workspace",
-      )
+      await expect(OpenScience.setFundingContext(alpha.organization_id)).rejects.toThrow("tied to one workspace")
       expect((await Bun.file(session).json()).workspace_locked).toBe(true)
     } finally {
       await atlas.close()
@@ -284,6 +293,43 @@ describe("browser login funding context", () => {
       expect(await OpenScience.getFundingContext()).toMatchObject({
         type: "personal",
         locked: true,
+      })
+    } finally {
+      await atlas.close()
+    }
+  })
+
+  test("keeps a pasted legacy key flexible when modern status selects an organization", async () => {
+    const atlas = await gateway({})
+    try {
+      const selected = await OpenScience.loginWithKey("thk_legacy-selected.secret")
+      expect(selected).toMatchObject({
+        api_key: "thk_legacy-selected.secret",
+        user_id: "user-legacy",
+        organization_id: alpha.organization_id,
+      })
+      expect(selected.workspace_locked).toBeUndefined()
+      expect(await OpenScience.getFundingContext()).toMatchObject({
+        type: "organization",
+        organization_id: alpha.organization_id,
+        available: true,
+        locked: false,
+      })
+
+      expect(await OpenScience.setFundingContext(null)).toMatchObject({
+        type: "personal",
+        locked: false,
+      })
+      expect(await OpenScience.getSession()).toMatchObject({
+        api_key: "thk_legacy-selected.secret",
+      })
+      expect((await OpenScience.getSession())?.organization_id).toBeUndefined()
+      expect((await OpenScience.getSession())?.workspace_locked).toBeUndefined()
+
+      expect(await OpenScience.setFundingContext(alpha.organization_id)).toMatchObject({
+        type: "organization",
+        organization_id: alpha.organization_id,
+        locked: false,
       })
     } finally {
       await atlas.close()

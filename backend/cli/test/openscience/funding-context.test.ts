@@ -244,6 +244,69 @@ describe("organization funding context", () => {
     })
   })
 
+  test("account summary repairs stale Personal scope before wallet and billing reads", async () => {
+    await Bun.write(
+      session,
+      JSON.stringify({
+        api_key: "thk_old-personal-summary.secret",
+        user_id: "user-context",
+        organization_id: alpha.organization_id,
+      }),
+    )
+    const calls: Array<{ path: string; organization: string | null }> = []
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname
+      const organization = new Headers(init?.headers).get("X-Organization-ID")
+      calls.push({ path, organization })
+      if (path === "/api/v1/auth/status") {
+        if (organization) return new Response("workspace mismatch", { status: 403 })
+        return Response.json({
+          api_key: { organization_id: null, workspace_locked: true },
+          organizations: [],
+          funding_context: { type: "personal", locked: true },
+        })
+      }
+      if (path === "/api/cli/sync") {
+        return Response.json({ user: { user_id: "user-context", email: "researcher@example.test" }, services: {} })
+      }
+      if (path === "/api/v1/wallet") {
+        return Response.json({ balance_cents: 7_606, purchased_cents: 7_606, promotional_cents: 0 })
+      }
+      if (path === "/api/credits") return Response.json({ lifetime_spent_cents: 2_500 })
+      if (path === "/api/cli/access") {
+        return Response.json({ managed_supported: true, managed_unlocked: true, ace_enabled: true })
+      }
+      if (path === "/api/cli/billing-mode") return new Response("retired", { status: 404 })
+      return new Response("not found", { status: 404 })
+    }) as typeof fetch
+
+    const response = await AccountRoutes().request("/")
+    const summary = await response.json()
+    expect(response.status).toBe(200)
+    expect(summary).toMatchObject({
+      session: true,
+      user: { user_id: "user-context", email: "researcher@example.test" },
+      balance_usd: 76.06,
+      billing_mode: { balance_usd: 76.06, managed_unlocked: true },
+      funding_context: { type: "personal", available: true, locked: true, organizations: [] },
+    })
+    expect(await Bun.file(session).json()).toEqual({
+      api_key: "thk_old-personal-summary.secret",
+      user_id: "user-context",
+      workspace_locked: true,
+    })
+    expect(calls.filter((call) => call.organization === alpha.organization_id)).toEqual([
+      { path: "/api/v1/auth/status", organization: alpha.organization_id },
+    ])
+    expect(
+      calls
+        .filter((call) =>
+          ["/api/v1/wallet", "/api/credits", "/api/cli/access", "/api/cli/billing-mode"].includes(call.path),
+        )
+        .every((call) => call.organization === null),
+    ).toBe(true)
+  })
+
   test("does not unlock a locally locked Personal workspace during a status outage", async () => {
     await Bun.write(
       session,
