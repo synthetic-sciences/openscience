@@ -49,6 +49,41 @@ test("migrates the legacy Personal cutover and drops its queued billing retry", 
   }
 })
 
+test("keeps the established key-only Personal tag upgrade-compatible", async () => {
+  await fs.mkdir(Global.Path.data, { recursive: true })
+  await Bun.write(session, JSON.stringify({ api_key: "thk_keyonly.secret" }))
+  const account = "k:d8d0d15d1a2b2ccc"
+  const line =
+    JSON.stringify({
+      service: "llm",
+      event_type: "chat",
+      tokens_used: 3,
+      __account: account,
+    }) + "\n"
+  await fs.writeFile(queue, line)
+  await Bun.write(
+    capabilities,
+    JSON.stringify({
+      schema_version: 1,
+      accounts: { [account]: { nonfinancial: true, observed_at: "2026-01-01T00:00:00Z" } },
+    }),
+  )
+  const fetcher = spyOn(globalThis, "fetch").mockImplementation((async () => {
+    throw new Error("legacy key-only cutover must prevent replay")
+  }) as unknown as typeof fetch)
+
+  try {
+    await OpenScience.flushPendingUsage()
+    expect(await Bun.file(queue).exists()).toBe(false)
+    const saved = await Bun.file(capabilities).json()
+    expect(saved.accounts[`${account}\u0000personal`]).toMatchObject({ nonfinancial: true })
+    expect(saved.accounts[account]).toBeUndefined()
+    expect(fetcher).not.toHaveBeenCalled()
+  } finally {
+    fetcher.mockRestore()
+  }
+})
+
 test("keeps legacy tagged and accountless rows away from an organization Wallet", async () => {
   await fs.mkdir(Global.Path.data, { recursive: true })
   await Bun.write(

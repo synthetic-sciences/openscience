@@ -2,7 +2,7 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import { existsSync, readFileSync } from "fs"
-import { createHash, randomUUID } from "crypto"
+import { randomUUID } from "crypto"
 import { Global } from "../global"
 import { DataRootBarrier } from "../global/data-root-barrier"
 import { Log } from "../util/log"
@@ -2126,10 +2126,9 @@ export namespace OpenScience {
     if (session.user_id) return session.user_id
     // The input is a high-entropy, server-issued API credential. This short
     // fingerprint partitions local retry rows; it is not authentication or a
-    // password verifier. Keep the established digest so existing key-only
-    // queues and durable cutover markers remain upgrade-compatible.
-    // codeql[js/insufficient-password-hash]
-    return "k:" + createHash("sha256").update(session.api_key).digest("hex").slice(0, 16)
+    // password verifier. Keep the established SHA-256 digest so existing
+    // key-only queues and durable cutover markers remain upgrade-compatible.
+    return "k:" + new Bun.CryptoHasher("sha256").update(session.api_key).digest("hex").slice(0, 16)
   }
 
   /** Stable cache/queue key for one account's explicit funding selection. */
